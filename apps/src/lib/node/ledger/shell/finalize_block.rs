@@ -208,11 +208,14 @@ where
                         #[cfg(not(feature = "mainnet"))]
                         let has_valid_pow =
                             self.invalidate_pow_solution_if_valid(wrapper);
-                        let _ = self.charge_fee(
+                        if let Err(e) = self.charge_fee(
                             wrapper,
+                            &gas_table,
                             #[cfg(not(feature = "mainnet"))]
                             has_valid_pow,
-                        );
+                        ) {
+                            tracing::error!("Encountered error while charging fee for a failed Wrapper tx: {}", e);
+                        }
                     }
                 }
 
@@ -256,6 +259,7 @@ where
 
                         if let Err(e) = self.charge_fee(
                             wrapper,
+                            &gas_table,
                             #[cfg(not(feature = "mainnet"))]
                             has_valid_pow,
                         ) {
@@ -835,8 +839,46 @@ where
     fn charge_fee(
         &mut self,
         wrapper: &WrapperTx,
+        gas_table: &BTreeMap<String, u64>,
         #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     ) -> Result<()> {
+        // Unshield funds if requested
+        if let Some(unshield) = &wrapper.unshield {
+            // The unshielding tx does not charge gas, instantiate a limitless custom gas meter for this step
+            let mut gas_meter = TxGasMeter::new(u64::MAX);
+
+            // NOTE: given the checks in process_proposal, a failure in the unshielding tx should not happen. If it does, do not return early from this function but try to take the funds from the unshielded balance
+            match apply_tx(
+                TxType::Decrypted(DecryptedTx::Decrypted {
+                    tx: unshield.to_owned(),
+                    has_valid_pow: false,
+                }),
+                TxIndex::default(),
+                &mut gas_meter,
+                gas_table,
+                &mut self.wl_storage.write_log,
+                &self.wl_storage.storage,
+                &mut self.vp_wasm_cache,
+                &mut self.tx_wasm_cache,
+            ) {
+                Ok(result) => {
+                    if result.is_accepted() {
+                        self.wl_storage.write_log.commit_tx();
+                    } else {
+                        self.wl_storage.write_log.drop_tx();
+                        tracing::error!("The unshielding tx is invalid, some VPs rejected it: {:#?}", result.vps_result.rejected_vps);
+                    }
+                }
+                Err(e) => {
+                    self.wl_storage.write_log.drop_tx();
+                    tracing::error!(
+                        "The unshielding tx is invalid, wasm run failed: {}",
+                        e
+                    );
+                }
+            }
+        }
+
         // Charge fee
         let balance_key =
             token::balance_key(&wrapper.fee.token, &wrapper.fee_payer());
@@ -855,6 +897,7 @@ where
                     .unwrap();
             }
             None => {
+                // Balance was insufficient for fee payment
                 #[cfg(not(feature = "mainnet"))]
                 let reject = !has_valid_pow;
                 #[cfg(feature = "mainnet")]
