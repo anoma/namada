@@ -459,8 +459,7 @@ mod test_finalize_block {
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::core::types::hash::Hash;
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
-    use namada::proto::{Data, Code, Signature, Section, InnerTx};
-    use namada::proto::SignedTxData;
+    use namada::proto::{Data, Code, Signature, Section};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::*;

@@ -61,7 +61,7 @@ use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::Sha256Hasher;
 use namada::ledger::tx_env::TxEnv;
-use namada::proto::{InnerTx, Tx};
+use namada::proto::{Tx};
 use namada::tendermint_proto::Protobuf;
 use namada::types::address::{self, Address, InternalAddress};
 use namada::types::ibc::data::{FungibleTokenPacketData, PacketAck};
@@ -69,7 +69,6 @@ use namada::types::storage::{self, BlockHash, BlockHeight, Key, TxIndex};
 use namada::types::token::{self, Amount};
 use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_tx_prelude::StorageWrite;
-use namada::proto::SignedTxData;
 
 use crate::tx::{self, *};
 

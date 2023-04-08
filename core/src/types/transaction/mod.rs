@@ -209,7 +209,7 @@ pub mod tx_types {
 
     use super::*;
     use sha2::{Sha256, Digest};
-    use crate::proto::{SignedTxData, SignedOuterTxData, InnerTx, Tx, Code, Data, Section, Signature};
+    use crate::proto::{Tx, Code, Data, Section, Signature};
     #[cfg(feature = "ferveo-tpke")]
     use crate::types::transaction::protocol::ProtocolTx;
 
@@ -320,7 +320,7 @@ pub mod tx_types {
         use super::*;
         use crate::types::address::nam;
         use crate::types::storage::Epoch;
-        use crate::proto::{Code, Data, InnerTx};
+        use crate::proto::{Code, Data};
 
         fn gen_keypair() -> common::SecretKey {
             use rand::prelude::ThreadRng;

@@ -2,7 +2,7 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use crate::proto::{Tx, SignedTxData};
+use crate::proto::{Tx};
 
 /// A validity predicate with an input that is intended to be invoked via `eval`
 /// host function.

@@ -13,7 +13,7 @@ use std::collections::BTreeSet;
 
 use crate::types::address::Address;
 use crate::types::storage;
-use crate::proto::{Tx, SignedTxData};
+use crate::proto::{Tx};
 
 /// Input for validity predicate wasm module call
 pub struct VpInput<'a> {

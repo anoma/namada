@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use namada_core::ledger::storage;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::Key;
-use namada_core::proto::{Tx, SignedTxData};
+use namada_core::proto::{Tx};
 use thiserror::Error;
 
 use super::governance;

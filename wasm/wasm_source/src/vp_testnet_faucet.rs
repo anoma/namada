@@ -344,10 +344,6 @@ mod tests {
         // The signature itself doesn't matter and is not being checked in this
         // test, it's just used to construct `SignedTxData`
         let sig = key::common::SigScheme::sign(&target_key, &solution_bytes);
-        let signed_solution = SignedTxData {
-            data: Some(solution_bytes),
-            sig,
-        };
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -362,7 +358,7 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         // This is set by the protocol when the wrapper tx has a valid PoW
         vp_env.has_valid_pow = true;
-        let tx_data: Vec<u8> = signed_solution.try_to_vec().unwrap();
+        let tx_data: Vec<u8> = solution_bytes;
         let keys_changed: BTreeSet<storage::Key> =
         vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();

@@ -9,7 +9,6 @@ use std::io::{self, Write};
 use std::iter::Iterator;
 use std::str::FromStr;
 
-use namada::proto::InnerTx;
 use async_std::fs;
 use async_std::path::PathBuf;
 use async_std::prelude::*;
@@ -36,7 +35,7 @@ use namada::ledger::pos::{
 };
 use namada::ledger::queries::{self, RPC};
 use namada::ledger::storage::ConversionState;
-use namada::proto::{SignedTxData, Tx};
+use namada::proto::{Tx};
 use namada::types::address::{masp, tokens, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalResult, ProposalVote, TallyResult,

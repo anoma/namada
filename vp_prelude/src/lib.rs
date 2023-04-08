@@ -24,7 +24,7 @@ pub use namada_core::ledger::storage_api::{
 };
 pub use namada_core::ledger::vp_env::VpEnv;
 pub use namada_core::ledger::{parameters, testnet_pow};
-pub use namada_core::proto::{Signed, SignedTxData, Tx};
+pub use namada_core::proto::{Signed, Tx};
 pub use namada_core::types::address::Address;
 use namada_core::types::chain::CHAIN_ID_LENGTH;
 use namada_core::types::hash::{Hash, HASH_LENGTH};

@@ -7,7 +7,7 @@ use namada::ledger::parameters::{self, EpochDuration};
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::testing::TestStorage;
 use namada::ledger::storage::write_log::WriteLog;
-use namada::proto::{InnerTx, Tx, SignedOuterTxData};
+use namada::proto::{Tx};
 use namada::types::transaction::{RawHeader, TxType};
 use namada::types::address::Address;
 use namada::types::storage::{Key, TxIndex};

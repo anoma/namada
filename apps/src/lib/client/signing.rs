@@ -10,7 +10,6 @@ use namada::types::storage::Epoch;
 use namada::types::token;
 use namada::types::token::Amount;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx, MIN_FEE};
-use namada::proto::InnerTx;
 use namada::types::transaction::TxType;
 use namada::types::transaction::decrypted::DecryptedTx;
 use namada::types::hash::Hash;

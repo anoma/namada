@@ -14,7 +14,7 @@ use crate::ledger::gas;
 use crate::ledger::gas::VpGasMeter;
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, write_log, Storage, StorageHasher};
-use crate::proto::{InnerTx, Tx};
+use crate::proto::{Tx};
 use crate::types::transaction::hash_tx;
 
 /// These runtime errors will abort VP execution immediately

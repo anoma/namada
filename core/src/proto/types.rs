@@ -50,31 +50,6 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// This can be used to sign an arbitrary tx. The signature is produced and
-/// verified on the tx data concatenated with the tx code, however the tx code
-/// itself is not part of this structure.
-///
-/// Because the signature is not checked by the ledger, we don't inline it into
-/// the `Tx` type directly. Instead, the signature is attached to the `tx.data`,
-/// which can then be checked by a validity predicate wasm.
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq, Default, Deserialize, Serialize)]
-pub struct SignedTxData {
-    /// The original tx data bytes, if any
-    pub data: Option<Vec<u8>>,
-    /// The signature is produced on the tx data concatenated with the tx code
-    /// and the timestamp.
-    pub sig: Option<common::Signature>,
-}
-
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Deserialize, Serialize)]
-pub struct SignedOuterTxData {
-    /// The original tx data bytes, if any
-    pub data: TxType,
-    /// The signature is produced on the tx data concatenated with the tx code
-    /// and the timestamp.
-    pub sig: Option<common::Signature>,
-}
-
 /// A generic signed data wrapper for Borsh encode-able data.
 #[derive(
     Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
@@ -465,23 +440,9 @@ pub struct Tx {
     pub outer_timestamp: DateTimeUtc,
     pub outer_extra: Vec<u8>,
     pub code: Vec<u8>,
-    pub data: Option<SignedTxData>,
     pub timestamp: DateTimeUtc,
     pub extra: Vec<u8>,
     pub sections: Vec<Section>,
-}
-
-/// A SigningTx but with the full code embedded. This structure will almost
-/// certainly be bigger than SigningTxs and contains enough information to
-/// execute the transaction.
-#[derive(
-    Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq, Serialize, Deserialize,
-)]
-pub struct InnerTx {
-    pub code: Vec<u8>,
-    pub data: Option<SignedTxData>,
-    pub timestamp: DateTimeUtc,
-    pub extra: Vec<u8>,
 }
 
 impl TryFrom<&[u8]> for Tx {
@@ -583,7 +544,6 @@ impl Tx {
             outer_timestamp: DateTimeUtc::now(),
             outer_extra: vec![],
             code: vec![],
-            data: None,
             timestamp: DateTimeUtc::now(),
             extra: vec![],
             sections: vec![],
@@ -805,122 +765,6 @@ impl Tx {
                 _ => *section = Section::Ciphertext(Ciphertext::new(section.clone(), &pubkey)),
             } 
         }
-    }
-}
-
-impl From<InnerTx> for types::InnerTx {
-    fn from(tx: InnerTx) -> Self {
-        let timestamp = Some(tx.timestamp.into());
-        let data = tx.data.map(|x| {
-            x.try_to_vec()
-                .expect("Unable to serialize encrypted transaction")
-        });
-        types::InnerTx {
-            code: tx.code,
-            data,
-            extra: tx.extra,
-            timestamp,
-        }
-    }
-}
-
-impl InnerTx {
-    pub fn new(code: Vec<u8>, data: Option<SignedTxData>) -> Self {
-        InnerTx {
-            code,
-            data,
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-    }
-
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = vec![];
-        let tx: types::InnerTx = self.clone().into();
-        tx.encode(&mut bytes)
-            .expect("encoding a transaction failed");
-        bytes
-    }
-
-    /// Produce a reduced version of this transaction that is sufficient for
-    /// signing. Specifically replaces code and extra with their hashes, and
-    /// leaves out inner tx.
-    pub fn signing_tx(&self) -> types::InnerTx {
-        let timestamp = Some(self.timestamp.into());
-        let data = self.data.as_ref().map(|x| {
-            x.try_to_vec()
-                .expect("Unable to serialize encrypted transaction")
-        });
-        types::InnerTx {
-            code: hash_tx(&self.code).0.to_vec(),
-            extra: hash_tx(&self.extra).0.to_vec(),
-            data,
-            timestamp,
-        }
-    }
-
-    /// Hash this transaction leaving out the inner tx, but instead of including
-    /// the transaction code and extra data in the hash, include their hashes
-    /// instead.
-    pub fn partial_hash(&self) -> [u8; 32] {
-        let mut bytes = vec![];
-        self.signing_tx()
-            .encode(&mut bytes)
-            .expect("encoding a transaction failed");
-        hash_tx(&bytes).0
-    }
-
-    /// Get the hash of this transaction's code
-    pub fn code_hash(&self) -> [u8; 32] {
-        hash_tx(&self.code).0
-    }
-
-    /// Get the hash of this transaction's extra data
-    pub fn extra_hash(&self) -> [u8; 32] {
-        hash_tx(&self.extra).0
-    }
-
-    /// Sign a transaction using [`SignedTxData`].
-    pub fn sign(self, keypair: &common::SecretKey) -> Self {
-        let to_sign = self.partial_hash();
-        let sig = common::SigScheme::sign(keypair, to_sign);
-        let signed = SignedTxData {
-            data: self.data.and_then(|x| x.data),
-            sig: Some(sig),
-        };
-        InnerTx {
-            code: self.code,
-            data: Some(signed),
-            extra: self.extra,
-            timestamp: self.timestamp,
-        }
-    }
-
-    /// Verify that the transaction has been signed by the secret key
-    /// counterpart of the given public key.
-    pub fn verify_sig(
-        &self,
-        pk: &common::PublicKey,
-        sig: &common::Signature,
-    ) -> std::result::Result<(), VerifySigError> {
-        // Try to get the transaction data from decoded `SignedTxData`
-        let signed_tx_data = self.data.clone().ok_or(VerifySigError::MissingData)?;
-        let mut data = signed_tx_data.clone();
-        data.sig = None;
-        let tx = InnerTx {
-            code: self.code.clone(),
-            extra: self.extra.clone(),
-            data: Some(data),
-            timestamp: self.timestamp,
-        };
-        let signed_data = tx.partial_hash();
-        common::SigScheme::verify_signature_raw(pk, &signed_data, sig)
-    }
-
-    /// A validity check on the ciphertext.
-    #[cfg(feature = "ferveo-tpke")]
-    pub fn validate_ciphertext(&self) -> bool {
-        true
     }
 }
 

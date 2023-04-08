@@ -17,7 +17,7 @@ use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter, MIN_STORAGE_GAS};
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::ledger::vp_host_fns;
-use crate::proto::{InnerTx, Tx};
+use crate::proto::{Tx};
 use crate::types::address::{self, Address};
 use crate::types::ibc::IbcEvent;
 use crate::types::internal::HostEnvResult;
@@ -25,7 +25,6 @@ use crate::types::key::*;
 use crate::types::storage::{Key, TxIndex};
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
-use crate::proto::SignedTxData;
 use crate::vm::{
     validate_untrusted_wasm, HostRef, MutHostRef, WasmValidationError,
 };

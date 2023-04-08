@@ -29,7 +29,7 @@ mod tests {
         get_dummy_header as tm_dummy_header, Error as IbcError,
     };
     use namada::ledger::tx_env::TxEnv;
-    use namada::proto::{SignedTxData, InnerTx, Tx};
+    use namada::proto::{Tx};
     use namada::tendermint_proto::Protobuf;
     use namada::types::key::*;
     use namada::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
@@ -45,7 +45,7 @@ mod tests {
     use prost::Message;
     use test_log::test;
 
-    use namada::proto::{SignedOuterTxData, Code, Section, Data, Signature};
+    use namada::proto::{Code, Section, Data, Signature};
 
     use super::{ibc, tx, vp};
     use crate::tx::{tx_host_env, TestTxEnv};

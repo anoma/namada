@@ -16,7 +16,7 @@ use namada_core::ledger::ibc::storage::{
     client_id, ibc_prefix, is_client_counter_key, IbcPrefix,
 };
 use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
-use namada_core::proto::{Tx, SignedTxData};
+use namada_core::proto::{Tx};
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::ibc::IbcEvent as WrappedIbcEvent;
 use namada_core::types::storage::Key;
@@ -316,7 +316,7 @@ mod tests {
     use std::convert::TryFrom;
     use std::str::FromStr;
     use crate::types::transaction::{TxType, RawHeader};
-    use crate::proto::{SignedOuterTxData, SignedTxData, Code, Data, Signature, Section};
+    use crate::proto::{Code, Data, Signature, Section};
 
     use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
     use crate::ibc::core::ics02_client::client_consensus::ConsensusState;
@@ -382,7 +382,7 @@ mod tests {
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::storage::testing::TestStorage;
     use crate::ledger::storage::write_log::WriteLog;
-    use crate::proto::{InnerTx, Tx};
+    use crate::proto::{Tx};
     use crate::types::ibc::data::{PacketAck, PacketReceipt};
     use crate::vm::wasm;
     use crate::types::storage::TxIndex;

@@ -15,14 +15,13 @@ use crate::ledger::native_vp::{self, NativeVp};
 use crate::ledger::pos::{self, PosVP};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
-use crate::proto::{self, Tx, InnerTx};
+use crate::proto::{self, Tx};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage;
 use crate::types::storage::TxIndex;
 use crate::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
 use crate::vm::wasm::{TxCache, VpCache};
 use crate::vm::{self, wasm, WasmCacheAccess};
-use crate::proto::SignedTxData;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]

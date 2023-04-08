@@ -14,7 +14,7 @@ use wasmer::{
 use wasmer_vm::{
     MemoryStyle, TableStyle, VMMemoryDefinition, VMTableDefinition,
 };
-use crate::proto::{Tx, SignedTxData};
+use crate::proto::{Tx};
 
 use crate::vm::memory::VmMemory;
 use crate::vm::types::VpInput;

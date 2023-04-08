@@ -11,7 +11,7 @@ pub mod wrapper_tx {
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
 
-    use crate::proto::{Tx, InnerTx, Code, Data, Signature, Section};
+    use crate::proto::{Tx, Code, Data, Signature, Section};
     use crate::types::address::Address;
     use crate::types::key::*;
     use crate::types::storage::Epoch;
@@ -19,7 +19,6 @@ pub mod wrapper_tx {
     #[cfg(feature = "ferveo-tpke")]
     use crate::types::transaction::encrypted::EncryptedTx;
     use crate::types::transaction::{Hash, TxError, TxType};
-    use crate::proto::{SignedTxData, SignedOuterTxData};
     use sha2::{Digest, Sha256};
 
     /// Minimum fee amount in micro NAMs
@@ -288,7 +287,6 @@ pub mod wrapper_tx {
     #[cfg(test)]
     mod test_wrapper_tx {
         use super::*;
-        use crate::proto::SignedTxData;
         use crate::types::address::nam;
         use crate::types::transaction::EncryptionKey;
 

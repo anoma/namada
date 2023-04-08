@@ -13,8 +13,6 @@ pub mod decrypted_tx {
     #[cfg(feature = "ferveo-tpke")]
     use crate::types::transaction::encrypted::EncryptedTx;
     use crate::types::transaction::{Hash, TxType, WrapperTx};
-    use crate::proto::InnerTx;
-    use crate::proto::{SignedTxData, SignedOuterTxData};
     use sha2::{Digest, Sha256};
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, serde::Serialize, serde::Deserialize)]

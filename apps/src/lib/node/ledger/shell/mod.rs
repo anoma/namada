@@ -33,7 +33,7 @@ use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, DB,
 };
 use namada::ledger::{ibc, pos, protocol};
-use namada::proto::{self, InnerTx, Tx};
+use namada::proto::{self, Tx};
 use namada::types::address;
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::chain::ChainId;
@@ -770,8 +770,7 @@ mod test_utils {
     use namada::types::transaction::{Fee, WrapperTx};
     use tempfile::tempdir;
     use tokio::sync::mpsc::UnboundedReceiver;
-    use namada::proto::InnerTx;
-    use namada::proto::{SignedOuterTxData, SignedTxData, Code, Data};
+    use namada::proto::{Code, Data};
 
     use super::*;
     use crate::facade::tendermint_proto::abci::{

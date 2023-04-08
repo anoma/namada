@@ -220,14 +220,13 @@ where
 #[cfg(test)]
 mod test_process_proposal {
     use borsh::BorshDeserialize;
-    use namada::proto::{SignedOuterTxData, SignedTxData};
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::Epoch;
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, RawHeader};
-    use namada::proto::{InnerTx, Code, Data, Section, Signature};
+    use namada::proto::{Code, Data, Section, Signature};
 
     use super::*;
     use crate::facade::tendermint_proto::abci::RequestInitChain;

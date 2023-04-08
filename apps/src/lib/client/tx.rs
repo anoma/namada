@@ -65,7 +65,6 @@ use rand_core::{CryptoRng, OsRng, RngCore};
 use rust_decimal::Decimal;
 use sha2::{Sha256, Digest};
 use tokio::time::{Duration, Instant};
-use namada::proto::{InnerTx, SignedTxData};
 
 use super::rpc;
 use super::types::ShieldedTransferContext;

@@ -32,10 +32,9 @@ mod protocol_txs {
     use serde_json;
 
     use super::*;
-    use crate::proto::{InnerTx, Tx, Data, Code, Signature, Section};
+    use crate::proto::{Tx, Data, Code, Signature, Section};
     use crate::types::key::*;
     use crate::types::transaction::{EllipticCurve, TxError, TxType};
-    use crate::proto::{SignedTxData, SignedOuterTxData};
     use crate::types::hash::Hash;
     use crate::types::transaction::{Digest, Sha256};
 

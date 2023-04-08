@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 
 use namada::ledger::events::Event;
-use namada::proto::{InnerTx, Tx};
+use namada::proto::Tx;
 use namada::types::address::Address;
 use serde::Serialize;
 

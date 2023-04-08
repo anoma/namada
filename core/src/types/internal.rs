@@ -49,7 +49,7 @@ mod tx_queue {
     use borsh::{BorshDeserialize, BorshSerialize};
 
     use crate::types::transaction::encrypted::EncryptedTx;
-    use crate::proto::{Tx, InnerTx};
+    use crate::proto::Tx;
 
     /// A wrapper for `crate::types::transaction::WrapperTx` to conditionally
     /// add `has_valid_pow` flag for only used in testnets.

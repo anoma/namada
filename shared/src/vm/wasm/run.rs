@@ -13,7 +13,7 @@ use super::TxCache;
 use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, Storage, StorageHasher};
-use crate::proto::{Tx, InnerTx, Code, Data};
+use crate::proto::{Tx, Code, Data};
 use crate::types::transaction::RawHeader;
 use crate::types::address::Address;
 use crate::types::internal::HostEnvResult;
@@ -413,7 +413,6 @@ mod tests {
     use itertools::Either;
     use test_log::test;
     use wasmer_vm::TrapCode;
-    use crate::proto::{SignedOuterTxData, SignedTxData};
     use crate::types::transaction::TxType;
     use crate::types::hash::Hash;
 

@@ -72,7 +72,7 @@ where
     use crate::ledger::gas::BlockGasMeter;
     use crate::ledger::protocol;
     use crate::ledger::storage::write_log::WriteLog;
-    use crate::proto::{InnerTx, Tx, Code, Data};
+    use crate::proto::{Tx, Code, Data};
     use crate::types::storage::TxIndex;
     use crate::types::transaction::{DecryptedTx, TxType};
 
@@ -331,7 +331,7 @@ mod test {
     use crate::ledger::queries::testing::TestClient;
     use crate::ledger::queries::RPC;
     use crate::ledger::storage_api::{self, StorageWrite};
-    use crate::proto::{InnerTx, Tx, Code, Data};
+    use crate::proto::{Tx, Code, Data};
     use crate::types::{address, token};
     use crate::types::transaction::TxType;
     use crate::types::transaction::decrypted::DecryptedTx;

@@ -13,7 +13,7 @@ use namada::types::address::Address;
 use namada::types::governance::TallyResult;
 use namada::types::storage::Epoch;
 use namada::types::token;
-use namada::proto::{SignedTxData, Data, Code};
+use namada::proto::{Data, Code};
 use namada::types::hash::Hash;
 
 use super::*;

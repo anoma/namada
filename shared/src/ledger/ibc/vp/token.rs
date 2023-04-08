@@ -13,7 +13,7 @@ use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use crate::ledger::ibc::storage as ibc_storage;
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
-use crate::proto::{Tx, SignedTxData};
+use crate::proto::{Tx};
 use crate::types::address::{
     Address, DecodeError as AddressError, InternalAddress,
 };

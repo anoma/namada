@@ -18,7 +18,7 @@ use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Epoch, Key};
 use crate::types::token;
 use crate::vm::WasmCacheAccess;
-use crate::proto::{Tx, SignedTxData};
+use crate::proto::{Tx};
 
 /// for handling Governance NativeVP errors
 pub type Result<T> = std::result::Result<T, Error>;

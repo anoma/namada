@@ -197,8 +197,7 @@ mod test_prepare_proposal {
     use borsh::BorshSerialize;
     use namada::types::storage::Epoch;
     use namada::types::transaction::{Fee, WrapperTx};
-    use namada::proto::InnerTx;
-    use namada::proto::{SignedOuterTxData, SignedTxData, Code, Data, Section, Signature};
+    use namada::proto::{Code, Data, Section, Signature};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{gen_keypair, TestShell};

@@ -37,7 +37,7 @@ use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Key, KeySeg};
 use crate::types::token;
 use crate::vm::WasmCacheAccess;
-use crate::proto::{Tx, SignedTxData};
+use crate::proto::{Tx};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]

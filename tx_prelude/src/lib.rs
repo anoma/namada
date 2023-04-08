@@ -25,7 +25,7 @@ pub use namada_core::ledger::storage_api::{
     StorageRead, StorageWrite,
 };
 pub use namada_core::ledger::tx_env::TxEnv;
-pub use namada_core::proto::{Signed, SignedTxData, Tx};
+pub use namada_core::proto::{Signed, Tx};
 pub use namada_core::types::address::Address;
 use namada_core::types::chain::CHAIN_ID_LENGTH;
 use namada_core::types::internal::HostEnvResult;

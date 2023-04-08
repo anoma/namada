@@ -8,7 +8,7 @@ use crate::ledger::storage::StorageHasher;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
-use crate::proto::{Tx, SignedTxData};
+use crate::proto::{Tx};
 
 /// Internal address for the Ethereum bridge VP
 pub const ADDRESS: Address = Address::Internal(InternalAddress::EthBridge);

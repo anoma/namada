@@ -4,7 +4,7 @@ use namada::ledger::gas::VpGasMeter;
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::testing::TestStorage;
 use namada::ledger::storage::write_log::WriteLog;
-use namada::proto::{InnerTx, Tx, SignedOuterTxData};
+use namada::proto::{Tx};
 use namada::types::transaction::{RawHeader, TxType};
 use namada::types::address::{self, Address};
 use namada::types::storage::{self, Key, TxIndex};
@@ -65,7 +65,6 @@ impl Default for TestVpEnv {
         let (vp_wasm_cache, vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
-        let inner_tx = InnerTx::new(vec![], None);
         Self {
             addr: address::testing::established_address_1(),
             storage: TestStorage::default(),
