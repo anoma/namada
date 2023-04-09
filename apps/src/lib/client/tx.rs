@@ -758,11 +758,11 @@ impl ShieldedContext {
         tx: &Transfer,
     ) {
         // Ignore purely transparent transactions
-        let shielded = if let Some(shielded) = &tx.shielded {
-            shielded
-        } else {
+        if tx.shielded.is_empty() {
             return;
-        };
+        }
+        let shielded = Transaction::try_from_slice(&tx.shielded[..])
+            .expect("Decoding shielded tx failed");
         // For tracking the account changes caused by this Transaction
         let mut transaction_delta = TransactionDelta::new();
         // Listen for notes sent to our viewing keys
@@ -1190,8 +1190,7 @@ impl ShieldedContext {
             .expect("Ill-formed epoch, transaction pair");
         // Accumulate the combined output note value into this Amount
         let mut val_acc = Amount::zero();
-        let tx = tx
-            .shielded
+        let tx = Transaction::try_from_slice(&tx.shielded[..])
             .expect("Pinned Transfers should have shielded part");
         for so in &tx.shielded_outputs {
             // Let's try to see if our viewing key can decrypt current note
@@ -1502,6 +1501,54 @@ where
     tx.map(Some)
 }
 
+async fn make_shielded_transaction(
+    ctx: &mut Context,
+    parsed_args: &ParsedTxTransferArgs,
+    shielded_gas: bool,
+) -> Vec<u8> {
+    let spending_key = parsed_args.source.spending_key();
+    let payment_address = parsed_args.target.payment_address();
+    // No shielded components are needed when neither source nor
+    // destination are shielded
+    if spending_key.is_none() && payment_address.is_none() {
+        return Vec::new();
+    }
+    // We want to fund our transaction solely from supplied spending
+    // key
+    let spending_key = spending_key.map(|x| x.into());
+    let spending_keys: Vec<_> = spending_key.into_iter().collect();
+    // Load the current shielded context given the spending key we
+    // possess
+    let _ = ctx.shielded.load();
+    ctx.shielded
+        .fetch(&parsed_args.tx.ledger_address, &spending_keys, &[])
+        .await;
+    // Save the update state so that future fetches can be
+    // short-circuited
+    let _ = ctx.shielded.save();
+    match gen_shielded_transfer(ctx, parsed_args, shielded_gas).await {
+        Ok(Some(stx)) => stx
+            .0
+            .try_to_vec()
+            .expect("Encoding shielded tx shouldn't fail"),
+        Ok(None) => Vec::new(),
+        Err(builder::Error::ChangeIsNegative(_)) => {
+            eprintln!(
+                "The balance of the source {} is lower than the amount to be \
+                 transferred and fees. Amount to transfer is {} {} and fees \
+                 are {} {}.",
+                parsed_args.source,
+                parsed_args.amount,
+                parsed_args.token,
+                parsed_args.tx.fee_amount,
+                parsed_args.tx.fee_token,
+            );
+            safe_exit(1)
+        }
+        Err(err) => panic!("{}", err),
+    }
+}
+
 pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     let parsed_args = args.parse_from_context(&mut ctx);
     let source = parsed_args.source.effective_address();
@@ -1628,49 +1675,12 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         sub_prefix,
         amount,
         key,
-        shielded: {
-            let spending_key = parsed_args.source.spending_key();
-            let payment_address = parsed_args.target.payment_address();
-            // No shielded components are needed when neither source nor
-            // destination are shielded
-            if spending_key.is_none() && payment_address.is_none() {
-                None
-            } else {
-                // We want to fund our transaction solely from supplied spending
-                // key
-                let spending_key = spending_key.map(|x| x.into());
-                let spending_keys: Vec<_> = spending_key.into_iter().collect();
-                // Load the current shielded context given the spending key we
-                // possess
-                let _ = ctx.shielded.load();
-                ctx.shielded
-                    .fetch(&args.tx.ledger_address, &spending_keys, &[])
-                    .await;
-                // Save the update state so that future fetches can be
-                // short-circuited
-                let _ = ctx.shielded.save();
-                let stx_result =
-                    gen_shielded_transfer(&mut ctx, &parsed_args, shielded_gas)
-                        .await;
-                match stx_result {
-                    Ok(stx) => stx.map(|x| x.0),
-                    Err(builder::Error::ChangeIsNegative(_)) => {
-                        eprintln!(
-                            "The balance of the source {} is lower than the \
-                             amount to be transferred and fees. Amount to \
-                             transfer is {} {} and fees are {} {}.",
-                            parsed_args.source,
-                            args.amount,
-                            parsed_args.token,
-                            args.tx.fee_amount,
-                            parsed_args.tx.fee_token,
-                        );
-                        safe_exit(1)
-                    }
-                    Err(err) => panic!("{}", err),
-                }
-            }
-        },
+        shielded: make_shielded_transaction(
+            &mut ctx,
+            &parsed_args,
+            shielded_gas,
+        )
+        .await,
     };
     tracing::debug!("Transfer data {:?}", transfer);
     let data = transfer

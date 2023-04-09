@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::components::Amount;
+use masp_primitives::transaction::Transaction;
 /// Multi-asset shielded pool VP.
 use namada_vp_prelude::address::masp;
 use namada_vp_prelude::storage::Epoch;
@@ -49,7 +50,9 @@ fn validate_tx(
     let transfer =
         token::Transfer::try_from_slice(&signed.data.unwrap()[..]).unwrap();
 
-    if let Some(shielded_tx) = transfer.shielded {
+    if !transfer.shielded.is_empty() {
+        let shielded_tx =
+            Transaction::try_from_slice(&transfer.shielded[..]).unwrap();
         let mut transparent_tx_pool = Amount::zero();
         // The Sapling value balance adds to the transparent tx pool
         transparent_tx_pool += shielded_tx.value_balance.clone();

@@ -5,6 +5,7 @@ use std::convert::TryInto;
 use std::num::TryFromIntError;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use masp_primitives::transaction::Transaction;
 use namada_core::types::internal::KeyVal;
 use thiserror::Error;
 
@@ -1785,12 +1786,16 @@ where
         BorshDeserialize::try_from_slice(tx_bytes.as_slice())
             .map_err(vp_host_fns::RuntimeError::EncodingError)?;
 
-    match full_tx.shielded {
-        Some(shielded_tx) => Ok(HostEnvResult::from(
-            crate::ledger::masp::verify_shielded_tx(&shielded_tx),
-        )
-        .to_i64()),
-        None => Ok(HostEnvResult::Fail.to_i64()),
+    if full_tx.shielded.is_empty() {
+        Ok(HostEnvResult::Fail.to_i64())
+    } else {
+        let shielded_tx: Transaction =
+            BorshDeserialize::try_from_slice(full_tx.shielded.as_slice())
+                .map_err(vp_host_fns::RuntimeError::EncodingError)?;
+        Ok(HostEnvResult::from(crate::ledger::masp::verify_shielded_tx(
+            &shielded_tx,
+        ))
+        .to_i64())
     }
 }
 

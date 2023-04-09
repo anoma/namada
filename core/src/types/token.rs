@@ -5,7 +5,6 @@ use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use masp_primitives::transaction::Transaction;
 use rust_decimal::prelude::{Decimal, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -442,8 +441,8 @@ pub struct Transfer {
     pub amount: Amount,
     /// The unused storage location at which to place TxId
     pub key: Option<String>,
-    /// Shielded transaction part
-    pub shielded: Option<Transaction>,
+    /// Shielded transaction part as encoded bytes
+    pub shielded: Vec<u8>,
 }
 
 #[allow(missing_docs)]
@@ -481,7 +480,7 @@ impl TryFrom<crate::ledger::ibc::data::FungibleTokenPacketData> for Transfer {
             sub_prefix: None,
             amount,
             key: None,
-            shielded: None,
+            shielded: Vec::new(),
         })
     }
 }

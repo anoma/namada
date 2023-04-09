@@ -1675,7 +1675,7 @@ fn invalid_transactions() -> Result<()> {
         sub_prefix: None,
         amount: token::Amount::whole(1),
         key: None,
-        shielded: None,
+        shielded: Vec::new(),
     };
     let data = transfer
         .try_to_vec()

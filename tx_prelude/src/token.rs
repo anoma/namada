@@ -1,4 +1,3 @@
-use masp_primitives::transaction::Transaction;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::KeySeg;
 use namada_core::types::token;
@@ -16,7 +15,7 @@ pub fn transfer(
     sub_prefix: Option<storage::Key>,
     amount: Amount,
     key: &Option<String>,
-    shielded: &Option<Transaction>,
+    shielded: Vec<u8>,
 ) -> TxResult {
     if amount != Amount::default() {
         let src_key = match &sub_prefix {
@@ -86,7 +85,7 @@ pub fn transfer(
 
     // If this transaction has a shielded component, then handle it
     // separately
-    if let Some(shielded) = shielded {
+    if !shielded.is_empty() {
         let masp_addr = address::masp();
         ctx.insert_verifier(&masp_addr)?;
         let head_tx_key = storage::Key::from(masp_addr.to_db_key())
@@ -108,7 +107,7 @@ pub fn transfer(
             sub_prefix: None,
             amount,
             key: key.clone(),
-            shielded: Some(shielded.clone()),
+            shielded,
         };
         ctx.write(
             &current_tx_key,

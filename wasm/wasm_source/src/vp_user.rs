@@ -254,7 +254,7 @@ mod tests {
                 None,
                 amount,
                 &None,
-                &None,
+                Vec::new(),
             )
             .unwrap();
         });
@@ -300,7 +300,7 @@ mod tests {
                 None,
                 amount,
                 &None,
-                &None,
+                Vec::new(),
             )
             .unwrap();
         });
@@ -350,7 +350,7 @@ mod tests {
                 None,
                 amount,
                 &None,
-                &None,
+                Vec::new(),
             )
             .unwrap();
         });
@@ -534,7 +534,7 @@ mod tests {
                 None,
                 amount,
                 &None,
-                &None,
+                Vec::new(),
             )
             .unwrap();
         });
