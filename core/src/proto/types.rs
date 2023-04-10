@@ -31,6 +31,7 @@ use crate::types::transaction::TxType;
 use crate::types::transaction::WrapperTx;
 use sha2::{Digest, Sha256};
 use crate::types::transaction::WrapperTxErr;
+use masp_primitives::transaction::Transaction;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -353,6 +354,7 @@ pub enum Section {
     Code(Code),
     Signature(Signature),
     Ciphertext(Ciphertext),
+    MaspTx(Transaction),
 }
 
 impl Section {
@@ -378,6 +380,11 @@ impl Section {
                 hasher.update(&[4]);
                 ct.hash(hasher)
             }
+            Self::MaspTx(tx) => {
+                hasher.update(&[5]);
+                hasher.update(tx.try_to_vec().expect("unable to serialize tx"));
+                hasher
+            },
         }
     }
 
@@ -421,6 +428,14 @@ impl Section {
 
     pub fn ciphertext(&self) -> Option<Ciphertext> {
         if let Self::Ciphertext(data) = self {
+            Some(data.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn masp_tx(&self) -> Option<Transaction> {
+        if let Self::MaspTx(data) = self {
             Some(data.clone())
         } else {
             None

@@ -60,6 +60,7 @@ pub fn init_proposal(ctx: &mut Ctx, data: InitProposalData) -> TxResult {
         min_proposal_funds,
         &None,
         &None,
+        &None,
     )
 }
 

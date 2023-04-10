@@ -76,6 +76,7 @@ pub mod tx {
         token: &Address,
         amount: Amount,
         key: &Option<String>,
+        shielded_hash: &Option<Hash>,
         shielded: &Option<Transaction>,
     ) {
         let src_key = token::balance_key(token, src);
@@ -138,16 +139,18 @@ pub mod tx {
                 token: token.clone(),
                 amount,
                 key: key.clone(),
-                shielded: Some(shielded.clone()),
+                shielded: Some(shielded_hash.clone()),
             };
+            let record: (Epoch, BlockHeight, TxIndex, Transfer, Transaction) = (
+                tx::get_block_epoch(),
+                tx::get_block_height(),
+                tx::get_tx_index(),
+                transfer,
+                shielded.clone(),
+            );
             tx::write(
                 &current_tx_key.to_string(),
-                (
-                    tx::get_block_epoch(),
-                    tx::get_block_height(),
-                    tx::get_tx_index(),
-                    transfer,
-                ),
+                record,
             );
             tx::write(&head_tx_key.to_string(), current_tx_idx + 1);
             // If storage key has been supplied, then pin this transaction to it

@@ -666,8 +666,8 @@ impl ShieldedContext {
             }
             // Update this unknown shielded context until it is level with self
             while tx_ctx.last_txidx != self.last_txidx {
-                if let Some(((height, idx), (epoch, tx))) = tx_iter.next() {
-                    tx_ctx.scan_tx(*height, *idx, *epoch, tx);
+                if let Some(((height, idx), (epoch, tx, stx))) = tx_iter.next() {
+                    tx_ctx.scan_tx(*height, *idx, *epoch, tx, stx);
                 } else {
                     break;
                 }
@@ -684,8 +684,8 @@ impl ShieldedContext {
         }
         // Now that we possess the unspent notes corresponding to both old and
         // new keys up until tx_pos, proceed to scan the new transactions.
-        for ((height, idx), (epoch, tx)) in &mut tx_iter {
-            self.scan_tx(*height, *idx, *epoch, tx);
+        for ((height, idx), (epoch, tx, stx)) in &mut tx_iter {
+            self.scan_tx(*height, *idx, *epoch, tx, stx);
         }
     }
 
@@ -722,7 +722,7 @@ impl ShieldedContext {
     pub async fn fetch_shielded_transfers(
         ledger_address: &TendermintAddress,
         last_txidx: u64,
-    ) -> BTreeMap<(BlockHeight, TxIndex), (Epoch, Transfer)> {
+    ) -> BTreeMap<(BlockHeight, TxIndex), (Epoch, Transfer, Transaction)> {
         let client = HttpClient::new(ledger_address.clone()).unwrap();
         // The address of the MASP account
         let masp_addr = masp();
@@ -742,15 +742,15 @@ impl ShieldedContext {
                 .push(&(TX_KEY_PREFIX.to_owned() + &i.to_string()))
                 .expect("Cannot obtain a storage key");
             // Obtain the current transaction
-            let (tx_epoch, tx_height, tx_index, current_tx) =
-                query_storage_value::<(Epoch, BlockHeight, TxIndex, Transfer)>(
+            let (tx_epoch, tx_height, tx_index, current_tx, current_stx) =
+                query_storage_value::<(Epoch, BlockHeight, TxIndex, Transfer, Transaction)>(
                     &client,
                     &current_tx_key,
                 )
                 .await
                 .unwrap();
             // Collect the current transaction
-            shielded_txs.insert((tx_height, tx_index), (tx_epoch, current_tx));
+            shielded_txs.insert((tx_height, tx_index), (tx_epoch, current_tx, current_stx));
         }
         shielded_txs
     }
@@ -769,13 +769,8 @@ impl ShieldedContext {
         index: TxIndex,
         epoch: Epoch,
         tx: &Transfer,
+        shielded: &Transaction,
     ) {
-        // Ignore purely transparent transactions
-        let shielded = if let Some(shielded) = &tx.shielded {
-            shielded
-        } else {
-            return;
-        };
         // For tracking the account changes caused by this Transaction
         let mut transaction_delta = TransactionDelta::new();
         // Listen for notes sent to our viewing keys
@@ -1195,18 +1190,15 @@ impl ShieldedContext {
             .push(&(TX_KEY_PREFIX.to_owned() + &txidx.to_string()))
             .expect("Cannot obtain a storage key");
         // Obtain the pointed to transaction
-        let (tx_epoch, _tx_height, _tx_index, tx) =
-            query_storage_value::<(Epoch, BlockHeight, TxIndex, Transfer)>(
+        let (tx_epoch, _tx_height, _tx_index, tx, shielded) =
+            query_storage_value::<(Epoch, BlockHeight, TxIndex, Transfer, Transaction)>(
                 &client, &tx_key,
             )
             .await
             .expect("Ill-formed epoch, transaction pair");
         // Accumulate the combined output note value into this Amount
         let mut val_acc = Amount::zero();
-        let tx = tx
-            .shielded
-            .expect("Pinned Transfers should have shielded part");
-        for so in &tx.shielded_outputs {
+        for so in &shielded.shielded_outputs {
             // Let's try to see if our viewing key can decrypt current note
             let decres = try_sapling_note_decryption::<TestNetwork>(
                 0,
@@ -1634,6 +1626,52 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     let is_source_faucet =
         rpc::is_faucet_account(&source, args.tx.ledger_address.clone()).await;
 
+    let shielded = {
+        let spending_key = parsed_args.source.spending_key();
+        let payment_address = parsed_args.target.payment_address();
+        // No shielded components are needed when neither source nor
+        // destination are shielded
+        if spending_key.is_none() && payment_address.is_none() {
+            None
+        } else {
+            // We want to fund our transaction solely from supplied spending
+            // key
+            let spending_key = spending_key.map(|x| x.into());
+            let spending_keys: Vec<_> = spending_key.into_iter().collect();
+            // Load the current shielded context given the spending key we
+            // possess
+            let _ = ctx.shielded.load();
+            ctx.shielded
+                .fetch(&args.tx.ledger_address, &spending_keys, &[])
+                .await;
+            // Save the update state so that future fetches can be
+            // short-circuited
+            let _ = ctx.shielded.save();
+            let stx_result =
+                gen_shielded_transfer(&mut ctx, &parsed_args, shielded_gas)
+                .await;
+            match stx_result {
+                Ok(stx) => stx.map(|x| x.0),
+                Err(builder::Error::ChangeIsNegative(_)) => {
+                    eprintln!(
+                        "The balance of the source {} is lower than the \
+                         amount to be transferred and fees. Amount to \
+                         transfer is {} {} and fees are {} {}.",
+                        parsed_args.source,
+                        args.amount,
+                        parsed_args.token,
+                        args.tx.fee_amount,
+                        parsed_args.tx.fee_token,
+                    );
+                    safe_exit(1)
+                }
+                Err(err) => panic!("{}", err),
+            }
+        }
+    };
+    let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
+    let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+    let masp_tx = shielded.map(|shielded| tx.add_section(Section::MaspTx(shielded)));
     let transfer = token::Transfer {
         source,
         target,
@@ -1641,56 +1679,14 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         sub_prefix,
         amount,
         key,
-        shielded: {
-            let spending_key = parsed_args.source.spending_key();
-            let payment_address = parsed_args.target.payment_address();
-            // No shielded components are needed when neither source nor
-            // destination are shielded
-            if spending_key.is_none() && payment_address.is_none() {
-                None
-            } else {
-                // We want to fund our transaction solely from supplied spending
-                // key
-                let spending_key = spending_key.map(|x| x.into());
-                let spending_keys: Vec<_> = spending_key.into_iter().collect();
-                // Load the current shielded context given the spending key we
-                // possess
-                let _ = ctx.shielded.load();
-                ctx.shielded
-                    .fetch(&args.tx.ledger_address, &spending_keys, &[])
-                    .await;
-                // Save the update state so that future fetches can be
-                // short-circuited
-                let _ = ctx.shielded.save();
-                let stx_result =
-                    gen_shielded_transfer(&mut ctx, &parsed_args, shielded_gas)
-                        .await;
-                match stx_result {
-                    Ok(stx) => stx.map(|x| x.0),
-                    Err(builder::Error::ChangeIsNegative(_)) => {
-                        eprintln!(
-                            "The balance of the source {} is lower than the \
-                             amount to be transferred and fees. Amount to \
-                             transfer is {} {} and fees are {} {}.",
-                            parsed_args.source,
-                            args.amount,
-                            parsed_args.token,
-                            args.tx.fee_amount,
-                            parsed_args.tx.fee_token,
-                        );
-                        safe_exit(1)
-                    }
-                    Err(err) => panic!("{}", err),
-                }
-            }
-        },
+        shielded: masp_tx.map(
+            |masp_tx| Hash(masp_tx.hash(&mut Sha256::new()).finalize_reset().into())
+        ),
     };
     tracing::debug!("Transfer data {:?}", transfer);
     let data = transfer
         .try_to_vec()
         .expect("Encoding tx data shouldn't fail");
-    let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
-    let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
     tx.set_data(Data::new(data));
     tx.set_code(Code::new(tx_code));
     let signing_address = TxSigningKey::WalletAddress(args.source.to_address());

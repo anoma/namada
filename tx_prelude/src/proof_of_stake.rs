@@ -235,7 +235,7 @@ impl namada_proof_of_stake::PosActions for Ctx {
         dest: &Address,
     ) -> storage_api::Result<()> {
         crate::token::transfer(
-            self, src, dest, token, None, amount, &None, &None,
+            self, src, dest, token, None, amount, &None, &None, &None,
         )
     }
 }

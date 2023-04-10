@@ -34,6 +34,7 @@ pub type HashResult<T> = std::result::Result<T, Error>;
     Debug,
     Default,
     Hash,
+    PartialOrd,
     PartialEq,
     Eq,
     BorshSerialize,

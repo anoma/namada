@@ -49,7 +49,13 @@ fn validate_tx(
     let transfer =
         token::Transfer::try_from_slice(&signed.data().unwrap()[..]).unwrap();
 
-    if let Some(shielded_tx) = transfer.shielded {
+    let shielded = transfer.shielded.as_ref().map(|hash| {
+        signed
+            .get_section(&hash)
+            .and_then(Section::masp_tx)
+            .ok_or_err_msg("unable to find shielded section")
+    }).transpose()?;
+    if let Some(shielded_tx) = shielded {
         let mut transparent_tx_pool = Amount::zero();
         // The Sapling value balance adds to the transparent tx pool
         transparent_tx_pool += shielded_tx.value_balance.clone();
@@ -96,8 +102,9 @@ fn validate_tx(
             }
             _ => {}
         }
+        // Do the expensive proof verification in the VM at the end.
+        ctx.verify_masp(shielded_tx.try_to_vec().unwrap())
+    } else {
+        reject()
     }
-
-    // Do the expensive proof verification in the VM at the end.
-    ctx.verify_masp(data)
 }
