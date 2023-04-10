@@ -9,8 +9,11 @@ The Namada Ethereum bridge system consists of:
 * A set of Ethereum smart contracts.
 * An Ethereum full node run by each Namada validator, to watch Ethereum
   events emitted by the bridge's smart contracts.
-* A set of validity predicates on Namada which roughly implement
+* A set of validity predicates (VPs) on Namada which roughly implement
   [ICS20] fungible token transfers.
+    + A Bridge pool VP, to validate transfers to Ethereum and escrowed NAM.
+    + An Ethereum bridge VP, to protect writes to Namada storage
+      key sub-spaces containing Ethereum event tallies.
 * Two relayer utilities, to call the Ethereum smart contracts.
     + One for performing validator set updates on the Ethereum
       smart contracts.
