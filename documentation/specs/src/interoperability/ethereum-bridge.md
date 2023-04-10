@@ -57,11 +57,11 @@ ever seen it as well as the fraction of total voting power that has ever seen it
 Once an event has been seen by at least 2/3 of voting power, it is locked into a
 `seen` state, and acted upon.
 
-There is no adjustment across epoch boundaries - e.g. if an event is seen by 1/3
-of voting power in epoch n, then seen by a different 1/3 of voting power in 
-epoch m>n, the event will be considered `seen` in total. The voting power behind
-an individual event is therefore kept track of in the form of a fraction over the
-minimum of the total voting power across all epochs it was voted on.
+If the voting power of Namada changes across epoch boundaries, then events in
+storage which are yet to be achieve a quorum decision behind them (i.e. whose
+`seen` state is still `false`) must have their voting power adjusted. It is
+enough to lazily adjust an event's voting power whenever a new vote is made
+for it, to avoid iterating over each Ethereum event in storage.
 
 Validators may never vote more than once for a given event. To ensure that this
 invariant is held, events are timed out if they are not `seen` within the span
