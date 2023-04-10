@@ -2,9 +2,9 @@
 
 ## Overview
 
-The Ethereum bridge is not enabled at the launch of a Namada chain. To
-enable the Ethereum bridge, there are four governance parameters which
-must be written to storage:
+The Ethereum bridge may not be enabled at the launch (i.e. genesis) of a
+Namada chain. To enable the Ethereum bridge, there are four governance
+parameters which must be written to storage:
 
 - `eth_bridge_min_confirmations` - The minimum number of block confirmations
   on Ethereum required for any given event to be voted on by Namada validators.
@@ -20,25 +20,27 @@ must be written to storage:
 - `eth_bridge_wnam_address` - The address of the deployment of the native
   ERC20 address, representing NAM in Ethereum.
 
-An overview of the steps to enable the Ethereum bridge for a given
-Namada chain are:
+An overview of the steps to follow, after genesis, to enable the Ethereum bridge
+for a given Namada chain are:
 
-- A governance proposal should be held to agree on a block height `h` at which
-  to launch the Ethereum bridge by means of a hard fork.
-- If the proposal passes, the Namada chain must halt after finalizing block
-  `h-1`. This requires
-- The [Ethereum bridge smart contracts](./ethereum_smart_contracts.md) are
-  deployed to the relevant EVM chain, with the active validator set at block
-  height `h` as the initial validator set that controls the bridge.
-- Details are published so that the deployed contracts can be verified by anyone
-  who wishes to do so.
-- If active validators for block height `h` regard the deployment as valid, the
-  chain should be restarted with a new genesis file that specifies
-  `eth_bridge_proxy_address` as the Ethereum address of the proxy contract.
+1. A governance proposal should be held to agree on a block height `h` at which
+   to launch the Ethereum bridge by means of a hard fork.
+2. If the proposal passes, the Namada chain must halt after finalizing block
+   `h-1`.
+3. The [Ethereum bridge smart contracts](./ethereum_smart_contracts.md) are
+   deployed to the relevant EVM chain, with the active validator set at block
+   height `h` as the initial validator set that controls the bridge.
+4. Details are published so that the deployed contracts can be verified by anyone
+   who wishes to do so.
+5. If active validators for block height `h` regard the deployment as valid, the
+   chain should be restarted with a new genesis file that specifies
+   the parameters described above.
 
 At this point, the bridge is launched and it may start being used. Validators'
 ledger nodes will immediately and automatically coordinate in order to craft the
-first validator set update protocol transaction.
+first Bridge pool root's vote extension, used to prove the existence of a quorum
+decision on the root of the merkle tree of transfers to Ethereum and its associated
+nonce.
 
 ## Facets
 
