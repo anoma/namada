@@ -1919,9 +1919,9 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             }
         }
     } else {
-        let tx_data: Result<(InitProposalData, Vec<u8>), _> =
+        let tx_data: Result<(InitProposalData, Option<Vec<u8>>), _> =
             proposal.clone().try_into();
-        let (init_proposal_data, proposal_code) = if let Ok(data) = tx_data {
+        let (mut init_proposal_data, proposal_code) = if let Ok(data) = tx_data {
             data
         } else {
             eprintln!("Invalid data for init proposal transaction.");
@@ -1952,14 +1952,17 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             safe_exit(1);
         }
 
+        let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let proposal_sec = proposal_code.map(|pc| tx.add_section(Section::ExtraData(Data::new(pc))));
+        init_proposal_data.proposal_code = proposal_sec.map(|ps| {
+            Hash(ps.hash(&mut Sha256::new()).finalize_reset().into())
+        });
         let data = init_proposal_data
             .try_to_vec()
             .expect("Encoding proposal data shouldn't fail");
-        let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
         tx.set_data(Data::new(data));
         tx.set_code(Code::new(tx_code));
-        tx.add_section(Section::ExtraData(Data::new(proposal_code)));
 
         process_tx(
             ctx,

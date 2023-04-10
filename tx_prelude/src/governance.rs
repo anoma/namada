@@ -10,7 +10,11 @@ use super::*;
 use crate::token::transfer;
 
 /// A proposal creation transaction.
-pub fn init_proposal(ctx: &mut Ctx, data: InitProposalData) -> TxResult {
+pub fn init_proposal(
+    ctx: &mut Ctx,
+    data: InitProposalData,
+    proposal_code: Option<Vec<u8>>,
+) -> TxResult {
     let counter_key = storage::get_counter_key();
     let proposal_id = if let Some(id) = data.id {
         id
@@ -34,8 +38,10 @@ pub fn init_proposal(ctx: &mut Ctx, data: InitProposalData) -> TxResult {
     let grace_epoch_key = storage::get_grace_epoch_key(proposal_id);
     ctx.write(&grace_epoch_key, data.grace_epoch)?;
 
-    let proposal_code_key = storage::get_proposal_code_key(proposal_id);
-    //ctx.write_bytes(&proposal_code_key, ctx.get_tx_extra()?)?;
+    if let Some(proposal_code) = proposal_code {
+        let proposal_code_key = storage::get_proposal_code_key(proposal_id);
+        ctx.write_bytes(&proposal_code_key, proposal_code)?;
+    }
 
     ctx.write(&counter_key, proposal_id + 1)?;
 

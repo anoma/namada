@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::types::address::Address;
 use crate::types::governance::{Proposal, ProposalError, ProposalVote};
 use crate::types::storage::Epoch;
+use crate::types::hash::Hash;
 
 /// A tx data type to hold proposal data
 #[derive(
@@ -28,6 +29,8 @@ pub struct InitProposalData {
     pub voting_end_epoch: Epoch,
     /// The epoch from which this changes are executed
     pub grace_epoch: Epoch,
+    /// The code containing the storage changes
+    pub proposal_code: Option<Hash>,
 }
 
 /// A tx data type to hold vote proposal data
@@ -51,17 +54,17 @@ pub struct VoteProposalData {
     pub delegations: Vec<Address>,
 }
 
-impl TryFrom<Proposal> for (InitProposalData, Vec<u8>) {
+impl TryFrom<Proposal> for (InitProposalData, Option<Vec<u8>>) {
     type Error = ProposalError;
 
     fn try_from(proposal: Proposal) -> Result<Self, Self::Error> {
         let proposal_code = if let Some(path) = proposal.proposal_code_path {
             match std::fs::read(path) {
-                Ok(bytes) => bytes,
+                Ok(bytes) => Some(bytes),
                 Err(_) => return Err(Self::Error::InvalidProposalData),
             }
         } else {
-            vec![]
+            None
         };
 
         Ok((
@@ -72,6 +75,7 @@ impl TryFrom<Proposal> for (InitProposalData, Vec<u8>) {
                 voting_start_epoch: proposal.voting_start_epoch,
                 voting_end_epoch: proposal.voting_end_epoch,
                 grace_epoch: proposal.grace_epoch,
+                proposal_code: None,
             },
             proposal_code,
         ))
