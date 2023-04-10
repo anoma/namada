@@ -98,14 +98,14 @@ at $H$.
 
 Namada validators perform votes on other kinds of data, namely:
 
-1) Validator set update vote extension protocol transactions. As the name
-   implies, these are used to sign off the set of validators of some epoch
-   $E' = E + 1$ by the validators of epoch $E$. The proof (quorum of signatures)
-   is used to update the validator set reflected in the Ethereum smart contracts
-   of the bridge.
-2) Bridge pool root vote extension protocol transactions. These vote extensions
-   are used to reach a quorum decision on the most recent root and nonce of the
-   [Ethereum bridge pool](./ethereum-bridge/transfers_to_ethereum.md).
+1) Validator set update vote extension. As the name implies, these are used to
+   sign off the set of validators of some epoch $E' = E + 1$ by the validators
+   of epoch $E$. The proof (quorum of signatures) is used to update the validator
+   set reflected in the Ethereum smart contracts of the bridge.
+2) Bridge pool root vote extension. These vote extensions are used to reach a
+   quorum decision on the most recent root and nonce of the [Ethereum bridge pool].
+
+[Ethereum bridge pool]: ./ethereum-bridge/transfers_to_ethereum.md
 
 ### Storage
 To make including new events easy, we take the approach of always overwriting 
