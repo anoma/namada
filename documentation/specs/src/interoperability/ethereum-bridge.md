@@ -424,6 +424,6 @@ Namada.
 
 ## Resources which may be helpful:
 - [Gravity Bridge Solidity contracts](https://github.com/Gravity-Bridge/Gravity-Bridge/tree/main/solidity)
-- [ICS20](https://github.com/cosmos/ibc/tree/master/spec/app/ics-020-fungible-token-transfer)
+- [ICS20]
 - [Rainbow Bridge contracts](https://github.com/aurora-is-near/rainbow-bridge/tree/master/contracts)
 - [IBC in Solidity](https://github.com/hyperledger-labs/yui-ibc-solidity)
