@@ -39,7 +39,8 @@ Due to asynchronicity concerns, this message should be submitted well in
 advance of the actual epoch change. It should happen at the beginning of each
 new epoch. Bridge headers to ethereum should include the current Namada epoch
 so that the smart contract knows how to verify the headers. In short, there
-is a pipelining mechanism in the smart contract - the active validators for epoch `n` submit details of the active validator set for epoch `n+1`.
+is a pipelining mechanism in the smart contract - the consensus validators
+for epoch `n` submit details of the consensus validator set for epoch `n+1`.
 
 Such a message is not prompted by any user transaction and thus will have
 to be carried out by a _bridge relayer_. Once the necessary data to 
@@ -98,4 +99,4 @@ transaction with a quorum of signatures offline and submit it on-chain. This
 transaction should include the validator set update. 
 
 The only way this is impossible is if more than 1/3 of the validators by 
-stake from that epoch delete their ethereum keys, which is extremely unlikely.
+stake from that epoch delete their Ethereum keys, which is extremely unlikely.

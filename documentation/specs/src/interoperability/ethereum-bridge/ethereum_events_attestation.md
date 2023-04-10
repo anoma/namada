@@ -133,7 +133,7 @@ The votes will include be a Borsh-serialization of something like
 the following.
 ```rust
 /// This struct will be created and signed over by each
-/// active validator, to be included as a vote extension at the end of a
+/// consensus validator, to be included as a vote extension at the end of a
 /// Tendermint PreCommit phase or as Protocol Tx.
 pub struct Vext {
     /// The block height for which this [`Vext`] was made.
@@ -153,7 +153,7 @@ transaction into their proposal.
 Validators will check this transaction and the validity of the new votes as
 part of `ProcessProposal`, this includes checking:
 - signatures
-- that votes are really from active validators
+- that votes are really from consensus validators
 - the calculation of backed voting power
 
 If vote extensions are supported, it is also checked that each vote extension

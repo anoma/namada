@@ -75,7 +75,7 @@ The contracts should be deployable by anyone to any EVM chain using an automated
 script. The following configuration should be agreed up front by Namada
 governance before deployment:
 
-- details of the initial active validator set that will control the bridge -
+- details of the initial consensus validator set that will control the bridge -
   specifically, for each validator:
   - their hot Ethereum address
   - their cold Ethereum address
@@ -109,11 +109,11 @@ is the case with all other ERC20s.
 
 At any time, the _Governance_ and _Bridge_ contracts must store:
 
-- a hash of the current Namada epoch's active validator set
-- a hash of another epoch's active validator set. When the bridge is first
-  deployed, this will also be the current Namada epoch's active validator set,
+- a hash of the current Namada epoch's consensus validator set
+- a hash of another epoch's consensus validator set. When the bridge is first
+  deployed, this will also be the current Namada epoch's consensus validator set,
   but after the first validator set update is submitted to the _Governance_
-  smart contract, this hash will always be an adjacent Namada epoch's active
+  smart contract, this hash will always be an adjacent Namada epoch's consensus
   validator set i.e. either the previous epoch's, or the next epoch's
 
 In the case of the _Governance_ contract, these are hashes of a map of
@@ -125,15 +125,15 @@ set updates, pending transfers, etc.). Methods of the Ethereum bridge smart
 contracts should generally accept:
 
 - some message
-- full details of some active validator set (i.e. relevant Ethereum addresses +
+- full details of some consensus validator set (i.e. relevant Ethereum addresses +
   voting powers)
-- signatures over the message by validators from the this active validator set
+- signatures over the message by validators from the this consensus validator set
 
 Given this data, anyone should be able to make the relevant Ethereum smart
 contract method call, if they are willing to pay the Ethereum gas. A call is
 then authorized to happen if:
 
-- The active validator set specified in the call hashes to *either* of the
+- The consensus validator set specified in the call hashes to *either* of the
   validator set hashes stored in the smart contract
 - A quorum (i.e. more than 2/3 by voting power) of the signatures over the
   message are valid
