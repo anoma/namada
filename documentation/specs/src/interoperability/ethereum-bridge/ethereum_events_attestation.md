@@ -5,9 +5,12 @@ will include events that have been seen by at least one validator, but will not
 act on them until they have been seen by at least 2/3 of voting power.
 
 There will be multiple types of events emitted. Validators should
-ignore improperly formatted events. Raw events from Ethereum are converted to a
-Rust enum type (`EthereumEvent`) by Namada validators before being included
-in vote extensions or stored on chain.
+ignore improperly formatted events. ABI encoded events from Ethereum
+are decoded by [`ethbridge-rs`], and converted to a Rust enum type
+(`EthereumEvent`) by Namada validators before being included in vote
+extensions or stored on chain.
+
+[`ethbridge-rs`]: <https://github.com/heliaxdev/ethbridge-rs>
 
 ```rust
 pub enum EthereumEvent {
@@ -18,15 +21,26 @@ pub enum EthereumEvent {
 }
 ```
 
-Each event will be stored with a list of the validators that have ever seen it
-as well as the fraction of total voting power that has ever seen it.
-Once an event has been seen by 2/3 of voting power, it is locked into a
+Each event will be stored with a list of the consensus validators that have
+ever seen it as well as the fraction of total voting power that has ever seen it.
+Once an event has been seen by at least 2/3 of voting power, it is locked into a
 `seen` state, and acted upon.
 
-There is no adjustment across epoch boundaries - e.g. if an event is seen by 1/3
-of voting power in epoch n, then seen by a different 1/3 of voting power in
-epoch m>n, the event will be considered `seen` in total. Validators may never
-vote more than once for a given event.
+If the voting power of Namada changes across epoch boundaries, then events in
+storage which are yet to be achieve a quorum decision behind them (i.e. whose
+`seen` state is still `false`) must have their voting power adjusted. It is
+enough to lazily adjust an event's voting power whenever a new vote is made
+for it, to avoid iterating over each Ethereum event in storage.
+
+Validators may never vote more than once for a given event. To ensure that this
+invariant is held, events are timed out if they are not `seen` within the span
+of `unbonding_length` epochs, which corresponds to the period of time necessary
+for bonded tokens to be returned to an address (check the [relevant proof-of-stake section]
+for more details). Timing out an event consists in removing all its associated
+state from storage. Therefore, this mechanism serves another purpose: purging
+forged events from storage, voted on by Byzantine validators.
+
+[relevant proof-of-stake section]: ../../economics/proof-of-stake/bonding-mechanism.md
 
 ## Minimum confirmations
 There will be a protocol-specified minimum number of confirmations that events
@@ -35,8 +49,42 @@ on Namada. This minimum number of confirmations will be changeable via
 governance.
 
 `TransferToNamada` events may include a custom minimum number of
-confirmations, that must be at least the protocol-specified minimum number of
-confirmations but is initially set to __100__.
+confirmations that must be at least the protocol-specified minimum number of
+confirmations. However, this value is initially set to __100__.
+
+Validators must not vote to include events that have not met the required
+number of confirmations. Votes on unconfirmed events will eventually time
+out in storage, unless the number of confirmations was only off by a few
+block heights in Ethereum. Assuming that an honest quorum of validators is
+operating Namada, only confirmed events will eventually become `seen`.
+
+## Vote extension protocol transactions
+A batch of Ethereum events $E$ newly confirmed at some block height $H$
+is included by some validator $v$ in a protocol transaction we dub the
+*Ethereum events vote extension*. The vote extension is signed by the protocol
+key of $v$, uniquely identifying $v$'s vote on some Ethereum event $e \in E$
+at $H$.
+
+Namada validators perform votes on other kinds of data, namely:
+
+1) Validator set update vote extension. As the name implies, these are used to
+   sign off the set of validators of some epoch $E' = E + 1$ by the validators
+   of epoch $E$. The proof (quorum of signatures) is used to update the validator
+   set reflected in the Ethereum smart contracts of the bridge.
+2) Bridge pool root vote extension. These vote extensions are used to reach a
+   quorum decision on the most recent root and nonce of the [Ethereum bridge pool].
+
+These protocol transactions are only ever included on-chain if the Tendermint
+version that is being used to run the ledger does not include a full ABCI++
+(i.e. ABCI 2.0) implementation. Alternatively, nodes receive vote extensions
+from the previously decided block, never lagging behind more than one block
+height. Without ABCI++, vote extensions are included in arbitrary blocks,
+based on the contention of block proposers' mempools. This effectively means
+that a vote extension for some height $H_0$ may only be acted upon at some
+height $H \gg H_0$, or even evicted from the mempool altogether, if it is
+never proposed.
+
+[Ethereum bridge pool]: ./transfers_to_ethereum.md
 
 ## Storage
 To make including new events easy, we take the approach of always overwriting
@@ -44,27 +92,24 @@ the state with the new state rather than applying state diffs. The storage
 keys involved are:
 ```
 # all values are Borsh-serialized
-/eth_msgs/\$msg_hash/body : EthereumEvent
-/eth_msgs/\$msg_hash/seen_by : BTreeSet<Address>
-/eth_msgs/\$msg_hash/voting_power: (u64, u64)  # reduced fraction < 1 e.g. (2, 3)
-/eth_msgs/\$msg_hash/seen: bool
+/eth_msgs/$msg_hash/body: EthereumEvent # the event to be voted on
+/eth_msgs/$msg_hash/seen_by: BTreeMap<Address, BlockHeight> # mapping from a validator to the Namada height at which the event was observed to be confirmed by said validator
+/eth_msgs/$msg_hash/voting_power: FractionalVotingPower  # reduced fraction < 1 e.g. (2, 3)
+/eth_msgs/$msg_hash/seen: bool # >= 2/3 voting power across all epochs it was voted on
 ```
 
-`\$msg_hash` is the SHA256 digest of the Borsh serialization of the relevant
-`EthereumEvent`.
+Where `$msg_hash` is the SHA256 digest of the Borsh serialization of
+some `EthereumEvent`.
 
-Changes to this `/eth_msgs` storage subspace are only ever made by
-nodes as part of the ledger code based on the aggregate of votes
-by validators for specific events. That is, changes to
-`/eth_msgs` happen
-in block `n` in a deterministic manner based on the votes included in the
-block proposal for block `n`. Depending on the underlying Tendermint
-version, these votes will either be included as vote extensions or as
+Changes to this `/eth_msgs` storage subspace are only ever made by nodes as part
+of the ledger code based on the aggregate of votes by validators for specific events.
+That is, changes to `/eth_msgs` happen in block `n` in a deterministic manner based
+on the votes included in the block proposal for block `n`. Depending on the underlying
+Tendermint version, these votes will either be included as vote extensions or as
 protocol transactions.
 
-The `/eth_msgs` storage subspace will belong
-to the `EthBridge` validity predicate. It should disallow any changes to
-this storage from wasm transactions.
+The `/eth_msgs` storage subspace will belong to the `EthBridge` validity predicate.
+It should disallow any changes to this storage from wasm transactions.
 
 ### Including events into storage
 
