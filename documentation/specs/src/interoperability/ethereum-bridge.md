@@ -92,7 +92,7 @@ operating Namada, only confirmed events will eventually become `seen`.
 ### Vote extension protocol transactions
 A batch of Ethereum events $E$ newly confirmed at some block height $H$
 is included by some validator $v$ in a protocol transaction we dub the
-*Ethereum events vote extension*. The transaction is signed by the protocol
+*Ethereum events vote extension*. The vote extension is signed by the protocol
 key of $v$, uniquely identifying $v$'s vote on some Ethereum event $e \in E$
 at $H$.
 
