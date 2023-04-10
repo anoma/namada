@@ -2,15 +2,26 @@
 
 ## Overview
 
-The Ethereum bridge is not enabled at the launch of a Namada chain. Instead,
-there are two governance parameters:
+The Ethereum bridge is not enabled at the launch of a Namada chain. To
+enable the Ethereum bridge, there are four governance parameters which
+must be written to storage:
 
-- `eth_bridge_proxy_address`
-- `eth_bridge_wnam_address`
+- `eth_bridge_min_confirmations` - The minimum number of block confirmations
+  on Ethereum required for any given event to be voted on by Namada validators.
+- `eth_bridge_bridge_address` - The address of the `Bridge` contract, used to
+  perform transfers in either direction (Namada <> Ethereum).
+- `eth_bridge_bridge_version` - The version of the `Bridge` contract, starting
+  from 1.
+- `eth_bridge_governance_address` - The address of the `Governance` contract,
+  used to perform administrative tasks, such as updating validator sets in
+  Ethereum.
+- `eth_bridge_governance_version` - The version of the `Governance` contract,
+  starting from 1.
+- `eth_bridge_wnam_address` - The address of the deployment of the native
+  ERC20 address, representing NAM in Ethereum.
 
-Both are initialized to the zero Ethereum address
-(`"0x0000000000000000000000000000000000000000"`). An overview of the steps to
-enable the Ethereum bridge for a given Namada chain are:
+An overview of the steps to enable the Ethereum bridge for a given
+Namada chain are:
 
 - A governance proposal should be held to agree on a block height `h` at which
   to launch the Ethereum bridge by means of a hard fork.
