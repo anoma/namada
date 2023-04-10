@@ -71,7 +71,7 @@ for more details). Timing out an event consists in removing all its associated
 state from storage. Therefore, this mechanism serves another purpose: purging
 forged events from storage, voted on by Byzantine validators.
 
-[relevant proof-of-stake section]: ../../../economics/proof-of-stake/bonding-mechanism.html
+[relevant proof-of-stake section]: ../economics/proof-of-stake/bonding-mechanism.md
 
 ### Minimum confirmations
 There will be a protocol-specified minimum number of confirmations that events
@@ -89,9 +89,23 @@ out in storage, unless the number of confirmations was only off by a few
 block heights in Ethereum. Assuming that an honest quorum of validators is
 operating Namada, only confirmed events will eventually become `seen`.
 
-### Protocol transactions
-Ethereum votes confirmed at some block height `H`. TODO: describe protocol
-tx vote extensions
+### Vote extension protocol transactions
+A batch of Ethereum events $E$ newly confirmed at some block height $H$
+is included by some validator $v$ in a protocol transaction we dub the
+*Ethereum events vote extension*. The transaction is signed by the protocol
+key of $v$, uniquely identifying $v$'s vote on some Ethereum event $e \in E$
+at $H$.
+
+Namada validators perform votes on other kinds of data, namely:
+
+1) Validator set update vote extension protocol transactions. As the name
+   implies, these are used to sign off the set of validators of some epoch
+   $E' = E + 1$ by the validators of epoch $E$. The proof (quorum of signatures)
+   is used to update the validator set reflected in the Ethereum smart contracts
+   of the bridge.
+2) Bridge pool root vote extension protocol transactions. These vote extensions
+   are used to reach a quorum decision on the most recent root and nonce of the
+   [Ethereum bridge pool](./ethereum-bridge/transfers_to_ethereum.md).
 
 ### Storage
 To make including new events easy, we take the approach of always overwriting 
