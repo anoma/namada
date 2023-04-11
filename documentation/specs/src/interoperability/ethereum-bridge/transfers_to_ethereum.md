@@ -136,7 +136,7 @@ ledger with a nonce different from the next expected nonce are rejected.
 ## Timeouts
 
 Pending transfers to Ethereum sitting in the Bridge Pool for some duration of
-$T_{dur}$ blocks are subjected to timeouts. The exact value of $T_{dur}$, for
+$T_{dur}$ blocks are subject to timeouts. The exact value of $T_{dur}$, for
 now, is the minimum duration in blocks of an epoch. Transactions that time out
 should revert the state changes in Namada, including refunding the paid fees
 and escrowed assets.
