@@ -16,11 +16,13 @@ fees in NAM are released from `#EthBridgePool` into the relayer's address.
 
 ## Moving value to Ethereum
 
-To redeem wrapped Ethereum assets, a user should make a transaction to burn
-their wrapped tokens, which the `#EthBridge` validity predicate will accept.
-For sending NAM over the bridge, a user should escrow their NAM in
+To redeem wrapped Ethereum assets, a user should make a transaction to escrow
+their wrapped tokens in `#EthBridgePool`, which the appropriate validity predicate
+will accept. For sending NAM over the bridge, a user should escrow their NAM in
 `#EthBridge`. In both cases, it's important that the user also adds a
 `PendingTransfer` to the [Bridge Pool](#bridge-pool-validity-predicate).
+When a transfer to Ethereum event is received and acted upon in Namada,
+wrapped Ethereum assets (other than wNAM) must be burned from `#EthBridgePool`.
 
 ## Batching
 
@@ -36,14 +38,13 @@ pool. We call this the _Bridge Pool_.
 The Bridge Pool should be thought of as a sort of mempool. When users who
 wish to move assets to Ethereum submit their transactions, they will pay some
 additional amount of NAM (of their choosing) as a way of covering the gas
-costs on Ethereum. Namada validators will hold these fees in a Bridge Pool
-Escrow.
+costs on Ethereum. Namada validators will hold these fees in `#EthBridgePool`.
 
 When a batch of transactions from the Bridge Pool is submitted by a user to
 Ethereum, Namada validators will receive notifications via their full nodes.
 They will then pay out the fees for each submitted transaction to the user who
-relayed these transactions (still in NAM). These will be paid out from the
-Bridge Pool Escrow.
+relayed these transactions (still in NAM). These will be paid out from
+`#EthBridgePool`.
 
 The idea is that users will only relay transactions from the Bridge Pool
 that make economic sense. This prevents DoS attacks by underpaying fees as
@@ -82,14 +83,14 @@ validity predicate. The storage layout looks as follows.
 The pending transfers are instances of the following type:
 ```rust
 pub struct TransferToEthereum {
-    /// The type of token 
+    /// The type of token
     pub asset: EthAddress,
     /// The recipient address
     pub recipient: EthAddress,
+    /// The sender of the transfer
+    pub sender: Address,
     /// The amount to be transferred
     pub amount: Amount,
-    /// a nonce for replay protection
-    pub nonce: u64,
 }
 
 pub struct PendingTransfer {
@@ -109,7 +110,7 @@ pub struct GasFee {
     pub payer: Address,
 }
 ```
-When a user submits initiates a transfer, their transaction should include wasm
+When a user initiates a transfer, their transaction should include wasm code
 to craft a `PendingTransfer` and append it to the pool in storage as well as 
 send the relevant gas fees into the Bridge Pool's escrow.  This will be 
 validated by the Bridge Pool vp. 
@@ -122,11 +123,20 @@ If vote extensions are not available, this signed root may lag behind the
 list of pending transactions. However, it should be the eventually every 
 pending transaction is covered by the root or it times out.
 
-## Replay Protection and timeouts
+## Replay Protection
 
-It is important that nonces are used to prevent copies of the same
-transaction being submitted multiple times. Since we do not want to enforce
-an order on the transactions, these nonces should land in a range. As a
-consequence of this, it is possible that transactions in the Bridge Pool will
-time out. Transactions that timed out should revert the state changes on
-Namada including refunding the paid in fees.
+State updates in Namada result in the increment of the value of a monotonically
+growing nonce, that is signed together with the root of the Bridge Pool. The
+`Bridge` smart contract's nonce of transfers to Ethereum is kept in sync with
+Namada's, upon relay calls. This behavior should contribute to avoiding replay
+attacks on Ethereum events related to transfers to Ethereum, as it assigns a
+unique id on a snapshot of the Bridge Pool. Ethereum events arriving at the
+ledger with a nonce different from the next expected nonce are rejected.
+
+## Timeouts
+
+Pending transfers to Ethereum sitting in the Bridge Pool for some duration of
+$T_{dur}$ blocks are subjected to timeouts. The exact value of $T_{dur}$, for
+now, is the minimum duration in blocks of an epoch. Transactions that time out
+should revert the state changes in Namada, including refunding the paid fees
+and escrowed assets.
