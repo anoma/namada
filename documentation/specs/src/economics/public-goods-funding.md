@@ -173,7 +173,7 @@ This governance proposal will be such that it passes by default **unless** the f
 
 Conditions to veto a PGF proposal:
 1. Out of the votes that voted for the proposal, more than $50\%$ voted `Nay` on the proposal
-2. At least $\frac{1}{3}$ of voting power voted `Nay` on the proposal
+2. At least $\frac{1}{3}$ of voting power voted on the proposal.
   - Further, if at least $\frac{2}{3}$ of voting power voted `Nay` on the proposal, and the proposal was rejected, the Steward is removed from the set of stewards.
 
 
