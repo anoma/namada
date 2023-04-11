@@ -309,10 +309,7 @@ mod test_prepare_proposal {
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: false,
             });
-            std::mem::replace(
-                &mut tx.header,
-                decrypted_tx,
-            );
+            tx.header = decrypted_tx;
             expected_decrypted.push(tx.clone());
         }
         // we extract the inner data from the txs for testing
@@ -340,7 +337,7 @@ mod test_prepare_proposal {
                             Some(
                                 Tx::try_from(tx_bytes.as_slice())
                                     .expect("Test failed")
-                                    .outer_data
+                                    .header
                                     .expect("Test failed"),
                             )
                         } else {
@@ -361,7 +358,7 @@ mod test_prepare_proposal {
                 .map(|tx_bytes| {
                     Tx::try_from(tx_bytes.as_slice())
                         .expect("Test failed")
-                        .outer_data
+                        .header
                 })
                 .collect();
             // check that the order of the txs is correct
