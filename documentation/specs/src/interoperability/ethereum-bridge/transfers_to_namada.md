@@ -7,7 +7,7 @@ will be two internal accounts with associated native validity predicates:
   and ledger of balances of minted wrapped Ethereum assets (ERC20 tokens) structured in a
   ["multitoken"](https://github.com/anoma/anoma/issues/1102) hierarchy.
   Also contains in escrow Namada tokens which have been sent to Ethereum,
-  pertaining to pending transfers.
+  pertaining to pending wNAM transfers.
 - `#EthBridgePool` - Holds gas fees to be payed to relayers of transfers to Ethereum,
   as well assets (other than wNAM) in escrow, pertaining to pending transfers to
   Ethereum.
