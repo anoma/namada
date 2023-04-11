@@ -518,7 +518,7 @@ pub mod eth_events {
                     2
                 ],
                 valid_map: vec![true; 2],
-                nonce: 1u64.into(),
+                nonce: 0u64.into(),
                 confirmations: 0u64.into(),
             };
             let eth_transfers = TransferToErcFilter {
@@ -534,16 +534,16 @@ pub mod eth_events {
                     2
                 ],
                 valid_map: vec![true; 2],
-                nonce: 1u64.into(),
+                nonce: 0u64.into(),
                 relayer_address: address,
             };
             let update = ValidatorSetUpdateFilter {
-                validator_set_nonce: 1u64.into(),
+                validator_set_nonce: 0u64.into(),
                 bridge_validator_set_hash: [1; 32],
                 governance_validator_set_hash: [2; 32],
             };
             let whitelist = UpdateBridgeWhitelistFilter {
-                nonce: 1u64.into(),
+                nonce: 0u64.into(),
                 tokens: vec![H160([0; 20]); 2],
                 token_cap: vec![0u64.into(); 2],
             };

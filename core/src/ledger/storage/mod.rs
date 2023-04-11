@@ -41,8 +41,8 @@ use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::internal::TxQueue;
 use crate::types::storage::{
-    BlockHash, BlockHeight, BlockResults, Epoch, Epochs, Header, Key, KeySeg,
-    TxIndex, BLOCK_HASH_LENGTH,
+    BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
+    Header, Key, KeySeg, TxIndex, BLOCK_HASH_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
 use crate::types::{ethereum_structs, token};
@@ -92,6 +92,8 @@ where
     /// The latest block height on Ethereum processed, if
     /// the bridge is enabled.
     pub ethereum_height: Option<ethereum_structs::BlockHeight>,
+    /// The queue of Ethereum events to be processed in order.
+    pub eth_events_queue: EthEventsQueue,
 }
 
 /// The block storage data
@@ -166,6 +168,8 @@ pub struct BlockStateRead {
     /// The latest block height on Ethereum processed, if
     /// the bridge is enabled.
     pub ethereum_height: Option<ethereum_structs::BlockHeight>,
+    /// The queue of Ethereum events to be processed in order.
+    pub eth_events_queue: EthEventsQueue,
 }
 
 /// The block's state to write into the database.
@@ -196,6 +200,8 @@ pub struct BlockStateWrite<'a> {
     /// The latest block height on Ethereum processed, if
     /// the bridge is enabled.
     pub ethereum_height: Option<&'a ethereum_structs::BlockHeight>,
+    /// The queue of Ethereum events to be processed in order.
+    pub eth_events_queue: &'a EthEventsQueue,
 }
 
 /// A database backend.
@@ -358,6 +364,7 @@ where
             tx_queue: TxQueue::default(),
             native_token,
             ethereum_height: None,
+            eth_events_queue: EthEventsQueue::default(),
         }
     }
 
@@ -377,6 +384,7 @@ where
             #[cfg(feature = "ferveo-tpke")]
             tx_queue,
             ethereum_height,
+            eth_events_queue,
         }) = self.db.read_last_block()?
         {
             self.block.tree = MerkleTree::new(merkle_tree_stores);
@@ -412,6 +420,7 @@ where
                 self.tx_queue = tx_queue;
             }
             self.ethereum_height = ethereum_height;
+            self.eth_events_queue = eth_events_queue;
             tracing::debug!("Loaded storage from DB");
         } else {
             tracing::info!("No state could be found");
@@ -445,6 +454,7 @@ where
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: &self.tx_queue,
             ethereum_height: self.ethereum_height.as_ref(),
+            eth_events_queue: &self.eth_events_queue,
         };
         self.db.write_block(state)?;
         self.last_height = self.block.height;
@@ -915,6 +925,7 @@ pub mod testing {
                 tx_queue: TxQueue::default(),
                 native_token: address::nam(),
                 ethereum_height: None,
+                eth_events_queue: EthEventsQueue::default(),
             }
         }
     }

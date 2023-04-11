@@ -17,7 +17,8 @@ use crate::types::ethereum_structs;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::internal::TxQueue;
 use crate::types::storage::{
-    BlockHeight, BlockResults, Header, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
+    BlockHeight, BlockResults, EthEventsQueue, Header, Key, KeySeg,
+    KEY_SEGMENT_SEPARATOR,
 };
 use crate::types::time::DateTimeUtc;
 
@@ -90,6 +91,14 @@ impl DB for MockDB {
         };
 
         let ethereum_height: Option<ethereum_structs::BlockHeight> =
+            match self.0.borrow().get("ethereum_height") {
+                Some(bytes) => {
+                    types::decode(bytes).map_err(Error::CodingError)?
+                }
+                None => return Ok(None),
+            };
+
+        let eth_events_queue: EthEventsQueue =
             match self.0.borrow().get("ethereum_height") {
                 Some(bytes) => {
                     types::decode(bytes).map_err(Error::CodingError)?
@@ -173,6 +182,7 @@ impl DB for MockDB {
                     #[cfg(feature = "ferveo-tpke")]
                     tx_queue,
                     ethereum_height,
+                    eth_events_queue,
                 }))
             }
             _ => Err(Error::Temporary {
@@ -195,6 +205,7 @@ impl DB for MockDB {
             address_gen,
             results,
             ethereum_height,
+            eth_events_queue,
             #[cfg(feature = "ferveo-tpke")]
             tx_queue,
         }: BlockStateWrite = state;
@@ -211,6 +222,10 @@ impl DB for MockDB {
         self.0
             .borrow_mut()
             .insert("ethereum_height".into(), types::encode(&ethereum_height));
+        self.0.borrow_mut().insert(
+            "eth_events_queue".into(),
+            types::encode(&eth_events_queue),
+        );
         #[cfg(feature = "ferveo-tpke")]
         {
             self.0

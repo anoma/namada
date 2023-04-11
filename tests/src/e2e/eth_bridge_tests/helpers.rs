@@ -12,12 +12,11 @@ use namada::ledger::eth_bridge::{
     MinimumConfirmations, UpgradeableContract,
 };
 use namada::types::address::{wnam, Address};
-use namada::types::ethereum_events::EthAddress;
+use namada::types::ethereum_events::{EthAddress, Uint};
 use namada_apps::config::ethereum_bridge;
 use namada_core::ledger::eth_bridge;
 use namada_core::types::ethereum_events::{EthereumEvent, TransferToNamada};
 use namada_core::types::token;
-use rand::Rng;
 
 use crate::e2e::helpers::{get_actor_rpc, strip_trailing_newline};
 use crate::e2e::setup::{
@@ -114,7 +113,7 @@ pub fn setup_single_validator_test() -> Result<(Test, NamadaBgCmd)> {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::SelfHostedEndpoint,
-        None,
+        Some(DEFAULT_ETHEREUM_EVENTS_LISTEN_ADDR),
     );
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
@@ -133,11 +132,10 @@ pub fn setup_single_validator_test() -> Result<(Test, NamadaBgCmd)> {
 pub async fn send_transfer_to_namada_event(
     bg_ledger: NamadaBgCmd,
     transfer: TransferToNamada,
+    nonce: Uint,
 ) -> Result<NamadaBgCmd> {
-    let mut rng = rand::thread_rng();
-    let nonce: u64 = rng.gen();
     let transfers = EthereumEvent::TransfersToNamada {
-        nonce: nonce.into(),
+        nonce,
         transfers: vec![transfer.clone()],
         valid_transfers_map: vec![true],
     };

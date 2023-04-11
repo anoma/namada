@@ -1,9 +1,10 @@
 //! Storage types
+use std::collections::VecDeque;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::io::Write;
 use std::num::ParseIntError;
-use std::ops::{Add, AddAssign, Deref, Div, Mul, Rem, Sub};
+use std::ops::{Add, AddAssign, Deref, Div, Drop, Mul, Rem, Sub};
 use std::str::FromStr;
 
 use arse_merkle_tree::InternalKey;
@@ -15,8 +16,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::bytes::ByteBuf;
+use crate::hints;
 use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
 use crate::types::address::{self, Address};
+use crate::types::ethereum_events::{GetEventNonce, TransfersToNamada, Uint};
 use crate::types::hash::Hash;
 use crate::types::keccak::{KeccakHash, TryFromError};
 use crate::types::time::DateTimeUtc;
@@ -1151,6 +1154,165 @@ pub struct PrefixValue {
     pub value: Vec<u8>,
 }
 
+/// Container of all Ethereum event queues.
+#[derive(Default, Debug, BorshSerialize, BorshDeserialize)]
+pub struct EthEventsQueue {
+    /// Queue of transfer to Namada events.
+    pub transfers_to_namada: InnerEthEventsQueue<TransfersToNamada>,
+    // TODO: add queue of update whitelist events
+}
+
+/// A queue of confirmed Ethereum events of type `E`.
+///
+/// __INVARIANT:__ At any given moment, the queue holds the nonce `N`
+/// of the next confirmed event to be processed by the ledger, and any
+/// number of events that have been confirmed with a nonce greater than
+/// or equal to `N`. Events in the queue must be returned in asceding
+/// order of their nonce.
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
+pub struct InnerEthEventsQueue<E> {
+    next_nonce_to_process: Uint,
+    inner: VecDeque<E>,
+}
+
+impl<E: GetEventNonce> InnerEthEventsQueue<E> {
+    /// Return an Ethereum events queue starting at the specified nonce.
+    pub fn new_at(next_nonce_to_process: Uint) -> Self {
+        Self {
+            next_nonce_to_process,
+            ..Default::default()
+        }
+    }
+}
+
+impl<E: GetEventNonce> Default for InnerEthEventsQueue<E> {
+    fn default() -> Self {
+        Self {
+            next_nonce_to_process: 0u64.into(),
+            inner: Default::default(),
+        }
+    }
+}
+
+/// Draining iterator over a queue of Ethereum events,
+///
+/// At each iteration step, we peek into the head of the
+/// queue, and if an event is present with a nonce equal
+/// to the local nonce maintained by the iterator object,
+/// we pop it and increment the local nonce. Otherwise,
+/// iteration stops.
+///
+/// Upon being dropped, the iterator object updates the
+/// nonce of the next event of type `E` to be processed
+/// by the ledger (stored in an [`InnerEthEventsQueue`]),
+/// if the iterator's nonce was incremented.
+pub struct EthEventsQueueIter<'queue, E> {
+    current_nonce: Uint,
+    queue: &'queue mut InnerEthEventsQueue<E>,
+}
+
+impl<E> Drop for EthEventsQueueIter<'_, E> {
+    fn drop(&mut self) {
+        // on drop, we commit the nonce of the next event to process
+        if self.queue.next_nonce_to_process < self.current_nonce {
+            self.queue.next_nonce_to_process = self.current_nonce;
+        }
+    }
+}
+
+impl<E: GetEventNonce> Iterator for EthEventsQueueIter<'_, E> {
+    type Item = E;
+
+    fn next(&mut self) -> Option<E> {
+        let nonce_in_queue = self.queue.peek_event_nonce()?;
+        if nonce_in_queue == self.current_nonce {
+            self.current_nonce = self
+                .current_nonce
+                .checked_increment()
+                .expect("Nonce overflow");
+            self.queue.pop_event()
+        } else {
+            None
+        }
+    }
+}
+
+impl<E: GetEventNonce> InnerEthEventsQueue<E> {
+    /// Push a new Ethereum event of type `E` into the queue,
+    /// and return a draining iterator over the next events to
+    /// be processed, if any.
+    pub fn push_and_iter(
+        &mut self,
+        latest_event: E,
+    ) -> EthEventsQueueIter<'_, E>
+    where
+        E: std::fmt::Debug,
+    {
+        let event_nonce = latest_event.get_event_nonce();
+        if hints::unlikely(self.next_nonce_to_process > event_nonce) {
+            unreachable!(
+                "Attempted to replay an Ethereum event: {latest_event:#?}"
+            );
+        }
+
+        self.try_push_event(latest_event);
+
+        EthEventsQueueIter {
+            current_nonce: self.next_nonce_to_process,
+            queue: self,
+        }
+    }
+
+    /// Provide a reference to the earliest event stored in the queue.
+    #[inline]
+    fn peek_event_nonce(&self) -> Option<Uint> {
+        self.inner.front().map(GetEventNonce::get_event_nonce)
+    }
+
+    /// Attempt to push a new Ethereum event to the queue.
+    ///
+    /// This operation may panic if a confirmed event is
+    /// already present in the queue.
+    #[inline]
+    fn try_push_event(&mut self, new_event: E)
+    where
+        E: std::fmt::Debug,
+    {
+        self.inner
+            .binary_search_by_key(
+                &new_event.get_event_nonce(),
+                |event_in_queue| event_in_queue.get_event_nonce(),
+            )
+            .map_or_else(
+                |insert_at| {
+                    tracing::debug!(?new_event, "Queueing Ethereum event");
+                    self.inner.insert(insert_at, new_event)
+                },
+                // the event is already present in the queue... this is
+                // certainly a protocol error
+                |_| {
+                    hints::cold();
+                    unreachable!(
+                        "An event with an identical nonce was already present \
+                         in the EthEventsQueue"
+                    )
+                },
+            )
+    }
+
+    /// Pop a transfer to Namada event from the queue.
+    #[inline]
+    fn pop_event(&mut self) -> Option<E> {
+        self.inner.pop_front()
+    }
+}
+
+impl<E> GetEventNonce for InnerEthEventsQueue<E> {
+    fn get_event_nonce(&self) -> Uint {
+        self.next_nonce_to_process
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
@@ -1190,6 +1352,133 @@ mod tests {
             let parsed_epoch: Epoch = KeySeg::parse(key_seg).expect("Test failed");
             assert_eq!(original_epoch, parsed_epoch);
         }
+    }
+
+    /// Test that providing an [`EthEventsQueue`] with an event containing
+    /// a nonce identical to the next expected nonce in Namada yields the
+    /// event itself.
+    #[test]
+    fn test_eth_events_queue_equal_nonces() {
+        let mut queue = EthEventsQueue::default();
+        queue.transfers_to_namada.next_nonce_to_process = 2u64.into();
+        let new_event = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 2u64.into(),
+        };
+        let next_event = queue
+            .transfers_to_namada
+            .push_and_iter(new_event.clone())
+            .next();
+        assert_eq!(next_event, Some(new_event));
+    }
+
+    /// Test that providing an [`EthEventsQueue`] with an event containing
+    /// a nonce lower than the next expected nonce in Namada results in a
+    /// panic.
+    #[test]
+    #[should_panic = "Attempted to replay an Ethereum event"]
+    fn test_eth_events_queue_panic_on_invalid_nonce() {
+        let mut queue = EthEventsQueue::default();
+        queue.transfers_to_namada.next_nonce_to_process = 3u64.into();
+        let new_event = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 2u64.into(),
+        };
+        _ = queue.transfers_to_namada.push_and_iter(new_event);
+    }
+
+    /// Test enqueueing transfer to Namada events to
+    /// an [`EthEventsQueue`].
+    #[test]
+    fn test_eth_events_queue_enqueue() {
+        let mut queue = EthEventsQueue::default();
+        queue.transfers_to_namada.next_nonce_to_process = 1u64.into();
+
+        let new_event_1 = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 1u64.into(),
+        };
+        let new_event_2 = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 2u64.into(),
+        };
+        let new_event_3 = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 3u64.into(),
+        };
+        let new_event_4 = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 4u64.into(),
+        };
+        let new_event_7 = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 7u64.into(),
+        };
+
+        // enqueue events
+        assert!(
+            queue
+                .transfers_to_namada
+                .push_and_iter(new_event_4.clone())
+                .next()
+                .is_none()
+        );
+        assert!(
+            queue
+                .transfers_to_namada
+                .push_and_iter(new_event_2.clone())
+                .next()
+                .is_none()
+        );
+        assert!(
+            queue
+                .transfers_to_namada
+                .push_and_iter(new_event_3.clone())
+                .next()
+                .is_none()
+        );
+        assert!(
+            queue
+                .transfers_to_namada
+                .push_and_iter(new_event_7.clone())
+                .next()
+                .is_none()
+        );
+        assert_eq!(
+            &queue.transfers_to_namada.inner,
+            &[
+                new_event_2.clone(),
+                new_event_3.clone(),
+                new_event_4.clone(),
+                new_event_7.clone()
+            ]
+        );
+
+        // start dequeueing events
+        assert_eq!(
+            vec![new_event_1.clone(), new_event_2, new_event_3, new_event_4],
+            queue
+                .transfers_to_namada
+                .push_and_iter(new_event_1)
+                .collect::<Vec<_>>()
+        );
+
+        // check the next nonce to process
+        assert_eq!(queue.transfers_to_namada.get_event_nonce(), 5u64.into());
+
+        // one remaining event with nonce 7
+        assert_eq!(
+            queue.transfers_to_namada.pop_event().expect("Test failed"),
+            new_event_7
+        );
+        assert!(queue.transfers_to_namada.pop_event().is_none());
     }
 
     #[test]

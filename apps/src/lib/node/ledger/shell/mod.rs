@@ -1584,6 +1584,7 @@ mod test_utils {
                     .storage
                     .ethereum_height
                     .as_ref(),
+                eth_events_queue: &shell.wl_storage.storage.eth_events_queue,
             })
             .expect("Test failed");
 
@@ -1646,7 +1647,7 @@ mod mempool_tests {
             .clone();
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
         let ethereum_event = EthereumEvent::TransfersToNamada {
-            nonce: 1u64.into(),
+            nonce: 0u64.into(),
             transfers: vec![],
             valid_transfers_map: vec![],
         };
@@ -1745,7 +1746,7 @@ mod mempool_tests {
         let validator_addr = wallet::defaults::validator_address();
 
         let ethereum_event = EthereumEvent::TransfersToNamada {
-            nonce: 1u64.into(),
+            nonce: 0u64.into(),
             transfers: vec![],
             valid_transfers_map: vec![],
         };

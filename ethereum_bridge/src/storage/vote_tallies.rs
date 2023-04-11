@@ -239,11 +239,11 @@ mod test {
         pub(super) fn arbitrary_event_with_hash() -> (EthereumEvent, String) {
             (
                 EthereumEvent::TransfersToNamada {
-                    nonce: 1.into(),
+                    nonce: 0.into(),
                     transfers: vec![],
                     valid_transfers_map: vec![],
                 },
-                "EF11F4E55D73918490B7AB11A9A4E461BBC255BB480E94BA95F959D7147CDE64"
+                "9E1736C43D19118E6CE4302118AF337109491ECC52757DFB949BAD6A7940B0C2"
                     .to_owned(),
             )
         }

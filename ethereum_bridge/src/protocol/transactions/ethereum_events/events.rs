@@ -7,7 +7,8 @@ use borsh::BorshDeserialize;
 use eyre::{Result, WrapErr};
 use namada_core::hints::likely;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
-    get_pending_key, is_pending_transfer_key, BRIDGE_POOL_ADDRESS,
+    get_nonce_key, get_pending_key, is_pending_transfer_key,
+    BRIDGE_POOL_ADDRESS,
 };
 use namada_core::ledger::eth_bridge::storage::{
     self as bridge_storage, wrapped_erc20s,
@@ -21,6 +22,7 @@ use namada_core::types::address::{nam, Address};
 use namada_core::types::eth_bridge_pool::PendingTransfer;
 use namada_core::types::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum, TransferToNamada,
+    TransfersToNamada,
 };
 use namada_core::types::storage::{BlockHeight, Key, KeySeg};
 use namada_core::types::token;
@@ -30,34 +32,36 @@ use namada_core::types::token::{
 
 use crate::parameters::read_native_erc20_address;
 use crate::protocol::transactions::update;
+use crate::storage::eth_bridge_queries::EthBridgeQueries;
 
 /// Updates storage based on the given confirmed `event`. For example, for a
 /// confirmed [`EthereumEvent::TransfersToNamada`], mint the corresponding
 /// transferred assets to the appropriate receiver addresses.
 pub(super) fn act_on<D, H>(
     wl_storage: &mut WlStorage<D, H>,
-    event: &EthereumEvent,
+    event: EthereumEvent,
 ) -> Result<BTreeSet<Key>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    match &event {
+    match event {
         EthereumEvent::TransfersToNamada {
             transfers,
             valid_transfers_map,
-            ..
+            nonce,
         } => act_on_transfers_to_namada(
             wl_storage,
-            transfers
-                .iter()
-                .zip(valid_transfers_map.iter())
-                .filter_map(|(transf, valid)| valid.then_some(transf)),
+            TransfersToNamada {
+                transfers,
+                valid_transfers_map,
+                nonce,
+            },
         ),
         EthereumEvent::TransfersToEthereum {
-            transfers,
-            relayer,
-            valid_transfers_map,
+            ref transfers,
+            ref relayer,
+            ref valid_transfers_map,
             ..
         } => act_on_transfers_to_eth(
             wl_storage,
@@ -74,20 +78,69 @@ where
 
 fn act_on_transfers_to_namada<'tx, D, H>(
     wl_storage: &mut WlStorage<D, H>,
-    transfers: impl IntoIterator<Item = &'tx TransferToNamada>,
+    transfer_event: TransfersToNamada,
 ) -> Result<BTreeSet<Key>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let wrapped_native_erc20 = read_native_erc20_address(wl_storage)?;
-    let mut changed_keys = BTreeSet::default();
-    for TransferToNamada {
-        amount,
-        asset,
-        receiver,
-    } in transfers
+    tracing::debug!(?transfer_event, "Acting on transfers to Namada");
+    let mut changed_keys = BTreeSet::new();
+    // we need to collect the events into a separate
+    // buffer because of rust's borrowing rules :|
+    let confirmed_events: Vec<_> = wl_storage
+        .storage
+        .eth_events_queue
+        .transfers_to_namada
+        .push_and_iter(transfer_event)
+        .collect();
+    for TransfersToNamada {
+        transfers,
+        valid_transfers_map,
+        ..
+    } in confirmed_events
     {
+        update_transfers_to_namada_state(
+            wl_storage,
+            &mut changed_keys,
+            transfers.iter().zip(valid_transfers_map.iter()).filter_map(
+                |(transfer, &valid)| {
+                    if valid {
+                        Some(transfer)
+                    } else {
+                        tracing::debug!(
+                            ?transfer,
+                            "Ignoring invalid transfer to Namada event"
+                        );
+                        None
+                    }
+                },
+            ),
+        )?;
+    }
+    Ok(changed_keys)
+}
+
+fn update_transfers_to_namada_state<'tx, D, H>(
+    wl_storage: &mut WlStorage<D, H>,
+    changed_keys: &mut BTreeSet<Key>,
+    transfers: impl IntoIterator<Item = &'tx TransferToNamada>,
+) -> Result<()>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let wrapped_native_erc20 = read_native_erc20_address(wl_storage)?;
+    for transfer in transfers {
+        tracing::debug!(
+            ?transfer,
+            "Applying state updates derived from a transfer to Namada event"
+        );
+        let TransferToNamada {
+            amount,
+            asset,
+            receiver,
+        } = transfer;
         let mut changed = if asset != &wrapped_native_erc20 {
             let changed =
                 mint_wrapped_erc20s(wl_storage, asset, receiver, amount)?;
@@ -101,7 +154,7 @@ where
         };
         changed_keys.append(&mut changed)
     }
-    Ok(changed_keys)
+    Ok(())
 }
 
 /// Redeems `amount` of the native token for `receiver` from escrow.
@@ -223,6 +276,11 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    tracing::debug!(
+        ?transfers,
+        ?valid_transfers,
+        "Acting on transfers to Ethereum"
+    );
     let mut changed_keys = BTreeSet::default();
     // all keys of pending transfers
     let prefix = BRIDGE_POOL_ADDRESS.to_db_key().into();
@@ -273,6 +331,9 @@ where
         _ = changed_keys.insert(key);
     }
     if !transfers.is_empty() {
+        let nonce_key = get_nonce_key();
+        increment_bp_nonce(&nonce_key, wl_storage)?;
+        changed_keys.insert(nonce_key);
         changed_keys.insert(relayer_rewards_key);
         changed_keys.insert(pool_balance_key);
     }
@@ -303,6 +364,23 @@ where
     }
 
     Ok(changed_keys)
+}
+
+fn increment_bp_nonce<D, H>(
+    nonce_key: &Key,
+    wl_storage: &mut WlStorage<D, H>,
+) -> Result<()>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let next_nonce = wl_storage
+        .ethbridge_queries()
+        .get_bridge_pool_nonce()
+        .checked_increment()
+        .expect("Bridge pool nonce has overflowed");
+    wl_storage.write(nonce_key, next_nonce)?;
+    Ok(())
 }
 
 fn refund_transfer<D, H>(
@@ -571,8 +649,8 @@ mod tests {
             },
         ];
 
-        for event in events.iter() {
-            act_on(&mut wl_storage, event).unwrap();
+        for event in events {
+            act_on(&mut wl_storage, event.clone()).unwrap();
             assert_eq!(
                 stored_keys_count(&wl_storage),
                 initial_stored_keys_count,
@@ -603,7 +681,7 @@ mod tests {
             transfers,
         };
 
-        act_on(&mut wl_storage, &event).unwrap();
+        act_on(&mut wl_storage, event).unwrap();
 
         assert_eq!(
             stored_keys_count(&wl_storage),
@@ -626,7 +704,12 @@ mod tests {
             receiver: receiver.clone(),
         }];
 
-        act_on_transfers_to_namada(&mut wl_storage, &transfers).unwrap();
+        update_transfers_to_namada_state(
+            &mut wl_storage,
+            &mut BTreeSet::new(),
+            &transfers,
+        )
+        .unwrap();
 
         let wdai: wrapped_erc20s::Keys = (&DAI_ERC20_ETH_ADDRESS).into();
         let receiver_balance_key = wdai.balance(&receiver);
@@ -649,6 +732,8 @@ mod tests {
     /// TransfersToEthereum
     fn test_act_on_changes_storage_for_transfers_to_eth() {
         let mut wl_storage = TestWlStorage::default();
+        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
+        wl_storage.commit_block().expect("Test failed");
         init_storage(&mut wl_storage);
         let pending_transfers = init_bridge_pool(&mut wl_storage);
         init_balance(&mut wl_storage, &pending_transfers);
@@ -682,10 +767,11 @@ mod tests {
                 .expect("Test failed"),
         )
         .expect("Test failed");
-        let mut changed_keys = act_on(&mut wl_storage, &event).unwrap();
+        let mut changed_keys = act_on(&mut wl_storage, event).unwrap();
 
         assert!(changed_keys.remove(&payer_balance_key));
         assert!(changed_keys.remove(&pool_balance_key));
+        assert!(changed_keys.remove(&get_nonce_key()));
         assert!(changed_keys.iter().all(|k| pending_keys.contains(k)));
 
         let prefix = BRIDGE_POOL_ADDRESS.to_db_key().into();
@@ -694,7 +780,8 @@ mod tests {
                 .iter_prefix(&prefix)
                 .expect("Test failed")
                 .count(),
-            0
+            // NOTE: we should have one write -- the bridge pool nonce update
+            1
         );
         let relayer_balance = Amount::try_from_slice(
             &wl_storage
@@ -755,7 +842,7 @@ mod tests {
             valid_transfers_map: vec![],
             relayer: gen_implicit_address(),
         };
-        let _ = act_on(&mut wl_storage, &event).unwrap();
+        let _ = act_on(&mut wl_storage, event).unwrap();
 
         // The latest transfer is still pending
         let prefix = BRIDGE_POOL_ADDRESS.to_db_key().into();

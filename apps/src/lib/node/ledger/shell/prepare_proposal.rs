@@ -634,7 +634,7 @@ mod test_prepare_proposal {
         let validator_addr = wallet::defaults::validator_address();
 
         let ethereum_event = EthereumEvent::TransfersToNamada {
-            nonce: 1u64.into(),
+            nonce: 0u64.into(),
             transfers: vec![],
             valid_transfers_map: vec![],
         };
@@ -729,7 +729,7 @@ mod test_prepare_proposal {
         let validator_addr = wallet::defaults::validator_address();
 
         let ethereum_event = EthereumEvent::TransfersToNamada {
-            nonce: 1u64.into(),
+            nonce: 0u64.into(),
             transfers: vec![],
             valid_transfers_map: vec![],
         };
@@ -871,7 +871,7 @@ mod test_prepare_proposal {
         let validator_addr = wallet::defaults::validator_address();
 
         let ethereum_event = EthereumEvent::TransfersToNamada {
-            nonce: 1u64.into(),
+            nonce: 0u64.into(),
             transfers: vec![],
             valid_transfers_map: vec![],
         };

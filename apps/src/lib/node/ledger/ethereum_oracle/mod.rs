@@ -669,7 +669,7 @@ mod test_oracle {
             .expect("Test failed");
 
         let new_event = TransferToNamadaFilter {
-            nonce: 1337.into(),
+            nonce: 0.into(),
             transfers: vec![],
             valid_map: vec![],
             confirmations: 100.into(),
@@ -725,7 +725,7 @@ mod test_oracle {
             .expect("Test failed");
         // send a new event to the oracle
         let new_event = TransferToNamadaFilter {
-            nonce: 1337.into(),
+            nonce: 0.into(),
             transfers: vec![],
             valid_map: vec![],
             confirmations: 100.into(),
@@ -786,7 +786,7 @@ mod test_oracle {
 
         // confirmed after 100 blocks
         let first_event = TransferToNamadaFilter {
-            nonce: 1337.into(),
+            nonce: 0.into(),
             transfers: vec![],
             valid_map: vec![],
             confirmations: 100.into(),
@@ -806,7 +806,7 @@ mod test_oracle {
             }],
             valid_map: vec![true],
             relayer_address: gas_payer.to_string(),
-            nonce: 1.into(),
+            nonce: 0.into(),
         }
         .encode();
 
@@ -843,7 +843,7 @@ mod test_oracle {
             valid_transfers_map: valid_map,
         } = event
         {
-            assert_eq!(nonce, 1337.into());
+            assert_eq!(nonce, 0.into());
             assert!(transfers.is_empty());
             assert!(valid_map.is_empty());
         } else {

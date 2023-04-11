@@ -10,7 +10,6 @@ use eth_msgs::EthMsgUpdate;
 use eyre::Result;
 use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::storage::{DBIter, WlStorage, DB};
-use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::EthereumEvent;
 use namada_core::types::storage::{BlockHeight, Epoch, Key};
@@ -68,7 +67,7 @@ where
 
     let mut changed_keys = apply_updates(wl_storage, updates, voting_powers)?;
 
-    changed_keys.extend(timeout_events(wl_storage)?);
+    changed_keys.append(&mut timeout_events(wl_storage)?);
 
     Ok(TxResult {
         changed_keys,
@@ -116,7 +115,7 @@ where
 
     // Right now, the order in which events are acted on does not matter.
     // For `TransfersToNamada` events, they can happen in any order.
-    for event in &confirmed {
+    for event in confirmed {
         let mut changed = events::act_on(wl_storage, event)?;
         changed_keys.append(&mut changed);
     }
@@ -138,11 +137,17 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let eth_msg_keys = vote_tallies::Keys::from(&update.body);
-
-    // we arbitrarily look at whether the seen key is present to
-    // determine if the /eth_msg already exists in storage, but maybe there
-    // is a less arbitrary way to do this
-    let exists_in_storage = wl_storage.has_key(&eth_msg_keys.seen())?;
+    let exists_in_storage = if let Some(seen) =
+        votes::storage::maybe_read_seen(wl_storage, &eth_msg_keys)?
+    {
+        if seen {
+            tracing::debug!(?update, "Ethereum event is already seen");
+            return Ok((ChangedKeys::default(), false));
+        }
+        true
+    } else {
+        false
+    };
 
     let (vote_tracking, changed, confirmed, already_present) =
         if !exists_in_storage {
@@ -265,6 +270,7 @@ mod tests {
     use borsh::BorshDeserialize;
     use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
     use namada_core::ledger::storage::testing::TestWlStorage;
+    use namada_core::ledger::storage_api::StorageRead;
     use namada_core::types::address;
     use namada_core::types::ethereum_events::testing::{
         arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
@@ -383,7 +389,7 @@ mod tests {
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
-            nonce: 1.into(),
+            nonce: 0.into(),
             valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
@@ -446,7 +452,7 @@ mod tests {
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
-            nonce: 1.into(),
+            nonce: 0.into(),
             valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
@@ -498,7 +504,7 @@ mod tests {
         );
 
         let event = EthereumEvent::TransfersToNamada {
-            nonce: 1.into(),
+            nonce: 0.into(),
             valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
@@ -621,7 +627,7 @@ mod tests {
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
-            nonce: 1.into(),
+            nonce: 0.into(),
             valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
@@ -652,7 +658,7 @@ mod tests {
         wl_storage.storage.block.epoch = wl_storage.storage.last_epoch + 1_u64;
 
         let new_event = EthereumEvent::TransfersToNamada {
-            nonce: 2.into(),
+            nonce: 1.into(),
             valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),

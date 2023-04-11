@@ -930,7 +930,7 @@ mod test_process_proposal {
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
         let addr = shell.mode.get_validator_address().expect("Test failed");
         let event = EthereumEvent::TransfersToNamada {
-            nonce: 1u64.into(),
+            nonce: 0u64.into(),
             transfers: vec![],
             valid_transfers_map: vec![],
         };
@@ -1057,7 +1057,7 @@ mod test_process_proposal {
         ];
 
         let event = EthereumEvent::TransfersToNamada {
-            nonce: 1u64.into(),
+            nonce: 0u64.into(),
             transfers: vec![],
             valid_transfers_map: vec![],
         };
@@ -1160,7 +1160,7 @@ mod test_process_proposal {
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let addr = wallet::defaults::validator_address();
         let event = EthereumEvent::TransfersToNamada {
-            nonce: 1u64.into(),
+            nonce: 0u64.into(),
             transfers: vec![],
             valid_transfers_map: vec![],
         };
@@ -1225,7 +1225,7 @@ mod test_process_proposal {
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let addr = wallet::defaults::validator_address();
         let event = EthereumEvent::TransfersToNamada {
-            nonce: 1u64.into(),
+            nonce: 0u64.into(),
             transfers: vec![],
             valid_transfers_map: vec![],
         };
@@ -1282,7 +1282,7 @@ mod test_process_proposal {
             (bertha_addr, bertha_key)
         };
         let event = EthereumEvent::TransfersToNamada {
-            nonce: 1u64.into(),
+            nonce: 0u64.into(),
             transfers: vec![],
             valid_transfers_map: vec![],
         };
