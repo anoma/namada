@@ -312,13 +312,16 @@ where
 mod test_prepare_proposal {
 
     use borsh::BorshSerialize;
+    use namada::ledger::storage_api::StorageWrite;
     use namada::proof_of_stake::Epoch;
+    use namada::types::address::Address;
+    use namada::types::key::RefTo;
+    use namada::types::token;
+    use namada::types::token::Amount;
     use namada::types::transaction::{Fee, WrapperTx};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{self, gen_keypair};
-
-    const GAS_LIMIT_MULTIPLIER: u64 = 1;
 
     /// Test that if a tx from the mempool is not a
     /// WrapperTx type, it is not included in the
@@ -395,6 +398,17 @@ mod test_prepare_proposal {
         let mut expected_wrapper = vec![];
         let mut expected_decrypted = vec![];
 
+        // Load some tokens to tx signer to pay fees
+        let balance_key = token::balance_key(
+            &shell.wl_storage.storage.native_token,
+            &Address::from(&keypair.ref_to()),
+        );
+        shell
+            .wl_storage
+            .storage
+            .write(&balance_key, Amount::whole(1_000).try_to_vec().unwrap())
+            .unwrap();
+
         let mut req = RequestPrepareProposal {
             txs: vec![],
             ..Default::default()
@@ -420,7 +434,7 @@ mod test_prepare_proposal {
                 },
                 &keypair,
                 Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
+                100.into(),
                 tx,
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]

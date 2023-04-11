@@ -295,7 +295,7 @@ pub async fn sign_wrapper(
             } else {
                 eprintln!(
             "The wrapper transaction source doesn't have enough balance to \
-             pay fee {fee_amount}, got {balance}."
+             pay fee. Fee: {fee_amount}, balance: {balance}."
         );
                 if !args.force && cfg!(feature = "mainnet") {
                     cli::safe_exit(1);
@@ -312,7 +312,7 @@ pub async fn sign_wrapper(
     let pow_solution: Option<namada::core::ledger::testnet_pow::Solution> = {
         // If the address derived from the keypair doesn't have enough balance
         // to pay for the fee, allow to find a PoW solution instead.
-        if requires_pow || balance < fee_amount {
+        if requires_pow || ((balance < fee_amount) && unshield.is_none()) {
             println!(
                 "The transaction requires the completion of a PoW challenge."
             );
