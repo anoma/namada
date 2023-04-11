@@ -163,7 +163,7 @@ where
         // Check tx gas limit
         let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit.clone().into());
         if tx_gas_meter
-            .add_tx_size_gas(tx_bytes.len()).is_err() {
+            .add_tx_size_gas(tx_bytes).is_err() {
                             return None;
                         }
 

@@ -712,7 +712,7 @@ where
         if let TxType::Wrapper(wrapper) = tx_type {
             // Tx gas limit
             let mut gas_meter = TxGasMeter::new(u64::from(&wrapper.gas_limit));
-            if gas_meter.add_tx_size_gas(tx_bytes.len()).is_err() {
+            if gas_meter.add_tx_size_gas(tx_bytes).is_err() {
                 response.code = ErrorCodes::TxGasLimit.into();
                 response.log =
                     "Wrapper transactions exceeds its gas limit".to_string();

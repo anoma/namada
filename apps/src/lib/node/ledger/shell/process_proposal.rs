@@ -450,7 +450,7 @@ where
                 // gas limit (ABCI only)
                 let mut tx_gas_meter =
                     TxGasMeter::new(u64::from(&wrapper.gas_limit));
-                if tx_gas_meter.add_tx_size_gas(tx_bytes.len()).is_err() {
+                if tx_gas_meter.add_tx_size_gas(tx_bytes).is_err() {
                     // Add the declared tx gas limit to the block gas meter
                     // even in case of an error
                     let _ =

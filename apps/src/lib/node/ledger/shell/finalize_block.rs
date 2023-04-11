@@ -275,7 +275,7 @@ where
 
                         // Account for gas
                         if let Err(e) =
-                            gas_meter.add_tx_size_gas(processed_tx.tx.len())
+                            gas_meter.add_tx_size_gas(&processed_tx.tx)
                         {
                             tx_event["info"] = format!("{}", e);
                             tx_event["code"] = ErrorCodes::TxGasLimit.into();

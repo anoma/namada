@@ -174,12 +174,11 @@ impl TxGasMeter {
     }
 
     /// Add the gas for the space that the transaction requires in the block
-    pub fn add_tx_size_gas(
-        &mut self,
-        bytes_len: impl TryInto<u64>,
-    ) -> Result<()> {
-        let bytes_len =
-            bytes_len.try_into().map_err(|_| Error::ConversionError)?;
+    pub fn add_tx_size_gas(&mut self, tx_bytes: &[u8]) -> Result<()> {
+        let bytes_len: u64 = tx_bytes
+            .len()
+            .try_into()
+            .map_err(|_| Error::ConversionError)?;
         self.add(
             bytes_len
                 .checked_mul(TX_SIZE_GAS_PER_BYTE)
