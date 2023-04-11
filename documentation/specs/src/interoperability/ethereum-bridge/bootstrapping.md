@@ -2,9 +2,9 @@
 
 ## Overview
 
-The Ethereum bridge may not be enabled at the launch (i.e. genesis) of a
-Namada chain. To enable the Ethereum bridge, there are four governance
-parameters which must be written to storage:
+It is not mandatory for the Ethereum bridge be enabled at the launch (i.e. genesis)
+of a Namada chain. To enable the Ethereum bridge, there are six governance parameters
+which must be written to storage:
 
 - `eth_bridge_min_confirmations` - The minimum number of block confirmations
   on Ethereum required for any given event to be voted on by Namada validators.
@@ -18,7 +18,7 @@ parameters which must be written to storage:
 - `eth_bridge_governance_version` - The version of the `Governance` contract,
   starting from 1.
 - `eth_bridge_wnam_address` - The address of the deployment of the native
-  ERC20 address, representing NAM in Ethereum.
+  ERC20 token, representing NAM in Ethereum.
 
 An overview of the steps to follow, after genesis, to enable the Ethereum bridge
 for a given Namada chain are:
@@ -43,7 +43,7 @@ decision on the root of the merkle tree of transfers to Ethereum and its associa
 nonce.
 
 Conversely, if the bridge is already enabled during genesis, the same steps need
-to be followed. Naturally, no restarting is required.
+to be followed. Naturally, no restarting is required, in this instance.
 
 ## Facets
 
@@ -83,7 +83,7 @@ enabled.
 ## Example
 
 In this example, all epochs are assumed to be `100` blocks long, of equal duration
-(in time), and the consensus validator set does not change at any point.
+(in time units), and the consensus validator set does not change at any point.
 
 1. A governance proposal is made to launch the Ethereum bridge at height `h =
    3400`, i.e. the first block of epoch `34`.
@@ -112,7 +112,7 @@ In this example, all epochs are assumed to be `100` blocks long, of equal durati
 4. The chain halts after having finalized block `3399` (the last block of epoch
    `33`).
 5. Putative Ethereum bridge smart contracts are deployed at this point, with, e.g.
-   the `Bridge` contract located at `0x00000000000000000000000000000000DeaDBeef`.
+   the `Governance` contract located at `0x00000000000000000000000000000000DeaDBeef`.
 6. Verification of the Ethereum bridge smart contracts take place.
 7. Validators coordinate to craft a new genesis file for the chain restart at
    `3400`, with the governance parameter `eth_bridge_governance_address` set to
