@@ -583,7 +583,7 @@ mod test_finalize_block {
         outer_tx.encrypt(&Default::default());
         shell.enqueue_tx(outer_tx.header().wrapper().expect("expected wrapper"), outer_tx.clone());
 
-        outer_tx.outer_data = TxType::Decrypted(DecryptedTx::Decrypted {
+        outer_tx.header = TxType::Decrypted(DecryptedTx::Decrypted {
             header_hash: outer_tx.header_hash(),
             data_hash: outer_tx.data_hash().clone(),
             code_hash: outer_tx.code_hash().clone(),
@@ -714,7 +714,7 @@ mod test_finalize_block {
             );
             outer_tx.encrypt(&Default::default());
             shell.enqueue_tx(outer_tx.header().wrapper().expect("expected wrapper"), outer_tx.clone());
-            outer_tx.outer_data = TxType::Decrypted(DecryptedTx::Decrypted {
+            outer_tx.header = TxType::Decrypted(DecryptedTx::Decrypted {
                 code_hash: outer_tx.code_hash().clone(),
                 data_hash: outer_tx.data_hash().clone(),
                 header_hash: outer_tx.header_hash(),

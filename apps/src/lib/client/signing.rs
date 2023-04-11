@@ -164,7 +164,7 @@ pub async fn sign_tx(
     })
     .await;
     let broadcast_data = if args.dry_run {
-        tx.outer_data = TxType::Decrypted(DecryptedTx::Decrypted {
+        tx.header = TxType::Decrypted(DecryptedTx::Decrypted {
             code_hash: tx.code_hash().clone(),
             data_hash: tx.data_hash().clone(),
             header_hash: Hash::default(),
@@ -254,7 +254,7 @@ pub async fn sign_wrapper(
     let data_hash = tx.data_hash().clone();
     let code_hash = tx.code_hash().clone();
     // This object governs how the payload will be processed
-    tx.outer_data = TxType::Wrapper(WrapperTx::new(
+    tx.header = TxType::Wrapper(WrapperTx::new(
         Fee {
             amount: fee_amount,
             token: fee_token,

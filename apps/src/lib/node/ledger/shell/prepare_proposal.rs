@@ -112,7 +112,7 @@ where
                     {
                         Some(()) => {
                             let mut inner_tx = inner_tx.clone();
-                            inner_tx.outer_data = TxType::Decrypted(DecryptedTx::Decrypted {
+                            inner_tx.header = TxType::Decrypted(DecryptedTx::Decrypted {
                                 header_hash: inner_tx.header_hash(),
                                 code_hash: tx.code_hash.clone(),
                                 data_hash: tx.data_hash.clone(),
@@ -125,7 +125,7 @@ where
                         // treated as undecryptable
                         None => {
                             let mut inner_tx = inner_tx.clone();
-                            inner_tx.outer_data = TxType::Decrypted(
+                            inner_tx.header = TxType::Decrypted(
                                 DecryptedTx::Undecryptable(tx.clone())
                             );
                             inner_tx
@@ -310,7 +310,7 @@ mod test_prepare_proposal {
                 has_valid_pow: false,
             });
             std::mem::replace(
-                &mut tx.outer_data,
+                &mut tx.header,
                 decrypted_tx,
             );
             expected_decrypted.push(tx.clone());
@@ -321,7 +321,7 @@ mod test_prepare_proposal {
         expected_wrapper.append(&mut expected_decrypted);
         let expected_txs: Vec<TxType> = expected_wrapper
             .iter()
-            .map(|tx| tx.outer_data.clone())
+            .map(|tx| tx.header.clone())
             .collect();
         #[cfg(feature = "abcipp")]
         {

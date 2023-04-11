@@ -450,13 +450,8 @@ impl Section {
     Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize,
 )]
 pub struct Tx {
-    pub outer_code: Vec<u8>,
-    pub outer_data: TxType,
-    pub outer_timestamp: DateTimeUtc,
-    pub outer_extra: Vec<u8>,
-    pub code: Vec<u8>,
+    pub header: TxType,
     pub timestamp: DateTimeUtc,
-    pub extra: Vec<u8>,
     pub sections: Vec<Section>,
 }
 
@@ -471,13 +466,24 @@ impl TryFrom<&[u8]> for Tx {
     }
 }
 
-impl From<Tx> for types::Tx {
-    fn from(tx: Tx) -> Self {
-        types::Tx {
-            data: tx.try_to_vec()
-            .expect("encoding a transaction failed"),
-        }
-    }
+#[cfg(feature = "ABCI")]
+fn encode_str(x: &str) -> Vec<u8> {
+    x.as_bytes().to_vec()
+}
+
+#[cfg(feature = "ABCI")]
+fn encode_string(x: String) -> Vec<u8> {
+    x.into_bytes()
+}
+
+#[cfg(not(feature = "ABCI"))]
+fn encode_str(x: &str) -> String {
+    x.to_string()
+}
+
+#[cfg(not(feature = "ABCI"))]
+fn encode_string(x: String) -> String {
+    x
 }
 
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
@@ -492,61 +498,50 @@ impl From<Tx> for ResponseDeliverTx {
     fn from(tx: Tx) -> ResponseDeliverTx {
         use crate::tendermint_proto::abci::{Event, EventAttribute};
 
-        #[cfg(feature = "ABCI")]
-        fn encode_str(x: &str) -> Vec<u8> {
-            x.as_bytes().to_vec()
-        }
-        #[cfg(not(feature = "ABCI"))]
-        fn encode_str(x: &str) -> String {
-            x.to_string()
-        }
-        #[cfg(feature = "ABCI")]
-        fn encode_string(x: String) -> Vec<u8> {
-            x.into_bytes()
-        }
-        #[cfg(not(feature = "ABCI"))]
-        fn encode_string(x: String) -> String {
-            x
-        }
-        let empty_vec = vec![];
-        let tx_data = tx.data();
-        if let Ok(transfer) = Transfer::try_from_slice(
-            tx.data().as_ref().unwrap_or(&empty_vec),
-        ) {
-            let events = vec![Event {
-                r#type: "transfer".to_string(),
-                attributes: vec![
-                    EventAttribute {
-                        key: encode_str("source"),
-                        value: encode_string(transfer.source.encode()),
-                        index: true,
-                    },
-                    EventAttribute {
-                        key: encode_str("target"),
-                        value: encode_string(transfer.target.encode()),
-                        index: true,
-                    },
-                    EventAttribute {
-                        key: encode_str("token"),
-                        value: encode_string(transfer.token.encode()),
-                        index: true,
-                    },
-                    EventAttribute {
-                        key: encode_str("amount"),
-                        value: encode_string(
-                            transfer.amount.to_string(),
-                        ),
-                        index: true,
-                    },
-                ],
-            }];
-            ResponseDeliverTx {
-                events,
-                info: "Transfer tx".to_string(),
-                ..Default::default()
-            }
+        // If data cannot be extracteed, then attach no events
+        let tx_data = if let Some(data) = tx.data() {
+            data
         } else {
-            Default::default()
+            return Default::default();
+        };
+        // If the data is not a Transfer, then attach no events
+        let transfer = if let Ok(transfer) = Transfer::try_from_slice(&tx_data) {
+            transfer
+        } else {
+            return Default::default();
+        };
+        // Otherwise attach all Transfer events
+        let events = vec![Event {
+            r#type: "transfer".to_string(),
+            attributes: vec![
+                EventAttribute {
+                    key: encode_str("source"),
+                    value: encode_string(transfer.source.encode()),
+                    index: true,
+                },
+                EventAttribute {
+                    key: encode_str("target"),
+                    value: encode_string(transfer.target.encode()),
+                    index: true,
+                },
+                EventAttribute {
+                    key: encode_str("token"),
+                    value: encode_string(transfer.token.encode()),
+                    index: true,
+                },
+                EventAttribute {
+                    key: encode_str("amount"),
+                    value: encode_string(
+                        transfer.amount.to_string(),
+                    ),
+                    index: true,
+                },
+            ],
+        }];
+        ResponseDeliverTx {
+            events,
+            info: "Transfer tx".to_string(),
+            ..Default::default()
         }
     }
 }
@@ -554,23 +549,18 @@ impl From<Tx> for ResponseDeliverTx {
 impl Tx {
     pub fn new(header: TxType) -> Self {
         Tx {
-            outer_data: header,
-            outer_code: vec![],
-            outer_timestamp: DateTimeUtc::now(),
-            outer_extra: vec![],
-            code: vec![],
+            header,
             timestamp: DateTimeUtc::now(),
-            extra: vec![],
             sections: vec![],
         }
     }
 
     pub fn header(&self) -> TxType {
-        self.outer_data.clone()
+        self.header.clone()
     }
 
     pub fn header_hash(&self) -> crate::types::hash::Hash {
-        crate::types::hash::Hash(self.outer_data.hash(&mut Sha256::new()).finalize_reset().into())
+        crate::types::hash::Hash(self.header.hash(&mut Sha256::new()).finalize_reset().into())
     }
 
     pub fn get_section(&self, hash: &crate::types::hash::Hash) -> Option<&Section> {
@@ -590,7 +580,7 @@ impl Tx {
     }
 
     pub fn code_hash(&self) -> &crate::types::hash::Hash {
-        match &self.outer_data {
+        match &self.header {
             TxType::Raw(raw) => {
                 &raw.code_hash
             },
@@ -611,7 +601,7 @@ impl Tx {
     }
 
     pub fn set_code_hash(&mut self, hash: crate::types::hash::Hash) {
-        match &mut self.outer_data {
+        match &mut self.header {
             TxType::Raw(raw) => {
                 raw.code_hash = hash;
             },
@@ -649,7 +639,7 @@ impl Tx {
     }
 
     pub fn data_hash(&self) -> &crate::types::hash::Hash {
-        match &self.outer_data {
+        match &self.header {
             TxType::Raw(raw) => {
                 &raw.data_hash
             },
@@ -670,7 +660,7 @@ impl Tx {
     }
 
     pub fn set_data_hash(&mut self, hash: crate::types::hash::Hash) {
-        match &mut self.outer_data {
+        match &mut self.header {
             TxType::Raw(raw) => {
                 raw.data_hash = hash;
             },

@@ -298,7 +298,7 @@ mod test_process_proposal {
         outer_tx.add_section(Section::Signature(Signature::new(&outer_tx.header_hash(), &keypair)));
         outer_tx.encrypt(&Default::default());
         let mut new_tx = outer_tx.clone();
-        if let TxType::Wrapper(wrapper) = &mut new_tx.outer_data {
+        if let TxType::Wrapper(wrapper) = &mut new_tx.header {
             // we mount a malleability attack to try and remove the fee
             wrapper.fee.amount = 0.into();
         } else {
@@ -447,7 +447,7 @@ mod test_process_proposal {
             outer_tx.encrypt(&Default::default());
             shell.enqueue_tx(outer_tx.header().wrapper().expect("expected wrapper"), outer_tx.clone());
 
-            outer_tx.outer_data = TxType::Decrypted(DecryptedTx::Decrypted {
+            outer_tx.header = TxType::Decrypted(DecryptedTx::Decrypted {
                 header_hash: outer_tx.header_hash(),
                 code_hash: outer_tx.code_hash().clone(),
                 data_hash: outer_tx.data_hash().clone(),
@@ -519,7 +519,7 @@ mod test_process_proposal {
         let wrapper = tx.header().wrapper().expect("expected wrapper");
         shell.enqueue_tx(wrapper.clone(), tx.clone());
 
-        tx.outer_data = TxType::Decrypted(DecryptedTx::Undecryptable(wrapper.clone()));
+        tx.header = TxType::Decrypted(DecryptedTx::Undecryptable(wrapper.clone()));
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
         };
@@ -579,7 +579,7 @@ mod test_process_proposal {
         let wrapper = tx.header().wrapper().expect("expected wrapper");
         shell.enqueue_tx(wrapper.clone(), tx.clone());
 
-        tx.outer_data = TxType::Decrypted(DecryptedTx::Undecryptable(
+        tx.header = TxType::Decrypted(DecryptedTx::Undecryptable(
             #[allow(clippy::redundant_clone)]
             wrapper.clone(),
         ));
