@@ -115,8 +115,11 @@ pub fn check_proposal_invariant(
             proposal_content_len,
             governance_parameters.max_proposal_code_size,
         )
-    } else if is_valid_author_balance(proposal, author_balance, &governance_parameters.min_proposal_fund)
-    {
+    } else if is_valid_author_balance(
+        proposal,
+        author_balance,
+        &governance_parameters.min_proposal_fund,
+    ) {
         GovInvariant::InvalidBalance(
             author_balance,
             governance_parameters.min_proposal_fund,
@@ -126,8 +129,11 @@ pub fn check_proposal_invariant(
     }
 }
 
-
-fn is_valid_author_balance(proposal: &Proposal, author_balance: token::Amount, min_proposal_fund: &token::Amount) -> bool {
+fn is_valid_author_balance(
+    proposal: &Proposal,
+    author_balance: token::Amount,
+    min_proposal_fund: &token::Amount,
+) -> bool {
     if let ProposalType::PGFSteward(_) = proposal.r#type {
         true
     } else {

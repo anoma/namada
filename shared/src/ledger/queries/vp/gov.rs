@@ -12,7 +12,6 @@ router! {GOV,
     // ( "parameters" ) -> GovParams = parameters
 }
 
-
 // /// Find all proposals
 // fn proposals<D, H>(
 //     ctx: RequestCtx<'_, D, H>,
@@ -34,7 +33,7 @@ router! {GOV,
 /// Find proposal by proposal id
 fn proposal_by_id<D, H>(
     ctx: RequestCtx<'_, D, H>,
-    id: u64
+    id: u64,
 ) -> storage_api::Result<Option<Proposal>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -42,4 +41,3 @@ where
 {
     Ok(None)
 }
-

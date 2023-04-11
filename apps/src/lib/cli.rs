@@ -2401,7 +2401,7 @@ pub mod args {
         /// Flag if proposal is of type pgf funding
         pub is_pgf_funding: bool,
         /// Flag if proposal is of type eth
-        pub is_eth: bool
+        pub is_eth: bool,
     }
 
     impl Args for InitProposal {
@@ -2419,7 +2419,7 @@ pub mod args {
                 offline,
                 is_eth,
                 is_pgf_stewards,
-                is_pgf_funding
+                is_pgf_funding,
             }
         }
 
@@ -2487,11 +2487,7 @@ pub mod args {
                         .def()
                         .about("The vote for the proposal. Either yay or nay"),
                 )
-                .arg(
-                    MEMO_VOTE
-                        .def()
-                        .about("The memo to attach to a vote."),
-                )
+                .arg(MEMO_VOTE.def().about("The memo to attach to a vote."))
                 .arg(
                     PROPOSAL_OFFLINE
                         .def()

@@ -38,7 +38,10 @@ use namada::ibc::timestamp::Timestamp as IbcTimestamp;
 use namada::ibc::tx_msg::Msg;
 use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::cosmos::base::v1beta1::Coin;
-use namada::ledger::governance::cli::{CliEthProposal, CliPgfPaymentsProposal, CliPgfStewardProposal, CliDefaultProposal};
+use namada::ledger::governance::cli::{
+    CliDefaultProposal, CliEthProposal, CliPgfPaymentsProposal,
+    CliPgfStewardProposal,
+};
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::governance::utils::{
     check_offline_proposal_invariant, check_proposal_invariant,
@@ -68,6 +71,7 @@ use namada::types::{storage, token};
 use namada::vm;
 use rand_core::{CryptoRng, OsRng, RngCore};
 use rust_decimal::Decimal;
+use serde::de::DeserializeOwned;
 use sha2::Digest;
 use tokio::time::{Duration, Instant};
 
@@ -1950,27 +1954,28 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
     .await;
 }
 
-pub async fn submit_init_proposal<T: DeserializeOwned>(mut ctx: Context, args::InitProposal {
-     tx: tx_args,
-     proposal_data_path,
-     offline,
-     is_pgf_funding,
-     is_pgf_stewards,
-     is_eth,
-}: args::InitProposal) { 
+pub async fn submit_init_proposal<T: DeserializeOwned>(
+    mut ctx: Context,
+    args::InitProposal {
+        tx: tx_args,
+        proposal_data_path,
+        offline,
+        is_pgf_funding,
+        is_pgf_stewards,
+        is_eth,
+    }: args::InitProposal,
+) {
     let client = HttpClient::new(tx_args.ledger_address).unwrap();
 
     let proposal = ctx.read_json::<T>(proposal_data_path);
 
-
-
     // let signer = ctx.to_context_address(&proposal.author);
 
     // // let signer = WalletAddress::new(proposal.clone().author.to_string());
-    // let governance_parameters = rpc::get_governance_parameters(&client).await;
-    // let current_epoch = rpc::query_and_print_epoch(args::Query {
-    //     ledger_address: args.tx.ledger_address.clone(),
-    // })
+    // let governance_parameters =
+    // rpc::get_governance_parameters(&client).await; let current_epoch =
+    // rpc::query_and_print_epoch(args::Query {     ledger_address:
+    // args.tx.ledger_address.clone(), })
     // .await;
 
     // if args.offline {
@@ -1990,7 +1995,8 @@ pub async fn submit_init_proposal<T: DeserializeOwned>(mut ctx: Context, args::I
     //         vec![TxSigningKey::WalletAddress(signer)],
     //     )
     //     .await;
-    //     let pks_map = rpc::get_address_pks_map(&client, &proposal.author).await;
+    //     let pks_map = rpc::get_address_pks_map(&client,
+    // &proposal.author).await;
 
     //     let offline_proposal = OfflineProposal::new(
     //         proposal.clone(),
@@ -2043,7 +2049,8 @@ pub async fn submit_init_proposal<T: DeserializeOwned>(mut ctx: Context, args::I
 
     //     let tx = ctx.build_tx(init_proposal_data, TX_INIT_PROPOSAL);
 
-    //     let pks_map = rpc::get_address_pks_map(&client, &proposal.author).await;
+    //     let pks_map = rpc::get_address_pks_map(&client,
+    // &proposal.author).await;
 
     //     process_tx(
     //         ctx,
@@ -2061,9 +2068,9 @@ pub async fn submit_init_proposal<T: DeserializeOwned>(mut ctx: Context, args::I
 pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
-    let proposal_vote: ProposalType = args.vote.parse().expect("Should be able to convert vote.");
+    let proposal_vote: ProposalType =
+        args.vote.parse().expect("Should be able to convert vote.");
     // let proposal = rpc::query_proposal(ctx, args)
-
 
     // if args.offline {
     //     if !proposal_vote.is_default_vote() {
@@ -2074,9 +2081,10 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
     //     }
     //     let proposal_file_path =
     //         args.proposal_data.expect("Proposal file should exist.");
-    //     let file = File::open(&proposal_file_path).expect("File must exist.");
-    //     let proposal: OfflineProposal =
-    //         serde_json::from_reader(file).expect("JSON was not well-formatted");
+    //     let file = File::open(&proposal_file_path).expect("File must
+    // exist.");     let proposal: OfflineProposal =
+    //         serde_json::from_reader(file).expect("JSON was not
+    // well-formatted");
 
     //     let proposer_pks_map =
     //         rpc::get_address_pks_map(&client, &proposal.author).await;
@@ -2096,7 +2104,8 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
     //     )
     //     .await;
 
-    //     let pks_map = rpc::get_address_pks_map(&client, &voter_address).await;
+    //     let pks_map = rpc::get_address_pks_map(&client,
+    // &voter_address).await;
 
     //     let vote = match args.vote.as_str() {
     //         "yay" => ProposalVote::Yay(VoteType::Default),
@@ -2134,7 +2143,8 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
     //         }
     //     }
     // } else {
-    //     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    //     let client =
+    // HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     //     let current_epoch = rpc::query_and_print_epoch(args::Query {
     //         ledger_address: args.tx.ledger_address.clone(),
     //     })
@@ -2151,7 +2161,8 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
     //     .await;
 
     //     // Check vote type and memo
-    //     let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
+    //     let proposal_type_key =
+    // gov_storage::get_proposal_type_key(proposal_id);
     //     let proposal_type: ProposalType =
     //         rpc::query_storage_value(&client, &proposal_type_key)
     //             .await
@@ -2176,8 +2187,8 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
     //         Some(epoch) => {
     //             if current_epoch < epoch {
     //                 eprintln!(
-    //                     "Current epoch {} is not greater than proposal start \
-    //                      epoch {}",
+    //                     "Current epoch {} is not greater than proposal start
+    // \                      epoch {}",
     //                     current_epoch, epoch
     //                 );
 
@@ -2190,8 +2201,8 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
     //                     .await;
 
     //             // Optimize by quering if a vote from a validator
-    //             // is equal to ours. If so, we can avoid voting, but ONLY if we
-    //             // are  voting in the last third of the voting
+    //             // is equal to ours. If so, we can avoid voting, but ONLY if
+    // we             // are  voting in the last third of the voting
     //             // window, otherwise there's  the risk of the
     //             // validator changing his vote and, effectively, invalidating
     //             // the delgator's vote
@@ -2242,8 +2253,8 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
     //         }
     //         None => {
     //             eprintln!(
-    //                 "Proposal start epoch for proposal id {} is not definied.",
-    //                 proposal_id
+    //                 "Proposal start epoch for proposal id {} is not
+    // definied.",                 proposal_id
     //             );
     //             if !args.tx.force {
     //                 safe_exit(1)

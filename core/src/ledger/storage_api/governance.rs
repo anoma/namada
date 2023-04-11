@@ -1,6 +1,6 @@
 //! Governance
 
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{BTreeMap, HashMap};
 
 use super::token;
 use crate::ledger::governance::{storage, ADDRESS as governance_address};
@@ -10,7 +10,7 @@ use crate::types::address::Address;
 use crate::types::governance::Proposal;
 use crate::types::storage::Epoch;
 use crate::types::transaction::governance::{
-    InitProposalData, VoteProposalData, ProposalType,
+    InitProposalData, ProposalType, VoteProposalData,
 };
 
 /// A proposal creation transaction.

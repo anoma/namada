@@ -23,7 +23,6 @@ const MIN_GRACE_EPOCH_KEY: &str = "min_grace_epoch";
 const COUNTER_KEY: &str = "counter";
 const PENDING_PROPOSAL: &str = "pending";
 
-
 /// Check if key is inside governance address space
 pub fn is_governance_key(key: &Key) -> bool {
     matches!(&key.segments[0], DbKeySeg::AddressSeg(addr) if addr == &ADDRESS)

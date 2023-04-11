@@ -122,7 +122,7 @@ impl FromStr for ProposalType {
         match value {
             "yay" => todo!(),
             "nay" => todo!(),
-            _ => todo!()
+            _ => todo!(),
         }
     }
 }

@@ -7,15 +7,15 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use borsh::{BorshSerialize, BorshDeserialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use color_eyre::eyre::Result;
 use namada::proto::Tx;
 use namada::types::address::Address;
 use namada::types::chain::ChainId;
 use namada::types::key::*;
 use namada::types::masp::*;
-use serde::Deserialize;
 use serde::de::DeserializeOwned;
+use serde::Deserialize;
 
 use super::args::{self};
 use crate::cli::safe_exit;
@@ -236,16 +236,14 @@ impl Context {
             Err(e) => {
                 eprintln!("{}", e);
                 safe_exit(1)
-            },
-        };
-        match serde_json::from_reader(file){
-            Ok(data) => {
-                return data
             }
+        };
+        match serde_json::from_reader(file) {
+            Ok(data) => return data,
             Err(_) => {
                 eprintln!("The specified file is not correctly formatted.");
                 safe_exit(1)
-            },
+            }
         }
     }
 

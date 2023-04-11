@@ -1,16 +1,14 @@
 use std::collections::{BTreeMap, HashSet};
+use std::marker::PhantomData;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{
-    de::{DeserializeOwned, Visitor},
-    Deserialize, Serialize,
-};
-
-use crate::{
-    ledger::storage_api::token::Amount,
-    types::{address::Address, storage::Epoch},
-};
+use serde::de::{DeserializeOwned, Visitor};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use crate::ledger::storage_api::token::Amount;
+use crate::types::address::Address;
+use crate::types::storage::Epoch;
 
 #[derive(Error, Debug)]
 pub enum GovernanceError {
@@ -50,9 +48,11 @@ pub enum ProposalType {
     ETHBridge,
 }
 
-#[derive(Debug, Clone, BorshDeserialize)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, Serialize)]
 /// The proposal structure
-pub struct Proposal<T: BorshDeserialize + DeserializeOwned> {
+pub struct Proposal<
+    T: Serialize + DeserializeOwned,
+> {
     /// The proposal id
     pub id: Option<u64>,
     /// The proposal content
@@ -71,21 +71,50 @@ pub struct Proposal<T: BorshDeserialize + DeserializeOwned> {
     pub grace_epoch: Epoch,
 }
 
-impl<'de> Deserialize<'de> for Proposal<T> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+/// The proposal structure
+struct ProposalDeserializer {
+    /// The proposal id
+    pub id: Option<u64>,
+    /// The proposal content
+    pub content: BTreeMap<String, String>,
+    /// The proposal author address
+    pub author: Address,
+    /// The proposal type
+    pub r#type: ProposalType,
+    /// Extra data
+    pub data: String,
+    /// The epoch from which voting is allowed
+    pub voting_start_epoch: Epoch,
+    /// The epoch from which voting is stopped
+    pub voting_end_epoch: Epoch,
+    /// The epoch from which this changes are executed
+    pub grace_epoch: Epoch,
+}
+
+impl<'de, T: Serialize + DeserializeOwned> Deserialize<'de>
+    for Proposal<T>
+{
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        struct ProposalVisitor;
+        struct ProposalVisitor<U> {
+            _ty: PhantomData<U>,
+        }
 
-        impl Visitor<'de> for ProposalVisitor {
-            type Proposal;
+        impl<'a, U: Serialize + DeserializeOwned> Visitor<'a>
+            for ProposalVisitor<U>
+        {
+            type Value = Proposal<U>;
 
             fn expecting(
                 &self,
                 formatter: &mut std::fmt::Formatter,
             ) -> std::fmt::Result {
-                formatter.write_str("Expecting a valid serialized Governance proposal.")
+                formatter.write_str(
+                    "Expecting a valid serialized Governance proposal.",
+                )
             }
 
             fn visit_str<E>(
@@ -95,9 +124,24 @@ impl<'de> Deserialize<'de> for Proposal<T> {
             where
                 E: serde::de::Error,
             {
-                v
+                let partial: ProposalDeserializer = serde_json::from_str(v)
+                    .map_err(|e| E::custom(e.to_string()))?;
+                let data: U = serde_json::from_str(&partial.data)
+                    .map_err(|e| E::custom(e.to_string()))?;
+                Ok(Proposal {
+                    id: partial.id,
+                    content: partial.content,
+                    author: partial.author,
+                    r#type: partial.r#type,
+                    data,
+                    voting_start_epoch: partial.voting_start_epoch,
+                    voting_end_epoch: partial.voting_end_epoch,
+                    grace_epoch: partial.grace_epoch,
+                })
             }
         }
+
+        deserializer.deserialize_any(ProposalVisitor { _ty: PhantomData })
     }
 }
 
@@ -178,7 +222,8 @@ pub struct PgfRetroPayments {
     target: PgfTarget,
 }
 
-/// The actions that a PGF Steward can propose to execute with a continous funding
+/// The actions that a PGF Steward can propose to execute with a continous
+/// funding
 #[derive(
     Debug,
     Clone,
