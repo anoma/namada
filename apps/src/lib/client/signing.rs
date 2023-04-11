@@ -252,11 +252,9 @@ pub async fn sign_wrapper(
             None
         }
     };
-    // Capture the data and code hashes that will be overwritten
-    let data_hash = tx.data_hash().clone();
-    let code_hash = tx.code_hash().clone();
+    
     // This object governs how the payload will be processed
-    tx.header = TxType::Wrapper(WrapperTx::new(
+    tx.update_header(TxType::Wrapper(WrapperTx::new(
         Fee {
             amount: fee_amount,
             token: fee_token,
@@ -266,10 +264,8 @@ pub async fn sign_wrapper(
         args.gas_limit.clone(),
         #[cfg(not(feature = "mainnet"))]
         pow_solution.clone(),
-    ));
-    // Rebind the data and code hashes
-    tx.set_data_hash(data_hash.clone());
-    tx.set_code_hash(code_hash.clone());
+    )));
+    
     // Then sign over the bound wrapper
     tx.add_section(Section::Signature(Signature::new(&tx.header_hash(), keypair)));
     // Encrypt all sections not relating to the header
@@ -280,8 +276,8 @@ pub async fn sign_wrapper(
     // We use this to determine when the decrypted inner tx makes it
     // on-chain
     let decrypted_header = TxType::Decrypted(DecryptedTx::Decrypted {
-        data_hash,
-        code_hash,
+        data_hash: *tx.data_hash(),
+        code_hash: *tx.code_hash(),
         header_hash: tx.header_hash(),
         has_valid_pow: pow_solution.is_some(),
     });

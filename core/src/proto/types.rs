@@ -460,6 +460,17 @@ impl Tx {
         crate::types::hash::Hash(self.header.hash(&mut Sha256::new()).finalize_reset().into())
     }
 
+    /// Update the header whilst maintaining existing cross-references
+    pub fn update_header(&mut self, header: TxType) {
+        // Capture the data and code hashes that will be overwritten
+        let data_hash = self.data_hash().clone();
+        let code_hash = self.code_hash().clone();
+        self.header = header;
+        // Rebind the data and code hashes
+        self.set_data_hash(data_hash);
+        self.set_code_hash(code_hash);
+    }
+
     /// Get the transaction section with the given hash
     pub fn get_section(&self, hash: &crate::types::hash::Hash) -> Option<&Section> {
         for section in &self.sections {
