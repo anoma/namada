@@ -13,9 +13,9 @@ use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::ledger::storage_api::{token, StorageWrite};
 use namada::proof_of_stake::read_total_stake;
 use namada::types::address::Address;
-use namada::types::governance::{Stewards, Tally, TallyResult, VotePower};
+use namada::types::governance::{Tally, TallyResult, VotePower};
 use namada::types::storage::Epoch;
-use namada::types::transaction::governance::PGFAction;
+use namada::types::transaction::governance::{AddRemove, PGFAction};
 
 use super::*;
 
@@ -69,9 +69,8 @@ where
             read_total_stake(&shell.wl_storage, &params, proposal_end_epoch)
                 .map_err(|msg| Error::BadProposal(id, msg.to_string()))?;
         let total_stake = VotePower::from(u64::from(total_stake));
-        let tally_result = compute_tally(votes, total_stake, proposal_type)
-            .map_err(|msg| Error::BadProposal(id, msg.to_string()))?
-            .result;
+        let tally_result =
+            compute_tally(votes, total_stake, proposal_type).result;
 
         // Execute proposal if succesful
         let transfer_address = match tally_result {
@@ -225,7 +224,10 @@ where
     }
 }
 
-fn execute_pgf_steward_proposal(id: u64, stewards: Stewards) -> (bool, Event) {
+fn execute_pgf_steward_proposal(
+    id: u64,
+    stewards: HashSet<AddRemove<Address>>,
+) -> (bool, Event) {
     // TODO: implement when PGF is in place, update the PGF
     // council in storage
     (

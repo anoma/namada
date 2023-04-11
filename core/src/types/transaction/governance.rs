@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -7,9 +8,29 @@ use serde::{Deserialize, Serialize};
 use crate::ledger::storage_api::token::Amount;
 use crate::types::address::Address;
 use crate::types::governance::{
-    self, Proposal, ProposalError, ProposalVote, Stewards, VoteType,
+    self, Proposal, ProposalError, ProposalVote, VoteType,
 };
 use crate::types::storage::Epoch;
+
+/// An add or remove action for PGF
+#[derive(
+    Debug,
+    Clone,
+    Hash,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
+pub enum AddRemove<T> {
+    /// Add
+    Add(T),
+    /// Remove
+    Remove(T),
+}
 
 /// The target of a PGF payment
 #[derive(
@@ -26,23 +47,6 @@ pub struct PGFTarget {
     amount: Amount,
 }
 
-/// An add or remove action for continuous payment
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    Serialize,
-    Deserialize,
-)]
-pub enum ContinuousPayment {
-    /// Add a new continuous target
-    Add(PGFTarget),
-    /// Remove a continuous target
-    Remove(PGFTarget),
-}
-
 /// The actions that a PGF Steward can propose to execute
 #[derive(
     Debug,
@@ -55,7 +59,7 @@ pub enum ContinuousPayment {
 )]
 pub enum PGFAction {
     /// A continuous payment
-    Continuous(ContinuousPayment),
+    Continuous(AddRemove<PGFTarget>),
     /// A retro payment
     Retro(PGFTarget),
 }
@@ -74,7 +78,7 @@ pub enum ProposalType {
     /// Default governance proposal with the optional wasm code
     Default(Option<Vec<u8>>),
     /// PGF stewards proposal
-    PGFSteward(Stewards),
+    PGFSteward(HashSet<AddRemove<Address>>),
     /// PGF funding proposal
     PGFPayment(Vec<PGFAction>),
     /// ETH proposal
@@ -138,7 +142,15 @@ impl TryFrom<governance::ProposalType> for ProposalType {
                     Ok(Self::Default(None))
                 }
             }
-            governance::ProposalType::PGFSteward(s) => Ok(Self::PGFSteward(s)),
+            governance::ProposalType::PGFSteward(p) => {
+                match serde_json::from_reader(
+                    std::fs::File::open(p)
+                        .map_err(|_| Self::Error::InvalidProposalData)?,
+                ) {
+                    Ok(actions) => Ok(Self::PGFSteward(actions)),
+                    Err(_) => Err(Self::Error::InvalidProposalData),
+                }
+            }
             governance::ProposalType::PGFPayment(p) => {
                 match serde_json::from_reader(
                     std::fs::File::open(p)
