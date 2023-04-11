@@ -1,14 +1,14 @@
 # Transferring assets from Ethereum to Namada
 
-In order to facilitate transferring assets from Ethereum to Namada, There
+In order to facilitate transferring assets from Ethereum to Namada, there
 will be two internal accounts with associated native validity predicates:
 
 - `#EthBridge` - Controls the `/eth_msgs/` [storage](ethereum_events_attestation.md#storage)
-- and ledgers of balances
-  for wrapped Ethereum assets (ERC20 tokens) structured in a
-  ["multitoken"](https://github.com/anoma/anoma/issues/1102) hierarchy
-- `#EthBridgeEscrow` which will hold in escrow wrapped Namada tokens which have
-  been sent to Ethereum.
+  and ledger of balances for wrapped Ethereum assets (ERC20 tokens) structured in a
+  ["multitoken"](https://github.com/anoma/anoma/issues/1102) hierarchy.
+- `#EthBridgeEscrow` - Holds in escrow wrapped Namada tokens which have
+  been sent to Ethereum, as well as gas fees to be payed to relayers of
+  transfers to Ethereum.
 
 #### Wrapped ERC20
 
