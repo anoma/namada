@@ -4,12 +4,13 @@ use masp_primitives::primitives::{Diversifier, Note, ViewingKey};
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::Amount;
 use namada::types::address::Address;
+use namada::types::key;
 use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::storage::Epoch;
 use namada::types::transaction::GasLimit;
-use namada::types::{key, token};
 
 use super::rpc;
+use crate::cli::args::InputAmount;
 use crate::cli::{args, Context};
 use crate::client::tx::Conversions;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
@@ -30,7 +31,7 @@ pub struct ParsedTxArgs {
     /// save it in the wallet.
     pub initialized_account_alias: Option<String>,
     /// The amount being payed to include the transaction
-    pub fee_amount: token::Amount,
+    pub fee_amount: InputAmount,
     /// The token in which the fee is being paid
     pub fee_token: Address,
     /// The max amount of gas used to process tx
@@ -52,7 +53,7 @@ pub struct ParsedTxTransferArgs {
     /// Transferred token address
     pub token: Address,
     /// Transferred token amount
-    pub amount: token::Amount,
+    pub amount: InputAmount,
 }
 
 #[async_trait(?Send)]

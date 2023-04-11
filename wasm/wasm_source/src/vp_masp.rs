@@ -12,16 +12,17 @@ fn convert_amount(
     epoch: Epoch,
     token: &Address,
     val: token::Amount,
+    denom: token::MaspDenom,
 ) -> (AssetType, Amount) {
     // Timestamp the chosen token with the current epoch
-    let token_bytes = (token, epoch.0)
+    let token_bytes = (token, denom, epoch.0)
         .try_to_vec()
         .expect("token should serialize");
     // Generate the unique asset identifier from the unique token address
     let asset_type = AssetType::new(token_bytes.as_ref())
         .expect("unable to create asset type");
     // Combine the value and unit into one amount
-    let amount = Amount::from_nonnegative(asset_type, u64::from(val))
+    let amount = Amount::from_nonnegative(asset_type, denom.denominate(&val))
         .expect("invalid value or asset type for amount");
     (asset_type, amount)
 }
@@ -59,14 +60,17 @@ fn validate_tx(
             // Note that the asset type is timestamped so shields
             // where the shielded value has an incorrect timestamp
             // are automatically rejected
-            let (_transp_asset, transp_amt) = convert_amount(
-                ctx.get_block_epoch().unwrap(),
-                &transfer.token,
-                transfer.amount,
-            );
+            for denom in token::MaspDenom::iter() {
+                let (_transp_asset, transp_amt) = convert_amount(
+                    ctx.get_block_epoch().unwrap(),
+                    &transfer.token,
+                    transfer.amount.into(),
+                    denom,
+                );
 
-            // Non-masp sources add to transparent tx pool
-            transparent_tx_pool += transp_amt;
+                // Non-masp sources add to transparent tx pool
+                transparent_tx_pool += transp_amt;
+            }
         }
 
         // Handle unshielding/transparent output
@@ -74,13 +78,16 @@ fn validate_tx(
             // Timestamp is derived to allow unshields for older tokens
             let atype =
                 shielded_tx.value_balance.components().next().unwrap().0;
+            for denom in token::MaspDenom::iter() {
+                let transp_amt = Amount::from_nonnegative(
+                    *atype,
+                    denom.denominate(&transfer.amount),
+                )
+                .expect("invalid value or asset type for amount");
 
-            let transp_amt =
-                Amount::from_nonnegative(*atype, u64::from(transfer.amount))
-                    .expect("invalid value or asset type for amount");
-
-            // Non-masp destinations subtract from transparent tx pool
-            transparent_tx_pool -= transp_amt;
+                // Non-masp destinations subtract from transparent tx pool
+                transparent_tx_pool -= transp_amt;
+            }
         }
 
         match transparent_tx_pool.partial_cmp(&Amount::zero()) {

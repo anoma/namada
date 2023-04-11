@@ -14,7 +14,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
     let slashed =
         ctx.withdraw_tokens(withdraw.source.as_ref(), &withdraw.validator)?;
     if slashed != token::Amount::default() {
-        debug_log!("New withdrawal slashed for {}", slashed);
+        debug_log!("New withdrawal slashed for {}", slashed.to_string_native());
     }
     Ok(())
 }
@@ -216,7 +216,7 @@ mod tests {
                 // stake
                 let unbonded_amount =
                     token::testing::arb_amount_non_zero_ceiled(
-                        initial_stake.into(),
+                        u128::try_from(initial_stake).unwrap() as u64,
                     );
                 // Use the generated initial stake too too
                 (Just(initial_stake), unbonded_amount)

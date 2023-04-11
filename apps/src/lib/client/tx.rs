@@ -40,7 +40,6 @@ use namada::ibc_proto::cosmos::base::v1beta1::Coin;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::masp;
 use namada::ledger::pos::{CommissionPair, PosParams};
-use namada::ledger::queries::RPC;
 use namada::proto::Tx;
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::governance::{
@@ -69,11 +68,12 @@ use tokio::time::{Duration, Instant};
 
 use super::rpc;
 use super::types::ShieldedTransferContext;
+use crate::cli::args::InputAmount;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::{
     format_denominated_amount, make_asset_type, query_conversion,
-    query_storage_value, unwrap_client_response,
+    query_storage_value, validate_amount,
 };
 use crate::client::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
 use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
@@ -848,9 +848,11 @@ impl ShieldedContext {
         // Record the changes to the transparent accounts
         let mut transfer_delta = TransferDelta::new();
         for denom in MaspDenom::iter() {
-            let transparent_delta =
-                Amount::from_nonnegative((tx.token.clone(), denom), denom.denominate(&tx.amount.amount))
-                    .expect("invalid value for amount");
+            let transparent_delta = Amount::from_nonnegative(
+                (tx.token.clone(), denom),
+                denom.denominate(&tx.amount.amount),
+            )
+            .expect("invalid value for amount");
             if transparent_delta == Amount::zero() {
                 continue;
             }
@@ -1367,12 +1369,15 @@ where
             .expect("unable to load MASP Parameters")
     };
     let fee = if spending_key.is_some() {
+        let InputAmount::Validated(fee) = args.tx.fee_amount else {
+            unreachable!("The function `gen_shielded_transfer` is only called by `submit_tx` which validates amounts.")
+        };
         // Transaction fees need to match the amount in the wrapper Transfer
         // when MASP source is used. This amount should be <= `u64::MAX`.
         let (_, fee) = convert_amount(
             epoch,
             &args.tx.fee_token,
-            MaspDenom::Zero.denominate(&args.tx.fee_amount),
+            MaspDenom::Zero.denominate(&fee.amount),
             MaspDenom::Zero,
         );
         builder.set_fee(fee.clone())?;
@@ -1386,8 +1391,11 @@ where
     let mut epoch_transitions = vec![];
     // break up a transfer into a number of transfers with suitable
     // denominations
+    let InputAmount::Validated(amt) = args.amount else {
+        unreachable!("The function `gen_shielded_transfer` is only called by `submit_tx` which validates amounts.")
+    };
     for denom in MaspDenom::iter() {
-        let denom_amount = denom.denominate(&args.amount);
+        let denom_amount = denom.denominate(&amt.amount);
         if denom_amount == 0 {
             continue;
         }
@@ -1562,8 +1570,10 @@ where
     tx.map(Some)
 }
 
-pub async fn submit_transfer(mut ctx: Context, mut args: args::TxTransfer) {
-    let parsed_args = args.parse_from_context(&mut ctx).await;
+pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
+    let mut parsed_args: ParsedTxTransferArgs =
+        args.parse_from_context(&mut ctx);
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     let source = parsed_args.source.effective_address();
     let target = parsed_args.target.effective_address();
     // Check that the source address exists on chain
@@ -1597,6 +1607,17 @@ pub async fn submit_transfer(mut ctx: Context, mut args: args::TxTransfer) {
             safe_exit(1)
         }
     }
+    // validate the amount given
+    let validated_amount =
+        validate_amount(&client, parsed_args.amount, &parsed_args.token).await;
+    let validate_fee = validate_amount(
+        &client,
+        parsed_args.tx.fee_amount,
+        &parsed_args.tx.fee_token,
+    )
+    .await;
+    parsed_args.amount = InputAmount::Validated(validated_amount);
+    parsed_args.tx.fee_amount = InputAmount::Validated(validate_fee);
     // Check source balance
     let (sub_prefix, balance_key) = match args.sub_prefix {
         Some(sub_prefix) => {
@@ -1612,11 +1633,10 @@ pub async fn submit_transfer(mut ctx: Context, mut args: args::TxTransfer) {
         }
         None => (None, token::balance_key(&parsed_args.token, &source)),
     };
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
     {
         Some(balance) => {
-            if balance < parsed_args.amount {
+            if balance < validated_amount.amount {
                 let balance_amount = format_denominated_amount(
                     &client,
                     &parsed_args.token,
@@ -1627,7 +1647,7 @@ pub async fn submit_transfer(mut ctx: Context, mut args: args::TxTransfer) {
                     "The balance of the source {} of token {} is lower than \
                      the amount to be transferred. Amount to transfer is {} \
                      and the balance is {}.",
-                    source, parsed_args.token, args.amount, balance_amount
+                    source, parsed_args.token, validated_amount, balance_amount
                 );
                 if !args.tx.force {
                     safe_exit(1)
@@ -1661,13 +1681,13 @@ pub async fn submit_transfer(mut ctx: Context, mut args: args::TxTransfer) {
         } else if source == masp_addr {
             (
                 TxSigningKey::SecretKey(masp_tx_key()),
-                parsed_args.amount,
+                validated_amount.amount,
                 parsed_args.token.clone(),
             )
         } else {
             (
                 TxSigningKey::WalletAddress(args.source.to_address()),
-                parsed_args.amount,
+                validated_amount.amount,
                 parsed_args.token.clone(),
             )
         };
@@ -1686,25 +1706,15 @@ pub async fn submit_transfer(mut ctx: Context, mut args: args::TxTransfer) {
     #[cfg(not(feature = "mainnet"))]
     let is_source_faucet =
         rpc::is_faucet_account(&source, args.tx.ledger_address.clone()).await;
-    let denom = unwrap_client_response(
-        RPC.vp()
-            .token()
-            .denomination(&client, &parsed_args.token)
-            .await,
-    )
-    .unwrap_or_else(|| {
-        println!(
-            "No denomination found for token: {token}, defaulting to zero \
-             decimal places"
-        );
-        0.into()
-    });
     let transfer = token::Transfer {
         source,
         target,
         token,
         sub_prefix,
-        amount: DenominatedAmount { amount, denom },
+        amount: DenominatedAmount {
+            amount,
+            denom: validated_amount.denom,
+        },
         key,
         shielded: {
             let spending_key = parsed_args.source.spending_key();
@@ -1738,9 +1748,9 @@ pub async fn submit_transfer(mut ctx: Context, mut args: args::TxTransfer) {
                              amount to be transferred and fees. Amount to \
                              transfer is {} {} and fees are {} {}.",
                             parsed_args.source,
-                            args.amount,
+                            validated_amount,
                             parsed_args.token,
-                            args.tx.fee_amount,
+                            validate_fee,
                             parsed_args.tx.fee_token,
                         );
                         safe_exit(1)

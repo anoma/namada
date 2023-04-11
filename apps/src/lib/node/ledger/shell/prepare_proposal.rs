@@ -224,12 +224,12 @@ mod test_prepare_proposal {
             Some(
                 WrapperTx::new(
                     Fee {
-                        amount: 0.into(),
+                        amount: Default::default(),
                         token: shell.wl_storage.storage.native_token.clone(),
                     },
                     &keypair,
                     Epoch(0),
-                    0.into(),
+                    Default::default(),
                     tx,
                     Default::default(),
                     #[cfg(not(feature = "mainnet"))]
@@ -284,12 +284,12 @@ mod test_prepare_proposal {
             }));
             let wrapper_tx = WrapperTx::new(
                 Fee {
-                    amount: 0.into(),
+                    amount: Default::default(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 tx,
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]

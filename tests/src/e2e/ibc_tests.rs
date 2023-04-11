@@ -701,7 +701,7 @@ fn transfer_token(
         ALBERT,
         &receiver,
         NAM,
-        &Amount::whole(100000),
+        &Amount::native_whole(100000),
         port_channel_id_a,
         None,
         None,
@@ -820,7 +820,7 @@ fn transfer_back(
         BERTHA,
         &receiver,
         NAM,
-        &Amount::whole(50000),
+        &Amount::native_whole(50000),
         port_channel_id_b,
         Some(sub_prefix),
         None,
@@ -879,7 +879,7 @@ fn transfer_timeout(
         ALBERT,
         &receiver,
         NAM,
-        &Amount::whole(100000),
+        &Amount::native_whole(100000),
         port_channel_id_a,
         None,
         Some(Duration::new(5, 0)),
@@ -924,7 +924,7 @@ fn transfer_timeout_on_close(
         BERTHA,
         &receiver,
         NAM,
-        &Amount::whole(100000),
+        &Amount::native_whole(100000),
         port_channel_id_b,
         None,
         None,
@@ -973,7 +973,7 @@ fn try_transfer_on_close(
         ALBERT,
         &receiver,
         NAM,
-        &Amount::whole(100000),
+        &Amount::native_whole(100000),
         port_channel_id_a,
         None,
         None,
@@ -1095,7 +1095,7 @@ fn transfer(
     let rpc = get_actor_rpc(test, &Who::Validator(0));
 
     let receiver = receiver.to_string();
-    let amount = amount.to_string();
+    let amount = amount.to_string_native();
     let port_id = port_channel_id.port_id.to_string();
     let channel_id = port_channel_id.channel_id.to_string();
     let mut tx_args = vec![

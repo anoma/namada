@@ -197,7 +197,9 @@ where
                                     .storage
                                     .write(
                                         &balance_key,
-                                        Amount::from(0).try_to_vec().unwrap(),
+                                        Amount::native_whole(0)
+                                            .try_to_vec()
+                                            .unwrap(),
                                     )
                                     .unwrap();
                                 tx_event["info"] =
@@ -468,6 +470,7 @@ mod test_finalize_block {
     use namada::types::governance::ProposalVote;
     use namada::types::storage::Epoch;
     use namada::types::time::DurationSecs;
+    use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
     use namada::types::transaction::governance::{
         InitProposalData, VoteProposalData,
     };
@@ -497,7 +500,10 @@ mod test_finalize_block {
         shell
             .wl_storage
             .storage
-            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
+            .write(
+                &balance_key,
+                Amount::native_whole(1000).try_to_vec().unwrap(),
+            )
             .unwrap();
 
         // create some wrapper txs
@@ -508,12 +514,16 @@ mod test_finalize_block {
             );
             let wrapper = WrapperTx::new(
                 Fee {
-                    amount: MIN_FEE.into(),
+                    amount: Amount::from_uint(
+                        MIN_FEE,
+                        NATIVE_MAX_DECIMAL_PLACES,
+                    )
+                    .expect("Test failed"),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 raw_tx.clone(),
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
@@ -581,12 +591,12 @@ mod test_finalize_block {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             raw_tx.clone(),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -639,12 +649,12 @@ mod test_finalize_block {
             );
         let wrapper = WrapperTx {
             fee: Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             pk: keypair.ref_to(),
             epoch: Epoch(0),
-            gas_limit: 0.into(),
+            gas_limit: Default::default(),
             inner_tx,
             tx_hash: hash_tx(&tx),
             #[cfg(not(feature = "mainnet"))]
@@ -699,7 +709,10 @@ mod test_finalize_block {
         shell
             .wl_storage
             .storage
-            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
+            .write(
+                &balance_key,
+                Amount::native_whole(1000).try_to_vec().unwrap(),
+            )
             .unwrap();
 
         // create two decrypted txs
@@ -718,12 +731,16 @@ mod test_finalize_block {
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
-                    amount: MIN_FEE.into(),
+                    amount: Amount::from_uint(
+                        MIN_FEE,
+                        NATIVE_MAX_DECIMAL_PLACES,
+                    )
+                    .expect("Test failed"),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 raw_tx.clone(),
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
@@ -755,12 +772,16 @@ mod test_finalize_block {
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
-                    amount: MIN_FEE.into(),
+                    amount: Amount::from_uint(
+                        MIN_FEE,
+                        NATIVE_MAX_DECIMAL_PLACES,
+                    )
+                    .expect("Test failed"),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 raw_tx.clone(),
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]

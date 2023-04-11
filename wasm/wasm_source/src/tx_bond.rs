@@ -186,7 +186,7 @@ mod tests {
         // Check that the validator set and deltas are unchanged before pipeline
         // length and that they are updated between the pipeline and
         // unbonding lengths
-        if bond.amount == token::Amount::from(0) {
+        if bond.amount.is_zero() {
             // None of the optional storage fields should have been updated
             assert_eq!(epoched_validator_set_pre, epoched_validator_set_post);
             assert_eq!(
@@ -217,7 +217,7 @@ mod tests {
                 ..=pos_params.unbonding_len as usize
             {
                 let expected_stake =
-                    i128::from(initial_stake) + i128::from(bond.amount);
+                    initial_stake.change() + bond.amount.change();
                 assert_eq!(
                     epoched_validator_stake_post[epoch],
                     token::Amount::from_change(expected_stake),
@@ -341,7 +341,7 @@ mod tests {
             // Generate initial stake
             (initial_stake in token::testing::arb_amount_ceiled((i64::MAX/8) as u64))
             // Use the initial stake to limit the bond amount
-            (bond in arb_bond(((i64::MAX/8) as u64) - u64::from(initial_stake)),
+            (bond in arb_bond(((i64::MAX/8) as u64) - u128::try_from(initial_stake).unwrap() as u64),
             // Use the generated initial stake too
             initial_stake in Just(initial_stake),
         ) -> (token::Amount, transaction::pos::Bond) {

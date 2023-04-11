@@ -35,6 +35,7 @@ mod tests {
     use namada::types::time::DateTimeUtc;
     use namada::types::token::{self, Amount};
     use namada::types::{address, key};
+    use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
     use namada_tx_prelude::{
         BorshDeserialize, BorshSerialize, StorageRead, StorageWrite,
     };
@@ -1312,7 +1313,9 @@ mod tests {
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
         let key_prefix = ibc_storage::ibc_token_prefix(denom).unwrap();
         let key = token::multitoken_balance_key(&key_prefix, &sender);
-        let init_bal = Amount::from(1_000_000_000u64);
+        let init_bal =
+            Amount::from_uint(1_000_000_000u64, NATIVE_MAX_DECIMAL_PLACES)
+                .unwrap();
         writes.insert(key, init_bal.try_to_vec().unwrap());
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
@@ -1373,7 +1376,9 @@ mod tests {
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
         let key_prefix = ibc_storage::ibc_token_prefix(denom).unwrap();
         let key = token::multitoken_balance_key(&key_prefix, &receiver);
-        let init_bal = Amount::from(1_000_000_000u64);
+        let init_bal =
+            Amount::from_uint(1_000_000_000u64, NATIVE_MAX_DECIMAL_PLACES)
+                .unwrap();
         writes.insert(key, init_bal.try_to_vec().unwrap());
 
         writes.into_iter().for_each(|(key, val)| {
@@ -1452,7 +1457,11 @@ mod tests {
             &key_prefix,
             &address::Address::Internal(address::InternalAddress::IbcEscrow),
         );
-        let val = Amount::from(1_000_000_000u64).try_to_vec().unwrap();
+        let val =
+            Amount::from_uint(1_000_000_000u64, NATIVE_MAX_DECIMAL_PLACES)
+                .unwrap()
+                .try_to_vec()
+                .unwrap();
         tx_host_env::with(|env| {
             env.wl_storage
                 .storage

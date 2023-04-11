@@ -16,6 +16,7 @@ use namada::types::storage::Epoch;
 use namada::types::token;
 use namada_apps::config::genesis::genesis_config;
 use namada_apps::config::{Config, TendermintMode};
+use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 
 use super::setup::{
     self, sleep, NamadaBgCmd, Test, ENV_VAR_DEBUG,
@@ -184,12 +185,13 @@ pub fn find_bonded_stake(
         .rsplit_once(' ')
         .unwrap()
         .1;
-    token::Amount::from_str(bonded_stake_str).map_err(|e| {
-        eyre!(format!(
-            "Bonded stake: {} parsed from {}, Error: {}\n\nOutput: {}",
-            bonded_stake_str, matched, e, unread
-        ))
-    })
+    token::Amount::from_str(bonded_stake_str, NATIVE_MAX_DECIMAL_PLACES)
+        .map_err(|e| {
+            eyre!(format!(
+                "Bonded stake: {} parsed from {}, Error: {}\n\nOutput: {}",
+                bonded_stake_str, matched, e, unread
+            ))
+        })
 }
 
 /// Get the last committed epoch.

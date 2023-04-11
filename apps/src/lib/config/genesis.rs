@@ -324,7 +324,9 @@ pub mod genesis_config {
             pos_data: GenesisValidator {
                 address: Address::decode(config.address.as_ref().unwrap())
                     .unwrap(),
-                tokens: token::Amount::native_whole(config.tokens.unwrap_or_default()),
+                tokens: token::Amount::native_whole(
+                    config.tokens.unwrap_or_default(),
+                ),
                 consensus_key: config
                     .consensus_public_key
                     .as_ref()

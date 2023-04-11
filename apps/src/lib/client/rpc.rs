@@ -55,6 +55,7 @@ use namada::types::transaction::{
 use namada::types::{address, storage, token};
 use tokio::time::{Duration, Instant};
 
+use crate::cli::args::InputAmount;
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
 use crate::client::tx::{
@@ -224,11 +225,6 @@ pub async fn query_tx_deltas(
                     .txs;
                 for response_tx in txs {
                     let height = BlockHeight(response_tx.height.value());
-                    let epoch =
-                        query_epoch_at_height(&client, height).await.expect(
-                            "This block height should not exceed that latest \
-                             committed block height",
-                        );
                     let idx = TxIndex(response_tx.index);
                     // Only process yet unprocessed transactions which have been
                     // accepted by node VPs
@@ -262,7 +258,7 @@ pub async fn query_tx_deltas(
                                 denom.denominate(&transfer.amount);
                             if denominated != 0 {
                                 let tfer_delta = Amount::from_nonnegative(
-                                    (transfer.token.clone(), denom.into()),
+                                    (transfer.token.clone(), denom),
                                     denominated,
                                 )
                                 .expect("invalid value for amount");
@@ -778,7 +774,7 @@ async fn print_balances(
                 format!(
                     "with {}: {}, owned by {}",
                     sub_prefix,
-                    format_denominated_amount(&client, &token, balance).await,
+                    format_denominated_amount(client, token, balance).await,
                     lookup_alias(ctx, owner)
                 ),
             ),
@@ -788,7 +784,7 @@ async fn print_balances(
                         owner.clone(),
                         format!(
                             ": {}, owned by {}",
-                            format_denominated_amount(&client, &token, balance)
+                            format_denominated_amount(client, token, balance)
                                 .await,
                             lookup_alias(ctx, owner)
                         ),
@@ -2812,4 +2808,41 @@ pub fn make_asset_type(
         .expect("token should serialize");
     // Generate the unique asset identifier from the unique token address
     AssetType::new(token_bytes.as_ref()).expect("unable to create asset type")
+}
+
+/// Get the correct representation of the amount given the token type.
+pub async fn validate_amount(
+    client: &HttpClient,
+    amount: InputAmount,
+    token: &Address,
+) -> token::DenominatedAmount {
+    let input_amount = match amount {
+        InputAmount::Unvalidated(amt) => amt.canonical(),
+        InputAmount::Validated(amt) => return amt,
+    };
+    let denom = unwrap_client_response(
+        RPC.vp().token().denomination(client, token).await,
+    )
+    .unwrap_or_else(|| {
+        println!(
+            "No denomination found for token: {token}, the input arguments \
+             could
+                    not be parsed."
+        );
+        cli::safe_exit(1);
+    });
+    if denom < input_amount.denom {
+        println!(
+            "The input amount contained a higher precision than allowed by \
+             {token}."
+        );
+        cli::safe_exit(1);
+    } else {
+        input_amount.increase_precision(denom).unwrap_or_else(|| {
+            println!(
+                "The amount provided requires more the 256 bits to represent."
+            );
+            cli::safe_exit(1);
+        })
+    }
 }

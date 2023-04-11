@@ -152,7 +152,7 @@ pub mod main {
         let target_key = token::balance_key(&token, &target);
         let mut target_bal: token::Amount =
             ctx.read(&target_key)?.unwrap_or_default();
-        target_bal.receive(&amount);
+        target_bal.receive(&amount.amount);
         ctx.write(&target_key, target_bal)?;
         Ok(())
     }

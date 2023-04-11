@@ -731,7 +731,7 @@ where
             &self.wl_storage,
         )
         .expect("Must be able to read wrapper tx fees parameter");
-        fees.unwrap_or(token::Amount::native_whole(MIN_FEE))
+        fees.unwrap_or_else(|| token::Amount::native_whole(MIN_FEE))
     }
 
     #[cfg(not(feature = "mainnet"))]
@@ -1001,12 +1001,12 @@ mod test_utils {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: native_token,
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]

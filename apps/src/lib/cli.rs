@@ -1567,7 +1567,6 @@ pub mod args {
     use std::str::FromStr;
 
     use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
-    use namada::ledger::queries::RPC;
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::governance::ProposalVote;
@@ -1579,7 +1578,6 @@ pub mod args {
     use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
     use namada::types::transaction::GasLimit;
     use rust_decimal::Decimal;
-    use tendermint_rpc::HttpClient;
 
     use super::context::*;
     use super::utils::*;
@@ -1886,64 +1884,32 @@ pub mod args {
         /// Transferred token address
         pub sub_prefix: Option<String>,
         /// Transferred token amount
-        pub amount: token::DenominatedAmount,
+        pub amount: InputAmount,
+    }
+
+    /// An amount read in by the cli
+    #[derive(Copy, Clone, Debug)]
+    pub enum InputAmount {
+        /// An amount whose representation has been validated
+        /// against the allowed representation in storage
+        Validated(token::DenominatedAmount),
+        /// The parsed amount read in from the cli. It has
+        /// not yet been validated against the allowed
+        /// representation in storage.
+        Unvalidated(token::DenominatedAmount),
     }
 
     impl TxTransfer {
-        pub async fn parse_from_context(
-            &mut self,
+        pub fn parse_from_context(
+            &self,
             ctx: &mut Context,
         ) -> ParsedTxTransferArgs {
-            let token = ctx.get(&self.token);
             ParsedTxTransferArgs {
-                tx: self.tx.parse_from_context(ctx).await,
+                tx: self.tx.parse_from_context(ctx),
                 source: ctx.get_cached(&self.source),
                 target: ctx.get(&self.target),
-                amount: self.validate_amount(&token).await,
-                token,
-            }
-        }
-
-        /// Get the correct representation of the amount given the token type.
-        async fn validate_amount(&mut self, token: &Address) -> token::Amount {
-            let client =
-                HttpClient::new(self.tx.ledger_address.clone()).unwrap();
-            let denom = RPC
-                .vp()
-                .token()
-                .denomination(&client, token)
-                .await
-                .unwrap_or_else(|err| {
-                    eprintln!("Error in the query {}", err);
-                    safe_exit(1)
-                })
-                .unwrap_or_else(|| {
-                    println!(
-                        "No denomination found for token: {token}, the input \
-                         arguments could
-                        not be parsed."
-                    );
-                    safe_exit(1);
-                });
-            let input_amount = self.amount.canonical();
-            if denom < input_amount.denom {
-                println!(
-                    "The input amount contained a higher precision than \
-                     allowed by {token}."
-                );
-                safe_exit(1);
-            } else {
-                let validated = input_amount
-                    .increase_precision(denom)
-                    .unwrap_or_else(|| {
-                        println!(
-                            "The amount provided requires more the 256 bits \
-                             to represent."
-                        );
-                        safe_exit(1);
-                    });
-                self.amount = validated;
-                self.amount.amount
+                amount: self.amount,
+                token: ctx.get(&self.token),
             }
         }
     }
@@ -1955,7 +1921,7 @@ pub mod args {
             let target = TRANSFER_TARGET.parse(matches);
             let token = TOKEN.parse(matches);
             let sub_prefix = SUB_PREFIX.parse(matches);
-            let amount = AMOUNT.parse(matches);
+            let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             Self {
                 tx,
                 source,
@@ -2931,7 +2897,7 @@ pub mod args {
         /// save it in the wallet.
         pub initialized_account_alias: Option<String>,
         /// The amount being payed to include the transaction
-        pub fee_amount: token::DenominatedAmount,
+        pub fee_amount: InputAmount,
         /// The token in which the fee is being paid
         pub fee_token: WalletAddress,
         /// The max amount of gas used to process tx
@@ -2943,11 +2909,7 @@ pub mod args {
     }
 
     impl Tx {
-        pub async fn parse_from_context(
-            &mut self,
-            ctx: &mut Context,
-        ) -> ParsedTxArgs {
-            let fee_token = ctx.get(&self.fee_token);
+        pub fn parse_from_context(&self, ctx: &mut Context) -> ParsedTxArgs {
             ParsedTxArgs {
                 dry_run: self.dry_run,
                 dump_tx: self.dump_tx,
@@ -2957,57 +2919,14 @@ pub mod args {
                 initialized_account_alias: self
                     .initialized_account_alias
                     .clone(),
-                fee_amount: self.validate_amount(&fee_token).await,
-                fee_token,
+                fee_amount: self.fee_amount,
+                fee_token: ctx.get(&self.fee_token),
                 gas_limit: self.gas_limit.clone(),
                 signing_key: self
                     .signing_key
                     .as_ref()
                     .map(|sk| ctx.get_cached(sk)),
                 signer: self.signer.as_ref().map(|signer| ctx.get(signer)),
-            }
-        }
-
-        /// Get the correct representation of the fee amount given the token
-        /// type.
-        async fn validate_amount(&mut self, token: &Address) -> token::Amount {
-            let client = HttpClient::new(self.ledger_address.clone()).unwrap();
-            let denom = RPC
-                .vp()
-                .token()
-                .denomination(&client, token)
-                .await
-                .unwrap_or_else(|err| {
-                    eprintln!("Error in the query {}", err);
-                    safe_exit(1)
-                })
-                .unwrap_or_else(|| {
-                    println!(
-                        "No denomination found for token: {token}, the input \
-                         arguments could
-                        not be parsed."
-                    );
-                    safe_exit(1);
-                });
-            let input_amount = self.fee_amount.canonical();
-            if denom < input_amount.denom {
-                println!(
-                    "The input amount contained a higher precision than \
-                     allowed by {token}."
-                );
-                safe_exit(1);
-            } else {
-                let validated = input_amount
-                    .increase_precision(denom)
-                    .unwrap_or_else(|| {
-                        println!(
-                            "The amount provided requires more the 256 bits \
-                             to represent."
-                        );
-                        safe_exit(1);
-                    });
-                self.fee_amount = validated;
-                self.fee_amount.amount
             }
         }
     }
@@ -3071,7 +2990,8 @@ pub mod args {
             let broadcast_only = BROADCAST_ONLY.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
-            let fee_amount = GAS_AMOUNT.parse(matches);
+            let fee_amount =
+                InputAmount::Unvalidated(GAS_AMOUNT.parse(matches));
             let fee_token = GAS_TOKEN.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches).amount.into();
 

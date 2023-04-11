@@ -1,11 +1,11 @@
 //! Helpers for use in multitoken tests.
 use std::path::PathBuf;
-use std::str::FromStr;
 
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use eyre::Context;
 use namada_core::types::address::Address;
+use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_core::types::{storage, token};
 use namada_test_utils::tx_data::TxWriteData;
 use namada_tx_prelude::storage::KeySeg;
@@ -138,7 +138,7 @@ pub fn attempt_red_tokens_transfer(
     signer: &str,
     amount: &token::Amount,
 ) -> Result<NamadaCmd> {
-    let amount = amount.to_string();
+    let amount = amount.to_string_native();
     let transfer_args = vec![
         "transfer",
         "--token",
@@ -184,6 +184,6 @@ pub fn fetch_red_token_balance(
     println!("Got balance for {}: {}", owner_alias, matched);
     let decimal = decimal_regex.find(&matched).unwrap().as_str();
     client_balance.assert_success();
-    token::Amount::from_str(decimal)
+    token::Amount::from_str(decimal, NATIVE_MAX_DECIMAL_PLACES)
         .wrap_err(format!("Failed to parse {}", matched))
 }

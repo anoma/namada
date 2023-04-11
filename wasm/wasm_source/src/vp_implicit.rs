@@ -123,12 +123,17 @@ fn validate_tx(
                         ctx.read_post(key)?.unwrap_or_default();
                     let change = post.change() - pre.change();
                     // debit has to signed, credit doesn't
-                    let valid = change >= 0 || *valid_sig;
+                    let valid = change.non_negative() || *valid_sig;
+                    let sign = if change.non_negative() { "" } else { "-" };
+                    let denom_amount = token::Amount::from_change(change)
+                        .denominated(owner, &ctx.pre())
+                        .unwrap();
                     debug_log!(
-                        "token key: {}, change: {}, valid_sig: {}, valid \
+                        "token key: {}, change: {}{}, valid_sig: {}, valid \
                          modification: {}",
                         key,
-                        change,
+                        sign,
+                        denom_amount,
                         *valid_sig,
                         valid
                     );
@@ -338,8 +343,11 @@ mod tests {
         let vp_owner: Address = (&public_key).into();
         let source = address::testing::established_address_2();
         let token = address::nam();
-        let amount = token::Amount::from(10_098_123);
-
+        let amount = token::Amount::from_uint(
+            10_098_123,
+            token::NATIVE_MAX_DECIMAL_PLACES,
+        )
+        .unwrap();
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &source, &token]);
 
@@ -347,6 +355,10 @@ mod tests {
         // able to transfer from it
         tx_env.credit_tokens(&source, &token, None, amount);
 
+        let amount = token::DenominatedAmount {
+            amount,
+            denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
@@ -382,7 +394,11 @@ mod tests {
         // Init PoS genesis
         let pos_params = PosParams::default();
         let validator = address::testing::established_address_3();
-        let initial_stake = token::Amount::from(10_098_123);
+        let initial_stake = token::Amount::from_uint(
+            10_098_123,
+            token::NATIVE_MAX_DECIMAL_PLACES,
+        )
+        .unwrap();
         let consensus_key = key::testing::keypair_2().ref_to();
         let commission_rate = rust_decimal::Decimal::new(5, 2);
         let max_commission_rate_change = rust_decimal::Decimal::new(1, 2);
@@ -405,9 +421,21 @@ mod tests {
         let vp_owner: Address = (&public_key).into();
         let target = address::testing::established_address_2();
         let token = address::nam();
-        let amount = token::Amount::from(10_098_123);
-        let bond_amount = token::Amount::from(5_098_123);
-        let unbond_amount = token::Amount::from(3_098_123);
+        let amount = token::Amount::from_uint(
+            10_098_123,
+            token::NATIVE_MAX_DECIMAL_PLACES,
+        )
+        .unwrap();
+        let bond_amount = token::Amount::from_uint(
+            5_098_123,
+            token::NATIVE_MAX_DECIMAL_PLACES,
+        )
+        .unwrap();
+        let unbond_amount = token::Amount::from_uint(
+            3_098_123,
+            token::NATIVE_MAX_DECIMAL_PLACES,
+        )
+        .unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&target, &token]);
@@ -446,7 +474,11 @@ mod tests {
         // Init PoS genesis
         let pos_params = PosParams::default();
         let validator = address::testing::established_address_3();
-        let initial_stake = token::Amount::from(10_098_123);
+        let initial_stake = token::Amount::from_uint(
+            10_098_123,
+            token::NATIVE_MAX_DECIMAL_PLACES,
+        )
+        .unwrap();
         let consensus_key = key::testing::keypair_2().ref_to();
         let commission_rate = rust_decimal::Decimal::new(5, 2);
         let max_commission_rate_change = rust_decimal::Decimal::new(1, 2);
@@ -469,9 +501,21 @@ mod tests {
         let vp_owner: Address = (&public_key).into();
         let target = address::testing::established_address_2();
         let token = address::nam();
-        let amount = token::Amount::from(10_098_123);
-        let bond_amount = token::Amount::from(5_098_123);
-        let unbond_amount = token::Amount::from(3_098_123);
+        let amount = token::Amount::from_uint(
+            10_098_123,
+            token::NATIVE_MAX_DECIMAL_PLACES,
+        )
+        .unwrap();
+        let bond_amount = token::Amount::from_uint(
+            5_098_123,
+            token::NATIVE_MAX_DECIMAL_PLACES,
+        )
+        .unwrap();
+        let unbond_amount = token::Amount::from_uint(
+            3_098_123,
+            token::NATIVE_MAX_DECIMAL_PLACES,
+        )
+        .unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&target, &token]);
@@ -519,7 +563,11 @@ mod tests {
         let vp_owner: Address = (&public_key).into();
         let target = address::testing::established_address_2();
         let token = address::nam();
-        let amount = token::Amount::from(10_098_123);
+        let amount = token::Amount::from_uint(
+            10_098_123,
+            token::NATIVE_MAX_DECIMAL_PLACES,
+        )
+        .unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &target, &token]);
@@ -527,6 +575,11 @@ mod tests {
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, None, amount);
+
+        let amount = token::DenominatedAmount {
+            amount,
+            denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -567,7 +620,11 @@ mod tests {
         let vp_owner: Address = (&public_key).into();
         let target = address::testing::established_address_2();
         let token = address::nam();
-        let amount = token::Amount::from(10_098_123);
+        let amount = token::Amount::from_uint(
+            10_098_123,
+            token::NATIVE_MAX_DECIMAL_PLACES,
+        )
+        .unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &target, &token]);
@@ -578,6 +635,10 @@ mod tests {
 
         tx_env.write_public_key(&vp_owner, &public_key);
 
+        let amount = token::DenominatedAmount {
+            amount,
+            denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
@@ -621,7 +682,11 @@ mod tests {
         let source = address::testing::established_address_2();
         let target = address::testing::established_address_3();
         let token = address::nam();
-        let amount = token::Amount::from(10_098_123);
+        let amount = token::Amount::from_uint(
+            10_098_123,
+            token::NATIVE_MAX_DECIMAL_PLACES,
+        )
+        .unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &source, &target, &token]);
@@ -629,6 +694,11 @@ mod tests {
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
         tx_env.credit_tokens(&source, &token, None, amount);
+
+        let amount = token::DenominatedAmount {
+            amount,
+            denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {

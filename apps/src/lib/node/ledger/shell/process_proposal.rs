@@ -215,7 +215,7 @@ mod test_process_proposal {
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::Epoch;
-    use namada::types::token::Amount;
+    use namada::types::token::{Amount, NATIVE_MAX_DECIMAL_PLACES};
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx};
 
@@ -238,12 +238,12 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -287,12 +287,13 @@ mod test_process_proposal {
         let timestamp = tx.timestamp;
         let mut wrapper = WrapperTx::new(
             Fee {
-                amount: 100.into(),
+                amount: Amount::from_uint(100, NATIVE_MAX_DECIMAL_PLACES)
+                    .expect("Test failed"),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -318,7 +319,7 @@ mod test_process_proposal {
             };
 
             // we mount a malleability attack to try and remove the fee
-            new_wrapper.fee.amount = 0.into();
+            new_wrapper.fee.amount = Default::default();
             let new_data = TxType::Wrapper(new_wrapper)
                 .try_to_vec()
                 .expect("Test failed");
@@ -371,12 +372,13 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 1.into(),
+                amount: Amount::from_uint(1, NATIVE_MAX_DECIMAL_PLACES)
+                    .expect("Test failed"),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -419,7 +421,7 @@ mod test_process_proposal {
         shell
             .wl_storage
             .storage
-            .write(&balance_key, Amount::whole(99).try_to_vec().unwrap())
+            .write(&balance_key, Amount::native_whole(99).try_to_vec().unwrap())
             .unwrap();
 
         let tx = Tx::new(
@@ -428,12 +430,12 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: Amount::whole(1_000_100),
+                amount: Amount::native_whole(1_000_100),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -478,12 +480,12 @@ mod test_process_proposal {
             );
             let wrapper = WrapperTx::new(
                 Fee {
-                    amount: i.into(),
+                    amount: Amount::native_whole(i as u64),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 tx.clone(),
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
@@ -548,12 +550,12 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -609,12 +611,12 @@ mod test_process_proposal {
         );
         let mut wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -664,12 +666,12 @@ mod test_process_proposal {
         let inner_tx = EncryptedTx::encrypt(&tx, pubkey);
         let wrapper = WrapperTx {
             fee: Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             pk: keypair.ref_to(),
             epoch: Epoch(0),
-            gas_limit: 0.into(),
+            gas_limit: Default::default(),
             inner_tx,
             tx_hash: hash_tx(&tx),
             #[cfg(not(feature = "mainnet"))]

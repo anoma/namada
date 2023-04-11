@@ -73,6 +73,7 @@ pub mod wrapper_tx {
     /// This struct only stores the multiple of GAS_LIMIT_RESOLUTION,
     /// not the raw amount
     #[derive(
+        Default,
         Debug,
         Clone,
         PartialEq,
@@ -295,7 +296,9 @@ pub mod wrapper_tx {
         /// Test that serializing converts GasLimit to u64 correctly
         #[test]
         fn test_gas_limit_roundtrip() {
-            let limit = GasLimit { multiplier: 1 };
+            let limit = GasLimit {
+                multiplier: 1.into(),
+            };
             // Test serde roundtrip
             let js = serde_json::to_string(&limit).expect("Test failed");
             assert_eq!(js, format!("{}", GAS_LIMIT_RESOLUTION));
@@ -321,31 +324,49 @@ pub mod wrapper_tx {
                 .expect("Test failed");
             let limit: GasLimit =
                 serde_json::from_str(&js).expect("Test failed");
-            assert_eq!(limit, GasLimit { multiplier: 2 });
+            assert_eq!(
+                limit,
+                GasLimit {
+                    multiplier: 2.into()
+                }
+            );
         }
 
         /// Test that refund is calculated correctly
         #[test]
         fn test_gas_limit_refund() {
-            let limit = GasLimit { multiplier: 1 };
-            let refund = limit.refund_amount(GAS_LIMIT_RESOLUTION - 1);
-            assert_eq!(refund, Amount::from(1u64));
+            let limit = GasLimit {
+                multiplier: 1.into(),
+            };
+            let refund =
+                limit.refund_amount(Uint::from(GAS_LIMIT_RESOLUTION - 1));
+            assert_eq!(refund, Amount::from_uint(1, 0).expect("Test failed"));
         }
 
         /// Test that we don't refund more than GAS_LIMIT_RESOLUTION
         #[test]
         fn test_gas_limit_too_high_no_refund() {
-            let limit = GasLimit { multiplier: 2 };
-            let refund = limit.refund_amount(GAS_LIMIT_RESOLUTION - 1);
-            assert_eq!(refund, Amount::from(GAS_LIMIT_RESOLUTION));
+            let limit = GasLimit {
+                multiplier: 2.into(),
+            };
+            let refund =
+                limit.refund_amount(Uint::from(GAS_LIMIT_RESOLUTION - 1));
+            assert_eq!(
+                refund,
+                Amount::from_uint(GAS_LIMIT_RESOLUTION, 0)
+                    .expect("Test failed")
+            );
         }
 
         /// Test that if gas usage was underestimated, we issue no refund
         #[test]
         fn test_gas_limit_too_low_no_refund() {
-            let limit = GasLimit { multiplier: 1 };
-            let refund = limit.refund_amount(GAS_LIMIT_RESOLUTION + 1);
-            assert_eq!(refund, Amount::from(0u64));
+            let limit = GasLimit {
+                multiplier: 1.into(),
+            };
+            let refund =
+                limit.refund_amount(Uint::from(GAS_LIMIT_RESOLUTION + 1));
+            assert_eq!(refund, Amount::default());
         }
     }
 
@@ -354,6 +375,7 @@ pub mod wrapper_tx {
         use super::*;
         use crate::proto::SignedTxData;
         use crate::types::address::nam;
+        use crate::types::token::NATIVE_MAX_DECIMAL_PLACES;
 
         fn gen_keypair() -> common::SecretKey {
             use rand::prelude::ThreadRng;
@@ -375,12 +397,13 @@ pub mod wrapper_tx {
 
             let wrapper = WrapperTx::new(
                 Fee {
-                    amount: 10.into(),
+                    amount: Amount::from_uint(10, NATIVE_MAX_DECIMAL_PLACES)
+                        .expect("Test failed"),
                     token: nam(),
                 },
                 &keypair,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 tx.clone(),
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
@@ -403,12 +426,13 @@ pub mod wrapper_tx {
 
             let mut wrapper = WrapperTx::new(
                 Fee {
-                    amount: 10.into(),
+                    amount: Amount::from_uint(10, NATIVE_MAX_DECIMAL_PLACES)
+                        .expect("Test failed"),
                     token: nam(),
                 },
                 &gen_keypair(),
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 tx,
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
@@ -437,12 +461,13 @@ pub mod wrapper_tx {
             // the signed tx
             let mut tx = WrapperTx::new(
                 Fee {
-                    amount: 10.into(),
+                    amount: Amount::from_uint(10, NATIVE_MAX_DECIMAL_PLACES)
+                        .expect("Test failed"),
                     token: nam(),
                 },
                 &keypair,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 tx,
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]

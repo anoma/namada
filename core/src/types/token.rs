@@ -924,9 +924,9 @@ mod tests {
 
     #[test]
     fn test_amount_checked_sub() {
-        let max = Amount::from(u64::MAX);
-        let one = Amount::from(1);
-        let zero = Amount::from(0);
+        let max = Amount::native_whole(u64::MAX);
+        let one = Amount::native_whole(1);
+        let zero = Amount::native_whole(0);
 
         assert_eq!(zero.checked_sub(zero), Some(zero));
         assert_eq!(zero.checked_sub(one), None);
@@ -939,9 +939,9 @@ mod tests {
 
     #[test]
     fn test_amount_checked_add() {
-        let max = Amount::from(u64::MAX);
-        let one = Amount::from(1);
-        let zero = Amount::from(0);
+        let max = Amount::native_whole(u64::MAX);
+        let one = Amount::native_whole(1);
+        let zero = Amount::native_whole(0);
 
         assert_eq!(zero.checked_add(zero), Some(zero));
         assert_eq!(zero.checked_add(one), Some(one));

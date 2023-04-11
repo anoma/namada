@@ -342,6 +342,7 @@ pub mod tx_types {
         use super::*;
         use crate::types::address::nam;
         use crate::types::storage::Epoch;
+        use crate::types::token::{Amount, NATIVE_MAX_DECIMAL_PLACES};
 
         fn gen_keypair() -> common::SecretKey {
             use rand::prelude::ThreadRng;
@@ -423,12 +424,13 @@ pub mod tx_types {
             // the signed tx
             let wrapper = WrapperTx::new(
                 Fee {
-                    amount: 10.into(),
+                    amount: Amount::from_uint(10, NATIVE_MAX_DECIMAL_PLACES)
+                        .expect("Test failed"),
                     token: nam(),
                 },
                 &keypair,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 tx.clone(),
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
@@ -460,12 +462,13 @@ pub mod tx_types {
             // the signed tx
             let wrapper = WrapperTx::new(
                 Fee {
-                    amount: 10.into(),
+                    amount: Amount::from_uint(10, NATIVE_MAX_DECIMAL_PLACES)
+                        .expect("Test failed"),
                     token: nam(),
                 },
                 &keypair,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 tx,
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]

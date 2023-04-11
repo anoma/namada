@@ -166,3 +166,26 @@ impl Sub for SignedUint {
         self + (-rhs)
     }
 }
+
+impl From<i128> for SignedUint {
+    fn from(val: i128) -> Self {
+        if val < 0 {
+            let abs = Self((-val).into());
+            -abs
+        } else {
+            Self(val.into())
+        }
+    }
+}
+
+impl From<i64> for SignedUint {
+    fn from(val: i64) -> Self {
+        Self::from(val as i128)
+    }
+}
+
+impl From<i32> for SignedUint {
+    fn from(val: i32) -> Self {
+        Self::from(val as i128)
+    }
+}
