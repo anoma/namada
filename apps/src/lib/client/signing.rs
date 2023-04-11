@@ -156,7 +156,9 @@ pub async fn sign_tx(
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (Context, TxBroadcastData) {
     let keypair = tx_signer(&mut ctx, args, default).await;
+    // Sign over the transacttion data
     tx.add_section(Section::Signature(Signature::new(tx.data_hash(), &keypair)));
+    // Sign over the transaction code
     tx.add_section(Section::Signature(Signature::new(tx.code_hash(), &keypair)));
 
     let epoch = rpc::query_epoch(args::Query {

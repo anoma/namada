@@ -49,6 +49,7 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// A section representing transaction data
 #[derive(
     Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize,
 )]
@@ -58,13 +59,15 @@ pub struct Data {
 }
 
 impl Data {
+    /// Make a new data section with the given bytes
     pub fn new(data: Vec<u8>) -> Self {
         Self {
             salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
             data,
         }
     }
-    
+
+    /// Hash this data section
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
         hasher.update(&self.salt);
         hasher.update(&self.data);
@@ -72,22 +75,27 @@ impl Data {
     }
 }
 
+/// A section representing transaction code
 #[derive(
     Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize,
 )]
 pub struct Code {
+    /// Additional random data
     salt: [u8; 8],
+    /// Actuaal transaction code
     code: Vec<u8>,
 }
 
 impl Code {
+    /// Make a new code section with the given bytes
     pub fn new(code: Vec<u8>) -> Self {
         Self {
             salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
             code,
         }
     }
-    
+
+    /// Hash this code section
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
         hasher.update(&self.salt);
         hasher.update(&self.code);
@@ -95,17 +103,23 @@ impl Code {
     }
 }
 
+/// A section representing the signature over another section
 #[derive(
     Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize,
 )]
 pub struct Signature {
+    /// Additional random data
     salt: [u8; 8],
+    /// The hash of the section being signed
     target: crate::types::hash::Hash,
+    /// The signature over the above has
     pub signature: common::Signature,
+    /// The public key to verrify the above siggnature
     pub_key: common::PublicKey,
 }
 
 impl Signature {
+    /// Sign the given section hash with the given key and return a section
     pub fn new(target: &crate::types::hash::Hash, sec_key: &common::SecretKey) -> Self {
         Self {
             salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
@@ -114,7 +128,8 @@ impl Signature {
             pub_key: sec_key.ref_to(),
         }
     }
-    
+
+    /// Hash this signature section
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
         hasher.update(&self.salt);
         hasher.update(&self.target);
@@ -124,6 +139,7 @@ impl Signature {
     }
 }
 
+/// Represents a section obtained by encrypting another section
 #[derive(
     Clone, Debug, Serialize, Deserialize,
 )]
@@ -131,15 +147,21 @@ impl Signature {
 #[cfg_attr(feature = "ferveo-tpke", serde(into = "SerializedCiphertext"))]
 #[cfg_attr(not(feature = "ferveo-tpke"), derive(BorshSerialize, BorshDeserialize, BorshSchema))]
 pub struct Ciphertext {
+    /// Length of following ciphertext. Required for type punning in the absence
+    /// of ferveo so that ciphertext can be read as Vec.
     #[cfg(feature = "ferveo-tpke")]
     pub length: u32,
+    /// The ciphertext corresponding to the original section serialization
     #[cfg(feature = "ferveo-tpke")]
     pub ciphertext: tpke::Ciphertext<EllipticCurve>,
+    /// Ciphertext representation when ferveo not available
     #[cfg(not(feature = "ferveo-tpke"))]
     pub opaque: Vec<u8>,
 }
 
 impl Ciphertext {
+    /// Make a ciphertext section based on the given section. Note that this
+    /// encryption is not idempotent
     #[cfg(feature = "ferveo-tpke")]
     pub fn new(section: Section, pubkey: &EncryptionKey) -> Self {
         let mut rng = rand::thread_rng();
@@ -150,6 +172,7 @@ impl Ciphertext {
         }
     }
 
+    /// Decrypt this ciphertext back to the original plaintext.
     #[cfg(feature = "ferveo-tpke")]
     pub fn decrypt(
         &self,
@@ -159,6 +182,8 @@ impl Ciphertext {
         Section::try_from_slice(&bytes)
     }
 
+    /// Get the hash of this ciphertext section. This operation is done in such
+    /// a way it matches the hash of the type pun
     #[cfg(feature = "ferveo-tpke")]
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
         hasher.update(
@@ -170,6 +195,7 @@ impl Ciphertext {
         hasher
     }
 
+    /// Hash this ciphertext section
     #[cfg(not(feature = "ferveo-tpke"))]
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
         hasher.update(&self.opaque);
@@ -272,19 +298,29 @@ impl From<SerializedCiphertext> for Ciphertext {
     }
 }
 
+/// A section of a transaction. Carries an independent piece of information
+/// necessary for the processing of a transaction.
 #[derive(
     Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize,
 )]
 pub enum Section {
+    /// Transaction data that needs to be sent to hardware wallets
     Data(Data),
+    /// Transaction data that does not need to be sent to hardware wallets
     ExtraData(Data),
+    /// Transaction code. Sending to hardware wallets optional
     Code(Code),
+    /// A transaction ssignature. Often produced by hardware wallets
     Signature(Signature),
+    /// Ciphertext obtained by encrypting arbitrary transaction sections
     Ciphertext(Ciphertext),
+    /// Embedded MASP transaction section
     MaspTx(Transaction),
 }
 
 impl Section {
+    /// Hash this section. Section hashes are useful for signatures and also for
+    /// allowing transaction sections to cross reference.
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
         match self {
             Self::Data(data) => {
@@ -315,12 +351,15 @@ impl Section {
         }
     }
 
+    /// Sign over the hash of this section and return a signature section that
+    /// can be added to the container transaction
     pub fn sign(&self, sec_key: &common::SecretKey) -> Signature {
         let mut hasher = Sha256::new();
         self.hash(&mut hasher);
         Signature::new(&crate::types::hash::Hash(hasher.finalize().into()), sec_key)
     }
 
+    /// Extract the data from this section if possible
     pub fn data(&self) -> Option<Data> {
         if let Self::Data(data) = self {
             Some(data.clone())
@@ -329,6 +368,7 @@ impl Section {
         }
     }
 
+    /// Extract the extra data from this section if possible
     pub fn extra_data(&self) -> Option<Data> {
         if let Self::ExtraData(data) = self {
             Some(data.clone())
@@ -337,6 +377,7 @@ impl Section {
         }
     }
 
+    /// Extract the code from this section is possible
     pub fn code(&self) -> Option<Code> {
         if let Self::Code(data) = self {
             Some(data.clone())
@@ -345,6 +386,7 @@ impl Section {
         }
     }
 
+    /// Extract the signature from this section if possible
     pub fn signature(&self) -> Option<Signature> {
         if let Self::Signature(data) = self {
             Some(data.clone())
@@ -353,6 +395,7 @@ impl Section {
         }
     }
 
+    /// Extract the ciphertext from this section if possible
     pub fn ciphertext(&self) -> Option<Ciphertext> {
         if let Self::Ciphertext(data) = self {
             Some(data.clone())
@@ -361,6 +404,7 @@ impl Section {
         }
     }
 
+    /// Extract the MASP transaction from this section if possible
     pub fn masp_tx(&self) -> Option<Transaction> {
         if let Self::MaspTx(data) = self {
             Some(data.clone())
@@ -370,18 +414,21 @@ impl Section {
     }
 }
 
-/// A SigningTx but with the full code embedded. This structure will almost
-/// certainly be bigger than SigningTxs and contains enough information to
-/// execute the transaction.
+/// A namada transaction is represented as a header followed by a series of
+/// seections providing additional details.
 #[derive(
     Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize,
 )]
 pub struct Tx {
+    /// Type indicating how to process transaction
     pub header: TxType,
+    /// A transaction timestamp
     pub timestamp: DateTimeUtc,
+    /// Additional details necessary to process transaction
     pub sections: Vec<Section>,
 }
 
+/// Deserialize Tx from protobufs
 impl TryFrom<&[u8]> for Tx {
     type Error = Error;
 
@@ -390,6 +437,253 @@ impl TryFrom<&[u8]> for Tx {
         BorshDeserialize::try_from_slice(
             &tx.data
         ).map_err(Error::TxDeserializingError)
+    }
+}
+
+impl Tx {
+    /// Create a transaction of the given type
+    pub fn new(header: TxType) -> Self {
+        Tx {
+            header,
+            timestamp: DateTimeUtc::now(),
+            sections: vec![],
+        }
+    }
+
+    /// Get the transaction header
+    pub fn header(&self) -> TxType {
+        self.header.clone()
+    }
+
+    /// Get the transaction header hash
+    pub fn header_hash(&self) -> crate::types::hash::Hash {
+        crate::types::hash::Hash(self.header.hash(&mut Sha256::new()).finalize_reset().into())
+    }
+
+    /// Get the transaction section with the given hash
+    pub fn get_section(&self, hash: &crate::types::hash::Hash) -> Option<&Section> {
+        for section in &self.sections {
+            let mut hasher = Sha256::new();
+            section.hash(&mut hasher);
+            if crate::types::hash::Hash(hasher.finalize().into()) == *hash {
+                return Some(&section);
+            }
+        }
+        None
+    }
+
+    /// Add a new section to the transaction
+    pub fn add_section(&mut self, section: Section) -> &mut Section {
+        self.sections.push(section);
+        self.sections.last_mut().unwrap()
+    }
+
+    /// Get the hash of this transaction's code from the heeader
+    pub fn code_hash(&self) -> &crate::types::hash::Hash {
+        match &self.header {
+            TxType::Raw(raw) => {
+                &raw.code_hash
+            },
+            TxType::Wrapper(wrapper) => {
+                &wrapper.code_hash
+            },
+            TxType::Decrypted(DecryptedTx::Decrypted {code_hash, ..}) => {
+                code_hash
+            },
+            TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)) => {
+                &wrapper.code_hash
+            },
+            #[cfg(feature = "ferveo-tpke")]
+            TxType::Protocol(proto) => {
+                &proto.code_hash
+            },
+        }
+    }
+
+    /// Set the transaction code hash stored in the header
+    pub fn set_code_hash(&mut self, hash: crate::types::hash::Hash) {
+        match &mut self.header {
+            TxType::Raw(raw) => {
+                raw.code_hash = hash;
+            },
+            TxType::Wrapper(wrapper) => {
+                wrapper.code_hash = hash;
+            },
+            TxType::Decrypted(DecryptedTx::Decrypted {code_hash, ..}) => {
+                *code_hash = hash;
+            },
+            TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)) => {
+                wrapper.code_hash = hash;
+            },
+            #[cfg(feature = "ferveo-tpke")]
+            TxType::Protocol(proto) => {
+                proto.code_hash = hash;
+            },
+        }
+    }
+
+    /// Get the code designated by the transaction code hash in the header
+    pub fn code(&self) -> Option<Vec<u8>> {
+        match self.get_section(self.code_hash()) {
+            Some(Section::Code(code)) => Some(code.code.clone()),
+            _ => None,
+        }
+    }
+
+    /// Add the given code to the transaction and set code hash in the header
+    pub fn set_code(&mut self, code: Code) -> &mut Section {
+        let sec = Section::Code(code);
+        let mut hasher = Sha256::new();
+        sec.hash(&mut hasher);
+        let hash = crate::types::hash::Hash(hasher.finalize().into());
+        self.set_code_hash(hash);
+        self.sections.push(sec);
+        self.sections.last_mut().unwrap()
+    }
+
+    /// Get the transaction data hash stored in the header
+    pub fn data_hash(&self) -> &crate::types::hash::Hash {
+        match &self.header {
+            TxType::Raw(raw) => {
+                &raw.data_hash
+            },
+            TxType::Wrapper(wrapper) => {
+                &wrapper.data_hash
+            },
+            TxType::Decrypted(DecryptedTx::Decrypted {data_hash, ..}) => {
+                data_hash
+            },
+            TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)) => {
+                &wrapper.data_hash
+            },
+            #[cfg(feature = "ferveo-tpke")]
+            TxType::Protocol(proto) => {
+                &proto.data_hash
+            },
+        }
+    }
+
+    /// Set the transaction data hash stored in the header
+    pub fn set_data_hash(&mut self, hash: crate::types::hash::Hash) {
+        match &mut self.header {
+            TxType::Raw(raw) => {
+                raw.data_hash = hash;
+            },
+            TxType::Wrapper(wrapper) => {
+                wrapper.data_hash = hash;
+            },
+            TxType::Decrypted(DecryptedTx::Decrypted {data_hash, ..}) => {
+                *data_hash = hash;
+            },
+            TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)) => {
+                wrapper.data_hash = hash;
+            },
+            #[cfg(feature = "ferveo-tpke")]
+            TxType::Protocol(proto) => {
+                proto.data_hash = hash;
+            },
+        }
+    }
+
+    /// Add the given code to the transaction and set the hash in the header
+    pub fn set_data(&mut self, data: Data) -> &mut Section {
+        let sec = Section::Data(data);
+        let mut hasher = Sha256::new();
+        sec.hash(&mut hasher);
+        let hash = crate::types::hash::Hash(hasher.finalize().into());
+        self.set_data_hash(hash);
+        self.sections.push(sec);
+        self.sections.last_mut().unwrap()
+    }
+
+    /// Get the data designated by the transaction data hash in the header
+    pub fn data(&self) -> Option<Vec<u8>> {
+        match self.get_section(self.data_hash()) {
+            Some(Section::Data(data)) => Some(data.data.clone()),
+            _ => None,
+        }
+    }
+
+    /// Convert this transaction into protobufs
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = vec![];
+        let tx: types::Tx = types::Tx {
+            data: self.try_to_vec()
+            .expect("encoding a transaction failed"),
+        };
+        tx.encode(&mut bytes)
+            .expect("encoding a transaction failed");
+        bytes
+    }
+
+    /// Verify that the section with the given hash has been signed by the given
+    /// public key
+    pub fn verify_signature(
+        &self,
+        pk: &common::PublicKey,
+        hash: &crate::types::hash::Hash,
+    ) -> std::result::Result<(), VerifySigError> {
+        for section in &self.sections {
+            if let Section::Signature(sig_sec) = section {
+                if sig_sec.pub_key == *pk && sig_sec.target == *hash {
+                    return common::SigScheme::verify_signature_raw(
+                        pk,
+                        &hash.0,
+                        &sig_sec.signature,
+                    );
+                }
+            }
+        }
+        Err(VerifySigError::MissingData)
+    }
+
+    /// Validate any and all ciphertexts stored in this transaction
+    #[cfg(feature = "ferveo-tpke")]
+    pub fn validate_ciphertext(&self) -> bool {
+        let mut valid = true;
+        for section in &self.sections {
+            if let Section::Ciphertext(ct) = section {
+                valid = valid && ct.ciphertext.check(
+                    &<EllipticCurve as PairingEngine>::G1Prepared::from(
+                        -<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator(),
+                    )
+                );
+            }
+        }
+        valid
+    }
+
+    /// Decrypt any and all ciphertexts stored in this transaction use the
+    /// given decryption key
+    #[cfg(feature = "ferveo-tpke")]
+    pub fn decrypt(
+        &mut self,
+        privkey: <EllipticCurve as PairingEngine>::G2Affine
+    ) -> std::result::Result<(), WrapperTxErr> {
+        for section in &mut self.sections {
+            if let Section::Ciphertext(ct) = section {
+                *section = ct.decrypt(privkey).map_err(|_| WrapperTxErr::InvalidTx)?;
+            }
+        }
+        self.data().ok_or(WrapperTxErr::DecryptedHash)?;
+        self.code().ok_or(WrapperTxErr::DecryptedHash)?;
+        Ok(())
+    }
+
+    /// Encrypt all sections in this transaction other than the header and
+    /// signatures over it
+    #[cfg(feature = "ferveo-tpke")]
+    pub fn encrypt(
+        &mut self,
+        pubkey: &EncryptionKey,
+    ) {
+        let header_hash = self.header_hash();
+        for section in &mut self.sections {
+            match section {
+                Section::Signature(sig) if sig.target == header_hash => {},
+                _ => *section = Section::Ciphertext(Ciphertext::new(section.clone(), &pubkey)),
+            } 
+        }
     }
 }
 
@@ -469,233 +763,6 @@ impl From<Tx> for ResponseDeliverTx {
             events,
             info: "Transfer tx".to_string(),
             ..Default::default()
-        }
-    }
-}
-
-impl Tx {
-    pub fn new(header: TxType) -> Self {
-        Tx {
-            header,
-            timestamp: DateTimeUtc::now(),
-            sections: vec![],
-        }
-    }
-
-    pub fn header(&self) -> TxType {
-        self.header.clone()
-    }
-
-    pub fn header_hash(&self) -> crate::types::hash::Hash {
-        crate::types::hash::Hash(self.header.hash(&mut Sha256::new()).finalize_reset().into())
-    }
-
-    pub fn get_section(&self, hash: &crate::types::hash::Hash) -> Option<&Section> {
-        for section in &self.sections {
-            let mut hasher = Sha256::new();
-            section.hash(&mut hasher);
-            if crate::types::hash::Hash(hasher.finalize().into()) == *hash {
-                return Some(&section);
-            }
-        }
-        None
-    }
-
-    pub fn add_section(&mut self, section: Section) -> &mut Section {
-        self.sections.push(section);
-        self.sections.last_mut().unwrap()
-    }
-
-    pub fn code_hash(&self) -> &crate::types::hash::Hash {
-        match &self.header {
-            TxType::Raw(raw) => {
-                &raw.code_hash
-            },
-            TxType::Wrapper(wrapper) => {
-                &wrapper.code_hash
-            },
-            TxType::Decrypted(DecryptedTx::Decrypted {code_hash, ..}) => {
-                code_hash
-            },
-            TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)) => {
-                &wrapper.code_hash
-            },
-            #[cfg(feature = "ferveo-tpke")]
-            TxType::Protocol(proto) => {
-                &proto.code_hash
-            },
-        }
-    }
-
-    pub fn set_code_hash(&mut self, hash: crate::types::hash::Hash) {
-        match &mut self.header {
-            TxType::Raw(raw) => {
-                raw.code_hash = hash;
-            },
-            TxType::Wrapper(wrapper) => {
-                wrapper.code_hash = hash;
-            },
-            TxType::Decrypted(DecryptedTx::Decrypted {code_hash, ..}) => {
-                *code_hash = hash;
-            },
-            TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)) => {
-                wrapper.code_hash = hash;
-            },
-            #[cfg(feature = "ferveo-tpke")]
-            TxType::Protocol(proto) => {
-                proto.code_hash = hash;
-            },
-        }
-    }
-
-    pub fn code(&self) -> Option<Vec<u8>> {
-        match self.get_section(self.code_hash()) {
-            Some(Section::Code(code)) => Some(code.code.clone()),
-            _ => None,
-        }
-    }
-
-    pub fn set_code(&mut self, code: Code) -> &mut Section {
-        let sec = Section::Code(code);
-        let mut hasher = Sha256::new();
-        sec.hash(&mut hasher);
-        let hash = crate::types::hash::Hash(hasher.finalize().into());
-        self.set_code_hash(hash);
-        self.sections.push(sec);
-        self.sections.last_mut().unwrap()
-    }
-
-    pub fn data_hash(&self) -> &crate::types::hash::Hash {
-        match &self.header {
-            TxType::Raw(raw) => {
-                &raw.data_hash
-            },
-            TxType::Wrapper(wrapper) => {
-                &wrapper.data_hash
-            },
-            TxType::Decrypted(DecryptedTx::Decrypted {data_hash, ..}) => {
-                data_hash
-            },
-            TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)) => {
-                &wrapper.data_hash
-            },
-            #[cfg(feature = "ferveo-tpke")]
-            TxType::Protocol(proto) => {
-                &proto.data_hash
-            },
-        }
-    }
-
-    pub fn set_data_hash(&mut self, hash: crate::types::hash::Hash) {
-        match &mut self.header {
-            TxType::Raw(raw) => {
-                raw.data_hash = hash;
-            },
-            TxType::Wrapper(wrapper) => {
-                wrapper.data_hash = hash;
-            },
-            TxType::Decrypted(DecryptedTx::Decrypted {data_hash, ..}) => {
-                *data_hash = hash;
-            },
-            TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)) => {
-                wrapper.data_hash = hash;
-            },
-            #[cfg(feature = "ferveo-tpke")]
-            TxType::Protocol(proto) => {
-                proto.data_hash = hash;
-            },
-        }
-    }
-
-    pub fn set_data(&mut self, data: Data) -> &mut Section {
-        let sec = Section::Data(data);
-        let mut hasher = Sha256::new();
-        sec.hash(&mut hasher);
-        let hash = crate::types::hash::Hash(hasher.finalize().into());
-        self.set_data_hash(hash);
-        self.sections.push(sec);
-        self.sections.last_mut().unwrap()
-    }
-
-    pub fn data(&self) -> Option<Vec<u8>> {
-        match self.get_section(self.data_hash()) {
-            Some(Section::Data(data)) => Some(data.data.clone()),
-            _ => None,
-        }
-    }
-
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = vec![];
-        let tx: types::Tx = types::Tx {
-            data: self.try_to_vec()
-            .expect("encoding a transaction failed"),
-        };
-        tx.encode(&mut bytes)
-            .expect("encoding a transaction failed");
-        bytes
-    }
-
-    pub fn verify_signature(
-        &self,
-        pk: &common::PublicKey,
-        hash: &crate::types::hash::Hash,
-    ) -> std::result::Result<(), VerifySigError> {
-        for section in &self.sections {
-            if let Section::Signature(sig_sec) = section {
-                if sig_sec.pub_key == *pk && sig_sec.target == *hash {
-                    return common::SigScheme::verify_signature_raw(
-                        pk,
-                        &hash.0,
-                        &sig_sec.signature,
-                    );
-                }
-            }
-        }
-        Err(VerifySigError::MissingData)
-    }
-
-    /// A validity check on the ciphertext.
-    #[cfg(feature = "ferveo-tpke")]
-    pub fn validate_ciphertext(&self) -> bool {
-        let mut valid = true;
-        for section in &self.sections {
-            if let Section::Ciphertext(ct) = section {
-                valid = valid && ct.ciphertext.check(
-                    &<EllipticCurve as PairingEngine>::G1Prepared::from(
-                        -<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator(),
-                    )
-                );
-            }
-        }
-        valid
-    }
-
-    #[cfg(feature = "ferveo-tpke")]
-    pub fn decrypt(
-        &mut self,
-        privkey: <EllipticCurve as PairingEngine>::G2Affine
-    ) -> std::result::Result<(), WrapperTxErr> {
-        for section in &mut self.sections {
-            if let Section::Ciphertext(ct) = section {
-                *section = ct.decrypt(privkey).map_err(|_| WrapperTxErr::InvalidTx)?;
-            }
-        }
-        self.data().ok_or(WrapperTxErr::DecryptedHash)?;
-        self.code().ok_or(WrapperTxErr::DecryptedHash)?;
-        Ok(())
-    }
-
-    #[cfg(feature = "ferveo-tpke")]
-    pub fn encrypt(
-        &mut self,
-        pubkey: &EncryptionKey,
-    ) {
-        let header_hash = self.header_hash();
-        for section in &mut self.sections {
-            match section {
-                Section::Signature(sig) if sig.target == header_hash => {},
-                _ => *section = Section::Ciphertext(Ciphertext::new(section.clone(), &pubkey)),
-            } 
         }
     }
 }
