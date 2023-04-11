@@ -4,11 +4,13 @@ In order to facilitate transferring assets from Ethereum to Namada, there
 will be two internal accounts with associated native validity predicates:
 
 - `#EthBridge` - Controls the `/eth_msgs/` [storage](ethereum_events_attestation.md#storage)
-  and ledger of balances for wrapped Ethereum assets (ERC20 tokens) structured in a
+  and ledger of balances of minted wrapped Ethereum assets (ERC20 tokens) structured in a
   ["multitoken"](https://github.com/anoma/anoma/issues/1102) hierarchy.
-- `#EthBridgeEscrow` - Holds in escrow wrapped Namada tokens which have
-  been sent to Ethereum, as well as gas fees to be payed to relayers of
-  transfers to Ethereum.
+  Also contains in escrow Namada tokens which have been sent to Ethereum,
+  pertaining to pending transfers.
+- `#EthBridgePool` - Holds gas fees to be payed to relayers of transfers to Ethereum,
+  as well assets (other than wNAM) in escrow, pertaining to pending transfers to
+  Ethereum.
 
 #### Wrapped ERC20
 
@@ -46,7 +48,7 @@ For 10 DAI i.e. ERC20([0x6b175474e89094c44da98b954eedeac495271d0f](https://ether
 #### Namada tokens
 
 Any wrapped Namada tokens being redeemed from Ethereum must have an 
-equivalent amount of the native token held in escrow by `#EthBridgeEscrow`.
+equivalent amount of the native token held in escrow by `#EthBridge`.
 Once the associated`TransferToNamada` Ethereum event is included into 
-Namada, validators should simply make a transfer from `#EthBridgeEscrow` to 
+Namada, validators should simply make a transfer from `#EthBridge` to
 the `receiver` for the appropriate amount and asset.

@@ -102,7 +102,7 @@ contract is set in a governance parameter in Namada storage. Namada validators
 treat emitted events as authoritative and take action on them. Namada also knows
 the address of the _wNAM_ ERC20 contract via a governance parameter, and treats
 transfers of this ERC20 to Namada as an indication to release native NAM from
-the `#EthBridgeEscrow` account on Namada, rather than to mint a wrapped ERC20 as
+the `#EthBridge` account on Namada, rather than to mint a wrapped ERC20 as
 is the case with all other ERC20s.
 
 ### From Namada to Ethereum
