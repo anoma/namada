@@ -8,6 +8,8 @@ pub mod parameters;
 pub mod storage;
 /// governnce utils functions
 pub mod utils;
+/// governance cli structure and functions
+pub mod cli;
 
 /// The governance internal address
 pub const ADDRESS: Address = Address::Internal(InternalAddress::Governance);

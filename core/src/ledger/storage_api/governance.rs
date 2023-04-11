@@ -1,10 +1,16 @@
 //! Governance
 
+use std::collections::{HashMap, BTreeMap};
+
 use super::token;
 use crate::ledger::governance::{storage, ADDRESS as governance_address};
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
+use crate::types;
+use crate::types::address::Address;
+use crate::types::governance::Proposal;
+use crate::types::storage::Epoch;
 use crate::types::transaction::governance::{
-    InitProposalData, ProposalType, VoteProposalData,
+    InitProposalData, VoteProposalData, ProposalType,
 };
 
 /// A proposal creation transaction.
@@ -49,11 +55,6 @@ where
     let grace_epoch_key = storage::get_grace_epoch_key(proposal_id);
     storage.write(&grace_epoch_key, data.grace_epoch)?;
 
-    if let ProposalType::Default(Some(proposal_code)) = data.r#type {
-        let proposal_code_key = storage::get_proposal_code_key(proposal_id);
-        storage.write_bytes(&proposal_code_key, proposal_code)?;
-    }
-
     storage.write(&counter_key, proposal_id + 1)?;
 
     let min_proposal_funds_key = storage::get_min_proposal_fund_key();
@@ -94,4 +95,56 @@ where
         storage.write(&vote_key, data.vote.clone())?;
     }
     Ok(())
+}
+
+pub fn query_proposal<S>(
+    storage: &mut S,
+    id: u64,
+) -> storage_api::Result<Option<Proposal>>
+where
+    S: StorageRead,
+{
+    let author_key = storage::get_author_key(id);
+    let start_epoch_key = storage::get_voting_start_epoch_key(id);
+    let end_epoch_key = storage::get_voting_end_epoch_key(id);
+    let proposal_type_key = storage::get_proposal_type_key(id);
+    let content_key = storage::get_content_key(id);
+    let grace_epoch_key = storage::get_grace_epoch_key(id);
+    let proposal_type_key = storage::get_proposal_type_key(id);
+
+    let author: Option<Address> = storage.read(&author_key)?;
+    let voting_start_epoch: Option<Epoch> = storage.read(&start_epoch_key)?;
+    let voting_end_epoch: Option<Epoch> = storage.read(&end_epoch_key)?;
+    let content: Option<BTreeMap<String, String>> =
+        storage.read(&content_key)?;
+    let grace_epoch: Option<Epoch> = storage.read(&grace_epoch_key)?;
+    let proposal_type: Option<ProposalType> =
+        storage.read(&proposal_type_key)?;
+
+    match (
+        author,
+        voting_start_epoch,
+        voting_end_epoch,
+        proposal_type,
+        content,
+        grace_epoch,
+    ) {
+        (
+            Some(author),
+            Some(voting_start_epoch),
+            Some(voting_end_epoch),
+            Some(proposal_type),
+            Some(content),
+            Some(grace_epoch),
+        ) => Ok(Some(Proposal {
+            id: Some(id),
+            content,
+            author,
+            r#type: types::governance::ProposalType::ETHBridge,
+            voting_start_epoch,
+            voting_end_epoch,
+            grace_epoch,
+        })),
+        _ => Ok(None),
+    }
 }

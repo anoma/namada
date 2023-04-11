@@ -1,17 +1,21 @@
 //! CLI input types can be used for command arguments
 
 use std::env;
+use std::fmt::Display;
+use std::fs::File;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use borsh::BorshSerialize;
+use borsh::{BorshSerialize, BorshDeserialize};
 use color_eyre::eyre::Result;
 use namada::proto::Tx;
 use namada::types::address::Address;
 use namada::types::chain::ChainId;
 use namada::types::key::*;
 use namada::types::masp::*;
+use serde::Deserialize;
+use serde::de::DeserializeOwned;
 
 use super::args::{self};
 use crate::cli::safe_exit;
@@ -220,6 +224,33 @@ impl Context {
             .expect("Encoding proposal data shouldn't fail");
         let tx_code = self.read_wasm(tx_code_type);
         Tx::new(tx_code, Some(data))
+    }
+
+    /// Read JSON file and to borsh object
+    pub fn read_json<T>(&self, filepath: impl AsRef<Path>) -> T
+    where
+        T: BorshDeserialize + DeserializeOwned,
+    {
+        let file = match File::open(&filepath) {
+            Ok(file) => file,
+            Err(e) => {
+                eprintln!("{}", e);
+                safe_exit(1)
+            },
+        };
+        match serde_json::from_reader(file){
+            Ok(data) => {
+                return data
+            }
+            Err(_) => {
+                eprintln!("The specified file is not correctly formatted.");
+                safe_exit(1)
+            },
+        }
+    }
+
+    pub fn to_context_address(&self, address: &Address) -> WalletAddress {
+        WalletAddress::new(address.to_string())
     }
 }
 

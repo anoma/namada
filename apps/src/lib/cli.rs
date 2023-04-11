@@ -1690,6 +1690,7 @@ pub mod args {
     const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =
         arg("max-commission-rate-change");
     const MODE: ArgOpt<String> = arg_opt("mode");
+    const MEMO_VOTE: ArgOpt<String> = arg_opt("memo");
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
@@ -1708,8 +1709,6 @@ pub mod args {
     const PUBLIC_KEYS: ArgMulti<WalletPublicKey> = arg_multi("public-keys");
     const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
     const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
-    const PROPOSAL_VOTE_PGF_OPT: ArgFlag = flag("pgf");
-    const PROPOSAL_VOTE_ETH_OPT: ArgOpt<String> = arg_opt("eth");
     const PROPOSAL_VOTE: Arg<String> = arg("vote");
     const RAW_ADDRESS: Arg<Address> = arg("address");
     const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
@@ -2394,21 +2393,33 @@ pub mod args {
         /// Common tx arguments
         pub tx: Tx,
         /// The proposal file path
-        pub proposal_data: PathBuf,
+        pub proposal_data_path: PathBuf,
         /// Flag if proposal should run offline
         pub offline: bool,
+        /// Flag if proposal is of type pgf stewards
+        pub is_pgf_stewards: bool,
+        /// Flag if proposal is of type pgf funding
+        pub is_pgf_funding: bool,
+        /// Flag if proposal is of type eth
+        pub is_eth: bool
     }
 
     impl Args for InitProposal {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let proposal_data = DATA_PATH.parse(matches);
+            let proposal_data_path = DATA_PATH.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
+            let is_pgf_stewards = true;
+            let is_pgf_funding = true;
+            let is_eth = false;
 
             Self {
                 tx,
-                proposal_data,
-                offline
+                proposal_data_path,
+                offline,
+                is_eth,
+                is_pgf_stewards,
+                is_pgf_funding
             }
         }
 
@@ -2433,14 +2444,10 @@ pub mod args {
         pub proposal_id: Option<u64>,
         /// The vote
         pub vote: String,
-        /// PGF proposal
-        pub proposal_pgf: bool,
-        /// ETH proposal
-        pub proposal_stewards_eth: Option<String>,
         /// Flag if proposal vote should be run offline
         pub offline: bool,
-        /// The proposal file path
-        pub proposal_data: Option<PathBuf>,
+        /// Vote memo field
+        pub memo: Option<String>,
         /// The address that will send the vote
         pub address: WalletAddress,
     }
@@ -2449,21 +2456,17 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let proposal_id = PROPOSAL_ID_OPT.parse(matches);
-            let proposal_pgf = PROPOSAL_VOTE_PGF_OPT.parse(matches);
-            let proposal_eth = PROPOSAL_VOTE_ETH_OPT.parse(matches);
             let vote = PROPOSAL_VOTE.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
-            let proposal_data = DATA_PATH_OPT.parse(matches);
+            let memo = MEMO_VOTE.parse(matches);
             let address = ADDRESS.parse(matches);
 
             Self {
                 tx,
                 proposal_id,
                 vote,
-                proposal_pgf,
-                proposal_stewards_eth: proposal_eth,
                 offline,
-                proposal_data,
+                memo,
                 address,
             }
         }
@@ -2485,40 +2488,14 @@ pub mod args {
                         .about("The vote for the proposal. Either yay or nay"),
                 )
                 .arg(
-                    PROPOSAL_VOTE_PGF_OPT
+                    MEMO_VOTE
                         .def()
-                        .about(
-                            "The list of proposed councils and spending \
-                             caps:\n$council1 $cap1 $council2 $cap2 ... \
-                             (council is bech32m encoded address, cap is \
-                             expressed in microNAM",
-                        )
-                        .requires(PROPOSAL_ID.name)
-                        .conflicts_with(PROPOSAL_VOTE_ETH_OPT.name),
-                )
-                .arg(
-                    PROPOSAL_VOTE_ETH_OPT
-                        .def()
-                        .about(
-                            "The signing key and message bytes (hex encoded) \
-                             to be signed: $signing_key $message",
-                        )
-                        .requires(PROPOSAL_ID.name)
-                        .conflicts_with(PROPOSAL_VOTE_PGF_OPT.name),
+                        .about("The memo to attach to a vote."),
                 )
                 .arg(
                     PROPOSAL_OFFLINE
                         .def()
                         .about("Flag if the proposal vote should run offline.")
-                        .conflicts_with(PROPOSAL_ID.name),
-                )
-                .arg(
-                    DATA_PATH_OPT
-                        .def()
-                        .about(
-                            "The data path file (json) that describes the \
-                             proposal.",
-                        )
                         .conflicts_with(PROPOSAL_ID.name),
                 )
                 .arg(ADDRESS.def().about("The address to vote with."))

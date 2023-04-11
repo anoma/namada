@@ -2,10 +2,14 @@
 pub use pos::Pos;
 use pos::POS;
 mod pos;
+pub use gov::Gov;
+use gov::GOV;
+mod gov;
 
 // Validity predicate queries
 router! {VP,
     ( "pos" ) = (sub POS),
+    ( "governance" ) = (sub GOV),
 }
 
 #[cfg(any(test, feature = "async-client"))]

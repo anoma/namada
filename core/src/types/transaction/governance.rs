@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
@@ -106,6 +107,18 @@ impl PartialEq<VoteType> for ProposalType {
             Self::ETHBridge => {
                 matches!(other, VoteType::ETHBridge(_))
             }
+        }
+    }
+}
+
+impl FromStr for ProposalType {
+    type Err = ProposalError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "yay" => todo!(),
+            "nay" => todo!(),
+            _ => todo!()
         }
     }
 }
