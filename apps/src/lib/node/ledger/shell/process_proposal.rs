@@ -224,7 +224,6 @@ mod test_process_proposal {
     use namada::types::key::*;
     use namada::types::storage::Epoch;
     use namada::types::token::Amount;
-    use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, RawHeader};
     use namada::proto::{Code, Data, Section, Signature};
 

@@ -10,8 +10,6 @@ pub mod decrypted_tx {
 
     use super::EllipticCurve;
     use crate::proto::Tx;
-    #[cfg(feature = "ferveo-tpke")]
-    use crate::types::transaction::encrypted::EncryptedTx;
     use crate::types::transaction::{Hash, TxType, WrapperTx};
     use sha2::{Digest, Sha256};
 

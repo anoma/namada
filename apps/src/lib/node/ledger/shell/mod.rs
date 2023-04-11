@@ -766,7 +766,6 @@ mod test_utils {
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
-    use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{Fee, WrapperTx};
     use tempfile::tempdir;
     use tokio::sync::mpsc::UnboundedReceiver;

@@ -456,7 +456,6 @@ where
 #[cfg(test)]
 mod test_finalize_block {
     use namada::types::storage::Epoch;
-    use namada::types::transaction::encrypted::EncryptedTx;
     use namada::core::types::hash::Hash;
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
     use namada::proto::{Data, Code, Signature, Section};

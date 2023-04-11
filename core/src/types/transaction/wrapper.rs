@@ -16,8 +16,6 @@ pub mod wrapper_tx {
     use crate::types::key::*;
     use crate::types::storage::Epoch;
     use crate::types::token::Amount;
-    #[cfg(feature = "ferveo-tpke")]
-    use crate::types::transaction::encrypted::EncryptedTx;
     use crate::types::transaction::{Hash, TxError, TxType};
     use sha2::{Digest, Sha256};
 

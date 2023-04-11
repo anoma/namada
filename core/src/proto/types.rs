@@ -17,8 +17,6 @@ use crate::types::key::*;
 use crate::types::time::DateTimeUtc;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::token::Transfer;
-#[cfg(feature = "ferveo-tpke")]
-use crate::types::transaction::encrypted::EncryptedTx;
 use crate::types::transaction::hash_tx;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::process_tx;
@@ -782,32 +780,32 @@ mod tests {
 
     /*#[test]
     fn test_tx() {
-        let code = "wasm code".as_bytes().to_owned();
-        let data = "arbitrary data".as_bytes().to_owned();
-        let tx = InnerTx::new(code.clone(), Some(SignedTxData {data: Some(data.clone()), sig: None}));
+    let code = "wasm code".as_bytes().to_owned();
+    let data = "arbitrary data".as_bytes().to_owned();
+    let tx = InnerTx::new(code.clone(), Some(SignedTxData {data: Some(data.clone()), sig: None}));
 
-        let bytes = tx.to_bytes();
-        let tx_from_bytes =
-            InnerTx::try_from(bytes.as_ref()).expect("decoding failed");
-        assert_eq!(tx_from_bytes, tx);
+    let bytes = tx.to_bytes();
+    let tx_from_bytes =
+    InnerTx::try_from(bytes.as_ref()).expect("decoding failed");
+    assert_eq!(tx_from_bytes, tx);
 
-        let types_tx = types::Tx {
-            outer_code: code,
-            outer_data: Some(data),
-            outer_timestamp: None,
-            code: vec![],
-            data: None,
-            timestamp: None,
-            extra: vec![],
-            outer_extra: vec![],
-        };
-        let mut bytes = vec![];
-        types_tx.encode(&mut bytes).expect("encoding failed");
-        match Tx::try_from(bytes.as_ref()) {
-            Err(Error::NoTimestampError) => {}
-            _ => panic!("unexpected result"),
-        }
-    }*/
+    let types_tx = types::Tx {
+    outer_code: code,
+    outer_data: Some(data),
+    outer_timestamp: None,
+    code: vec![],
+    data: None,
+    timestamp: None,
+    extra: vec![],
+    outer_extra: vec![],
+};
+    let mut bytes = vec![];
+    types_tx.encode(&mut bytes).expect("encoding failed");
+    match Tx::try_from(bytes.as_ref()) {
+    Err(Error::NoTimestampError) => {}
+    _ => panic!("unexpected result"),
+}
+}*/
 
     #[test]
     fn test_dkg_gossip_message() {
@@ -829,5 +827,77 @@ mod tests {
         let types_dkg: types::Dkg = dkg.clone().into();
         let dkg_from_types = Dkg::from(types_dkg);
         assert_eq!(dkg_from_types, dkg);
+    }
+
+    /// Test that encryption and decryption are inverses.
+    #[cfg(feature = "ferveo-tpke")]
+    #[test]
+    fn test_encrypt_decrypt() {
+        // The trivial public - private keypair
+        let pubkey = EncryptionKey(<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator());
+        let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+        // generate encrypted payload
+        let plaintext = Section::Data(Data::new("Super secret stuff".as_bytes().to_vec()));
+        let encrypted =
+            Ciphertext::new(plaintext.clone(), &pubkey);
+        // check that encryption doesn't do trivial things
+        assert_ne!(encrypted.ciphertext.ciphertext, plaintext.try_to_vec().expect("Test failed"));
+        // decrypt the payload and check we got original data back
+        let decrypted = encrypted.decrypt(privkey);
+        assert_eq!(
+            decrypted.expect("Test failed").try_to_vec().expect("Test failed"),
+            plaintext.try_to_vec().expect("Test failed"),
+        );
+    }
+
+    /// Test that serializing and deserializing again via Borsh produces
+    /// original payload
+    #[cfg(feature = "ferveo-tpke")]
+    #[test]
+    fn test_encrypted_tx_round_trip_borsh() {
+        // The trivial public - private keypair
+        let pubkey = EncryptionKey(<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator());
+        let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+        // generate encrypted payload
+        let plaintext = Section::Data(Data::new("Super secret stuff".as_bytes().to_vec()));
+        let encrypted =
+            Ciphertext::new(plaintext.clone(), &pubkey);
+        // serialize via Borsh
+        let borsh = encrypted.try_to_vec().expect("Test failed");
+        // deserialize again
+        let new_encrypted: Ciphertext =
+            BorshDeserialize::deserialize(&mut borsh.as_ref())
+            .expect("Test failed");
+        // check that decryption works as expected
+        let decrypted = new_encrypted.decrypt(privkey);
+        assert_eq!(
+            decrypted.expect("Test failed").try_to_vec().expect("Test failed"),
+            plaintext.try_to_vec().expect("Test failed"),
+        );
+    }
+
+    /// Test that serializing and deserializing again via Serde produces
+    /// original payload
+    #[cfg(feature = "ferveo-tpke")]
+    #[test]
+    fn test_encrypted_tx_round_trip_serde() {
+        // The trivial public - private keypair
+        let pubkey = EncryptionKey(<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator());
+        let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+        // generate encrypted payload
+        let plaintext = Section::Data(Data::new("Super secret stuff".as_bytes().to_vec()));
+        let encrypted =
+            Ciphertext::new(plaintext.clone(), &pubkey);
+        // serialize via Serde
+        let js = serde_json::to_string(&encrypted).expect("Test failed");
+        // deserialize it again
+        let new_encrypted: Ciphertext =
+            serde_json::from_str(&js).expect("Test failed");
+        let decrypted = new_encrypted.decrypt(privkey);
+        // check that decryption works as expected
+        assert_eq!(
+            decrypted.expect("Test failed").try_to_vec().expect("Test failed"),
+            plaintext.try_to_vec().expect("Test failed"),
+        );
     }
 }
