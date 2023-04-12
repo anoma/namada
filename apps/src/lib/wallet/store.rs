@@ -11,6 +11,7 @@ use ark_std::rand::SeedableRng;
 use bimap::BiHashMap;
 use bip39::Seed;
 use file_lock::{FileLock, FileOptions};
+use itertools::Itertools;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::key::dkg_session_keys::DkgKeypair;
@@ -20,9 +21,11 @@ use namada::types::masp::{
 };
 use namada::types::transaction::EllipticCurve;
 use serde::{Deserialize, Serialize};
+use slip10_ed25519;
 use thiserror::Error;
 
 use super::alias::{self, Alias};
+use super::derivation_path::DerivationPath;
 use super::keys::StoredKeypair;
 use super::pre_genesis;
 use crate::cli;
@@ -344,23 +347,27 @@ impl Store {
 
     /// Generate a new keypair and insert it into the store with the provided
     /// alias. If none provided, the alias will be the public key hash.
-    /// If no password is provided, the keypair will be stored raw without
-    /// encryption. Returns the alias of the key and a reference-counting
-    /// pointer to the key.
+    /// If no encryption password is provided, the keypair will be stored raw
+    /// without encryption.
+    /// Returns the alias of the key and a reference-counting pointer to the
+    /// key. Optionally, use a given random seed and a given BIP44
+    /// derivation path.
     pub fn gen_key(
         &mut self,
         scheme: SchemeType,
         alias: Option<String>,
-        password: Option<String>,
+        encryption_password: Option<String>,
         seed: Option<Seed>,
+        derivation_path: DerivationPath,
     ) -> (Alias, common::SecretKey) {
         let sk = if let Some(seed) = seed {
-            gen_sk_from_seed(scheme, seed)
+            gen_sk_from_seed_and_derivation_path(scheme, seed, derivation_path)
         } else {
             gen_sk(scheme)
         };
         let pkh: PublicKeyHash = PublicKeyHash::from(&sk.ref_to());
-        let (keypair_to_store, raw_keypair) = StoredKeypair::new(sk, password);
+        let (keypair_to_store, raw_keypair) =
+            StoredKeypair::new(sk, encryption_password);
         let address = Address::Implicit(ImplicitAddress(pkh.clone()));
         let alias: Alias = alias.unwrap_or_else(|| pkh.clone().into()).into();
         if self
@@ -854,19 +861,35 @@ pub fn gen_sk(scheme: SchemeType) -> common::SecretKey {
 }
 
 /// Generate a new secret key from the seed.
-pub fn gen_sk_from_seed(scheme: SchemeType, seed: Seed) -> common::SecretKey {
+pub fn gen_sk_from_seed_and_derivation_path(
+    scheme: SchemeType,
+    seed: Seed,
+    derivation_path: DerivationPath,
+) -> common::SecretKey {
     match scheme {
         SchemeType::Ed25519 => {
-            const ED25519_SEED_BYTES: usize = 32;
-            let mut s: [u8; ED25519_SEED_BYTES] = Default::default();
-            s.copy_from_slice(&seed.as_bytes()[0..ED25519_SEED_BYTES]);
-            ed25519::SigScheme::from_seed(s).try_to_sk().unwrap()
+            let indexes = derivation_path
+                .path()
+                .iter()
+                .map(|idx| idx.to_bits())
+                .collect_vec();
+            // SLIP10 Ed25519 key derivation function promotes all indexes to
+            // hardened indexes.
+            let sk = slip10_ed25519::derive_ed25519_private_key(
+                seed.as_bytes(),
+                &indexes,
+            );
+            ed25519::SigScheme::from_bytes(sk).try_to_sk().unwrap()
         }
         SchemeType::Secp256k1 => {
-            unimplemented!(
-                "Generation of Secp256k1 keys from random seeds is not \
-                 supported."
+            let xpriv = tiny_hderive::bip32::ExtendedPrivKey::derive(
+                seed.as_bytes(),
+                derivation_path,
             )
+            .expect("Secret key derivation should not fail.");
+            secp256k1::SigScheme::from_bytes(xpriv.secret())
+                .try_to_sk()
+                .unwrap()
         }
         SchemeType::Common => {
             panic!(

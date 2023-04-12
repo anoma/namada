@@ -1,5 +1,6 @@
 mod alias;
 pub mod defaults;
+mod derivation_path;
 mod keys;
 pub mod pre_genesis;
 mod store;
@@ -9,7 +10,7 @@ use std::fmt::Display;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::{env, fs};
+use std::{env, error, fs};
 
 use bip39::{Language, Mnemonic, MnemonicType, Seed};
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -24,6 +25,7 @@ pub use store::wallet_file;
 use thiserror::Error;
 
 use self::alias::Alias;
+use self::derivation_path::{DerivationPath, DerivationPathError};
 pub use self::keys::{DecryptionError, StoredKeypair};
 use self::store::Store;
 pub use self::store::{AddressVpType, ValidatorData, ValidatorKeys};
@@ -48,6 +50,8 @@ pub enum FindKeyError {
 
 #[derive(Error, Debug)]
 pub enum GenRestoreKeyError {
+    #[error("Derivation path parse error")]
+    DerivationPathError(DerivationPathError),
     #[error("Mnemonic generation error")]
     MnemonicGenerationError,
     #[error("Mnemonic input error")]
@@ -119,13 +123,13 @@ impl Wallet {
             println!("Warning: The keypair will NOT be encrypted.");
             None
         } else {
-            Some(read_password("Enter your encryption password: "))
+            Some(read_encryption_password("Enter your encryption password: "))
         };
         // Bis repetita for confirmation.
         let pwd = if unsafe_dont_encrypt {
             None
         } else {
-            Some(read_password(
+            Some(read_encryption_password(
                 "To confirm, please enter the same encryption password once \
                  more: ",
             ))
@@ -141,10 +145,33 @@ impl Wallet {
         &mut self,
         scheme: SchemeType,
         alias: Option<String>,
-        password: Option<String>,
+        encryption_password: Option<String>,
         seed: Option<Seed>,
+        use_empty_derivation_path: bool,
+        derivation_path: Option<String>,
     ) -> Result<(String, common::SecretKey), GenRestoreKeyError> {
-        let (alias, key) = self.store.gen_key(scheme, alias, password, seed);
+        let derivation_path = derivation_path
+            .map(|p| {
+                if p.is_empty() {
+                    Ok(DerivationPath::default_for_scheme(scheme))
+                } else {
+                    DerivationPath::from_path_str(&p)
+                        .map_err(GenRestoreKeyError::DerivationPathError)
+                }
+            })
+            .transpose()?;
+        let derivation_path = use_empty_derivation_path
+            .then(DerivationPath::empty)
+            .or(derivation_path)
+            .unwrap();
+        println!("Using HD derivation path {}", derivation_path);
+        let (alias, key) = self.store.gen_key(
+            scheme,
+            alias,
+            encryption_password,
+            seed,
+            derivation_path,
+        );
         // Cache the newly added key
         self.decrypted_key_cache.insert(alias.clone(), key.clone());
         Ok((alias.into(), key))
@@ -158,16 +185,27 @@ impl Wallet {
     /// password from stdin. Stores the key in decrypted key cache and
     /// returns the alias of the key and a reference-counting pointer to the
     /// key.
+    /// TO REMOVE Optionally, use BIP44 derivation path for the key recovery.
     pub fn derive_key_from_user_mnemonic_code(
         &mut self,
         scheme: SchemeType,
         alias: Option<String>,
         unsafe_dont_encrypt: bool,
+        use_empty_derivation_path: bool,
+        derivation_path: Option<String>,
     ) -> Result<(String, common::SecretKey), GenRestoreKeyError> {
-        let password = read_and_confirm_pwd(unsafe_dont_encrypt);
-        let mnemonic = read_mnemonic()?;
+        let password =
+            read_and_confirm_encryption_password(unsafe_dont_encrypt);
+        let mnemonic = read_mnemonic_code()?;
         let seed = Seed::new(&mnemonic, "");
-        self.gen_and_store_key(scheme, alias, password, Some(seed))
+        self.gen_and_store_key(
+            scheme,
+            alias,
+            password,
+            Some(seed),
+            use_empty_derivation_path,
+            derivation_path,
+        )
     }
 
     /// Generate a new keypair and derive an implicit address from its public
@@ -176,18 +214,34 @@ impl Wallet {
     /// lowercase too). If the key is to be encrypted, will prompt for
     /// password from stdin. Stores the key in decrypted key cache and
     /// returns the alias of the key and a reference-counting pointer to the
-    /// key. Optionally, use a BIP39 mnemonic code for the key generation.
+    /// key. Optionally, use a BIP39 mnemonic code.
+    /// If mnemonic code is not used, the values of derivation path arguments
+    /// are ignored.
+    /// Use empty derivation path if `true` is passed into the respective
+    /// argument. If none BIP44 derivation path is specified, a scheme
+    /// default path is used.
     pub fn gen_key(
         &mut self,
         scheme: SchemeType,
         alias: Option<String>,
         unsafe_dont_encrypt: bool,
         use_mnemonic: bool,
+        use_empty_derivation_path: bool,
+        derivation_path: Option<String>,
     ) -> Result<(String, common::SecretKey), GenRestoreKeyError> {
-        let password = read_and_confirm_pwd(unsafe_dont_encrypt);
+        let password =
+            read_and_confirm_encryption_password(unsafe_dont_encrypt);
         let mnemonic = generate_mnemonic_code(use_mnemonic)?;
-        let seed = mnemonic.map(|m| Seed::new(&m, ""));
-        self.gen_and_store_key(scheme, alias, password, seed)
+        let passphrase = read_and_confirm_mnemonic_passphrase();
+        let seed = mnemonic.map(|m| Seed::new(&m, &passphrase));
+        self.gen_and_store_key(
+            scheme,
+            alias,
+            password,
+            seed,
+            use_empty_derivation_path,
+            derivation_path,
+        )
     }
 
     pub fn gen_spending_key(
@@ -391,7 +445,8 @@ impl Wallet {
     {
         match stored_key {
             StoredKeypair::Encrypted(encrypted) => {
-                let password = read_password("Enter decryption password: ");
+                let password =
+                    read_encryption_password("Enter decryption password: ");
                 let key = encrypted
                     .decrypt(password)
                     .map_err(FindKeyError::KeyDecryptionError)?;
@@ -622,8 +677,8 @@ where
     Ok(SecStr::from(response))
 }
 
-fn read_mnemonic() -> Result<Mnemonic, GenRestoreKeyError> {
-    let phrase = get_secure_user_input("Input mnemonic code:")
+fn read_mnemonic_code() -> Result<Mnemonic, GenRestoreKeyError> {
+    let phrase = get_secure_user_input("Input mnemonic code: ")
         .map_err(|_| GenRestoreKeyError::MnemonicInputError)?;
 
     Mnemonic::from_phrase(
@@ -633,19 +688,48 @@ fn read_mnemonic() -> Result<Mnemonic, GenRestoreKeyError> {
     .map_err(|_| GenRestoreKeyError::MnemonicInputError)
 }
 
+pub fn read_and_confirm_passphrase_tty(
+    prompt: &str,
+) -> Result<String, Box<dyn error::Error>> {
+    let passphrase = rpassword::read_password_from_tty(Some(prompt))?;
+    if !passphrase.is_empty() {
+        let confirmed = rpassword::read_password_from_tty(Some(
+            "Enter same passphrase again: ",
+        ))?;
+        if confirmed != passphrase {
+            return Err("Passphrases did not match".into());
+        }
+    }
+    Ok(passphrase)
+}
+
+pub fn read_and_confirm_mnemonic_passphrase() -> String {
+    match read_and_confirm_passphrase_tty(
+        "Enter BIP39 passphrase (empty for none): ",
+    ) {
+        Ok(mnemonic_passphrase) => mnemonic_passphrase,
+        Err(e) => {
+            eprint!("{}", e);
+            cli::safe_exit(1);
+        }
+    }
+}
+
 /// Read the password for encryption from the file/env/stdin with confirmation.
-pub fn read_and_confirm_pwd(unsafe_dont_encrypt: bool) -> Option<String> {
+pub fn read_and_confirm_encryption_password(
+    unsafe_dont_encrypt: bool,
+) -> Option<String> {
     let password = if unsafe_dont_encrypt {
         println!("Warning: The keypair will NOT be encrypted.");
         None
     } else {
-        Some(read_password("Enter your encryption password: "))
+        Some(read_encryption_password("Enter your encryption password: "))
     };
     // Bis repetita for confirmation.
     let to_confirm = if unsafe_dont_encrypt {
         None
     } else {
-        Some(read_password(
+        Some(read_encryption_password(
             "To confirm, please enter the same encryption password once more: ",
         ))
     };
@@ -656,9 +740,9 @@ pub fn read_and_confirm_pwd(unsafe_dont_encrypt: bool) -> Option<String> {
     password
 }
 
-/// Read the password for encryption/decryption from the file/env/stdin. Panics
+/// Read the password for encryption/decryption from the file/env/stdin. Exits
 /// if all options are empty/invalid.
-pub fn read_password(prompt_msg: &str) -> String {
+pub fn read_encryption_password(prompt_msg: &str) -> String {
     let pwd = match env::var("NAMADA_WALLET_PASSWORD_FILE") {
         Ok(path) => fs::read_to_string(path)
             .expect("Something went wrong reading the file"),

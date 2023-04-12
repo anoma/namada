@@ -468,10 +468,11 @@ impl super::SigScheme for SigScheme {
         SecretKey(Box::new(libsecp256k1::SecretKey::random(csprng)))
     }
 
-    fn from_seed(_seed: [u8; 32]) -> SecretKey {
-        unimplemented!(
-            "Generation of Secp256k1 keys from random seeds is not supported."
-        )
+    fn from_bytes(sk: [u8; 32]) -> SecretKey {
+        SecretKey(Box::new(
+            libsecp256k1::SecretKey::parse_slice(&sk)
+                .expect("Secret key parsing should not fail."),
+        ))
     }
 
     /// Sign the data with a key

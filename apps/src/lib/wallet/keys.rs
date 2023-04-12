@@ -10,7 +10,7 @@ use orion::{aead, kdf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::read_password;
+use super::read_encryption_password;
 
 const ENCRYPTED_KEY_PREFIX: &str = "encrypted:";
 const UNENCRYPTED_KEY_PREFIX: &str = "unencrypted:";
@@ -174,7 +174,7 @@ where
             StoredKeypair::Encrypted(encrypted_keypair) => {
                 if decrypt {
                     let password = password.unwrap_or_else(|| {
-                        read_password("Enter decryption password: ")
+                        read_encryption_password("Enter decryption password: ")
                     });
                     let key = encrypted_keypair.decrypt(password)?;
                     Ok(key)

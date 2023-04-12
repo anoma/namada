@@ -287,7 +287,7 @@ impl super::SigScheme for SigScheme {
         );
     }
 
-    fn from_seed(_seed: [u8; 32]) -> Self::SecretKey {
+    fn from_bytes(_seed: [u8; 32]) -> Self::SecretKey {
         panic!(
             "Cannot generate common signing scheme. Must convert from \
              alternative scheme."

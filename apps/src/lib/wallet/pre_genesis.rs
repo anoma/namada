@@ -104,7 +104,9 @@ impl ValidatorWallet {
                     || store.consensus_key.is_encrypted()
                     || store.account_key.is_encrypted()
                 {
-                    Some(wallet::read_password("Enter decryption password: "))
+                    Some(wallet::read_encryption_password(
+                        "Enter decryption password: ",
+                    ))
                 } else {
                     None
                 };
@@ -133,7 +135,8 @@ impl ValidatorWallet {
     /// Generate a new [`ValidatorWallet`] with required pre-genesis keys. Will
     /// prompt for password when `!unsafe_dont_encrypt`.
     fn gen(scheme: SchemeType, unsafe_dont_encrypt: bool) -> Self {
-        let password = wallet::read_and_confirm_pwd(unsafe_dont_encrypt);
+        let password =
+            wallet::read_and_confirm_encryption_password(unsafe_dont_encrypt);
         let (account_key, account_sk) = gen_key_to_store(scheme, &password);
         let (consensus_key, consensus_sk) = gen_key_to_store(
             // Note that TM only allows ed25519 for consensus key
