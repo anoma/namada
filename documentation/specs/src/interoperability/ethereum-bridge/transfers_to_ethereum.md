@@ -125,13 +125,14 @@ pending transaction is covered by the root or it times out.
 
 ## Replay Protection
 
-State updates in Namada result in the increment of the value of a monotonically
-growing nonce, that is signed together with the root of the Bridge Pool. The
-`Bridge` smart contract's nonce of transfers to Ethereum is kept in sync with
-Namada's, upon relay calls. This behavior should contribute to avoiding replay
-attacks on Ethereum events related to transfers to Ethereum, as it assigns a
-unique id on a snapshot of the Bridge Pool. Ethereum events arriving at the
-ledger with a nonce different from the next expected nonce are rejected.
+State updates in Namada, derived from transfer to Ethereum events, result in
+the increment of the value of a monotonically growing nonce, that is signed
+together with the root of the Bridge Pool. The `Bridge` smart contract's nonce
+of transfers to Ethereum is kept in sync with Namada's, upon relay calls. This
+behavior should contribute to avoiding replay attacks on Ethereum events related
+to transfers to Ethereum, as it assigns a unique id on a snapshot of the Bridge
+Pool. Ethereum events arriving at the ledger with a nonce different from the next
+expected nonce are rejected.
 
 ## Timeouts
 
