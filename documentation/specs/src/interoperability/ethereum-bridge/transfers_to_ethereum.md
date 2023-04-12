@@ -112,7 +112,7 @@ pub struct GasFee {
 ```
 When a user initiates a transfer, their transaction should include wasm code
 to craft a `PendingTransfer` and append it to the pool in storage as well as 
-send the relevant gas fees into the Bridge Pool's escrow.  This will be 
+send the relevant gas fees into the Bridge Pool's escrow. This will be 
 validated by the Bridge Pool vp. 
 
 The signed Merkle root is only modifiable by validators. The Merkle tree 
@@ -142,4 +142,27 @@ now, is the minimum duration in blocks of an epoch. Transactions that time out
 should revert the state changes in Namada, including refunding the paid fees
 and escrowed assets.
 
-**TBD:** Explain [*freeze* period](https://excalidraw.com/#json=vwpU6RFPU1Re9cPPfs5IQ,xZpM6QcNqSpDa1VlgiEKug) when expiring transfers to Ethereum.
+Timeouts only happen after we process transfer to Ethereum events, to guarantee
+the consistency of the shared state between Namada and Ethereum. Nonces from
+transfer to Ethereum events will place a total order on these transfers and
+any future relay attempts.
+
+## Flow of transfers to Ethereum
+
+This diagram demonstrates the flow of transfers from Namada to Ethereum, and
+their respective failure scenarios.
+
+<img
+  src="images/transfer-to-eth-flow.svg"
+  alt="block space allocator tx bins"
+  height="600"
+  width="700"
+  style="display: block; margin: 0 auto" />
+
+Notice how the first call to `transferToErc` succeeds, but the second one
+does not. This is because the event associated with the first call had
+not been processed in Namada, yet. Once the event is processed, any events
+which should expire will do so, but not before their derived state transitiions
+are applied, if they were included in the relay operation. Finally, the nonce of
+transfers to Ethereum (dubbed the `bpNonce`, in the diagram) is incremented in
+Namada, allowing further relay calls to be made, as is shown.
