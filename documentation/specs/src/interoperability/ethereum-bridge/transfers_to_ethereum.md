@@ -141,3 +141,5 @@ $T_{dur}$ blocks are subject to timeouts. The exact value of $T_{dur}$, for
 now, is the minimum duration in blocks of an epoch. Transactions that time out
 should revert the state changes in Namada, including refunding the paid fees
 and escrowed assets.
+
+**TBD:** Explain [*freeze* period](https://excalidraw.com/#json=vwpU6RFPU1Re9cPPfs5IQ,xZpM6QcNqSpDa1VlgiEKug) when expiring transfers to Ethereum.
