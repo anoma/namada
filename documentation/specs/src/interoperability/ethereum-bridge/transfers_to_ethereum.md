@@ -4,8 +4,10 @@ Moving assets from Namada to Ethereum will not be automatic, as opposed the
 movement of value in the opposite direction. Instead, users must send an
 appropriate transaction to Namada to initiate a transfer across the bridge
 to Ethereum. Once this transaction is approved, the parts necessary to create
-a ["proof"](proofs.md) will be created and posted on Namada. Relayer processes
+a ["proof"](proofs.md) will be created and posted on Namada. [Relayer processes]
 can choose batches of pending transfers to Ethereum to be relayed.
+
+[Relayer processes]: proofs.md#namada-bridge-relayers
 
 It is incumbent on relayers to request an appropriate proof of existence of
 such transactions. This proof must be submitted to the appropriate Ethereum smart
