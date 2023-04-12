@@ -1,9 +1,14 @@
 # Proofs
 
-An Ethereum bridge proof is a quorum of signatures by a valid validator set.
-Namada validators create two types of proofs during their normal operation:
+An Ethereum bridge proof is a quorum (by $\ge 2/3$ voting power) of signatures
+from a valid validator set, on some arbitrary piece of data that is required to
+complete an operation in Ethereum. Namada validators create two types of proofs
+during their normal operation:
 
-1. Bridge pool merkle tree roots concatenated with a Bridge pool nonce.
+1. Bridge pool merkle tree roots.
+    - The signature is made over the concatenation of a merkle tree root with a
+      monotonically growing Bridge pool nonce, to uniquely identify different
+      Bridge pool snapshots.
     - To transfer value to Ethereum, an inclusion proof of a batch of transfers must
       be sent together with the signed merkle tree root, as well as the nonce of
       that snapshot of the Bridge pool. This process is described in the section
@@ -14,18 +19,17 @@ Namada validators create two types of proofs during their normal operation:
 2. Validator set updates.
     - These are comprised of:
         - The validators' Ethereum-facing public keys. The `Governance` and
-          `Bridge` contracts keep track of a different set of keys (cold and
-          hot keys, respectively).
+          `Bridge` contracts keep track of two sets of keys (cold and hot keys,
+          respectively).
         - The stake of each validator, normalized to the range $[0, 2^{32}]$.
     - When the validator set changes in Namada, the smart contracts on Ethereum
       must be updated so that they can continue to recognize valid proofs. The
       validator set of some epoch $E' = E + 1$ must be signed by a quorum of
-      validators from $E$ before the end of this epoch.
-
-This means that by the end of every Namada epoch, a special transaction must be
-sent to the Ethereum smart contracts detailing the new public keys and stake
-of the new validator set. This message must also be signed by at least 2 / 3
-of the current validators as a "transfer of power". 
+      Namada validators from $E$ before the end of this epoch.
+    - The process of updating the set of validators in Ethereum can be thought
+      of as a "transfer of power", from the old set of validators to the new one.
+      Note that the validators in the set may be the same between epochs, but this
+      must be communicated to the Ethereum bridge smart contracts, either way.
 
 If vote extensions are available, a fully crafted transfer of power message 
 will be made available on-chain. Otherwise, this message must be crafted 
