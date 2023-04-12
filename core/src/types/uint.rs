@@ -41,7 +41,8 @@ impl Uint {
                 .try_into()
                 .expect("This cannot fail"),
         )
-        .overflowing_add(Uint::from(1u64)).0
+        .overflowing_add(Uint::from(1u64))
+        .0
     }
 }
 

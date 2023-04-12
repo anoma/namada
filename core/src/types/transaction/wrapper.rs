@@ -9,8 +9,8 @@ pub mod wrapper_tx {
     pub use ark_bls12_381::Bls12_381 as EllipticCurve;
     pub use ark_ec::{AffineCurve, PairingEngine};
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use serde::de::Error;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use thiserror::Error;
 
     use crate::proto::Tx;
@@ -88,7 +88,10 @@ pub mod wrapper_tx {
     }
 
     impl Serialize for GasLimit {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
             let limit = Uint::from(self).to_string();
             Serialize::serialize(&limit, serializer)
         }
@@ -96,19 +99,26 @@ pub mod wrapper_tx {
 
     impl<'de> Deserialize<'de> for GasLimit {
         fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'de>
+        where
+            D: Deserializer<'de>,
         {
             struct GasLimitVisitor;
 
             impl<'a> serde::de::Visitor<'a> for GasLimitVisitor {
                 type Value = GasLimit;
 
-                fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-                    formatter.write_str("A string representing 256-bit unsigned integer")
+                fn expecting(
+                    &self,
+                    formatter: &mut Formatter,
+                ) -> std::fmt::Result {
+                    formatter.write_str(
+                        "A string representing 256-bit unsigned integer",
+                    )
                 }
 
                 fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-                    where E: Error
+                where
+                    E: Error,
                 {
                     let uint = Uint::from_dec_str(v)
                         .map_err(|e| E::custom(e.to_string()))?;

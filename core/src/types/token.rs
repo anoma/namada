@@ -919,8 +919,7 @@ mod tests {
 
     #[test]
     fn test_token_display() {
-        let max = Amount::from_uint(u64::MAX, 0)
-            .expect("Test failed");
+        let max = Amount::from_uint(u64::MAX, 0).expect("Test failed");
         assert_eq!("18446744073709.551615", max.to_string_native());
         let max = DenominatedAmount {
             amount: max,
@@ -928,11 +927,9 @@ mod tests {
         };
         assert_eq!("18446744073709.551615", max.to_string());
 
-        let whole = Amount::from_uint(
-            u64::MAX / NATIVE_SCALE * NATIVE_SCALE,
-            0,
-        )
-        .expect("Test failed");
+        let whole =
+            Amount::from_uint(u64::MAX / NATIVE_SCALE * NATIVE_SCALE, 0)
+                .expect("Test failed");
         assert_eq!("18446744073709.000000", whole.to_string_native());
         let whole = DenominatedAmount {
             amount: whole,
@@ -941,15 +938,13 @@ mod tests {
         assert_eq!("18446744073709", whole.to_string());
 
         let trailing_zeroes =
-            Amount::from_uint(123000, 0)
-                .expect("Test failed");
+            Amount::from_uint(123000, 0).expect("Test failed");
         assert_eq!("0.123000", trailing_zeroes.to_string_native());
         let trailing_zeroes = DenominatedAmount {
             amount: trailing_zeroes,
             denom: NATIVE_MAX_DECIMAL_PLACES.into(),
         };
         assert_eq!("0.123", trailing_zeroes.to_string());
-
 
         let zero = Amount::default();
         assert_eq!("0.000000", zero.to_string_native());
@@ -986,7 +981,10 @@ mod tests {
         assert_eq!(zero.checked_signed_add(zero), Some(zero));
         assert_eq!(zero.checked_add(one), Some(one));
         assert_eq!(zero.checked_add(max - one), Some(max - one));
-        assert_eq!(zero.checked_signed_add(max_signed - one), Some(max_signed - one));
+        assert_eq!(
+            zero.checked_signed_add(max_signed - one),
+            Some(max_signed - one)
+        );
         assert_eq!(zero.checked_add(max), Some(max));
         assert_eq!(zero.checked_signed_add(max_signed), Some(max_signed));
 
