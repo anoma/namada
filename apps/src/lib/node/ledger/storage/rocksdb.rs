@@ -237,8 +237,7 @@ impl RocksDB {
     }
 
     fn exec_batch(&mut self, batch: WriteBatch) -> Result<()> {
-        let mut write_opts = WriteOptions::default();
-        write_opts.disable_wal(true);
+        let write_opts = WriteOptions::default();
         self.0
             .write_opt(batch, &write_opts)
             .map_err(|e| Error::DBError(e.into_string()))
@@ -620,9 +619,9 @@ impl DB for RocksDB {
     fn write_block(
         &mut self,
         state: BlockStateWrite,
+        batch: &mut Self::WriteBatch,
         is_full_commit: bool,
     ) -> Result<()> {
-        let mut batch = WriteBatch::default();
         let BlockStateWrite {
             merkle_tree_stores,
             header,
@@ -751,11 +750,7 @@ impl DB for RocksDB {
         // Block height
         batch.put("height", types::encode(&height));
 
-        // Write the batch
-        self.exec_batch(batch)?;
-
-        // Flush without waiting
-        self.flush(false)
+        Ok(())
     }
 
     fn read_block_header(&self, height: BlockHeight) -> Result<Option<Header>> {
@@ -1102,12 +1097,12 @@ impl DB for RocksDB {
 
     fn prune_merkle_tree_stores(
         &mut self,
+        batch: &mut Self::WriteBatch,
         epoch: Epoch,
         pred_epochs: &Epochs,
     ) -> Result<()> {
         match pred_epochs.get_start_height_of_epoch(epoch) {
             Some(height) => {
-                let mut batch = WriteBatch::default();
                 let prefix_key = Key::from(height.to_db_key())
                     .push(&"tree".to_owned())
                     .map_err(Error::KeyError)?;
@@ -1126,7 +1121,7 @@ impl DB for RocksDB {
                         batch.delete(store_key.to_string());
                     }
                 }
-                self.exec_batch(batch)
+                Ok(())
             }
             None => Ok(()),
         }
@@ -1351,7 +1346,6 @@ mod test {
             vec![1_u8, 1, 1, 1],
         )
         .unwrap();
-        db.exec_batch(batch.0).unwrap();
 
         let merkle_tree = MerkleTree::<Sha256Hasher>::default();
         let merkle_tree_stores = merkle_tree.stores();
@@ -1378,7 +1372,8 @@ mod test {
             tx_queue: &tx_queue,
         };
 
-        db.write_block(block, true).unwrap();
+        db.write_block(block, &mut batch, true).unwrap();
+        db.exec_batch(batch.0).unwrap();
 
         let _state = db
             .read_last_block()

@@ -417,6 +417,7 @@ impl WriteLog {
     pub fn commit_block<DB, H>(
         &mut self,
         storage: &mut Storage<DB, H>,
+        batch: &mut DB::WriteBatch,
     ) -> Result<()>
     where
         DB: 'static
@@ -424,27 +425,22 @@ impl WriteLog {
             + for<'iter> ledger::storage::DBIter<'iter>,
         H: StorageHasher,
     {
-        let mut batch = Storage::<DB, H>::batch();
         for (key, entry) in self.block_write_log.iter() {
             match entry {
                 StorageModification::Write { value } => {
                     storage
-                        .batch_write_subspace_val(
-                            &mut batch,
-                            key,
-                            value.clone(),
-                        )
+                        .batch_write_subspace_val(batch, key, value.clone())
                         .map_err(Error::StorageError)?;
                 }
                 StorageModification::Delete => {
                     storage
-                        .batch_delete_subspace_val(&mut batch, key)
+                        .batch_delete_subspace_val(batch, key)
                         .map_err(Error::StorageError)?;
                 }
                 StorageModification::InitAccount { vp_code_hash } => {
                     storage
                         .batch_write_subspace_val(
-                            &mut batch,
+                            batch,
                             key,
                             vp_code_hash.clone(),
                         )
@@ -454,7 +450,6 @@ impl WriteLog {
                 StorageModification::Temp { .. } => {}
             }
         }
-        storage.exec_batch(batch).map_err(Error::StorageError)?;
         if let Some(address_gen) = self.address_gen.take() {
             storage.address_gen = address_gen
         }
@@ -684,6 +679,7 @@ mod tests {
         let mut storage =
             crate::ledger::storage::testing::TestStorage::default();
         let mut write_log = WriteLog::default();
+        let mut batch = crate::ledger::storage::testing::TestStorage::batch();
         let address_gen = EstablishedAddressGen::new("test");
 
         let key1 =
@@ -722,7 +718,9 @@ mod tests {
         write_log.commit_tx();
 
         // commit a block
-        write_log.commit_block(&mut storage).expect("commit failed");
+        write_log
+            .commit_block(&mut storage, &mut batch)
+            .expect("commit failed");
 
         let (vp_code_hash, _gas) =
             storage.validity_predicate(&addr1).expect("vp read failed");

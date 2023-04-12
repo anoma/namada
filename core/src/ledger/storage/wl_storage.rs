@@ -143,10 +143,11 @@ where
     /// Commit the current block's write log to the storage and commit the block
     /// to DB. Starts a new block write log.
     pub fn commit_block(&mut self) -> storage_api::Result<()> {
+        let mut batch = D::batch();
         self.write_log
-            .commit_block(&mut self.storage)
+            .commit_block(&mut self.storage, &mut batch)
             .into_storage_result()?;
-        self.storage.commit_block().into_storage_result()
+        self.storage.commit_block(batch).into_storage_result()
     }
 
     /// Initialize a new epoch when the current epoch is finished. Returns

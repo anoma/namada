@@ -176,6 +176,7 @@ impl DB for MockDB {
     fn write_block(
         &mut self,
         state: BlockStateWrite,
+        _batch: &mut Self::WriteBatch,
         _is_full_commit: bool,
     ) -> Result<()> {
         let BlockStateWrite {
@@ -445,6 +446,7 @@ impl DB for MockDB {
 
     fn prune_merkle_tree_stores(
         &mut self,
+        _batch: &mut Self::WriteBatch,
         epoch: Epoch,
         pred_epochs: &Epochs,
     ) -> Result<()> {

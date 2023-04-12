@@ -355,6 +355,7 @@ mod tests {
     use crate::ibc::tx_msg::Msg;
     use crate::ibc::Height;
     use crate::ibc_proto::cosmos::base::v1beta1::Coin;
+    use crate::ledger::storage::mockdb::MockDBWriteBatch;
     use namada_core::ledger::storage::testing::TestWlStorage;
     use prost::Message;
     use crate::tendermint::time::Time as TmTime;
@@ -457,6 +458,10 @@ mod tests {
         wl_storage.write_log.commit_tx();
 
         wl_storage
+    }
+
+    fn batch() -> MockDBWriteBatch {
+        TestStorage::batch()
     }
 
     fn get_connection_id() -> ConnectionId {
@@ -909,7 +914,7 @@ mod tests {
         let mut wl_storage = insert_init_states();
         wl_storage
             .write_log
-            .commit_block(&mut wl_storage.storage)
+            .commit_block(&mut wl_storage.storage, &mut batch())
             .expect("commit failed");
 
         // prepare data
@@ -1015,7 +1020,7 @@ mod tests {
         wl_storage.write_log.commit_tx();
         wl_storage
             .write_log
-            .commit_block(&mut wl_storage.storage)
+            .commit_block(&mut wl_storage.storage, &mut batch())
             .expect("commit failed");
         // update the connection to Open
         let conn = get_connection(ConnState::Open);
@@ -2096,7 +2101,7 @@ mod tests {
         wl_storage.write_log.commit_tx();
         wl_storage
             .write_log
-            .commit_block(&mut wl_storage.storage)
+            .commit_block(&mut wl_storage.storage, &mut batch())
             .expect("commit failed");
 
         // make a packet and data
