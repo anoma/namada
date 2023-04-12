@@ -101,10 +101,23 @@ impl Amount {
     }
 
     /// Checked addition. Returns `None` on overflow or if
-    /// the amount exceed [`uint::MAX_SIGNED_VALUE`]
+    /// the amount exceed [`uint::MAX_VALUE`]
     pub fn checked_add(&self, amount: Amount) -> Option<Self> {
         self.raw.checked_add(amount.raw).and_then(|result| {
-            if result < uint::MAX_SIGNED_VALUE {
+            if result <= uint::MAX_VALUE {
+                Some(Self { raw: result })
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Checked addition. Returns `None` on overflow or if
+    /// the amount exceed [`uint::MAX_SIGNED_VALUE`]
+    pub fn checked_signed_add(&self, amount: Amount) -> Option<Self> {
+        self.raw.checked_add(amount.raw).and_then(|result| {
+            // TODO: Should this be `MAX_SIGNED_VALUE` or `MAX_VALUE`?
+            if result <= uint::MAX_SIGNED_VALUE {
                 Some(Self { raw: result })
             } else {
                 None
@@ -334,7 +347,11 @@ impl Display for DenominatedAmount {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let string = self.to_string_precise();
         let string = string.trim_end_matches(&['0', '.']);
-        f.write_str(string)
+        if string.is_empty() {
+            f.write_str("0")
+        } else {
+            f.write_str(string)
+        }
     }
 }
 
@@ -902,24 +919,45 @@ mod tests {
 
     #[test]
     fn test_token_display() {
-        let max = Amount::from_uint(u64::MAX, NATIVE_MAX_DECIMAL_PLACES)
+        let max = Amount::from_uint(u64::MAX, 0)
             .expect("Test failed");
         assert_eq!("18446744073709.551615", max.to_string_native());
+        let max = DenominatedAmount {
+            amount: max,
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
+        assert_eq!("18446744073709.551615", max.to_string());
 
         let whole = Amount::from_uint(
             u64::MAX / NATIVE_SCALE * NATIVE_SCALE,
-            NATIVE_MAX_DECIMAL_PLACES,
+            0,
         )
         .expect("Test failed");
-        assert_eq!("18446744073709", whole.to_string_native());
+        assert_eq!("18446744073709.000000", whole.to_string_native());
+        let whole = DenominatedAmount {
+            amount: whole,
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
+        assert_eq!("18446744073709", whole.to_string());
 
         let trailing_zeroes =
-            Amount::from_uint(123000, NATIVE_MAX_DECIMAL_PLACES)
+            Amount::from_uint(123000, 0)
                 .expect("Test failed");
-        assert_eq!("0.123", trailing_zeroes.to_string_native());
+        assert_eq!("0.123000", trailing_zeroes.to_string_native());
+        let trailing_zeroes = DenominatedAmount {
+            amount: trailing_zeroes,
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
+        assert_eq!("0.123", trailing_zeroes.to_string());
+
 
         let zero = Amount::default();
-        assert_eq!("0", zero.to_string_native());
+        assert_eq!("0.000000", zero.to_string_native());
+        let zero = DenominatedAmount {
+            amount: zero,
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
+        assert_eq!("0", zero.to_string());
     }
 
     #[test]
@@ -939,18 +977,27 @@ mod tests {
 
     #[test]
     fn test_amount_checked_add() {
-        let max = Amount::native_whole(u64::MAX);
+        let max = Amount::max();
+        let max_signed = Amount::max_signed();
         let one = Amount::native_whole(1);
         let zero = Amount::native_whole(0);
 
         assert_eq!(zero.checked_add(zero), Some(zero));
+        assert_eq!(zero.checked_signed_add(zero), Some(zero));
         assert_eq!(zero.checked_add(one), Some(one));
         assert_eq!(zero.checked_add(max - one), Some(max - one));
+        assert_eq!(zero.checked_signed_add(max_signed - one), Some(max_signed - one));
         assert_eq!(zero.checked_add(max), Some(max));
+        assert_eq!(zero.checked_signed_add(max_signed), Some(max_signed));
 
         assert_eq!(max.checked_add(zero), Some(max));
+        assert_eq!(max.checked_signed_add(zero), None);
         assert_eq!(max.checked_add(one), None);
         assert_eq!(max.checked_add(max), None);
+
+        assert_eq!(max_signed.checked_add(zero), Some(max_signed));
+        assert_eq!(max_signed.checked_add(one), Some(max_signed + one));
+        assert_eq!(max_signed.checked_signed_add(max_signed), None);
     }
 }
 

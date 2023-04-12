@@ -15,6 +15,7 @@ mainnet = [
 abciplus = [
   "namada/abciplus",
   "namada/ibc-mocks",
+  "namada_apps/abciplus",
   "namada_vp_prelude/abciplus",
   "namada_tx_prelude/abciplus",
 ]

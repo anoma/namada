@@ -84,7 +84,7 @@ where
             SignedTxData::try_from_slice(tx_data).map_err(Error::Decoding)?;
         let tx_data = &signed.data.ok_or(Error::NoTxData)?;
 
-        // Check the non-onwer balance updates
+        // Check the non-owner balance updates
         let ibc_keys_changed: HashSet<Key> = keys_changed
             .iter()
             .filter(|k| {

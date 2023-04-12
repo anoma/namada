@@ -4,11 +4,13 @@
 #[cfg(feature = "ferveo-tpke")]
 pub mod wrapper_tx {
     use std::convert::TryFrom;
+    use std::fmt::Formatter;
 
     pub use ark_bls12_381::Bls12_381 as EllipticCurve;
     pub use ark_ec::{AffineCurve, PairingEngine};
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-    use serde::{Deserialize, Serialize};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use serde::de::Error;
     use thiserror::Error;
 
     use crate::proto::Tx;
@@ -77,16 +79,44 @@ pub mod wrapper_tx {
         Debug,
         Clone,
         PartialEq,
-        Serialize,
-        Deserialize,
         BorshSerialize,
         BorshDeserialize,
         BorshSchema,
     )]
-    #[serde(from = "Uint")]
-    #[serde(into = "Uint")]
     pub struct GasLimit {
         multiplier: Uint,
+    }
+
+    impl Serialize for GasLimit {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+            let limit = Uint::from(self).to_string();
+            Serialize::serialize(&limit, serializer)
+        }
+    }
+
+    impl<'de> Deserialize<'de> for GasLimit {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer<'de>
+        {
+            struct GasLimitVisitor;
+
+            impl<'a> serde::de::Visitor<'a> for GasLimitVisitor {
+                type Value = GasLimit;
+
+                fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                    formatter.write_str("A string representing 256-bit unsigned integer")
+                }
+
+                fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+                    where E: Error
+                {
+                    let uint = Uint::from_dec_str(v)
+                        .map_err(|e| E::custom(e.to_string()))?;
+                    Ok(GasLimit::from(uint))
+                }
+            }
+            deserializer.deserialize_any(GasLimitVisitor)
+        }
     }
 
     impl GasLimit {
@@ -301,7 +331,7 @@ pub mod wrapper_tx {
             };
             // Test serde roundtrip
             let js = serde_json::to_string(&limit).expect("Test failed");
-            assert_eq!(js, format!("{}", GAS_LIMIT_RESOLUTION));
+            assert_eq!(js, format!(r#""{}""#, GAS_LIMIT_RESOLUTION));
             let new_limit: GasLimit =
                 serde_json::from_str(&js).expect("Test failed");
             assert_eq!(new_limit, limit);
@@ -320,8 +350,7 @@ pub mod wrapper_tx {
         /// multiple
         #[test]
         fn test_deserialize_not_multiple_of_resolution() {
-            let js = serde_json::to_string(&(GAS_LIMIT_RESOLUTION + 1))
-                .expect("Test failed");
+            let js = format!(r#""{}""#, &(GAS_LIMIT_RESOLUTION + 1));
             let limit: GasLimit =
                 serde_json::from_str(&js).expect("Test failed");
             assert_eq!(

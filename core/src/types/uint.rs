@@ -32,7 +32,7 @@ pub const MAX_VALUE: Uint = Uint([u64::MAX; 4]);
 
 impl Uint {
     /// Compute the two's complement of a number.
-    fn negate(&self) -> Option<Self> {
+    fn negate(&self) -> Self {
         Self(
             self.0
                 .into_iter()
@@ -41,7 +41,7 @@ impl Uint {
                 .try_into()
                 .expect("This cannot fail"),
         )
-        .checked_add(Uint::from(1u64))
+        .overflowing_add(Uint::from(1u64)).0
     }
 }
 
@@ -69,7 +69,7 @@ impl SignedUint {
         if self.non_negative() {
             self.0
         } else {
-            self.0.negate().unwrap()
+            self.0.negate()
         }
     }
 
@@ -116,7 +116,7 @@ impl Neg for SignedUint {
     type Output = Self;
 
     fn neg(self) -> Self::Output {
-        Self(self.0.negate().expect("This should not fail"))
+        Self(self.0.negate())
     }
 }
 
