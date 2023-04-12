@@ -1,23 +1,26 @@
 # Proofs
 
-A proof for the bridge is a quorum of signatures by a valid validator set. A 
-bridge header is a proof attached to a message understandable to the 
-Ethereum smart contracts. For transferring value to Ethereum, a proof is a 
-signed Merkle tree root and inclusion proofs of asset transfer messages 
-understandable to the Ethereum smart contracts, as described in the section on 
-[batching](transfers_to_ethereum.md#batching)
+An Ethereum bridge proof is a quorum of signatures by a valid validator set.
+Namada validators create two types of proofs during their normal operation:
 
-A message for transferring value to Ethereum is a `TransferToNamada` 
-instance as described 
-[here](./transfers_to_ethereum.md#bridge-pool-validity-predicate).
-
-Additionally, when the validator set changes, the smart contracts on
-Ethereum must be updated so that it can continue to recognize valid proofs.
-Since the Ethereum smart contract should accept any bridge
-header signed by 2 / 3 of the staking validators, it needs up-to-date
-knowledge of:
-- The current validators' public keys
-- The current stake of each validator
+1. Bridge pool merkle tree roots concatenated with a Bridge pool nonce.
+    - To transfer value to Ethereum, an inclusion proof of a batch of transfers must
+      be sent together with the signed merkle tree root, as well as the nonce of
+      that snapshot of the Bridge pool. This process is described in the section
+      on [batching](transfers_to_ethereum.md#batching).
+    - A message for transferring value to Ethereum is a `TransferToEthereum`
+      instance as described
+      [here](./transfers_to_ethereum.md#bridge-pool-validity-predicate).
+2. Validator set updates.
+    - These are comprised of:
+        - The validators' Ethereum-facing public keys. The `Governance` and
+          `Bridge` contracts keep track of a different set of keys (cold and
+          hot keys, respectively).
+        - The stake of each validator, normalized to the range $[0, 2^{32}]$.
+    - When the validator set changes in Namada, the smart contracts on Ethereum
+      must be updated so that they can continue to recognize valid proofs. The
+      validator set of some epoch $E' = E + 1$ must be signed by a quorum of
+      validators from $E$ before the end of this epoch.
 
 This means that by the end of every Namada epoch, a special transaction must be
 sent to the Ethereum smart contracts detailing the new public keys and stake
