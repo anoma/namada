@@ -170,13 +170,6 @@ contract will contain the hash of the next validator set hash.
 - A relayer submits a validator set update for epoch `11` to _Governance_, using
   a quorum of signatures from the Namada chain.
 - The _Governance_ and _Bridge_ contracts now know the hashes of the validator
-  sets for epochs `10` and `11`, and will accept messages signed by either of
-  them. It will no longer accept messages signed by the validator set for epoch
-  `9`.
+  sets for epochs `10` and `11`, and will accept messages signed by epoch `10`.
+  It will no longer accept messages signed by the validator set for epoch `9`.
 - Namada progresses to epoch `11`, and the flow repeats.
-
-NB: The flow for when the bridge has just launched is similar, except the
-contracts know the details of only one epoch's validator set - the launch
-epoch's. E.g. if the bridge launches at epoch `10`, then initially the contracts
-know the hash only for epoch `10` and not epochs `10` and `11`, until the first
-validator set update has been submitted.
