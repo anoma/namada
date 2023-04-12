@@ -17,7 +17,7 @@ Then, install the remaining dependencies.
 **Ubuntu:** running the following command should install everything needed:
 
 ```shell
-sudo apt-get install -y make git-core libssl-dev pkg-config libclang-12-dev build-essential
+sudo apt-get install -y make git-core libssl-dev pkg-config libclang-12-dev build-essential protobuf-compiler
 ```
 
 **Mac:** installing the Xcode command line tools should provide you with almost everything you need:
@@ -25,6 +25,14 @@ sudo apt-get install -y make git-core libssl-dev pkg-config libclang-12-dev buil
 ```shell
 xcode-select --install
 ```
+
+`protoc` is also required. On Mac, you can install it with `Homebrew`:
+
+```shell
+brew install protobuf
+```
+
+Please refer to [protoc-installation doc](https://grpc.io/docs/protoc-installation/) for other installation options.
 
 Now that you have all the required dependencies installed, you can clone the source code from the [Namada repository](https://github.com/anoma/namada) and build it with:
 
