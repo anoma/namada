@@ -90,6 +90,13 @@ impl Iterator for PrefixIter {
     }
 }
 
+impl WriteLog {
+    /// Merges the write log of the current tx with the one coming from the other instance. This is useful when two or more distincts write logs are required to correctly validate a transaction. This function consumes the passed in parameter to prevent further use of it.
+    pub fn merge_tx_write_log(&mut self, other: WriteLog) {
+        self.tx_write_log.extend(other.tx_write_log.into_iter())
+    }
+}
+
 impl Default for WriteLog {
     fn default() -> Self {
         Self {
