@@ -282,6 +282,15 @@ where
         "Acting on transfers to Ethereum"
     );
     let mut changed_keys = BTreeSet::default();
+
+    // the BP nonce should always be incremented, even if no valid
+    // transfers to Ethereum were relayed. failing to do this
+    // halts the Ethereum bridge, since nonces will fall out
+    // of sync between Namada and Ethereum
+    let nonce_key = get_nonce_key();
+    increment_bp_nonce(&nonce_key, wl_storage)?;
+    changed_keys.insert(nonce_key);
+
     // all keys of pending transfers
     let prefix = BRIDGE_POOL_ADDRESS.to_db_key().into();
     let mut pending_keys: HashSet<Key> = wl_storage
@@ -331,9 +340,6 @@ where
         _ = changed_keys.insert(key);
     }
     if !transfers.is_empty() {
-        let nonce_key = get_nonce_key();
-        increment_bp_nonce(&nonce_key, wl_storage)?;
-        changed_keys.insert(nonce_key);
         changed_keys.insert(relayer_rewards_key);
         changed_keys.insert(pool_balance_key);
     }
