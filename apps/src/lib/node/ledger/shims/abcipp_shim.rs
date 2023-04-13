@@ -10,8 +10,10 @@ use namada::types::address::Address;
 use namada::types::hash::Hash;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::storage::BlockHash;
+use namada::types::storage::BlockHeight;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::transaction::hash_tx;
+use tokio::sync::broadcast;
 use tokio::sync::mpsc::UnboundedSender;
 use tower::Service;
 
@@ -21,6 +23,7 @@ use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
 use super::abcipp_shim_types::shim::TxBytes;
 use super::abcipp_shim_types::shim::{Error, Request, Response};
 use crate::config;
+use crate::config::{Action, ActionAtHeight};
 #[cfg(not(feature = "abcipp"))]
 use crate::facade::tendermint_proto::abci::RequestBeginBlock;
 use crate::facade::tower_abci::{BoxError, Request as Req, Response as Resp};
@@ -52,10 +55,13 @@ impl AbcippShim {
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
         native_token: Address,
-    ) -> (Self, AbciService) {
+    ) -> (Self, AbciService, broadcast::Sender<()>) {
         // We can use an unbounded channel here, because tower-abci limits the
         // the number of requests that can come in
+
         let (shell_send, shell_recv) = std::sync::mpsc::channel();
+        let (server_shutdown, _) = broadcast::channel::<()>(1);
+        let action_at_height = config.shell.action_at_height.clone();
         (
             Self {
                 service: Shell::new(
@@ -73,7 +79,13 @@ impl AbcippShim {
                 delivered_txs: vec![],
                 shell_recv,
             },
-            AbciService { shell_send },
+            AbciService {
+                shell_send,
+                shutdown: server_shutdown.clone(),
+                action_at_height,
+                suspended: false,
+            },
+            server_shutdown,
         )
     }
 
@@ -193,12 +205,147 @@ impl AbcippShim {
     }
 }
 
+/// Indicates how [`AbciService`] should
+/// check whether or not it needs to take
+/// action.
+#[derive(Debug)]
+enum CheckAction {
+    /// No check necessary.
+    NoAction,
+    /// Check a given block height.
+    Check(i64),
+    /// The action been taken.
+    AlreadySuspended,
+}
+
 #[derive(Debug)]
 pub struct AbciService {
+    /// A channel for forwarding requests to the shell
     shell_send: std::sync::mpsc::Sender<(
         Req,
         tokio::sync::oneshot::Sender<Result<Resp, BoxError>>,
     )>,
+    /// Indicates if the consensus connection is suspended.
+    suspended: bool,
+    /// This resolves the non-completing futures returned to tower-abci
+    /// during suspension.
+    shutdown: broadcast::Sender<()>,
+    /// An action to be taken at a specified block height.
+    action_at_height: Option<ActionAtHeight>,
+}
+
+impl AbciService {
+    /// Check if we are at a block height with a scheduled action.
+    /// If so, perform the action.
+    fn maybe_take_action(
+        action_at_height: Option<ActionAtHeight>,
+        check: CheckAction,
+        mut shutdown_recv: broadcast::Receiver<()>,
+    ) -> (bool, Option<<Self as Service<Req>>::Future>) {
+        let hght = match check {
+            CheckAction::AlreadySuspended => BlockHeight::from(u64::MAX),
+            CheckAction::Check(hght) => BlockHeight::from(hght as u64),
+            CheckAction::NoAction => BlockHeight::default(),
+        };
+        match action_at_height {
+            Some(ActionAtHeight {
+                height,
+                action: Action::Suspend,
+            }) if height <= hght => {
+                if height == hght {
+                    tracing::info!(
+                        "Reached block height {}, suspending.",
+                        height
+                    );
+                    tracing::warn!(
+                        "\x1b[93mThis feature is intended for debugging \
+                         purposes. Note that on shutdown a spurious panic \
+                         message will be produced.\x1b[0m"
+                    )
+                }
+                (
+                    true,
+                    Some(
+                        async move {
+                            shutdown_recv.recv().await.unwrap();
+                            Err(BoxError::from(
+                                "Not all tendermint responses were processed. \
+                                 If the `--suspended` flag was passed, you \
+                                 may ignore this error.",
+                            ))
+                        }
+                        .boxed(),
+                    ),
+                )
+            }
+            Some(ActionAtHeight {
+                height,
+                action: Action::Halt,
+            }) if height == hght => {
+                tracing::info!(
+                    "Reached block height {}, halting the chain.",
+                    height
+                );
+                (
+                    false,
+                    Some(
+                        async move {
+                            Err(BoxError::from(format!(
+                                "Reached block height {}, halting the chain.",
+                                height
+                            )))
+                        }
+                        .boxed(),
+                    ),
+                )
+            }
+            _ => (false, None),
+        }
+    }
+
+    /// If we are not taking special action for this request,
+    /// forward it normally.
+    fn forward_request(&mut self, req: Req) -> <Self as Service<Req>>::Future {
+        let (resp_send, recv) = tokio::sync::oneshot::channel();
+        let result = self.shell_send.send((req, resp_send));
+
+        async move {
+            if let Err(err) = result {
+                // The shell has shut-down
+                return Err(err.into());
+            }
+            match recv.await {
+                Ok(resp) => resp,
+                Err(err) => {
+                    tracing::info!("ABCI response channel didn't respond");
+                    Err(err.into())
+                }
+            }
+        }
+        .boxed()
+    }
+
+    /// Given the type of request, determine if we need to check
+    /// to possibly take an action.
+    fn get_action(&self, req: &Req) -> Option<CheckAction> {
+        match req {
+            Req::PrepareProposal(req) => Some(CheckAction::Check(req.height)),
+            Req::ProcessProposal(req) => Some(CheckAction::Check(req.height)),
+            Req::EndBlock(req) => Some(CheckAction::Check(req.height)),
+            Req::BeginBlock(_)
+            | Req::DeliverTx(_)
+            | Req::InitChain(_)
+            | Req::CheckTx(_)
+            | Req::Commit(_) => {
+                if self.suspended {
+                    Some(CheckAction::AlreadySuspended)
+                } else {
+                    Some(CheckAction::NoAction)
+                }
+            }
+            _ => None,
+        }
+    }
 }
 
 /// The ABCI tower service implementation sends and receives messages to and
@@ -218,23 +365,17 @@ impl Service<Req> for AbciService {
     }
 
     fn call(&mut self, req: Req) -> Self::Future {
-        let (resp_send, recv) = tokio::sync::oneshot::channel();
-        let result = self.shell_send.send((req, resp_send));
-        Box::pin(
-            async move {
-                if let Err(err) = result {
-                    // The shell has shut-down
-                    return Err(err.into());
-                }
-                match recv.await {
-                    Ok(resp) => resp,
-                    Err(err) => {
-                        tracing::info!("ABCI response channel didn't respond");
-                        Err(err.into())
-                    }
-                }
-            }
-            .boxed(),
-        )
+        let action = self.get_action(&req);
+        if let Some(action) = action {
+            let (suspended, fut) = Self::maybe_take_action(
+                self.action_at_height.clone(),
+                action,
+                self.shutdown.subscribe(),
+            );
+            self.suspended = suspended;
+            fut.unwrap_or_else(|| self.forward_request(req))
+        } else {
+            self.forward_request(req)
+        }
     }
 }

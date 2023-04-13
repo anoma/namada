@@ -1,7 +1,7 @@
 //! Namada node CLI.
 
 use eyre::{Context, Result};
-use namada::types::time::Utc;
+use namada::types::time::{DateTimeUtc, Utc};
 use namada_apps::cli::{self, cmds};
 use namada_apps::node::ledger;
 
@@ -14,23 +14,14 @@ pub fn main() -> Result<()> {
         cmds::NamadaNode::Ledger(sub) => match sub {
             cmds::Ledger::Run(cmds::LedgerRun(args)) => {
                 let wasm_dir = ctx.wasm_dir();
-
-                // Sleep until start time if needed
-                if let Some(time) = args.0 {
-                    if let Ok(sleep_time) =
-                        time.0.signed_duration_since(Utc::now()).to_std()
-                    {
-                        if !sleep_time.is_zero() {
-                            tracing::info!(
-                                "Waiting ledger start time: {:?}, time left: \
-                                 {:?}",
-                                time,
-                                sleep_time
-                            );
-                            std::thread::sleep(sleep_time)
-                        }
-                    }
-                }
+                sleep_until(args.0);
+                ledger::run(ctx.config.ledger, wasm_dir);
+            }
+            cmds::Ledger::RunUntil(cmds::LedgerRunUntil(args)) => {
+                let wasm_dir = ctx.wasm_dir();
+                sleep_until(args.time);
+                ctx.config.ledger.shell.action_at_height =
+                    Some(args.action_at_height);
                 ledger::run(ctx.config.ledger, wasm_dir);
             }
             cmds::Ledger::Reset(_) => {
@@ -67,4 +58,23 @@ pub fn main() -> Result<()> {
         },
     }
     Ok(())
+}
+
+/// Sleep until the given start time if necessary.
+fn sleep_until(time: Option<DateTimeUtc>) {
+    // Sleep until start time if needed
+    if let Some(time) = time {
+        if let Ok(sleep_time) =
+            time.0.signed_duration_since(Utc::now()).to_std()
+        {
+            if !sleep_time.is_zero() {
+                tracing::info!(
+                    "Waiting ledger start time: {:?}, time left: {:?}",
+                    time,
+                    sleep_time
+                );
+                std::thread::sleep(sleep_time)
+            }
+        }
+    }
 }

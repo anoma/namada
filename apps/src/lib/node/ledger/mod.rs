@@ -458,7 +458,7 @@ fn start_abci_broadcaster_shell(
     let genesis = genesis::genesis(&config.shell.base_dir, &config.chain_id);
     #[cfg(feature = "dev")]
     let genesis = genesis::genesis(1);
-    let (shell, abci_service) = AbcippShim::new(
+    let (shell, abci_service, service_handle) = AbcippShim::new(
         config,
         wasm_dir,
         broadcaster_sender,
@@ -474,8 +474,13 @@ fn start_abci_broadcaster_shell(
     // Start the ABCI server
     let abci = spawner
         .spawn_abortable("ABCI", move |aborter| async move {
-            let res =
-                run_abci(abci_service, ledger_address, abci_abort_recv).await;
+            let res = run_abci(
+                abci_service,
+                service_handle,
+                ledger_address,
+                abci_abort_recv,
+            )
+            .await;
 
             drop(aborter);
             res
@@ -508,6 +513,7 @@ fn start_abci_broadcaster_shell(
 /// mempool, snapshot, and info.
 async fn run_abci(
     abci_service: AbciService,
+    service_handle: tokio::sync::broadcast::Sender<()>,
     ledger_address: SocketAddr,
     abort_recv: tokio::sync::oneshot::Receiver<()>,
 ) -> shell::Result<()> {
@@ -534,13 +540,13 @@ async fn run_abci(
         )
         .finish()
         .unwrap();
-
     tokio::select! {
         // Run the server with the ABCI service
         status = server.listen(ledger_address) => {
             status.map_err(|err| Error::TowerServer(err.to_string()))
         },
         resp_sender = abort_recv => {
+            _ = service_handle.send(());
             match resp_sender {
                 Ok(()) => {
                     tracing::info!("Shutting down ABCI server...");
