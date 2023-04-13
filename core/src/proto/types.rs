@@ -362,6 +362,32 @@ impl Tx {
         SigningTx::from(self.clone()).hash()
     }
 
+    pub fn unsigned_hash(&self) -> [u8; 32] {
+        match self.data {
+            Some(ref data) => {
+                match SignedTxData::try_from_slice(data) {
+                    Ok(signed_data) => {
+                        // Reconstruct unsigned tx
+                        let unsigned_tx = Tx {
+                            code: self.code.clone(),
+                            data: signed_data.data,
+                            timestamp: self.timestamp,
+                        };
+                        unsigned_tx.hash()
+                    }
+                    Err(_) => {
+                        // Unsigned tx
+                        self.hash()
+                    }
+                }
+            }
+            None => {
+                // Unsigned tx
+                self.hash()
+            }
+        }
+    }
+
     pub fn code_hash(&self) -> [u8; 32] {
         SigningTx::from(self.clone()).code_hash
     }
