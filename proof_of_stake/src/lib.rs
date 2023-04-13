@@ -2321,6 +2321,9 @@ where
                     }
                     let change: token::Change =
                         BorshDeserialize::try_from_slice(&val_bytes).ok()?;
+                    if change == 0 {
+                        return None;
+                    }
                     return Some((bond_id, start, change));
                 }
             }
@@ -2334,24 +2337,33 @@ where
     let mut raw_unbonds = storage_api::iter_prefix_bytes(storage, &prefix)?
         .filter_map(|result| {
             if let Ok((key, val_bytes)) = result {
-                if let Some((_bond_id, _start, withdraw)) = is_unbond_key(&key)
-                {
-                    if let Some((bond_id, start)) = is_bond_key(&key) {
-                        if source.is_some()
-                            && source.as_ref().unwrap() != &bond_id.source
-                        {
-                            return None;
-                        }
-                        if validator.is_some()
-                            && validator.as_ref().unwrap() != &bond_id.validator
-                        {
-                            return None;
-                        }
-                        let amount: token::Amount =
-                            BorshDeserialize::try_from_slice(&val_bytes)
-                                .ok()?;
-                        return Some((bond_id, start, withdraw, amount));
+                if let Some((bond_id, start, withdraw)) = is_unbond_key(&key) {
+                    if source.is_some()
+                        && source.as_ref().unwrap() != &bond_id.source
+                    {
+                        return None;
                     }
+                    if validator.is_some()
+                        && validator.as_ref().unwrap() != &bond_id.validator
+                    {
+                        return None;
+                    }
+                    match (source.clone(), validator.clone()) {
+                        (None, Some(validator)) => {
+                            if bond_id.validator != validator {
+                                return None;
+                            }
+                        }
+                        (Some(owner), None) => {
+                            if owner != bond_id.source {
+                                return None;
+                            }
+                        }
+                        _ => {}
+                    }
+                    let amount: token::Amount =
+                        BorshDeserialize::try_from_slice(&val_bytes).ok()?;
+                    return Some((bond_id, start, withdraw, amount));
                 }
             }
             None
@@ -2434,6 +2446,7 @@ where
 
     let bonds = find_bonds(storage, &source, &validator)?
         .into_iter()
+        .filter(|(_start, change)| *change > token::Change::default())
         .map(|(start, change)| {
             make_bond_details(
                 storage,

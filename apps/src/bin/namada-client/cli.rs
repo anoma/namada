@@ -93,7 +93,7 @@ pub async fn main() -> Result<()> {
                 Sub::QueryBonds(QueryBonds(args)) => {
                     wait_until_node_is_synched(&args.query.ledger_address)
                         .await;
-                    rpc::query_bonds(ctx, args).await;
+                    rpc::query_bonds(ctx, args).await.unwrap();
                 }
                 Sub::QueryBondedStake(QueryBondedStake(args)) => {
                     wait_until_node_is_synched(&args.query.ledger_address)
