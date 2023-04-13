@@ -101,6 +101,7 @@ mod protocol_txs {
                     .expect("Could not serialize ProtocolTx"),
                 ),
                 chain_id,
+                None,
             )
             .sign(signing_key)
         }
@@ -130,6 +131,7 @@ mod protocol_txs {
                             .expect("Serializing request should not fail"),
                     ),
                     chain_id,
+                    None,
                 )
                 .sign(signing_key),
             )

@@ -151,6 +151,7 @@ where
                 proposal_code,
                 Some(encode(&id)),
                 shell.chain_id.clone(),
+                None,
             );
             let tx_type = TxType::Decrypted(DecryptedTx::Decrypted {
                 tx,

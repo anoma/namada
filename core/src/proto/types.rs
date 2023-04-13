@@ -138,17 +138,20 @@ pub struct SigningTx {
     pub data: Option<Vec<u8>>,
     pub timestamp: DateTimeUtc,
     pub chain_id: ChainId,
+    pub expiration: Option<DateTimeUtc>,
 }
 
 impl SigningTx {
     pub fn hash(&self) -> [u8; 32] {
         let timestamp = Some(self.timestamp.into());
+        let expiration = self.expiration.map(|e| e.into());
         let mut bytes = vec![];
         types::Tx {
             code: self.code_hash.to_vec(),
             data: self.data.clone(),
             timestamp,
             chain_id: self.chain_id.as_str().to_owned(),
+            expiration,
         }
         .encode(&mut bytes)
         .expect("encoding a transaction failed");
@@ -170,6 +173,7 @@ impl SigningTx {
             data: Some(signed),
             timestamp: self.timestamp,
             chain_id: self.chain_id,
+            expiration: self.expiration,
         }
     }
 
@@ -190,6 +194,7 @@ impl SigningTx {
             data,
             timestamp: self.timestamp,
             chain_id: self.chain_id.clone(),
+            expiration: self.expiration,
         };
         let signed_data = tx.hash();
         common::SigScheme::verify_signature_raw(pk, &signed_data, sig)
@@ -204,6 +209,7 @@ impl SigningTx {
                 data: self.data,
                 timestamp: self.timestamp,
                 chain_id: self.chain_id,
+                expiration: self.expiration,
             })
         } else {
             None
@@ -218,6 +224,7 @@ impl From<Tx> for SigningTx {
             data: tx.data,
             timestamp: tx.timestamp,
             chain_id: tx.chain_id,
+            expiration: tx.expiration,
         }
     }
 }
@@ -233,6 +240,7 @@ pub struct Tx {
     pub data: Option<Vec<u8>>,
     pub timestamp: DateTimeUtc,
     pub chain_id: ChainId,
+    pub expiration: Option<DateTimeUtc>,
 }
 
 impl TryFrom<&[u8]> for Tx {
@@ -245,12 +253,17 @@ impl TryFrom<&[u8]> for Tx {
             None => return Err(Error::NoTimestampError),
         };
         let chain_id = ChainId(tx.chain_id);
+        let expiration = match tx.expiration {
+            Some(e) => Some(e.try_into().map_err(Error::InvalidTimestamp)?),
+            None => None,
+        };
 
         Ok(Tx {
             code: tx.code,
             data: tx.data,
             timestamp,
             chain_id,
+            expiration,
         })
     }
 }
@@ -258,11 +271,14 @@ impl TryFrom<&[u8]> for Tx {
 impl From<Tx> for types::Tx {
     fn from(tx: Tx) -> Self {
         let timestamp = Some(tx.timestamp.into());
+        let expiration = tx.expiration.map(|e| e.into());
+
         types::Tx {
             code: tx.code,
             data: tx.data,
             timestamp,
             chain_id: tx.chain_id.as_str().to_owned(),
+            expiration,
         }
     }
 }
@@ -358,12 +374,14 @@ impl Tx {
         code: Vec<u8>,
         data: Option<Vec<u8>>,
         chain_id: ChainId,
+        expiration: Option<DateTimeUtc>,
     ) -> Self {
         Tx {
             code,
             data,
             timestamp: DateTimeUtc::now(),
             chain_id,
+            expiration,
         }
     }
 
@@ -390,6 +408,7 @@ impl Tx {
                             data: signed_data.data,
                             timestamp: self.timestamp,
                             chain_id: self.chain_id.clone(),
+                            expiration: self.expiration,
                         };
                         unsigned_tx.hash()
                     }
@@ -513,7 +532,8 @@ mod tests {
         let code = "wasm code".as_bytes().to_owned();
         let data = "arbitrary data".as_bytes().to_owned();
         let chain_id = ChainId::default();
-        let tx = Tx::new(code.clone(), Some(data.clone()), chain_id.clone());
+        let tx =
+            Tx::new(code.clone(), Some(data.clone()), chain_id.clone(), None);
 
         let bytes = tx.to_bytes();
         let tx_from_bytes =
@@ -525,6 +545,7 @@ mod tests {
             data: Some(data),
             timestamp: None,
             chain_id: chain_id.0,
+            expiration: None,
         };
         let mut bytes = vec![];
         types_tx.encode(&mut bytes).expect("encoding failed");

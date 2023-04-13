@@ -79,7 +79,7 @@ mod tests {
 
         let tx_code = vec![];
         let tx_data = commission_change.try_to_vec().unwrap();
-        let tx = Tx::new(tx_code, Some(tx_data), ChainId::default());
+        let tx = Tx::new(tx_code, Some(tx_data), ChainId::default(), None);
         let signed_tx = tx.sign(&key);
         let tx_data = signed_tx.data.unwrap();
 
