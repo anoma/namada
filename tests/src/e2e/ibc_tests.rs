@@ -1317,7 +1317,7 @@ fn check_balances(
         "--node",
         &rpc_b,
     ];
-    let expected = format!("NAM with {}: 100000", sub_prefix);
+    let expected = format!("nam with {}: 100000", sub_prefix);
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
@@ -1351,7 +1351,7 @@ fn check_balances_after_non_ibc(
         "--node",
         &rpc,
     ];
-    let expected = format!("NAM with {}: 50000", sub_prefix);
+    let expected = format!("nam with {}: 50000", sub_prefix);
     let mut client = run!(test, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
@@ -1368,7 +1368,7 @@ fn check_balances_after_non_ibc(
         "--node",
         &rpc,
     ];
-    let expected = format!("NAM with {}: 50000", sub_prefix);
+    let expected = format!("nam with {}: 50000", sub_prefix);
     let mut client = run!(test, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
@@ -1426,7 +1426,7 @@ fn check_balances_after_back(
         "--node",
         &rpc_b,
     ];
-    let expected = format!("NAM with {}: 0", sub_prefix);
+    let expected = format!("nam with {}: 0", sub_prefix);
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
