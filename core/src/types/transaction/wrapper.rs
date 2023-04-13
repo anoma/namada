@@ -414,7 +414,6 @@ pub mod wrapper_tx {
         use super::*;
         use crate::proto::SignedTxData;
         use crate::types::address::nam;
-        use crate::types::token::NATIVE_MAX_DECIMAL_PLACES;
 
         fn gen_keypair() -> common::SecretKey {
             use rand::prelude::ThreadRng;
@@ -436,7 +435,7 @@ pub mod wrapper_tx {
 
             let wrapper = WrapperTx::new(
                 Fee {
-                    amount: Amount::from_uint(10, NATIVE_MAX_DECIMAL_PLACES)
+                    amount: Amount::from_uint(10, 0)
                         .expect("Test failed"),
                     token: nam(),
                 },
@@ -465,7 +464,7 @@ pub mod wrapper_tx {
 
             let mut wrapper = WrapperTx::new(
                 Fee {
-                    amount: Amount::from_uint(10, NATIVE_MAX_DECIMAL_PLACES)
+                    amount: Amount::from_uint(10, 0)
                         .expect("Test failed"),
                     token: nam(),
                 },
@@ -500,7 +499,7 @@ pub mod wrapper_tx {
             // the signed tx
             let mut tx = WrapperTx::new(
                 Fee {
-                    amount: Amount::from_uint(10, NATIVE_MAX_DECIMAL_PLACES)
+                    amount: Amount::from_uint(10, 0)
                         .expect("Test failed"),
                     token: nam(),
                 },

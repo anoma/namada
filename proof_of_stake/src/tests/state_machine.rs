@@ -17,6 +17,7 @@ use rust_decimal::Decimal;
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see
 // `tracing` logs from tests
 use test_log::test;
+use namada_core::types::token::Change;
 
 use super::arb_genesis_validators;
 use crate::parameters::testing::{arb_pos_params, arb_rate};
@@ -584,8 +585,9 @@ impl ConcretePosState {
                 assert!(
                     consensus_stake >= below_cap_stake,
                     "Consensus validator {consensus_addr} with stake \
-                     {consensus_stake} and below-capacity {below_cap_addr} \
-                     with stake {below_cap_stake} should be swapped."
+                     {} and below-capacity {below_cap_addr} \
+                     with stake {} should be swapped.",
+                    consensus_stake.to_string_native(), below_cap_stake.to_string_native()
                 );
             }
         }
@@ -759,11 +761,12 @@ impl AbstractStateMachine for AbstractPosState {
             let arb_unbondable = prop::sample::select(unbondable);
             let arb_unbond =
                 arb_unbondable.prop_flat_map(|(id, deltas_sum)| {
+                    let deltas_sum = i128::try_from(deltas_sum).unwrap();
                     // Generate an amount to unbond, up to the sum
                     assert!(deltas_sum > 0);
                     (0..deltas_sum).prop_map(move |to_unbond| {
                         let id = id.clone();
-                        let amount = token::Amount::from_change(to_unbond);
+                        let amount = token::Amount::from_change(Change::from(to_unbond));
                         Transition::Unbond { id, amount }
                     })
                 });
@@ -952,7 +955,7 @@ impl AbstractPosState {
         let bond = bonds.entry(id.clone()).or_default();
         *bond += change;
         // Remove fully unbonded entries
-        if *bond == 0 {
+        if bond.is_zero() {
             bonds.remove(id);
         }
     }
@@ -1120,9 +1123,9 @@ impl AbstractPosState {
             |mut acc, (_epoch, bonds)| {
                 for (id, delta) in bonds {
                     let entry = acc.entry(id.clone()).or_default();
-                    *entry += delta;
+                    *entry += *delta;
                     // Remove entries that are fully unbonded
-                    if *entry == 0 {
+                    if entry.is_zero() {
                         acc.remove(id);
                     }
                 }
@@ -1198,5 +1201,5 @@ fn arb_delegation(
 
 // Bond up to 10 tokens (10M micro units) to avoid overflows
 pub fn arb_bond_amount() -> impl Strategy<Value = token::Amount> {
-    (1_u64..10).prop_map(token::Amount::from)
+    (1_u64..10).prop_map(|val| token::Amount::from_uint(val, 0).unwrap())
 }

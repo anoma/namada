@@ -215,7 +215,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         read_total_stake(&s, &params, pipeline_epoch).unwrap();
 
     // Self-bond
-    let amount_self_bond = token::Amount::from(100_500_000);
+    let amount_self_bond = token::Amount::from_uint(100_500_000, 0).unwrap();
     credit_tokens(
         &mut s,
         &staking_token_address(),
@@ -325,7 +325,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
 
     // Get a non-validating account with tokens
     let delegator = address::testing::gen_implicit_address();
-    let amount_del = token::Amount::from(201_000_000);
+    let amount_del = token::Amount::from_uint(201_000_000, 0).unwrap();
     credit_tokens(&mut s, &staking_token_address(), &delegator, amount_del)
         .unwrap();
     let balance_key = token::balance_key(&staking_token_address(), &delegator);
@@ -461,7 +461,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
     // Unbond the self-bond
-    let amount_self_unbond = token::Amount::from(50_000);
+    let amount_self_unbond = token::Amount::from_uint(50_000, 0).unwrap();
     unbond_tokens(
         &mut s,
         None,
@@ -511,7 +511,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     );
 
     // Unbond delegation
-    let amount_undel = token::Amount::from(1_000_000);
+    let amount_undel = token::Amount::from_uint(1_000_000, 0).unwrap();
     unbond_tokens(
         &mut s,
         Some(&delegator),
@@ -694,7 +694,7 @@ fn test_become_validator_aux(
     current_epoch = advance_epoch(&mut s, &params);
 
     // Self-bond to the new validator
-    let amount = token::Amount::from(100_500_000);
+    let amount = token::Amount::from_uint(100_500_000, 0).unwrap();
     credit_tokens(&mut s, &staking_token_address(), &new_validator, amount)
         .unwrap();
     bond_tokens(&mut s, None, &new_validator, amount, current_epoch).unwrap();
@@ -831,20 +831,20 @@ fn test_validator_sets() {
 
     // Start with two genesis validators with 1 NAM stake
     let epoch = Epoch::default();
-    let ((val1, pk1), stake1) = (gen_validator(), token::Amount::whole(1));
-    let ((val2, pk2), stake2) = (gen_validator(), token::Amount::whole(1));
-    let ((val3, pk3), stake3) = (gen_validator(), token::Amount::whole(10));
-    let ((val4, pk4), stake4) = (gen_validator(), token::Amount::whole(1));
-    let ((val5, pk5), stake5) = (gen_validator(), token::Amount::whole(100));
-    let ((val6, pk6), stake6) = (gen_validator(), token::Amount::whole(1));
-    let ((val7, pk7), stake7) = (gen_validator(), token::Amount::whole(1));
-    println!("val1: {val1}, {pk1}, {stake1}");
-    println!("val2: {val2}, {pk2}, {stake2}");
-    println!("val3: {val3}, {pk3}, {stake3}");
-    println!("val4: {val4}, {pk4}, {stake4}");
-    println!("val5: {val5}, {pk5}, {stake5}");
-    println!("val6: {val6}, {pk6}, {stake6}");
-    println!("val7: {val7}, {pk7}, {stake7}");
+    let ((val1, pk1), stake1) = (gen_validator(), token::Amount::native_whole(1));
+    let ((val2, pk2), stake2) = (gen_validator(), token::Amount::native_whole(1));
+    let ((val3, pk3), stake3) = (gen_validator(), token::Amount::native_whole(10));
+    let ((val4, pk4), stake4) = (gen_validator(), token::Amount::native_whole(1));
+    let ((val5, pk5), stake5) = (gen_validator(), token::Amount::native_whole(100));
+    let ((val6, pk6), stake6) = (gen_validator(), token::Amount::native_whole(1));
+    let ((val7, pk7), stake7) = (gen_validator(), token::Amount::native_whole(1));
+    println!("val1: {val1}, {pk1}, {}", stake1.to_string_native());
+    println!("val2: {val2}, {pk2}, {}", stake2.to_string_native());
+    println!("val3: {val3}, {pk3}, {}", stake3.to_string_native());
+    println!("val4: {val4}, {pk4}, {}", stake4.to_string_native());
+    println!("val5: {val5}, {pk5}, {}", stake5.to_string_native());
+    println!("val6: {val6}, {pk6}, {}", stake6.to_string_native());
+    println!("val7: {val7}, {pk7}, {}", stake7.to_string_native());
 
     init_genesis(
         &mut s,
@@ -877,14 +877,14 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk1.clone(),
-            bonded_stake: stake1.into(),
+            bonded_stake: u128::try_from(stake1).unwrap() as u64,
         })
     );
     assert_eq!(
         tm_updates[1],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk2.clone(),
-            bonded_stake: stake2.into(),
+            bonded_stake: u128::try_from(stake2).unwrap() as u64,
         })
     );
 
@@ -1023,7 +1023,7 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk3,
-            bonded_stake: stake3.into(),
+            bonded_stake: u128::try_from(stake3).unwrap() as u64,
         })
     );
 
@@ -1078,16 +1078,16 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk5,
-            bonded_stake: stake5.into(),
+            bonded_stake: u128::try_from(stake5).unwrap() as u64,
         })
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk2));
 
     // Unbond some stake from val1, it should be be swapped with the greatest
     // below-capacity validator val2 into the below-capacity set
-    let unbond = token::Amount::from(500_000);
+    let unbond = token::Amount::from_uint(500_000, 0).unwrap();
     let stake1 = stake1 - unbond;
-    println!("val1 {val1} new stake {stake1}");
+    println!("val1 {val1} new stake {}", stake1.to_string_native());
     // Because `update_validator_set` and `update_validator_deltas` are
     // effective from pipeline offset, we use pipeline epoch for the rest of the
     // checks
@@ -1274,16 +1274,16 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk4.clone(),
-            bonded_stake: stake4.into(),
+            bonded_stake: u128::try_from(stake4).unwrap() as u64,
         })
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk1));
 
     // Bond some stake to val6, it should be be swapped with the lowest
     // consensus validator val2 into the consensus set
-    let bond = token::Amount::from(500_000);
+    let bond = token::Amount::from_uint(500_000, 0).unwrap();
     let stake6 = stake6 + bond;
-    println!("val6 {val6} new stake {stake6}");
+    println!("val6 {val6} new stake {}", stake6.to_string_native());
     update_validator_set(&mut s, &params, &val6, bond.change(), epoch).unwrap();
     update_validator_deltas(&mut s, &params, &val6, bond.change(), epoch)
         .unwrap();
@@ -1390,7 +1390,7 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk6,
-            bonded_stake: stake6.into(),
+            bonded_stake: u128::try_from(stake6).unwrap() as u64,
         })
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk4));
@@ -1454,14 +1454,14 @@ fn test_validator_sets_swap() {
     // Start with two genesis validators, one with 1 voting power and other 0
     let epoch = Epoch::default();
     // 1M voting power
-    let ((val1, pk1), stake1) = (gen_validator(), token::Amount::whole(10));
+    let ((val1, pk1), stake1) = (gen_validator(), token::Amount::native_whole(10));
     // 0 voting power
-    let ((val2, pk2), stake2) = (gen_validator(), token::Amount::from(5));
+    let ((val2, pk2), stake2) = (gen_validator(), token::Amount::from_uint(5, 0).unwrap());
     // 0 voting power
-    let ((val3, pk3), stake3) = (gen_validator(), token::Amount::from(5));
-    println!("val1: {val1}, {pk1}, {stake1}");
-    println!("val2: {val2}, {pk2}, {stake2}");
-    println!("val3: {val3}, {pk3}, {stake3}");
+    let ((val3, pk3), stake3) = (gen_validator(), token::Amount::from_uint(5, 0).unwrap());
+    println!("val1: {val1}, {pk1}, {}", stake1.to_string_native());
+    println!("val2: {val2}, {pk2}, {}", stake2.to_string_native());
+    println!("val3: {val3}, {pk3}, {}", stake3.to_string_native());
 
     init_genesis(
         &mut s,
@@ -1498,14 +1498,14 @@ fn test_validator_sets_swap() {
 
     // Add 2 bonds, one for val2 and greater one for val3
     let bonds_epoch_1 = pipeline_epoch;
-    let bond2 = token::Amount::from(1);
+    let bond2 = token::Amount::from_uint(1, 0).unwrap();
     let stake2 = stake2 + bond2;
-    let bond3 = token::Amount::from(4);
+    let bond3 = token::Amount::from_uint(4, 0).unwrap();
     let stake3 = stake3 + bond3;
 
     assert!(stake2 < stake3);
-    assert_eq!(into_tm_voting_power(params.tm_votes_per_token, stake2), 0);
-    assert_eq!(into_tm_voting_power(params.tm_votes_per_token, stake3), 0);
+    assert_eq!(into_tm_voting_power(params.tm_votes_per_token, u128::try_from(stake2).unwrap() as u64), 0);
+    assert_eq!(into_tm_voting_power(params.tm_votes_per_token, u128::try_from(stake3).unwrap() as u64), 0);
 
     update_validator_set(&mut s, &params, &val2, bond2.change(), epoch)
         .unwrap();
@@ -1523,13 +1523,13 @@ fn test_validator_sets_swap() {
 
     // Add 2 more bonds, same amount for `val2` and val3`
     let bonds_epoch_2 = pipeline_epoch;
-    let bonds = token::Amount::whole(1);
+    let bonds = token::Amount::native_whole(1);
     let stake2 = stake2 + bonds;
     let stake3 = stake3 + bonds;
     assert!(stake2 < stake3);
     assert_eq!(
-        into_tm_voting_power(params.tm_votes_per_token, stake2),
-        into_tm_voting_power(params.tm_votes_per_token, stake3)
+        into_tm_voting_power(params.tm_votes_per_token, u128::try_from(stake2).unwrap() as u64),
+        into_tm_voting_power(params.tm_votes_per_token, u128::try_from(stake3).unwrap() as u64)
     );
 
     update_validator_set(&mut s, &params, &val2, bonds.change(), epoch)
@@ -1567,7 +1567,7 @@ fn test_validator_sets_swap() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk3,
-            bonded_stake: stake3.into(),
+            bonded_stake: u128::try_from(stake3).unwrap() as u64,
         })
     );
 }

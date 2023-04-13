@@ -200,7 +200,7 @@ impl Amount {
     pub fn from_masp_denominated(val: u64, denom: MaspDenom) -> Self {
         let mut raw = [0u64; 4];
         raw[denom as usize] = val;
-        Self { raw: Uint(raw)}
+        Self { raw: Uint(raw) }
     }
 
     /// Get a string representation of a native token amount.
@@ -326,7 +326,10 @@ impl DenominatedAmount {
 
     /// Attempt to increase the precision of an amount. Can fail
     /// if the resulting amount does not fit into 256 bits.
-    pub fn increase_precision(self, denom: Denomination) -> Result<Self, AmountParseError> {
+    pub fn increase_precision(
+        self,
+        denom: Denomination,
+    ) -> Result<Self, AmountParseError> {
         if denom.0 < self.denom.0 {
             return Err(AmountParseError::PrecisionDecrease);
         }
@@ -1021,7 +1024,6 @@ mod tests {
         assert!(Amount::from_decimal(dec!(1.12), 80).is_err());
         let amount = Amount::from_decimal(dec!(1.12), 3).expect("Test failed");
         assert_eq!(amount, Amount::from_uint(1120, 0).expect("Test failed"));
-
     }
 
     #[test]
@@ -1031,8 +1033,14 @@ mod tests {
         assert!(Amount::from_str("1.12", 80).is_err());
         assert!(Amount::from_str("1.12.1", 3).is_err());
         assert!(Amount::from_str("1.1a", 3).is_err());
-        assert_eq!(Amount::zero(), Amount::from_str("0.0", 1).expect("Test failed"));
-        assert_eq!(Amount::zero(), Amount::from_str(".0", 1).expect("Test failed"));
+        assert_eq!(
+            Amount::zero(),
+            Amount::from_str("0.0", 1).expect("Test failed")
+        );
+        assert_eq!(
+            Amount::zero(),
+            Amount::from_str(".0", 1).expect("Test failed")
+        );
 
         let amount = Amount::from_str("1.12", 3).expect("Test failed");
         assert_eq!(amount, Amount::from_uint(1120, 0).expect("Test failed"));
@@ -1066,7 +1074,6 @@ mod tests {
         let amount = Amount::parse(key).expect("Test failed");
         assert_eq!(amount, original);
     }
-
 }
 
 /// Helpers for testing with addresses.

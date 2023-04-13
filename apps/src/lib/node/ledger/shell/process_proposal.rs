@@ -215,7 +215,7 @@ mod test_process_proposal {
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::Epoch;
-    use namada::types::token::{Amount, NATIVE_MAX_DECIMAL_PLACES};
+    use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx};
 
@@ -287,8 +287,7 @@ mod test_process_proposal {
         let timestamp = tx.timestamp;
         let mut wrapper = WrapperTx::new(
             Fee {
-                amount: Amount::from_uint(100, NATIVE_MAX_DECIMAL_PLACES)
-                    .expect("Test failed"),
+                amount: Amount::from_uint(100, 0).expect("Test failed"),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -372,8 +371,7 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: Amount::from_uint(1, NATIVE_MAX_DECIMAL_PLACES)
-                    .expect("Test failed"),
+                amount: Amount::from_uint(1, 0).expect("Test failed"),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,

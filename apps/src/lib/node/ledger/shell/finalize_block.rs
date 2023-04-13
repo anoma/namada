@@ -470,7 +470,6 @@ mod test_finalize_block {
     use namada::types::governance::ProposalVote;
     use namada::types::storage::Epoch;
     use namada::types::time::DurationSecs;
-    use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
     use namada::types::transaction::governance::{
         InitProposalData, VoteProposalData,
     };
@@ -514,11 +513,7 @@ mod test_finalize_block {
             );
             let wrapper = WrapperTx::new(
                 Fee {
-                    amount: Amount::from_uint(
-                        MIN_FEE,
-                        NATIVE_MAX_DECIMAL_PLACES,
-                    )
-                    .expect("Test failed"),
+                    amount: Amount::from_uint(MIN_FEE, 0).expect("Test failed"),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
@@ -731,11 +726,7 @@ mod test_finalize_block {
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
-                    amount: Amount::from_uint(
-                        MIN_FEE,
-                        NATIVE_MAX_DECIMAL_PLACES,
-                    )
-                    .expect("Test failed"),
+                    amount: Amount::from_uint(MIN_FEE, 0).expect("Test failed"),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
@@ -772,11 +763,7 @@ mod test_finalize_block {
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
-                    amount: Amount::from_uint(
-                        MIN_FEE,
-                        NATIVE_MAX_DECIMAL_PLACES,
-                    )
-                    .expect("Test failed"),
+                    amount: Amount::from_uint(MIN_FEE, 0).expect("Test failed"),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,

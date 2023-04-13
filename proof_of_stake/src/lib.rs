@@ -19,8 +19,8 @@ pub mod storage;
 pub mod types;
 // pub mod validation;
 
-//#[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 use core::fmt::Debug;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -42,7 +42,7 @@ use namada_core::types::key::{
 };
 pub use namada_core::types::storage::Epoch;
 use namada_core::types::token;
-use namada_core::types::token::{Amount, NATIVE_MAX_DECIMAL_PLACES};
+use namada_core::types::token::Amount;
 use once_cell::unsync::Lazy;
 use parameters::PosParams;
 use rust_decimal::Decimal;
@@ -1628,7 +1628,7 @@ where
                         slash_rate,
                         u128::try_from(amount).expect("Amount out of bounds"),
                     ),
-                    NATIVE_MAX_DECIMAL_PLACES,
+                    0,
                 )
                 .expect("Amount out of bounds");
                 slashed += to_slash;
@@ -1745,7 +1745,7 @@ where
             rate,
             u128::try_from(current_stake).expect("Amount out of bounds"),
         ),
-        NATIVE_MAX_DECIMAL_PLACES,
+        0,
     )
     .expect("Amount out of bounds");
     let token_change = -token::Change::from(slashed_amount);

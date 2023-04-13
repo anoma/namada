@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use uint::construct_uint;
 
 use crate::types::token;
+use crate::types::token::Amount;
 
 construct_uint! {
     /// Namada native type to replace for unsigned 256 bit
@@ -108,14 +109,11 @@ impl SignedUint {
     /// not exceed [`MAX_SIGNED_AMOUNT`], else returns `None`.
     pub fn checked_add(&self, other: &Self) -> Option<Self> {
         if self.non_negative() == other.non_negative() {
-            self.abs().checked_add(other.abs())
-                .and_then(|val| Self::try_from(val)
+            self.abs().checked_add(other.abs()).and_then(|val| {
+                Self::try_from(val)
                     .ok()
-                    .map(|val| if !self.non_negative() {
-                        -val
-                    } else {
-                        val
-                    }))
+                    .map(|val| if !self.non_negative() { -val } else { val })
+            })
         } else {
             Some(*self + *other)
         }
@@ -189,17 +187,22 @@ impl Add<SignedUint> for SignedUint {
         match (self.non_negative(), rhs.non_negative()) {
             (true, true) => Self(self.0 + rhs.0),
             (false, false) => -Self(self.abs() + rhs.abs()),
-            (true, false) => if self.0 >= rhs.abs() {
-                Self(self.0 - rhs.abs())
-            } else {
-                -Self(rhs.abs() - self.0)
+            (true, false) => {
+                if self.0 >= rhs.abs() {
+                    Self(self.0 - rhs.abs())
+                } else {
+                    -Self(rhs.abs() - self.0)
+                }
             }
-            (false, true) => if rhs.0 >= self.abs() {
-                Self(rhs.0 - self.abs())
-            } else {
-                -Self(self.abs() - rhs.0)
-            },
-        }.canonical()
+            (false, true) => {
+                if rhs.0 >= self.abs() {
+                    Self(rhs.0 - self.abs())
+                } else {
+                    -Self(self.abs() - rhs.0)
+                }
+            }
+        }
+        .canonical()
     }
 }
 
@@ -240,6 +243,17 @@ impl From<i32> for SignedUint {
     }
 }
 
+impl TryFrom<SignedUint> for i128 {
+    type Error = std::io::Error;
+
+    fn try_from(value: SignedUint) -> Result<Self, Self::Error> {
+        if !value.non_negative() {
+            Ok(-(u128::try_from(Amount::from_change(value))? as i128))
+        } else {
+            Ok(u128::try_from(Amount::from_change(value))? as i128)
+        }
+    }
+}
 
 #[cfg(test)]
 mod test_uint {
@@ -249,10 +263,14 @@ mod test_uint {
     /// value gives zero.
     #[test]
     fn test_max_signed_value() {
-        let signed = SignedUint::try_from(MAX_SIGNED_VALUE).expect("Test failed");
+        let signed =
+            SignedUint::try_from(MAX_SIGNED_VALUE).expect("Test failed");
         let one = SignedUint::try_from(Uint::from(1u64)).expect("Test failed");
         let overflow = signed + one;
-        assert_eq!(overflow, SignedUint::try_from(Uint::zero()).expect("Test failed"));
+        assert_eq!(
+            overflow,
+            SignedUint::try_from(Uint::zero()).expect("Test failed")
+        );
         assert!(signed.checked_add(&one).is_none());
         assert!((-signed).checked_sub(&one).is_none());
     }
@@ -262,7 +280,7 @@ mod test_uint {
     #[test]
     fn test_minus_zero_not_allowed() {
         let larger = Uint([0, 0, 0, 2u64.pow(63)]);
-        let smaller = Uint([u64::MAX, u64::MAX, u64::MAX, 2u64.pow(63) -1]);
+        let smaller = Uint([u64::MAX, u64::MAX, u64::MAX, 2u64.pow(63) - 1]);
         assert!(larger > smaller);
         assert_eq!(smaller, MAX_SIGNED_VALUE);
         assert_eq!(larger, MINUS_ZERO);
