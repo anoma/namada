@@ -843,7 +843,7 @@ mod test_finalize_block {
     use namada::types::storage::Epoch;
     use namada::types::time::DurationSecs;
     use namada::types::transaction::governance::{
-        InitProposalData, VoteProposalData,
+        InitProposalData, ProposalType, VoteProposalData,
     };
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
     use rust_decimal_macros::dec;
@@ -1232,7 +1232,7 @@ mod test_finalize_block {
                 voting_start_epoch: Epoch::default(),
                 voting_end_epoch: Epoch::default().next(),
                 grace_epoch: Epoch::default().next(),
-                proposal_code: None,
+                r#type: ProposalType::Default(None),
             };
 
             storage_api::governance::init_proposal(
@@ -1254,7 +1254,10 @@ mod test_finalize_block {
         };
 
         // Add a proposal to be accepted and one to be rejected.
-        add_proposal(0, ProposalVote::Yay);
+        add_proposal(
+            0,
+            ProposalVote::Yay(namada::types::governance::VoteType::Default),
+        );
         add_proposal(1, ProposalVote::Nay);
 
         // Commit the genesis state

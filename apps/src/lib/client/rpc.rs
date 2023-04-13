@@ -23,10 +23,11 @@ use masp_primitives::transaction::components::Amount;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
+use namada::core::types::transaction::governance::ProposalType;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
-use namada::ledger::native_vp::governance::utils::Votes;
+use namada::ledger::native_vp::governance::utils::{self, Votes};
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::{
     self, BondId, BondsAndUnbondsDetail, CommissionPair, PosParams, Slash,
@@ -36,8 +37,7 @@ use namada::ledger::storage::ConversionState;
 use namada::proto::{SignedTxData, Tx};
 use namada::types::address::{masp, tokens, Address};
 use namada::types::governance::{
-    OfflineProposal, OfflineVote, ProposalResult, ProposalVote, TallyResult,
-    VotePower,
+    OfflineProposal, OfflineVote, ProposalVote, VotePower, VoteType,
 };
 use namada::types::hash::Hash;
 use namada::types::key::*;
@@ -755,6 +755,7 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
         let author_key = gov_storage::get_author_key(id);
         let start_epoch_key = gov_storage::get_voting_start_epoch_key(id);
         let end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
+        let proposal_type_key = gov_storage::get_proposal_type_key(id);
 
         let author =
             query_storage_value::<Address>(client, &author_key).await?;
@@ -762,6 +763,9 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
             query_storage_value::<Epoch>(client, &start_epoch_key).await?;
         let end_epoch =
             query_storage_value::<Epoch>(client, &end_epoch_key).await?;
+        let proposal_type =
+            query_storage_value::<ProposalType>(client, &proposal_type_key)
+                .await?;
 
         if details {
             let content_key = gov_storage::get_content_key(id);
@@ -775,6 +779,7 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
                 query_storage_value::<Epoch>(client, &grace_epoch_key).await?;
 
             println!("Proposal: {}", id);
+            println!("{:4}Type: {}", "", proposal_type);
             println!("{:4}Author: {}", "", author);
             println!("{:4}Content:", "");
             for (key, value) in &content {
@@ -783,31 +788,43 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
             println!("{:4}Start Epoch: {}", "", start_epoch);
             println!("{:4}End Epoch: {}", "", end_epoch);
             println!("{:4}Grace Epoch: {}", "", grace_epoch);
+            let votes = get_proposal_votes(client, start_epoch, id).await;
+            let total_stake =
+                get_total_staked_tokens(client, start_epoch).await.into();
             if start_epoch > current_epoch {
                 println!("{:4}Status: pending", "");
             } else if start_epoch <= current_epoch && current_epoch <= end_epoch
             {
-                let votes = get_proposal_votes(client, start_epoch, id).await;
-                let partial_proposal_result =
-                    compute_tally(client, start_epoch, votes).await;
-                println!(
-                    "{:4}Yay votes: {}",
-                    "", partial_proposal_result.total_yay_power
-                );
-                println!(
-                    "{:4}Nay votes: {}",
-                    "", partial_proposal_result.total_nay_power
-                );
-                println!("{:4}Status: on-going", "");
+                match utils::compute_tally(votes, total_stake, &proposal_type) {
+                    Ok(partial_proposal_result) => {
+                        println!(
+                            "{:4}Yay votes: {}",
+                            "", partial_proposal_result.total_yay_power
+                        );
+                        println!(
+                            "{:4}Nay votes: {}",
+                            "", partial_proposal_result.total_nay_power
+                        );
+                        println!("{:4}Status: on-going", "");
+                    }
+                    Err(msg) => {
+                        eprintln!("Error in tally computation: {}", msg)
+                    }
+                }
             } else {
-                let votes = get_proposal_votes(client, start_epoch, id).await;
-                let proposal_result =
-                    compute_tally(client, start_epoch, votes).await;
-                println!("{:4}Status: done", "");
-                println!("{:4}Result: {}", "", proposal_result);
+                match utils::compute_tally(votes, total_stake, &proposal_type) {
+                    Ok(proposal_result) => {
+                        println!("{:4}Status: done", "");
+                        println!("{:4}Result: {}", "", proposal_result);
+                    }
+                    Err(msg) => {
+                        eprintln!("Error in tally computation: {}", msg)
+                    }
+                }
             }
         } else {
             println!("Proposal: {}", id);
+            println!("{:4}Type: {}", "", proposal_type);
             println!("{:4}Author: {}", "", author);
             println!("{:4}Start Epoch: {}", "", start_epoch);
             println!("{:4}End Epoch: {}", "", end_epoch);
@@ -1182,10 +1199,34 @@ pub async fn query_proposal_result(
                     if current_epoch > end_epoch {
                         let votes =
                             get_proposal_votes(&client, end_epoch, id).await;
-                        let proposal_result =
-                            compute_tally(&client, end_epoch, votes).await;
+                        let proposal_type_key =
+                            gov_storage::get_proposal_type_key(id);
+                        let proposal_type =
+                            query_storage_value::<ProposalType>(
+                                &client,
+                                &proposal_type_key,
+                            )
+                            .await
+                            .expect(
+                                "Could not read proposal type from storage",
+                            );
+                        let total_stake =
+                            get_total_staked_tokens(&client, end_epoch)
+                                .await
+                                .into();
                         println!("Proposal: {}", id);
-                        println!("{:4}Result: {}", "", proposal_result);
+                        match utils::compute_tally(
+                            votes,
+                            total_stake,
+                            &proposal_type,
+                        ) {
+                            Ok(proposal_result) => {
+                                println!("{:4}Result: {}", "", proposal_result)
+                            }
+                            Err(msg) => {
+                                eprintln!("Error in tally computation: {}", msg)
+                            }
+                        }
                     } else {
                         eprintln!("Proposal is still in progress.");
                         cli::safe_exit(1)
@@ -1275,11 +1316,24 @@ pub async fn query_proposal_result(
                             files,
                         )
                         .await;
-                        let proposal_result =
-                            compute_tally(&client, proposal.tally_epoch, votes)
-                                .await;
-
-                        println!("{:4}Result: {}", "", proposal_result);
+                        let total_stake = get_total_staked_tokens(
+                            &client,
+                            proposal.tally_epoch,
+                        )
+                        .await
+                        .into();
+                        match utils::compute_tally(
+                            votes,
+                            total_stake,
+                            &ProposalType::Default(None),
+                        ) {
+                            Ok(proposal_result) => {
+                                println!("{:4}Result: {}", "", proposal_result)
+                            }
+                            Err(msg) => {
+                                eprintln!("Error in tally computation: {}", msg)
+                            }
+                        }
                     }
                     None => {
                         eprintln!(
@@ -2202,11 +2256,12 @@ pub async fn get_proposal_votes(
     let vote_iter =
         query_storage_prefix::<ProposalVote>(client, &vote_prefix_key).await;
 
-    let mut yay_validators: HashMap<Address, VotePower> = HashMap::new();
-    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+    let mut yay_validators: HashMap<Address, (VotePower, ProposalVote)> =
         HashMap::new();
-    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
-        HashMap::new();
+    let mut delegators: HashMap<
+        Address,
+        HashMap<Address, (VotePower, ProposalVote)>,
+    > = HashMap::new();
 
     if let Some(vote_iter) = vote_iter {
         for (key, vote) in vote_iter {
@@ -2219,7 +2274,7 @@ pub async fn get_proposal_votes(
                         .await
                         .unwrap_or_default()
                         .into();
-                yay_validators.insert(voter_address, amount);
+                yay_validators.insert(voter_address, (amount, vote));
             } else if !validators.contains(&voter_address) {
                 let validator_address =
                     gov_storage::get_vote_delegation_address(&key)
@@ -2235,17 +2290,11 @@ pub async fn get_proposal_votes(
                 )
                 .await;
                 if let Some(amount) = delegator_token_amount {
-                    if vote.is_yay() {
-                        let entry =
-                            yay_delegators.entry(voter_address).or_default();
-                        entry
-                            .insert(validator_address, VotePower::from(amount));
-                    } else {
-                        let entry =
-                            nay_delegators.entry(voter_address).or_default();
-                        entry
-                            .insert(validator_address, VotePower::from(amount));
-                    }
+                    let entry = delegators.entry(voter_address).or_default();
+                    entry.insert(
+                        validator_address,
+                        (VotePower::from(amount), vote),
+                    );
                 }
             }
         }
@@ -2253,8 +2302,7 @@ pub async fn get_proposal_votes(
 
     Votes {
         yay_validators,
-        yay_delegators,
-        nay_delegators,
+        delegators,
     }
 }
 
@@ -2267,11 +2315,12 @@ pub async fn get_proposal_offline_votes(
 
     let proposal_hash = proposal.compute_hash();
 
-    let mut yay_validators: HashMap<Address, VotePower> = HashMap::new();
-    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+    let mut yay_validators: HashMap<Address, (VotePower, ProposalVote)> =
         HashMap::new();
-    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
-        HashMap::new();
+    let mut delegators: HashMap<
+        Address,
+        HashMap<Address, (VotePower, ProposalVote)>,
+    > = HashMap::new();
 
     for path in files {
         let file = File::open(&path).expect("Proposal file must exist.");
@@ -2303,7 +2352,10 @@ pub async fn get_proposal_offline_votes(
             .await
             .unwrap_or_default()
             .into();
-            yay_validators.insert(proposal_vote.address, amount);
+            yay_validators.insert(
+                proposal_vote.address,
+                (amount, ProposalVote::Yay(VoteType::Default)),
+            );
         } else if is_delegator_at(
             client,
             &proposal_vote.address,
@@ -2343,17 +2395,17 @@ pub async fn get_proposal_offline_votes(
                             - delta.slashed_amount.unwrap_or_default();
                     }
                 }
-                if proposal_vote.vote.is_yay() {
-                    let entry = yay_delegators
-                        .entry(proposal_vote.address.clone())
-                        .or_default();
-                    entry.insert(validator, VotePower::from(delegated_amount));
-                } else {
-                    let entry = nay_delegators
-                        .entry(proposal_vote.address.clone())
-                        .or_default();
-                    entry.insert(validator, VotePower::from(delegated_amount));
-                }
+
+                let entry = delegators
+                    .entry(proposal_vote.address.clone())
+                    .or_default();
+                entry.insert(
+                    validator,
+                    (
+                        VotePower::from(delegated_amount),
+                        proposal_vote.vote.clone(),
+                    ),
+                );
             }
 
             // let key = pos::bonds_for_source_prefix(&proposal_vote.address);
@@ -2432,63 +2484,7 @@ pub async fn get_proposal_offline_votes(
 
     Votes {
         yay_validators,
-        yay_delegators,
-        nay_delegators,
-    }
-}
-
-// Compute the result of a proposal
-pub async fn compute_tally(
-    client: &HttpClient,
-    epoch: Epoch,
-    votes: Votes,
-) -> ProposalResult {
-    let total_staked_tokens: VotePower =
-        get_total_staked_tokens(client, epoch).await.into();
-
-    let Votes {
-        yay_validators,
-        yay_delegators,
-        nay_delegators,
-    } = votes;
-
-    let mut total_yay_staked_tokens = VotePower::from(0_u64);
-    for (_, amount) in yay_validators.clone().into_iter() {
-        total_yay_staked_tokens += amount;
-    }
-
-    // YAY: Add delegator amount whose validator didn't vote / voted nay
-    for (_, vote_map) in yay_delegators.iter() {
-        for (validator_address, vote_power) in vote_map.iter() {
-            if !yay_validators.contains_key(validator_address) {
-                total_yay_staked_tokens += vote_power;
-            }
-        }
-    }
-
-    // NAY: Remove delegator amount whose validator validator vote yay
-    for (_, vote_map) in nay_delegators.iter() {
-        for (validator_address, vote_power) in vote_map.iter() {
-            if yay_validators.contains_key(validator_address) {
-                total_yay_staked_tokens -= vote_power;
-            }
-        }
-    }
-
-    if total_yay_staked_tokens >= (total_staked_tokens / 3) * 2 {
-        ProposalResult {
-            result: TallyResult::Passed,
-            total_voting_power: total_staked_tokens,
-            total_yay_power: total_yay_staked_tokens,
-            total_nay_power: 0,
-        }
-    } else {
-        ProposalResult {
-            result: TallyResult::Rejected,
-            total_voting_power: total_staked_tokens,
-            total_yay_power: total_yay_staked_tokens,
-            total_nay_power: 0,
-        }
+        delegators,
     }
 }
 

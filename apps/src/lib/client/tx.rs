@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use async_std::io::prelude::WriteExt;
 use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
+use data_encoding::HEXLOWER_PERMISSIVE;
 use itertools::Either::*;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::consensus::{BranchId, TestNetwork};
@@ -42,7 +43,7 @@ use namada::ledger::pos::{CommissionPair, PosParams};
 use namada::proto::Tx;
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::governance::{
-    OfflineProposal, OfflineVote, Proposal, ProposalVote,
+    OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
 use namada::types::key::*;
 use namada::types::masp::{PaymentAddress, TransferTarget};
@@ -54,7 +55,7 @@ use namada::types::token::{
     Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
 use namada::types::transaction::governance::{
-    InitProposalData, VoteProposalData,
+    InitProposalData, ProposalType, VoteProposalData,
 };
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{storage, token};
@@ -1964,7 +1965,67 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
         safe_exit(1)
     };
 
+    // Construct vote
+    let proposal_vote = match args.vote.to_ascii_lowercase().as_str() {
+        "yay" => {
+            if let Some(pgf) = args.proposal_pgf {
+                let splits = pgf.trim().split_ascii_whitespace();
+                let address_iter = splits.clone().into_iter().step_by(2);
+                let cap_iter = splits.into_iter().skip(1).step_by(2);
+                let mut set = HashSet::new();
+                for (address, cap) in
+                    address_iter.zip(cap_iter).map(|(addr, cap)| {
+                        (
+                            addr.parse()
+                                .expect("Failed to parse pgf council address"),
+                            cap.parse::<u64>()
+                                .expect("Failed to parse pgf spending cap"),
+                        )
+                    })
+                {
+                    set.insert((address, cap.into()));
+                }
+
+                ProposalVote::Yay(VoteType::PGFCouncil(set))
+            } else if let Some(eth) = args.proposal_eth {
+                let mut splits = eth.trim().split_ascii_whitespace();
+                // Sign the message
+                let sigkey = splits
+                    .next()
+                    .expect("Expected signing key")
+                    .parse::<common::SecretKey>()
+                    .expect("Signing key parsing failed.");
+
+                let msg = splits.next().expect("Missing message to sign");
+                if splits.next().is_some() {
+                    eprintln!("Unexpected argument after message");
+                    safe_exit(1);
+                }
+
+                ProposalVote::Yay(VoteType::ETHBridge(common::SigScheme::sign(
+                    &sigkey,
+                    HEXLOWER_PERMISSIVE
+                        .decode(msg.as_bytes())
+                        .expect("Error while decoding message"),
+                )))
+            } else {
+                ProposalVote::Yay(VoteType::Default)
+            }
+        }
+        "nay" => ProposalVote::Nay,
+        _ => {
+            eprintln!("Vote must be either yay or nay");
+            safe_exit(1);
+        }
+    };
+
     if args.offline {
+        if !proposal_vote.is_default_vote() {
+            eprintln!(
+                "Wrong vote type for offline proposal. Just vote yay or nay!"
+            );
+            safe_exit(1);
+        }
         let signer = ctx.get(signer);
         let proposal_file_path =
             args.proposal_data.expect("Proposal file should exist.");
@@ -1989,9 +2050,10 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
             args.tx.ledger_address.clone(),
         )
         .await;
+
         let offline_vote = OfflineVote::new(
             &proposal,
-            args.vote,
+            proposal_vote,
             signer.clone(),
             &signing_key,
         );
@@ -2030,6 +2092,56 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
         )
         .await;
 
+        // Check vote type and memo
+        let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
+        let proposal_type: ProposalType =
+            rpc::query_storage_value(&client, &proposal_type_key)
+                .await
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Didn't find type of proposal id {} in storage",
+                        proposal_id
+                    )
+                });
+
+        if let ProposalVote::Yay(ref vote_type) = proposal_vote {
+            if &proposal_type != vote_type {
+                eprintln!(
+                    "Expected vote of type {}, found {}",
+                    proposal_type, args.vote
+                );
+                safe_exit(1);
+            } else if let VoteType::PGFCouncil(set) = vote_type {
+                // Check that addresses proposed as council are established and
+                // are present in storage
+                for (address, _) in set {
+                    match address {
+                        Address::Established(_) => {
+                            let vp_key = Key::validity_predicate(address);
+                            if !rpc::query_has_storage_key(&client, &vp_key)
+                                .await
+                            {
+                                eprintln!(
+                                    "Proposed PGF council {} cannot be found \
+                                     in storage",
+                                    address
+                                );
+                                safe_exit(1);
+                            }
+                        }
+                        _ => {
+                            eprintln!(
+                                "PGF council vote contains a non-established \
+                                 address: {}",
+                                address
+                            );
+                            safe_exit(1);
+                        }
+                    }
+                }
+            }
+        }
+
         match proposal_start_epoch {
             Some(epoch) => {
                 if current_epoch < epoch {
@@ -2066,14 +2178,14 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                         &client,
                         delegations,
                         proposal_id,
-                        &args.vote,
+                        &proposal_vote,
                     )
                     .await;
                 }
 
                 let tx_data = VoteProposalData {
                     id: proposal_id,
-                    vote: args.vote,
+                    vote: proposal_vote,
                     voter: voter_address,
                     delegations: delegations.into_iter().collect(),
                 };
