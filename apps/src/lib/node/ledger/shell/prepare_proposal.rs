@@ -1,6 +1,8 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
 use namada::core::hints;
+use namada::vm::wasm::{TxCache, VpCache};
+use namada::vm::WasmCacheAccess;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
@@ -151,38 +153,16 @@ where
         let txs = txs
             .iter()
             .filter_map(|tx_bytes| {
-                if let Ok(tx) = Tx::try_from(tx_bytes.as_slice()) {
-                    // If tx doesn't have an expiration it is valid. If time cannot be
-                    // retrieved from block default to last block datetime which has
-                    // already been checked by mempool_validate, so it's valid
-                    if let (Some(block_time), Some(exp)) = (block_time.as_ref(), &tx.expiration) {
-                        if block_time > exp { return None }
-                    }
-                    if let Ok(TxType::Wrapper(wrapper)) = process_tx(tx) {
-
-        // Check tx gas limit
-        let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit.clone().into());
-        if tx_gas_meter
-            .add_tx_size_gas(tx_bytes).is_err() {
-                            return None;
-                        }
-
-                    if temp_block_gas_meter.try_finalize_transaction(tx_gas_meter).is_err() {
-                        return None;
-        }
-            // Check fees
-            if self.wrapper_fee_check(
-                wrapper,
-                &mut temp_wl_storage,
-                Some(Cow::Borrowed(&gas_table)),
-                &mut vp_wasm_cache,
-                &mut tx_wasm_cache,
-            ).is_ok() {
-                        return Some(tx_bytes.clone())
-                    }
+                match self.validate_wrapper_bytes(tx_bytes, &mut temp_block_gas_meter, block_time, &mut temp_wl_storage, &gas_table, &mut vp_wasm_cache, &mut tx_wasm_cache) {
+                    Ok(()) => {
+                        temp_wl_storage.write_log.commit_tx();
+                        Some(tx_bytes.to_owned())
+                    },
+                    Err(()) => {
+                        temp_wl_storage.write_log.drop_tx();
+                        None
                     }
                 }
-                None
             })
             .take_while(|tx_bytes| {
                 alloc.try_alloc(&tx_bytes[..])
@@ -218,6 +198,57 @@ where
         let alloc = alloc.next_state();
 
         (txs, alloc)
+    }
+
+    /// Validity checks on a wrapper tx
+    fn validate_wrapper_bytes<CA>(
+        &self,
+        tx_bytes: &[u8],
+        temp_block_gas_meter: &mut BlockGasMeter,
+        block_time: Option<DateTimeUtc>,
+        temp_wl_storage: &mut TempWlStorage<D, H>,
+        gas_table: &BTreeMap<String, u64>,
+        vp_wasm_cache: &mut VpCache<CA>,
+        tx_wasm_cache: &mut TxCache<CA>,
+    ) -> Result<(), ()>
+    where
+        CA: 'static + WasmCacheAccess + Sync,
+    {
+        let tx = Tx::try_from(tx_bytes).map_err(|_| ())?;
+
+        // If tx doesn't have an expiration it is valid. If time cannot be
+        // retrieved from block default to last block datetime which has
+        // already been checked by mempool_validate, so it's valid
+        if let (Some(block_time), Some(exp)) =
+            (block_time.as_ref(), &tx.expiration)
+        {
+            if block_time > exp {
+                return Err(());
+            }
+        }
+
+        if let TxType::Wrapper(wrapper) = process_tx(tx).map_err(|_| ())? {
+            // Check tx gas limit
+            let mut tx_gas_meter =
+                TxGasMeter::new(wrapper.gas_limit.clone().into());
+            tx_gas_meter.add_tx_size_gas(tx_bytes).map_err(|_| ())?;
+
+            temp_block_gas_meter
+                .try_finalize_transaction(tx_gas_meter)
+                .map_err(|_| ())?;
+
+            // Check fees
+            self.wrapper_fee_check(
+                wrapper,
+                temp_wl_storage,
+                Some(Cow::Borrowed(&gas_table)),
+                vp_wasm_cache,
+                tx_wasm_cache,
+            )
+            .map_err(|_| ())
+        } else {
+            Err(())
+        }
     }
 
     /// Builds a batch of DKG decrypted transactions.
@@ -312,7 +343,6 @@ where
 mod test_prepare_proposal {
 
     use borsh::BorshSerialize;
-    use namada::ledger::storage_api::StorageWrite;
     use namada::proof_of_stake::Epoch;
     use namada::types::address::Address;
     use namada::types::key::RefTo;
