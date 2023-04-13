@@ -71,11 +71,11 @@ router! {ETH_BRIDGE,
         -> EncodeCell<EthereumProof<(Epoch, VotingPowersMap)>>
         = read_valset_upd_proof,
 
-    // Request the set of active validator at the given epoch.
+    // Request the set of consensus validator at the given epoch.
     //
     // The request may fail if no validator set exists at that epoch.
-    ( "validator_set" / "active" / [epoch: Epoch] )
-        -> EncodeCell<ValidatorSetArgs> = read_active_valset,
+    ( "validator_set" / "consensus" / [epoch: Epoch] )
+        -> EncodeCell<ValidatorSetArgs> = read_consensus_valset,
 
     // Read the address and version of the Ethereum bridge's Governance
     // smart contract.
@@ -449,11 +449,11 @@ where
     Ok(proof.map(|set| (epoch, set)).encode())
 }
 
-/// Read the active set of validators at the given [`Epoch`].
+/// Read the consensus set of validators at the given [`Epoch`].
 ///
 /// This method may fail if no set of validators exists yet,
 /// at that [`Epoch`].
-fn read_active_valset<D, H>(
+fn read_consensus_valset<D, H>(
     ctx: RequestCtx<'_, D, H>,
     epoch: Epoch,
 ) -> storage_api::Result<EncodeCell<ValidatorSetArgs>>
@@ -465,8 +465,8 @@ where
     if epoch > current_epoch.next() {
         Err(storage_api::Error::Custom(CustomError(
             format!(
-                "Requesting active validator set at {epoch:?}, but the last \
-                 installed epoch is still {current_epoch:?}"
+                "Requesting consensus validator set at {epoch:?}, but the \
+                 last installed epoch is still {current_epoch:?}"
             )
             .into(),
         )))
@@ -530,9 +530,9 @@ mod test_ethbridge_router {
     };
     use crate::types::ethereum_events::EthAddress;
 
-    /// Test that reading the active validator set works.
+    /// Test that reading the consensus validator set works.
     #[tokio::test]
-    async fn test_read_active_valset() {
+    async fn test_read_consensus_valset() {
         let mut client = TestClient::new(RPC);
         let epoch = Epoch(0);
         assert_eq!(client.wl_storage.storage.last_epoch, epoch);
@@ -551,7 +551,7 @@ mod test_ethbridge_router {
         let validator_set = RPC
             .shell()
             .eth_bridge()
-            .read_active_valset(&client, &epoch)
+            .read_consensus_valset(&client, &epoch)
             .await
             .unwrap();
         let expected = {
@@ -564,7 +564,7 @@ mod test_ethbridge_router {
             let voting_powers_map: VotingPowersMap = client
                 .wl_storage
                 .ethbridge_queries()
-                .get_active_eth_addresses(Some(epoch))
+                .get_consensus_eth_addresses(Some(epoch))
                 .iter()
                 .map(|(addr_book, _, power)| (addr_book, power))
                 .collect();
@@ -591,10 +591,10 @@ mod test_ethbridge_router {
         assert_eq!(validator_set, expected);
     }
 
-    /// Test that when reading an active validator set too far ahead,
+    /// Test that when reading an consensus validator set too far ahead,
     /// RPC clients are met with an error.
     #[tokio::test]
-    async fn test_read_active_valset_too_far_ahead() {
+    async fn test_read_consensus_valset_too_far_ahead() {
         let mut client = TestClient::new(RPC);
         assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
 
@@ -612,7 +612,7 @@ mod test_ethbridge_router {
         let result = RPC
             .shell()
             .eth_bridge()
-            .read_active_valset(&client, &Epoch(999_999))
+            .read_consensus_valset(&client, &Epoch(999_999))
             .await;
         let Err(err) = result else {
             panic!("Test failed");

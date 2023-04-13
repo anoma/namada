@@ -24,7 +24,7 @@ where
     /// pool root and nonce.
     ///
     /// Checks that at epoch of the provided height:
-    ///  * The inner Namada address corresponds to an active validator.
+    ///  * The inner Namada address corresponds to a consensus validator.
     ///  * Check that the root and nonce are correct.
     ///  * The validator correctly signed the extension.
     ///  * The validator signed over the correct height inside of the extension.

@@ -39,7 +39,7 @@ pub async fn query_validator_set_update_proof(args: args::ValidatorSetProof) {
 }
 
 /// Query an ABI encoding of the validator set at a given epoch.
-pub async fn query_validator_set_args(args: args::ActiveValidatorSet) {
+pub async fn query_validator_set_args(args: args::ConsensusValidatorSet) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
 
     let epoch = if let Some(epoch) = args.epoch {
@@ -51,7 +51,7 @@ pub async fn query_validator_set_args(args: args::ActiveValidatorSet) {
     let encoded_validator_set_args = RPC
         .shell()
         .eth_bridge()
-        .read_active_valset(&client, &epoch)
+        .read_consensus_valset(&client, &epoch)
         .await
         .unwrap();
 
@@ -244,7 +244,7 @@ where
     let bridge_current_epoch = Epoch(epoch_to_relay.0.saturating_sub(2));
     let shell = RPC.shell().eth_bridge();
     let encoded_validator_set_args_fut =
-        shell.read_active_valset(nam_client, &bridge_current_epoch);
+        shell.read_consensus_valset(nam_client, &bridge_current_epoch);
 
     let shell = RPC.shell().eth_bridge();
     let governance_address_fut = shell.read_governance_contract(nam_client);
@@ -262,7 +262,7 @@ where
         [u8; 32],
         Vec<Signature>,
     ) = abi_decode_struct(encoded_proof);
-    let active_set: ValidatorSetArgs =
+    let consensus_set: ValidatorSetArgs =
         abi_decode_struct(encoded_validator_set_args);
 
     let eth_client =
@@ -270,7 +270,7 @@ where
     let governance = Governance::new(governance_contract.address, eth_client);
 
     let mut relay_op = governance.update_validators_set(
-        active_set,
+        consensus_set,
         bridge_hash,
         gov_hash,
         signatures,

@@ -203,7 +203,7 @@ where
                 let voting_powers = self
                     .wl_storage
                     .ethbridge_queries()
-                    .get_active_eth_addresses(Some(next_epoch))
+                    .get_consensus_eth_addresses(Some(next_epoch))
                     .iter()
                     .map(|(eth_addr_book, _, voting_power)| {
                         (eth_addr_book, voting_power)
@@ -232,10 +232,10 @@ where
     ///
     /// This checks that the vote extension:
     /// * Correctly deserializes.
-    /// * The Ethereum events vote extension within was correctly signed by an
-    ///   active validator.
+    /// * The Ethereum events vote extension within was correctly signed by a
+    ///   consensus validator.
     /// * The validator set update vote extension within was correctly signed by
-    ///   an active validator, in case it could have been sent at the current
+    ///   a consensus validator, in case it could have been sent at the current
     ///   block height.
     /// * The Ethereum events vote extension block height signed over is correct
     ///   (for replay protection).

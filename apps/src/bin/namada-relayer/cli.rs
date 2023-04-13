@@ -29,7 +29,7 @@ pub async fn main() -> Result<()> {
             }
         },
         cmds::NamadaRelayer::ValidatorSet(sub) => match sub {
-            cmds::ValidatorSet::ActiveValidatorSet(args) => {
+            cmds::ValidatorSet::ConsensusValidatorSet(args) => {
                 validator_set::query_validator_set_args(args).await;
             }
             cmds::ValidatorSet::ValidatorSetProof(args) => {

@@ -40,18 +40,18 @@ where
         proof.get_voters(wl_storage.pos_queries().get_epoch_start_height());
     tracing::debug!(?voters, "Got validators who voted on at least one event");
 
-    let active_validators = get_active_validators(
+    let consensus_validators = get_consensus_validators(
         wl_storage,
         voters.iter().map(|(_, h)| h.to_owned()).collect(),
     );
     tracing::debug!(
-        n = active_validators.len(),
-        ?active_validators,
-        "Got active validators"
+        n = consensus_validators.len(),
+        ?consensus_validators,
+        "Got consensus validators"
     );
 
     let voting_powers =
-        get_voting_powers_for_selected(&active_validators, voters)?;
+        get_voting_powers_for_selected(&consensus_validators, voters)?;
     tracing::debug!(
         ?voting_powers,
         "Got voting powers for relevant validators"
@@ -61,7 +61,7 @@ where
 }
 
 // TODO: we might be able to remove allocation here
-pub(super) fn get_active_validators<D, H>(
+pub(super) fn get_consensus_validators<D, H>(
     wl_storage: &WlStorage<D, H>,
     block_heights: HashSet<BlockHeight>,
 ) -> BTreeMap<BlockHeight, BTreeSet<WeightedValidator>>
@@ -69,30 +69,31 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let mut active_validators = BTreeMap::default();
+    let mut consensus_validators = BTreeMap::default();
     for height in block_heights.into_iter() {
         let epoch = wl_storage.pos_queries().get_epoch(height).expect(
             "The epoch of the last block height should always be known",
         );
-        _ = active_validators.insert(
+        _ = consensus_validators.insert(
             height,
             wl_storage
                 .pos_queries()
-                .get_active_validators(Some(epoch))
+                .get_consensus_validators(Some(epoch))
                 .iter()
                 .collect(),
         );
     }
-    active_validators
+    consensus_validators
 }
 
-/// Gets the voting power of `selected` from `all_active`. Errors if a
-/// `selected` validator is not found in `all_active`.
+/// Gets the voting power of `selected` from `all_consensus`. Errors if a
+/// `selected` validator is not found in `all_consensus`.
 pub(super) fn get_voting_powers_for_selected(
-    all_active: &BTreeMap<BlockHeight, BTreeSet<WeightedValidator>>,
+    all_consensus: &BTreeMap<BlockHeight, BTreeSet<WeightedValidator>>,
     selected: HashSet<(Address, BlockHeight)>,
 ) -> eyre::Result<HashMap<(Address, BlockHeight), FractionalVotingPower>> {
-    let total_voting_powers = sum_voting_powers_for_block_heights(all_active);
+    let total_voting_powers =
+        sum_voting_powers_for_block_heights(all_consensus);
     let voting_powers = selected
         .into_iter()
         .map(
@@ -100,16 +101,18 @@ pub(super) fn get_voting_powers_for_selected(
                 (Address, BlockHeight),
                 FractionalVotingPower,
             )> {
-                let active_validators =
-                    all_active.get(&height).ok_or_else(|| {
-                        eyre!("No active validators found for height {height}")
+                let consensus_validators =
+                    all_consensus.get(&height).ok_or_else(|| {
+                        eyre!(
+                            "No consensus validators found for height {height}"
+                        )
                     })?;
-                let individual_voting_power = active_validators
+                let individual_voting_power = consensus_validators
                     .iter()
                     .find(|&v| v.address == addr)
                     .ok_or_else(|| {
                         eyre!(
-                            "No active validator found with address {addr} \
+                            "No consensus validator found with address {addr} \
                              for height {height}"
                         )
                     })?
@@ -166,8 +169,8 @@ mod tests {
     use super::*;
 
     #[test]
-    /// Test getting the voting power for the sole active validator from the set
-    /// of active validators
+    /// Test getting the voting power for the sole consensus validator from the
+    /// set of consensus validators
     fn test_get_voting_powers_for_selected_sole_validator() {
         let sole_validator = address::testing::established_address_1();
         let bonded_stake = arbitrary_bonded_stake();
@@ -179,13 +182,13 @@ mod tests {
             sole_validator.clone(),
             BlockHeight(100),
         )]);
-        let active_validators = BTreeMap::from_iter(vec![(
+        let consensus_validators = BTreeMap::from_iter(vec![(
             BlockHeight(100),
             BTreeSet::from_iter(vec![weighted_sole_validator]),
         )]);
 
         let result =
-            get_voting_powers_for_selected(&active_validators, validators);
+            get_voting_powers_for_selected(&consensus_validators, validators);
 
         let voting_powers = match result {
             Ok(voting_powers) => voting_powers,
@@ -200,7 +203,7 @@ mod tests {
 
     #[test]
     /// Test that an error is returned if a validator is not found in the set of
-    /// active validators
+    /// consensus validators
     fn test_get_voting_powers_for_selected_missing_validator() {
         let present_validator = address::testing::established_address_1();
         let missing_validator = address::testing::established_address_2();
@@ -213,13 +216,13 @@ mod tests {
             (present_validator, BlockHeight(100)),
             (missing_validator, BlockHeight(100)),
         ]);
-        let active_validators = BTreeMap::from_iter(vec![(
+        let consensus_validators = BTreeMap::from_iter(vec![(
             BlockHeight(100),
             BTreeSet::from_iter(vec![weighted_present_validator]),
         )]);
 
         let result =
-            get_voting_powers_for_selected(&active_validators, validators);
+            get_voting_powers_for_selected(&consensus_validators, validators);
 
         assert!(result.is_err());
     }
@@ -227,21 +230,22 @@ mod tests {
     #[test]
     /// Assert we error if we are passed an `(Address, BlockHeight)` but are not
     /// given a corrseponding set of validators for the block height
-    fn test_get_voting_powers_for_selected_no_active_validators_for_height() {
-        let all_active = BTreeMap::default();
+    fn test_get_voting_powers_for_selected_no_consensus_validators_for_height()
+    {
+        let all_consensus = BTreeMap::default();
         let selected = HashSet::from_iter(vec![(
             address::testing::established_address_1(),
             BlockHeight(100),
         )]);
 
-        let result = get_voting_powers_for_selected(&all_active, selected);
+        let result = get_voting_powers_for_selected(&all_consensus, selected);
 
         assert!(result.is_err());
     }
 
     #[test]
-    /// Test getting the voting powers for two active validators from the set of
-    /// active validators
+    /// Test getting the voting powers for two consensus validators from the set
+    /// of consensus validators
     fn test_get_voting_powers_for_selected_two_validators() {
         let validator_1 = address::testing::established_address_1();
         let validator_2 = address::testing::established_address_2();
@@ -259,7 +263,7 @@ mod tests {
             (validator_1.clone(), BlockHeight(100)),
             (validator_2.clone(), BlockHeight(100)),
         ]);
-        let active_validators = BTreeMap::from_iter(vec![(
+        let consensus_validators = BTreeMap::from_iter(vec![(
             BlockHeight(100),
             BTreeSet::from_iter(vec![
                 weighted_validator_1,
@@ -268,7 +272,7 @@ mod tests {
         )]);
 
         let result =
-            get_voting_powers_for_selected(&active_validators, validators);
+            get_voting_powers_for_selected(&consensus_validators, validators);
 
         let voting_powers = match result {
             Ok(voting_powers) => voting_powers,

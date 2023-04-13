@@ -28,7 +28,7 @@ where
     /// block height.
     ///
     /// Checks that at epoch of the provided height:
-    ///  * The Tendermint address corresponds to an active validator.
+    ///  * The inner Namada address corresponds to a consensus validator.
     ///  * The validator correctly signed the extension.
     ///  * The validator signed over the correct height inside of the extension.
     ///  * There are no duplicate Ethereum events in this vote extension, and
