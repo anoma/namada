@@ -1264,36 +1264,97 @@ mod test {
         let mut db = open(dir.path(), None).unwrap();
 
         let key = Key::parse("test").unwrap();
+        let batch_key = Key::parse("batch").unwrap();
 
         let mut batch = RocksDB::batch();
         let last_height = BlockHeight(100);
         db.batch_write_subspace_val(
             &mut batch,
             last_height,
-            &key,
+            &batch_key,
             vec![1_u8, 1, 1, 1],
         )
         .unwrap();
         db.exec_batch(batch.0).unwrap();
+
+        db.write_subspace_val(last_height, &key, vec![1_u8, 1, 1, 0])
+            .unwrap();
 
         let mut batch = RocksDB::batch();
         let last_height = BlockHeight(111);
         db.batch_write_subspace_val(
             &mut batch,
             last_height,
-            &key,
+            &batch_key,
             vec![2_u8, 2, 2, 2],
         )
         .unwrap();
         db.exec_batch(batch.0).unwrap();
 
+        db.write_subspace_val(last_height, &key, vec![2_u8, 2, 2, 0])
+            .unwrap();
+
+        let prev_value = db
+            .read_subspace_val_with_height(
+                &batch_key,
+                BlockHeight(100),
+                last_height,
+            )
+            .expect("read should succeed");
+        assert_eq!(prev_value, Some(vec![1_u8, 1, 1, 1]));
         let prev_value = db
             .read_subspace_val_with_height(&key, BlockHeight(100), last_height)
             .expect("read should succeed");
-        assert_eq!(prev_value, Some(vec![1_u8, 1, 1, 1]));
+        assert_eq!(prev_value, Some(vec![1_u8, 1, 1, 0]));
 
+        let updated_value = db
+            .read_subspace_val_with_height(
+                &batch_key,
+                BlockHeight(111),
+                last_height,
+            )
+            .expect("read should succeed");
+        assert_eq!(updated_value, Some(vec![2_u8, 2, 2, 2]));
+        let updated_value = db
+            .read_subspace_val_with_height(&key, BlockHeight(111), last_height)
+            .expect("read should succeed");
+        assert_eq!(updated_value, Some(vec![2_u8, 2, 2, 0]));
+
+        let latest_value = db
+            .read_subspace_val(&batch_key)
+            .expect("read should succeed");
+        assert_eq!(latest_value, Some(vec![2_u8, 2, 2, 2]));
         let latest_value =
             db.read_subspace_val(&key).expect("read should succeed");
-        assert_eq!(latest_value, Some(vec![2_u8, 2, 2, 2]));
+        assert_eq!(latest_value, Some(vec![2_u8, 2, 2, 0]));
+
+        let mut batch = RocksDB::batch();
+        let last_height = BlockHeight(222);
+        db.batch_delete_subspace_val(&mut batch, last_height, &batch_key)
+            .unwrap();
+        db.exec_batch(batch.0).unwrap();
+
+        db.delete_subspace_val(last_height, &key).unwrap();
+
+        let deleted_value = db
+            .read_subspace_val_with_height(
+                &batch_key,
+                BlockHeight(222),
+                last_height,
+            )
+            .expect("read should succeed");
+        assert_eq!(deleted_value, None);
+        let deleted_value = db
+            .read_subspace_val_with_height(&key, BlockHeight(222), last_height)
+            .expect("read should succeed");
+        assert_eq!(deleted_value, None);
+
+        let latest_value = db
+            .read_subspace_val(&batch_key)
+            .expect("read should succeed");
+        assert_eq!(latest_value, None);
+        let latest_value =
+            db.read_subspace_val(&key).expect("read should succeed");
+        assert_eq!(latest_value, None);
     }
 }
