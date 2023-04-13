@@ -17,6 +17,7 @@ use eyre::eyre;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
     get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
 };
+use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_ethereum_bridge::parameters::read_native_erc20_address;
 use namada_ethereum_bridge::storage::wrapped_erc20s;
 
@@ -126,12 +127,13 @@ where
         &self,
         transfer: &'trans PendingTransfer,
     ) -> Result<EscrowCheck<'trans>, Error> {
+        let is_native_asset = transfer.transfer.asset
+            == read_native_erc20_address(&self.ctx.pre())?;
         // there is a corner case where the gas fees and escrowed Nam
         // are debited from the same address when mint wNam.
         Ok(
             if transfer.gas_fee.payer == transfer.transfer.sender
-                && transfer.transfer.asset
-                    == read_native_erc20_address(&self.ctx.pre())?
+                && is_native_asset
             {
                 let debit = transfer
                     .gas_fee
@@ -169,9 +171,11 @@ where
                     },
                     token_check: EscrowDelta {
                         payer_account: &transfer.transfer.sender,
-                        escrow_account: &Address::Internal(
-                            InternalAddress::EthBridge,
-                        ),
+                        escrow_account: if is_native_asset {
+                            &BRIDGE_ADDRESS
+                        } else {
+                            &BRIDGE_POOL_ADDRESS
+                        },
                         expected_debit: transfer.transfer.amount,
                         expected_credit: transfer.transfer.amount,
                     },
