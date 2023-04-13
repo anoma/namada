@@ -4,7 +4,7 @@ mod keys;
 pub mod pre_genesis;
 mod store;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -23,7 +23,7 @@ use thiserror::Error;
 use self::alias::Alias;
 pub use self::keys::{DecryptionError, StoredKeypair};
 use self::store::Store;
-pub use self::store::{ValidatorData, ValidatorKeys};
+pub use self::store::{AddressVpType, ValidatorData, ValidatorKeys};
 use crate::cli;
 use crate::config::genesis::genesis_config::GenesisConfig;
 
@@ -510,6 +510,24 @@ impl Wallet {
             validator_alias,
             other,
         )
+    }
+
+    /// Gets all addresses given a vp_type
+    pub fn get_addresses_with_vp_type(
+        &self,
+        vp_type: AddressVpType,
+    ) -> HashSet<Address> {
+        self.store.get_addresses_with_vp_type(vp_type)
+    }
+
+    /// Add a vp_type to a given address
+    pub fn add_vp_type_to_address(
+        &mut self,
+        vp_type: AddressVpType,
+        address: Address,
+    ) {
+        // defaults to an empty set
+        self.store.add_vp_type_to_address(vp_type, address)
     }
 }
 

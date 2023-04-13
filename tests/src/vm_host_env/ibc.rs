@@ -88,11 +88,11 @@ use namada::types::storage::{
 use namada::types::time::DurationSecs;
 use namada::types::token::{self, Amount};
 use namada::vm::{wasm, WasmCacheRwAccess};
+use namada_test_utils::TestWasms;
 use namada_tx_prelude::BorshSerialize;
 
 use crate::tx::{self, *};
 
-const VP_ALWAYS_TRUE_WASM: &str = "../wasm_for_tests/vp_always_true.wasm";
 const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
 
 const COMMITMENT_PREFIX: &[u8] = b"ibc";
@@ -224,7 +224,7 @@ pub fn init_storage() -> (Address, Address) {
     });
 
     // initialize a token
-    let code = std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+    let code = TestWasms::VpAlwaysTrue.read_bytes();
     let token = tx::ctx().init_account(code.clone()).unwrap();
 
     // initialize an account

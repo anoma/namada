@@ -90,7 +90,12 @@ impl Shell {
         match req {
             Request::InitChain(init) => {
                 tracing::debug!("Request InitChain");
-                self.init_chain(init).map(Response::InitChain)
+                self.init_chain(
+                    init,
+                    #[cfg(feature = "dev")]
+                    1,
+                )
+                .map(Response::InitChain)
             }
             Request::Info(_) => Ok(Response::Info(self.last_state())),
             Request::Query(query) => Ok(Response::Query(self.query(query))),
@@ -206,6 +211,7 @@ pub fn dump_db(
     args::LedgerDumpDb {
         // block_height,
         out_file_path,
+        historic,
     }: args::LedgerDumpDb,
 ) {
     use namada::ledger::storage::DB;
@@ -214,7 +220,12 @@ pub fn dump_db(
     let db_path = config.shell.db_dir(&chain_id);
 
     let db = storage::PersistentDB::open(db_path, None);
-    db.dump_last_block(out_file_path);
+    db.dump_last_block(out_file_path, historic);
+}
+
+/// Roll Namada state back to the previous height
+pub fn rollback(config: config::Ledger) -> Result<(), shell::Error> {
+    shell::rollback(config)
 }
 
 /// Runs and monitors a few concurrent tasks.
@@ -446,8 +457,8 @@ fn start_abci_broadcaster_shell(
     #[cfg(not(feature = "dev"))]
     let genesis = genesis::genesis(&config.shell.base_dir, &config.chain_id);
     #[cfg(feature = "dev")]
-    let genesis = genesis::genesis();
-    let (shell, abci_service) = AbcippShim::new(
+    let genesis = genesis::genesis(1);
+    let (shell, abci_service, service_handle) = AbcippShim::new(
         config,
         wasm_dir,
         broadcaster_sender,
@@ -463,8 +474,13 @@ fn start_abci_broadcaster_shell(
     // Start the ABCI server
     let abci = spawner
         .spawn_abortable("ABCI", move |aborter| async move {
-            let res =
-                run_abci(abci_service, ledger_address, abci_abort_recv).await;
+            let res = run_abci(
+                abci_service,
+                service_handle,
+                ledger_address,
+                abci_abort_recv,
+            )
+            .await;
 
             drop(aborter);
             res
@@ -497,6 +513,7 @@ fn start_abci_broadcaster_shell(
 /// mempool, snapshot, and info.
 async fn run_abci(
     abci_service: AbciService,
+    service_handle: tokio::sync::broadcast::Sender<()>,
     ledger_address: SocketAddr,
     abort_recv: tokio::sync::oneshot::Receiver<()>,
 ) -> shell::Result<()> {
@@ -523,13 +540,13 @@ async fn run_abci(
         )
         .finish()
         .unwrap();
-
     tokio::select! {
         // Run the server with the ABCI service
         status = server.listen(ledger_address) => {
             status.map_err(|err| Error::TowerServer(err.to_string()))
         },
         resp_sender = abort_recv => {
+            _ = service_handle.send(());
             match resp_sender {
                 Ok(()) => {
                     tracing::info!("Shutting down ABCI server...");

@@ -1,6 +1,6 @@
 //! Governance library code
 
-use crate::types::address::{Address, InternalAddress};
+use crate::types::address::{self, Address};
 
 /// governance parameters
 pub mod parameters;
@@ -8,4 +8,4 @@ pub mod parameters;
 pub mod storage;
 
 /// The governance internal address
-pub const ADDRESS: Address = Address::Internal(InternalAddress::Governance);
+pub const ADDRESS: Address = address::GOV;

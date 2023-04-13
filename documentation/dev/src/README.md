@@ -6,7 +6,7 @@ Welcome to Namada's docs!
 
 Namada is a sovereign, proof-of-stake blockchain protocol that enables private, asset-agnostic cash and private bartering among any number of parties. To learn more about the protocol, we recommend the following resources:
 
-- [Introduction to Namada Medium article](https://medium.com/namadanetwork/introducing-namada-a-blockchain-for-private-asset-agnostic-bartering-dcc47ac42d9f)
+- [Introducing Namada: Interchain Asset-agnostic Privacy](https://blog.namada.net/introducing-namada-interchain-asset-agnostic-privacy/)
 - [Namada's Whitepaper](https://namada.network/papers/whitepaper.pdf)
 - [Namada's Vision paper](https://namada.network/papers/vision-paper.pdf)
 

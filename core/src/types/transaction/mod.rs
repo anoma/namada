@@ -210,6 +210,7 @@ pub mod tx_types {
 
     use super::*;
     use crate::proto::{SignedTxData, Tx};
+    use crate::types::chain::ChainId;
     use crate::types::transaction::protocol::ProtocolTx;
 
     /// Errors relating to decrypting a wrapper tx and its
@@ -241,7 +242,15 @@ pub mod tx_types {
 
     impl From<TxType> for Tx {
         fn from(ty: TxType) -> Self {
-            Tx::new(vec![], Some(ty.try_to_vec().unwrap()))
+            Tx::new(
+                vec![],
+                Some(ty.try_to_vec().unwrap()),
+                ChainId(String::new()), /* No need to provide a valid
+                                         * ChainId or expiration when
+                                         * casting back from
+                                         * TxType */
+                None,
+            )
         }
     }
 
@@ -296,12 +305,16 @@ pub mod tx_types {
                 code: tx.code,
                 data: Some(data.clone()),
                 timestamp: tx.timestamp,
+                chain_id: tx.chain_id.clone(),
+                expiration: tx.expiration,
             }
             .hash();
             match TxType::try_from(Tx {
                 code: vec![],
                 data: Some(data),
                 timestamp: tx.timestamp,
+                chain_id: tx.chain_id,
+                expiration: tx.expiration,
             })
             .map_err(|err| TxError::Deserialization(err.to_string()))?
             {
@@ -342,6 +355,7 @@ pub mod tx_types {
         use super::*;
         use crate::types::address::nam;
         use crate::types::storage::Epoch;
+        use crate::types::time::DateTimeUtc;
 
         fn gen_keypair() -> common::SecretKey {
             use rand::prelude::ThreadRng;
@@ -355,7 +369,12 @@ pub mod tx_types {
         /// data and returns an identical copy
         #[test]
         fn test_process_tx_raw_tx_no_data() {
-            let tx = Tx::new("wasm code".as_bytes().to_owned(), None);
+            let tx = Tx::new(
+                "wasm code".as_bytes().to_owned(),
+                None,
+                ChainId::default(),
+                None,
+            );
 
             match process_tx(tx.clone()).expect("Test failed") {
                 TxType::Raw(raw) => assert_eq!(tx, raw),
@@ -371,6 +390,8 @@ pub mod tx_types {
             let inner = Tx::new(
                 "code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
+                ChainId::default(),
+                None,
             );
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
@@ -379,6 +400,8 @@ pub mod tx_types {
                         .try_to_vec()
                         .expect("Test failed"),
                 ),
+                inner.chain_id.clone(),
+                None,
             );
 
             match process_tx(tx).expect("Test failed") {
@@ -394,6 +417,8 @@ pub mod tx_types {
             let inner = Tx::new(
                 "code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
+                ChainId::default(),
+                None,
             );
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
@@ -402,6 +427,8 @@ pub mod tx_types {
                         .try_to_vec()
                         .expect("Test failed"),
                 ),
+                inner.chain_id.clone(),
+                None,
             )
             .sign(&gen_keypair());
 
@@ -419,6 +446,8 @@ pub mod tx_types {
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
+                ChainId::default(),
+                None,
             );
             // the signed tx
             let wrapper = WrapperTx::new(
@@ -434,7 +463,7 @@ pub mod tx_types {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             )
-            .sign(&keypair)
+            .sign(&keypair, tx.chain_id.clone(), Some(DateTimeUtc::now()))
             .expect("Test failed");
 
             match process_tx(wrapper).expect("Test failed") {
@@ -456,6 +485,8 @@ pub mod tx_types {
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
+                ChainId::default(),
+                None,
             );
             // the signed tx
             let wrapper = WrapperTx::new(
@@ -477,6 +508,8 @@ pub mod tx_types {
                 Some(
                     TxType::Wrapper(wrapper).try_to_vec().expect("Test failed"),
                 ),
+                ChainId::default(),
+                None,
             );
             let result = process_tx(tx).expect_err("Test failed");
             assert_matches!(result, TxError::Unsigned(_));
@@ -490,6 +523,8 @@ pub mod tx_types {
         let payload = Tx::new(
             "transaction data".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            ChainId::default(),
+            None,
         );
         let decrypted = DecryptedTx::Decrypted {
             tx: payload.clone(),
@@ -517,6 +552,8 @@ pub mod tx_types {
         let payload = Tx::new(
             "transaction data".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            ChainId::default(),
+            None,
         );
         let decrypted = DecryptedTx::Decrypted {
             tx: payload.clone(),
@@ -535,8 +572,12 @@ pub mod tx_types {
             sig: common::Signature::try_from_sig(&ed_sig).unwrap(),
         };
         // create the tx with signed decrypted data
-        let tx =
-            Tx::new(vec![], Some(signed.try_to_vec().expect("Test failed")));
+        let tx = Tx::new(
+            vec![],
+            Some(signed.try_to_vec().expect("Test failed")),
+            ChainId::default(),
+            None,
+        );
         match process_tx(tx).expect("Test failed") {
             TxType::Decrypted(DecryptedTx::Decrypted {
                 tx: processed,

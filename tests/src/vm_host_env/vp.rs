@@ -64,15 +64,17 @@ impl Default for TestVpEnv {
         let (vp_wasm_cache, vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
+        let wl_storage = WlStorage {
+            storage: TestStorage::default(),
+            write_log: WriteLog::default(),
+        };
+        let chain_id = wl_storage.storage.chain_id.clone();
         Self {
             addr: address::testing::established_address_1(),
-            wl_storage: WlStorage {
-                storage: TestStorage::default(),
-                write_log: WriteLog::default(),
-            },
+            wl_storage,
             iterators: PrefixIterators::default(),
             gas_meter: VpGasMeter::default(),
-            tx: Tx::new(vec![], None),
+            tx: Tx::new(vec![], None, chain_id, None),
             tx_index: TxIndex::default(),
             keys_changed: BTreeSet::default(),
             verifiers: BTreeSet::default(),
@@ -344,6 +346,7 @@ mod native_vp_host_env {
     // [`namada_vm_env::imports::vp`] `extern "C"` section.
     native_host_fn!(vp_read_pre(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_read_post(key_ptr: u64, key_len: u64) -> i64);
+    native_host_fn!(vp_read_temp(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_result_buffer(result_ptr: u64));
     native_host_fn!(vp_has_key_pre(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_has_key_post(key_ptr: u64, key_len: u64) -> i64);

@@ -13,13 +13,13 @@ pub mod wrapper_tx {
 
     use crate::proto::Tx;
     use crate::types::address::Address;
+    use crate::types::chain::ChainId;
     use crate::types::key::*;
     use crate::types::storage::Epoch;
+    use crate::types::time::DateTimeUtc;
     use crate::types::token::Amount;
     use crate::types::transaction::encrypted::EncryptedTx;
-    use crate::types::transaction::{
-        hash_tx, EncryptionKey, Hash, TxError, TxType,
-    };
+    use crate::types::transaction::{EncryptionKey, Hash, TxError, TxType};
 
     /// Minimum fee amount in micro NAMs
     pub const MIN_FEE: u64 = 100;
@@ -206,7 +206,7 @@ pub mod wrapper_tx {
                 epoch,
                 gas_limit,
                 inner_tx,
-                tx_hash: hash_tx(&tx.to_bytes()),
+                tx_hash: Hash(tx.unsigned_hash()),
                 #[cfg(not(feature = "mainnet"))]
                 pow_solution,
             }
@@ -227,7 +227,7 @@ pub mod wrapper_tx {
 
         /// Decrypt the wrapped transaction.
         ///
-        /// Will fail if the inner transaction does match the
+        /// Will fail if the inner transaction doesn't match the
         /// hash commitment or we are unable to recover a
         /// valid Tx from the decoded byte stream.
         pub fn decrypt(
@@ -236,20 +236,23 @@ pub mod wrapper_tx {
         ) -> Result<Tx, WrapperTxErr> {
             // decrypt the inner tx
             let decrypted = self.inner_tx.decrypt(privkey);
+            let decrypted_tx = Tx::try_from(decrypted.as_ref())
+                .map_err(|_| WrapperTxErr::InvalidTx)?;
+
             // check that the hash equals commitment
-            if hash_tx(&decrypted) != self.tx_hash {
-                Err(WrapperTxErr::DecryptedHash)
-            } else {
-                // convert back to Tx type
-                Tx::try_from(decrypted.as_ref())
-                    .map_err(|_| WrapperTxErr::InvalidTx)
+            if decrypted_tx.unsigned_hash() != self.tx_hash.0 {
+                return Err(WrapperTxErr::DecryptedHash);
             }
+
+            Ok(decrypted_tx)
         }
 
         /// Sign the wrapper transaction and convert to a normal Tx type
         pub fn sign(
             &self,
             keypair: &common::SecretKey,
+            chain_id: ChainId,
+            expiration: Option<DateTimeUtc>,
         ) -> Result<Tx, WrapperTxErr> {
             if self.pk != keypair.ref_to() {
                 return Err(WrapperTxErr::InvalidKeyPair);
@@ -261,6 +264,8 @@ pub mod wrapper_tx {
                         .try_to_vec()
                         .expect("Could not serialize WrapperTx"),
                 ),
+                chain_id,
+                expiration,
             )
             .sign(keypair))
         }
@@ -365,6 +370,8 @@ pub mod wrapper_tx {
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
+                ChainId::default(),
+                Some(DateTimeUtc::now()),
             );
 
             let wrapper = WrapperTx::new(
@@ -393,6 +400,8 @@ pub mod wrapper_tx {
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
+                ChainId::default(),
+                Some(DateTimeUtc::now()),
             );
 
             let mut wrapper = WrapperTx::new(
@@ -416,7 +425,7 @@ pub mod wrapper_tx {
             assert_matches!(err, WrapperTxErr::DecryptedHash);
         }
 
-        /// We check that even if the encrypted payload and has of its
+        /// We check that even if the encrypted payload and hash of its
         /// contents are correctly changed, we detect fraudulent activity
         /// via the signature.
         #[test]
@@ -427,6 +436,8 @@ pub mod wrapper_tx {
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
+                ChainId::default(),
+                Some(DateTimeUtc::now()),
             );
             // the signed tx
             let mut tx = WrapperTx::new(
@@ -442,7 +453,7 @@ pub mod wrapper_tx {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             )
-            .sign(&keypair)
+            .sign(&keypair, ChainId::default(), None)
             .expect("Test failed");
 
             // we now try to alter the inner tx maliciously
@@ -460,8 +471,12 @@ pub mod wrapper_tx {
                     .expect("Test failed");
 
             // malicious transaction
-            let malicious =
-                Tx::new("Give me all the money".as_bytes().to_owned(), None);
+            let malicious = Tx::new(
+                "Give me all the money".as_bytes().to_owned(),
+                None,
+                ChainId::default(),
+                None,
+            );
 
             // We replace the inner tx with a malicious one
             wrapper.inner_tx = EncryptedTx::encrypt(
@@ -470,7 +485,7 @@ pub mod wrapper_tx {
             );
 
             // We change the commitment appropriately
-            wrapper.tx_hash = hash_tx(&malicious.to_bytes());
+            wrapper.tx_hash = Hash(malicious.unsigned_hash());
 
             // we check ciphertext validity still passes
             assert!(wrapper.validate_ciphertext());

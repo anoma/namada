@@ -875,8 +875,10 @@ pub fn genesis(base_dir: impl AsRef<Path>, chain_id: &ChainId) -> Genesis {
     genesis_config::read_genesis_config(path)
 }
 #[cfg(feature = "dev")]
-pub fn genesis() -> Genesis {
-    use namada::types::address;
+pub fn genesis(num_validators: u64) -> Genesis {
+    use namada::types::address::{
+        self, apfel, btc, dot, eth, kartoffel, nam, schnitzel,
+    };
     use rust_decimal_macros::dec;
 
     use crate::wallet;
@@ -888,6 +890,9 @@ pub fn genesis() -> Genesis {
     // NOTE When the validator's key changes, tendermint must be reset with
     // `namada reset` command. To generate a new validator, use the
     // `tests::gen_genesis_validator` below.
+    let mut validators = Vec::<Validator>::new();
+
+    // Use hard-coded keys for the first validator to avoid breaking other code
     let consensus_keypair = wallet::defaults::validator_keypair();
     let account_keypair = wallet::defaults::validator_keypair();
     let address = wallet::defaults::validator_address();
@@ -908,6 +913,37 @@ pub fn genesis() -> Genesis {
         validator_vp_code_path: vp_user_path.into(),
         validator_vp_sha256: Default::default(),
     };
+    validators.push(validator);
+
+    // Add other validators with randomly generated keys if needed
+    for _ in 0..(num_validators - 1) {
+        let consensus_keypair: common::SecretKey =
+            testing::gen_keypair::<ed25519::SigScheme>()
+                .try_to_sk()
+                .unwrap();
+        let account_keypair = consensus_keypair.clone();
+        let address = address::gen_established_address("validator account");
+        let (protocol_keypair, dkg_keypair) =
+            wallet::defaults::validator_keys();
+        let validator = Validator {
+            pos_data: GenesisValidator {
+                address,
+                tokens: token::Amount::whole(200_000),
+                consensus_key: consensus_keypair.ref_to(),
+                commission_rate: dec!(0.05),
+                max_commission_rate_change: dec!(0.01),
+            },
+            account_key: account_keypair.ref_to(),
+            protocol_key: protocol_keypair.ref_to(),
+            dkg_public_key: dkg_keypair.public(),
+            non_staked_balance: token::Amount::whole(100_000),
+            // TODO replace with https://github.com/anoma/namada/issues/25)
+            validator_vp_code_path: vp_user_path.into(),
+            validator_vp_sha256: Default::default(),
+        };
+        validators.push(validator);
+    }
+
     let parameters = Parameters {
         epoch_duration: EpochDuration {
             min_num_of_blocks: 10,
@@ -960,7 +996,7 @@ pub fn genesis() -> Genesis {
     }];
     let default_user_tokens = token::Amount::whole(1_000_000);
     let default_key_tokens = token::Amount::whole(1_000);
-    let balances: HashMap<Address, token::Amount> = HashMap::from_iter([
+    let mut balances: HashMap<Address, token::Amount> = HashMap::from_iter([
         // established accounts' balances
         (wallet::defaults::albert_address(), default_user_tokens),
         (wallet::defaults::bertha_address(), default_user_tokens),
@@ -980,9 +1016,26 @@ pub fn genesis() -> Genesis {
             christel.public_key.as_ref().unwrap().into(),
             default_key_tokens,
         ),
-        ((&validator.account_key).into(), default_key_tokens),
     ]);
-    let token_accounts = address::tokens()
+    for validator in &validators {
+        balances.insert((&validator.account_key).into(), default_key_tokens);
+    }
+
+    /// Deprecated function, soon to be deleted. Generates default tokens
+    fn tokens() -> HashMap<Address, &'static str> {
+        vec![
+            (nam(), "NAM"),
+            (btc(), "BTC"),
+            (eth(), "ETH"),
+            (dot(), "DOT"),
+            (schnitzel(), "Schnitzel"),
+            (apfel(), "Apfel"),
+            (kartoffel(), "Kartoffel"),
+        ]
+        .into_iter()
+        .collect()
+    }
+    let token_accounts = tokens()
         .into_keys()
         .map(|address| TokenAccount {
             address,
@@ -993,7 +1046,7 @@ pub fn genesis() -> Genesis {
         .collect();
     Genesis {
         genesis_time: DateTimeUtc::now(),
-        validators: vec![validator],
+        validators,
         established_accounts: vec![albert, bertha, christel, masp],
         implicit_accounts,
         token_accounts,

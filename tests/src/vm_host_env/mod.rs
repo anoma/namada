@@ -28,6 +28,7 @@ mod tests {
     };
     use namada::ledger::tx_env::TxEnv;
     use namada::proto::{SignedTxData, Tx};
+    use namada::types::chain::ChainId;
     use namada::types::key::*;
     use namada::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
     use namada::types::time::DateTimeUtc;
@@ -35,6 +36,7 @@ mod tests {
     use namada::types::{address, key};
     use namada_core::ledger::ibc::context::transfer_mod::testing::DummyTransferModule;
     use namada_core::ledger::ibc::Error as IbcActionError;
+    use namada_test_utils::TestWasms;
     use namada_tx_prelude::{
         BorshDeserialize, BorshSerialize, StorageRead, StorageWrite,
     };
@@ -45,10 +47,6 @@ mod tests {
     use super::{ibc, tx, vp};
     use crate::tx::{tx_host_env, TestTxEnv};
     use crate::vp::{vp_host_env, TestVpEnv};
-
-    // paths to the WASMs used for tests
-    const VP_ALWAYS_TRUE_WASM: &str = "../wasm_for_tests/vp_always_true.wasm";
-    const VP_ALWAYS_FALSE_WASM: &str = "../wasm_for_tests/vp_always_false.wasm";
 
     #[test]
     fn test_tx_read_write() {
@@ -220,8 +218,7 @@ mod tests {
         // The environment must be initialized first
         tx_host_env::init();
 
-        let code =
-            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+        let code = TestWasms::VpAlwaysTrue.read_bytes();
         tx::ctx().init_account(code).unwrap();
     }
 
@@ -445,6 +442,7 @@ mod tests {
 
         // Use some arbitrary bytes for tx code
         let code = vec![4, 3, 2, 1, 0];
+        let expiration = Some(DateTimeUtc::now());
         for data in &[
             // Tx with some arbitrary data
             Some(vec![1, 2, 3, 4].repeat(10)),
@@ -452,7 +450,13 @@ mod tests {
             None,
         ] {
             let signed_tx_data = vp_host_env::with(|env| {
-                env.tx = Tx::new(code.clone(), data.clone()).sign(&keypair);
+                env.tx = Tx::new(
+                    code.clone(),
+                    data.clone(),
+                    env.wl_storage.storage.chain_id.clone(),
+                    expiration,
+                )
+                .sign(&keypair);
                 let tx_data = env.tx.data.as_ref().expect("data should exist");
 
                 SignedTxData::try_from_slice(&tx_data[..])
@@ -528,16 +532,14 @@ mod tests {
         assert!(!result);
 
         // evaluating the VP template which always returns `true` should pass
-        let code =
-            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+        let code = TestWasms::VpAlwaysTrue.read_bytes();
         let input_data = vec![];
         let result = vp::CTX.eval(code, input_data).unwrap();
         assert!(result);
 
         // evaluating the VP template which always returns `false` shouldn't
         // pass
-        let code =
-            std::fs::read(VP_ALWAYS_FALSE_WASM).expect("cannot load wasm");
+        let code = TestWasms::VpAlwaysFalse.read_bytes();
         let input_data = vec![];
         let result = vp::CTX.eval(code, input_data).unwrap();
         assert!(!result);
@@ -558,6 +560,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
 
@@ -593,6 +597,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // update the client with the message
@@ -631,6 +637,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // init a connection with the message
@@ -665,6 +673,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // open the connection with the message
@@ -704,6 +714,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // open try a connection with the message
@@ -738,6 +750,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // open the connection with the mssage
@@ -779,6 +793,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // init a channel with the message
@@ -813,6 +829,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // open the channle with the message
@@ -854,6 +872,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // try open a channel with the message
@@ -888,6 +908,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // open a channel with the message
@@ -931,6 +953,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // close the channel with the message
@@ -982,6 +1006,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
 
@@ -1030,6 +1056,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // send the token and a packet with the data
@@ -1077,6 +1105,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // ack the packet with the message
@@ -1151,6 +1181,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // send the token and a packet with the data
@@ -1225,6 +1257,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // receive a packet with the message
@@ -1312,6 +1346,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // receive a packet with the message
@@ -1402,6 +1438,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // receive a packet with the message
@@ -1496,6 +1534,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
 
@@ -1580,6 +1620,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
 

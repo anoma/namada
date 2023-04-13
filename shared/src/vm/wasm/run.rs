@@ -409,6 +409,8 @@ fn get_gas_rules() -> rules::Set {
 mod tests {
     use borsh::BorshSerialize;
     use itertools::Either;
+    use namada_core::types::chain::ChainId;
+    use namada_test_utils::TestWasms;
     use test_log::test;
     use wasmer_vm::TrapCode;
 
@@ -416,16 +418,6 @@ mod tests {
     use crate::ledger::storage::testing::TestStorage;
     use crate::types::validity_predicate::EvalVp;
     use crate::vm::wasm;
-
-    const TX_MEMORY_LIMIT_WASM: &str = "../wasm_for_tests/tx_memory_limit.wasm";
-    const TX_NO_OP_WASM: &str = "../wasm_for_tests/tx_no_op.wasm";
-    const TX_READ_STORAGE_KEY_WASM: &str =
-        "../wasm_for_tests/tx_read_storage_key.wasm";
-    const VP_ALWAYS_TRUE_WASM: &str = "../wasm_for_tests/vp_always_true.wasm";
-    const VP_EVAL_WASM: &str = "../wasm_for_tests/vp_eval.wasm";
-    const VP_MEMORY_LIMIT_WASM: &str = "../wasm_for_tests/vp_memory_limit.wasm";
-    const VP_READ_STORAGE_KEY_WASM: &str =
-        "../wasm_for_tests/vp_read_storage_key.wasm";
 
     /// Test that when a transaction wasm goes over the stack-height limit, the
     /// execution is aborted.
@@ -477,8 +469,7 @@ mod tests {
         let tx_index = TxIndex::default();
 
         // This code will allocate memory of the given size
-        let tx_code =
-            std::fs::read(TX_MEMORY_LIMIT_WASM).expect("cannot load wasm");
+        let tx_code = TestWasms::TxMemoryLimit.read_bytes();
 
         // Assuming 200 pages, 12.8 MiB limit
         assert_eq!(memory::TX_MEMORY_MAX_PAGES, 200);
@@ -534,10 +525,9 @@ mod tests {
         let tx_index = TxIndex::default();
 
         // This code will call `eval` with the other VP below
-        let vp_eval = std::fs::read(VP_EVAL_WASM).expect("cannot load wasm");
+        let vp_eval = TestWasms::VpEval.read_bytes();
         // This code will allocate memory of the given size
-        let vp_memory_limit =
-            std::fs::read(VP_MEMORY_LIMIT_WASM).expect("cannot load wasm");
+        let vp_memory_limit = TestWasms::VpMemoryLimit.read_bytes();
 
         // Assuming 200 pages, 12.8 MiB limit
         assert_eq!(memory::VP_MEMORY_MAX_PAGES, 200);
@@ -550,7 +540,7 @@ mod tests {
             input,
         };
         let tx_data = eval_vp.try_to_vec().unwrap();
-        let tx = Tx::new(vec![], Some(tx_data));
+        let tx = Tx::new(vec![], Some(tx_data), storage.chain_id.clone(), None);
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         // When the `eval`ed VP doesn't run out of memory, it should return
         // `true`
@@ -579,7 +569,7 @@ mod tests {
             input,
         };
         let tx_data = eval_vp.try_to_vec().unwrap();
-        let tx = Tx::new(vec![], Some(tx_data));
+        let tx = Tx::new(vec![], Some(tx_data), storage.chain_id.clone(), None);
         // When the `eval`ed VP runs out of memory, its result should be
         // `false`, hence we should also get back `false` from the VP that
         // called `eval`.
@@ -615,8 +605,7 @@ mod tests {
         let tx_index = TxIndex::default();
 
         // This code will allocate memory of the given size
-        let vp_code =
-            std::fs::read(VP_MEMORY_LIMIT_WASM).expect("cannot load wasm");
+        let vp_code = TestWasms::VpMemoryLimit.read_bytes();
 
         // Assuming 200 pages, 12.8 MiB limit
         assert_eq!(memory::VP_MEMORY_MAX_PAGES, 200);
@@ -624,7 +613,7 @@ mod tests {
         // Allocating `2^23` (8 MiB) should be below the memory limit and
         // shouldn't fail
         let tx_data = 2_usize.pow(23).try_to_vec().unwrap();
-        let tx = Tx::new(vec![], Some(tx_data));
+        let tx = Tx::new(vec![], Some(tx_data), storage.chain_id.clone(), None);
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let result = vp(
             vp_code.clone(),
@@ -645,7 +634,7 @@ mod tests {
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
         let tx_data = 2_usize.pow(24).try_to_vec().unwrap();
-        let tx = Tx::new(vec![], Some(tx_data));
+        let tx = Tx::new(vec![], Some(tx_data), storage.chain_id.clone(), None);
         let error = vp(
             vp_code,
             &tx,
@@ -674,7 +663,7 @@ mod tests {
         let mut gas_meter = BlockGasMeter::default();
         let tx_index = TxIndex::default();
 
-        let tx_no_op = std::fs::read(TX_NO_OP_WASM).expect("cannot load wasm");
+        let tx_no_op = TestWasms::TxNoOp.read_bytes();
 
         // Assuming 200 pages, 12.8 MiB limit
         assert_eq!(memory::TX_MEMORY_MAX_PAGES, 200);
@@ -728,8 +717,7 @@ mod tests {
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
 
-        let vp_code =
-            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+        let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
 
         // Assuming 200 pages, 12.8 MiB limit
         assert_eq!(memory::VP_MEMORY_MAX_PAGES, 200);
@@ -738,7 +726,7 @@ mod tests {
         // limit and should fail
         let len = 2_usize.pow(24);
         let tx_data: Vec<u8> = vec![6_u8; len];
-        let tx = Tx::new(vec![], Some(tx_data));
+        let tx = Tx::new(vec![], Some(tx_data), storage.chain_id.clone(), None);
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let result = vp(
             vp_code,
@@ -785,8 +773,7 @@ mod tests {
         let mut gas_meter = BlockGasMeter::default();
         let tx_index = TxIndex::default();
 
-        let tx_read_key =
-            std::fs::read(TX_READ_STORAGE_KEY_WASM).expect("cannot load wasm");
+        let tx_read_key = TestWasms::TxReadStorageKey.read_bytes();
 
         // Allocating `2^24` (16 MiB) for a value in storage that the tx
         // attempts to read should be above the memory limit and should
@@ -832,8 +819,7 @@ mod tests {
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
 
-        let vp_read_key =
-            std::fs::read(VP_READ_STORAGE_KEY_WASM).expect("cannot load wasm");
+        let vp_read_key = TestWasms::VpReadStorageKey.read_bytes();
 
         // Allocating `2^24` (16 MiB) for a value in storage that the tx
         // attempts to read should be above the memory limit and should
@@ -847,7 +833,7 @@ mod tests {
         // Borsh.
         storage.write(&key, value.try_to_vec().unwrap()).unwrap();
         let tx_data = key.try_to_vec().unwrap();
-        let tx = Tx::new(vec![], Some(tx_data));
+        let tx = Tx::new(vec![], Some(tx_data), storage.chain_id.clone(), None);
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let error = vp(
             vp_read_key,
@@ -883,10 +869,9 @@ mod tests {
         let tx_index = TxIndex::default();
 
         // This code will call `eval` with the other VP below
-        let vp_eval = std::fs::read(VP_EVAL_WASM).expect("cannot load wasm");
+        let vp_eval = TestWasms::VpEval.read_bytes();
         // This code will read value from the storage
-        let vp_read_key =
-            std::fs::read(VP_READ_STORAGE_KEY_WASM).expect("cannot load wasm");
+        let vp_read_key = TestWasms::VpReadStorageKey.read_bytes();
 
         // Allocating `2^24` (16 MiB) for a value in storage that the tx
         // attempts to read should be above the memory limit and should
@@ -905,7 +890,7 @@ mod tests {
             input,
         };
         let tx_data = eval_vp.try_to_vec().unwrap();
-        let tx = Tx::new(vec![], Some(tx_data));
+        let tx = Tx::new(vec![], Some(tx_data), storage.chain_id.clone(), None);
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let passed = vp(
             vp_eval,
@@ -1010,7 +995,7 @@ mod tests {
         )
         .expect("unexpected error converting wat2wasm").into_owned();
 
-        let tx = Tx::new(vec![], None);
+        let tx = Tx::new(vec![], None, ChainId::default(), None);
         let tx_index = TxIndex::default();
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");

@@ -2698,7 +2698,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.14.3"
+version = "0.15.0"
 dependencies = [
  "async-trait",
  "bellman",
@@ -2723,6 +2723,7 @@ dependencies = [
  "pwasm-utils",
  "rayon",
  "rust_decimal",
+ "rust_decimal_macros",
  "serde_json",
  "sha2 0.9.9",
  "tempfile",
@@ -2742,7 +2743,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.14.3"
+version = "0.15.0"
 dependencies = [
  "ark-bls12-381",
  "ark-serialize",
@@ -2784,7 +2785,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.14.3"
+version = "0.15.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2793,10 +2794,12 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.14.3"
+version = "0.15.0"
 dependencies = [
  "borsh",
+ "data-encoding",
  "derivative",
+ "hex",
  "namada_core",
  "once_cell",
  "proptest",
@@ -2808,15 +2811,16 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.14.3"
+version = "0.15.0"
 dependencies = [
  "borsh",
  "namada_core",
+ "strum",
 ]
 
 [[package]]
 name = "namada_tests"
-version = "0.14.3"
+version = "0.15.0"
 dependencies = [
  "chrono",
  "concat-idents",
@@ -2847,7 +2851,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.14.3"
+version = "0.15.0"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -2862,7 +2866,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.14.3"
+version = "0.15.0"
 dependencies = [
  "borsh",
  "hex",
@@ -2873,7 +2877,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.14.3"
+version = "0.15.0"
 dependencies = [
  "borsh",
  "namada_core",
@@ -2886,18 +2890,20 @@ dependencies = [
 
 [[package]]
 name = "namada_wasm"
-version = "0.14.3"
+version = "0.15.0"
 dependencies = [
  "borsh",
  "getrandom 0.2.8",
  "masp_primitives",
  "masp_proofs",
  "namada",
+ "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
  "namada_vp_prelude",
  "once_cell",
  "proptest",
+ "ripemd",
  "rust_decimal",
  "tracing",
  "tracing-subscriber",
@@ -5139,7 +5145,7 @@ dependencies = [
 
 [[package]]
 name = "tx_template"
-version = "0.14.3"
+version = "0.15.0"
 dependencies = [
  "borsh",
  "getrandom 0.2.8",
@@ -5270,7 +5276,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "vp_template"
-version = "0.14.3"
+version = "0.15.0"
 dependencies = [
  "borsh",
  "getrandom 0.2.8",

@@ -25,6 +25,7 @@ mod tests {
         read_total_stake, read_validator_stake,
     };
     use namada::proto::Tx;
+    use namada::types::chain::ChainId;
     use namada::types::storage::Epoch;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
@@ -99,7 +100,7 @@ mod tests {
 
         let tx_code = vec![];
         let tx_data = bond.try_to_vec().unwrap();
-        let tx = Tx::new(tx_code, Some(tx_data));
+        let tx = Tx::new(tx_code, Some(tx_data), ChainId::default(), None);
         let signed_tx = tx.sign(&key);
         let tx_data = signed_tx.data.unwrap();
 

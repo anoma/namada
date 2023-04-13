@@ -1,9 +1,79 @@
+use std::fmt::Display;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
-use crate::types::governance::{Proposal, ProposalError, ProposalVote};
+use crate::types::governance::{
+    self, Proposal, ProposalError, ProposalVote, VoteType,
+};
 use crate::types::storage::Epoch;
+
+/// The type of a Proposal
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
+pub enum ProposalType {
+    /// Default governance proposal with the optional wasm code
+    Default(Option<Vec<u8>>),
+    /// PGF council proposal
+    PGFCouncil,
+    /// ETH proposal
+    ETHBridge,
+}
+
+impl Display for ProposalType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            ProposalType::Default(_) => write!(f, "Default"),
+            ProposalType::PGFCouncil => write!(f, "PGF Council"),
+            ProposalType::ETHBridge => write!(f, "ETH Bridge"),
+        }
+    }
+}
+
+impl PartialEq<VoteType> for ProposalType {
+    fn eq(&self, other: &VoteType) -> bool {
+        match self {
+            Self::Default(_) => {
+                matches!(other, VoteType::Default)
+            }
+            Self::PGFCouncil => {
+                matches!(other, VoteType::PGFCouncil(..))
+            }
+            Self::ETHBridge => {
+                matches!(other, VoteType::ETHBridge(_))
+            }
+        }
+    }
+}
+
+impl TryFrom<governance::ProposalType> for ProposalType {
+    type Error = ProposalError;
+
+    fn try_from(value: governance::ProposalType) -> Result<Self, Self::Error> {
+        match value {
+            governance::ProposalType::Default(path) => {
+                if let Some(p) = path {
+                    match std::fs::read(p) {
+                        Ok(code) => Ok(Self::Default(Some(code))),
+                        Err(_) => Err(Self::Error::InvalidProposalData),
+                    }
+                } else {
+                    Ok(Self::Default(None))
+                }
+            }
+            governance::ProposalType::PGFCouncil => Ok(Self::PGFCouncil),
+            governance::ProposalType::ETHBridge => Ok(Self::ETHBridge),
+        }
+    }
+}
 
 /// A tx data type to hold proposal data
 #[derive(
@@ -22,14 +92,14 @@ pub struct InitProposalData {
     pub content: Vec<u8>,
     /// The proposal author address
     pub author: Address,
+    /// The proposal type
+    pub r#type: ProposalType,
     /// The epoch from which voting is allowed
     pub voting_start_epoch: Epoch,
     /// The epoch from which voting is stopped
     pub voting_end_epoch: Epoch,
     /// The epoch from which this changes are executed
     pub grace_epoch: Epoch,
-    /// The code containing the storage changes
-    pub proposal_code: Option<Vec<u8>>,
 }
 
 /// A tx data type to hold vote proposal data
@@ -57,23 +127,14 @@ impl TryFrom<Proposal> for InitProposalData {
     type Error = ProposalError;
 
     fn try_from(proposal: Proposal) -> Result<Self, Self::Error> {
-        let proposal_code = if let Some(path) = proposal.proposal_code_path {
-            match std::fs::read(path) {
-                Ok(bytes) => Some(bytes),
-                Err(_) => return Err(Self::Error::InvalidProposalData),
-            }
-        } else {
-            None
-        };
-
         Ok(InitProposalData {
             id: proposal.id,
             content: proposal.content.try_to_vec().unwrap(),
             author: proposal.author,
+            r#type: proposal.r#type.try_into()?,
             voting_start_epoch: proposal.voting_start_epoch,
             voting_end_epoch: proposal.voting_end_epoch,
             grace_epoch: proposal.grace_epoch,
-            proposal_code,
         })
     }
 }

@@ -7,7 +7,6 @@
 #![deny(rustdoc::private_intra_doc_links)]
 
 pub mod key;
-pub mod token;
 
 // used in the VP input
 use core::convert::AsRef;
