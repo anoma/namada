@@ -62,7 +62,7 @@ fn everything() {
         &tx_code_path,
         "--data-path",
         &tx_data_path,
-        "--ledger-address",
+        "--node",
         &ledger_addr,
     ];
 
