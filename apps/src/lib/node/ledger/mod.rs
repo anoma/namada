@@ -211,6 +211,7 @@ pub fn dump_db(
     args::LedgerDumpDb {
         // block_height,
         out_file_path,
+        historic,
     }: args::LedgerDumpDb,
 ) {
     use namada::ledger::storage::DB;
@@ -219,7 +220,7 @@ pub fn dump_db(
     let db_path = config.shell.db_dir(&chain_id);
 
     let db = storage::PersistentDB::open(db_path, None);
-    db.dump_last_block(out_file_path);
+    db.dump_last_block(out_file_path, historic);
 }
 
 /// Runs and monitors a few concurrent tasks.

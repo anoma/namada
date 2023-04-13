@@ -1,7 +1,6 @@
 //! The persistent storage in RocksDB.
 //!
 //! The current storage tree is:
-//! - `chain_id`
 //! - `height`: the last committed block height
 //! - `tx_queue`: txs to be decrypted in the next block
 //! - `pred`: predecessor values of the top-level keys of the same name
@@ -15,6 +14,7 @@
 //!   - `next_epoch_min_start_time`
 //! - `subspace`: accounts sub-spaces
 //!   - `{address}/{dyn}`: any byte data associated with accounts
+//! - `results`: block results
 //! - `h`: for each block at height `h`:
 //!   - `tree`: merkle tree
 //!     - `root`: root hash
@@ -243,10 +243,14 @@ impl RocksDB {
     }
 
     /// Dump last known block
-    pub fn dump_last_block(&self, out_file_path: std::path::PathBuf) {
+    pub fn dump_last_block(
+        &self,
+        out_file_path: std::path::PathBuf,
+        historic: bool,
+    ) {
         use std::io::Write;
 
-        // Fine the last block height
+        // Find the last block height
         let height: BlockHeight = types::decode(
             self.0
                 .get("height")
@@ -274,32 +278,39 @@ impl RocksDB {
         println!("Will write to {} ...", full_path.to_string_lossy());
 
         let mut dump_it = |prefix: String| {
-            for next in self.0.iterator(IteratorMode::From(
-                prefix.as_bytes(),
-                Direction::Forward,
-            )) {
-                match next {
-                    Err(e) => {
-                        eprintln!(
-                            "Something failed in a \"{prefix}\" iterator: {e}"
-                        )
-                    }
-                    Ok((raw_key, raw_val)) => {
-                        let key = std::str::from_utf8(&raw_key)
-                            .expect("All keys should be valid UTF-8 strings");
-                        let val = HEXLOWER.encode(&raw_val);
-                        let bytes = format!("\"{key}\" = \"{val}\"\n");
-                        file.write_all(bytes.as_bytes())
-                            .expect("Unable to write to output file");
-                    }
-                };
+            let mut read_opts = ReadOptions::default();
+            read_opts.set_total_order_seek(true);
+
+            let mut upper_prefix = prefix.clone().into_bytes();
+            if let Some(last) = upper_prefix.pop() {
+                upper_prefix.push(last + 1);
+            }
+            read_opts.set_iterate_upper_bound(upper_prefix);
+
+            let iter = self.0.iterator_opt(
+                IteratorMode::From(prefix.as_bytes(), Direction::Forward),
+                read_opts,
+            );
+
+            for (key, raw_val, _gas) in PersistentPrefixIterator(
+                PrefixIterator::new(iter, String::default()),
+                // Empty string to prevent prefix stripping, the prefix is
+                // already in the enclosed iterator
+            ) {
+                let val = HEXLOWER.encode(&raw_val);
+                let bytes = format!("\"{key}\" = \"{val}\"\n");
+                file.write_all(bytes.as_bytes())
+                    .expect("Unable to write to output file");
             }
         };
 
-        // Dump accounts subspace and block height data
+        if historic {
+            // Dump the keys prepended with the selected block height (includes
+            // subspace diff keys)
+            dump_it(height.raw());
+        }
+
         dump_it("subspace".to_string());
-        let block_prefix = format!("{}/", height.raw());
-        dump_it(block_prefix);
 
         println!("Done writing to {}", full_path.to_string_lossy());
     }
