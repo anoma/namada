@@ -831,13 +831,20 @@ fn test_validator_sets() {
 
     // Start with two genesis validators with 1 NAM stake
     let epoch = Epoch::default();
-    let ((val1, pk1), stake1) = (gen_validator(), token::Amount::native_whole(1));
-    let ((val2, pk2), stake2) = (gen_validator(), token::Amount::native_whole(1));
-    let ((val3, pk3), stake3) = (gen_validator(), token::Amount::native_whole(10));
-    let ((val4, pk4), stake4) = (gen_validator(), token::Amount::native_whole(1));
-    let ((val5, pk5), stake5) = (gen_validator(), token::Amount::native_whole(100));
-    let ((val6, pk6), stake6) = (gen_validator(), token::Amount::native_whole(1));
-    let ((val7, pk7), stake7) = (gen_validator(), token::Amount::native_whole(1));
+    let ((val1, pk1), stake1) =
+        (gen_validator(), token::Amount::native_whole(1));
+    let ((val2, pk2), stake2) =
+        (gen_validator(), token::Amount::native_whole(1));
+    let ((val3, pk3), stake3) =
+        (gen_validator(), token::Amount::native_whole(10));
+    let ((val4, pk4), stake4) =
+        (gen_validator(), token::Amount::native_whole(1));
+    let ((val5, pk5), stake5) =
+        (gen_validator(), token::Amount::native_whole(100));
+    let ((val6, pk6), stake6) =
+        (gen_validator(), token::Amount::native_whole(1));
+    let ((val7, pk7), stake7) =
+        (gen_validator(), token::Amount::native_whole(1));
     println!("val1: {val1}, {pk1}, {}", stake1.to_string_native());
     println!("val2: {val2}, {pk2}, {}", stake2.to_string_native());
     println!("val3: {val3}, {pk3}, {}", stake3.to_string_native());
@@ -1454,11 +1461,14 @@ fn test_validator_sets_swap() {
     // Start with two genesis validators, one with 1 voting power and other 0
     let epoch = Epoch::default();
     // 1M voting power
-    let ((val1, pk1), stake1) = (gen_validator(), token::Amount::native_whole(10));
+    let ((val1, pk1), stake1) =
+        (gen_validator(), token::Amount::native_whole(10));
     // 0 voting power
-    let ((val2, pk2), stake2) = (gen_validator(), token::Amount::from_uint(5, 0).unwrap());
+    let ((val2, pk2), stake2) =
+        (gen_validator(), token::Amount::from_uint(5, 0).unwrap());
     // 0 voting power
-    let ((val3, pk3), stake3) = (gen_validator(), token::Amount::from_uint(5, 0).unwrap());
+    let ((val3, pk3), stake3) =
+        (gen_validator(), token::Amount::from_uint(5, 0).unwrap());
     println!("val1: {val1}, {pk1}, {}", stake1.to_string_native());
     println!("val2: {val2}, {pk2}, {}", stake2.to_string_native());
     println!("val3: {val3}, {pk3}, {}", stake3.to_string_native());
@@ -1504,8 +1514,20 @@ fn test_validator_sets_swap() {
     let stake3 = stake3 + bond3;
 
     assert!(stake2 < stake3);
-    assert_eq!(into_tm_voting_power(params.tm_votes_per_token, u128::try_from(stake2).unwrap() as u64), 0);
-    assert_eq!(into_tm_voting_power(params.tm_votes_per_token, u128::try_from(stake3).unwrap() as u64), 0);
+    assert_eq!(
+        into_tm_voting_power(
+            params.tm_votes_per_token,
+            u128::try_from(stake2).unwrap() as u64
+        ),
+        0
+    );
+    assert_eq!(
+        into_tm_voting_power(
+            params.tm_votes_per_token,
+            u128::try_from(stake3).unwrap() as u64
+        ),
+        0
+    );
 
     update_validator_set(&mut s, &params, &val2, bond2.change(), epoch)
         .unwrap();
@@ -1528,8 +1550,14 @@ fn test_validator_sets_swap() {
     let stake3 = stake3 + bonds;
     assert!(stake2 < stake3);
     assert_eq!(
-        into_tm_voting_power(params.tm_votes_per_token, u128::try_from(stake2).unwrap() as u64),
-        into_tm_voting_power(params.tm_votes_per_token, u128::try_from(stake3).unwrap() as u64)
+        into_tm_voting_power(
+            params.tm_votes_per_token,
+            u128::try_from(stake2).unwrap() as u64
+        ),
+        into_tm_voting_power(
+            params.tm_votes_per_token,
+            u128::try_from(stake3).unwrap() as u64
+        )
     );
 
     update_validator_set(&mut s, &params, &val2, bonds.change(), epoch)

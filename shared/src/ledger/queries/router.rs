@@ -828,263 +828,289 @@ macro_rules! router {
     );
 }
 
-// You can expand the `handlers!` macro invocation with e.g.:
-// ```shell
-// cargo expand ledger::queries::router::test_rpc_handlers --features "ferveo-tpke, ibc-mocks, testing, wasm-runtime, tendermint-rpc" --tests --lib
-// ```
-// #[cfg(test)]
-// mod test_rpc_handlers {
-// use borsh::BorshSerialize;
-//
-// use crate::ledger::queries::{
-// EncodedResponseQuery, RequestCtx, RequestQuery, ResponseQuery,
-// };
-// use crate::ledger::storage::{DBIter, StorageHasher, DB};
-// use crate::ledger::storage_api::{self, ResultExt};
-// use crate::types::storage::Epoch;
-// use crate::types::token;
-//
-// A little macro to generate boilerplate for RPC handler functions.
-// These are implemented to return their name as a String, joined by
-// slashes with their argument values turned `to_string()`, if any.
-// macro_rules! handlers {
-// (
-// name and params, if any
-// $( $name:ident $( ( $( $param:ident: $param_ty:ty ),* ) )? ),*
-// optional trailing comma
-// $(,)? ) => {
-// $(
-// pub fn $name<D, H>(
-// _ctx: RequestCtx<'_, D, H>,
-// $( $( $param: $param_ty ),* )?
-// ) -> storage_api::Result<String>
-// where
-// D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-// H: 'static + StorageHasher + Sync,
-// {
-// let data = stringify!($name).to_owned();
-// $( $(
-// let data = format!("{data}/{}", $param);
-// )* )?
-// Ok(data)
-// }
-// )*
-// };
-// }
-//
-// Generate handler functions for the router below
-// handlers!(
-// a,
-// b0i,
-// b0ii,
-// b1,
-// b2i(balance: token::Amount),
-// b3(a1: token::Amount, a2: token::Amount, a3: token::Amount),
-// b3i(a1: token::Amount, a2: token::Amount, a3: token::Amount),
-// b3ii(a1: token::Amount, a2: token::Amount, a3: token::Amount),
-// x,
-// y(untyped_arg: &str),
-// z(untyped_arg: &str),
-// );
-//
-// This handler is hand-written, because the test helper macro doesn't
-// support optional args.
-// pub fn b3iii<D, H>(
-// _ctx: RequestCtx<'_, D, H>,
-// a1: token::Amount,
-// a2: token::Amount,
-// a3: Option<token::Amount>,
-// ) -> storage_api::Result<String>
-// where
-// D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-// H: 'static + StorageHasher + Sync,
-// {
-// let data = "b3iii".to_owned();
-// let data = format!("{data}/{}", a1);
-// let data = format!("{data}/{}", a2);
-// let data = a3.map(|a3| format!("{data}/{}", a3)).unwrap_or(data);
-// Ok(data)
-// }
-//
-// This handler is hand-written, because the test helper macro doesn't
-// support optional args.
-// pub fn b3iiii<D, H>(
-// _ctx: RequestCtx<'_, D, H>,
-// a1: token::Amount,
-// a2: token::Amount,
-// a3: Option<token::Amount>,
-// a4: Option<Epoch>,
-// ) -> storage_api::Result<String>
-// where
-// D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-// H: 'static + StorageHasher + Sync,
-// {
-// let data = "b3iiii".to_owned();
-// let data = format!("{data}/{}", a1);
-// let data = format!("{data}/{}", a2);
-// let data = a3.map(|a3| format!("{data}/{}", a3)).unwrap_or(data);
-// let data = a4.map(|a4| format!("{data}/{}", a4)).unwrap_or(data);
-// Ok(data)
-// }
-//
-// This handler is hand-written, because the test helper macro doesn't
-// support handlers with `with_options`.
-// pub fn c<D, H>(
-// _ctx: RequestCtx<'_, D, H>,
-// _request: &RequestQuery,
-// ) -> storage_api::Result<EncodedResponseQuery>
-// where
-// D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-// H: 'static + StorageHasher + Sync,
-// {
-// let data = "c".to_owned().try_to_vec().into_storage_result()?;
-// Ok(ResponseQuery {
-// data,
-// ..ResponseQuery::default()
-// })
-// }
-// }
-//
-// You can expand the `router!` macro invocation with e.g.:
-// ```shell
-// cargo expand ledger::queries::router::test_rpc --features "ferveo-tpke, ibc-mocks, testing, wasm-runtime, tendermint-rpc" --tests --lib
-// ```
-// #[cfg(test)]
-// mod test_rpc {
-// use super::test_rpc_handlers::*;
-// use crate::types::storage::Epoch;
-// use crate::types::token;
-//
-// Setup an RPC router for testing
-// router! {TEST_RPC,
-// ( "sub" ) = (sub TEST_SUB_RPC),
-// ( "a" ) -> String = a,
-// ( "b" ) = {
-// ( "0" ) = {
-// ( "i" ) -> String = b0i,
-// ( "ii" ) -> String = b0ii,
-// },
-// ( "1" ) -> String = b1,
-// ( "2" ) = {
-// ( "i" / [balance: token::Amount] ) -> String = b2i,
-// },
-// ( "3" / [a1: token::Amount] / [a2: token::Amount] ) = {
-// ( "i" / [a3: token:: Amount] ) -> String = b3i,
-// ( [a3: token:: Amount] ) -> String = b3,
-// ( [a3: token:: Amount] / "ii" ) -> String = b3ii,
-// ( [a3: opt token::Amount] / "iii" ) -> String = b3iii,
-// ( "iiii" / [a3: opt token::Amount] / "xyz" / [a4: opt Epoch] ) -> String =
-// b3iiii, },
-// },
-// ( "c" ) -> String = (with_options c),
-// }
-//
-// router! {TEST_SUB_RPC,
-// ( "x" ) -> String = x,
-// ( "y" / [untyped_arg] ) -> String = y,
-// ( "z" / [untyped_arg] ) -> String = z,
-// }
-// }
-//
-// #[cfg(test)]
-// mod test {
-// use super::test_rpc::TEST_RPC;
-// use crate::ledger::queries::testing::TestClient;
-// use crate::ledger::queries::{RequestCtx, RequestQuery, Router};
-// use crate::ledger::storage_api;
-// use crate::types::storage::Epoch;
-// use crate::types::token;
-//
-// Test all the possible paths in `TEST_RPC` router.
-// #[tokio::test]
-// async fn test_router_macro() -> storage_api::Result<()> {
-// let client = TestClient::new(TEST_RPC);
-//
-// Test request with an invalid path
-// let request = RequestQuery {
-// path: "/invalid".to_owned(),
-// ..RequestQuery::default()
-// };
-// let ctx = RequestCtx {
-// event_log: &client.event_log,
-// wl_storage: &client.wl_storage,
-// vp_wasm_cache: client.vp_wasm_cache.clone(),
-// tx_wasm_cache: client.tx_wasm_cache.clone(),
-// storage_read_past_height_limit: None,
-// };
-// let result = TEST_RPC.handle(ctx, &request);
-// assert!(result.is_err());
-//
-// Test requests to valid paths using the router's methods
-//
-// let result = TEST_RPC.a(&client).await.unwrap();
-// assert_eq!(result, "a");
-//
-// let result = TEST_RPC.b0i(&client).await.unwrap();
-// assert_eq!(result, "b0i");
-//
-// let result = TEST_RPC.b0ii(&client).await.unwrap();
-// assert_eq!(result, "b0ii");
-//
-// let result = TEST_RPC.b1(&client).await.unwrap();
-// assert_eq!(result, "b1");
-//
-// let balance = token::Amount::native_whole(123_000_000);
-// let result = TEST_RPC.b2i(&client, &balance).await.unwrap();
-// assert_eq!(result, format!("b2i/{balance}"));
-//
-// let a1 = token::Amount::native_whole(345);
-// let a2 = token::Amount::native_whole(123_000);
-// let a3 = token::Amount::native_whole(1_000_999);
-// let result = TEST_RPC.b3(&client, &a1, &a2, &a3).await.unwrap();
-// assert_eq!(result, format!("b3/{a1}/{a2}/{a3}"));
-//
-// let result = TEST_RPC.b3i(&client, &a1, &a2, &a3).await.unwrap();
-// assert_eq!(result, format!("b3i/{a1}/{a2}/{a3}"));
-//
-// let result = TEST_RPC.b3ii(&client, &a1, &a2, &a3).await.unwrap();
-// assert_eq!(result, format!("b3ii/{a1}/{a2}/{a3}"));
-//
-// let result =
-// TEST_RPC.b3iii(&client, &a1, &a2, &Some(a3)).await.unwrap();
-// assert_eq!(result, format!("b3iii/{a1}/{a2}/{a3}"));
-//
-// let result = TEST_RPC.b3iii(&client, &a1, &a2, &None).await.unwrap();
-// assert_eq!(result, format!("b3iii/{a1}/{a2}"));
-//
-// let result = TEST_RPC
-// .b3iiii(&client, &a1, &a2, &Some(a3), &None)
-// .await
-// .unwrap();
-// assert_eq!(result, format!("b3iiii/{a1}/{a2}/{a3}"));
-//
-// let a4 = Epoch::from(10);
-// let result = TEST_RPC
-// .b3iiii(&client, &a1, &a2, &Some(a3), &Some(a4))
-// .await
-// .unwrap();
-// assert_eq!(result, format!("b3iiii/{a1}/{a2}/{a3}/{a4}"));
-//
-// let result = TEST_RPC
-// .b3iiii(&client, &a1, &a2, &None, &None)
-// .await
-// .unwrap();
-// assert_eq!(result, format!("b3iiii/{a1}/{a2}"));
-//
-// let result = TEST_RPC.c(&client, None, None, false).await.unwrap();
-// assert_eq!(result.data, format!("c"));
-//
-// let result = TEST_RPC.test_sub_rpc().x(&client).await.unwrap();
-// assert_eq!(result, format!("x"));
-//
-// let arg = "test123";
-// let result = TEST_RPC.test_sub_rpc().y(&client, arg).await.unwrap();
-// assert_eq!(result, format!("y/{arg}"));
-//
-// let arg = "test321";
-// let result = TEST_RPC.test_sub_rpc().z(&client, arg).await.unwrap();
-// assert_eq!(result, format!("z/{arg}"));
-//
-// Ok(())
-// }
-// }
+/// You can expand the `handlers!` macro invocation with e.g.:
+/// ```shell
+/// cargo expand ledger::queries::router::test_rpc_handlers --features "ferveo-tpke, ibc-mocks, testing, wasm-runtime, tendermint-rpc" --tests --lib
+/// ```
+#[cfg(test)]
+mod test_rpc_handlers {
+    use borsh::BorshSerialize;
+
+    use crate::ledger::queries::{
+        EncodedResponseQuery, RequestCtx, RequestQuery, ResponseQuery,
+    };
+    use crate::ledger::storage::{DBIter, StorageHasher, DB};
+    use crate::ledger::storage_api::{self, ResultExt};
+    use crate::types::storage::Epoch;
+    use crate::types::token;
+
+    /// A little macro to generate boilerplate for RPC handler functions.
+    /// These are implemented to return their name as a String, joined by
+    /// slashes with their argument values turned `to_string()`, if any.
+    macro_rules! handlers {
+        (
+            // name and params, if any
+            $( $name:ident $( ( $( $param:ident: $param_ty:ty ),* ) )? ),*
+            // optional trailing comma
+            $(,)? ) => {
+            $(
+                pub fn $name<D, H>(
+                    _ctx: RequestCtx<'_, D, H>,
+                    $( $( $param: $param_ty ),* )?
+                ) -> storage_api::Result<String>
+                where
+                    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+                    H: 'static + StorageHasher + Sync,
+                {
+                    let data = stringify!($name).to_owned();
+                    $( $(
+                        let data = format!("{data}/{}", $param);
+                    )* )?
+                    Ok(data)
+                }
+            )*
+        };
+    }
+
+    // Generate handler functions for the router below
+    handlers!(
+        a,
+        b0i,
+        b0ii,
+        b1,
+        b2i(balance: token::DenominatedAmount),
+        b3(
+            a1: token::DenominatedAmount,
+            a2: token::DenominatedAmount,
+            a3: token::DenominatedAmount
+        ),
+        b3i(
+            a1: token::DenominatedAmount,
+            a2: token::DenominatedAmount,
+            a3: token::DenominatedAmount
+        ),
+        b3ii(
+            a1: token::DenominatedAmount,
+            a2: token::DenominatedAmount,
+            a3: token::DenominatedAmount
+        ),
+        x,
+        y(untyped_arg: &str),
+        z(untyped_arg: &str),
+    );
+
+    /// This handler is hand-written, because the test helper macro doesn't
+    /// support optional args.
+    pub fn b3iii<D, H>(
+        _ctx: RequestCtx<'_, D, H>,
+        a1: token::DenominatedAmount,
+        a2: token::DenominatedAmount,
+        a3: Option<token::DenominatedAmount>,
+    ) -> storage_api::Result<String>
+    where
+        D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+        H: 'static + StorageHasher + Sync,
+    {
+        let data = "b3iii".to_owned();
+        let data = format!("{data}/{}", a1);
+        let data = format!("{data}/{}", a2);
+        let data = a3.map(|a3| format!("{data}/{}", a3)).unwrap_or(data);
+        Ok(data)
+    }
+
+    /// This handler is hand-written, because the test helper macro doesn't
+    /// support optional args.
+    pub fn b3iiii<D, H>(
+        _ctx: RequestCtx<'_, D, H>,
+        a1: token::DenominatedAmount,
+        a2: token::DenominatedAmount,
+        a3: Option<token::DenominatedAmount>,
+        a4: Option<Epoch>,
+    ) -> storage_api::Result<String>
+    where
+        D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+        H: 'static + StorageHasher + Sync,
+    {
+        let data = "b3iiii".to_owned();
+        let data = format!("{data}/{}", a1);
+        let data = format!("{data}/{}", a2);
+        let data = a3.map(|a3| format!("{data}/{}", a3)).unwrap_or(data);
+        let data = a4.map(|a4| format!("{data}/{}", a4)).unwrap_or(data);
+        Ok(data)
+    }
+
+    /// This handler is hand-written, because the test helper macro doesn't
+    /// support handlers with `with_options`.
+    pub fn c<D, H>(
+        _ctx: RequestCtx<'_, D, H>,
+        _request: &RequestQuery,
+    ) -> storage_api::Result<EncodedResponseQuery>
+    where
+        D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+        H: 'static + StorageHasher + Sync,
+    {
+        let data = "c".to_owned().try_to_vec().into_storage_result()?;
+        Ok(ResponseQuery {
+            data,
+            ..ResponseQuery::default()
+        })
+    }
+}
+
+/// You can expand the `router!` macro invocation with e.g.:
+/// ```shell
+/// cargo expand ledger::queries::router::test_rpc --features "ferveo-tpke, ibc-mocks, testing, wasm-runtime, tendermint-rpc" --tests --lib
+/// ```
+#[cfg(test)]
+mod test_rpc {
+    use super::test_rpc_handlers::*;
+    use crate::types::storage::Epoch;
+    use crate::types::token;
+
+    // Setup an RPC router for testing
+    router! {TEST_RPC,
+        ( "sub" ) = (sub TEST_SUB_RPC),
+        ( "a" ) -> String = a,
+        ( "b" ) = {
+            ( "0" ) = {
+                ( "i" ) -> String = b0i,
+                ( "ii" ) -> String = b0ii,
+            },
+            ( "1" ) -> String = b1,
+            ( "2" ) = {
+                ( "i" / [balance: token::DenominatedAmount] ) -> String = b2i,
+            },
+            ( "3" / [a1: token::DenominatedAmount] / [a2: token::DenominatedAmount] ) = {
+                ( "i" / [a3: token::DenominatedAmount] ) -> String = b3i,
+                ( [a3: token::DenominatedAmount] ) -> String = b3,
+                ( [a3: token::DenominatedAmount] / "ii" ) -> String = b3ii,
+                ( [a3: opt token::DenominatedAmount] / "iii" ) -> String = b3iii,
+                ( "iiii" / [a3: opt token::DenominatedAmount] / "xyz" / [a4: opt Epoch] ) -> String = b3iiii,
+            },
+        },
+        ( "c" ) -> String = (with_options c),
+    }
+
+    router! {TEST_SUB_RPC,
+        ( "x" ) -> String = x,
+        ( "y" / [untyped_arg] ) -> String = y,
+        ( "z" / [untyped_arg] ) -> String = z,
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
+
+    use super::test_rpc::TEST_RPC;
+    use crate::ledger::queries::testing::TestClient;
+    use crate::ledger::queries::{RequestCtx, RequestQuery, Router};
+    use crate::ledger::storage_api;
+    use crate::types::storage::Epoch;
+    use crate::types::token;
+
+    /// Test all the possible paths in `TEST_RPC` router.
+    #[tokio::test]
+    async fn test_router_macro() -> storage_api::Result<()> {
+        let client = TestClient::new(TEST_RPC);
+
+        // Test request with an invalid path
+        let request = RequestQuery {
+            path: "/invalid".to_owned(),
+            ..RequestQuery::default()
+        };
+        let ctx = RequestCtx {
+            event_log: &client.event_log,
+            wl_storage: &client.wl_storage,
+            vp_wasm_cache: client.vp_wasm_cache.clone(),
+            tx_wasm_cache: client.tx_wasm_cache.clone(),
+            storage_read_past_height_limit: None,
+        };
+        let result = TEST_RPC.handle(ctx, &request);
+        assert!(result.is_err());
+
+        // Test requests to valid paths using the router's methods
+
+        let result = TEST_RPC.a(&client).await.unwrap();
+        assert_eq!(result, "a");
+
+        let result = TEST_RPC.b0i(&client).await.unwrap();
+        assert_eq!(result, "b0i");
+
+        let result = TEST_RPC.b0ii(&client).await.unwrap();
+        assert_eq!(result, "b0ii");
+
+        let result = TEST_RPC.b1(&client).await.unwrap();
+        assert_eq!(result, "b1");
+
+        let balance = token::DenominatedAmount {
+            amount: token::Amount::native_whole(123_000_000),
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
+        let result = TEST_RPC.b2i(&client, &balance).await.unwrap();
+        assert_eq!(result, format!("b2i/{balance}"));
+
+        let a1 = token::DenominatedAmount {
+            amount: token::Amount::native_whole(345),
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
+        let a2 = token::DenominatedAmount {
+            amount: token::Amount::native_whole(123_000),
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
+        let a3 = token::DenominatedAmount {
+            amount: token::Amount::native_whole(1_000_999),
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
+        let result = TEST_RPC.b3(&client, &a1, &a2, &a3).await.unwrap();
+        assert_eq!(result, format!("b3/{a1}/{a2}/{a3}"));
+
+        let result = TEST_RPC.b3i(&client, &a1, &a2, &a3).await.unwrap();
+        assert_eq!(result, format!("b3i/{a1}/{a2}/{a3}"));
+
+        let result = TEST_RPC.b3ii(&client, &a1, &a2, &a3).await.unwrap();
+        assert_eq!(result, format!("b3ii/{a1}/{a2}/{a3}"));
+
+        let result =
+            TEST_RPC.b3iii(&client, &a1, &a2, &Some(a3)).await.unwrap();
+        assert_eq!(result, format!("b3iii/{a1}/{a2}/{a3}"));
+
+        let result = TEST_RPC.b3iii(&client, &a1, &a2, &None).await.unwrap();
+        assert_eq!(result, format!("b3iii/{a1}/{a2}"));
+
+        let result = TEST_RPC
+            .b3iiii(&client, &a1, &a2, &Some(a3), &None)
+            .await
+            .unwrap();
+        assert_eq!(result, format!("b3iiii/{a1}/{a2}/{a3}"));
+
+        let a4 = Epoch::from(10);
+        let result = TEST_RPC
+            .b3iiii(&client, &a1, &a2, &Some(a3), &Some(a4))
+            .await
+            .unwrap();
+        assert_eq!(result, format!("b3iiii/{a1}/{a2}/{a3}/{a4}"));
+
+        let result = TEST_RPC
+            .b3iiii(&client, &a1, &a2, &None, &None)
+            .await
+            .unwrap();
+        assert_eq!(result, format!("b3iiii/{a1}/{a2}"));
+
+        let result = TEST_RPC.c(&client, None, None, false).await.unwrap();
+        assert_eq!(result.data, format!("c"));
+
+        let result = TEST_RPC.test_sub_rpc().x(&client).await.unwrap();
+        assert_eq!(result, format!("x"));
+
+        let arg = "test123";
+        let result = TEST_RPC.test_sub_rpc().y(&client, arg).await.unwrap();
+        assert_eq!(result, format!("y/{arg}"));
+
+        let arg = "test321";
+        let result = TEST_RPC.test_sub_rpc().z(&client, arg).await.unwrap();
+        assert_eq!(result, format!("z/{arg}"));
+
+        Ok(())
+    }
+}

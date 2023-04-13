@@ -9,6 +9,7 @@ use namada_core::types::address::{self, Address};
 use namada_core::types::key;
 use namada_core::types::key::common::PublicKey;
 use namada_core::types::storage::Epoch;
+use namada_core::types::token::Change;
 use proptest::prelude::*;
 use proptest::prop_state_machine;
 use proptest::state_machine::{AbstractStateMachine, StateMachineTest};
@@ -17,7 +18,6 @@ use rust_decimal::Decimal;
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see
 // `tracing` logs from tests
 use test_log::test;
-use namada_core::types::token::Change;
 
 use super::arb_genesis_validators;
 use crate::parameters::testing::{arb_pos_params, arb_rate};
@@ -584,10 +584,11 @@ impl ConcretePosState {
             {
                 assert!(
                     consensus_stake >= below_cap_stake,
-                    "Consensus validator {consensus_addr} with stake \
-                     {} and below-capacity {below_cap_addr} \
-                     with stake {} should be swapped.",
-                    consensus_stake.to_string_native(), below_cap_stake.to_string_native()
+                    "Consensus validator {consensus_addr} with stake {} and \
+                     below-capacity {below_cap_addr} with stake {} should be \
+                     swapped.",
+                    consensus_stake.to_string_native(),
+                    below_cap_stake.to_string_native()
                 );
             }
         }
@@ -766,7 +767,8 @@ impl AbstractStateMachine for AbstractPosState {
                     assert!(deltas_sum > 0);
                     (0..deltas_sum).prop_map(move |to_unbond| {
                         let id = id.clone();
-                        let amount = token::Amount::from_change(Change::from(to_unbond));
+                        let amount =
+                            token::Amount::from_change(Change::from(to_unbond));
                         Transition::Unbond { id, amount }
                     })
                 });

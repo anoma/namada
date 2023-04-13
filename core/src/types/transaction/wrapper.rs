@@ -435,8 +435,7 @@ pub mod wrapper_tx {
 
             let wrapper = WrapperTx::new(
                 Fee {
-                    amount: Amount::from_uint(10, 0)
-                        .expect("Test failed"),
+                    amount: Amount::from_uint(10, 0).expect("Test failed"),
                     token: nam(),
                 },
                 &keypair,
@@ -464,8 +463,7 @@ pub mod wrapper_tx {
 
             let mut wrapper = WrapperTx::new(
                 Fee {
-                    amount: Amount::from_uint(10, 0)
-                        .expect("Test failed"),
+                    amount: Amount::from_uint(10, 0).expect("Test failed"),
                     token: nam(),
                 },
                 &gen_keypair(),
@@ -499,8 +497,7 @@ pub mod wrapper_tx {
             // the signed tx
             let mut tx = WrapperTx::new(
                 Fee {
-                    amount: Amount::from_uint(10, 0)
-                        .expect("Test failed"),
+                    amount: Amount::from_uint(10, 0).expect("Test failed"),
                     token: nam(),
                 },
                 &keypair,

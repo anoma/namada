@@ -424,8 +424,7 @@ pub mod tx_types {
             // the signed tx
             let wrapper = WrapperTx::new(
                 Fee {
-                    amount: Amount::from_uint(10, 0)
-                        .expect("Test failed"),
+                    amount: Amount::from_uint(10, 0).expect("Test failed"),
                     token: nam(),
                 },
                 &keypair,
@@ -462,8 +461,7 @@ pub mod tx_types {
             // the signed tx
             let wrapper = WrapperTx::new(
                 Fee {
-                    amount: Amount::from_uint(10, 0)
-                        .expect("Test failed"),
+                    amount: Amount::from_uint(10, 0).expect("Test failed"),
                     token: nam(),
                 },
                 &keypair,
