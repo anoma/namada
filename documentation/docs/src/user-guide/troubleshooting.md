@@ -68,6 +68,32 @@ rustup target add wasm32-unknown-unknown
 ```
 (Yes the name of the target is `wasm32-unknown-unknown`. This is not the compiler unable to tell which version/release it is).
 
+#### OpenSSL
+
+If you run into the error
+
+```bash
+Could not find directory of OpenSSL installation, and this `-sys` crate cannot
+  proceed without this knowledge. If OpenSSL is installed and this crate had
+  trouble finding it,  you can set the `OPENSSL_DIR` environment variable for the
+  compilation process.
+
+  Make sure you also have the development packages of openssl installed.
+  For example, `libssl-dev` on Ubuntu or `openssl-devel` on Fedora.
+
+  If you're in a situation where you think the directory *should* be found
+  automatically, please open a bug at https://github.com/sfackler/rust-openssl
+  and include information about your system as well as this message.
+```
+
+Then the solution is spelled out for you. You need to install the development packages of OpenSSL. For Ubuntu, this is `libssl-dev`. For Fedora, this is `openssl-devel`. For other distributions, please refer to the [OpenSSL website](https://www.openssl.org/).
+
+For ubuntu, this can be achieved through
+
+```bash
+sudo apt-get install libssl-dev
+```
+
 ## Validator Troubleshooting
 
 ### Missed pre-genesis
