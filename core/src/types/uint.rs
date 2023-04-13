@@ -43,6 +43,17 @@ impl Uint {
         )
         .overflowing_add(Uint::from(1u64))
         .0
+        .canonical()
+    }
+
+    /// There are two valid representations of zero: plus and
+    /// minus. We only allow the positive representation.
+    fn canonical(self) -> Self {
+        if self == MINUS_ZERO {
+            Self::zero()
+        } else {
+            self
+        }
     }
 }
 
@@ -51,6 +62,8 @@ impl Uint {
 /// we can use two's complement.
 pub const MAX_SIGNED_VALUE: Uint =
     Uint([u64::MAX, u64::MAX, u64::MAX, 9223372036854775807]);
+
+const MINUS_ZERO: Uint = Uint([0u64, 0u64, 0u64, 9223372036854775808]);
 
 /// A signed 256 big integer.
 #[derive(
@@ -82,13 +95,41 @@ impl SignedUint {
     /// Get a string representation of `self` as a
     /// native token amount.
     pub fn to_string_native(&self) -> String {
-        let mut sign = if self.non_negative() {
+        let mut sign = if !self.non_negative() {
             String::from("-")
         } else {
             String::new()
         };
         sign.push_str(&token::Amount::from(*self).to_string_native());
         sign
+    }
+
+    /// Adds two [`SignedUint`]'s if the absolute value does
+    /// not exceed [`MAX_SIGNED_AMOUNT`], else returns `None`.
+    pub fn checked_add(&self, other: &Self) -> Option<Self> {
+        if self.non_negative() == other.non_negative() {
+            self.abs().checked_add(other.abs())
+                .and_then(|val| Self::try_from(val)
+                    .ok()
+                    .map(|val| if !self.non_negative() {
+                        -val
+                    } else {
+                        val
+                    }))
+        } else {
+            Some(*self + *other)
+        }
+    }
+
+    /// Subtracts two [`SignedUint`]'s if the absolute value does
+    /// not exceed [`MAX_SIGNED_AMOUNT`], else returns `None`.
+    pub fn checked_sub(&self, other: &Self) -> Option<Self> {
+        self.checked_add(&other.neg())
+    }
+
+    /// Changed the inner Uint into a canonical representation.
+    fn canonical(self) -> Self {
+        Self(self.0.canonical())
     }
 }
 
@@ -103,7 +144,7 @@ impl TryFrom<Uint> for SignedUint {
     type Error = Box<dyn 'static + std::error::Error>;
 
     fn try_from(value: Uint) -> Result<Self, Self::Error> {
-        if value.0 <= MAX_SIGNED_VALUE.0 {
+        if value <= MAX_SIGNED_VALUE {
             Ok(Self(value))
         } else {
             Err("The given integer is too large to be represented asa \
@@ -148,9 +189,17 @@ impl Add<SignedUint> for SignedUint {
         match (self.non_negative(), rhs.non_negative()) {
             (true, true) => Self(self.0 + rhs.0),
             (false, false) => -Self(self.abs() + rhs.abs()),
-            (true, false) => Self(self.0 - rhs.abs()),
-            (false, true) => Self(rhs.0 - self.abs()),
-        }
+            (true, false) => if self.0 >= rhs.abs() {
+                Self(self.0 - rhs.abs())
+            } else {
+                -Self(rhs.abs() - self.0)
+            }
+            (false, true) => if rhs.0 >= self.abs() {
+                Self(rhs.0 - self.abs())
+            } else {
+                -Self(self.abs() - rhs.0)
+            },
+        }.canonical()
     }
 }
 
@@ -188,5 +237,108 @@ impl From<i64> for SignedUint {
 impl From<i32> for SignedUint {
     fn from(val: i32) -> Self {
         Self::from(val as i128)
+    }
+}
+
+
+#[cfg(test)]
+mod test_uint {
+    use super::*;
+
+    /// Test that adding one to the max signed
+    /// value gives zero.
+    #[test]
+    fn test_max_signed_value() {
+        let signed = SignedUint::try_from(MAX_SIGNED_VALUE).expect("Test failed");
+        let one = SignedUint::try_from(Uint::from(1u64)).expect("Test failed");
+        let overflow = signed + one;
+        assert_eq!(overflow, SignedUint::try_from(Uint::zero()).expect("Test failed"));
+        assert!(signed.checked_add(&one).is_none());
+        assert!((-signed).checked_sub(&one).is_none());
+    }
+
+    /// Sanity on our constants and that the minus zero representation
+    /// is not allowed.
+    #[test]
+    fn test_minus_zero_not_allowed() {
+        let larger = Uint([0, 0, 0, 2u64.pow(63)]);
+        let smaller = Uint([u64::MAX, u64::MAX, u64::MAX, 2u64.pow(63) -1]);
+        assert!(larger > smaller);
+        assert_eq!(smaller, MAX_SIGNED_VALUE);
+        assert_eq!(larger, MINUS_ZERO);
+        assert!(SignedUint::try_from(MINUS_ZERO).is_err());
+        let zero = Uint::zero();
+        assert_eq!(zero, zero.negate());
+    }
+
+    /// Test that we correctly reserve the right bit for indicating the
+    /// sign.
+    #[test]
+    fn test_non_negative() {
+        let zero = SignedUint::try_from(Uint::zero()).expect("Test failed");
+        assert!(zero.non_negative());
+        assert!((-zero).non_negative());
+        let negative = SignedUint(Uint([1u64, 0, 0, 2u64.pow(63)]));
+        assert!(!negative.non_negative());
+        assert!((-negative).non_negative());
+        let positive = SignedUint(MAX_SIGNED_VALUE);
+        assert!(positive.non_negative());
+        assert!(!(-positive).non_negative());
+    }
+
+    /// Test that the absolute vale is computed correctly
+    #[test]
+    fn test_abs() {
+        let zero = SignedUint::try_from(Uint::zero()).expect("Test failed");
+        let neg_one = SignedUint(Uint::max_value());
+        let neg_eight = SignedUint(Uint::max_value() - Uint::from(7));
+        let two = SignedUint(Uint::from(2));
+        let ten = SignedUint(Uint::from(10));
+
+        assert_eq!(zero.abs(), Uint::zero());
+        assert_eq!(neg_one.abs(), Uint::from(1));
+        assert_eq!(neg_eight.abs(), Uint::from(8));
+        assert_eq!(two.abs(), Uint::from(2));
+        assert_eq!(ten.abs(), Uint::from(10));
+    }
+
+    /// Test that the absolute vale is computed correctly
+    #[test]
+    fn test_to_string_native() {
+        let native_scaling = Uint::exp10(6);
+        let zero = SignedUint::try_from(Uint::zero()).expect("Test failed");
+        let neg_one = -SignedUint(native_scaling);
+        let neg_eight = -SignedUint(Uint::from(8) * native_scaling);
+        let two = SignedUint(Uint::from(2) * native_scaling);
+        let ten = SignedUint(Uint::from(10) * native_scaling);
+
+        assert_eq!(zero.to_string_native(), "0.000000");
+        assert_eq!(neg_one.to_string_native(), "-1.000000");
+        assert_eq!(neg_eight.to_string_native(), "-8.000000");
+        assert_eq!(two.to_string_native(), "2.000000");
+        assert_eq!(ten.to_string_native(), "10.000000");
+    }
+
+    /// Test that we correctly handle arithmetic with two's complement
+    #[test]
+    fn test_arithmetic() {
+        let zero = SignedUint::try_from(Uint::zero()).expect("Test failed");
+        let neg_one = SignedUint(Uint::max_value());
+        let neg_eight = SignedUint(Uint::max_value() - Uint::from(7));
+        let two = SignedUint(Uint::from(2));
+        let ten = SignedUint(Uint::from(10));
+
+        assert_eq!(zero + neg_one, neg_one);
+        assert_eq!(neg_one - zero, neg_one);
+        assert_eq!(zero - neg_one, SignedUint(Uint::one()));
+        assert_eq!(two - neg_eight, ten);
+        assert_eq!(two + ten, SignedUint(Uint::from(12)));
+        assert_eq!(ten - two, -neg_eight);
+        assert_eq!(two - ten, neg_eight);
+        assert_eq!(neg_eight + neg_one, -SignedUint(Uint::from(9)));
+        assert_eq!(neg_one - neg_eight, SignedUint(Uint::from(7)));
+        assert_eq!(neg_eight - neg_one, -SignedUint(Uint::from(7)));
+        assert_eq!(neg_eight - two, -ten);
+        assert!((two - two).is_zero());
     }
 }

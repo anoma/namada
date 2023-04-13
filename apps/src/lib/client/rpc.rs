@@ -2838,7 +2838,7 @@ pub async fn validate_amount(
         );
         cli::safe_exit(1);
     } else {
-        input_amount.increase_precision(denom).unwrap_or_else(|| {
+        input_amount.increase_precision(denom).unwrap_or_else(|_| {
             println!(
                 "The amount provided requires more the 256 bits to represent."
             );

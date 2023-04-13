@@ -2211,8 +2211,8 @@ pub mod args {
             let amount = amount
                 .canonical()
                 .increase_precision(NATIVE_MAX_DECIMAL_PLACES.into())
-                .unwrap_or_else(|| {
-                    println!("Could not parse bond amount");
+                .unwrap_or_else(|e| {
+                    println!("Could not parse bond amount: {:?}", e);
                     safe_exit(1);
                 })
                 .amount;
@@ -2258,8 +2258,8 @@ pub mod args {
             let amount = amount
                 .canonical()
                 .increase_precision(NATIVE_MAX_DECIMAL_PLACES.into())
-                .unwrap_or_else(|| {
-                    println!("Could not parse bond amount");
+                .unwrap_or_else(|e| {
+                    println!("Could not parse bond amount: {:?}", e);
                     safe_exit(1);
                 })
                 .amount;

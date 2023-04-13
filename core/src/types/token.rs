@@ -116,7 +116,6 @@ impl Amount {
     /// the amount exceed [`uint::MAX_SIGNED_VALUE`]
     pub fn checked_signed_add(&self, amount: Amount) -> Option<Self> {
         self.raw.checked_add(amount.raw).and_then(|result| {
-            // TODO: Should this be `MAX_SIGNED_VALUE` or `MAX_VALUE`?
             if result <= uint::MAX_SIGNED_VALUE {
                 Some(Self { raw: result })
             } else {
@@ -163,10 +162,9 @@ impl Amount {
         string: impl AsRef<str>,
         denom: impl Into<u8>,
     ) -> Result<Amount, AmountParseError> {
-        match Decimal::from_str(string.as_ref()) {
-            Ok(dec) => Ok(Self::from_decimal(dec, denom)?),
-            Err(err) => Err(AmountParseError::InvalidDecimal(err)),
-        }
+        DenominatedAmount::from_str(string.as_ref())?
+            .increase_precision(denom.into().into())
+            .map(Into::into)
     }
 
     /// Attempt to convert a float to an `Amount` with the specified
@@ -200,10 +198,9 @@ impl Amount {
     /// Given a u64 and [`MaspDenom`], construct the corresponding
     /// amount.
     pub fn from_masp_denominated(val: u64, denom: MaspDenom) -> Self {
-        let val = Uint::from(val);
-        let denom = Uint::from(denom as u64);
-        let scaling = Uint::from(2).pow(denom);
-        Self { raw: val * scaling }
+        let mut raw = [0u64; 4];
+        raw[denom as usize] = val;
+        Self { raw: Uint(raw)}
     }
 
     /// Get a string representation of a native token amount.
@@ -329,9 +326,9 @@ impl DenominatedAmount {
 
     /// Attempt to increase the precision of an amount. Can fail
     /// if the resulting amount does not fit into 256 bits.
-    pub fn increase_precision(self, denom: Denomination) -> Option<Self> {
+    pub fn increase_precision(self, denom: Denomination) -> Result<Self, AmountParseError> {
         if denom.0 < self.denom.0 {
-            return None;
+            return Err(AmountParseError::PrecisionDecrease);
         }
         Uint::from(10)
             .checked_pow(Uint::from(denom.0 - self.denom.0))
@@ -340,6 +337,7 @@ impl DenominatedAmount {
                 amount: Amount { raw: amount },
                 denom,
             })
+            .ok_or(AmountParseError::PrecisionOverflow)
     }
 }
 
@@ -359,7 +357,7 @@ impl FromStr for DenominatedAmount {
     type Err = AmountParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let precision = s.find('.').map(|pos| s.len() - pos);
+        let precision = s.find('.').map(|pos| s.len() - pos - 1);
         let digits = s
             .chars()
             .filter_map(|c| {
@@ -613,6 +611,10 @@ pub enum AmountParseError {
     FromString,
     #[error("Could not parse string as a correctly formatted number.")]
     NotNumeric,
+    #[error("This amount cannot handle the requested precision in 256 bits.")]
+    PrecisionOverflow,
+    #[error("More precision given in the amount than requested.")]
+    PrecisionDecrease,
 }
 
 impl From<Amount> for Change {
@@ -901,6 +903,7 @@ impl TryFrom<crate::ledger::ibc::data::FungibleTokenPacketData> for Transfer {
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
+    use rust_decimal_macros::dec;
 
     use super::*;
 
@@ -953,6 +956,20 @@ mod tests {
             denom: NATIVE_MAX_DECIMAL_PLACES.into(),
         };
         assert_eq!("0", zero.to_string());
+
+        let amount = DenominatedAmount {
+            amount: Amount::from_uint(1120, 0).expect("Test failed"),
+            denom: 3u8.into(),
+        };
+        assert_eq!("1.12", amount.to_string());
+        assert_eq!("1.120", amount.to_string_precise());
+
+        let amount = DenominatedAmount {
+            amount: Amount::from_uint(1120, 0).expect("Test failed"),
+            denom: 5u8.into(),
+        };
+        assert_eq!("0.0112", amount.to_string());
+        assert_eq!("0.01120", amount.to_string_precise());
     }
 
     #[test]
@@ -997,6 +1014,59 @@ mod tests {
         assert_eq!(max_signed.checked_add(one), Some(max_signed + one));
         assert_eq!(max_signed.checked_signed_add(max_signed), None);
     }
+
+    #[test]
+    fn test_amount_from_decimal() {
+        assert!(Amount::from_decimal(dec!(1.12), 1).is_err());
+        assert!(Amount::from_decimal(dec!(1.12), 80).is_err());
+        let amount = Amount::from_decimal(dec!(1.12), 3).expect("Test failed");
+        assert_eq!(amount, Amount::from_uint(1120, 0).expect("Test failed"));
+
+    }
+
+    #[test]
+    fn test_amount_from_string() {
+        assert!(Amount::from_str("1.12", 1).is_err());
+        assert!(Amount::from_str("0.0", 0).is_err());
+        assert!(Amount::from_str("1.12", 80).is_err());
+        assert!(Amount::from_str("1.12.1", 3).is_err());
+        assert!(Amount::from_str("1.1a", 3).is_err());
+        assert_eq!(Amount::zero(), Amount::from_str("0.0", 1).expect("Test failed"));
+        assert_eq!(Amount::zero(), Amount::from_str(".0", 1).expect("Test failed"));
+
+        let amount = Amount::from_str("1.12", 3).expect("Test failed");
+        assert_eq!(amount, Amount::from_uint(1120, 0).expect("Test failed"));
+        let amount = Amount::from_str(".34", 3).expect("Test failed");
+        assert_eq!(amount, Amount::from_uint(340, 0).expect("Test failed"));
+        let amount = Amount::from_str("0.34", 3).expect("Test failed");
+        assert_eq!(amount, Amount::from_uint(340, 0).expect("Test failed"));
+        let amount = Amount::from_str("34", 1).expect("Test failed");
+        assert_eq!(amount, Amount::from_uint(340, 0).expect("Test failed"));
+    }
+
+    #[test]
+    fn test_from_masp_denominated() {
+        let uint = Uint([15u64, 16, 17, 18]);
+        let original = Amount::from_uint(uint, 0).expect("Test failed");
+        for denom in MaspDenom::iter() {
+            let word = denom.denominate(&original);
+            assert_eq!(word, denom as u64 + 15u64);
+            let amount = Amount::from_masp_denominated(word, denom);
+            let raw = Uint::from(amount).0;
+            let mut expected = [0u64; 4];
+            expected[denom as usize] = word;
+            assert_eq!(raw, expected);
+        }
+    }
+
+    #[test]
+    fn test_key_seg() {
+        let original = Amount::from_uint(1234560000, 0).expect("Test failed");
+        let key = original.raw();
+        let amount = Amount::parse(key).expect("Test failed");
+        assert_eq!(amount, original);
+    }
+
 }
 
 /// Helpers for testing with addresses.
