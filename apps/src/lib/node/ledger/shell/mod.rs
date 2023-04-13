@@ -132,6 +132,8 @@ pub enum ErrorCodes {
     Undecryptable = 6,
     AllocationError = 7,
     ReplayTx = 8,
+    InvalidChainId = 9,
+    InvalidDecryptedChainId = 10,
 }
 
 impl ErrorCodes {
@@ -142,9 +144,10 @@ impl ErrorCodes {
         // NOTE: pattern match on all `ErrorCodes` variants, in order
         // to catch potential bugs when adding new codes
         match self {
-            Ok => true,
+            Ok | InvalidDecryptedChainId => true,
             InvalidTx | InvalidSig | WasmRuntimeError | InvalidOrder
-            | ExtraTxs | Undecryptable | AllocationError | ReplayTx => false,
+            | ExtraTxs | Undecryptable | AllocationError | ReplayTx
+            | InvalidChainId => false,
         }
     }
 }
@@ -607,6 +610,7 @@ where
     ///    1: Invalid tx
     ///    2: Tx is invalidly signed
     ///    7: Replay attack
+    ///    8: Invalid chain id in tx
     pub fn mempool_validate(
         &self,
         tx_bytes: &[u8],
@@ -623,6 +627,16 @@ where
                 return response;
             }
         };
+
+        // Tx chain id
+        if tx.chain_id != self.chain_id {
+            response.code = ErrorCodes::InvalidChainId.into();
+            response.log = format!(
+                "Tx carries a wrong chain id: expected {}, found {}",
+                self.chain_id, tx.chain_id
+            );
+            return response;
+        }
 
         // Tx signature check
         let tx_type = match process_tx(tx) {
@@ -1100,6 +1114,7 @@ mod test_utils {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -1168,6 +1183,7 @@ mod test_mempool_validate {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
 
         let mut wrapper = WrapperTx::new(
@@ -1183,7 +1199,7 @@ mod test_mempool_validate {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair)
+        .sign(&keypair, shell.chain_id.clone())
         .expect("Wrapper signing failed");
 
         let unsigned_wrapper = if let Some(Ok(SignedTxData {
@@ -1194,7 +1210,7 @@ mod test_mempool_validate {
             .take()
             .map(|data| SignedTxData::try_from_slice(&data[..]))
         {
-            Tx::new(vec![], Some(data))
+            Tx::new(vec![], Some(data), shell.chain_id.clone())
         } else {
             panic!("Test failed")
         };
@@ -1221,6 +1237,7 @@ mod test_mempool_validate {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
 
         let mut wrapper = WrapperTx::new(
@@ -1236,7 +1253,7 @@ mod test_mempool_validate {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair)
+        .sign(&keypair, shell.chain_id.clone())
         .expect("Wrapper signing failed");
 
         let invalid_wrapper = if let Some(Ok(SignedTxData {
@@ -1271,6 +1288,7 @@ mod test_mempool_validate {
                     .try_to_vec()
                     .expect("Test failed"),
                 ),
+                shell.chain_id.clone(),
             )
         } else {
             panic!("Test failed");
@@ -1294,7 +1312,11 @@ mod test_mempool_validate {
         let (shell, _) = TestShell::new();
 
         // Test Raw TxType
-        let tx = Tx::new("wasm_code".as_bytes().to_owned(), None);
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            None,
+            shell.chain_id.clone(),
+        );
 
         let result = shell.mempool_validate(
             tx.to_bytes().as_ref(),
@@ -1315,6 +1337,7 @@ mod test_mempool_validate {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
 
         let wrapper = WrapperTx::new(
@@ -1330,7 +1353,7 @@ mod test_mempool_validate {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair)
+        .sign(&keypair, shell.chain_id.clone())
         .expect("Wrapper signing failed");
 
         let tx_type = match process_tx(wrapper.clone()).expect("Test failed") {
@@ -1410,6 +1433,35 @@ mod test_mempool_validate {
             format!(
                 "Inner transaction hash {} already in storage, replay attempt",
                 tx_type.tx_hash
+            )
+        )
+    }
+
+    /// Check that a transaction with a wrong chain id gets discarded
+    #[test]
+    fn test_wrong_chain_id() {
+        let (shell, _) = TestShell::new();
+
+        let keypair = super::test_utils::gen_keypair();
+
+        let wrong_chain_id = ChainId("Wrong chain id".to_string());
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            wrong_chain_id.clone(),
+        )
+        .sign(&keypair);
+
+        let result = shell.mempool_validate(
+            tx.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidChainId));
+        assert_eq!(
+            result.log,
+            format!(
+                "Tx carries a wrong chain id: expected {}, found {}",
+                shell.chain_id, wrong_chain_id
             )
         )
     }

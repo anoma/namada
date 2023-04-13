@@ -272,6 +272,7 @@ mod test_prepare_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction_data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let req = RequestPrepareProposal {
             txs: vec![tx.to_bytes()],
@@ -290,6 +291,7 @@ mod test_prepare_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction_data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         // an unsigned wrapper will cause an error in processing
         let wrapper = Tx::new(
@@ -311,6 +313,7 @@ mod test_prepare_proposal {
                 .try_to_vec()
                 .expect("Test failed"),
             ),
+            shell.chain_id.clone(),
         )
         .to_bytes();
         #[allow(clippy::redundant_clone)]
@@ -341,6 +344,7 @@ mod test_prepare_proposal {
             let tx = Tx::new(
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
+                shell.chain_id.clone(),
             );
             expected_decrypted.push(Tx::from(DecryptedTx::Decrypted {
                 tx: tx.clone(),
@@ -360,7 +364,9 @@ mod test_prepare_proposal {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             );
-            let wrapper = wrapper_tx.sign(&keypair).expect("Test failed");
+            let wrapper = wrapper_tx
+                .sign(&keypair, shell.chain_id.clone())
+                .expect("Test failed");
             shell.enqueue_tx(wrapper_tx);
             expected_wrapper.push(wrapper.clone());
             req.txs.push(wrapper.to_bytes());

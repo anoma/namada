@@ -30,6 +30,7 @@ mod tests {
     use namada::ledger::tx_env::TxEnv;
     use namada::proto::{SignedTxData, Tx};
     use namada::tendermint_proto::Protobuf;
+    use namada::types::chain::ChainId;
     use namada::types::key::*;
     use namada::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
     use namada::types::time::DateTimeUtc;
@@ -448,7 +449,12 @@ mod tests {
             None,
         ] {
             let signed_tx_data = vp_host_env::with(|env| {
-                env.tx = Tx::new(code.clone(), data.clone()).sign(&keypair);
+                env.tx = Tx::new(
+                    code.clone(),
+                    data.clone(),
+                    env.wl_storage.storage.chain_id.clone(),
+                )
+                .sign(&keypair);
                 let tx_data = env.tx.data.as_ref().expect("data should exist");
 
                 SignedTxData::try_from_slice(&tx_data[..])
@@ -555,6 +561,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // get and increment the connection counter
@@ -592,6 +599,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
 
@@ -629,6 +637,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // get and update the client without a header
@@ -674,6 +683,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // update the client with the message
@@ -707,6 +717,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // upgrade the client with the message
@@ -748,6 +759,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // get and increment the connection counter
@@ -785,6 +797,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // init a connection with the message
@@ -814,6 +827,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // open the connection with the message
@@ -853,6 +867,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // open try a connection with the message
@@ -883,6 +898,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // open the connection with the mssage
@@ -927,6 +943,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // not bind a port
@@ -968,6 +985,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // bind a port
@@ -1012,6 +1030,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // init a channel with the message
@@ -1036,6 +1055,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // open the channle with the message
@@ -1077,6 +1097,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // try open a channel with the message
@@ -1102,6 +1123,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // open a channel with the message
@@ -1145,6 +1167,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // close the channel with the message
@@ -1188,6 +1211,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
 
@@ -1236,6 +1260,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // send the token and a packet with the data
@@ -1276,6 +1301,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // ack the packet with the message
@@ -1328,6 +1354,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // send the token and a packet with the data
@@ -1396,6 +1423,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // receive a packet with the message
@@ -1479,6 +1507,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // receive a packet with the message
@@ -1529,6 +1558,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // send a packet with the message
@@ -1558,6 +1588,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // ack the packet with the message
@@ -1612,6 +1643,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
         // receive a packet with the message
@@ -1677,6 +1709,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
 
@@ -1752,6 +1785,7 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
         }
         .sign(&key::testing::keypair_1());
 

@@ -310,7 +310,7 @@ pub async fn sign_wrapper(
     let decrypted_hash = tx.tx_hash.to_string();
     TxBroadcastData::Wrapper {
         tx: tx
-            .sign(keypair)
+            .sign(keypair, ctx.config.ledger.chain_id.clone())
             .expect("Wrapper tx signing keypair should be correct"),
         wrapper_hash,
         decrypted_hash,

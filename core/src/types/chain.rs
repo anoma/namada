@@ -192,6 +192,7 @@ pub const DEFAULT_CHAIN_ID: &str = "namada-internal.00000000000000";
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
     PartialOrd,
     Ord,
     PartialEq,
@@ -199,7 +200,7 @@ pub const DEFAULT_CHAIN_ID: &str = "namada-internal.00000000000000";
     Hash,
 )]
 #[serde(transparent)]
-pub struct ChainId(String);
+pub struct ChainId(pub String);
 
 impl ChainId {
     /// Extracts a string slice containing the entire chain ID.

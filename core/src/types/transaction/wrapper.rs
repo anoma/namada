@@ -13,6 +13,7 @@ pub mod wrapper_tx {
 
     use crate::proto::Tx;
     use crate::types::address::Address;
+    use crate::types::chain::ChainId;
     use crate::types::key::*;
     use crate::types::storage::Epoch;
     use crate::types::token::Amount;
@@ -249,6 +250,7 @@ pub mod wrapper_tx {
         pub fn sign(
             &self,
             keypair: &common::SecretKey,
+            chain_id: ChainId,
         ) -> Result<Tx, WrapperTxErr> {
             if self.pk != keypair.ref_to() {
                 return Err(WrapperTxErr::InvalidKeyPair);
@@ -260,6 +262,7 @@ pub mod wrapper_tx {
                         .try_to_vec()
                         .expect("Could not serialize WrapperTx"),
                 ),
+                chain_id,
             )
             .sign(keypair))
         }
@@ -364,6 +367,7 @@ pub mod wrapper_tx {
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
+                ChainId::default(),
             );
 
             let wrapper = WrapperTx::new(
@@ -392,6 +396,7 @@ pub mod wrapper_tx {
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
+                ChainId::default(),
             );
 
             let mut wrapper = WrapperTx::new(
@@ -426,6 +431,7 @@ pub mod wrapper_tx {
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
+                ChainId::default(),
             );
             // the signed tx
             let mut tx = WrapperTx::new(
@@ -441,7 +447,7 @@ pub mod wrapper_tx {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             )
-            .sign(&keypair)
+            .sign(&keypair, ChainId::default())
             .expect("Test failed");
 
             // we now try to alter the inner tx maliciously
@@ -459,8 +465,11 @@ pub mod wrapper_tx {
                     .expect("Test failed");
 
             // malicious transaction
-            let malicious =
-                Tx::new("Give me all the money".as_bytes().to_owned(), None);
+            let malicious = Tx::new(
+                "Give me all the money".as_bytes().to_owned(),
+                None,
+                ChainId::default(),
+            );
 
             // We replace the inner tx with a malicious one
             wrapper.inner_tx = EncryptedTx::encrypt(
