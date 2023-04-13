@@ -1,5 +1,90 @@
 # CHANGELOG
 
+## v0.15.0
+
+Namada 0.15.0 is a regular minor release featuring various
+implementation improvements.
+
+### BUG FIXES
+
+- Fix to read the prev value for batch delete
+  ([#1116](https://github.com/anoma/namada/issues/1116))
+- Returns an error when getting proof of a non-committed block
+  ([#1154](https://github.com/anoma/namada/issues/1154))
+- Fixed dump-db node utility which was not iterating on db keys correctly
+  leading to duplicates in the dump. Added an historic flag to also dump the
+  diff keys. ([#1184](https://github.com/anoma/namada/pull/1184))
+- Fixed an issue with lazy collections sub-key validation with the `Address`
+  type. This issue was also affecting the iterator of nested `LazyMap`.
+  ([#1212](https://github.com/anoma/namada/pull/1212))
+- Fixed various features of the CLI output for querying bonds and performing an
+  unbond action. ([#1239](https://github.com/anoma/namada/pull/1239))
+- PoS: Fixed an issue with slashable evidence processed
+  and applied at a new epoch causing a ledger to crash.
+  ([#1246](https://github.com/anoma/namada/pull/1246))
+- Addresses are now being ordered by their string format (bech32m)
+  to ensure that their order is preserved inside raw storage keys.
+  ([#1256](https://github.com/anoma/namada/pull/1256))
+- Prevent clients from delegating from a validator account to another validator
+  account. ([#1263](https://github.com/anoma/namada/pull/1263))
+
+### FEATURES
+
+- Infrastructure for PoS inflation and rewards. Includes inflation
+  using the PD controller mechanism and rewards based on validator block voting
+  behavior. Rewards are tracked and effectively distributed using the F1 fee
+  mechanism. In this PR, rewards are calculated and stored, but they are not
+  yet applied to voting powers or considered when unbonding and withdrawing.
+  ([#714](https://github.com/anoma/namada/pull/714))
+- Implements governance custom proposals
+  ([#1056](https://github.com/anoma/namada/pull/1056))
+- Adds expiration field to transactions
+  ([#1123](https://github.com/anoma/namada/pull/1123))
+- Added a rollback command to revert the Namada state to that of the previous
+  block. ([#1187](https://github.com/anoma/namada/pull/1187))
+- Introduced a new ledger sub-command: `run-until`. Then, at the provided block
+  height, the node will either halt or suspend. If the chain is suspended, only
+  the consensus connection is suspended. This means that the node can still be
+  queried. This is useful for debugging purposes.
+  ([#1189](https://github.com/anoma/namada/pull/1189))
+
+### IMPROVEMENTS
+
+- Return early in PosBase::transfer if an attempt is made to transfer zero
+  tokens ([#856](https://github.com/anoma/namada/pull/856))
+- Adds hash-based replay protection
+  ([#1017](https://github.com/anoma/namada/pull/1017))
+- Renamed "ledger-address" CLI argument to "node".
+  ([#1031](https://github.com/anoma/namada/pull/1031))
+- Added a TempWlStorage for storage_api::StorageRead/Write
+  in ABCI++ prepare/process proposal handler.
+  ([#1051](https://github.com/anoma/namada/pull/1051))
+- Added a wallet section for token addresses to replace hard-
+  coded values with addresses loaded from genesis configuration.
+  ([#1081](https://github.com/anoma/namada/pull/1081))
+- Improved the CLI description of the start time node argument.
+  ([#1087](https://github.com/anoma/namada/pull/1087))
+- Adds chain id field to transactions
+  ([#1106](https://github.com/anoma/namada/pull/1106))
+-  update help text on namadc utils join-network so that the url
+   displays cleanly on a single line, instead of being cut half way
+   ([#1109](https://github.com/anoma/namada/pull/1109))
+- Check in the client that the ledger node has at least one
+  block and is synced before submitting transactions and queries.
+  ([#1258](https://github.com/anoma/namada/pull/1258))
+
+### MISCELLANEOUS
+
+- Clean up some code relating to the Ethereum bridge
+  ([#796](https://github.com/anoma/namada/pull/796))
+- Updated RocksDB to v0.20.1.
+  ([#1163](https://github.com/anoma/namada/pull/1163))
+
+### TESTING
+
+- Add utility code for working with test wasms
+  ([#893](https://github.com/anoma/namada/pull/893))
+
 ## v0.14.3
 
 Namada 0.14.3 is a bugfix release addressing mainly disk usage
