@@ -40,6 +40,10 @@ pub fn main() -> Result<()> {
             cmds::Ledger::DumpDb(cmds::LedgerDumpDb(args)) => {
                 ledger::dump_db(ctx.config.ledger, args);
             }
+            cmds::Ledger::RollBack(_) => {
+                ledger::rollback(ctx.config.ledger)
+                    .wrap_err("Failed to rollback the Namada node")?;
+            }
         },
         cmds::NamadaNode::Config(sub) => match sub {
             cmds::Config::Gen(cmds::ConfigGen) => {

@@ -187,6 +187,22 @@ pub fn reset(config: config::Ledger) -> Result<()> {
     Ok(())
 }
 
+pub fn rollback(config: config::Ledger) -> Result<()> {
+    // Rollback Tendermint state
+    tracing::info!("Rollback Tendermint state");
+    let tendermint_block_height =
+        tendermint_node::rollback(config.tendermint_dir())
+            .map_err(Error::Tendermint)?;
+
+    // Rollback Namada state
+    let db_path = config.shell.db_dir(&config.chain_id);
+    let mut db = storage::PersistentDB::open(db_path, None);
+    tracing::info!("Rollback Namada state");
+
+    db.rollback(tendermint_block_height)
+        .map_err(|e| Error::StorageApi(storage_api::Error::new(e)))
+}
+
 #[derive(Debug)]
 #[allow(dead_code, clippy::large_enum_variant)]
 pub(super) enum ShellMode {

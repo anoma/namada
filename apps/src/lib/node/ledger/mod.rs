@@ -223,6 +223,11 @@ pub fn dump_db(
     db.dump_last_block(out_file_path, historic);
 }
 
+/// Roll Namada state back to the previous height
+pub fn rollback(config: config::Ledger) -> Result<(), shell::Error> {
+    shell::rollback(config)
+}
+
 /// Runs and monitors a few concurrent tasks.
 ///
 /// This includes:

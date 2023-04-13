@@ -31,6 +31,7 @@ use std::cmp::Ordering;
 use std::fs::File;
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::Mutex;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
@@ -45,6 +46,7 @@ use namada::types::storage::{
     KEY_SEGMENT_SEPARATOR,
 };
 use namada::types::time::DateTimeUtc;
+use rayon::prelude::*;
 use rocksdb::{
     BlockBasedOptions, Direction, FlushOptions, IteratorMode, Options,
     ReadOptions, SliceTransform, WriteBatch, WriteOptions,
@@ -313,6 +315,121 @@ impl RocksDB {
         dump_it("subspace".to_string());
 
         println!("Done writing to {}", full_path.to_string_lossy());
+    }
+
+    /// Rollback to previous block. Given the inner working of tendermint
+    /// rollback and of the key structure of Namada, calling rollback more than
+    /// once without restarting the chain results in a single rollback.
+    pub fn rollback(
+        &mut self,
+        tendermint_block_height: BlockHeight,
+    ) -> Result<()> {
+        let last_block = self.read_last_block()?.ok_or(Error::DBError(
+            "Missing last block in storage".to_string(),
+        ))?;
+        tracing::info!(
+            "Namada last block height: {}, Tendermint last block height: {}",
+            last_block.height,
+            tendermint_block_height
+        );
+
+        // If the block height to which tendermint rolled back matches the
+        // Namada height, there's no need to rollback
+        if tendermint_block_height == last_block.height {
+            tracing::info!(
+                "Namada height already matches the rollback Tendermint \
+                 height, no need to rollback."
+            );
+            return Ok(());
+        }
+
+        let mut batch = WriteBatch::default();
+        let previous_height =
+            BlockHeight::from(u64::from(last_block.height) - 1);
+
+        // Revert the non-height-prepended metadata storage keys which get
+        // updated with every block. Because of the way we save these
+        // three keys in storage we can only perform one rollback before
+        // restarting the chain
+        tracing::info!("Reverting non-height-prepended metadata keys");
+        batch.put("height", types::encode(&previous_height));
+        for metadata_key in [
+            "next_epoch_min_start_height",
+            "next_epoch_min_start_time",
+            "tx_queue",
+        ] {
+            let previous_key = format!("pred/{}", metadata_key);
+            let previous_value = self
+                .0
+                .get(previous_key.as_bytes())
+                .map_err(|e| Error::DBError(e.to_string()))?
+                .ok_or(Error::UnknownKey { key: previous_key })?;
+
+            batch.put(metadata_key, previous_value);
+            // NOTE: we cannot restore the "pred/" keys themselves since we
+            // don't have their predecessors in storage, but there's no need to
+            // since we cannot do more than one rollback anyway because of
+            // Tendermint.
+        }
+
+        // Delete block results for the last block
+        tracing::info!("Removing last block results");
+        batch.delete(format!("results/{}", last_block.height));
+
+        // Execute next step in parallel
+        let batch = Mutex::new(batch);
+
+        tracing::info!("Restoring previous hight subspace diffs");
+        self.iter_prefix(&Key::default())
+            .par_bridge()
+            .try_for_each(|(key, _value, _gas)| -> Result<()> {
+                // Restore previous height diff if present, otherwise delete the
+                // subspace key
+
+                // Add the prefix back since `iter_prefix` has removed it
+                let prefixed_key = format!("subspace/{}", key);
+
+                match self.read_subspace_val_with_height(
+                    &Key::from(key.to_db_key()),
+                    previous_height,
+                    last_block.height,
+                )? {
+                    Some(previous_value) => {
+                        batch.lock().unwrap().put(&prefixed_key, previous_value)
+                    }
+                    None => batch.lock().unwrap().delete(&prefixed_key),
+                }
+
+                Ok(())
+            })?;
+
+        // Delete any height-prepended key, including subspace diff keys
+        let mut batch = batch.into_inner().unwrap();
+        let prefix = last_block.height.to_string();
+        let mut read_opts = ReadOptions::default();
+        read_opts.set_total_order_seek(true);
+        let mut upper_prefix = prefix.clone().into_bytes();
+        if let Some(last) = upper_prefix.pop() {
+            upper_prefix.push(last + 1);
+        }
+        read_opts.set_iterate_upper_bound(upper_prefix);
+
+        let iter = self.0.iterator_opt(
+            IteratorMode::From(prefix.as_bytes(), Direction::Forward),
+            read_opts,
+        );
+        tracing::info!("Deleting keys prepended with the last height");
+        for (key, _value, _gas) in PersistentPrefixIterator(
+            // Empty prefix string to prevent stripping
+            PrefixIterator::new(iter, String::default()),
+        ) {
+            batch.delete(key);
+        }
+
+        // Write the batch and persist changes to disk
+        tracing::info!("Flushing restored state to disk");
+        self.exec_batch(batch)?;
+        self.flush(true)
     }
 }
 

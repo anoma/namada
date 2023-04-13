@@ -761,6 +761,7 @@ pub mod cmds {
         Run(LedgerRun),
         Reset(LedgerReset),
         DumpDb(LedgerDumpDb),
+        RollBack(LedgerRollBack),
     }
 
     impl SubCmd for Ledger {
@@ -771,8 +772,10 @@ pub mod cmds {
                 let run = SubCmd::parse(matches).map(Self::Run);
                 let reset = SubCmd::parse(matches).map(Self::Reset);
                 let dump_db = SubCmd::parse(matches).map(Self::DumpDb);
+                let rollback = SubCmd::parse(matches).map(Self::RollBack);
                 run.or(reset)
                     .or(dump_db)
+                    .or(rollback)
                     // The `run` command is the default if no sub-command given
                     .or(Some(Self::Run(LedgerRun(args::LedgerRun(None)))))
             })
@@ -787,6 +790,7 @@ pub mod cmds {
                 .subcommand(LedgerRun::def())
                 .subcommand(LedgerReset::def())
                 .subcommand(LedgerDumpDb::def())
+                .subcommand(LedgerRollBack::def())
         }
     }
 
@@ -843,6 +847,26 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Dump Namada ledger node's DB from a block into a file.")
                 .add_args::<args::LedgerDumpDb>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerRollBack;
+
+    impl SubCmd for LedgerRollBack {
+        const CMD: &'static str = "rollback";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|_matches| Self)
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD).about(
+                "Roll Namada state back to the previous height. This command \
+                 does not create a backup of neither the Namada nor the \
+                 Tendermint state before execution: for extra safety, it is \
+                 recommended to make a backup in advance.",
+            )
         }
     }
 
