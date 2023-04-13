@@ -152,11 +152,7 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let source = address::testing::established_address_2();
         let token = address::nam();
-        let amount = token::Amount::from_uint(
-            10_098_123,
-            token::NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap();
+        let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &source, &token]);
@@ -299,12 +295,12 @@ mod tests {
         // Init the VP
         let vp_owner = address::testing::established_address_1();
         let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();
-        let withdrawal_limit = token::Amount::from_uint(MAX_FREE_DEBIT as u64, token::NATIVE_MAX_DECIMAL_PLACES).unwrap();
+        let withdrawal_limit = token::Amount::from_uint(MAX_FREE_DEBIT as u64, 0).unwrap();
         testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
 
         let target = address::testing::established_address_2();
         let token = address::nam();
-        let amount = token::Amount::from_uint(amount, token::NATIVE_MAX_DECIMAL_PLACES).unwrap();
+        let amount = token::Amount::from_uint(amount, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &target, &token]);
@@ -343,13 +339,13 @@ mod tests {
         // Init the VP
         let vp_owner = address::testing::established_address_1();
         let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();
-        let withdrawal_limit = token::Amount::from_uint(MAX_FREE_DEBIT as u64, token::NATIVE_MAX_DECIMAL_PLACES).unwrap();
+        let withdrawal_limit = token::Amount::from_uint(MAX_FREE_DEBIT as u64, 0).unwrap();
         testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
 
         let target = address::testing::established_address_2();
         let target_key = key::testing::keypair_1();
         let token = address::nam();
-        let amount = token::Amount::from_uint(amount, token::NATIVE_MAX_DECIMAL_PLACES).unwrap();
+        let amount = token::Amount::from_uint(amount, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &target, &token]);
@@ -410,7 +406,7 @@ mod tests {
 
             // Init the VP
             let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();
-            let withdrawal_limit = token::Amount::from_uint(MAX_FREE_DEBIT as u64, token::NATIVE_MAX_DECIMAL_PLACES).unwrap();
+            let withdrawal_limit = token::Amount::from_uint(MAX_FREE_DEBIT as u64, 0).unwrap();
             testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
 
             let keypair = key::testing::keypair_1();

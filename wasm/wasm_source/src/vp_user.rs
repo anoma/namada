@@ -238,11 +238,7 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let source = address::testing::established_address_2();
         let token = address::nam();
-        let amount = token::Amount::from_uint(
-            10_098_123,
-            token::NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap();
+        let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &source, &token]);
@@ -292,11 +288,7 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let target = address::testing::established_address_2();
         let token = address::nam();
-        let amount = token::Amount::from_uint(
-            10_098_123,
-            token::NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap();
+        let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &target, &token]);
@@ -348,11 +340,7 @@ mod tests {
         let public_key = keypair.ref_to();
         let target = address::testing::established_address_2();
         let token = address::nam();
-        let amount = token::Amount::from_uint(
-            10_098_123,
-            token::NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap();
+        let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &target, &token]);
@@ -406,11 +394,7 @@ mod tests {
         // Init PoS genesis
         let pos_params = PosParams::default();
         let validator = address::testing::established_address_3();
-        let initial_stake = token::Amount::from_uint(
-            10_098_123,
-            token::NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap();
+        let initial_stake = token::Amount::from_uint(10_098_123, 0).unwrap();
         let consensus_key = key::testing::keypair_2().ref_to();
         let commission_rate = rust_decimal::Decimal::new(5, 2);
         let max_commission_rate_change = rust_decimal::Decimal::new(1, 2);
@@ -433,21 +417,9 @@ mod tests {
         let vp_owner: Address = address::testing::established_address_2();
         let target = address::testing::established_address_3();
         let token = address::nam();
-        let amount = token::Amount::from_uint(
-            10_098_123,
-            token::NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap();
-        let bond_amount = token::Amount::from_uint(
-            5_098_123,
-            token::NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap();
-        let unbond_amount = token::Amount::from_uint(
-            3_098_123,
-            token::NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap();
+        let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
+        let bond_amount = token::Amount::from_uint(5_098_123, 0).unwrap();
+        let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&target, &token]);
@@ -486,11 +458,7 @@ mod tests {
         // Init PoS genesis
         let pos_params = PosParams::default();
         let validator = address::testing::established_address_3();
-        let initial_stake = token::Amount::from_uint(
-            10_098_123,
-            token::NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap();
+        let initial_stake = token::Amount::from_uint(10_098_123, 0).unwrap();
         let consensus_key = key::testing::keypair_2().ref_to();
         let commission_rate = rust_decimal::Decimal::new(5, 2);
         let max_commission_rate_change = rust_decimal::Decimal::new(1, 2);
@@ -513,21 +481,9 @@ mod tests {
         let vp_owner: Address = address::testing::established_address_2();
         let target = address::testing::established_address_3();
         let token = address::nam();
-        let amount = token::Amount::from_uint(
-            10_098_123,
-            token::NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap();
-        let bond_amount = token::Amount::from_uint(
-            5_098_123,
-            token::NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap();
-        let unbond_amount = token::Amount::from_uint(
-            3_098_123,
-            token::NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap();
+        let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
+        let bond_amount = token::Amount::from_uint(5_098_123, 0).unwrap();
+        let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&target, &token]);
@@ -574,11 +530,7 @@ mod tests {
         let source = address::testing::established_address_2();
         let target = address::testing::established_address_3();
         let token = address::nam();
-        let amount = token::Amount::from_uint(
-            10_098_123,
-            token::NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap();
+        let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &source, &target, &token]);

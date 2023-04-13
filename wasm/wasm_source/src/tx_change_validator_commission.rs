@@ -68,11 +68,7 @@ mod tests {
         let consensus_key = key::testing::keypair_1().ref_to();
         let genesis_validators = [GenesisValidator {
             address: commission_change.validator.clone(),
-            tokens: token::Amount::from_uint(
-                1_000_000,
-                token::NATIVE_MAX_DECIMAL_PLACES,
-            )
-            .unwrap(),
+            tokens: token::Amount::from_uint(1_000_000, 0).unwrap(),
             consensus_key,
             commission_rate: initial_rate,
             max_commission_rate_change: max_change,

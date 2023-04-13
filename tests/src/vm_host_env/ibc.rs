@@ -202,7 +202,7 @@ pub fn init_storage() -> (Address, Address) {
     // initialize an account
     let account = tx::ctx().init_account(code).unwrap();
     let key = token::balance_key(&token, &account);
-    let init_bal = Amount::native_whole(1_000_000_000u64);
+    let init_bal = Amount::from_uint(1_000_000_000u64, 0).unwrap();
     tx::ctx().write(&key, init_bal).unwrap();
     (token, account)
 }

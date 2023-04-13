@@ -591,9 +591,7 @@ pub mod testing {
     use namada::types::key::RefTo;
     use namada::types::storage::Epoch;
     use namada::types::{address, key, token};
-    use namada_core::types::token::{
-        Amount, Change, NATIVE_MAX_DECIMAL_PLACES,
-    };
+    use namada_core::types::token::{Amount, Change};
     use namada_tx_prelude::{Address, StorageRead, StorageWrite};
     use proptest::prelude::*;
     use rust_decimal::Decimal;
@@ -767,11 +765,7 @@ pub mod testing {
                 arb_validator,
             )
                 .prop_map(|(amount, owner, validator)| ValidPosAction::Bond {
-                    amount: Amount::from_uint(
-                        amount,
-                        NATIVE_MAX_DECIMAL_PLACES,
-                    )
-                    .unwrap(),
+                    amount: Amount::from_uint(amount, 0).unwrap(),
                     owner,
                     validator,
                 });
@@ -809,11 +803,7 @@ pub mod testing {
                         // Unbond an arbitrary amount up to what's available
                         (0..current_bond_amount).prop_map(move |amount| {
                             ValidPosAction::Unbond {
-                                amount: Amount::from_uint(
-                                    amount,
-                                    NATIVE_MAX_DECIMAL_PLACES,
-                                )
-                                .unwrap(),
+                                amount: Amount::from_uint(amount, 0).unwrap(),
                                 owner: bond_id.source.clone(),
                                 validator: bond_id.validator.clone(),
                             }
