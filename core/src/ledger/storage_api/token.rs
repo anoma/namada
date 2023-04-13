@@ -49,6 +49,9 @@ pub fn transfer<S>(
 where
     S: StorageRead + StorageWrite,
 {
+    if amount.is_zero() {
+        return Ok(());
+    }
     let src_key = token::balance_key(token, src);
     let src_balance = read_balance(storage, token, src)?;
     match src_balance.checked_sub(amount) {

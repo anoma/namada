@@ -45,6 +45,11 @@ pub const MAX_AMOUNT: Amount = Amount { micro: u64::MAX };
 pub type Change = i128;
 
 impl Amount {
+    /// Returns whether an amount is zero.
+    pub fn is_zero(&self) -> bool {
+        self.micro == 0
+    }
+
     /// Get the amount as a [`Change`]
     pub fn change(&self) -> Change {
         self.micro as Change
@@ -579,6 +584,15 @@ mod tests {
         assert_eq!(max.checked_add(zero), Some(max));
         assert_eq!(max.checked_add(one), None);
         assert_eq!(max.checked_add(max), None);
+    }
+
+    #[test]
+    fn test_amount_is_zero() {
+        let zero = Amount::from(0);
+        assert!(zero.is_zero());
+
+        let non_zero = Amount::from(1);
+        assert!(!non_zero.is_zero());
     }
 }
 
