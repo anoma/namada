@@ -423,15 +423,14 @@ where
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
                                 info: "Process Proposal accepted this \
-                                    tranasction"
+                                       tranasction"
                                     .into(),
                             }
                         } else {
                             TxResult {
                                 code: ErrorCodes::InvalidTx.into(),
                                 info: "The encrypted payload of tx was \
-                                    incorrectly marked as \
-                                    un-decryptable"
+                                       incorrectly marked as un-decryptable"
                                     .into(),
                             }
                         }
@@ -596,7 +595,13 @@ where
                         .expect("Couldn't write wrapper tx hash to write log");
 
                     // check that the fee payer has sufficient balance
-                    // The temporary write log is populated by now. We need a new, empty one, to simulate the unshielding tx (to prevent the already written keys from being passed/triggering VPs) but we cannot commit the tx write log yet cause the unshielding could be invalid. As a workaround, we create a new write log and merge it with the previous one in case of success
+                    // The temporary write log is populated by now. We need a
+                    // new, empty one, to simulate the unshielding tx (to
+                    // prevent the already written keys from being
+                    // passed/triggering VPs) but we cannot commit the tx write
+                    // log yet cause the unshielding could be invalid. As a
+                    // workaround, we create a new write log and merge it with
+                    // the previous one in case of success
                     let mut clone_wl_storage =
                         TempWlStorage::new(&self.wl_storage.storage);
                     match self.wrapper_fee_check(

@@ -214,7 +214,11 @@ where
                             #[cfg(not(feature = "mainnet"))]
                             has_valid_pow,
                         ) {
-                            tracing::error!("Encountered error while charging fee for a failed Wrapper tx: {}", e);
+                            tracing::error!(
+                                "Encountered error while charging fee for a \
+                                 failed Wrapper tx: {}",
+                                e
+                            );
                         }
                     }
                 }
@@ -844,10 +848,14 @@ where
     ) -> Result<()> {
         // Unshield funds if requested
         if let Some(unshield) = &wrapper.unshield {
-            // The unshielding tx does not charge gas, instantiate a limitless custom gas meter for this step
+            // The unshielding tx does not charge gas, instantiate a limitless
+            // custom gas meter for this step
             let mut gas_meter = TxGasMeter::new(u64::MAX);
 
-            // NOTE: given the checks in process_proposal, a failure in the unshielding tx should not happen. If it does, do not return early from this function but try to take the funds from the unshielded balance
+            // NOTE: given the checks in process_proposal, a failure in the
+            // unshielding tx should not happen. If it does, do not return early
+            // from this function but try to take the funds from the unshielded
+            // balance
             match apply_tx(
                 TxType::Decrypted(DecryptedTx::Decrypted {
                     tx: unshield.to_owned(),
@@ -866,7 +874,11 @@ where
                         self.wl_storage.write_log.commit_tx();
                     } else {
                         self.wl_storage.write_log.drop_tx();
-                        tracing::error!("The unshielding tx is invalid, some VPs rejected it: {:#?}", result.vps_result.rejected_vps);
+                        tracing::error!(
+                            "The unshielding tx is invalid, some VPs rejected \
+                             it: {:#?}",
+                            result.vps_result.rejected_vps
+                        );
                     }
                 }
                 Err(e) => {
@@ -1896,10 +1908,12 @@ mod test_finalize_block {
         let code = event.attributes.get("code").expect("Testfailed").as_str();
         assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
 
-        assert!(!shell
-            .wl_storage
-            .has_key(&inner_hash_key)
-            .expect("Test failed"))
+        assert!(
+            !shell
+                .wl_storage
+                .has_key(&inner_hash_key)
+                .expect("Test failed")
+        )
     }
 
     /// Test that a wrapper transaction rejected by [`process_proposal`] because

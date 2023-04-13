@@ -1623,9 +1623,9 @@ pub async fn build_shielded_part(
         Ok(stx) => unzip_option(stx.map(|x| (x.0, x.2))),
         Err(builder::Error::ChangeIsNegative(_)) => {
             eprintln!(
-                "The balance of the source {} is lower than the amount to \
-                     be transferred and fees. Amount to transfer is {} {} and \
-                     fees are {} {}.",
+                "The balance of the source {} is lower than the amount to be \
+                 transferred and fees. Amount to transfer is {} {} and fees \
+                 are {} {}.",
                 ctx.get_cached(&args.source).effective_address(),
                 args.amount,
                 ctx.get(&args.token),
@@ -2867,7 +2867,8 @@ async fn process_tx(
     default_signer: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (Context, ProcessTxResponse) {
-    // Loop twice in case the optional unshielding tx fails because of an epoch change
+    // Loop twice in case the optional unshielding tx fails because of an epoch
+    // change
     for _ in 0..2 {
         let (to_broadcast, unshielding_tx_epoch) = sign_tx(
             &mut ctx,
@@ -2895,7 +2896,7 @@ async fn process_tx(
             } else {
                 panic!(
                     "Expected a dry-run transaction, received a wrapper \
-                 transaction instead"
+                     transaction instead"
                 );
             }
         } else {
@@ -2906,13 +2907,14 @@ async fn process_tx(
                     .await
                 {
                     Ok(resp) => {
-                        return (ctx, ProcessTxResponse::Broadcast(resp))
+                        return (ctx, ProcessTxResponse::Broadcast(resp));
                     }
                     Err(err) => {
                         eprintln!(
-                        "Encountered error while broadcasting transaction: {}",
-                        err
-                    );
+                            "Encountered error while broadcasting \
+                             transaction: {}",
+                            err
+                        );
                         break;
                     }
                 }
@@ -2920,24 +2922,28 @@ async fn process_tx(
                 match submit_tx(args.ledger_address.clone(), to_broadcast).await
                 {
                     Ok(result) => {
-                        // Query the epoch in which the transaction was probably submitted
+                        // Query the epoch in which the transaction was probably
+                        // submitted
                         let submission_epoch = rpc::query_epoch(
                             &HttpClient::new(args.ledger_address.clone())
                                 .unwrap(),
                         )
                         .await;
 
-                        // If wrapper tx requests the unshielding of tokens for fee payment
+                        // If wrapper tx requests the unshielding of tokens for
+                        // fee payment
                         if let Some(unshield_epoch) = unshielding_tx_epoch {
-                            // And the transaction was rejected by some vp and the epochs do not match
+                            // And the transaction was rejected by some vp and
+                            // the epochs do not match
                             if result.code == 1.to_string()
                                 && unshield_epoch != submission_epoch
                             {
                                 // Retry the submission
                                 eprintln!(
-                    "Fee unshielding transaction rejected and this may be due to the \
-                     epoch changing. Attempting to resubmit transaction.",
-                );
+                                    "Fee unshielding transaction rejected and \
+                                     this may be due to the epoch changing. \
+                                     Attempting to resubmit transaction.",
+                                );
                                 continue;
                             }
                         }
@@ -2946,9 +2952,10 @@ async fn process_tx(
                     }
                     Err(err) => {
                         eprintln!(
-                        "Encountered error while broadcasting transaction: {}",
-                        err
-                    );
+                            "Encountered error while broadcasting \
+                             transaction: {}",
+                            err
+                        );
                         break;
                     }
                 }

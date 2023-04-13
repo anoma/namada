@@ -1,11 +1,9 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
-use namada::core::hints;
-use namada::vm::wasm::{TxCache, VpCache};
-use namada::vm::WasmCacheAccess;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
+use namada::core::hints;
 use namada::core::ledger::gas::TxGasMeter;
 use namada::core::ledger::parameters;
 use namada::ledger::gas::BlockGasMeter;
@@ -18,6 +16,8 @@ use namada::types::time::DateTimeUtc;
 use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
+use namada::vm::wasm::{TxCache, VpCache};
+use namada::vm::WasmCacheAccess;
 
 use super::super::*;
 use super::block_space_alloc::states::{
@@ -201,6 +201,7 @@ where
     }
 
     /// Validity checks on a wrapper tx
+    #[allow(clippy::too_many_arguments)]
     fn validate_wrapper_bytes<CA>(
         &self,
         tx_bytes: &[u8],
@@ -241,7 +242,7 @@ where
             self.wrapper_fee_check(
                 wrapper,
                 temp_wl_storage,
-                Some(Cow::Borrowed(&gas_table)),
+                Some(Cow::Borrowed(gas_table)),
                 vp_wasm_cache,
                 tx_wasm_cache,
             )

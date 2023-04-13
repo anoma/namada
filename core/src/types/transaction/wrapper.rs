@@ -151,9 +151,9 @@ pub mod wrapper_tx {
         }
     }
 
-    /// A transaction with an encrypted payload, an optional shielded pool unshielding tx for fee payment and
-    /// some non-encrypted metadata for inclusion
-    /// and / or verification purposes
+    /// A transaction with an encrypted payload, an optional shielded pool
+    /// unshielding tx for fee payment and some non-encrypted metadata for
+    /// inclusion and / or verification purposes
     #[derive(
         Debug,
         Clone,
@@ -186,10 +186,11 @@ pub mod wrapper_tx {
     }
 
     impl WrapperTx {
-        /// Create a new wrapper tx from unencrypted tx, the personal keypair, an optional unshielding tx,
-        /// and the metadata surrounding the inclusion of the tx. This method
-        /// constructs the signature of relevant data and encrypts the
-        /// transaction
+        /// Create a new wrapper tx from unencrypted tx, the personal keypair,
+        /// an optional unshielding tx, and the metadata surrounding the
+        /// inclusion of the tx. This method constructs the signature of
+        /// relevant data and encrypts the transaction
+        #[allow(clippy::too_many_arguments)]
         pub fn new(
             fee: Fee,
             keypair: &common::SecretKey,
@@ -349,7 +350,12 @@ pub mod wrapper_tx {
 
             match unshielded_balance.checked_add(transfer.amount) {
                 Some(v) if v == self.fee.amount => Ok(()),
-                _ => Err(WrapperTxErr::InvalidUnshieldTx(format!("The unshielded amount is not the minimum required for fee payment: required {}, found: {}", self.fee.amount - unshielded_balance, transfer.amount)))
+                _ => Err(WrapperTxErr::InvalidUnshieldTx(format!(
+                    "The unshielded amount is not the minimum required for \
+                     fee payment: required {}, found: {}",
+                    self.fee.amount - unshielded_balance,
+                    transfer.amount
+                ))),
             }
         }
     }

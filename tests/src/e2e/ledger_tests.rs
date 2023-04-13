@@ -542,8 +542,9 @@ fn ledger_txs_and_queries() -> Result<()> {
 /// Test the unshielding tx attached to a wrapper:
 ///
 /// 1. Shield some tokens to reduce the unshielded balance
-/// 2. Submit a new wrapper with an invalid unshielding tx and assert the failure
-/// 3. Submit a new wrapper with a valid unshielding tx and assert success
+/// 2. Submit a new wrapper with an invalid unshielding tx and assert the
+/// failure 3. Submit a new wrapper with a valid unshielding tx and assert
+/// success
 #[test]
 fn wrapper_fee_unshielding() -> Result<()> {
     // Download the shielded pool parameters before starting node

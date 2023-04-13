@@ -12,8 +12,7 @@ use namada::types::token;
 use namada::types::token::Amount;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx, MIN_FEE};
 
-use super::rpc;
-use super::tx;
+use super::{rpc, tx};
 use crate::cli::context::{FromContext, WalletAddress, WalletKeypair};
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxBroadcastData;
@@ -194,7 +193,7 @@ pub async fn sign_tx(
             } => (tx, wrapper_hash),
         };
 
-        dump_tx_helper(&ctx, wrapper_tx, "wrapper", Some(wrapper_hash));
+        dump_tx_helper(ctx, wrapper_tx, "wrapper", Some(wrapper_hash));
     }
 
     (broadcast_data, unshielding_epoch)
@@ -293,9 +292,10 @@ pub async fn sign_wrapper(
                 (Some(unsigned_tx.sign(&masp_key)), unshielding_epoch)
             } else {
                 eprintln!(
-            "The wrapper transaction source doesn't have enough balance to \
-             pay fee. Fee: {fee_amount}, balance: {balance}."
-        );
+                    "The wrapper transaction source doesn't have enough \
+                     balance to pay fee. Fee: {fee_amount}, balance: \
+                     {balance}."
+                );
                 if !args.force && cfg!(feature = "mainnet") {
                     cli::safe_exit(1);
                 }

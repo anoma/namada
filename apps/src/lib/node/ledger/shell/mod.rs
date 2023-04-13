@@ -44,12 +44,11 @@ use namada::types::internal::WrapperTxInQueue;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
-use namada::types::transaction::WrapperTx;
 #[cfg(not(feature = "mainnet"))]
 use namada::types::transaction::MIN_FEE;
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
-    EllipticCurve, PairingEngine, TxType,
+    EllipticCurve, PairingEngine, TxType, WrapperTx,
 };
 use namada::types::{address, hash, token};
 use namada::vm::wasm::{TxCache, VpCache};
@@ -944,7 +943,8 @@ where
         false
     }
 
-    /// Check that the Wrapper's signer has enough funds to pay fees. This method consumes the provided wrapper.
+    /// Check that the Wrapper's signer has enough funds to pay fees. This
+    /// method consumes the provided wrapper.
     pub fn wrapper_fee_check<CA>(
         &self,
         mut wrapper: WrapperTx,
@@ -997,7 +997,7 @@ where
                 &mut TxGasMeter::new(u64::MAX),
                 &gas_table,
                 &mut wl_storage.write_log,
-                &wl_storage.storage,
+                wl_storage.storage,
                 vp_wasm_cache,
                 tx_wasm_cache,
             ) {
@@ -1013,7 +1013,11 @@ where
                             "Token balance read in the protocol must not fail",
                         );
                     } else {
-                        return Err(format!("The unshielding tx is invalid, some VPs rejected it: {:#?}", result.vps_result.rejected_vps));
+                        return Err(format!(
+                            "The unshielding tx is invalid, some VPs rejected \
+                             it: {:#?}",
+                            result.vps_result.rejected_vps
+                        ));
                     }
                 }
                 Err(e) => {
@@ -1028,9 +1032,11 @@ where
         if balance >= self.get_wrapper_tx_fees() {
             Ok(())
         } else {
-            Err("The given address does not have a sufficient balance to \
-                     pay fee"
-                .to_string())
+            Err(
+                "The given address does not have a sufficient balance to pay \
+                 fee"
+                .to_string(),
+            )
         }
     }
 }
