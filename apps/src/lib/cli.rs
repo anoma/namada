@@ -1847,11 +1847,11 @@ pub mod cmds {
     /// Used as sub-commands (`SubCmd` instance) in `namadar` binary.
     #[derive(Clone, Debug)]
     pub enum ValidatorSet {
-        /// Query an Ethereum ABI encoding of the active validator
+        /// Query an Ethereum ABI encoding of the consensus validator
         /// set in Namada, at the given epoch, or the latest
         /// one, if none is provided.
-        ActiveValidatorSet(args::ActiveValidatorSet),
-        /// Query an Ethereum ABI encoding of a proof of the active
+        ConsensusValidatorSet(args::ConsensusValidatorSet),
+        /// Query an Ethereum ABI encoding of a proof of the consensus
         /// validator set in Namada, at the given epoch, or the next
         /// one, if none is provided.
         ValidatorSetProof(args::ValidatorSetProof),
@@ -1865,13 +1865,14 @@ pub mod cmds {
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let active_validator_set = ActiveValidatorSet::parse(matches)
-                    .map(|args| Self::ActiveValidatorSet(args.0));
+                let consensus_validator_set =
+                    ConsensusValidatorSet::parse(matches)
+                        .map(|args| Self::ConsensusValidatorSet(args.0));
                 let validator_set_proof = ValidatorSetProof::parse(matches)
                     .map(|args| Self::ValidatorSetProof(args.0));
                 let relay = ValidatorSetUpdateRelay::parse(matches)
                     .map(|args| Self::ValidatorSetUpdateRelay(args.0));
-                active_validator_set.or(validator_set_proof).or(relay)
+                consensus_validator_set.or(validator_set_proof).or(relay)
             })
         }
 
@@ -1883,32 +1884,32 @@ pub mod cmds {
                      contracts.",
                 )
                 .setting(AppSettings::SubcommandRequiredElseHelp)
-                .subcommand(ActiveValidatorSet::def().display_order(1))
+                .subcommand(ConsensusValidatorSet::def().display_order(1))
                 .subcommand(ValidatorSetProof::def().display_order(1))
                 .subcommand(ValidatorSetUpdateRelay::def().display_order(1))
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct ActiveValidatorSet(args::ActiveValidatorSet);
+    pub struct ConsensusValidatorSet(args::ConsensusValidatorSet);
 
-    impl SubCmd for ActiveValidatorSet {
-        const CMD: &'static str = "active";
+    impl SubCmd for ConsensusValidatorSet {
+        const CMD: &'static str = "consensus";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::ActiveValidatorSet::parse(matches)))
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                Self(args::ConsensusValidatorSet::parse(matches))
+            })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Query an Ethereum ABI encoding of the active validator \
-                     set in Namada, at the requested epoch, or the current \
-                     one, if no epoch is provided.",
+                    "Query an Ethereum ABI encoding of the consensus \
+                     validator set in Namada, at the requested epoch, or the \
+                     current one, if no epoch is provided.",
                 )
-                .add_args::<args::ActiveValidatorSet>()
+                .add_args::<args::ConsensusValidatorSet>()
         }
     }
 
@@ -1927,9 +1928,9 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Query an Ethereum ABI encoding of a proof of the active \
-                     validator set in Namada, at the requested epoch, or the \
-                     next one, if no epoch is provided.",
+                    "Query an Ethereum ABI encoding of a proof of the \
+                     consensus validator set in Namada, at the requested \
+                     epoch, or the next one, if no epoch is provided.",
                 )
                 .add_args::<args::ValidatorSetProof>()
         }
@@ -2521,14 +2522,14 @@ pub mod args {
     }
 
     #[derive(Debug, Clone)]
-    pub struct ActiveValidatorSet {
+    pub struct ConsensusValidatorSet {
         /// The query parameters.
         pub query: Query,
         /// The epoch to query.
         pub epoch: Option<Epoch>,
     }
 
-    impl Args for ActiveValidatorSet {
+    impl Args for ConsensusValidatorSet {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let epoch = EPOCH.parse(matches);
@@ -2536,11 +2537,9 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>().arg(
-                EPOCH.def().about(
-                    "The epoch of the active set of validators to query.",
-                ),
-            )
+            app.add_args::<Query>().arg(EPOCH.def().about(
+                "The epoch of the consensus set of validators to query.",
+            ))
         }
     }
 

@@ -121,11 +121,11 @@ pub fn stored_keys_count(wl_storage: &TestWlStorage) -> usize {
 /// Set up a [`TestWlStorage`] initialized at genesis with the given
 /// validators.
 pub fn setup_storage_with_validators(
-    active_validators: HashMap<Address, token::Amount>,
+    consensus_validators: HashMap<Address, token::Amount>,
 ) -> (TestWlStorage, HashMap<Address, TestValidatorKeys>) {
     let mut wl_storage = TestWlStorage::default();
     let all_keys =
-        init_storage_with_validators(&mut wl_storage, active_validators);
+        init_storage_with_validators(&mut wl_storage, consensus_validators);
     (wl_storage, all_keys)
 }
 
@@ -133,29 +133,30 @@ pub fn setup_storage_with_validators(
 /// validators.
 pub fn init_storage_with_validators(
     wl_storage: &mut TestWlStorage,
-    active_validators: HashMap<Address, token::Amount>,
+    consensus_validators: HashMap<Address, token::Amount>,
 ) -> HashMap<Address, TestValidatorKeys> {
     // set last height to a reasonable value;
     // it should allow vote extensions to be cast
     wl_storage.storage.last_height = 3.into();
 
     let mut all_keys = HashMap::new();
-    let validators = active_validators.into_iter().map(|(address, tokens)| {
-        let keys = TestValidatorKeys::generate();
-        let consensus_key = keys.consensus.ref_to();
-        let eth_cold_key = keys.eth_gov.ref_to();
-        let eth_hot_key = keys.eth_bridge.ref_to();
-        all_keys.insert(address.clone(), keys);
-        GenesisValidator {
-            address,
-            tokens,
-            consensus_key,
-            eth_cold_key,
-            eth_hot_key,
-            commission_rate: dec!(0.05),
-            max_commission_rate_change: dec!(0.01),
-        }
-    });
+    let validators =
+        consensus_validators.into_iter().map(|(address, tokens)| {
+            let keys = TestValidatorKeys::generate();
+            let consensus_key = keys.consensus.ref_to();
+            let eth_cold_key = keys.eth_gov.ref_to();
+            let eth_hot_key = keys.eth_bridge.ref_to();
+            all_keys.insert(address.clone(), keys);
+            GenesisValidator {
+                address,
+                tokens,
+                consensus_key,
+                eth_cold_key,
+                eth_hot_key,
+                commission_rate: dec!(0.05),
+                max_commission_rate_change: dec!(0.01),
+            }
+        });
 
     namada_proof_of_stake::init_genesis(
         wl_storage,

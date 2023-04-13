@@ -28,7 +28,8 @@ where
     /// To validate a [`validator_set_update::SignedVext`], Namada nodes
     /// check if:
     ///
-    ///  * The signing validator is active during `signing_epoch`.
+    ///  * The signing validator is a consensus validator during
+    ///    `signing_epoch`.
     ///  * The validator correctly signed the extension, with its Ethereum hot
     ///    key.
     ///  * The validator signed over the epoch inside of the extension, whose
@@ -93,7 +94,7 @@ where
         for (eth_addr_book, namada_addr, namada_power) in self
             .wl_storage
             .ethbridge_queries()
-            .get_active_eth_addresses(Some(signing_epoch.next()))
+            .get_consensus_eth_addresses(Some(signing_epoch.next()))
             .iter()
         {
             let &ext_power = match ext.data.voting_powers.get(&eth_addr_book) {
@@ -357,7 +358,7 @@ mod test_vote_extensions {
             shell
                 .wl_storage
                 .ethbridge_queries()
-                .get_active_eth_addresses(Some(next_epoch))
+                .get_consensus_eth_addresses(Some(next_epoch))
                 .iter()
                 .map(|(eth_addr_book, _, voting_power)| {
                     (eth_addr_book, voting_power)
@@ -444,7 +445,7 @@ mod test_vote_extensions {
             shell
                 .wl_storage
                 .ethbridge_queries()
-                .get_active_eth_addresses(Some(next_epoch))
+                .get_consensus_eth_addresses(Some(next_epoch))
                 .iter()
                 .map(|(eth_addr_book, _, voting_power)| {
                     (eth_addr_book, voting_power)
@@ -534,7 +535,7 @@ mod test_vote_extensions {
             shell
                 .wl_storage
                 .ethbridge_queries()
-                .get_active_eth_addresses(Some(next_epoch))
+                .get_consensus_eth_addresses(Some(next_epoch))
                 .iter()
                 .map(|(eth_addr_book, _, voting_power)| {
                     (eth_addr_book, voting_power)
@@ -624,7 +625,7 @@ mod test_vote_extensions {
                 shell
                     .wl_storage
                     .ethbridge_queries()
-                    .get_active_eth_addresses(Some(next_epoch))
+                    .get_consensus_eth_addresses(Some(next_epoch))
                     .iter()
                     .map(|(eth_addr_book, _, voting_power)| {
                         (eth_addr_book, voting_power)
@@ -702,10 +703,10 @@ mod test_vote_extensions {
     }
 
     /// Test if a [`validator_set_update::Vext`] is signed with a secp key
-    /// that belongs to an active validator of some previous epoch
+    /// that belongs to a consensus validator of some previous epoch
     #[test]
     #[ignore]
-    fn test_secp_key_belongs_to_active_validator() {
+    fn test_secp_key_belongs_to_consensus_validator() {
         // TODO: we need to prove ownership of validator keys
         // https://github.com/anoma/namada/issues/106
     }

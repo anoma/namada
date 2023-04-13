@@ -32,7 +32,7 @@ pub type VextDigest = ValidatorSetUpdateVextDigest;
     Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct ValidatorSetUpdateVextDigest {
-    /// A mapping from an active validator address to a [`Signature`].
+    /// A mapping from a consensus validator address to a [`Signature`].
     pub signatures: HashMap<Address, Signature>,
     /// The addresses of the validators in the new [`Epoch`],
     /// and their respective voting power.
@@ -309,7 +309,8 @@ pub struct ValidatorSetArgs {
     pub validators: Vec<EthAddress>,
     /// The voting powers of the validators.
     pub voting_powers: Vec<EthBridgeVotingPower>,
-    /// The epoch when the validators were active.
+    /// The epoch when the validators were part of
+    /// the consensus set of validators.
     ///
     /// Serves as a nonce.
     pub epoch: Epoch,

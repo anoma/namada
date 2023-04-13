@@ -18,12 +18,11 @@ pub type Vext = EthereumEventsVext;
 /// a Namada protocol key.
 pub type SignedVext = Signed<Vext>;
 
-/// Represents a set of [`EthereumEvent`] instances
-/// seen by some validator.
+/// Represents a set of [`EthereumEvent`] instances seen by some validator.
 ///
-/// This struct will be created and signed over by each
-/// active validator, to be included as a vote extension at the end of a
-/// Tendermint PreCommit phase.
+/// This struct will be created and signed over by each consensus validator,
+/// to be included as a vote extension at the end of a Tendermint PreCommit
+/// phase.
 #[derive(
     Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
