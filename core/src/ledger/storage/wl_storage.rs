@@ -2,6 +2,7 @@
 
 use std::iter::Peekable;
 
+use super::EPOCH_SWITCH_BLOCKS_DELAY;
 use crate::ledger::parameters::EpochDuration;
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
@@ -67,10 +68,33 @@ where
         let parameters =
             parameters::read(self).expect("Couldn't read protocol parameters");
 
-        // Check if the current epoch is over
-        let new_epoch = height >= self.storage.next_epoch_min_start_height
-            && time >= self.storage.next_epoch_min_start_time;
+        match self.storage.update_epoch_blocks_delay.as_mut() {
+            None => {
+                // Check if the new epoch minimum start height and start time
+                // have been fulfilled. If so, queue the next
+                // epoch to start two blocks into the future so
+                // as to align validator set updates + etc with
+                // tendermint. This is because tendermint has a two block delay
+                // to validator changes.
+                let current_epoch_duration_satisfied = height
+                    >= self.storage.next_epoch_min_start_height
+                    && time >= self.storage.next_epoch_min_start_time;
+                if current_epoch_duration_satisfied {
+                    self.storage.update_epoch_blocks_delay =
+                        Some(EPOCH_SWITCH_BLOCKS_DELAY);
+                }
+            }
+            Some(blocks_until_switch) => {
+                *blocks_until_switch -= 1;
+            }
+        };
+        let new_epoch =
+            matches!(self.storage.update_epoch_blocks_delay, Some(0));
+
         if new_epoch {
+            // Reset the delay tracker
+            self.storage.update_epoch_blocks_delay = None;
+
             // Begin a new epoch
             self.storage.block.epoch = self.storage.block.epoch.next();
             let EpochDuration {

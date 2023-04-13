@@ -33,10 +33,10 @@ pub struct PosParams {
     pub max_inflation_rate: Decimal,
     /// Target ratio of staked NAM tokens to total NAM tokens
     pub target_staked_ratio: Decimal,
-    /// Portion of validator's stake that should be slashed on a duplicate
+    /// Fraction of validator's stake that should be slashed on a duplicate
     /// vote.
     pub duplicate_vote_min_slash_rate: Decimal,
-    /// Portion of validator's stake that should be slashed on a light client
+    /// Fraction of validator's stake that should be slashed on a light client
     /// attack.
     pub light_client_attack_min_slash_rate: Decimal,
 }
@@ -113,6 +113,10 @@ impl PosParams {
 
         // Check maximum total voting power cannot get larger than what
         // Tendermint allows
+        //
+        // TODO: decide if this is still a check we want to do (in its current
+        // state with our latest voting power conventions, it will fail
+        // always)
         let max_total_voting_power = Decimal::from(self.max_validator_slots)
             * self.tm_votes_per_token
             * Decimal::from(TOKEN_MAX_AMOUNT);
