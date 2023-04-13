@@ -249,7 +249,7 @@ pub async fn sign_wrapper(
     let fee_token = ctx.get(&args.fee_token);
     let source = Address::from(&keypair.ref_to());
     let balance_key = token::balance_key(&fee_token, &source);
-    let balance =
+    let mut balance =
         rpc::query_storage_value::<token::Amount>(&client, &balance_key)
             .await
             .unwrap_or_default();
@@ -258,8 +258,15 @@ pub async fn sign_wrapper(
         Some(diff) => {
             if let Some(spending_key) = args.fee_unshield {
                 // Unshield funds for fee payment
+                let tx_args = args::Tx {
+                    fee_amount: 0.into(),
+                    fee_unshield: None,
+                    gas_limit: u64::MAX.into(),
+                    signer: Some(FromContext::new(address::masp().to_string())),
+                    ..args.to_owned()
+                };
                 let transfer_args = args::TxTransfer {
-                    tx: args.to_owned(),
+                    tx: tx_args,
                     source: FromContext::new(spending_key.to_string()),
                     target: FromContext::new(source.to_string()),
                     token: args.fee_token.to_owned(),
@@ -291,7 +298,14 @@ pub async fn sign_wrapper(
                     ctx.config.ledger.chain_id.clone(),
                     args.expiration,
                 );
-                Some(unsigned_tx.sign(keypair))
+                balance += diff;
+                let masp_key = find_keypair(
+                    &mut ctx.wallet,
+                    &address::masp(),
+                    args.ledger_address.clone(),
+                )
+                .await;
+                Some(unsigned_tx.sign(&masp_key))
             } else {
                 eprintln!(
             "The wrapper transaction source doesn't have enough balance to \
@@ -312,7 +326,7 @@ pub async fn sign_wrapper(
     let pow_solution: Option<namada::core::ledger::testnet_pow::Solution> = {
         // If the address derived from the keypair doesn't have enough balance
         // to pay for the fee, allow to find a PoW solution instead.
-        if requires_pow || ((balance < fee_amount) && unshield.is_none()) {
+        if requires_pow || balance < fee_amount {
             println!(
                 "The transaction requires the completion of a PoW challenge."
             );
