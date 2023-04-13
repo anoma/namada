@@ -58,33 +58,24 @@ fn validate_tx(
     if let Some(shielded_tx) = shielded {
         let mut transparent_tx_pool = Amount::zero();
         // The Sapling value balance adds to the transparent tx pool
-        transparent_tx_pool += shielded_tx.value_balance.clone();
+        transparent_tx_pool += shielded_tx.sapling_value_balance();
 
+        // Note that the asset type is timestamped so shields
+        // where the shielded value has an incorrect timestamp
+        // are automatically rejected
+        let (_transp_asset, transp_amt) = convert_amount(
+            ctx.get_block_epoch().unwrap(),
+            &transfer.token,
+            transfer.amount,
+        );
         // Handle shielding/transparent input
         if transfer.source != masp() {
-            // Note that the asset type is timestamped so shields
-            // where the shielded value has an incorrect timestamp
-            // are automatically rejected
-            let (_transp_asset, transp_amt) = convert_amount(
-                ctx.get_block_epoch().unwrap(),
-                &transfer.token,
-                transfer.amount,
-            );
-
             // Non-masp sources add to transparent tx pool
-            transparent_tx_pool += transp_amt;
+            transparent_tx_pool += transp_amt.clone();
         }
 
         // Handle unshielding/transparent output
         if transfer.target != masp() {
-            // Timestamp is derived to allow unshields for older tokens
-            let atype =
-                shielded_tx.value_balance.components().next().unwrap().0;
-
-            let transp_amt =
-                Amount::from_nonnegative(*atype, u64::from(transfer.amount))
-                    .expect("invalid value or asset type for amount");
-
             // Non-masp destinations subtract from transparent tx pool
             transparent_tx_pool -= transp_amt;
         }

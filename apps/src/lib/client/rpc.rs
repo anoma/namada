@@ -18,7 +18,7 @@ use eyre::{eyre, Context as EyreContext};
 use itertools::Itertools;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
-use masp_primitives::primitives::ViewingKey;
+use masp_primitives::sapling::ViewingKey;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::Amount;
 use masp_primitives::zip32::ExtendedFullViewingKey;

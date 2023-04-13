@@ -111,6 +111,7 @@ rand_core = {version = "0.6", default-features = false}
 rayon = "=1.5.3"
 regex = "1.4.5"
 reqwest = "0.11.4"
+ripemd = "0.1"
 rlimit = "0.5.4"
 rocksdb = {version = "0.19.0", features = ['zstd', 'jemalloc'], default-features = false}
 rpassword = "5.0.1"
@@ -145,9 +146,8 @@ tracing-log = "0.1.2"
 tracing-subscriber = {version = "0.3.7", features = ["env-filter", "json"]}
 websocket = "0.26.2"
 winapi = "0.3.9"
-#libmasp = { git = "https://github.com/anoma/masp", branch = "murisi/masp-incentive" }
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", features = ["transparent-inputs"] }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", features = ["bundled-prover", "download-params"] }
+masp_primitives = { git = "https://github.com/anoma/masp", branch = "murisi/namada-integration", features = ["transparent-inputs"] }
+masp_proofs = { git = "https://github.com/anoma/masp", branch = "murisi/namada-integration", features = ["bundled-prover", "download-params"] }
 bimap = {version = "0.6.2", features = ["serde"]}
 rust_decimal = "1.26.1"
 rust_decimal_macros = "1.26.1"

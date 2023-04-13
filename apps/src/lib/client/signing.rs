@@ -126,9 +126,6 @@ pub async fn tx_signer(
             signing_key
         }
         TxSigningKey::SecretKey(signing_key) => {
-            // Check if the signing key needs to reveal its PK first
-            let pk: common::PublicKey = signing_key.ref_to();
-            super::tx::reveal_pk_if_needed(ctx, &pk, args).await;
             signing_key
         }
         TxSigningKey::None => {
@@ -270,7 +267,6 @@ pub async fn sign_wrapper(
     tx.add_section(Section::Signature(Signature::new(&tx.header_hash(), keypair)));
     // Encrypt all sections not relating to the header
     tx.encrypt(&Default::default());
-    
     // We use this to determine when the wrapper tx makes it on-chain
     let wrapper_hash = tx.header_hash().to_string();
     // We use this to determine when the decrypted inner tx makes it

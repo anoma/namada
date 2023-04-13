@@ -30,6 +30,7 @@ use crate::types::transaction::WrapperTx;
 use sha2::{Digest, Sha256};
 use crate::types::transaction::WrapperTxErr;
 use masp_primitives::transaction::Transaction;
+use serde::de::Error as SerdeError;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -298,6 +299,39 @@ impl From<SerializedCiphertext> for Ciphertext {
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+struct TransactionSerde(Vec<u8>);
+
+impl From<Vec<u8>> for TransactionSerde {
+    fn from(tx: Vec<u8>) -> Self {
+        Self(tx)
+    }
+}
+
+impl Into<Vec<u8>> for TransactionSerde {
+    fn into(self) -> Vec<u8> {
+        self.0
+    }
+}
+
+fn borsh_serde<T, S>(obj: &impl BorshSerialize, ser: S) -> std::result::Result<S::Ok, S::Error> where
+    S: serde::Serializer,
+    T: From<Vec<u8>>,
+    T: serde::Serialize,
+{
+    Into::<T>::into(obj.try_to_vec().unwrap()).serialize(ser)
+}
+
+fn serde_borsh<'de, T, S, U>(ser: S) -> std::result::Result<U, S::Error> where
+    S: serde::Deserializer<'de>,
+    T: Into<Vec<u8>>,
+    T: serde::Deserialize<'de>,
+    U: BorshDeserialize,
+{
+    BorshDeserialize::try_from_slice(&Into::<Vec<u8>>::into(T::deserialize(ser)?))
+        .map_err(S::Error::custom)
+}
+
 /// A section of a transaction. Carries an independent piece of information
 /// necessary for the processing of a transaction.
 #[derive(
@@ -315,6 +349,10 @@ pub enum Section {
     /// Ciphertext obtained by encrypting arbitrary transaction sections
     Ciphertext(Ciphertext),
     /// Embedded MASP transaction section
+    #[serde(
+        serialize_with = "borsh_serde::<TransactionSerde, _>",
+        deserialize_with = "serde_borsh::<TransactionSerde, _, _>",
+    )]
     MaspTx(Transaction),
 }
 
