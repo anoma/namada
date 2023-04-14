@@ -75,10 +75,10 @@ where
             Ok(None)
         }
         Some(&write_log::StorageModification::InitAccount {
-            ref vp_code_hash,
+            ref vp, ..
         }) => {
             // Read the VP of a new account
-            Ok(Some(vp_code_hash.to_vec()))
+            Ok(Some(vp.clone()))
         }
         Some(&write_log::StorageModification::Temp { .. }) => {
             Err(RuntimeError::ReadTemporaryValueError)
@@ -117,10 +117,10 @@ where
             Ok(None)
         }
         Some(&write_log::StorageModification::InitAccount {
-            ref vp_code_hash,
+            ref vp, ..
         }) => {
-            // Read the VP code hash of a new account
-            Ok(Some(vp_code_hash.to_vec()))
+            // Read the VP of a new account
+            Ok(Some(vp.clone()))
         }
         Some(&write_log::StorageModification::Temp { .. }) => {
             Err(RuntimeError::ReadTemporaryValueError)
@@ -270,8 +270,8 @@ pub fn get_tx_code_hash(
     gas_meter: &mut VpGasMeter,
     tx: &Tx,
 ) -> EnvResult<Hash> {
-    let hash = if tx.code_or_hash.len() == HASH_LENGTH {
-        Hash::try_from(&tx.code_or_hash[..])
+    let hash = if tx.code.len() == HASH_LENGTH {
+        Hash::try_from(&tx.code[..])
             .map_err(|_| RuntimeError::InvalidCodeHash)?
     } else {
         Hash(tx.code_hash())

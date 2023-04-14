@@ -174,7 +174,7 @@ where
         write_log,
         gas_meter,
         tx_index,
-        &tx.code_or_hash,
+        &tx.code,
         tx_data,
         vp_wasm_cache,
         tx_wasm_cache,
@@ -266,6 +266,8 @@ where
                             return Err(Error::MissingAddress(addr.clone()));
                         }
                     };
+
+                    // TODO vp compiling fee
 
                     wasm::run::vp(
                         &vp_code_hash,
