@@ -58,7 +58,6 @@ use namada::types::transaction::governance::{
 };
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{storage, token};
-use namada::vm;
 use rand_core::{CryptoRng, OsRng, RngCore};
 use rust_decimal::Decimal;
 use sha2::Digest;
@@ -67,7 +66,9 @@ use tokio::time::{Duration, Instant};
 use super::rpc;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
-use crate::client::rpc::{query_conversion, query_epoch, query_storage_value};
+use crate::client::rpc::{
+    query_conversion, query_epoch, query_storage_value, query_wasm_code_hash,
+};
 use crate::client::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
 use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
 use crate::client::tx::args::Query;
@@ -101,12 +102,16 @@ const ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: &str =
 const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
-    let tx_code = ctx.read_wasm(args.code_path);
+    let code_path = args.code_path.file_name().unwrap().to_str().unwrap();
+    let tx_code_hash =
+        query_wasm_code_hash(code_path, args.tx.ledger_address.clone())
+            .await
+            .unwrap();
     let data = args.data_path.map(|data_path| {
         std::fs::read(data_path).expect("Expected a file at given data path")
     });
     let tx = Tx::new(
-        tx_code,
+        tx_code_hash,
         data,
         ctx.config.ledger.chain_id.clone(),
         args.tx.expiration,
@@ -160,22 +165,22 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
         }
     }
 
-    let vp_code = ctx.read_wasm(args.vp_code_path);
-    // Validate the VP code
-    if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
-        eprintln!("Validity predicate code validation failed with {}", err);
-        if !args.tx.force {
-            safe_exit(1)
-        }
-    }
+    let vp_code_path = args.vp_code_path.file_name().unwrap().to_str().unwrap();
+    let vp_code_hash =
+        query_wasm_code_hash(vp_code_path, args.tx.ledger_address.clone())
+            .await
+            .unwrap();
 
-    let tx_code = ctx.read_wasm(TX_UPDATE_VP_WASM);
+    let tx_code_hash =
+        query_wasm_code_hash(TX_UPDATE_VP_WASM, args.tx.ledger_address.clone())
+            .await
+            .unwrap();
 
-    let data = UpdateVp { addr, vp_code };
+    let data = UpdateVp { addr, vp_code_hash };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(
-        tx_code,
+        tx_code_hash,
         Some(data),
         ctx.config.ledger.chain_id.clone(),
         args.tx.expiration,
@@ -193,27 +198,28 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
 
 pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
     let public_key = ctx.get_cached(&args.public_key);
-    let vp_code = args
-        .vp_code_path
-        .map(|path| ctx.read_wasm(path))
-        .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
-    // Validate the VP code
-    if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
-        eprintln!("Validity predicate code validation failed with {}", err);
-        if !args.tx.force {
-            safe_exit(1)
-        }
-    }
-
-    let tx_code = ctx.read_wasm(TX_INIT_ACCOUNT_WASM);
+    let vp_code_path = match &args.vp_code_path {
+        Some(path) => path.file_name().unwrap().to_str().unwrap(),
+        None => VP_USER_WASM,
+    };
+    let vp_code_hash =
+        query_wasm_code_hash(vp_code_path, args.tx.ledger_address.clone())
+            .await
+            .unwrap();
+    let tx_code_hash = query_wasm_code_hash(
+        TX_INIT_ACCOUNT_WASM,
+        args.tx.ledger_address.clone(),
+    )
+    .await
+    .unwrap();
     let data = InitAccount {
         public_key,
-        vp_code,
+        vp_code_hash,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(
-        tx_code,
+        tx_code_hash,
         Some(data),
         ctx.config.ledger.chain_id.clone(),
         args.tx.expiration,
@@ -304,9 +310,14 @@ pub async fn submit_init_validator(
 
     ctx.wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
 
-    let validator_vp_code = validator_vp_code_path
-        .map(|path| ctx.read_wasm(path))
-        .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
+    let vp_code_path = match &validator_vp_code_path {
+        Some(path) => path.file_name().unwrap().to_str().unwrap(),
+        None => VP_USER_WASM,
+    };
+    let validator_vp_code_hash =
+        query_wasm_code_hash(vp_code_path, tx_args.ledger_address.clone())
+            .await
+            .unwrap();
 
     // Validate the commission rate data
     if commission_rate > Decimal::ONE || commission_rate < Decimal::ZERO {
@@ -329,17 +340,12 @@ pub async fn submit_init_validator(
             safe_exit(1)
         }
     }
-    // Validate the validator VP code
-    if let Err(err) = vm::validate_untrusted_wasm(&validator_vp_code) {
-        eprintln!(
-            "Validator validity predicate code validation failed with {}",
-            err
-        );
-        if !tx_args.force {
-            safe_exit(1)
-        }
-    }
-    let tx_code = ctx.read_wasm(TX_INIT_VALIDATOR_WASM);
+    let tx_code_hash = query_wasm_code_hash(
+        TX_INIT_VALIDATOR_WASM,
+        tx_args.ledger_address.clone(),
+    )
+    .await
+    .unwrap();
 
     let data = InitValidator {
         account_key,
@@ -348,11 +354,11 @@ pub async fn submit_init_validator(
         dkg_key,
         commission_rate,
         max_commission_rate_change,
-        validator_vp_code,
+        validator_vp_code_hash,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
     let tx = Tx::new(
-        tx_code,
+        tx_code_hash,
         Some(data),
         ctx.config.ledger.chain_id.clone(),
         tx_args.expiration,
@@ -1674,7 +1680,10 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         args.tx.expiration,
     );
     let signing_address = TxSigningKey::WalletAddress(args.source.to_address());
-    let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
+    let tx_code_hash =
+        query_wasm_code_hash(TX_TRANSFER_WASM, args.tx.ledger_address.clone())
+            .await
+            .unwrap();
 
     // Loop twice in case the first submission attempt fails
     for _ in 0..2 {
@@ -1819,7 +1828,10 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
             }
         }
     }
-    let tx_code = ctx.read_wasm(TX_IBC_WASM);
+    let tx_code_hash =
+        query_wasm_code_hash(TX_IBC_WASM, args.tx.ledger_address.clone())
+            .await
+            .unwrap();
 
     let denom = match sub_prefix {
         // To parse IbcToken address, remove the address prefix
@@ -1864,7 +1876,7 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
         .expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(
-        tx_code,
+        tx_code_hash,
         Some(data),
         ctx.config.ledger.chain_id.clone(),
         args.tx.expiration,
@@ -2012,9 +2024,14 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         let data = init_proposal_data
             .try_to_vec()
             .expect("Encoding proposal data shouldn't fail");
-        let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
+        let tx_code_hash = query_wasm_code_hash(
+            TX_INIT_PROPOSAL,
+            args.tx.ledger_address.clone(),
+        )
+        .await
+        .unwrap();
         let tx = Tx::new(
-            tx_code,
+            tx_code_hash,
             Some(data),
             ctx.config.ledger.chain_id.clone(),
             args.tx.expiration,
@@ -2268,9 +2285,14 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                 let data = tx_data
                     .try_to_vec()
                     .expect("Encoding proposal data shouldn't fail");
-                let tx_code = ctx.read_wasm(TX_VOTE_PROPOSAL);
+                let tx_code_hash = query_wasm_code_hash(
+                    TX_VOTE_PROPOSAL,
+                    args.tx.ledger_address.clone(),
+                )
+                .await
+                .unwrap();
                 let tx = Tx::new(
-                    tx_code,
+                    tx_code_hash,
                     Some(data),
                     ctx.config.ledger.chain_id.clone(),
                     args.tx.expiration,
@@ -2345,9 +2367,12 @@ pub async fn submit_reveal_pk_aux(
     let tx_data = public_key
         .try_to_vec()
         .expect("Encoding a public key shouldn't fail");
-    let tx_code = ctx.read_wasm(TX_REVEAL_PK);
+    let tx_code_hash =
+        query_wasm_code_hash(TX_REVEAL_PK, args.ledger_address.clone())
+            .await
+            .unwrap();
     let chain_id = ctx.config.ledger.chain_id.clone();
-    let tx = Tx::new(tx_code, Some(tx_data), chain_id, args.expiration);
+    let tx = Tx::new(tx_code_hash, Some(tx_data), chain_id, args.expiration);
 
     // submit_tx without signing the inner tx
     let keypair = if let Some(signing_key) = &args.signing_key {
@@ -2541,8 +2566,10 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
             }
         }
     }
-    let tx_code = ctx.read_wasm(TX_BOND_WASM);
-    println!("Wasm tx bond code bytes length = {}\n", tx_code.len());
+    let tx_code_hash =
+        query_wasm_code_hash(TX_BOND_WASM, args.tx.ledger_address.clone())
+            .await
+            .unwrap();
     let bond = pos::Bond {
         validator,
         amount: args.amount,
@@ -2551,7 +2578,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     let data = bond.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(
-        tx_code,
+        tx_code_hash,
         Some(data),
         ctx.config.ledger.chain_id.clone(),
         args.tx.expiration,
@@ -2609,9 +2636,12 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let tx_code = ctx.read_wasm(TX_UNBOND_WASM);
+    let tx_code_hash =
+        query_wasm_code_hash(TX_UNBOND_WASM, args.tx.ledger_address.clone())
+            .await
+            .unwrap();
     let tx = Tx::new(
-        tx_code,
+        tx_code_hash,
         Some(data),
         ctx.config.ledger.chain_id.clone(),
         args.tx.expiration,
@@ -2694,9 +2724,12 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
     let data = pos::Withdraw { validator, source };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let tx_code = ctx.read_wasm(TX_WITHDRAW_WASM);
+    let tx_code_hash =
+        query_wasm_code_hash(TX_WITHDRAW_WASM, args.tx.ledger_address.clone())
+            .await
+            .unwrap();
     let tx = Tx::new(
-        tx_code,
+        tx_code_hash,
         Some(data),
         ctx.config.ledger.chain_id.clone(),
         args.tx.expiration,
@@ -2722,7 +2755,12 @@ pub async fn submit_validator_commission_change(
     })
     .await;
 
-    let tx_code = ctx.read_wasm(TX_CHANGE_COMMISSION_WASM);
+    let tx_code_hash = query_wasm_code_hash(
+        TX_CHANGE_COMMISSION_WASM,
+        args.tx.ledger_address.clone(),
+    )
+    .await
+    .unwrap();
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
     // TODO: put following two let statements in its own function
@@ -2787,7 +2825,7 @@ pub async fn submit_validator_commission_change(
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(
-        tx_code,
+        tx_code_hash,
         Some(data),
         ctx.config.ledger.chain_id.clone(),
         args.tx.expiration,

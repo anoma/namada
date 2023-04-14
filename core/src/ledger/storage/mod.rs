@@ -1096,7 +1096,7 @@ mod tests {
                 max_expected_time_per_block: Duration::seconds(max_expected_time_per_block).into(),
                 vp_whitelist: vec![],
                 tx_whitelist: vec![],
-                implicit_vp: vec![],
+                implicit_vp_code_hash: vec![],
                 epochs_per_year: 100,
                 pos_gain_p: dec!(0.1),
                 pos_gain_d: dec!(0.1),

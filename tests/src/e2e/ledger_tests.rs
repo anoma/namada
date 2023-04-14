@@ -294,8 +294,6 @@ fn ledger_txs_and_queries() -> Result<()> {
     ledger.exp_string("Committed block hash")?;
     let _bg_ledger = ledger.background();
 
-    let vp_user = wasm_abs_path(VP_USER_WASM);
-    let vp_user = vp_user.to_string_lossy();
     let tx_no_op = TestWasms::TxNoOp.path();
     let tx_no_op = tx_no_op.to_string_lossy();
 
@@ -349,7 +347,7 @@ fn ledger_txs_and_queries() -> Result<()> {
              "--address",
              BERTHA,
              "--code-path",
-             &vp_user,
+             VP_USER_WASM,
              "--gas-amount",
              "0",
              "--gas-limit",
@@ -386,7 +384,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             // Value obtained from `namada::types::key::ed25519::tests::gen_keypair`
             "001be519a321e29020fa3cbfbfd01bd5e92db134305609270b71dace25b5a21168",
             "--code-path",
-            &vp_user,
+            VP_USER_WASM,
             "--alias",
             "Test-Account",
             "--gas-amount",

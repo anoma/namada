@@ -442,8 +442,7 @@ where
                         Error::LoadWasmCode(format!(
                             "Read wasm code failed from storage: key {}, \
                              error {}",
-                            key,
-                            e.to_string()
+                            key, e
                         ))
                     })?
                     .0

@@ -143,8 +143,8 @@ fn iterable_to_string<T: fmt::Display>(
 pub struct UpdateVp {
     /// An address of the account
     pub addr: Address,
-    /// The new VP code
-    pub vp_code: Vec<u8>,
+    /// The new VP code hash
+    pub vp_code_hash: Vec<u8>,
 }
 
 /// A tx data type to initialize a new established account
@@ -163,8 +163,8 @@ pub struct InitAccount {
     /// for signature verification of transactions for the newly created
     /// account.
     pub public_key: common::PublicKey,
-    /// The VP code
-    pub vp_code: Vec<u8>,
+    /// The VP code hash
+    pub vp_code_hash: Vec<u8>,
 }
 
 /// A tx data type to initialize a new validator account.
@@ -195,7 +195,7 @@ pub struct InitValidator {
     /// immutable once set here.
     pub max_commission_rate_change: Decimal,
     /// The VP code for validator account
-    pub validator_vp_code: Vec<u8>,
+    pub validator_vp_code_hash: Vec<u8>,
 }
 
 /// Module that includes helper functions for classifying
