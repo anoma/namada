@@ -870,7 +870,7 @@ mod test_process_proposal {
                 );
                 assert_eq!(
                     response[0].result.info,
-                    "The address given does not have sufficient balance to \
+                    "The given address does not have a sufficient balance to \
                      pay fee"
                         .to_string(),
                 );
@@ -896,12 +896,9 @@ mod test_process_proposal {
             .unwrap();
         shell
             .wl_storage
-            .write_log
-            .write(
-                &get_wrapper_tx_fees_key(),
-                token::Amount::whole(MIN_FEE).try_to_vec().unwrap(),
-            )
+            .write(&get_wrapper_tx_fees_key(), token::Amount::whole(MIN_FEE))
             .unwrap();
+        shell.commit();
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -940,7 +937,7 @@ mod test_process_proposal {
                 assert_eq!(
                     response[0].result.info,
                     String::from(
-                        "The address given does not have sufficient balance \
+                        "The given address does not have a sufficient balance \
                          to pay fee"
                     )
                 );
