@@ -3,7 +3,7 @@
 use std::num::TryFromIntError;
 
 use namada_core::types::address::Address;
-use namada_core::types::hash::Hash;
+use namada_core::types::hash::{Hash, HASH_LENGTH};
 use namada_core::types::storage::{
     BlockHash, BlockHeight, Epoch, Key, TxIndex,
 };
@@ -36,6 +36,8 @@ pub enum RuntimeError {
     ReadTemporaryValueError,
     #[error("Trying to read a permament value with read_temp")]
     ReadPermanentValueError,
+    #[error("Invalid transaction code hash")]
+    InvalidCodeHash,
 }
 
 /// VP environment function result
@@ -268,7 +270,12 @@ pub fn get_tx_code_hash(
     gas_meter: &mut VpGasMeter,
     tx: &Tx,
 ) -> EnvResult<Hash> {
-    let hash = Hash(tx.code_hash());
+    let hash = if tx.code.len() == HASH_LENGTH {
+        Hash::try_from(&tx.code[..])
+            .map_err(|_| RuntimeError::InvalidCodeHash)?
+    } else {
+        Hash(tx.code_hash())
+    };
     add_gas(gas_meter, MIN_STORAGE_GAS)?;
     Ok(hash)
 }

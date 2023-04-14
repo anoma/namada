@@ -264,11 +264,7 @@ impl<'view> VpEnv<'view> for Ctx {
         iter_prefix_pre_impl(prefix)
     }
 
-    fn eval(
-        &self,
-        vp_code: Vec<u8>,
-        input_data: Vec<u8>,
-    ) -> Result<bool, Error> {
+    fn eval(&self, vp_code: Hash, input_data: Vec<u8>) -> Result<bool, Error> {
         let result = unsafe {
             namada_vp_eval(
                 vp_code.as_ptr() as _,
