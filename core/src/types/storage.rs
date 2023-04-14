@@ -549,12 +549,12 @@ impl Key {
         Key { segments }
     }
 
-    /// Returns a key of the wasm code hash of the given name
-    pub fn wasm_hash(code_name: impl AsRef<str>) -> Self {
+    /// Returns a key of the wasm code hash of the given code path
+    pub fn wasm_hash(code_path: impl AsRef<str>) -> Self {
         let mut segments =
             Self::from(WASM_KEY_PREFIX.to_owned().to_db_key()).segments;
         segments.push(DbKeySeg::StringSeg(WASM_HASH_PREFIX.to_owned()));
-        segments.push(DbKeySeg::StringSeg(code_name.as_ref().to_string()));
+        segments.push(DbKeySeg::StringSeg(code_path.as_ref().to_string()));
         Key { segments }
     }
 

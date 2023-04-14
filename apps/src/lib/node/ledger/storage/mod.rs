@@ -245,7 +245,7 @@ mod tests {
 
         // insert
         let vp1 = Hash::sha256("vp1".as_bytes());
-        storage.write(&key, vp1.to_vec()).expect("write failed");
+        storage.write(&key, vp1.clone()).expect("write failed");
 
         // check
         let (vp_code_hash, gas) =

@@ -83,7 +83,6 @@ where
             vp_whitelist,
             tx_whitelist,
             implicit_vp_code_path,
-            implicit_vp_sha256,
             epochs_per_year,
             pos_gain_p,
             pos_gain_d,
@@ -91,26 +90,6 @@ where
             pos_inflation_amount,
             wrapper_tx_fees,
         } = genesis.parameters;
-        // borrow necessary for release build, annoys clippy on dev build
-        #[allow(clippy::needless_borrow)]
-        let implicit_vp =
-            wasm_loader::read_wasm(&self.wasm_dir, &implicit_vp_code_path)
-                .map_err(Error::ReadingWasm)?;
-        // In dev, we don't check the hash
-        #[cfg(feature = "dev")]
-        let _ = implicit_vp_sha256;
-        #[cfg(not(feature = "dev"))]
-        {
-            let mut hasher = Sha256::new();
-            hasher.update(&implicit_vp);
-            let vp_code_hash = hasher.finalize();
-            assert_eq!(
-                vp_code_hash.as_slice(),
-                &implicit_vp_sha256,
-                "Invalid implicit account's VP sha256 hash for {}",
-                implicit_vp_code_path
-            );
-        }
         #[cfg(not(feature = "mainnet"))]
         // Try to find a faucet account
         let faucet_account = {
@@ -132,7 +111,7 @@ where
         // Store wasm codes into storage
         let checksums = wasm_loader::Checksums::read_checksums(&self.wasm_dir);
         for (name, full_name) in checksums.0.iter() {
-            let code = wasm_loader::read_wasm(&self.wasm_dir, &name)
+            let code = wasm_loader::read_wasm(&self.wasm_dir, name)
                 .map_err(Error::ReadingWasm)?;
             let code_hash = CodeHash::sha256(&code);
 
@@ -141,32 +120,43 @@ where
                 Error::LoadingWasm(format!("invalid full name: {}", full_name))
             })?;
             assert_eq!(
-                &code_hash.to_string(),
-                checksum,
+                code_hash.to_string(),
+                checksum.to_uppercase(),
                 "Invalid wasm code sha256 hash for {}",
                 name
             );
 
             if (tx_whitelist.is_empty() && vp_whitelist.is_empty())
-                || tx_whitelist.contains(&checksum.to_string())
-                || vp_whitelist.contains(&checksum.to_string())
+                || tx_whitelist.contains(&code_hash.to_string())
+                || vp_whitelist.contains(&code_hash.to_string())
             {
                 let code_key = Key::wasm_code(&code_hash);
                 self.wl_storage.write_bytes(&code_key, code)?;
 
-                let hash_key = Key::wasm_hash(&name);
-                self.wl_storage
-                    .write_bytes(&hash_key, code_hash.0.to_vec())?;
+                let hash_key = Key::wasm_hash(name);
+                self.wl_storage.write_bytes(&hash_key, code_hash)?;
             }
         }
 
+        // check if implicit_vp wasm is stored
+        let hash_key = Key::wasm_hash(&implicit_vp_code_path);
+        let implicit_vp_code_hash =
+            match self.wl_storage.read_bytes(&hash_key)? {
+                Some(hash) => hash,
+                None => {
+                    return Err(Error::LoadingWasm(format!(
+                        "Unknown vp code path: {}",
+                        implicit_vp_code_path
+                    )));
+                }
+            };
         let parameters = Parameters {
             epoch_duration,
             max_proposal_bytes,
             max_expected_time_per_block,
             vp_whitelist,
             tx_whitelist,
-            implicit_vp,
+            implicit_vp_code_hash,
             epochs_per_year,
             pos_gain_p,
             pos_gain_d,

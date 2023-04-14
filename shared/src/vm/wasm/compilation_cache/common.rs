@@ -300,7 +300,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
         }
 
         let mut progress = self.progress.write().unwrap();
-        if let Some(_) = progress.get(&hash) {
+        if progress.get(&hash).is_some() {
             drop(progress);
             return self.fetch(&hash);
         }
@@ -488,7 +488,7 @@ fn fs_cache(dir: impl AsRef<Path>, hash: &Hash) -> FileSystemCache {
 fn module_file_exists(dir: impl AsRef<Path>, hash: &Hash) -> bool {
     let file = dir.as_ref().join(hash_to_store_dir(hash)).join(format!(
         "{}.{}",
-        hash.to_string(),
+        hash,
         file_ext()
     ));
     file.exists()
