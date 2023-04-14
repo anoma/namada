@@ -1,19 +1,22 @@
+use std::collections::BTreeMap;
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::types::address;
 use namada::core::types::token::{Amount, Transfer};
 use namada::ledger::gas::BlockGasMeter;
 use namada::ledger::storage::TempWlStorage;
 use namada::types::chain::ChainId;
+use namada::types::storage::BlockHeight;
 use namada::types::time::DateTimeUtc;
-use std::collections::BTreeMap;
-
 use namada::types::transaction::{Fee, WrapperTx};
 use namada_apps::node::ledger::shell::process_proposal::ValidationMeta;
 use namada_apps::wallet::defaults;
 use namada_benches::{generate_tx, BenchShell, TX_TRANSFER_WASM};
 
 fn process_tx(c: &mut Criterion) {
-    let shell = BenchShell::new();
+    let mut shell = BenchShell::default();
+    // Advance chain height to allow the inclusion of wrapper txs by the block space allocator
+    shell.wl_storage.storage.last_height = BlockHeight(2);
     let tx = generate_tx(
         TX_TRANSFER_WASM,
         Transfer {
@@ -55,7 +58,7 @@ fn process_tx(c: &mut Criterion) {
                     // Prevent block out of gas and replay protection
                     TempWlStorage::new(&shell.wl_storage.storage),
                     BlockGasMeter::new(u64::MAX),
-                    ValidationMeta::default(),
+                    ValidationMeta::from(&shell.wl_storage),
                 )
             },
             |(

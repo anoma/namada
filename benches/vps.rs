@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use borsh::BorshSerialize;
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::types::address::{self, Address};
@@ -12,7 +14,11 @@ use namada::types::governance::{ProposalVote, VoteType};
 use namada::types::key::ed25519;
 use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::storage::TxIndex;
+use namada::types::transaction::governance::VoteProposalData;
+use namada::types::transaction::pos::{Bond, CommissionChange};
+use namada::types::transaction::UpdateVp;
 use namada::vm::wasm::run;
+use namada_apps::wallet::defaults;
 use namada_apps::wasm_loader;
 use namada_benches::{
     generate_foreign_key_tx, generate_tx, BenchShell, BenchShieldedCtx,
@@ -22,12 +28,6 @@ use namada_benches::{
     WASM_DIR,
 };
 use rust_decimal::Decimal;
-use std::collections::BTreeSet;
-
-use namada::types::transaction::governance::VoteProposalData;
-use namada::types::transaction::pos::{Bond, CommissionChange};
-use namada::types::transaction::UpdateVp;
-use namada_apps::wallet::defaults;
 
 const VP_USER_WASM: &str = "vp_user.wasm";
 const VP_TOKEN_WASM: &str = "vp_token.wasm";
@@ -120,8 +120,8 @@ fn vp_user(c: &mut Criterion) {
         "pos",
         "vp",
     ]) {
-        let mut shell = BenchShell::new();
-        shell.execute_tx(&signed_tx);
+        let mut shell = BenchShell::default();
+        shell.execute_tx(signed_tx);
         let (verifiers, keys_changed) = shell
             .wl_storage
             .write_log
@@ -129,20 +129,22 @@ fn vp_user(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(run::vp(
-                    &vp_code,
-                    signed_tx,
-                    &TxIndex(0),
-                    &defaults::albert_address(),
-                    &shell.wl_storage.storage,
-                    &shell.wl_storage.write_log,
-                    &mut VpGasMeter::new(u64::MAX, 0),
-                    &keys_changed,
-                    &verifiers,
-                    shell.vp_wasm_cache.clone(),
-                    false,
-                )
-                .unwrap());
+                assert!(
+                    run::vp(
+                        &vp_code,
+                        signed_tx,
+                        &TxIndex(0),
+                        &defaults::albert_address(),
+                        &shell.wl_storage.storage,
+                        &shell.wl_storage.write_log,
+                        &mut VpGasMeter::new(u64::MAX, 0),
+                        &keys_changed,
+                        &verifiers,
+                        shell.vp_wasm_cache.clone(),
+                        false,
+                    )
+                    .unwrap()
+                );
             })
         });
     }
@@ -214,7 +216,8 @@ fn vp_implicit(c: &mut Criterion) {
             id: 0,
             vote: ProposalVote::Yay(VoteType::Default),
             voter: Address::from(&implicit_account.to_public()),
-            delegations: vec![], //NOTE: no need to bond tokens because the implicit vp doesn't check that
+            delegations: vec![], /* NOTE: no need to bond tokens because the
+                                  * implicit vp doesn't check that */
         },
         &implicit_account,
     );
@@ -236,7 +239,7 @@ fn vp_implicit(c: &mut Criterion) {
         "pos",
         "governance_vote",
     ]) {
-        let mut shell = BenchShell::new();
+        let mut shell = BenchShell::default();
 
         if bench_name != "reveal_pk" {
             // Reveal publick key
@@ -261,20 +264,22 @@ fn vp_implicit(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(run::vp(
-                    &vp_code,
-                    tx,
-                    &TxIndex(0),
-                    &Address::from(&implicit_account.to_public()),
-                    &shell.wl_storage.storage,
-                    &shell.wl_storage.write_log,
-                    &mut VpGasMeter::new(u64::MAX, 0),
-                    &keys_changed,
-                    &verifiers,
-                    shell.vp_wasm_cache.clone(),
-                    false,
+                assert!(
+                    run::vp(
+                        &vp_code,
+                        tx,
+                        &TxIndex(0),
+                        &Address::from(&implicit_account.to_public()),
+                        &shell.wl_storage.storage,
+                        &shell.wl_storage.write_log,
+                        &mut VpGasMeter::new(u64::MAX, 0),
+                        &keys_changed,
+                        &verifiers,
+                        shell.vp_wasm_cache.clone(),
+                        false,
+                    )
+                    .unwrap()
                 )
-                .unwrap())
             })
         });
     }
@@ -378,9 +383,9 @@ fn vp_validator(c: &mut Criterion) {
         "commission_rate",
         "vp",
     ]) {
-        let mut shell = BenchShell::new();
+        let mut shell = BenchShell::default();
 
-        shell.execute_tx(&signed_tx);
+        shell.execute_tx(signed_tx);
         let (verifiers, keys_changed) = shell
             .wl_storage
             .write_log
@@ -388,20 +393,22 @@ fn vp_validator(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(run::vp(
-                    &vp_code,
-                    signed_tx,
-                    &TxIndex(0),
-                    &defaults::validator_address(),
-                    &shell.wl_storage.storage,
-                    &shell.wl_storage.write_log,
-                    &mut VpGasMeter::new(u64::MAX, 0),
-                    &keys_changed,
-                    &verifiers,
-                    shell.vp_wasm_cache.clone(),
-                    false,
-                )
-                .unwrap());
+                assert!(
+                    run::vp(
+                        &vp_code,
+                        signed_tx,
+                        &TxIndex(0),
+                        &defaults::validator_address(),
+                        &shell.wl_storage.storage,
+                        &shell.wl_storage.write_log,
+                        &mut VpGasMeter::new(u64::MAX, 0),
+                        &keys_changed,
+                        &verifiers,
+                        shell.vp_wasm_cache.clone(),
+                        false,
+                    )
+                    .unwrap()
+                );
             })
         });
     }
@@ -434,8 +441,8 @@ fn vp_token(c: &mut Criterion) {
         .iter()
         .zip(["foreign_key_write", "transfer"])
     {
-        let mut shell = BenchShell::new();
-        shell.execute_tx(&signed_tx);
+        let mut shell = BenchShell::default();
+        shell.execute_tx(signed_tx);
         let (verifiers, keys_changed) = shell
             .wl_storage
             .write_log
@@ -443,20 +450,22 @@ fn vp_token(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(run::vp(
-                    &vp_code,
-                    signed_tx,
-                    &TxIndex(0),
-                    &defaults::albert_address(),
-                    &shell.wl_storage.storage,
-                    &shell.wl_storage.write_log,
-                    &mut VpGasMeter::new(u64::MAX, 0),
-                    &keys_changed,
-                    &verifiers,
-                    shell.vp_wasm_cache.clone(),
-                    false,
-                )
-                .unwrap());
+                assert!(
+                    run::vp(
+                        &vp_code,
+                        signed_tx,
+                        &TxIndex(0),
+                        &defaults::albert_address(),
+                        &shell.wl_storage.storage,
+                        &shell.wl_storage.write_log,
+                        &mut VpGasMeter::new(u64::MAX, 0),
+                        &keys_changed,
+                        &verifiers,
+                        shell.vp_wasm_cache.clone(),
+                        false,
+                    )
+                    .unwrap()
+                );
             })
         });
     }
@@ -470,7 +479,7 @@ fn vp_masp(c: &mut Criterion) {
 
     for bench_name in ["shielding", "unshielding", "shielded"] {
         group.bench_function(bench_name, |b| {
-            let mut shielded_ctx = BenchShieldedCtx::new();
+            let mut shielded_ctx = BenchShieldedCtx::default();
 
             let albert_spending_key = shielded_ctx
                 .ctx
@@ -527,20 +536,22 @@ fn vp_masp(c: &mut Criterion) {
                 .verifiers_and_changed_keys(&BTreeSet::default());
 
             b.iter(|| {
-                assert!(run::vp(
-                    &vp_code,
-                    &signed_tx,
-                    &TxIndex(0),
-                    &defaults::validator_address(),
-                    &shielded_ctx.shell.wl_storage.storage,
-                    &shielded_ctx.shell.wl_storage.write_log,
-                    &mut VpGasMeter::new(u64::MAX, 0),
-                    &keys_changed,
-                    &verifiers,
-                    shielded_ctx.shell.vp_wasm_cache.clone(),
-                    false,
-                )
-                .unwrap());
+                assert!(
+                    run::vp(
+                        &vp_code,
+                        &signed_tx,
+                        &TxIndex(0),
+                        &defaults::validator_address(),
+                        &shielded_ctx.shell.wl_storage.storage,
+                        &shielded_ctx.shell.wl_storage.write_log,
+                        &mut VpGasMeter::new(u64::MAX, 0),
+                        &keys_changed,
+                        &verifiers,
+                        shielded_ctx.shell.vp_wasm_cache.clone(),
+                        false,
+                    )
+                    .unwrap()
+                );
             })
         });
     }

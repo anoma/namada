@@ -1,15 +1,15 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
+use std::collections::BTreeMap;
+
 use data_encoding::HEXUPPER;
 use namada::core::hints;
 use namada::core::ledger::storage::WlStorage;
-use namada::types::hash::HASH_LENGTH;
-use std::collections::BTreeMap;
-
 use namada::core::types::hash::Hash;
 use namada::ledger::storage::TempWlStorage;
 use namada::proof_of_stake::pos_queries::PosQueries;
+use namada::types::hash::HASH_LENGTH;
 use namada::types::internal::WrapperTxInQueue;
 
 use super::*;
@@ -167,7 +167,7 @@ where
                     &mut temp_block_gas_meter,
                     block_time,
                     &gas_table,
-                    &mut wrapper_index
+                    &mut wrapper_index,
                 );
                 if let ErrorCodes::Ok =
                     ErrorCodes::from_u32(result.code).unwrap()
@@ -206,6 +206,7 @@ where
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
     /// next block).
+    #[allow(clippy::too_many_arguments)]
     pub fn process_single_tx<'a>(
         &self,
         tx_bytes: &[u8],
@@ -309,32 +310,32 @@ where
                         .into(),
                 }
             }
-                TxType::Decrypted(tx) => {
-                    // Increase wrapper index
-                    let tx_index = *wrapper_index;
-                    *wrapper_index += 1; 
+            TxType::Decrypted(tx) => {
+                // Increase wrapper index
+                let tx_index = *wrapper_index;
+                *wrapper_index += 1;
 
-                    match tx_queue_iter.next() {
-                        Some(wrapper) => {
-                            if wrapper.tx.tx_hash != tx.hash_commitment() {
-                                TxResult {
-                                    code: ErrorCodes::InvalidOrder.into(),
-                                    info: "Process proposal rejected a \
-                                           decrypted transaction that \
-                                           violated the tx order determined \
-                                           in the previous block"
-                                        .into(),
-                                }
-                            } else if verify_decrypted_correctly(&tx, privkey) {
-                                if let DecryptedTx::Decrypted {
-                                    tx,
-                                    has_valid_pow: _,
-                                } = tx
-                                {
-                                    // Tx chain id
-                                    if tx.chain_id != self.chain_id {
-                                        return TxResult {
-                                            code: ErrorCodes::InvalidDecryptedChainId
+                match tx_queue_iter.next() {
+                    Some(wrapper) => {
+                        if wrapper.tx.tx_hash != tx.hash_commitment() {
+                            TxResult {
+                                code: ErrorCodes::InvalidOrder.into(),
+                                info: "Process proposal rejected a decrypted \
+                                       transaction that violated the tx order \
+                                       determined in the previous block"
+                                    .into(),
+                            }
+                        } else if verify_decrypted_correctly(&tx, privkey) {
+                            if let DecryptedTx::Decrypted {
+                                tx,
+                                has_valid_pow: _,
+                            } = tx
+                            {
+                                // Tx chain id
+                                if tx.chain_id != self.chain_id {
+                                    return TxResult {
+                                        code:
+                                            ErrorCodes::InvalidDecryptedChainId
                                                 .into(),
                                         info: format!(
                                             "Decrypted tx carries a wrong \
@@ -360,8 +361,10 @@ where
                                     }
                                 }
 
-                                    // Tx gas (partial check)
-                                let tx_hash = if tx.code_or_hash.len() == HASH_LENGTH {
+                                // Tx gas (partial check)
+                                let tx_hash = if tx.code_or_hash.len()
+                                    == HASH_LENGTH
+                                {
                                     match Hash::try_from(tx.code_or_hash.as_slice()) {
                                         Ok(hash) => hash,
                                         Err(_) => return TxResult {
@@ -372,20 +375,24 @@ where
                                 } else {
                                     Hash(tx.code_hash())
                                 };
-                                    let tx_gas = match gas_table.get(&tx_hash.to_string().to_ascii_lowercase()) {
-                                        Some(gas) => gas.to_owned(),
-                                        #[cfg(test)]
-                                        None => 1_000,
-                                        #[cfg(not(
-                                            test
-                                        ))]
-                                            None => 0, // VPs will rejected the non-whitelisted tx
-                                    };
-                                    let inner_tx_gas_limit = temp_wl_storage.storage.tx_queue.get(tx_index).map_or(0, |wrapper| wrapper.gas);
-                                    let mut tx_gas_meter = TxGasMeter::new(inner_tx_gas_limit);
- if let Err(e) = tx_gas_meter.add(tx_gas) {
-                                        
- return TxResult {
+                                let tx_gas = match gas_table.get(
+                                    &tx_hash.to_string().to_ascii_lowercase(),
+                                ) {
+                                    Some(gas) => gas.to_owned(),
+                                    #[cfg(test)]
+                                    None => 1_000,
+                                    #[cfg(not(test))]
+                                    None => 0, // VPs will rejected the non-whitelisted tx
+                                };
+                                let inner_tx_gas_limit = temp_wl_storage
+                                    .storage
+                                    .tx_queue
+                                    .get(tx_index)
+                                    .map_or(0, |wrapper| wrapper.gas);
+                                let mut tx_gas_meter =
+                                    TxGasMeter::new(inner_tx_gas_limit);
+                                if let Err(e) = tx_gas_meter.add(tx_gas) {
+                                    return TxResult {
                                             code: ErrorCodes::DecryptedTxGasLimit.into(),
                                             info: format!("Decrypted transaction gas error: {}", e)
                                         };
@@ -413,36 +420,41 @@ where
                         info: "Received more decrypted txs than expected"
                             .into(),
                     },
-                }}
-                TxType::Wrapper(wrapper) => {
-                    // Account for gas. This is done even if the transaction is
-                    // later deemed invalid, to incentivize the proposer to
-                    // include only valid transaction and avoid wasting block
-                    // gas limit (ABCI)
-                    let mut tx_gas_meter =
-                        TxGasMeter::new(u64::from(&wrapper.gas_limit));
-                    if tx_gas_meter.add_tx_size_gas(tx_bytes.len()).is_err() {
-                        // Add the declared tx gas limit to the block gas meter
-                        // even in case of an error
-                        let _ = temp_block_gas_meter
-                            .finalize_transaction(tx_gas_meter);
+                }
+            }
+            TxType::Wrapper(wrapper) => {
+                // Account for gas. This is done even if the transaction is
+                // later deemed invalid, to incentivize the proposer to
+                // include only valid transaction and avoid wasting block
+                // gas limit (ABCI)
+                let mut tx_gas_meter =
+                    TxGasMeter::new(u64::from(&wrapper.gas_limit));
+                if tx_gas_meter.add_tx_size_gas(tx_bytes.len()).is_err() {
+                    // Add the declared tx gas limit to the block gas meter
+                    // even in case of an error
+                    let _ =
+                        temp_block_gas_meter.finalize_transaction(tx_gas_meter);
 
-                        return TxResult {
-                            code: ErrorCodes::TxGasLimit.into(),
-                            info: "Wrapper transactions exceeds its gas limit".to_string(),
-                        };
-                    }
-                    
-                                        if let Err(_) = temp_block_gas_meter.finalize_transaction(tx_gas_meter){
-                        return TxResult {
-                            code: ErrorCodes::BlockGasLimit.into(),
-                            
-                            info:
-                    "Wrapper transaction exceeds the maximum block gas limit"
-                        .to_string()
-                        };
-                    }
-                
+                    return TxResult {
+                        code: ErrorCodes::TxGasLimit.into(),
+                        info: "Wrapper transactions exceeds its gas limit"
+                            .to_string(),
+                    };
+                }
+
+                if temp_block_gas_meter
+                    .finalize_transaction(tx_gas_meter)
+                    .is_err()
+                {
+                    return TxResult {
+                        code: ErrorCodes::BlockGasLimit.into(),
+
+                        info: "Wrapper transaction exceeds the maximum block \
+                               gas limit"
+                            .to_string(),
+                    };
+                }
+
                 // decrypted txs shouldn't show up before wrapper txs
                 if metadata.has_decrypted_txs {
                     return TxResult {
@@ -490,7 +502,7 @@ where
                     };
                 }
 
-                                    // Tx expiration
+                // Tx expiration
                 if let Some(exp) = tx_expiration {
                     if block_time > exp {
                         return TxResult {
@@ -502,7 +514,6 @@ where
                         };
                     }
                 }
-
 
                 // validate the ciphertext via Ferveo
                 if !wrapper.validate_ciphertext() {
@@ -563,9 +574,9 @@ where
                         .write(&wrapper_hash_key, vec![])
                         .expect("Couldn't write wrapper tx hash to write log");
 
-                        // check that the fee payer has sufficient balance
-                        let balance =
-                            self.get_balance(&wrapper.fee.token, &wrapper.fee_payer());
+                    // check that the fee payer has sufficient balance
+                    let balance = self
+                        .get_balance(&wrapper.fee.token, &wrapper.fee_payer());
 
                     // In testnets, tx is allowed to skip fees if it
                     // includes a valid PoW
@@ -631,7 +642,7 @@ mod test_process_proposal {
         self, gen_keypair, ProcessProposal, TestError,
     };
 
-const GAS_LIMIT_MULTIPLIER: u64 = 1; 
+    const GAS_LIMIT_MULTIPLIER: u64 = 1;
 
     /// Test that if a wrapper tx is not signed, the block is rejected
     /// by [`process_proposal`].
@@ -789,7 +800,7 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
             )
             .unwrap();
         let keypair = gen_keypair();
-// reduce address balance to match the 100 token min fee
+        // reduce address balance to match the 100 token min fee
         let balance_key = token::balance_key(
             &shell.wl_storage.storage.native_token,
             &Address::from(&keypair.ref_to()),
@@ -937,9 +948,13 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
                 #[cfg(not(feature = "mainnet"))]
                 None,
             );
-            let signed_wrapper = wrapper.sign(&keypair, shell.chain_id.clone(), None).unwrap().to_bytes();
-            let gas_limit = u64::from(&wrapper.gas_limit) - signed_wrapper.len() as u64;
-                        shell.enqueue_tx(wrapper, gas_limit);
+            let signed_wrapper = wrapper
+                .sign(&keypair, shell.chain_id.clone(), None)
+                .unwrap()
+                .to_bytes();
+            let gas_limit =
+                u64::from(&wrapper.gas_limit) - signed_wrapper.len() as u64;
+            shell.enqueue_tx(wrapper, gas_limit);
             let mut decrypted_tx =
                 Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
                     tx,
@@ -1002,8 +1017,14 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
             #[cfg(not(feature = "mainnet"))]
             None,
         );
-        let signed_wrapper = wrapper.sign(&keypair, shell.chain_id.clone(), None).unwrap().to_bytes();
-            shell.enqueue_tx(wrapper.clone(), u64::from(&wrapper.gas_limit) - signed_wrapper.len() as u64);
+        let signed_wrapper = wrapper
+            .sign(&keypair, shell.chain_id.clone(), None)
+            .unwrap()
+            .to_bytes();
+        shell.enqueue_tx(
+            wrapper.clone(),
+            u64::from(&wrapper.gas_limit) - signed_wrapper.len() as u64,
+        );
 
         let mut tx =
             Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)));
@@ -1059,9 +1080,15 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
             None,
         );
         wrapper.tx_hash = Hash([0; 32]);
-        let signed_wrapper = wrapper.sign(&keypair, shell.chain_id.clone(), None).unwrap().to_bytes();
+        let signed_wrapper = wrapper
+            .sign(&keypair, shell.chain_id.clone(), None)
+            .unwrap()
+            .to_bytes();
 
-            shell.enqueue_tx(wrapper.clone(), u64::from(&wrapper.gas_limit) - signed_wrapper.len() as u64);
+        shell.enqueue_tx(
+            wrapper.clone(),
+            u64::from(&wrapper.gas_limit) - signed_wrapper.len() as u64,
+        );
         let mut tx = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
             #[allow(clippy::redundant_clone)]
             wrapper.clone(),
@@ -1108,8 +1135,14 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
             pow_solution: None,
         };
 
-        let signed_wrapper = wrapper.sign(&keypair, shell.chain_id.clone(), None).unwrap().to_bytes();
-            shell.enqueue_tx(wrapper.clone(), u64::from(&wrapper.gas_limit) - signed_wrapper.len() as u64);
+        let signed_wrapper = wrapper
+            .sign(&keypair, shell.chain_id.clone(), None)
+            .unwrap()
+            .to_bytes();
+        shell.enqueue_tx(
+            wrapper.clone(),
+            u64::from(&wrapper.gas_limit) - signed_wrapper.len() as u64,
+        );
         let mut signed =
             Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
                 #[allow(clippy::redundant_clone)]
@@ -1593,8 +1626,12 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
             #[cfg(not(feature = "mainnet"))]
             None,
         );
-        let signed_wrapper = wrapper.sign(&keypair, shell.chain_id.clone(), None).unwrap().to_bytes();
-            let gas_limit = u64::from(&wrapper.gas_limit) - signed_wrapper.len() as u64;
+        let signed_wrapper = wrapper
+            .sign(&keypair, shell.chain_id.clone(), None)
+            .unwrap()
+            .to_bytes();
+        let gas_limit =
+            u64::from(&wrapper.gas_limit) - signed_wrapper.len() as u64;
         let wrapper_in_queue = WrapperTxInQueue {
             tx: wrapper,
             gas: gas_limit,
@@ -1702,8 +1739,12 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
             #[cfg(not(feature = "mainnet"))]
             None,
         );
-        let signed_wrapper_tx = wrapper.sign(&keypair, shell.chain_id.clone(), None).unwrap().to_bytes();
-        let gas_limit = u64::from(&wrapper.gas_limit) - signed_wrapper_tx.len() as u64;
+        let signed_wrapper_tx = wrapper
+            .sign(&keypair, shell.chain_id.clone(), None)
+            .unwrap()
+            .to_bytes();
+        let gas_limit =
+            u64::from(&wrapper.gas_limit) - signed_wrapper_tx.len() as u64;
         let wrapper_in_queue = WrapperTxInQueue {
             tx: wrapper,
             gas: gas_limit,
@@ -1726,9 +1767,8 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
         }
     }
 
-    
-    /// Test that a decrypted transaction requiring more gas than the limit imposed
-    /// by its wrapper is rejected.
+    /// Test that a decrypted transaction requiring more gas than the limit
+    /// imposed by its wrapper is rejected.
     #[test]
     fn test_decrypted_gas_limit() {
         let (mut shell, _) = test_utils::setup(1);
@@ -1738,7 +1778,7 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
             "wasm_code".as_bytes().to_owned(),
             Some("new transaction data".as_bytes().to_owned()),
             shell.chain_id.clone(),
-            None
+            None,
         );
         let decrypted: Tx = DecryptedTx::Decrypted {
             tx: tx.clone(),
@@ -1759,7 +1799,7 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
             #[cfg(not(feature = "mainnet"))]
             None,
         );
-        let gas = u64::from(&wrapper.gas_limit) ;
+        let gas = u64::from(&wrapper.gas_limit);
         let wrapper_in_queue = WrapperTxInQueue {
             tx: wrapper,
             gas,
@@ -1782,7 +1822,8 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
         }
     }
 
-    /// Check that a tx requiring more gas than the block limit causes a block rejection
+    /// Check that a tx requiring more gas than the block limit causes a block
+    /// rejection
     #[test]
     fn test_exceeding_max_block_gas_tx() {
         let (mut shell, _) = test_utils::setup(1);
@@ -1821,7 +1862,7 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
         let request = ProcessProposal {
             txs: vec![wrapper.to_bytes()],
         };
-match shell.process_proposal(request) {
+        match shell.process_proposal(request) {
             Ok(_) => panic!("Test failed"),
             Err(TestError::RejectProposal(response)) => {
                 assert_eq!(
@@ -1832,7 +1873,8 @@ match shell.process_proposal(request) {
         }
     }
 
-// Check that a wrapper requiring more gas than its limit causes a block rejection
+    // Check that a wrapper requiring more gas than its limit causes a block
+    // rejection
     #[test]
     fn test_exceeding_gas_limit_wrapper() {
         let (mut shell, _) = test_utils::setup(1);
@@ -1865,7 +1907,7 @@ match shell.process_proposal(request) {
         let request = ProcessProposal {
             txs: vec![wrapper.to_bytes()],
         };
-match shell.process_proposal(request) {
+        match shell.process_proposal(request) {
             Ok(_) => panic!("Test failed"),
             Err(TestError::RejectProposal(response)) => {
                 assert_eq!(
@@ -1874,5 +1916,5 @@ match shell.process_proposal(request) {
                 );
             }
         }
-            }
+    }
 }

@@ -5,6 +5,7 @@ use namada::core::types::key::{
 };
 use namada::core::types::token::Amount;
 use namada::ledger::governance;
+use namada::ledger::storage_api::StorageRead;
 use namada::proof_of_stake;
 use namada::proto::Tx;
 use namada::types::chain::ChainId;
@@ -14,10 +15,10 @@ use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
 };
-use namada::ledger::storage_api::StorageRead;
 use namada::types::transaction::pos::{Bond, CommissionChange, Withdraw};
-use namada::types::transaction::EllipticCurve;
-use namada::types::transaction::{InitAccount, InitValidator, UpdateVp};
+use namada::types::transaction::{
+    EllipticCurve, InitAccount, InitValidator, UpdateVp,
+};
 use namada_apps::wallet::defaults;
 use namada_apps::wasm_loader;
 use namada_benches::{
@@ -43,7 +44,7 @@ fn transfer(c: &mut Criterion) {
         group.bench_function(bench_name, |b| {
             b.iter_batched_ref(
                 || {
-                    let mut shielded_ctx = BenchShieldedCtx::new();
+                    let mut shielded_ctx = BenchShieldedCtx::default();
 
                     let albert_spending_key = shielded_ctx
                         .ctx
@@ -105,7 +106,7 @@ fn transfer(c: &mut Criterion) {
                     (shielded_ctx, signed_tx)
                 },
                 |(shielded_ctx, signed_tx)| {
-                    shielded_ctx.shell.execute_tx(&signed_tx);
+                    shielded_ctx.shell.execute_tx(signed_tx);
                 },
                 criterion::BatchSize::LargeInput,
             )
@@ -143,7 +144,7 @@ fn bond(c: &mut Criterion) {
     {
         group.bench_function(bench_name, |b| {
             b.iter_batched_ref(
-                BenchShell::new,
+                BenchShell::default,
                 |shell| shell.execute_tx(signed_tx),
                 criterion::BatchSize::LargeInput,
             )
@@ -181,7 +182,7 @@ fn unbond(c: &mut Criterion) {
     {
         group.bench_function(bench_name, |b| {
             b.iter_batched_ref(
-                BenchShell::new,
+                BenchShell::default,
                 |shell| shell.execute_tx(signed_tx),
                 criterion::BatchSize::LargeInput,
             )
@@ -219,7 +220,7 @@ fn withdraw(c: &mut Criterion) {
         group.bench_function(bench_name, |b| {
             b.iter_batched_ref(
                 || {
-                    let mut shell = BenchShell::new();
+                    let mut shell = BenchShell::default();
 
                     // Unbond funds
                     let unbond_tx = match bench_name {
@@ -285,7 +286,7 @@ fn reveal_pk(c: &mut Criterion) {
 
     c.bench_function("reveal_pk", |b| {
         b.iter_batched_ref(
-            BenchShell::new,
+            BenchShell::default,
             |shell| shell.execute_tx(&tx),
             criterion::BatchSize::LargeInput,
         )
@@ -307,7 +308,7 @@ fn update_vp(c: &mut Criterion) {
 
     c.bench_function("update_vp", |b| {
         b.iter_batched_ref(
-            BenchShell::new,
+            BenchShell::default,
             |shell| shell.execute_tx(&signed_tx),
             criterion::BatchSize::LargeInput,
         )
@@ -332,7 +333,7 @@ fn init_account(c: &mut Criterion) {
 
     c.bench_function("init_account", |b| {
         b.iter_batched_ref(
-            BenchShell::new,
+            BenchShell::default,
             |shell| shell.execute_tx(&signed_tx),
             criterion::BatchSize::LargeInput,
         )
@@ -346,7 +347,7 @@ fn init_proposal(c: &mut Criterion) {
         group.bench_function(bench_name, |b| {
             b.iter_batched_ref(
                 || {
-                    let shell = BenchShell::new();
+                    let shell = BenchShell::default();
 
                     let signed_tx = match bench_name {
                         "minimal_proposal" => generate_tx(
@@ -367,15 +368,22 @@ fn init_proposal(c: &mut Criterion) {
         governance::storage::get_max_proposal_code_size_key();
                             let max_proposal_content_key =
         governance::storage::get_max_proposal_content_key();
-                            let max_code_size = 
-                shell.wl_storage
-                    .read(&max_code_size_key)
-                    .expect("Error while reading from storage")
-                    .expect("Missing max_code_size parameter in storage");
-                            let max_proposal_content_size =                 shell.wl_storage
-                    .read(&max_proposal_content_key)
-                    .expect("Error while reading from storage")
-                    .expect("Missing max_proposal_content parameter in storage");
+                            let max_code_size = shell
+                                .wl_storage
+                                .read(&max_code_size_key)
+                                .expect("Error while reading from storage")
+                                .expect(
+                                    "Missing max_code_size parameter in \
+                                     storage",
+                                );
+                            let max_proposal_content_size = shell
+                                .wl_storage
+                                .read(&max_proposal_content_key)
+                                .expect("Error while reading from storage")
+                                .expect(
+                                    "Missing max_proposal_content parameter \
+                                     in storage",
+                                );
 
                             generate_tx(
                                 TX_INIT_PROPOSAL_WASM,
@@ -437,7 +445,7 @@ fn vote_proposal(c: &mut Criterion) {
     {
         group.bench_function(bench_name, |b| {
             b.iter_batched_ref(
-                BenchShell::new,
+                BenchShell::default,
                 |shell| shell.execute_tx(signed_tx),
                 criterion::BatchSize::LargeInput,
             )
@@ -486,7 +494,7 @@ fn init_validator(c: &mut Criterion) {
 
     c.bench_function("init_validator", |b| {
         b.iter_batched_ref(
-            BenchShell::new,
+            BenchShell::default,
             |shell| shell.execute_tx(&signed_tx),
             criterion::BatchSize::LargeInput,
         )
@@ -505,7 +513,7 @@ fn change_validator_commission(c: &mut Criterion) {
 
     c.bench_function("change_validator_commission", |b| {
         b.iter_batched_ref(
-            BenchShell::new,
+            BenchShell::default,
             |shell| shell.execute_tx(&signed_tx),
             criterion::BatchSize::LargeInput,
         )
@@ -518,7 +526,7 @@ fn ibc(c: &mut Criterion) {
     c.bench_function("ibc_transfer", |b| {
         b.iter_batched_ref(
             || {
-                let mut shell = BenchShell::new();
+                let mut shell = BenchShell::default();
                 shell.init_ibc_channel();
 
                 shell

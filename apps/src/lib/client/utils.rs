@@ -422,15 +422,7 @@ pub fn init_network(
     config.wasm.iter_mut().for_each(|(name, config)| {
         // Find the sha256 from checksums.json
         let name = format!("{}.wasm", name);
-        // Full name in format `{name}.{sha256}.wasm`
-        let full_name = checksums.0.get(&name).unwrap().get("hash").unwrap();
-        let hash = full_name
-            .split_once('.')
-            .unwrap()
-            .1
-            .split_once('.')
-            .unwrap()
-            .0;
+        let hash = checksums.0.get(&name).unwrap().get("hash").unwrap();
         config.sha256 = Some(genesis_config::HexString(hash.to_owned()));
     });
 

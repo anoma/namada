@@ -1,15 +1,20 @@
-//! Benchmarks module based on [`criterion`].
+//! Benchmarks module based on criterion.
 //!
 //! Measurements are taken on the elapsed wall-time.
 //!
-//! The benchmarks only focus on sucessfull transactions and vps: in case of failure,
-//! the bench function shall panic to avoid timing incomplete execution paths.
+//! The benchmarks only focus on sucessfull transactions and vps: in case of
+//! failure, the bench function shall panic to avoid timing incomplete execution
+//! paths.
 //!
-//! In addition, this module also contains benchmarks for [`WrapperTx`][`namada::core::types::transaction::wrapper::WrapperTx`] validation and
-//! [`host_env`][`namada::vm::host_env`] exposed functions that define the gas constants of [`gas`][`namada::core::ledger::gas`].
+//! In addition, this module also contains benchmarks for
+//! [`WrapperTx`][`namada::core::types::transaction::wrapper::WrapperTx`]
+//! validation and [`host_env`][`namada::vm::host_env`] exposed functions that
+//! define the gas constants of [`gas`][`namada::core::ledger::gas`].
 //!
-//! For more realistic results these benchmarks should be run on all the combination of
-//! supported OS/architecture.
+//! For more realistic results these benchmarks should be run on all the
+//! combination of supported OS/architecture.
+
+use std::ops::{Deref, DerefMut};
 
 use borsh::BorshSerialize;
 use masp_primitives::zip32::ExtendedFullViewingKey;
@@ -19,8 +24,9 @@ use namada::core::types::key::common::SecretKey;
 use namada::core::types::storage::Key;
 use namada::core::types::token::{Amount, Transfer};
 use namada::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
-use namada::ibc::clients::ics07_tendermint::client_state::AllowUpdate;
-use namada::ibc::clients::ics07_tendermint::client_state::ClientState;
+use namada::ibc::clients::ics07_tendermint::client_state::{
+    AllowUpdate, ClientState,
+};
 use namada::ibc::clients::ics07_tendermint::consensus_state::ConsensusState;
 use namada::ibc::core::ics02_client::client_consensus::AnyConsensusState;
 use namada::ibc::core::ics02_client::client_state::AnyClientState;
@@ -36,9 +42,8 @@ use namada::ibc::core::ics04_channel::channel::{
 use namada::ibc::core::ics04_channel::Version as ChannelVersion;
 use namada::ibc::core::ics23_commitment::commitment::CommitmentRoot;
 use namada::ibc::core::ics23_commitment::specs::ProofSpecs;
-use namada::ibc::core::ics24_host::identifier::ChainId as IbcChainId;
 use namada::ibc::core::ics24_host::identifier::{
-    ChannelId, ClientId, ConnectionId, PortId,
+    ChainId as IbcChainId, ChannelId, ClientId, ConnectionId, PortId,
 };
 use namada::ibc::core::ics24_host::path::{ChannelEndsPath, ConnectionsPath};
 use namada::ibc::core::ics24_host::Path as IbcPath;
@@ -48,9 +53,8 @@ use namada::ibc::tx_msg::Msg;
 use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::cosmos::base::v1beta1::Coin;
 use namada::ledger::gas::TxGasMeter;
-use namada::ledger::queries::RPC;
 use namada::ledger::queries::{
-    Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router,
+    Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
 use namada::proof_of_stake;
 use namada::proto::Tx;
@@ -63,16 +67,14 @@ use namada::types::masp::{
 };
 use namada::types::storage::{BlockHeight, KeySeg, TxIndex};
 use namada::types::time::DateTimeUtc;
-use namada::types::transaction::governance::InitProposalData;
-use namada::types::transaction::governance::ProposalType;
+use namada::types::transaction::governance::{InitProposalData, ProposalType};
 use namada::types::transaction::pos::Bond;
 use namada::types::transaction::GasLimit;
 use namada::vm::wasm::run;
 use namada_apps::cli::args::{Tx as TxArgs, TxTransfer};
 use namada_apps::cli::context::FromContext;
 use namada_apps::cli::Context;
-use namada_apps::client::tx::find_valid_diversifier;
-use namada_apps::client::tx::gen_shielded_transfer;
+use namada_apps::client::tx;
 use namada_apps::config::TendermintMode;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_apps::facade::tendermint_proto::abci::RequestInitChain;
@@ -82,7 +84,6 @@ use namada_apps::wallet::defaults;
 use namada_apps::{config, wasm_loader};
 use namada_test_utils::tx_data::TxWriteData;
 use rand_core::OsRng;
-use std::ops::{Deref, DerefMut};
 use tempfile::TempDir;
 
 pub const WASM_DIR: &str = "../wasm";
@@ -104,7 +105,8 @@ const BERTHA_SPENDING_KEY: &str = "bertha_spending";
 
 pub struct BenchShell {
     pub inner: Shell,
-    /// NOTE: Temporary directory should be dropped last since Shell need to flush data on drop
+    /// NOTE: Temporary directory should be dropped last since Shell need to
+    /// flush data on drop
     tempdir: TempDir,
 }
 
@@ -122,8 +124,8 @@ impl DerefMut for BenchShell {
     }
 }
 
-impl BenchShell {
-    pub fn new() -> Self {
+impl Default for BenchShell {
+    fn default() -> Self {
         let (sender, _) = tokio::sync::mpsc::unbounded_channel();
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path().canonicalize().unwrap();
@@ -162,11 +164,8 @@ impl BenchShell {
             amount: Amount::whole(1000),
             source: Some(defaults::albert_address()),
         };
-        let signed_tx = generate_tx(
-            TX_BOND_WASM,
-            bond.clone(),
-            &defaults::albert_keypair(),
-        );
+        let signed_tx =
+            generate_tx(TX_BOND_WASM, bond, &defaults::albert_keypair());
 
         let mut bench_shell = BenchShell {
             inner: shell,
@@ -202,7 +201,9 @@ impl BenchShell {
 
         bench_shell
     }
+}
 
+impl BenchShell {
     pub fn execute_tx(&mut self, tx: &Tx) {
         run::tx(
             &self.inner.wl_storage.storage,
@@ -291,7 +292,7 @@ impl BenchShell {
             .write(&cap_key, PortId::transfer().as_bytes())
             .unwrap();
 
-        //Set Channel open
+        // Set Channel open
         let counterparty = ChannelCounterparty::new(
             PortId::transfer(),
             Some(ChannelId::new(5)),
@@ -364,7 +365,7 @@ impl BenchShell {
 
         let consensus_state = ConsensusState {
             timestamp: now,
-            root: CommitmentRoot::from_bytes(&vec![]),
+            root: CommitmentRoot::from_bytes(&[]),
             next_validators_hash: Hash::Sha256([0u8; 32]),
         };
 
@@ -487,9 +488,9 @@ impl Client for BenchShell {
     }
 }
 
-impl BenchShieldedCtx {
-    pub fn new() -> Self {
-        let mut shell = BenchShell::new();
+impl Default for BenchShieldedCtx {
+    fn default() -> Self {
+        let mut shell = BenchShell::default();
 
         let mut ctx = Context::new(namada_apps::cli::args::Global {
             chain_id: None,
@@ -523,7 +524,7 @@ impl BenchShieldedCtx {
                 ExtendedFullViewingKey::from(ctx.get_cached(&viewing_key))
                     .fvk
                     .vk;
-            let (div, _g_d) = find_valid_diversifier(&mut OsRng);
+            let (div, _g_d) = tx::find_valid_diversifier(&mut OsRng);
             let payment_addr = viewing_key.to_payment_address(div).unwrap();
             let _ = ctx
                 .wallet
@@ -542,7 +543,9 @@ impl BenchShieldedCtx {
 
         Self { ctx, shell }
     }
+}
 
+impl BenchShieldedCtx {
     pub fn generate_masp_tx(
         &mut self,
         amount: Amount,
@@ -591,7 +594,11 @@ impl BenchShieldedCtx {
             &[],
         ));
         let shielded = async_runtime
-            .block_on(gen_shielded_transfer(&mut self.ctx, &self.shell, &args))
+            .block_on(tx::gen_shielded_transfer(
+                &mut self.ctx,
+                &self.shell,
+                &args,
+            ))
             .unwrap()
             .map(|x| x.0);
 

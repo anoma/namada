@@ -890,18 +890,18 @@ pub fn get_all_wasms_hashes(
 ) -> Vec<String> {
     let checksums_path = working_dir.join("wasm/checksums.json");
     let checksums_content = fs::read_to_string(checksums_path).unwrap();
-    let mut checksums: HashMap<String, HashMap<String, String>> =
+    let checksums: HashMap<String, HashMap<String, String>> =
         serde_json::from_str(&checksums_content).unwrap();
     let filter_prefix = filter.unwrap_or_default();
+
     checksums
-        .values_mut()
-        .filter_map(|wasm| {
-            let hash = wasm.get_mut("hash").expect("Missing hash in checksum");
-            if hash.contains(filter_prefix) {
+        .iter()
+        .filter_map(|(name, info)| {
+            if name.contains(filter_prefix) {
                 Some(
-                    hash.split('.').collect::<Vec<&str>>()[1]
-                        .to_owned()
-                        .to_lowercase(),
+                    info.get("hash")
+                        .expect("Missing hash in checksum")
+                        .to_owned(),
                 )
             } else {
                 None
@@ -920,9 +920,7 @@ pub fn get_all_wasms_gas(working_dir: &Path) -> BTreeMap<String, u64> {
         .values()
         .map(|map| {
             (
-                map.get("hash").unwrap().split('.').collect::<Vec<&str>>()[1]
-                    .to_owned()
-                    .to_lowercase(),
+                map.get("hash").unwrap().to_lowercase(),
                 map.get("gas").unwrap().parse::<u64>().unwrap(),
             )
         })

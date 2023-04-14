@@ -173,7 +173,8 @@ where
             let tx_result = protocol::apply_tx(
                 tx_type,
                 TxIndex::default(),
-                &mut TxGasMeter::new(u64::MAX), // No gas limit for governance proposals
+                &mut TxGasMeter::new(u64::MAX), /* No gas limit for
+                                                 * governance proposals */
                 gas_table,
                 &mut shell.wl_storage.write_log,
                 &shell.wl_storage.storage,

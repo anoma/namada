@@ -3067,14 +3067,14 @@ pub mod args {
                  address joined with a number.",
             ))
             .arg(FEE_AMOUNT.def().about(
-                "The amount being paid, per gas unit, for the inclusion of this transaction",
+                "The amount being paid, per gas unit, for the inclusion of \
+                 this transaction",
             ))
             .arg(FEE_TOKEN.def().about("The token for paying the gas"))
-            .arg(
-                GAS_LIMIT.def().about(
-                    "The multiplier of the gas limit resolution definying the maximum amount of gas needed to run transaction",
-                ),
-            )
+            .arg(GAS_LIMIT.def().about(
+                "The multiplier of the gas limit resolution defining the \
+                 maximum amount of gas needed to run transaction",
+            ))
             .arg(EXPIRATION_OPT.def().about(
                 "The expiration datetime of the transaction, after which the \
                  tx won't be accepted anymore. All of these examples are \

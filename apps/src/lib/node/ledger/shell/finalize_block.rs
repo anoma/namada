@@ -1,10 +1,8 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use data_encoding::HEXUPPER;
-use std::collections::BTreeMap;
-
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::parameters::storage as params_storage;
 use namada::ledger::pos::types::{decimal_mult_u64, into_tm_voting_power};
@@ -298,12 +296,12 @@ where
                         (
                             tx_event, None,
                             gas_meter,
-                            /* This is just for
-                             * logging/events
-                             * purposes, no more
-                             * gas is actually
-                             * used by the
-                             * wrapper */
+                            // This is just for
+                            // logging/events
+                            // purposes, no more
+                            // gas is actually
+                            // used by the
+                            // wrapper
                         )
                     }
                     TxType::Decrypted(inner) => {
@@ -329,9 +327,9 @@ where
                                 );
                             }
                             DecryptedTx::Undecryptable(_) => {
-                                event["log"] =
-                                    "Transaction could not be decrypted."
-                                        .into();
+                                event["log"] = "Transaction could not be \
+                                                decrypted."
+                                    .into();
                                 event["code"] =
                                     ErrorCodes::Undecryptable.into();
                             }
@@ -346,14 +344,14 @@ where
                     TxType::Raw(_) => {
                         tracing::error!(
                             "Internal logic error: FinalizeBlock received a \
-                         TxType::Raw transaction"
+                             TxType::Raw transaction"
                         );
                         continue;
                     }
                     TxType::Protocol(_) => {
                         tracing::error!(
                             "Internal logic error: FinalizeBlock received a \
-                         TxType::Protocol transaction"
+                             TxType::Protocol transaction"
                         );
                         continue;
                     }
@@ -448,8 +446,9 @@ where
                                 .storage
                                 .delete(&tx_hash_key)
                                 .expect(
-                                "Error while deleting tx hash key from storage",
-                            );
+                                    "Error while deleting tx hash key from \
+                                     storage",
+                                );
                         }
                     }
 
@@ -1599,9 +1598,11 @@ mod test_finalize_block {
         // won't receive votes from TM since we receive votes at a 1-block
         // delay, so votes will be empty here
         next_block_for_inflation(&mut shell, pkh1.clone(), vec![]);
-        assert!(rewards_accumulator_handle()
-            .is_empty(&shell.wl_storage)
-            .unwrap());
+        assert!(
+            rewards_accumulator_handle()
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
 
         // FINALIZE BLOCK 2. Tell Namada that val1 is the block proposer.
         // Include votes that correspond to block 1. Make val2 the next block's
@@ -1611,9 +1612,11 @@ mod test_finalize_block {
         assert!(rewards_prod_2.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_4.is_empty(&shell.wl_storage).unwrap());
-        assert!(!rewards_accumulator_handle()
-            .is_empty(&shell.wl_storage)
-            .unwrap());
+        assert!(
+            !rewards_accumulator_handle()
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
         // Val1 was the proposer, so its reward should be larger than all
         // others, which should themselves all be equal
         let acc_sum = get_rewards_sum(&shell.wl_storage);
@@ -1714,9 +1717,11 @@ mod test_finalize_block {
             );
             next_block_for_inflation(&mut shell, pkh1.clone(), votes.clone());
         }
-        assert!(rewards_accumulator_handle()
-            .is_empty(&shell.wl_storage)
-            .unwrap());
+        assert!(
+            rewards_accumulator_handle()
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
         let rp1 = rewards_prod_1
             .get(&shell.wl_storage, &Epoch::default())
             .unwrap()
@@ -1842,14 +1847,16 @@ mod test_finalize_block {
         let code = event.attributes.get("code").expect("Testfailed").as_str();
         assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
 
-        assert!(!shell
-            .wl_storage
-            .has_key(&inner_hash_key)
-            .expect("Test failed"))
+        assert!(
+            !shell
+                .wl_storage
+                .has_key(&inner_hash_key)
+                .expect("Test failed")
+        )
     }
 
-    /// Test that a wrapper transaction rejected by [`process_proposal`] because of gas,
-    /// still pays the fee
+    /// Test that a wrapper transaction rejected by [`process_proposal`] because
+    /// of gas, still pays the fee
     #[test]
     fn test_rejected_wrapper_for_gas_pays_fee() {
         let (mut shell, _) = setup(1);
@@ -1875,7 +1882,7 @@ mod test_finalize_block {
             &keypair,
             Epoch(0),
             1.into(),
-            raw_tx.clone(),
+            raw_tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
@@ -1901,7 +1908,7 @@ mod test_finalize_block {
             .write(&balance_key, initial_balance.try_to_vec().unwrap())
             .unwrap();
 
-        //FIXME: uncomment when variable fees
+        // FIXME: uncomment when variable fees
         // let event = &shell
         //     .finalize_block(FinalizeBlock {
         //         txs: vec![processed_tx],
@@ -1910,7 +1917,8 @@ mod test_finalize_block {
         //     .expect("Test failed")[0];
 
         // assert_eq!(event.event_type.to_string(), String::from("accepted"));
-        // let code = event.attributes.get("code").expect("Testfailed").as_str();
+        // let code =
+        // event.attributes.get("code").expect("Testfailed").as_str();
         // assert_eq!(code, String::from(ErrorCodes::TxGasLimit).as_str());
 
         // assert_eq!(

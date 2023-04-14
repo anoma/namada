@@ -193,7 +193,7 @@ mod testing {
     {
         #[allow(dead_code)]
         /// Initialize a test client for the given root RPC router
-        pub fn new(rpc: RPC) -> Self { 
+        pub fn new(rpc: RPC) -> Self {
             // Initialize the `TestClient`
             let mut wl_storage = TestWlStorage::default();
 
@@ -203,11 +203,14 @@ mod testing {
                 namada_core::ledger::parameters::storage::get_gas_table_storage_key();
             wl_storage
                 .storage
-                .write(&gas_table_key, 
-                namada_core::ledger::storage::types::encode(&gas_table))
+                .write(
+                    &gas_table_key,
+                    namada_core::ledger::storage::types::encode(&gas_table),
+                )
                 .expect(
-                "Gas table parameter must be initialized in the genesis block",
-            );
+                    "Gas table parameter must be initialized in the genesis \
+                     block",
+                );
 
             let max_block_gas_key =
                 namada_core::ledger::parameters::storage::get_max_block_gas_key(

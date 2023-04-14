@@ -5,7 +5,6 @@ use masp_primitives::sapling::Node;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::BlockResults;
-use std::collections::BTreeMap;
 
 use crate::ledger::events::log::dumb_queries;
 use crate::ledger::events::Event;
@@ -70,6 +69,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    use std::collections::BTreeMap;
+
     use namada_core::ledger::gas::TxGasMeter;
     use namada_core::ledger::parameters;
 

@@ -14,9 +14,8 @@ use namada::types::masp::*;
 
 use super::args;
 use crate::client::tx::ShieldedContext;
-use crate::config::genesis;
 use crate::config::global::GlobalConfig;
-use crate::config::{self, Config};
+use crate::config::{self, genesis, Config};
 use crate::wallet::{AddressVpType, Wallet};
 use crate::wasm_loader;
 

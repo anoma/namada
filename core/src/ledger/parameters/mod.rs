@@ -9,7 +9,7 @@ use thiserror::Error;
 
 use super::storage::types;
 use super::storage_api::{self, ResultExt, StorageRead, StorageWrite};
-use crate::ledger::storage::{self as ledger_storage};
+use crate::ledger::storage as ledger_storage;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::chain::ProposalBytes;
 use crate::types::hash::Hash;

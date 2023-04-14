@@ -1786,7 +1786,7 @@ where
     let tx = unsafe { env.ctx.tx.get() };
 
     Ok(HostEnvResult::from(vp_host_fns::verify_tx_signature(
-        gas_meter, &tx, &pk, &sig,
+        gas_meter, tx, &pk, &sig,
     )?)
     .to_i64())
 }

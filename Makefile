@@ -17,7 +17,7 @@ wasm_templates := wasm/tx_template wasm/vp_template
 audit-ignores += RUSTSEC-2021-0076
 
 build:
-	$(cargo) build
+	$(cargo) build --workspace --exclude namada_benchmarks
 
 build-test:
 	$(cargo) +$(nightly) build --tests -Z unstable-options
@@ -36,7 +36,8 @@ package: build-release
 
 check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wasm)/Cargo.toml
 check:
-	$(cargo) check && \
+	$(cargo) check --workspace --exclude namada_benchmarks && \
+	$(cargo) +$(nightly) check --benches -Z unstable-options && \
 	make -C $(wasms) check && \
 	make -C $(wasms_for_tests) check && \
 	$(foreach wasm,$(wasm_templates),$(check-wasm) && ) true
@@ -270,4 +271,4 @@ test-miri:
 	MIRIFLAGS="-Zmiri-disable-isolation" $(cargo) +$(nightly) miri test
 
 
-.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker debug-wasm-scripts-docker build-wasm-scripts debug-wasm-scripts clean-wasm-scripts dev-deps test-miri test-unit test-unit-abcipp clippy-abcipp bench-gas
+.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker debug-wasm-scripts-docker build-wasm-scripts debug-wasm-scripts clean-wasm-scripts dev-deps test-miri test-unit test-unit-abcipp clippy-abcipp bench

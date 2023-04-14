@@ -1523,29 +1523,31 @@ pub mod testing {
         let arb_delta =
             prop_oneof![(-(u32::MAX as i128)..0), (1..=u32::MAX as i128),];
 
-        prop_oneof![(
-            arb_address_or_validator.clone(),
-            arb_address_or_validator,
-            arb_offset,
-            arb_delta,
-        )
-            .prop_map(|(validator, owner, offset, delta)| {
-                vec![
-                    // We have to ensure that the addresses exists
-                    PosStorageChange::SpawnAccount {
-                        address: validator.clone(),
-                    },
-                    PosStorageChange::SpawnAccount {
-                        address: owner.clone(),
-                    },
-                    PosStorageChange::Bond {
-                        owner,
-                        validator,
-                        delta,
-                        offset,
-                    },
-                ]
-            })]
+        prop_oneof![
+            (
+                arb_address_or_validator.clone(),
+                arb_address_or_validator,
+                arb_offset,
+                arb_delta,
+            )
+                .prop_map(|(validator, owner, offset, delta)| {
+                    vec![
+                        // We have to ensure that the addresses exists
+                        PosStorageChange::SpawnAccount {
+                            address: validator.clone(),
+                        },
+                        PosStorageChange::SpawnAccount {
+                            address: owner.clone(),
+                        },
+                        PosStorageChange::Bond {
+                            owner,
+                            validator,
+                            delta,
+                            offset,
+                        },
+                    ]
+                })
+        ]
     }
 
     impl InvalidPosAction {

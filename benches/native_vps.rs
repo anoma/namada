@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::ledger::ibc::actions;
 use namada::core::types::address::{self, Address};
@@ -27,23 +29,20 @@ use namada::types::address::InternalAddress;
 use namada::types::chain::ChainId;
 use namada::types::governance::{ProposalVote, VoteType};
 use namada::types::storage::TxIndex;
-use namada::types::transaction::governance::ProposalType;
+use namada::types::transaction::governance::{
+    InitProposalData, ProposalType, VoteProposalData,
+};
+use namada_apps::wallet::defaults;
 use namada_apps::wasm_loader;
 use namada_benches::{
     generate_foreign_key_tx, generate_ibc_transfer_tx, generate_tx, BenchShell,
     TX_IBC_WASM, TX_INIT_PROPOSAL_WASM, TX_VOTE_PROPOSAL_WASM, WASM_DIR,
 };
-use std::collections::BTreeSet;
-
-use namada::types::transaction::governance::{
-    InitProposalData, VoteProposalData,
-};
-use namada_apps::wallet::defaults;
 
 fn replay_protection(c: &mut Criterion) {
     // Write a random key under the replay protection subspace
     let tx = generate_foreign_key_tx(&defaults::albert_keypair());
-    let mut shell = BenchShell::new();
+    let mut shell = BenchShell::default();
 
     shell.execute_tx(&tx);
     let (verifiers, keys_changed) = shell
@@ -67,7 +66,8 @@ fn replay_protection(c: &mut Criterion) {
 
     c.bench_function("vp_replay_protection", |b| {
         b.iter(|| {
-            // NOTE: thiv VP will always fail when triggered so don't assert here
+            // NOTE: thiv VP will always fail when triggered so don't assert
+            // here
             replay_protection
                 .validate_tx(
                     tx.data.as_ref().unwrap(),
@@ -89,7 +89,7 @@ fn governance(c: &mut Criterion) {
         "minimal_proposal",
         "complete_proposal",
     ] {
-        let mut shell = BenchShell::new();
+        let mut shell = BenchShell::default();
 
         let signed_tx = match bench_name {
             "foreign_key_write" => {
@@ -190,13 +190,15 @@ fn governance(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(governance
-                    .validate_tx(
-                        signed_tx.data.as_ref().unwrap(),
-                        governance.ctx.keys_changed,
-                        governance.ctx.verifiers,
-                    )
-                    .unwrap())
+                assert!(
+                    governance
+                        .validate_tx(
+                            signed_tx.data.as_ref().unwrap(),
+                            governance.ctx.keys_changed,
+                            governance.ctx.verifiers,
+                        )
+                        .unwrap()
+                )
             })
         });
     }
@@ -229,7 +231,7 @@ fn slash_fund(c: &mut Criterion) {
         .into_iter()
         .zip(["foreign_key_write", "governance_proposal"])
     {
-        let mut shell = BenchShell::new();
+        let mut shell = BenchShell::default();
 
         // Run the tx to validate
         shell.execute_tx(&tx);
@@ -255,13 +257,15 @@ fn slash_fund(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(slash_fund
-                    .validate_tx(
-                        tx.data.as_ref().unwrap(),
-                        slash_fund.ctx.keys_changed,
-                        slash_fund.ctx.verifiers,
-                    )
-                    .unwrap())
+                assert!(
+                    slash_fund
+                        .validate_tx(
+                            tx.data.as_ref().unwrap(),
+                            slash_fund.ctx.keys_changed,
+                            slash_fund.ctx.verifiers,
+                        )
+                        .unwrap()
+                )
             })
         });
     }
@@ -313,7 +317,7 @@ fn ibc(c: &mut Criterion) {
     );
     let msg = MsgChannelOpenInit {
         port_id: PortId::transfer(),
-        channel: channel.clone(),
+        channel,
         signer: Signer::new(defaults::albert_address()),
     };
 
@@ -347,7 +351,7 @@ fn ibc(c: &mut Criterion) {
         "open_channel",
         "outgoing_transfer",
     ]) {
-        let mut shell = BenchShell::new();
+        let mut shell = BenchShell::default();
         shell.init_ibc_channel();
 
         shell.execute_tx(signed_tx);
@@ -372,13 +376,14 @@ fn ibc(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(ibc
-                    .validate_tx(
+                assert!(
+                    ibc.validate_tx(
                         signed_tx.data.as_ref().unwrap(),
                         ibc.ctx.keys_changed,
                         ibc.ctx.verifiers,
                     )
-                    .unwrap())
+                    .unwrap()
+                )
             })
         });
     }
@@ -397,10 +402,10 @@ fn ibc_token(c: &mut Criterion) {
         .iter()
         .zip(["foreign_key_write", "outgoing_transfer"])
     {
-        let mut shell = BenchShell::new();
+        let mut shell = BenchShell::default();
         shell.init_ibc_channel();
 
-        shell.execute_tx(&signed_tx);
+        shell.execute_tx(signed_tx);
 
         let (verifiers, keys_changed) = shell
             .wl_storage
@@ -420,7 +425,7 @@ fn ibc_token(c: &mut Criterion) {
                 &internal_address,
                 &shell.wl_storage.storage,
                 &shell.wl_storage.write_log,
-                &signed_tx,
+                signed_tx,
                 &TxIndex(0),
                 VpGasMeter::new(u64::MAX, 0),
                 &keys_changed,
@@ -431,13 +436,14 @@ fn ibc_token(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(ibc
-                    .validate_tx(
+                assert!(
+                    ibc.validate_tx(
                         signed_tx.data.as_ref().unwrap(),
                         ibc.ctx.keys_changed,
                         ibc.ctx.verifiers,
                     )
-                    .unwrap())
+                    .unwrap()
+                )
             })
         });
     }

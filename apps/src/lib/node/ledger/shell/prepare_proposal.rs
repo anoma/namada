@@ -5,8 +5,8 @@ use namada::core::ledger::gas::TxGasMeter;
 use namada::core::ledger::parameters;
 use namada::ledger::gas::BlockGasMeter;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
-use namada::proof_of_stake::pos_queries::PosQueries;
 use namada::ledger::storage_api::StorageRead;
+use namada::proof_of_stake::pos_queries::PosQueries;
 use namada::proto::Tx;
 use namada::types::internal::WrapperTxInQueue;
 use namada::types::time::DateTimeUtc;
@@ -15,8 +15,6 @@ use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 
 use super::super::*;
-#[allow(unused_imports)]
-use super::block_space_alloc;
 use super::block_space_alloc::states::{
     BuildingDecryptedTxBatch, BuildingProtocolTxBatch,
     EncryptedTxBatchAllocator, NextState, TryAlloc,
@@ -36,8 +34,8 @@ where
 {
     /// Begin a new block.
     ///
-    /// Block construction is documented in [`block_space_alloc`]
-    /// and [`block_space_alloc::states`].
+    /// Block construction is documented in [`super::block_space_alloc`]
+    /// and [`super::block_space_alloc::states`].
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if
     /// the proposal is rejected (unless we can simply overwrite
@@ -132,12 +130,12 @@ where
             // valid because of mempool check
             TryInto::<DateTimeUtc>::try_into(block_time).ok()
         });
-            let mut temp_block_gas_meter = BlockGasMeter::new(
-                self.wl_storage
-                    .read(&parameters::storage::get_max_block_gas_key())
-                    .expect("Error while reading from storage")
-                    .expect("Missing max_block_gas parameter in storage"),
-            );
+        let mut temp_block_gas_meter = BlockGasMeter::new(
+            self.wl_storage
+                .read(&parameters::storage::get_max_block_gas_key())
+                .expect("Error while reading from storage")
+                .expect("Missing max_block_gas parameter in storage"),
+        );
 
         let txs = txs
             .iter()
@@ -226,7 +224,7 @@ where
             .map(
                 |WrapperTxInQueue {
                      tx,
-                    gas: _, 
+                     gas: _,
                      #[cfg(not(feature = "mainnet"))]
                      has_valid_pow,
                  }| {
@@ -482,7 +480,8 @@ mod test_prepare_proposal {
         assert!(result.txs.is_empty());
     }
 
-    /// Check that a tx requiring more gas than the block limit is not included in the block
+    /// Check that a tx requiring more gas than the block limit is not included
+    /// in the block
     #[test]
     fn test_exceeding_max_block_gas_tx() {
         let (shell, _) = test_utils::setup(1);
@@ -523,20 +522,13 @@ mod test_prepare_proposal {
             time: None,
             ..Default::default()
         };
-        #[cfg(feature = "abcipp")]
-        assert_eq!(
-            shell.prepare_proposal(req).tx_records,
-            vec![record::remove(wrapper.to_bytes())]
-        );
-        #[cfg(not(feature = "abcipp"))]
-        {
-            let result = shell.prepare_proposal(req);
-            eprintln!("Proposal: {:?}", result.txs);
-            assert!(result.txs.is_empty());
-        }
+        let result = shell.prepare_proposal(req);
+        eprintln!("Proposal: {:?}", result.txs);
+        assert!(result.txs.is_empty());
     }
 
-    // Check that a wrapper requiring more gas than its limit is not included in the block
+    // Check that a wrapper requiring more gas than its limit is not included in
+    // the block
     #[test]
     fn test_exceeding_gas_limit_wrapper() {
         let (shell, _) = test_utils::setup(1);
@@ -571,16 +563,8 @@ mod test_prepare_proposal {
             time: None,
             ..Default::default()
         };
-        #[cfg(feature = "abcipp")]
-        assert_eq!(
-            shell.prepare_proposal(req).tx_records,
-            vec![record::remove(wrapper.to_bytes())]
-        );
-        #[cfg(not(feature = "abcipp"))]
-        {
-            let result = shell.prepare_proposal(req);
-            eprintln!("Proposal: {:?}", result.txs);
-            assert!(result.txs.is_empty());
-        }
+        let result = shell.prepare_proposal(req);
+        eprintln!("Proposal: {:?}", result.txs);
+        assert!(result.txs.is_empty());
     }
 }

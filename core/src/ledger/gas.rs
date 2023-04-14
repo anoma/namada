@@ -31,11 +31,12 @@ pub const STORAGE_WRITE_GAS_PER_BYTE: u64 = 100;
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Gas metering in a block. The amount of gas consumed in a block is based on the
-/// tx_gas_limit declared by each [`TxGasMeter`]
+/// Gas metering in a block. The amount of gas consumed in a block is based on
+/// the tx_gas_limit declared by each [`TxGasMeter`]
 #[derive(Debug, Clone)]
 pub struct BlockGasMeter {
-    /// The max amount of gas allowed per block, defined by the protocol parameter
+    /// The max amount of gas allowed per block, defined by the protocol
+    /// parameter
     pub block_gas_limit: u64,
     block_gas: u64,
 }
@@ -79,7 +80,8 @@ impl BlockGasMeter {
 
     /// Add the transaction gas limit to the block's total gas. It will return
     /// error when the consumed gas exceeds the block gas limit, but the state
-    /// will still be updated. This function consumes the [`TxGasMeter`] which shouldn't be updated after this point.
+    /// will still be updated. This function consumes the [`TxGasMeter`] which
+    /// shouldn't be updated after this point.
     pub fn finalize_transaction(
         &mut self,
         tx_gas_meter: TxGasMeter,
@@ -96,7 +98,9 @@ impl BlockGasMeter {
     }
 
     /// Tries to add the transaction gas limit to the block's total gas.
-    /// If the operation returns an error, propagates this errors without updating the state. This function consumes the [`TxGasMeter`] which shouldn't be updated after this point.
+    /// If the operation returns an error, propagates this errors without
+    /// updating the state. This function consumes the [`TxGasMeter`] which
+    /// shouldn't be updated after this point.
     pub fn try_finalize_transaction(
         &mut self,
         tx_gas_meter: TxGasMeter,
@@ -117,7 +121,8 @@ impl BlockGasMeter {
 }
 
 impl TxGasMeter {
-    /// Initialize a new Tx gas meter. Requires the gas limit for the specific transaction
+    /// Initialize a new Tx gas meter. Requires the gas limit for the specific
+    /// transaction
     pub fn new(tx_gas_limit: u64) -> Self {
         Self {
             tx_gas_limit,
@@ -126,8 +131,8 @@ impl TxGasMeter {
     }
 
     /// Add gas cost for the current transaction. It will return error when the
-    /// consumed gas exceeds the provided transaction gas limit, but the state will still
-    /// be updated.
+    /// consumed gas exceeds the provided transaction gas limit, but the state
+    /// will still be updated.
     pub fn add(&mut self, gas: u64) -> Result<()> {
         self.transaction_gas = self
             .transaction_gas
@@ -203,7 +208,8 @@ impl VpGasMeter {
 }
 
 impl VpsGas {
-    /// Set the gas cost from a single VP run. It consumes the [`VpGasMeter`] instance which shouldn't be accessed passed this point.
+    /// Set the gas cost from a single VP run. It consumes the [`VpGasMeter`]
+    /// instance which shouldn't be accessed passed this point.
     pub fn set(&mut self, vp_gas_meter: VpGasMeter) -> Result<()> {
         debug_assert_eq!(self.max, None);
         debug_assert!(self.rest.is_empty());
