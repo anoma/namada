@@ -8,9 +8,9 @@ use masp_primitives::convert::AllowedConversion;
 use masp_primitives::merkle_tree::FrozenCommitmentTree;
 use masp_primitives::sapling::Node;
 
-use crate::ledger::inflation::{mint_tokens, RewardsController, ValsToUpdate};
+use crate::ledger::inflation::{RewardsController, ValsToUpdate};
 use crate::ledger::parameters;
-use crate::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
+use crate::ledger::storage_api::{self, ResultExt, StorageRead, StorageWrite};
 use crate::types::address::Address;
 use crate::types::storage::Epoch;
 use crate::types::{address, token};
@@ -31,8 +31,8 @@ fn calculate_masp_rewards<D, H>(
     addr: &Address,
 ) -> crate::ledger::storage_api::Result<(u64, u64)>
 where
-    D: super::DB + for<'iter> super::DBIter<'iter>,
-    H: super::StorageHasher,
+    D: 'static + super::DB + for<'iter> super::DBIter<'iter>,
+    H: 'static + super::StorageHasher,
 {
     use rust_decimal::Decimal;
 
@@ -84,22 +84,22 @@ where
         .expect("");
 
     // Creating the PD controller for handing out tokens
-    let controller = RewardsController::new(
-        total_token_in_masp,
+    let controller = RewardsController {
+        locked_tokens: total_token_in_masp,
         total_tokens,
-        locked_target_ratio,
-        last_locked_ratio,
+        locked_ratio_target: locked_target_ratio,
+        locked_ratio_last: last_locked_ratio,
         max_reward_rate,
-        token::Amount::from(last_inflation),
-        kp_gain_nom,
-        kd_gain_nom,
+        last_inflation_amount: token::Amount::from(last_inflation),
+        p_gain_nom: kp_gain_nom,
+        d_gain_nom: kd_gain_nom,
         epochs_per_year,
-    );
+    };
 
     let ValsToUpdate {
         locked_ratio,
         inflation,
-    } = RewardsController::run(&controller);
+    } = controller.run();
 
     // inflation-per-token = inflation / locked tokens = n/100
     // ∴ n = (inflation * 100) / locked tokens
@@ -323,7 +323,12 @@ where
 
     // Update the MASP's transparent reward token balance to ensure that it
     // is sufficiently backed to redeem rewards
-    mint_tokens(wl_storage, &masp_addr, &address::nam(), total_reward)?;
+    storage_api::token::credit_tokens(
+        wl_storage,
+        &address::nam(),
+        &masp_addr,
+        total_reward,
+    )?;
 
     // Try to distribute Merkle tree construction as evenly as possible
     // across multiple cores
