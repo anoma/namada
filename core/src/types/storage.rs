@@ -56,6 +56,10 @@ pub const VP_KEY_PREFIX: char = '?';
 pub const RESERVED_VP_KEY: &str = "?";
 /// The reserved storage key prefix for wasm codes
 pub const WASM_KEY_PREFIX: &str = "wasm";
+/// The reserved storage key prefix for wasm codes
+pub const WASM_CODE_PREFIX: &str = "code";
+/// The reserved storage key prefix for wasm code hashes
+pub const WASM_HASH_PREFIX: &str = "hash";
 
 /// Transaction index within block.
 #[derive(
@@ -540,7 +544,17 @@ impl Key {
     pub fn wasm_code(code_hash: &Hash) -> Self {
         let mut segments =
             Self::from(WASM_KEY_PREFIX.to_owned().to_db_key()).segments;
+        segments.push(DbKeySeg::StringSeg(WASM_CODE_PREFIX.to_owned()));
         segments.push(DbKeySeg::StringSeg(code_hash.to_string()));
+        Key { segments }
+    }
+
+    /// Returns a key of the wasm code hash of the given name
+    pub fn wasm_hash(code_name: impl AsRef<str>) -> Self {
+        let mut segments =
+            Self::from(WASM_KEY_PREFIX.to_owned().to_db_key()).segments;
+        segments.push(DbKeySeg::StringSeg(WASM_HASH_PREFIX.to_owned()));
+        segments.push(DbKeySeg::StringSeg(code_name.as_ref().to_string()));
         Key { segments }
     }
 

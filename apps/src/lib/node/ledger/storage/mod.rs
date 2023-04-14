@@ -59,6 +59,7 @@ mod tests {
     };
     use namada::ledger::storage_api::{self, StorageWrite};
     use namada::types::chain::ChainId;
+    use namada::types::hash::Hash;
     use namada::types::storage::{BlockHash, BlockHeight, Key};
     use namada::types::{address, storage};
     use proptest::collection::vec;
@@ -243,13 +244,13 @@ mod tests {
         assert_eq!(gas, key.len() as u64);
 
         // insert
-        let vp1 = "vp1".as_bytes().to_vec();
-        storage.write(&key, vp1.clone()).expect("write failed");
+        let vp1 = Hash::sha256("vp1".as_bytes());
+        storage.write(&key, vp1.to_vec()).expect("write failed");
 
         // check
-        let (vp, gas) =
+        let (vp_code_hash, gas) =
             storage.validity_predicate(&addr).expect("VP load failed");
-        assert_eq!(vp.expect("no VP"), vp1);
+        assert_eq!(vp_code_hash.expect("no VP"), vp1);
         assert_eq!(gas, (key.len() + vp1.len()) as u64);
     }
 

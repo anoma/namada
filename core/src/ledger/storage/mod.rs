@@ -37,6 +37,7 @@ use crate::types::address::{
     masp, Address, EstablishedAddressGen, InternalAddress,
 };
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
+use crate::types::hash::{Error as HashError, Hash};
 // TODO
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::internal::TxQueue;
@@ -147,6 +148,8 @@ pub enum Error {
     BorshCodingError(std::io::Error),
     #[error("Merkle tree at the height {height} is not stored")]
     NoMerkleTree { height: BlockHeight },
+    #[error("Code hash error: {0}")]
+    InvalidCodeHash(HashError),
 }
 
 /// The block's state as stored in the database.
@@ -606,18 +609,25 @@ where
         Ok(())
     }
 
-    /// Get a validity predicate for the given account address and the gas cost
-    /// for reading it.
+    /// Get the hash of a validity predicate for the given account address and
+    /// the gas cost for reading it.
     pub fn validity_predicate(
         &self,
         addr: &Address,
-    ) -> Result<(Option<Vec<u8>>, u64)> {
+    ) -> Result<(Option<Hash>, u64)> {
         let key = if let Address::Implicit(_) = addr {
             parameters::storage::get_implicit_vp_key()
         } else {
             Key::validity_predicate(addr)
         };
-        self.read(&key)
+        match self.read(&key)? {
+            (Some(value), gas) => {
+                let vp_code_hash = Hash::try_from(&value[..])
+                    .map_err(Error::InvalidCodeHash)?;
+                Ok((Some(vp_code_hash), gas))
+            }
+            (None, gas) => Ok((None, gas)),
+        }
     }
 
     #[allow(dead_code)]

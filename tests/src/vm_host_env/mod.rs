@@ -220,7 +220,13 @@ mod tests {
         tx_host_env::init();
 
         let code = TestWasms::VpAlwaysTrue.read_bytes();
-        tx::ctx().init_account(code).unwrap();
+        let code_hash = Hash::sha256(&code);
+        tx_host_env::with(|env| {
+            // store wasm code
+            let key = Key::wasm_code(&code_hash);
+            env.wl_storage.storage.write(&key, code.clone()).unwrap();
+        });
+        tx::ctx().init_account(code_hash).unwrap();
     }
 
     #[test]

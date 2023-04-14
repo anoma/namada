@@ -7,7 +7,7 @@ use std::str::FromStr;
 use arse_merkle_tree::traits::Value;
 use arse_merkle_tree::{Hash as TreeHash, H256};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use data_encoding::HEXUPPER;
+use data_encoding::HEXLOWER;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -47,7 +47,7 @@ pub struct Hash(pub [u8; HASH_LENGTH]);
 
 impl Display for Hash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", HEXUPPER.encode(&self.0))
+        write!(f, "{}", HEXLOWER.encode(&self.0))
     }
 }
 
@@ -96,8 +96,8 @@ impl TryFrom<&str> for Hash {
     type Error = self::Error;
 
     fn try_from(string: &str) -> HashResult<Self> {
-        let vec = HEXUPPER
-            .decode(string.as_ref())
+        let vec = HEXLOWER
+            .decode(string.to_lowercase().as_ref())
             .map_err(Error::FromStringError)?;
         Self::try_from(&vec[..])
     }

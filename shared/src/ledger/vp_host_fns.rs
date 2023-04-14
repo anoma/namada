@@ -75,10 +75,10 @@ where
             Ok(None)
         }
         Some(&write_log::StorageModification::InitAccount {
-            ref vp, ..
+            ref vp_code_hash,
         }) => {
             // Read the VP of a new account
-            Ok(Some(vp.clone()))
+            Ok(Some(vp_code_hash.clone()))
         }
         Some(&write_log::StorageModification::Temp { .. }) => {
             Err(RuntimeError::ReadTemporaryValueError)
@@ -117,10 +117,10 @@ where
             Ok(None)
         }
         Some(&write_log::StorageModification::InitAccount {
-            ref vp, ..
+            ref vp_code_hash,
         }) => {
             // Read the VP of a new account
-            Ok(Some(vp.clone()))
+            Ok(Some(vp_code_hash.clone()))
         }
         Some(&write_log::StorageModification::Temp { .. }) => {
             Err(RuntimeError::ReadTemporaryValueError)
