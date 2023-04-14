@@ -110,7 +110,11 @@ pub fn check_spend(
     parameters: &PreparedVerifyingKey<Bls12>,
 ) -> bool {
     let zkproof =
-        masp_proofs::bellman::groth16::Proof::read(spend.zkproof.as_slice()).unwrap();
+        masp_proofs::bellman::groth16::Proof::read(spend.zkproof.as_slice());
+    let zkproof = match zkproof {
+        Ok(zkproof) => zkproof,
+        _ => return false,
+    };
     ctx.check_spend(
         spend.cv,
         spend.anchor,
@@ -130,8 +134,13 @@ pub fn check_output(
     parameters: &PreparedVerifyingKey<Bls12>,
 ) -> bool {
     let zkproof =
-        masp_proofs::bellman::groth16::Proof::read(output.zkproof.as_slice()).unwrap();
-    let epk = match masp_proofs::jubjub::ExtendedPoint::from_bytes(&output.ephemeral_key.0).into() {
+        masp_proofs::bellman::groth16::Proof::read(output.zkproof.as_slice());
+    let zkproof = match zkproof {
+        Ok(zkproof) => zkproof,
+        _ => return false,
+    };
+    let epk = masp_proofs::jubjub::ExtendedPoint::from_bytes(&output.ephemeral_key.0);
+    let epk = match epk.into() {
         Some(p) => p,
         None => return false,
     };
@@ -151,15 +160,52 @@ pub fn check_convert(
     parameters: &PreparedVerifyingKey<Bls12>,
 ) -> bool {
     let zkproof =
-        masp_proofs::bellman::groth16::Proof::read(convert.zkproof.as_slice()).unwrap();
+        masp_proofs::bellman::groth16::Proof::read(convert.zkproof.as_slice());
+    let zkproof = match zkproof {
+        Ok(zkproof) => zkproof,
+        _ => return false,
+    };
     ctx.check_convert(convert.cv, convert.anchor, zkproof, parameters)
 }
 
-pub struct Nauthorized;
+/// Represents an authorization where the Sapling bundle is authorized and the
+/// transparent bundle is unauthorized.
+pub struct PartialAuthorized;
 
-impl Authorization for Nauthorized {
+impl Authorization for PartialAuthorized {
     type TransparentAuth = <Unauthorized as Authorization>::TransparentAuth;
     type SaplingAuth = <Authorized as Authorization>::SaplingAuth;
+}
+
+/// Partially deauthorize the transparent bundle
+fn partial_deauthorize(
+    tx_data: &TransactionData<Authorized>
+) -> Option<TransactionData<PartialAuthorized>> {
+    let transp = tx_data.transparent_bundle().and_then(|x| {
+        let mut tb = TransparentBuilder::empty();
+        for vin in &x.vin {
+            tb.add_input(TxOut {
+                asset_type: vin.asset_type,
+                value: vin.value,
+                address: vin.address,
+            }).ok()?;
+        }
+        for vout in &x.vout {
+            tb.add_output(&vout.address, vout.asset_type, vout.value).ok()?;
+        }
+        tb.build()
+    });
+    if tx_data.transparent_bundle().is_some() != transp.is_some() {
+        return None;
+    }
+    Some(TransactionData::from_parts(
+        tx_data.version(),
+        tx_data.consensus_branch_id(),
+        tx_data.lock_time(),
+        tx_data.expiry_height(),
+        transp,
+        tx_data.sapling_bundle().cloned(),
+    ))
 }
 
 /// Verify a shielded transaction.
@@ -171,40 +217,13 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
     } else {
         return false;
     };
-
-    let mut ctx = SaplingVerificationContext::new(true);
     let tx_data = transaction.deref();
 
-    let (_, spend_pvk) = load_spend_params();
-    let (_, convert_pvk) = load_convert_params();
-    let (_, output_pvk) = load_output_params();
-
-    // Deauthorize the transparent bundle
-    let transp = tx_data.transparent_bundle().and_then(|x| {
-        let mut tb = TransparentBuilder::empty();
-        for vin in &x.vin {
-            tb.add_input(TxOut {
-                asset_type: vin.asset_type,
-                value: vin.value,
-                transparent_address: vin.transparent_sig,
-            }).ok()?;
-        }
-        for vout in &x.vout {
-            tb.add_output(&vout.transparent_address, vout.asset_type, vout.value).ok()?;
-        }
-        tb.build()
-    });
-    if tx_data.transparent_bundle().is_some() != transp.is_some() {
-        return false;
-    }
-    let unauth_tx_data: TransactionData<Nauthorized> = TransactionData::from_parts(
-        tx_data.version(),
-        tx_data.consensus_branch_id(),
-        tx_data.lock_time(),
-        tx_data.expiry_height(),
-        transp,
-        tx_data.sapling_bundle().cloned(),
-    );
+    // Partially deauthorize the transparent bundle
+    let unauth_tx_data = match partial_deauthorize(tx_data) {
+        Some(tx_data) => tx_data,
+        None => return false,
+    };
 
     let txid_parts = unauth_tx_data.digest(TxIdDigester);
     // the commitment being signed is shared across all Sapling inputs; once
@@ -215,6 +234,11 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
 
     tracing::info!("sighash computed");
 
+    let (_, spend_pvk) = load_spend_params();
+    let (_, convert_pvk) = load_convert_params();
+    let (_, output_pvk) = load_output_params();
+
+    let mut ctx = SaplingVerificationContext::new(true);
     let spends_valid = sapling_bundle
         .shielded_spends
         .iter()

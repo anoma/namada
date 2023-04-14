@@ -1414,7 +1414,7 @@ where
             TxOut {
                 asset_type,
                 value: amt.try_into().expect("supplied amount too large"),
-                transparent_address: script,
+                address: script,
             },
         ).map_err(builder::Error::TransparentBuild)?;
     }

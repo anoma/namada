@@ -458,10 +458,10 @@ impl Section {
     Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize,
 )]
 pub struct Tx {
-    /// Type indicating how to process transaction
-    pub header: TxType,
     /// A transaction timestamp
     pub timestamp: DateTimeUtc,
+    /// Type indicating how to process transaction
+    pub header: TxType,
     /// Additional details necessary to process transaction
     pub sections: Vec<Section>,
 }
