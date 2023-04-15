@@ -358,8 +358,21 @@ fn ledger_txs_and_queries() -> Result<()> {
     ledger.exp_string("Committed block hash")?;
     let _bg_ledger = ledger.background();
 
-    let tx_no_op = TestWasms::TxNoOp.path();
-    let tx_no_op = tx_no_op.to_string_lossy();
+    // for a custom tx
+    let transfer = token::Transfer {
+        source: find_address(&test, BERTHA).unwrap(),
+        target: find_address(&test, ALBERT).unwrap(),
+        token: find_address(&test, NAM).unwrap(),
+        sub_prefix: None,
+        amount: token::Amount::whole(10),
+        key: None,
+        shielded: None,
+    }
+    .try_to_vec()
+    .unwrap();
+    let tx_data_path = test.test_dir.path().join("tx.data");
+    std::fs::write(&tx_data_path, transfer).unwrap();
+    let tx_data_path = tx_data_path.to_string_lossy();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
@@ -427,9 +440,9 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--signer",
             BERTHA,
             "--code-path",
-            &tx_no_op,
+            TX_TRANSFER_WASM,
             "--data-path",
-            "README.md",
+            &tx_data_path,
             "--gas-amount",
             "0",
             "--gas-limit",

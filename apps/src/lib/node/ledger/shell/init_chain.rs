@@ -13,8 +13,6 @@ use namada::ledger::storage_api::StorageWrite;
 use namada::types::hash::Hash as CodeHash;
 use namada::types::key::*;
 use rust_decimal::Decimal;
-#[cfg(not(feature = "dev"))]
-use sha2::{Digest, Sha256};
 
 use super::*;
 use crate::facade::tendermint_proto::abci;

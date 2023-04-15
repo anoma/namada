@@ -83,14 +83,14 @@ fn validate_tx(
             let has_post: bool = ctx.has_key_post(key)?;
             if owner == &addr {
                 if has_post {
-                    let vp: Vec<u8> = ctx.read_bytes_post(key)?.unwrap();
-                    return Ok(*valid_sig && is_vp_whitelisted(ctx, &vp)?);
+                    let vp_hash: Vec<u8> = ctx.read_bytes_post(key)?.unwrap();
+                    return Ok(*valid_sig && is_vp_whitelisted(ctx, &vp_hash)?);
                 } else {
                     return reject();
                 }
             } else {
-                let vp: Vec<u8> = ctx.read_bytes_post(key)?.unwrap();
-                return is_vp_whitelisted(ctx, &vp);
+                let vp_hash: Vec<u8> = ctx.read_bytes_post(key)?.unwrap();
+                return is_vp_whitelisted(ctx, &vp_hash);
             }
         } else {
             // Allow any other key change if authorized by a signature
