@@ -3,7 +3,7 @@
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::proto::Tx;
 use namada::types::internal::TxInQueue;
-use namada::types::transaction::tx_types::TxType;
+use namada::types::transaction::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 use namada::types::hash::Hash;

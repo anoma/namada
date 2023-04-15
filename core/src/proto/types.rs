@@ -381,7 +381,7 @@ impl Section {
             }
             Self::MaspTx(tx) => {
                 hasher.update(&[5]);
-                hasher.update(tx.try_to_vec().expect("unable to serialize tx"));
+                hasher.update(tx.txid().as_ref());
                 hasher
             },
         }
