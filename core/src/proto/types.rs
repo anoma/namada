@@ -18,8 +18,6 @@ use crate::types::time::DateTimeUtc;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::token::Transfer;
 use crate::types::transaction::hash_tx;
-#[cfg(feature = "ferveo-tpke")]
-use crate::types::transaction::process_tx;
 use crate::types::transaction::DecryptedTx;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::EllipticCurve;
@@ -452,6 +450,19 @@ impl Section {
     }
 }
 
+/// Errors relating to decrypting a wrapper tx and its
+/// encrypted payload from a Tx type
+#[allow(missing_docs)]
+#[derive(thiserror::Error, Debug, PartialEq)]
+pub enum TxError {
+    #[error("{0}")]
+    Unsigned(String),
+    #[error("{0}")]
+    SigError(String),
+    #[error("Failed to deserialize Tx: {0}")]
+    Deserialization(String),
+}
+
 /// A namada transaction is represented as a header followed by a series of
 /// seections providing additional details.
 #[derive(
@@ -732,6 +743,58 @@ impl Tx {
                 Section::Signature(sig) if sig.target == header_hash => {},
                 _ => *section = Section::Ciphertext(Ciphertext::new(section.clone(), &pubkey)),
             } 
+        }
+    }
+
+    /// Determines the type of the input Tx
+    ///
+    /// If it is a raw Tx, signed or not, the Tx is
+    /// returned unchanged inside an enum variant stating its type.
+    ///
+    /// If it is a decrypted tx, signing it adds no security so we
+    /// extract the signed data without checking the signature (if it
+    /// is signed) or return as is. Either way, it is returned in
+    /// an enum variant stating its type.
+    ///
+    /// If it is a WrapperTx, we extract the signed data of
+    /// the Tx and verify it is of the appropriate form. This means
+    /// 1. The signed Tx data deserializes to a WrapperTx type
+    /// 2. The wrapper tx is indeed signed
+    /// 3. The signature is valid
+    ///
+    /// We modify the data of the WrapperTx to contain only the signed
+    /// data if valid and return it wrapped in a enum variant
+    /// indicating it is a wrapper. Otherwise, an error is
+    /// returned indicating the signature was not valid
+    pub fn validate_header(&self) -> std::result::Result<(), TxError> {
+        match self.header() {
+            // verify signature and extract signed data
+            TxType::Wrapper(wrapper) => {
+                self.verify_signature(&wrapper.pk, &self.header_hash())
+                    .map_err(|err| {
+                        TxError::SigError(format!(
+                            "WrapperTx signature verification failed: {}",
+                            err
+                        ))
+                    })?;
+                Ok(())
+            }
+            // verify signature and extract signed data
+            #[cfg(feature = "ferveo-tpke")]
+            TxType::Protocol(protocol) => {
+                self.verify_signature(&protocol.pk, &self.header_hash())
+                    .map_err(|err| {
+                        TxError::SigError(format!(
+                            "ProtocolTx signature verification failed: {}",
+                            err
+                        ))
+                    })?;
+                Ok(())
+            }
+            // we extract the signed data, but don't check the signature
+            decrypted @ TxType::Decrypted(_) => Ok(()),
+            // return as is
+            raw @ TxType::Raw(_) => Ok(()),
         }
     }
 }

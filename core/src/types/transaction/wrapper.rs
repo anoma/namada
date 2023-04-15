@@ -11,12 +11,12 @@ pub mod wrapper_tx {
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
 
-    use crate::proto::{Tx, Code, Data, Signature, Section};
+    use crate::proto::{Tx, Code, Data, Signature, Section, TxError};
     use crate::types::address::Address;
     use crate::types::key::*;
     use crate::types::storage::Epoch;
     use crate::types::token::Amount;
-    use crate::types::transaction::{Hash, TxError, TxType};
+    use crate::types::transaction::{Hash, TxType};
     use sha2::{Digest, Sha256};
 
     /// Minimum fee amount in micro NAMs
@@ -173,9 +173,11 @@ pub mod wrapper_tx {
         pub epoch: Epoch,
         /// Max amount of gas that can be used when executing the inner tx
         pub gas_limit: GasLimit,
-        /// sha-2 hash of the inner transaction acting as a commitment
+        /// sha-2 hash of the data section acting as a commitment
         /// the contents of the encrypted payload
         pub data_hash: Hash,
+        /// sha-2 hash of the code section acting as a commitment
+        /// the contents of the encrypted payload
         pub code_hash: Hash,
         #[cfg(not(feature = "mainnet"))]
         /// A PoW solution can be used to allow zero-fee testnet transactions
@@ -214,6 +216,7 @@ pub mod wrapper_tx {
             Address::from(&self.pk)
         }
 
+        /// Produce a SHA-256 hash of this section
         pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
             hasher.update(self.try_to_vec().expect("unable to serialize wrapper"));
             hasher
@@ -400,7 +403,7 @@ pub mod wrapper_tx {
             tx.verify_signature(&keypair.ref_to(), &tx.header_hash())
                 .expect_err("Test failed");
             // check that the try from method also fails
-            let err = crate::types::transaction::process_tx(&tx)
+            let err = tx.validate_header()
                 .expect_err("Test failed");
             assert_matches!(err, TxError::SigError(_));
         }

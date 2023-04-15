@@ -13,7 +13,7 @@ use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::{tx_record::TxAction, TxRecord};
-use crate::node::ledger::shell::{process_tx, ShellMode};
+use crate::node::ledger::shell::{ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
 // TODO: remove this hard-coded value; Tendermint, and thus
@@ -55,8 +55,9 @@ where
                 .txs
                 .into_iter()
                 .map(|tx_bytes| {
-                    if let Ok(Ok(TxType::Wrapper(_))) =
-                        Tx::try_from(tx_bytes.as_slice()).map(process_tx)
+                    if let Ok(true) =
+                        Tx::try_from(tx_bytes.as_slice())
+                        .map(|x| x.validate_header().is_ok() && x.header().wrapper().is_some())
                     {
                         record::keep(tx_bytes)
                     } else {
@@ -80,8 +81,9 @@ where
                 .txs
                 .into_iter()
                 .filter_map(|tx_bytes| {
-                    if let Ok(Ok(TxType::Wrapper(_))) =
-                        Tx::try_from(tx_bytes.as_slice()).map(|x| process_tx(&x).map(Tx::header))
+                    if let Ok(true) =
+                        Tx::try_from(tx_bytes.as_slice())
+                        .map(|x| x.validate_header().is_ok() && x.header().wrapper().is_some())
                     {
                         Some(tx_bytes)
                     } else {

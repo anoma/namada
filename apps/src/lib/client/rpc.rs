@@ -49,7 +49,7 @@ use namada::types::storage::{
 };
 use namada::types::token::{balance_key, Transfer};
 use namada::types::transaction::{
-    process_tx, AffineCurve, DecryptedTx, EllipticCurve, PairingEngine, TxType,
+    AffineCurve, DecryptedTx, EllipticCurve, PairingEngine, TxType,
     WrapperTx,
 };
 use namada::types::{address, storage, token};

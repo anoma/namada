@@ -89,121 +89,120 @@ where
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
-        match process_tx(&tx).map(Tx::header) {
-            // This occurs if the wrapper / protocol tx signature is invalid
-            Err(err) => TxResult {
+        if let Err(err) = tx.validate_header() {
+            return TxResult {
                 code: ErrorCodes::InvalidSig.into(),
                 info: err.to_string(),
+            };
+        }
+        match tx.header() {
+            // If it is a raw transaction, we do no further validation
+            TxType::Raw(_) => TxResult {
+                code: ErrorCodes::InvalidTx.into(),
+                info: "Transaction rejected: Non-encrypted transactions \
+                       are not supported"
+                    .into(),
             },
-            Ok(result) => match result {
-                // If it is a raw transaction, we do no further validation
-                TxType::Raw(_) => TxResult {
-                    code: ErrorCodes::InvalidTx.into(),
-                    info: "Transaction rejected: Non-encrypted transactions \
-                           are not supported"
-                        .into(),
-                },
-                TxType::Protocol(_) => TxResult {
-                    code: ErrorCodes::InvalidTx.into(),
-                    info: "Protocol transactions are a fun new feature that \
-                           is coming soon to a blockchain near you. Patience."
-                        .into(),
-                },
-                TxType::Decrypted(tx) => match tx_queue_iter.next() {
-                    Some(TxInQueue {
-                        tx: wrapper,
-                        inner_tx,
-                        #[cfg(not(feature = "mainnet"))]
-                            has_valid_pow: _,
-                    }) => {
-                        if inner_tx.header_hash() !=
-                            tx.hash_commitment()
-                        {
-                            TxResult {
-                                code: ErrorCodes::InvalidOrder.into(),
-                                info: "Process proposal rejected a decrypted \
-                                       transaction that violated the tx order \
-                                       determined in the previous block"
-                                    .into(),
-                            }
-                        } else if verify_decrypted_correctly(
-                            &tx,
-                            inner_tx.clone(),
-                            privkey,
-                        ) {
-                            TxResult {
-                                code: ErrorCodes::Ok.into(),
-                                info: "Process Proposal accepted this \
-                                       transaction"
-                                    .into(),
-                            }
-                        } else {
-                            TxResult {
-                                code: ErrorCodes::InvalidTx.into(),
-                                info: "The encrypted payload of tx was \
-                                       incorrectly marked as un-decryptable"
-                                    .into(),
-                            }
-                        }
-                    }
-                    None => TxResult {
-                        code: ErrorCodes::ExtraTxs.into(),
-                        info: "Received more decrypted txs than expected"
-                            .into(),
-                    },
-                },
-                TxType::Wrapper(wtx) => {
-                    // validate the ciphertext via Ferveo
-                    if !tx.validate_ciphertext() {
+            TxType::Protocol(_) => TxResult {
+                code: ErrorCodes::InvalidTx.into(),
+                info: "Protocol transactions are a fun new feature that \
+                       is coming soon to a blockchain near you. Patience."
+                    .into(),
+            },
+            TxType::Decrypted(tx) => match tx_queue_iter.next() {
+                Some(TxInQueue {
+                    tx: wrapper,
+                    inner_tx,
+                    #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow: _,
+                }) => {
+                    if inner_tx.header_hash() !=
+                        tx.hash_commitment()
+                    {
                         TxResult {
-                            code: ErrorCodes::InvalidTx.into(),
-                            info: format!(
-                                "The ciphertext of the wrapped tx {} is \
-                                 invalid",
-                                hash_tx(tx_bytes)
-                            ),
+                            code: ErrorCodes::InvalidOrder.into(),
+                            info: "Process proposal rejected a decrypted \
+                                   transaction that violated the tx order \
+                                   determined in the previous block"
+                                .into(),
+                        }
+                    } else if verify_decrypted_correctly(
+                        &tx,
+                        inner_tx.clone(),
+                        privkey,
+                    ) {
+                        TxResult {
+                            code: ErrorCodes::Ok.into(),
+                            info: "Process Proposal accepted this \
+                                   transaction"
+                                .into(),
                         }
                     } else {
-                        // If the public key corresponds to the MASP sentinel
-                        // transaction key, then the fee payer is effectively
-                        // the MASP, otherwise derive
-                        // they payer from public key.
-                        let fee_payer = if wtx.pk != masp_tx_key().ref_to() {
-                            wtx.fee_payer()
-                        } else {
-                            masp()
-                        };
-                        // check that the fee payer has sufficient balance
-                        let balance =
-                            self.get_balance(&wtx.fee.token, &fee_payer);
-
-                        // In testnets, tx is allowed to skip fees if it
-                        // includes a valid PoW
-                        #[cfg(not(feature = "mainnet"))]
-                        let has_valid_pow = self.has_valid_pow_solution(&wtx);
-                        #[cfg(feature = "mainnet")]
-                        let has_valid_pow = false;
-
-                        if has_valid_pow
-                            || self.get_wrapper_tx_fees() <= balance
-                        {
-                            TxResult {
-                                code: ErrorCodes::Ok.into(),
-                                info: "Process proposal accepted this \
-                                       transaction"
-                                    .into(),
-                            }
-                        } else {
-                            TxResult {
-                                code: ErrorCodes::InvalidTx.into(),
-                                info: "The address given does not have \
-                                       sufficient balance to pay fee"
-                                    .into(),
-                            }
+                        TxResult {
+                            code: ErrorCodes::InvalidTx.into(),
+                            info: "The encrypted payload of tx was \
+                                   incorrectly marked as un-decryptable"
+                                .into(),
                         }
                     }
                 }
+                None => TxResult {
+                    code: ErrorCodes::ExtraTxs.into(),
+                    info: "Received more decrypted txs than expected"
+                        .into(),
+                },
             },
+            TxType::Wrapper(wtx) => {
+                // validate the ciphertext via Ferveo
+                if !tx.validate_ciphertext() {
+                    TxResult {
+                        code: ErrorCodes::InvalidTx.into(),
+                        info: format!(
+                            "The ciphertext of the wrapped tx {} is \
+                             invalid",
+                            hash_tx(tx_bytes)
+                        ),
+                    }
+                } else {
+                    // If the public key corresponds to the MASP sentinel
+                    // transaction key, then the fee payer is effectively
+                    // the MASP, otherwise derive
+                    // they payer from public key.
+                    let fee_payer = if wtx.pk != masp_tx_key().ref_to() {
+                        wtx.fee_payer()
+                    } else {
+                        masp()
+                    };
+                    // check that the fee payer has sufficient balance
+                    let balance =
+                        self.get_balance(&wtx.fee.token, &fee_payer);
+
+                    // In testnets, tx is allowed to skip fees if it
+                    // includes a valid PoW
+                    #[cfg(not(feature = "mainnet"))]
+                    let has_valid_pow = self.has_valid_pow_solution(&wtx);
+                    #[cfg(feature = "mainnet")]
+                    let has_valid_pow = false;
+
+                    if has_valid_pow
+                        || self.get_wrapper_tx_fees() <= balance
+                    {
+                        TxResult {
+                            code: ErrorCodes::Ok.into(),
+                            info: "Process proposal accepted this \
+                                   transaction"
+                                .into(),
+                        }
+                    } else {
+                        TxResult {
+                            code: ErrorCodes::InvalidTx.into(),
+                            info: "The address given does not have \
+                                   sufficient balance to pay fee"
+                                .into(),
+                        }
+                    }
+                }
+            }
         }
     }
 

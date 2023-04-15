@@ -209,26 +209,16 @@ pub mod tx_types {
 
     use super::*;
     use sha2::{Sha256, Digest};
-    use crate::proto::{Tx, Code, Data, Section, Signature};
+    use crate::proto::{Tx, Code, Data, Section, Signature, TxError};
     #[cfg(feature = "ferveo-tpke")]
     use crate::types::transaction::protocol::ProtocolTx;
 
-    /// Errors relating to decrypting a wrapper tx and its
-    /// encrypted payload from a Tx type
-    #[allow(missing_docs)]
-    #[derive(thiserror::Error, Debug, PartialEq)]
-    pub enum TxError {
-        #[error("{0}")]
-        Unsigned(String),
-        #[error("{0}")]
-        SigError(String),
-        #[error("Failed to deserialize Tx: {0}")]
-        Deserialization(String),
-    }
-
+    /// Represents an ordinary transaction
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize, Default)]
     pub struct RawHeader {
+        /// The SHA-256 hash of the transaction's code section
         pub code_hash: Hash,
+        /// The SHA-256 hash of the transaction's data section
         pub data_hash: Hash,
     }
 
@@ -248,6 +238,7 @@ pub mod tx_types {
     }
 
     impl TxType {
+        /// Produce a SHA-256 hash of this header
         pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
             hasher.update(self.try_to_vec().expect("unable to serialize header"));
             hasher
@@ -259,59 +250,6 @@ pub mod tx_types {
             } else {
                 None
             }
-        }
-    }
-
-    /// Determines the type of the input Tx
-    ///
-    /// If it is a raw Tx, signed or not, the Tx is
-    /// returned unchanged inside an enum variant stating its type.
-    ///
-    /// If it is a decrypted tx, signing it adds no security so we
-    /// extract the signed data without checking the signature (if it
-    /// is signed) or return as is. Either way, it is returned in
-    /// an enum variant stating its type.
-    ///
-    /// If it is a WrapperTx, we extract the signed data of
-    /// the Tx and verify it is of the appropriate form. This means
-    /// 1. The signed Tx data deserializes to a WrapperTx type
-    /// 2. The wrapper tx is indeed signed
-    /// 3. The signature is valid
-    ///
-    /// We modify the data of the WrapperTx to contain only the signed
-    /// data if valid and return it wrapped in a enum variant
-    /// indicating it is a wrapper. Otherwise, an error is
-    /// returned indicating the signature was not valid
-    pub fn process_tx(tx: &Tx) -> Result<&Tx, TxError> {
-        match tx.header()
-        {
-            // verify signature and extract signed data
-            TxType::Wrapper(wrapper) => {
-                tx.verify_signature(&wrapper.pk, &tx.header_hash())
-                    .map_err(|err| {
-                        TxError::SigError(format!(
-                            "WrapperTx signature verification failed: {}",
-                            err
-                        ))
-                    })?;
-                Ok(tx)
-            }
-            // verify signature and extract signed data
-            #[cfg(feature = "ferveo-tpke")]
-            TxType::Protocol(protocol) => {
-                tx.verify_signature(&protocol.pk, &tx.header_hash())
-                    .map_err(|err| {
-                        TxError::SigError(format!(
-                            "ProtocolTx signature verification failed: {}",
-                            err
-                        ))
-                    })?;
-                Ok(tx)
-            }
-            // we extract the signed data, but don't check the signature
-            decrypted @ TxType::Decrypted(_) => Ok(tx),
-            // return as is
-            raw @ TxType::Raw(_) => Ok(tx),
         }
     }
 
@@ -336,7 +274,8 @@ pub mod tx_types {
         fn test_process_tx_raw_tx_no_data() {
             let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
             let code_sec = outer_tx.set_code(Code::new("wasm code".as_bytes().to_owned())).clone();
-            match process_tx(&outer_tx).expect("Test failed").header() {
+            outer_tx.validate_header().expect("Test failed");
+            match outer_tx.header() {
                 TxType::Raw(raw) => assert_eq!(
                     Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into()),
                     raw.code_hash,
@@ -354,7 +293,8 @@ pub mod tx_types {
             let code_sec = tx.set_code(Code::new("wasm code".as_bytes().to_owned())).clone();
             let data_sec = tx.set_data(Data::new("transaction data".as_bytes().to_owned())).clone();
 
-            match process_tx(&tx).expect("Test failed").header() {
+            tx.validate_header().expect("Test failed");
+            match tx.header() {
                 TxType::Raw(raw) => {
                     assert_eq!(
                         Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into()),
@@ -379,7 +319,8 @@ pub mod tx_types {
             tx.add_section(Section::Signature(Signature::new(tx.code_hash(), &gen_keypair())));
             tx.add_section(Section::Signature(Signature::new(tx.data_hash(), &gen_keypair())));
 
-            match process_tx(&tx).expect("Test failed").header() {
+            tx.validate_header().expect("Test failed");
+            match tx.header() {
                 TxType::Raw(raw) => {
                     assert_eq!(
                         Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into()),
@@ -416,7 +357,8 @@ pub mod tx_types {
             tx.add_section(Section::Signature(Signature::new(&tx.header_hash(), &keypair)));
             tx.encrypt(&Default::default());
 
-            match process_tx(&tx.clone()).expect("Test failed").header() {
+            tx.validate_header().expect("Test failed");
+            match tx.header() {
                 TxType::Wrapper(wrapper) => {
                     tx.decrypt(<EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator())
                             .expect("Test failed");
@@ -448,7 +390,7 @@ pub mod tx_types {
             tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
             tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
             tx.encrypt(&Default::default());
-            let result = process_tx(&tx).expect_err("Test failed");
+            let result = tx.validate_header().expect_err("Test failed");
             assert_matches!(result, TxError::SigError(_));
         }
     }
@@ -466,7 +408,8 @@ pub mod tx_types {
         }));
         let code_sec = tx.set_code(Code::new("transaction data".as_bytes().to_owned())).clone();
         let data_sec = tx.set_data(Data::new("transaction data".as_bytes().to_owned())).clone();
-        match process_tx(&tx).expect("Test failed").header() {
+        tx.validate_header().expect("Test failed");
+        match tx.header() {
             TxType::Decrypted(DecryptedTx::Decrypted {
                 code_hash,
                 data_hash,
@@ -511,7 +454,8 @@ pub mod tx_types {
         // create the tx with signed decrypted data
         let code_sec = decrypted.set_code(Code::new("transaction data".as_bytes().to_owned())).clone();
         let data_sec = decrypted.set_data(Data::new("transaction data".as_bytes().to_owned())).clone();
-        match process_tx(&decrypted).expect("Test failed").header() {
+        decrypted.validate_header().expect("Test failed");
+        match decrypted.header() {
             TxType::Decrypted(DecryptedTx::Decrypted {
                 header_hash,
                 code_hash,

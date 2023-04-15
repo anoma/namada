@@ -43,7 +43,7 @@ use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::token::{self};
 use namada::types::transaction::{
-    hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
+    hash_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, MIN_FEE,
 };
 use namada::vm::wasm::{TxCache, VpCache};
@@ -580,7 +580,7 @@ where
         match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
             Ok(tx) => {
                 // Check balance for fee
-                if let Ok(TxType::Wrapper(wrapper)) = process_tx(&tx).map(Tx::header) {
+                if let (Ok(()), TxType::Wrapper(wrapper)) = (tx.validate_header(), tx.header()) {
                     let fee_payer = if wrapper.pk != masp_tx_key().ref_to() {
                         wrapper.fee_payer()
                     } else {

@@ -32,9 +32,9 @@ mod protocol_txs {
     use serde_json;
 
     use super::*;
-    use crate::proto::{Tx, Data, Code, Signature, Section};
+    use crate::proto::{Tx, Data, Code, Signature, Section, TxError};
     use crate::types::key::*;
-    use crate::types::transaction::{EllipticCurve, TxError, TxType};
+    use crate::types::transaction::{EllipticCurve, TxType};
     use crate::types::hash::Hash;
     use crate::types::transaction::{Digest, Sha256};
 
@@ -45,10 +45,12 @@ mod protocol_txs {
     pub struct ProtocolTx {
         /// we require ProtocolTxs be signed
         pub pk: common::PublicKey,
+        /// The hash of the code section for this message
+        pub code_hash: Hash,
+        /// The hash of the data section for this message
+        pub data_hash: Hash,
         /// The type of protocol message being sent
         pub tx: ProtocolTxType,
-        pub code_hash: Hash,
-        pub data_hash: Hash,
     }
 
     impl ProtocolTx {
@@ -67,6 +69,7 @@ mod protocol_txs {
                 })
         }
 
+        /// Produce a SHA-256 hash of this section
         pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
             hasher.update(self.try_to_vec().expect("unable to serialize protocol"));
             hasher

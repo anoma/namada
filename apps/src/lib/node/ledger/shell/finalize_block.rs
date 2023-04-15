@@ -77,25 +77,19 @@ where
             if ErrorCodes::from_u32(processed_tx.result.code).unwrap()
                 == ErrorCodes::InvalidSig
             {
-                let mut tx_event = match process_tx(&tx).map(Tx::header) {
-                    Ok(tx @ TxType::Wrapper(_))
-                    | Ok(tx @ TxType::Protocol(_)) => {
+                
+                let mut tx_event = match tx.header() {
+                    tx @ (TxType::Wrapper(_) | TxType::Protocol(_)) => {
                         Event::new_tx_event(&tx, height.0)
                     }
-                    _ => match tx.header() {
-                        (tx @ TxType::Wrapper(_))
-                        | (tx @ TxType::Protocol(_)) => {
-                            Event::new_tx_event(&tx, height.0)
-                        }
-                        _ => {
-                            tracing::error!(
-                                "Internal logic error: FinalizeBlock received \
-                                 a tx with an invalid signature error code \
-                                 that could not be deserialized to a \
-                                 WrapperTx / ProtocolTx type"
-                            );
-                            continue;
-                        }
+                    _ => {
+                        tracing::error!(
+                            "Internal logic error: FinalizeBlock received \
+                             a tx with an invalid signature error code \
+                             that could not be deserialized to a \
+                             WrapperTx / ProtocolTx type"
+                        );
+                        continue;
                     },
                 };
                 tx_event["code"] = processed_tx.result.code.to_string();
@@ -106,7 +100,7 @@ where
                 continue;
             }
 
-            let tx = if let Ok(tx) = process_tx(&tx) {
+            let tx = if let Ok(()) = tx.validate_header() {
                 tx
             } else {
                 tracing::error!(
