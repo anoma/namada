@@ -1741,37 +1741,22 @@ fn invalid_transactions() -> Result<()> {
 
     let bg_ledger = ledger.background();
 
-    // 2. Submit a an invalid transaction (trying to mint tokens should fail
-    // in the token's VP)
-    let tx_data_path = test.test_dir.path().join("tx.data");
-    let transfer = token::Transfer {
-        source: find_address(&test, DAEWON)?,
-        target: find_address(&test, ALBERT)?,
-        token: find_address(&test, NAM)?,
-        sub_prefix: None,
-        amount: token::Amount::whole(1),
-        key: None,
-        shielded: None,
-    };
-    let data = transfer
-        .try_to_vec()
-        .expect("Encoding unsigned transfer shouldn't fail");
-    let tx_wasm_path = TestWasms::TxMintTokens.path();
-    std::fs::write(&tx_data_path, data).unwrap();
-    let tx_wasm_path = tx_wasm_path.to_string_lossy();
-    let tx_data_path = tx_data_path.to_string_lossy();
-
+    // 2. Submit a an invalid transaction (trying to transfer tokens should fail
+    // in the user's VP due to the wrong signer)
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
-    let daewon_lower = DAEWON.to_lowercase();
     let tx_args = vec![
-        "tx",
-        "--code-path",
-        &tx_wasm_path,
-        "--data-path",
-        &tx_data_path,
+        "transfer",
+        "--source",
+        DAEWON,
         "--signing-key",
-        &daewon_lower,
+        ALBERT_KEY,
+        "--target",
+        ALBERT,
+        "--token",
+        NAM,
+        "--amount",
+        "1",
         "--gas-amount",
         "0",
         "--gas-limit",
