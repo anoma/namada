@@ -39,7 +39,7 @@ mod tests {
     use namada_tx_prelude::{
         BorshDeserialize, BorshSerialize, StorageRead, StorageWrite,
     };
-    use namada::types::transaction::tx_types::TxType;
+    use namada::types::transaction::TxType;
     use namada::types::transaction::RawHeader;
     use namada_vp_prelude::VpEnv;
     use prost::Message;

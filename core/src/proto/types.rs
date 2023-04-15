@@ -29,6 +29,9 @@ use sha2::{Digest, Sha256};
 use crate::types::transaction::WrapperTxErr;
 use masp_primitives::transaction::Transaction;
 use serde::de::Error as SerdeError;
+use masp_primitives::transaction::builder::Builder;
+use masp_primitives::zip32::ExtendedFullViewingKey;
+use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -330,6 +333,82 @@ fn serde_borsh<'de, T, S, U>(ser: S) -> std::result::Result<U, S::Error> where
         .map_err(S::Error::custom)
 }
 
+/// A structure to facilitate Serde (de)serializations of Builders
+#[derive(serde::Serialize, serde::Deserialize)]
+struct BuilderSerde(Vec<u8>);
+
+impl From<Vec<u8>> for BuilderSerde {
+    fn from(tx: Vec<u8>) -> Self {
+        Self(tx)
+    }
+}
+
+impl Into<Vec<u8>> for BuilderSerde {
+    fn into(self) -> Vec<u8> {
+        self.0
+    }
+}
+
+/// A structure to facilitate Serde (de)serializations of SaplingMetadata
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct SaplingMetadataSerde(Vec<u8>);
+
+impl From<Vec<u8>> for SaplingMetadataSerde {
+    fn from(tx: Vec<u8>) -> Self {
+        Self(tx)
+    }
+}
+
+impl Into<Vec<u8>> for SaplingMetadataSerde {
+    fn into(self) -> Vec<u8> {
+        self.0
+    }
+}
+
+/// A section providing the auxiliary inputs used to construct a MASP
+/// transaction
+#[derive(
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+)]
+pub struct MaspBuilder {
+    /// The MASP transaction that this section witnesses
+    target: crate::types::hash::Hash,
+    /// Track how Info objects map to descriptors and outputs
+    #[serde(
+        serialize_with = "borsh_serde::<SaplingMetadataSerde, _>",
+        deserialize_with = "serde_borsh::<SaplingMetadataSerde, _, _>",
+    )]
+    metadata: SaplingMetadata,
+    /// The data that was used to construct the target transaction
+    #[serde(
+        serialize_with = "borsh_serde::<BuilderSerde, _>",
+        deserialize_with = "serde_borsh::<BuilderSerde, _, _>",
+    )]
+    builder: Builder<(), (), ExtendedFullViewingKey, ()>,
+}
+
+impl MaspBuilder {
+    /// Get the hash of this ciphertext section. This operation is done in such
+    /// a way it matches the hash of the type pun
+    pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
+        hasher.update(self.try_to_vec().expect("unable to serialize MASP builder"));
+        hasher
+    }
+}
+
+impl borsh::BorshSchema for MaspBuilder {
+    fn add_definitions_recursively(
+        _definitions: &mut std::collections::HashMap<
+                borsh::schema::Declaration,
+            borsh::schema::Definition,
+            >,
+    ) {}
+
+    fn declaration() -> borsh::schema::Declaration {
+        "Builder".into()
+    }
+}
+
 /// A section of a transaction. Carries an independent piece of information
 /// necessary for the processing of a transaction.
 #[derive(
@@ -352,6 +431,9 @@ pub enum Section {
         deserialize_with = "serde_borsh::<TransactionSerde, _, _>",
     )]
     MaspTx(Transaction),
+    /// A section providing the auxiliary inputs used to construct a MASP
+    /// transaction. Only send to wallet, never send to protocol.
+    MaspBuilder(MaspBuilder),
 }
 
 impl Section {
@@ -383,6 +465,10 @@ impl Section {
                 hasher.update(&[5]);
                 hasher.update(tx.txid().as_ref());
                 hasher
+            },
+            Self::MaspBuilder(mb) =>  {
+                hasher.update(&[6]);
+                mb.hash(hasher)
             },
         }
     }
@@ -443,6 +529,15 @@ impl Section {
     /// Extract the MASP transaction from this section if possible
     pub fn masp_tx(&self) -> Option<Transaction> {
         if let Self::MaspTx(data) = self {
+            Some(data.clone())
+        } else {
+            None
+        }
+    }
+
+    /// Extract the MASP builder from this section if possible
+    pub fn masp_builder(&self) -> Option<MaspBuilder> {
+        if let Self::MaspBuilder(data) = self {
             Some(data.clone())
         } else {
             None
