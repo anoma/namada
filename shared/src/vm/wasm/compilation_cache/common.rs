@@ -439,7 +439,7 @@ fn hash_of_code(code: impl AsRef<[u8]>) -> Hash {
 }
 
 fn hash_to_store_dir(hash: &Hash) -> PathBuf {
-    PathBuf::from("vp_wasm_cache").join(hash.to_string())
+    PathBuf::from("vp_wasm_cache").join(hash.to_string().to_lowercase())
 }
 
 fn compile(
@@ -488,7 +488,7 @@ fn fs_cache(dir: impl AsRef<Path>, hash: &Hash) -> FileSystemCache {
 fn module_file_exists(dir: impl AsRef<Path>, hash: &Hash) -> bool {
     let file = dir.as_ref().join(hash_to_store_dir(hash)).join(format!(
         "{}.{}",
-        hash,
+        hash.to_string().to_lowercase(),
         file_ext()
     ));
     file.exists()
