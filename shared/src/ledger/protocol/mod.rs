@@ -18,6 +18,7 @@ use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::proto::{self, Tx};
 use crate::types::address::{Address, InternalAddress};
+use crate::types::hash::Hash;
 use crate::types::storage;
 use crate::types::storage::TxIndex;
 use crate::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
@@ -166,9 +167,6 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    gas_meter
-        .add_compiling_fee(tx.code.len())
-        .map_err(Error::GasError)?;
     let empty = vec![];
     let tx_data = tx.data.as_ref().unwrap_or(&empty);
     wasm::run::tx(
@@ -257,19 +255,22 @@ where
             let mut gas_meter = VpGasMeter::new(initial_gas);
             let accept = match &addr {
                 Address::Implicit(_) | Address::Established(_) => {
-                    let (vp, gas) = storage
+                    let (vp_hash, gas) = storage
                         .validity_predicate(addr)
                         .map_err(Error::StorageError)?;
                     gas_meter.add(gas).map_err(Error::GasError)?;
-                    let vp =
-                        vp.ok_or_else(|| Error::MissingAddress(addr.clone()))?;
+                    let vp_code_hash = match vp_hash {
+                        Some(v) => Hash::try_from(&v[..])
+                            .map_err(|_| Error::MissingAddress(addr.clone()))?,
+                        None => {
+                            return Err(Error::MissingAddress(addr.clone()));
+                        }
+                    };
 
-                    gas_meter
-                        .add_compiling_fee(vp.len())
-                        .map_err(Error::GasError)?;
+                    // TODO vp compiling fee
 
                     wasm::run::vp(
-                        vp,
+                        &vp_code_hash,
                         tx,
                         tx_index,
                         addr,

@@ -377,12 +377,6 @@ pub mod genesis_config {
                 config.non_staked_balance.unwrap_or_default(),
             ),
             validator_vp_code_path: validator_vp_config.filename.to_owned(),
-            validator_vp_sha256: validator_vp_config
-                .sha256
-                .clone()
-                .unwrap()
-                .to_sha256_bytes()
-                .unwrap(),
         }
     }
 
@@ -399,15 +393,6 @@ pub mod genesis_config {
         TokenAccount {
             address: Address::decode(config.address.as_ref().unwrap()).unwrap(),
             vp_code_path: token_vp_config.filename.to_owned(),
-            vp_sha256: token_vp_config
-                .sha256
-                .clone()
-                .unwrap_or_else(|| {
-                    eprintln!("Unknown token VP WASM sha256");
-                    cli::safe_exit(1);
-                })
-                .to_sha256_bytes()
-                .unwrap(),
             balances: config
                 .balances
                 .as_ref()
@@ -480,15 +465,6 @@ pub mod genesis_config {
         EstablishedAccount {
             address: Address::decode(config.address.as_ref().unwrap()).unwrap(),
             vp_code_path: account_vp_config.filename.to_owned(),
-            vp_sha256: account_vp_config
-                .sha256
-                .clone()
-                .unwrap_or_else(|| {
-                    eprintln!("Unknown user VP WASM sha256");
-                    cli::safe_exit(1);
-                })
-                .to_sha256_bytes()
-                .unwrap(),
             public_key: config
                 .public_key
                 .as_ref()
@@ -581,15 +557,6 @@ pub mod genesis_config {
 
         let implicit_vp_config = wasm.get(&parameters.implicit_vp).unwrap();
         let implicit_vp_code_path = implicit_vp_config.filename.to_owned();
-        let implicit_vp_sha256 = implicit_vp_config
-            .sha256
-            .clone()
-            .unwrap_or_else(|| {
-                eprintln!("Unknown implicit VP WASM sha256");
-                cli::safe_exit(1);
-            })
-            .to_sha256_bytes()
-            .unwrap();
 
         let min_duration: i64 =
             60 * 60 * 24 * 365 / (parameters.epochs_per_year as i64);
@@ -610,7 +577,6 @@ pub mod genesis_config {
             vp_whitelist: parameters.vp_whitelist.unwrap_or_default(),
             tx_whitelist: parameters.tx_whitelist.unwrap_or_default(),
             implicit_vp_code_path,
-            implicit_vp_sha256,
             epochs_per_year: parameters.epochs_per_year,
             pos_gain_p: parameters.pos_gain_p,
             pos_gain_d: parameters.pos_gain_d,
@@ -768,8 +734,6 @@ pub struct Validator {
     pub non_staked_balance: token::Amount,
     /// Validity predicate code WASM
     pub validator_vp_code_path: String,
-    /// Expected SHA-256 hash of the validator VP
-    pub validator_vp_sha256: [u8; 32],
 }
 
 #[derive(
@@ -781,8 +745,6 @@ pub struct EstablishedAccount {
     pub address: Address,
     /// Validity predicate code WASM
     pub vp_code_path: String,
-    /// Expected SHA-256 hash of the validity predicate wasm
-    pub vp_sha256: [u8; 32],
     /// A public key to be stored in the account's storage, if any
     pub public_key: Option<common::PublicKey>,
     /// Account's sub-space storage. The values must be borsh encoded bytes.
@@ -799,8 +761,6 @@ pub struct TokenAccount {
     pub address: Address,
     /// Validity predicate code WASM
     pub vp_code_path: String,
-    /// Expected SHA-256 hash of the validity predicate wasm
-    pub vp_sha256: [u8; 32],
     /// Accounts' balances of this token
     #[derivative(PartialOrd = "ignore", Ord = "ignore")]
     pub balances: HashMap<Address, token::Amount>,
@@ -850,8 +810,6 @@ pub struct Parameters {
     pub tx_whitelist: Vec<String>,
     /// Implicit accounts validity predicate code WASM
     pub implicit_vp_code_path: String,
-    /// Expected SHA-256 hash of the implicit VP
-    pub implicit_vp_sha256: [u8; 32],
     /// Expected number of epochs per year (read only)
     pub epochs_per_year: u64,
     /// PoS gain p (read only)
@@ -911,7 +869,6 @@ pub fn genesis(num_validators: u64) -> Genesis {
         non_staked_balance: token::Amount::whole(100_000),
         // TODO replace with https://github.com/anoma/namada/issues/25)
         validator_vp_code_path: vp_user_path.into(),
-        validator_vp_sha256: Default::default(),
     };
     validators.push(validator);
 
@@ -939,7 +896,6 @@ pub fn genesis(num_validators: u64) -> Genesis {
             non_staked_balance: token::Amount::whole(100_000),
             // TODO replace with https://github.com/anoma/namada/issues/25)
             validator_vp_code_path: vp_user_path.into(),
-            validator_vp_sha256: Default::default(),
         };
         validators.push(validator);
     }
@@ -954,7 +910,6 @@ pub fn genesis(num_validators: u64) -> Genesis {
         vp_whitelist: vec![],
         tx_whitelist: vec![],
         implicit_vp_code_path: vp_implicit_path.into(),
-        implicit_vp_sha256: Default::default(),
         epochs_per_year: 525_600, /* seconds in yr (60*60*24*365) div seconds
                                    * per epoch (60 = min_duration) */
         pos_gain_p: dec!(0.1),
@@ -966,28 +921,24 @@ pub fn genesis(num_validators: u64) -> Genesis {
     let albert = EstablishedAccount {
         address: wallet::defaults::albert_address(),
         vp_code_path: vp_user_path.into(),
-        vp_sha256: Default::default(),
         public_key: Some(wallet::defaults::albert_keypair().ref_to()),
         storage: HashMap::default(),
     };
     let bertha = EstablishedAccount {
         address: wallet::defaults::bertha_address(),
         vp_code_path: vp_user_path.into(),
-        vp_sha256: Default::default(),
         public_key: Some(wallet::defaults::bertha_keypair().ref_to()),
         storage: HashMap::default(),
     };
     let christel = EstablishedAccount {
         address: wallet::defaults::christel_address(),
         vp_code_path: vp_user_path.into(),
-        vp_sha256: Default::default(),
         public_key: Some(wallet::defaults::christel_keypair().ref_to()),
         storage: HashMap::default(),
     };
     let masp = EstablishedAccount {
         address: namada::types::address::masp(),
         vp_code_path: "vp_masp.wasm".into(),
-        vp_sha256: Default::default(),
         public_key: None,
         storage: HashMap::default(),
     };
@@ -1040,7 +991,6 @@ pub fn genesis(num_validators: u64) -> Genesis {
         .map(|address| TokenAccount {
             address,
             vp_code_path: vp_token_path.into(),
-            vp_sha256: Default::default(),
             balances: balances.clone(),
         })
         .collect();
