@@ -10,6 +10,7 @@ use super::storage_api::{self, ResultExt, StorageRead, StorageWrite};
 use crate::ledger::storage::{self as ledger_storage};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::chain::ProposalBytes;
+use crate::types::hash::Hash;
 use crate::types::time::DurationSecs;
 use crate::types::token;
 
@@ -39,8 +40,8 @@ pub struct Parameters {
     pub vp_whitelist: Vec<String>,
     /// Whitelisted tx hashes (read only)
     pub tx_whitelist: Vec<String>,
-    /// Implicit accounts validity predicate WASM code
-    pub implicit_vp: Vec<u8>,
+    /// Implicit accounts validity predicate WASM code hash
+    pub implicit_vp_code_hash: Hash,
     /// Expected number of epochs per year (read only)
     pub epochs_per_year: u64,
     /// PoS gain p (read only)
@@ -112,7 +113,7 @@ impl Parameters {
             max_proposal_bytes,
             vp_whitelist,
             tx_whitelist,
-            implicit_vp,
+            implicit_vp_code_hash,
             epochs_per_year,
             pos_gain_p,
             pos_gain_d,
@@ -158,9 +159,9 @@ impl Parameters {
 
         // write implicit vp parameter
         let implicit_vp_key = storage::get_implicit_vp_key();
-        // Using `fn write_bytes` here, because implicit_vp doesn't need to be
-        // encoded, it's bytes already.
-        storage.write_bytes(&implicit_vp_key, implicit_vp)?;
+        // Using `fn write_bytes` here, because implicit_vp code hash doesn't
+        // need to be encoded, it's bytes already.
+        storage.write_bytes(&implicit_vp_key, implicit_vp_code_hash)?;
 
         let epochs_per_year_key = storage::get_epochs_per_year_key();
         storage.write(&epochs_per_year_key, epochs_per_year)?;
@@ -417,10 +418,12 @@ where
         .into_storage_result()?;
 
     let implicit_vp_key = storage::get_implicit_vp_key();
-    let value = storage.read_bytes(&implicit_vp_key)?;
-    let implicit_vp = value
+    let value = storage
+        .read_bytes(&implicit_vp_key)?
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
+    let implicit_vp_code_hash =
+        Hash::try_from(&value[..]).into_storage_result()?;
 
     // read epochs per year
     let epochs_per_year_key = storage::get_epochs_per_year_key();
@@ -471,7 +474,7 @@ where
         max_proposal_bytes,
         vp_whitelist,
         tx_whitelist,
-        implicit_vp,
+        implicit_vp_code_hash,
         epochs_per_year,
         pos_gain_p,
         pos_gain_d,

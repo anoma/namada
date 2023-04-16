@@ -19,15 +19,14 @@ use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::ledger::vp_host_fns;
 use crate::proto::Tx;
 use crate::types::address::{self, Address};
+use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
 use crate::types::internal::HostEnvResult;
 use crate::types::key::*;
 use crate::types::storage::{Key, TxIndex};
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
-use crate::vm::{
-    validate_untrusted_wasm, HostRef, MutHostRef, WasmValidationError,
-};
+use crate::vm::{HostRef, MutHostRef};
 
 const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
 const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
@@ -40,8 +39,10 @@ pub enum TxRuntimeError {
     OutOfGas(gas::Error),
     #[error("Trying to modify storage for an address that doesn't exit {0}")]
     UnknownAddressStorageModification(Address),
-    #[error("Trying to use a validity predicate with an invalid WASM {0}")]
-    InvalidVpCode(WasmValidationError),
+    #[error(
+        "Trying to use a validity predicate with an invalid WASM code hash {0}"
+    )]
+    InvalidVpCodeHash(String),
     #[error("A validity predicate of an account cannot be deleted")]
     CannotDeleteVp,
     #[error("Storage modification error: {0}")]
@@ -617,15 +618,15 @@ where
             HostEnvResult::Fail.to_i64()
         }
         Some(&write_log::StorageModification::InitAccount {
-            ref vp, ..
+            ref vp_code_hash,
         }) => {
             // read the VP of a new account
-            let len: i64 = vp
+            let len: i64 = vp_code_hash
                 .len()
                 .try_into()
                 .map_err(TxRuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
-            result_buffer.replace(vp.clone());
+            result_buffer.replace(vp_code_hash.to_vec());
             len
         }
         Some(&write_log::StorageModification::Temp { ref value }) => {
@@ -833,7 +834,7 @@ where
 
     let key = Key::parse(key).map_err(TxRuntimeError::StorageDataError)?;
     if key.is_validity_predicate().is_some() {
-        tx_validate_vp_code(env, &value)?;
+        tx_validate_vp_code_hash(env, &value)?;
     }
 
     check_address_existence(env, &key)?;
@@ -1368,8 +1369,8 @@ pub fn tx_update_validity_predicate<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
     addr_ptr: u64,
     addr_len: u64,
-    code_ptr: u64,
-    code_len: u64,
+    code_hash_ptr: u64,
+    code_hash_len: u64,
 ) -> TxResult<()>
 where
     MEM: VmMemory,
@@ -1387,17 +1388,17 @@ where
     tracing::debug!("tx_update_validity_predicate for addr {}", addr);
 
     let key = Key::validity_predicate(&addr);
-    let (code, gas) = env
+    let (code_hash, gas) = env
         .memory
-        .read_bytes(code_ptr, code_len as _)
+        .read_bytes(code_hash_ptr, code_hash_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_add_gas(env, gas)?;
 
-    tx_validate_vp_code(env, &code)?;
+    tx_validate_vp_code_hash(env, &code_hash)?;
 
     let write_log = unsafe { env.ctx.write_log.get() };
     let (gas, _size_diff) = write_log
-        .write(&key, code)
+        .write(&key, code_hash)
         .map_err(TxRuntimeError::StorageModificationError)?;
     tx_add_gas(env, gas)
     // TODO: charge the size diff
@@ -1406,8 +1407,8 @@ where
 /// Initialize a new account established address.
 pub fn tx_init_account<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
-    code_ptr: u64,
-    code_len: u64,
+    code_hash_ptr: u64,
+    code_hash_len: u64,
     result_ptr: u64,
 ) -> TxResult<()>
 where
@@ -1416,24 +1417,21 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
-    let (code, gas) = env
+    let (code_hash, gas) = env
         .memory
-        .read_bytes(code_ptr, code_len as _)
+        .read_bytes(code_hash_ptr, code_hash_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_add_gas(env, gas)?;
 
-    tx_validate_vp_code(env, &code)?;
-    #[cfg(feature = "wasm-runtime")]
-    {
-        let vp_wasm_cache = unsafe { env.ctx.vp_wasm_cache.get() };
-        vp_wasm_cache.pre_compile(&code);
-    }
+    tx_validate_vp_code_hash(env, &code_hash)?;
 
     tracing::debug!("tx_init_account");
 
     let storage = unsafe { env.ctx.storage.get() };
     let write_log = unsafe { env.ctx.write_log.get() };
-    let (addr, gas) = write_log.init_account(&storage.address_gen, code);
+    let code_hash = Hash::try_from(&code_hash[..])
+        .map_err(|e| TxRuntimeError::InvalidVpCodeHash(e.to_string()))?;
+    let (addr, gas) = write_log.init_account(&storage.address_gen, code_hash);
     let addr_bytes =
         addr.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
     tx_add_gas(env, gas)?;
@@ -1816,10 +1814,10 @@ where
     Ok(())
 }
 
-/// Validate a VP WASM code in a tx environment.
-fn tx_validate_vp_code<MEM, DB, H, CA>(
+/// Validate a VP WASM code hash in a tx environment.
+fn tx_validate_vp_code_hash<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
-    code: &[u8],
+    code_hash: &[u8],
 ) -> TxResult<()>
 where
     MEM: VmMemory,
@@ -1827,8 +1825,26 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_add_gas(env, code.len() as u64 * WASM_VALIDATION_GAS_PER_BYTE)?;
-    validate_untrusted_wasm(code).map_err(TxRuntimeError::InvalidVpCode)
+    tx_add_gas(env, code_hash.len() as u64 * WASM_VALIDATION_GAS_PER_BYTE)?;
+    let hash = Hash::try_from(code_hash)
+        .map_err(|e| TxRuntimeError::InvalidVpCodeHash(e.to_string()))?;
+    let key = Key::wasm_code(&hash);
+    let write_log = unsafe { env.ctx.write_log.get() };
+    let (result, gas) = write_log.read(&key);
+    tx_add_gas(env, gas)?;
+    if result.is_none() {
+        let storage = unsafe { env.ctx.storage.get() };
+        let (is_present, gas) = storage
+            .has_key(&key)
+            .map_err(TxRuntimeError::StorageError)?;
+        tx_add_gas(env, gas)?;
+        if !is_present {
+            return Err(TxRuntimeError::InvalidVpCodeHash(
+                "The corresponding VP code doesn't exist".to_string(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Evaluate a validity predicate with the given input data.

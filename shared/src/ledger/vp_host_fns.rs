@@ -3,7 +3,7 @@
 use std::num::TryFromIntError;
 
 use namada_core::types::address::Address;
-use namada_core::types::hash::Hash;
+use namada_core::types::hash::{Hash, HASH_LENGTH};
 use namada_core::types::storage::{
     BlockHash, BlockHeight, Epoch, Key, TxIndex,
 };
@@ -36,6 +36,8 @@ pub enum RuntimeError {
     ReadTemporaryValueError,
     #[error("Trying to read a permament value with read_temp")]
     ReadPermanentValueError,
+    #[error("Invalid transaction code hash")]
+    InvalidCodeHash,
 }
 
 /// VP environment function result
@@ -73,10 +75,10 @@ where
             Ok(None)
         }
         Some(&write_log::StorageModification::InitAccount {
-            ref vp, ..
+            ref vp_code_hash,
         }) => {
             // Read the VP of a new account
-            Ok(Some(vp.clone()))
+            Ok(Some(vp_code_hash.to_vec()))
         }
         Some(&write_log::StorageModification::Temp { .. }) => {
             Err(RuntimeError::ReadTemporaryValueError)
@@ -115,10 +117,10 @@ where
             Ok(None)
         }
         Some(&write_log::StorageModification::InitAccount {
-            ref vp, ..
+            ref vp_code_hash,
         }) => {
-            // Read the VP of a new account
-            Ok(Some(vp.clone()))
+            // Read the VP code hash of a new account
+            Ok(Some(vp_code_hash.to_vec()))
         }
         Some(&write_log::StorageModification::Temp { .. }) => {
             Err(RuntimeError::ReadTemporaryValueError)
@@ -268,7 +270,12 @@ pub fn get_tx_code_hash(
     gas_meter: &mut VpGasMeter,
     tx: &Tx,
 ) -> EnvResult<Hash> {
-    let hash = Hash(tx.code_hash());
+    let hash = if tx.code_or_hash.len() == HASH_LENGTH {
+        Hash::try_from(&tx.code_or_hash[..])
+            .map_err(|_| RuntimeError::InvalidCodeHash)?
+    } else {
+        Hash(tx.code_hash())
+    };
     add_gas(gas_meter, MIN_STORAGE_GAS)?;
     Ok(hash)
 }
