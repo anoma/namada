@@ -1051,8 +1051,6 @@ fn submit_ibc_tx(
     let data = make_ibc_data(message);
     std::fs::write(&data_path, data).expect("writing data failed");
 
-    let code_path = wasm_abs_path(TX_IBC_WASM);
-    let code_path = code_path.to_string_lossy();
     let data_path = data_path.to_string_lossy();
     let rpc = get_actor_rpc(test, &Who::Validator(0));
     let mut client = run!(
@@ -1061,7 +1059,7 @@ fn submit_ibc_tx(
         [
             "tx",
             "--code-path",
-            &code_path,
+            TX_IBC_WASM,
             "--data-path",
             &data_path,
             "--signer",
