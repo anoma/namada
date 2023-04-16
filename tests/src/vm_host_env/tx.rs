@@ -16,6 +16,7 @@ use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::run::Error;
 use namada::vm::wasm::{self, TxCache, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
+use namada_core::types::hash::Hash;
 use namada_tx_prelude::{BorshSerialize, Ctx};
 use tempfile::TempDir;
 
@@ -119,6 +120,12 @@ impl TestTxEnv {
             vp_whitelist.unwrap_or_default(),
         )
         .unwrap();
+    }
+
+    pub fn store_wasm_code(&mut self, code: Vec<u8>) {
+        let hash = Hash::sha256(&code);
+        let key = Key::wasm_code(&hash);
+        self.wl_storage.storage.write(&key, code).unwrap();
     }
 
     /// Fake accounts' existence by initializing their VP storage.
