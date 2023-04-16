@@ -46,7 +46,7 @@ use namada::ibc_proto::cosmos::base::v1beta1::Coin;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::masp;
 use namada::ledger::pos::{BondId, Bonds, CommissionRates, Unbonds};
-use namada::proto::{Data, Code, Signature, Tx, Section};
+use namada::proto::{Data, Code, Signature, Tx, Section, MaspBuilder};
 use namada::types::transaction::{RawHeader, TxType};
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::governance::{
@@ -1330,6 +1330,22 @@ fn convert_amount(
     (asset_type, amount)
 }
 
+/// Freeze a Builder into the format necessary for inclusion in a Tx. This is
+/// the format used by hardware wallets to validate a MASP Transaction.
+struct WalletMap;
+
+impl<P1> masp_primitives::transaction::components::sapling::builder::MapBuilder<P1, ExtendedSpendingKey, (), ExtendedFullViewingKey> for WalletMap {
+    fn map_params(&self, s: P1) -> () {}
+    fn map_key(&self, s: ExtendedSpendingKey) -> ExtendedFullViewingKey {
+        s.to_extended_full_viewing_key()
+    }
+}
+
+impl<P1, R1, N1> MapBuilder<P1, R1, ExtendedSpendingKey, N1, (), (), ExtendedFullViewingKey, ()> for WalletMap {
+    fn map_rng(&self, s: R1) -> () {}
+    fn map_notifier(&self, s: N1) -> () {}
+}
+
 /// Make shielded components to embed within a Transfer object. If no shielded
 /// payment address nor spending key is specified, then no shielded components
 /// are produced. Otherwise a transaction containing nullifiers and/or note
@@ -1341,7 +1357,10 @@ async fn gen_shielded_transfer<C>(
     ctx: &mut C,
     args: &ParsedTxTransferArgs,
     shielded_gas: bool,
-) -> Result<Option<(Transaction, SaplingMetadata)>, builder::Error<std::convert::Infallible>>
+) -> Result<
+        Option<(Builder<(), (), ExtendedFullViewingKey, ()>, Transaction, SaplingMetadata)>,
+    builder::Error<std::convert::Infallible>,
+    >
 where
     C: ShieldedTransferContext,
 {
@@ -1488,7 +1507,8 @@ where
             .expect("unable to load MASP Parameters")
     };
     // Build and return the constructed transaction
-    builder.build(&prover, &FeeRule::non_standard(tx_fee)).map(Some)
+    builder.clone().build(&prover, &FeeRule::non_standard(tx_fee))
+        .map(|(tx, metadata)| Some((builder.map_builder(WalletMap), tx, metadata)))
 }
 
 pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
@@ -1635,7 +1655,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
                 gen_shielded_transfer(&mut ctx, &parsed_args, shielded_gas)
                 .await;
             match stx_result {
-                Ok(stx) => stx.map(|x| x.0),
+                Ok(stx) => stx,
                 Err(builder::Error::InsufficientFunds(_)) => {
                     eprintln!(
                         "The balance of the source {} is lower than the \
@@ -1655,7 +1675,27 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     };
     let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
     let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-    let masp_tx = shielded.map(|shielded| tx.add_section(Section::MaspTx(shielded)));
+    // Add the MASP Transaction and its Builder to facilitate validation
+    let masp_hash = if let Some(shielded) = shielded {
+        // Add a MASP Transaction section to the Tx
+        let masp_tx = tx.add_section(Section::MaspTx(shielded.1));
+        // Get the hash of the MASP Transaction section
+        let masp_hash = Hash(masp_tx.hash(&mut Sha256::new()).finalize_reset().into());
+        // Add the MASP Transaction's Builder to the Tx
+        tx.add_section(Section::MaspBuilder(MaspBuilder {
+            // Store how the Info objects map to Descriptors/Outputs
+            metadata: shielded.2,
+            // Store the data that was used to construct the Transaction
+            builder: shielded.0,
+            // Link the Builder to the Transaction by hash code
+            target: masp_hash,
+        }));
+        // The MASP Transaction section hash will be used in Transfer
+        Some(masp_hash)
+    } else {
+        None
+    };
+    // Construct the corresponding transparent Transfer object
     let transfer = token::Transfer {
         source,
         target,
@@ -1663,15 +1703,16 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         sub_prefix,
         amount,
         key,
-        shielded: masp_tx.map(
-            |masp_tx| Hash(masp_tx.hash(&mut Sha256::new()).finalize_reset().into())
-        ),
+        // Link the Transfer to the MASP Transaction by hash code
+        shielded: masp_hash,
     };
     tracing::debug!("Transfer data {:?}", transfer);
+    // Encode the Transfer and store it beside the MASP transaction
     let data = transfer
         .try_to_vec()
         .expect("Encoding tx data shouldn't fail");
     tx.set_data(Data::new(data));
+    // Finally store the Traansfer WASM code in the Tx
     tx.set_code(Code::new(tx_code));
 
     process_tx(

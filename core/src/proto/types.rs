@@ -372,19 +372,19 @@ impl Into<Vec<u8>> for SaplingMetadataSerde {
 )]
 pub struct MaspBuilder {
     /// The MASP transaction that this section witnesses
-    target: crate::types::hash::Hash,
+    pub target: crate::types::hash::Hash,
     /// Track how Info objects map to descriptors and outputs
     #[serde(
         serialize_with = "borsh_serde::<SaplingMetadataSerde, _>",
         deserialize_with = "serde_borsh::<SaplingMetadataSerde, _, _>",
     )]
-    metadata: SaplingMetadata,
+    pub metadata: SaplingMetadata,
     /// The data that was used to construct the target transaction
     #[serde(
         serialize_with = "borsh_serde::<BuilderSerde, _>",
         deserialize_with = "serde_borsh::<BuilderSerde, _, _>",
     )]
-    builder: Builder<(), (), ExtendedFullViewingKey, ()>,
+    pub builder: Builder<(), (), ExtendedFullViewingKey, ()>,
 }
 
 impl MaspBuilder {
@@ -887,10 +887,47 @@ impl Tx {
                 Ok(())
             }
             // we extract the signed data, but don't check the signature
-            decrypted @ TxType::Decrypted(_) => Ok(()),
+            TxType::Decrypted(_) => Ok(()),
             // return as is
-            raw @ TxType::Raw(_) => Ok(()),
+            TxType::Raw(_) => Ok(()),
         }
+    }
+
+    /// Filter out all the sections that must not be submitted to the protocol
+    /// and return them.
+    pub fn protocol_filter(&mut self) -> Vec<Section> {
+        let mut filtered = Vec::new();
+        for i in (0..self.sections.len()).rev() {
+            match self.sections[i] {
+                // MASP Builders containin extended full viewing keys amongst
+                // other private information and must be removed prior to
+                // submission to protocol
+                Section::MaspBuilder(_) => {
+                    filtered.push(self.sections.remove(i));
+                },
+                // Everything else is fine to add
+                _ => {},
+            }
+        }
+        filtered
+    }
+
+    /// Filter out all the sections that need not be sent to the hardware wallet
+    /// and return them
+    pub fn wallet_filter(&mut self) -> Vec<Section> {
+        let mut filtered = Vec::new();
+        for i in (0..self.sections.len()).rev() {
+            match self.sections[i] {
+                // These sections are known to be large and are not necessary
+                // for signing a transaction
+                Section::ExtraData(_) | Section::Code(_) => {
+                    filtered.push(self.sections.remove(i));
+                },
+                // Everything else is fine to add
+                _ => {},
+            }
+        }
+        filtered
     }
 }
 
