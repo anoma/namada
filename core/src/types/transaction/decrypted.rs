@@ -45,27 +45,9 @@ pub mod decrypted_tx {
     }
 
     impl DecryptedTx {
+        /// Produce a SHA-256 hash of this header
         pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-            match self {
-                Self::Decrypted {
-                    code_hash,
-                    data_hash,
-                    header_hash,
-                    #[cfg(not(feature = "mainnet"))]
-                    has_valid_pow,
-                } => {
-                    hasher.update(&[0]);
-                    hasher.update(header_hash);
-                    hasher.update(code_hash);
-                    hasher.update(data_hash);
-                    #[cfg(not(feature = "mainnet"))]
-                    hasher.update(&[if *has_valid_pow { 1 } else { 0 }]);
-                },
-                Self::Undecryptable(wrapper) => {
-                    hasher.update(&[1]);
-                    wrapper.hash(hasher);
-                }
-            }
+            hasher.update(self.try_to_vec().expect("unable to serialize decrypted tx"));
             hasher
         }
 
@@ -75,8 +57,8 @@ pub mod decrypted_tx {
             match self {
                 DecryptedTx::Decrypted {
                     header_hash,
-                    code_hash,
-                    data_hash,
+                    code_hash: _,
+                    data_hash: _,
                     #[cfg(not(feature = "mainnet"))]
                         has_valid_pow: _,
                 } => header_hash.clone(),

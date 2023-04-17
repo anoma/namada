@@ -71,8 +71,7 @@ impl Data {
 
     /// Hash this data section
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-        hasher.update(&self.salt);
-        hasher.update(&self.data);
+        hasher.update(self.try_to_vec().expect("unable to serialize data section"));
         hasher
     }
 }
@@ -186,10 +185,7 @@ impl Signature {
 
     /// Hash this signature section
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-        hasher.update(&self.salt);
-        hasher.update(&self.target);
-        hasher.update(&self.signature.try_to_vec().expect("unable to serialize signature"));
-        hasher.update(&self.pub_key.try_to_vec().expect("unable to serialize public key"));
+        hasher.update(self.try_to_vec().expect("unable to serialize signature section"));
         hasher
     }
 }
@@ -239,21 +235,8 @@ impl Ciphertext {
 
     /// Get the hash of this ciphertext section. This operation is done in such
     /// a way it matches the hash of the type pun
-    #[cfg(feature = "ferveo-tpke")]
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-        hasher.update(
-            self.try_to_vec()
-                .expect("unable to serialize ciphertext")
-                .get(4..)
-                .expect("ciphertext has invalid size")
-        );
-        hasher
-    }
-
-    /// Hash this ciphertext section
-    #[cfg(not(feature = "ferveo-tpke"))]
-    pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-        hasher.update(&self.opaque);
+        hasher.update(self.try_to_vec().expect("unable to serialize decrypted tx"));
         hasher
     }
 }
@@ -493,35 +476,22 @@ impl Section {
     /// Hash this section. Section hashes are useful for signatures and also for
     /// allowing transaction sections to cross reference.
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
+        // Get the index corresponding to this variant
+        let discriminant = self
+            .try_to_vec()
+            .expect("sections should serialize")[0];
+        // Use Borsh's discriminant in the Section's hash
+        hasher.update(&[discriminant]);
         match self {
-            Self::Data(data) => {
-                hasher.update(&[0]);
-                data.hash(hasher)
-            },
-            Self::ExtraData(extra) => {
-                hasher.update(&[1]);
-                extra.hash(hasher)
-            },
-            Self::Code(code) => {
-                hasher.update(&[2]);
-                code.hash(hasher)
-            },
-            Self::Signature(sig) => {
-                hasher.update(&[3]);
-                sig.hash(hasher)
-            },
-            Self::Ciphertext(ct) => {
-                hasher.update(&[4]);
-                ct.hash(hasher)
-            }
+            Self::Data(data) => data.hash(hasher),
+            Self::ExtraData(extra) => extra.hash(hasher),
+            Self::Code(code) => code.hash(hasher),
+            Self::Signature(sig) => sig.hash(hasher),
+            Self::Ciphertext(ct) => ct.hash(hasher),
+            Self::MaspBuilder(mb) => mb.hash(hasher),
             Self::MaspTx(tx) => {
-                hasher.update(&[5]);
                 hasher.update(tx.txid().as_ref());
                 hasher
-            },
-            Self::MaspBuilder(mb) =>  {
-                hasher.update(&[6]);
-                mb.hash(hasher)
             },
         }
     }
