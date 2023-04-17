@@ -262,6 +262,14 @@ mod tests {
         // Credit the tokens to the source before running the transaction to be
         // able to transfer from it
         tx_env.credit_tokens(&source, &token, None, amount);
+        // write the denomination of NAM into storage
+        storage_api::token::write_denom(
+            &mut tx_env.wl_storage,
+            &token,
+            None,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
 
         let amount = token::DenominatedAmount {
             amount,
@@ -308,6 +316,14 @@ mod tests {
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &target, &token]);
+        // write the denomination of NAM into storage
+        storage_api::token::write_denom(
+            &mut tx_env.wl_storage,
+            &token,
+            None,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
@@ -364,6 +380,14 @@ mod tests {
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        // write the denomination of NAM into storage
+        storage_api::token::write_denom(
+            &mut tx_env.wl_storage,
+            &token,
+            None,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
 
         tx_env.write_public_key(&vp_owner, &public_key);
 
@@ -439,6 +463,14 @@ mod tests {
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&target, &token]);
+        // write the denomination of NAM into storage
+        storage_api::token::write_denom(
+            &mut tx_env.wl_storage,
+            &token,
+            None,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
@@ -503,6 +535,14 @@ mod tests {
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&target, &token]);
+        // write the denomination of NAM into storage
+        storage_api::token::write_denom(
+            &mut tx_env.wl_storage,
+            &token,
+            None,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it

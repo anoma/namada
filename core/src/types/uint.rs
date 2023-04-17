@@ -165,10 +165,15 @@ impl PartialOrd for SignedUint {
         match (self.non_negative(), other.non_negative()) {
             (true, false) => Some(Ordering::Greater),
             (false, true) => Some(Ordering::Less),
-            _ => {
+            (true, true) => {
                 let this = self.abs();
                 let that = other.abs();
                 this.0.partial_cmp(&that.0)
+            }
+            (false, false) => {
+                let this = self.abs();
+                let that = other.abs();
+                that.0.partial_cmp(&this.0)
             }
         }
     }
@@ -358,5 +363,20 @@ mod test_uint {
         assert_eq!(neg_eight - neg_one, -SignedUint(Uint::from(7)));
         assert_eq!(neg_eight - two, -ten);
         assert!((two - two).is_zero());
+    }
+
+    /// Test that ordering is correctly implemented
+    #[test]
+    fn test_ord() {
+        let this = Amount::from_uint(1, 0).unwrap().change();
+        let that = Amount::native_whole(1000).change();
+        assert!(this <= that);
+        assert!(-this <= that);
+        assert!(-this >= -that);
+        assert!(this >= -that);
+        assert!(that >= this);
+        assert!(that >= -this);
+        assert!(-that <= -this);
+        assert!(-that <= this);
     }
 }

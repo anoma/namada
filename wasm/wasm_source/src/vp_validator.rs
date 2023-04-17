@@ -270,6 +270,15 @@ mod tests {
         // Credit the tokens to the source before running the transaction to be
         // able to transfer from it
         tx_env.credit_tokens(&source, &token, None, amount);
+        // write the denomination of NAM into storage
+        storage_api::token::write_denom(
+            &mut tx_env.wl_storage,
+            &token,
+            None,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
+
         let amount = token::DenominatedAmount {
             amount,
             denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -323,6 +332,14 @@ mod tests {
             amount,
             denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
         };
+        // write the denomination of NAM into storage
+        storage_api::token::write_denom(
+            &mut tx_env.wl_storage,
+            &token,
+            None,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -371,6 +388,14 @@ mod tests {
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        // write the denomination of NAM into storage
+        storage_api::token::write_denom(
+            &mut tx_env.wl_storage,
+            &token,
+            None,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
 
         tx_env.write_public_key(&vp_owner, &public_key);
         let amount = token::DenominatedAmount {
@@ -449,6 +474,14 @@ mod tests {
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        // write the denomination of NAM into storage
+        storage_api::token::write_denom(
+            &mut tx_env.wl_storage,
+            &token,
+            None,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
@@ -519,6 +552,14 @@ mod tests {
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        // write the denomination of NAM into storage
+        storage_api::token::write_denom(
+            &mut tx_env.wl_storage,
+            &token,
+            None,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
 
         tx_env.write_public_key(&vp_owner, &public_key);
 
