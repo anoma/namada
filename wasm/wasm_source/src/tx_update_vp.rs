@@ -16,8 +16,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let vp_code = signed.get_section(&update_vp.vp_code)
         .ok_or_err_msg("vp code section not found")?
         .extra_data()
-        .ok_or_err_msg("vp code section must be tagged as extra")?
-        .data;
+        .ok_or_err_msg("vp code section must be tagged as extra")?;
     ctx.update_validity_predicate(
         &update_vp.addr,
         vp_code,

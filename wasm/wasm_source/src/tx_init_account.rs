@@ -14,8 +14,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let vp_code = signed.get_section(&tx_data.vp_code)
         .ok_or_err_msg("vp code section not found")?
         .extra_data()
-        .ok_or_err_msg("vp code section must be tagged as extra")?
-        .data;
+        .ok_or_err_msg("vp code section must be tagged as extra")?;
     let address = ctx.init_account(&vp_code)?;
     let pk_key = key::pk_key(&address);
     ctx.write(&pk_key, &tx_data.public_key)?;

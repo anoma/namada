@@ -89,19 +89,19 @@ use crate::facade::tendermint_rpc::{Client, HttpClient};
 use crate::node::ledger::tendermint_node;
 use namada::types::hash::Hash;
 
-const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
-const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
-const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
-const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
-const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
-const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
-const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
-const TX_IBC_WASM: &str = "tx_ibc.wasm";
-const VP_USER_WASM: &str = "vp_user.wasm";
-const TX_BOND_WASM: &str = "tx_bond.wasm";
-const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
-const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
-const TX_CHANGE_COMMISSION_WASM: &str = "tx_change_validator_commission.wasm";
+pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
+pub const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
+pub const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
+pub const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
+pub const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
+pub const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
+pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
+pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
+pub const VP_USER_WASM: &str = "vp_user.wasm";
+pub const TX_BOND_WASM: &str = "tx_bond.wasm";
+pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
+pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
+pub const TX_CHANGE_COMMISSION_WASM: &str = "tx_change_validator_commission.wasm";
 
 /// Timeout for requests to the `/accepted` and `/applied`
 /// ABCI query endpoints.
@@ -189,7 +189,7 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
     let tx_code = ctx.read_wasm(TX_UPDATE_VP_WASM);
 
     let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-    let extra = tx.add_section(Section::ExtraData(Data::new(vp_code)));
+    let extra = tx.add_section(Section::ExtraData(Code::new(vp_code)));
     let extra_hash = Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
     let data = UpdateVp { addr, vp_code: extra_hash };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
@@ -223,7 +223,7 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
     let tx_code = ctx.read_wasm(TX_INIT_ACCOUNT_WASM);
 
     let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-    let extra = tx.add_section(Section::ExtraData(Data::new(vp_code)));
+    let extra = tx.add_section(Section::ExtraData(Code::new(vp_code)));
     let extra_hash = Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
     let data = InitAccount { public_key, vp_code: extra_hash };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
@@ -352,7 +352,7 @@ pub async fn submit_init_validator(
     let tx_code = ctx.read_wasm(TX_INIT_VALIDATOR_WASM);
 
     let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-    let extra = tx.add_section(Section::ExtraData(Data::new(validator_vp_code)));
+    let extra = tx.add_section(Section::ExtraData(Code::new(validator_vp_code)));
     let extra_hash = Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
     let data = InitValidator {
         account_key,
@@ -2007,7 +2007,7 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
 
         let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
         let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-        let proposal_sec = proposal_code.map(|pc| tx.add_section(Section::ExtraData(Data::new(pc))));
+        let proposal_sec = proposal_code.map(|pc| tx.add_section(Section::ExtraData(Code::new(pc))));
         init_proposal_data.proposal_code = proposal_sec.map(|ps| {
             Hash(ps.hash(&mut Sha256::new()).finalize_reset().into())
         });

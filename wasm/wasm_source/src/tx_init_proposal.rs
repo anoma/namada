@@ -15,7 +15,6 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         signed
             .get_section(&hash)
             .and_then(Section::extra_data)
-            .map(|x| x.data)
             .ok_or_err_msg("unable to find shielded section")
     }).transpose()?;
     governance::init_proposal(ctx, tx_data, proposal_code)

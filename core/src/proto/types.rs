@@ -136,9 +136,9 @@ impl CodeHash {
 )]
 pub struct Code {
     /// Additional random data
-    salt: [u8; 8],
+    pub salt: [u8; 8],
     /// Actual transaction code
-    code: CodeHash,
+    pub code: CodeHash,
 }
 
 impl Code {
@@ -471,7 +471,7 @@ pub enum Section {
     /// Transaction data that needs to be sent to hardware wallets
     Data(Data),
     /// Transaction data that does not need to be sent to hardware wallets
-    ExtraData(Data),
+    ExtraData(Code),
     /// Transaction code. Sending to hardware wallets optional
     Code(Code),
     /// A transaction ssignature. Often produced by hardware wallets
@@ -544,7 +544,7 @@ impl Section {
     }
 
     /// Extract the extra data from this section if possible
-    pub fn extra_data(&self) -> Option<Data> {
+    pub fn extra_data_sec(&self) -> Option<Code> {
         if let Self::ExtraData(data) = self {
             Some(data.clone())
         } else {
@@ -552,10 +552,28 @@ impl Section {
         }
     }
 
+    /// Extract the extra data from this section if possible
+    pub fn extra_data(&self) -> Option<Vec<u8>> {
+        if let Self::ExtraData(data) = self {
+            data.code.code()
+        } else {
+            None
+        }
+    }
+
     /// Extract the code from this section is possible
-    pub fn code(&self) -> Option<Code> {
+    pub fn code_sec(&self) -> Option<Code> {
         if let Self::Code(data) = self {
             Some(data.clone())
+        } else {
+            None
+        }
+    }
+
+    /// Extract the code from this section is possible
+    pub fn code(&self) -> Option<Vec<u8>> {
+        if let Self::Code(data) = self {
+            data.code.code()
         } else {
             None
         }
@@ -965,14 +983,14 @@ impl Tx {
         let mut filtered = Vec::new();
         for i in (0..self.sections.len()).rev() {
             match &mut self.sections[i] {
-                // This sections is known to be large and is not necessary for
-                // signing a transaction
-                Section::ExtraData(_) => {
-                    filtered.push(self.sections.remove(i));
-                },
-                // This sections is known to be large and can be contracted
+                // This section is known to be large and can be contracted
                 Section::Code(section) => {
                     filtered.push(Section::Code(section.clone()));
+                    section.code.contract();
+                },
+                // This section is known to be large and can be contracted
+                Section::ExtraData(section) => {
+                    filtered.push(Section::ExtraData(section.clone()));
                     section.code.contract();
                 },
                 // Everything else is fine to add

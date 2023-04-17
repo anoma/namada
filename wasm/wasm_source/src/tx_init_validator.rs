@@ -17,8 +17,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         .get_section(&init_validator.validator_vp_code)
         .ok_or_err_msg("validator vp section not found")?
         .extra_data()
-        .ok_or_err_msg("validator vp section must be tagged as extra")?
-        .data;
+        .ok_or_err_msg("validator vp section must be tagged as extra")?;
     // Register the validator in PoS
     match ctx.init_validator(
         init_validator,
