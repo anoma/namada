@@ -60,19 +60,6 @@ where
         (token::Amount, validator_set_update::SignedVext),
         VoteExtensionError,
     > {
-        if !self
-            .wl_storage
-            .ethbridge_queries()
-            .is_bridge_active_at(ext.data.signing_epoch.next())
-        {
-            let next_epoch = ext.data.signing_epoch.next();
-            tracing::debug!(
-                ?next_epoch,
-                "The Ethereum bridge was not enabled when the valset
-                 upd's vote extension was cast",
-            );
-            return Err(VoteExtensionError::EthereumBridgeInactive);
-        }
         if self.wl_storage.storage.last_height.0 == 0 {
             tracing::debug!(
                 "Dropping validator set update vote extension issued at \
