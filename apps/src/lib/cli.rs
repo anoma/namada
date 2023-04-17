@@ -780,7 +780,10 @@ pub mod cmds {
                     .or(rollback)
                     .or(run_until)
                     // The `run` command is the default if no sub-command given
-                    .or(Some(Self::Run(LedgerRun(args::LedgerRun(None)))))
+                    .or(Some(Self::Run(LedgerRun(args::LedgerRun {
+                        start_time: None,
+                        tx_index: false,
+                    }))))
             })
         }
 
@@ -1732,6 +1735,7 @@ pub mod args {
     const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
     const SUSPEND_ACTION: ArgFlag = flag("suspend");
+    const TENDERMINT_TX_INDEX: ArgFlag = flag("tx-index");
     const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
     const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
@@ -1802,12 +1806,19 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
-    pub struct LedgerRun(pub Option<DateTimeUtc>);
+    pub struct LedgerRun {
+        pub start_time: Option<DateTimeUtc>,
+        pub tx_index: bool,
+    }
 
     impl Args for LedgerRun {
         fn parse(matches: &ArgMatches) -> Self {
-            let time = NAMADA_START_TIME.parse(matches);
-            Self(time)
+            let start_time = NAMADA_START_TIME.parse(matches);
+            let tx_index = TENDERMINT_TX_INDEX.parse(matches);
+            Self {
+                start_time,
+                tx_index,
+            }
         }
 
         fn def(app: App) -> App {
@@ -1819,6 +1830,11 @@ pub mod args {
                  equivalent:\n2023-01-20T12:12:12Z\n2023-01-20 \
                  12:12:12Z\n2023-  01-20T12:  12:12Z",
             ))
+            .arg(
+                TENDERMINT_TX_INDEX
+                    .def()
+                    .about("Enable Tendermint tx indexing."),
+            )
         }
     }
 
