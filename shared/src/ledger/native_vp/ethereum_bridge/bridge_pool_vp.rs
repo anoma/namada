@@ -84,9 +84,9 @@ where
         }
     }
 
-    /// Check that the correct amount of wrapper erc20s were
-    /// sent from the correct account into escrow
-    fn check_werc20s_escrowed(
+    /// Check that the correct amount of erc20 assets were
+    /// sent from the correct account into escrow.
+    fn check_erc20s_escrowed(
         &self,
         keys_changed: &BTreeSet<Key>,
         transfer: &PendingTransfer,
@@ -363,7 +363,7 @@ where
                     ok
                 })
         } else {
-            self.check_werc20s_escrowed(keys_changed, &transfer)
+            self.check_erc20s_escrowed(keys_changed, &transfer)
         }
     }
 }
