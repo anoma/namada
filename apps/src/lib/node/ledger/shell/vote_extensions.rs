@@ -180,26 +180,19 @@ where
     pub fn extend_vote_with_valset_update(
         &mut self,
     ) -> Option<validator_set_update::SignedVext> {
-        let next_epoch = self.wl_storage.storage.get_current_epoch().0.next();
-
-        if !self
-            .wl_storage
-            .ethbridge_queries()
-            .is_bridge_active_at(next_epoch)
-        {
-            return None;
-        }
-
-        let validator_addr = self
-            .mode
-            .get_validator_address()
-            .expect(VALIDATOR_EXPECT_MSG)
-            .to_owned();
-
         self.wl_storage
             .ethbridge_queries()
             .must_send_valset_upd(SendValsetUpd::Now)
             .then(|| {
+                let next_epoch =
+                    self.wl_storage.storage.get_current_epoch().0.next();
+
+                let validator_addr = self
+                    .mode
+                    .get_validator_address()
+                    .expect(VALIDATOR_EXPECT_MSG)
+                    .to_owned();
+
                 let voting_powers = self
                     .wl_storage
                     .ethbridge_queries()
