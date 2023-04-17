@@ -306,8 +306,8 @@ mod test_prepare_proposal {
             req.txs.push(tx.to_bytes());
             let decrypted_tx = TxType::Decrypted(DecryptedTx::Decrypted {
                 header_hash: tx.header_hash(),
-                code_hash: tx.code_hash().clone(),
-                data_hash: tx.data_hash().clone(),
+                code_hash: tx.code_sechash().clone(),
+                data_hash: tx.data_sechash().clone(),
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: false,
             });

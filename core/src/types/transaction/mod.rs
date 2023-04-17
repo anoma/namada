@@ -339,8 +339,8 @@ mod test_process_tx {
         let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
         let code_sec = tx.set_code(Code::new("wasm code".as_bytes().to_owned())).clone();
         let data_sec = tx.set_data(Data::new("transaction data".as_bytes().to_owned())).clone();
-        tx.add_section(Section::Signature(Signature::new(tx.code_hash(), &gen_keypair())));
-        tx.add_section(Section::Signature(Signature::new(tx.data_hash(), &gen_keypair())));
+        tx.add_section(Section::Signature(Signature::new(tx.code_sechash(), &gen_keypair())));
+        tx.add_section(Section::Signature(Signature::new(tx.data_sechash(), &gen_keypair())));
 
         tx.validate_header().expect("Test failed");
         match tx.header() {

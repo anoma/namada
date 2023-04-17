@@ -346,8 +346,8 @@ pub mod wrapper_tx {
             wrapper.set_code(Code::new("wasm code".as_bytes().to_owned()));
             wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
             // give a incorrect commitment to the decrypted contents of the tx
-            wrapper.set_code_hash(Hash([0u8; 32]));
-            wrapper.set_data_hash(Hash([0u8; 32]));
+            wrapper.set_code_sechash(Hash([0u8; 32]));
+            wrapper.set_data_sechash(Hash([0u8; 32]));
             wrapper.add_section(Section::Signature(Signature::new(&wrapper.header_hash(), &keypair)));
             wrapper.encrypt(&Default::default());
             assert!(wrapper.validate_ciphertext());

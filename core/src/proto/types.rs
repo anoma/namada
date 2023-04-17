@@ -77,6 +77,59 @@ impl Data {
     }
 }
 
+/// Error representing the case where the supplied code has incorrect hash
+pub struct CodeHashError;
+
+/// Represents either some code bytes or their SHA-256 hash
+#[derive(
+    Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize,
+)]
+pub enum CodeHash {
+    /// Hash commitment to some code
+    Hash(crate::types::hash::Hash),
+    /// Actual code bytes
+    Code(Vec<u8>),
+}
+
+impl CodeHash {
+    /// Substitute code bytes with their SHA-256 hash
+    pub fn contract(&mut self) {
+        if let Self::Code(code) = self {
+            *self = Self::Hash(hash_tx(code));
+        }
+    }
+
+    /// Substitute a code hash with the supplied code if the hashes are
+    /// consistent, otherwise return an error
+    pub fn expand(&mut self, code: Vec<u8>) -> std::result::Result<(), CodeHashError> {
+        match self {
+            Self::Code(c) if *c == code => Ok(()),
+            Self::Hash(hash) if *hash == hash_tx(&code) => {
+                *self = Self::Code(code);
+                Ok(())
+            },
+            _ => Err(CodeHashError)
+        }
+    }
+
+    /// Return the contained hash commitment
+    pub fn hash(&self) -> crate::types::hash::Hash {
+        match self {
+            Self::Code(code) => hash_tx(code),
+            Self::Hash(hash) => *hash,
+        }
+    }
+
+    /// Return the cntained code if there is any
+    pub fn code(&self) -> Option<Vec<u8>> {
+        if let Self::Code(code) = self {
+            Some(code.clone())
+        } else {
+            None
+        }
+    }
+}
+
 /// A section representing transaction code
 #[derive(
     Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize,
@@ -84,8 +137,8 @@ impl Data {
 pub struct Code {
     /// Additional random data
     salt: [u8; 8],
-    /// Actuaal transaction code
-    code: Vec<u8>,
+    /// Actual transaction code
+    code: CodeHash,
 }
 
 impl Code {
@@ -93,14 +146,14 @@ impl Code {
     pub fn new(code: Vec<u8>) -> Self {
         Self {
             salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
-            code,
+            code: CodeHash::Code(code),
         }
     }
 
     /// Hash this code section
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
         hasher.update(&self.salt);
-        hasher.update(&self.code);
+        hasher.update(&self.code.hash());
         hasher
     }
 }
@@ -607,12 +660,12 @@ impl Tx {
     /// Update the header whilst maintaining existing cross-references
     pub fn update_header(&mut self, header: TxType) {
         // Capture the data and code hashes that will be overwritten
-        let data_hash = self.data_hash().clone();
-        let code_hash = self.code_hash().clone();
+        let data_hash = self.data_sechash().clone();
+        let code_hash = self.code_sechash().clone();
         self.header = header;
         // Rebind the data and code hashes
-        self.set_data_hash(data_hash);
-        self.set_code_hash(code_hash);
+        self.set_data_sechash(data_hash);
+        self.set_code_sechash(code_hash);
     }
 
     /// Get the transaction section with the given hash
@@ -634,7 +687,7 @@ impl Tx {
     }
 
     /// Get the hash of this transaction's code from the heeader
-    pub fn code_hash(&self) -> &crate::types::hash::Hash {
+    pub fn code_sechash(&self) -> &crate::types::hash::Hash {
         match &self.header {
             TxType::Raw(raw) => {
                 &raw.code_hash
@@ -656,7 +709,7 @@ impl Tx {
     }
 
     /// Set the transaction code hash stored in the header
-    pub fn set_code_hash(&mut self, hash: crate::types::hash::Hash) {
+    pub fn set_code_sechash(&mut self, hash: crate::types::hash::Hash) {
         match &mut self.header {
             TxType::Raw(raw) => {
                 raw.code_hash = hash;
@@ -679,8 +732,8 @@ impl Tx {
 
     /// Get the code designated by the transaction code hash in the header
     pub fn code(&self) -> Option<Vec<u8>> {
-        match self.get_section(self.code_hash()) {
-            Some(Section::Code(code)) => Some(code.code.clone()),
+        match self.get_section(self.code_sechash()) {
+            Some(Section::Code(section)) => section.code.code(),
             _ => None,
         }
     }
@@ -691,13 +744,13 @@ impl Tx {
         let mut hasher = Sha256::new();
         sec.hash(&mut hasher);
         let hash = crate::types::hash::Hash(hasher.finalize().into());
-        self.set_code_hash(hash);
+        self.set_code_sechash(hash);
         self.sections.push(sec);
         self.sections.last_mut().unwrap()
     }
 
     /// Get the transaction data hash stored in the header
-    pub fn data_hash(&self) -> &crate::types::hash::Hash {
+    pub fn data_sechash(&self) -> &crate::types::hash::Hash {
         match &self.header {
             TxType::Raw(raw) => {
                 &raw.data_hash
@@ -719,7 +772,7 @@ impl Tx {
     }
 
     /// Set the transaction data hash stored in the header
-    pub fn set_data_hash(&mut self, hash: crate::types::hash::Hash) {
+    pub fn set_data_sechash(&mut self, hash: crate::types::hash::Hash) {
         match &mut self.header {
             TxType::Raw(raw) => {
                 raw.data_hash = hash;
@@ -746,14 +799,14 @@ impl Tx {
         let mut hasher = Sha256::new();
         sec.hash(&mut hasher);
         let hash = crate::types::hash::Hash(hasher.finalize().into());
-        self.set_data_hash(hash);
+        self.set_data_sechash(hash);
         self.sections.push(sec);
         self.sections.last_mut().unwrap()
     }
 
     /// Get the data designated by the transaction data hash in the header
     pub fn data(&self) -> Option<Vec<u8>> {
-        match self.get_section(self.data_hash()) {
+        match self.get_section(self.data_sechash()) {
             Some(Section::Data(data)) => Some(data.data.clone()),
             _ => None,
         }
@@ -853,14 +906,8 @@ impl Tx {
     ///
     /// If it is a WrapperTx, we extract the signed data of
     /// the Tx and verify it is of the appropriate form. This means
-    /// 1. The signed Tx data deserializes to a WrapperTx type
-    /// 2. The wrapper tx is indeed signed
-    /// 3. The signature is valid
-    ///
-    /// We modify the data of the WrapperTx to contain only the signed
-    /// data if valid and return it wrapped in a enum variant
-    /// indicating it is a wrapper. Otherwise, an error is
-    /// returned indicating the signature was not valid
+    /// 1. The wrapper tx is indeed signed
+    /// 2. The signature is valid
     pub fn validate_header(&self) -> std::result::Result<(), TxError> {
         match self.header() {
             // verify signature and extract signed data
@@ -917,11 +964,16 @@ impl Tx {
     pub fn wallet_filter(&mut self) -> Vec<Section> {
         let mut filtered = Vec::new();
         for i in (0..self.sections.len()).rev() {
-            match self.sections[i] {
-                // These sections are known to be large and are not necessary
-                // for signing a transaction
-                Section::ExtraData(_) | Section::Code(_) => {
+            match &mut self.sections[i] {
+                // This sections is known to be large and is not necessary for
+                // signing a transaction
+                Section::ExtraData(_) => {
                     filtered.push(self.sections.remove(i));
+                },
+                // This sections is known to be large and can be contracted
+                Section::Code(section) => {
+                    filtered.push(Section::Code(section.clone()));
+                    section.code.contract();
                 },
                 // Everything else is fine to add
                 _ => {},

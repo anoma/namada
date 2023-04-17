@@ -2222,8 +2222,8 @@ pub async fn submit_reveal_pk_aux(
     } else {
         find_keypair(&mut ctx.wallet, &addr, args.ledger_address.clone()).await
     };
-    tx.add_section(Section::Signature(Signature::new(&tx.data_hash(), &keypair)));
-    tx.add_section(Section::Signature(Signature::new(&tx.code_hash(), &keypair)));
+    tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &keypair)));
+    tx.add_section(Section::Signature(Signature::new(&tx.code_sechash(), &keypair)));
     let epoch = rpc::query_epoch(args::Query {
         ledger_address: args.ledger_address.clone(),
     })

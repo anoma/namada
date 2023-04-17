@@ -230,7 +230,7 @@ where
                             header_hash: _,
                             has_valid_pow: _,
                         } => {
-                            if let code_hash = tx.code_hash() {
+                            if let code_hash = tx.code_sechash() {
                                 stats.increment_tx_type(code_hash.to_string());
                             }
                         }
@@ -541,11 +541,11 @@ mod test_finalize_block {
             let valid_tx = valid_tx.next().expect("Test failed");
             assert_eq!(
                 wrapper.tx.code_hash,
-                *valid_tx.code_hash()
+                *valid_tx.code_sechash()
             );
             assert_eq!(
                 wrapper.tx.data_hash,
-                *valid_tx.data_hash()
+                *valid_tx.data_sechash()
             );
             counter += 1;
         }
@@ -578,8 +578,8 @@ mod test_finalize_block {
 
         outer_tx.header = TxType::Decrypted(DecryptedTx::Decrypted {
             header_hash: outer_tx.header_hash(),
-            data_hash: outer_tx.data_hash().clone(),
-            code_hash: outer_tx.code_hash().clone(),
+            data_hash: outer_tx.data_sechash().clone(),
+            code_hash: outer_tx.code_sechash().clone(),
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
         });
@@ -708,8 +708,8 @@ mod test_finalize_block {
             outer_tx.encrypt(&Default::default());
             shell.enqueue_tx(outer_tx.header().wrapper().expect("expected wrapper"), outer_tx.clone());
             outer_tx.header = TxType::Decrypted(DecryptedTx::Decrypted {
-                code_hash: outer_tx.code_hash().clone(),
-                data_hash: outer_tx.data_hash().clone(),
+                code_hash: outer_tx.code_sechash().clone(),
+                data_hash: outer_tx.data_sechash().clone(),
                 header_hash: outer_tx.header_hash(),
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: false,
@@ -795,8 +795,8 @@ mod test_finalize_block {
         let mut counter = 0;
         for wrapper in shell.iter_tx_queue() {
             let next = txs.next().expect("Test failed");
-            assert_eq!(wrapper.tx.code_hash, *next.code_hash());
-            assert_eq!(wrapper.tx.data_hash, *next.data_hash());
+            assert_eq!(wrapper.tx.code_hash, *next.code_sechash());
+            assert_eq!(wrapper.tx.data_hash, *next.data_sechash());
             counter += 1;
         }
         assert_eq!(counter, 2);

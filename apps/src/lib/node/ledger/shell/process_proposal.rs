@@ -447,8 +447,8 @@ mod test_process_proposal {
 
             outer_tx.header = TxType::Decrypted(DecryptedTx::Decrypted {
                 header_hash: outer_tx.header_hash(),
-                code_hash: outer_tx.code_hash().clone(),
-                data_hash: outer_tx.data_hash().clone(),
+                code_hash: outer_tx.code_sechash().clone(),
+                data_hash: outer_tx.data_sechash().clone(),
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: false,
             });
@@ -570,8 +570,8 @@ mod test_process_proposal {
         )));
         tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        tx.set_code_hash(Hash([0u8; 32]));
-        tx.set_data_hash(Hash([0u8; 32]));
+        tx.set_code_sechash(Hash([0u8; 32]));
+        tx.set_data_sechash(Hash([0u8; 32]));
         tx.encrypt(&Default::default());
 
         let wrapper = tx.header().wrapper().expect("expected wrapper");

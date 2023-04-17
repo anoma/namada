@@ -154,9 +154,9 @@ pub async fn sign_tx(
 ) -> (Context, TxBroadcastData) {
     let keypair = tx_signer(&mut ctx, args, default).await;
     // Sign over the transacttion data
-    tx.add_section(Section::Signature(Signature::new(tx.data_hash(), &keypair)));
+    tx.add_section(Section::Signature(Signature::new(tx.data_sechash(), &keypair)));
     // Sign over the transaction code
-    tx.add_section(Section::Signature(Signature::new(tx.code_hash(), &keypair)));
+    tx.add_section(Section::Signature(Signature::new(tx.code_sechash(), &keypair)));
 
     let epoch = rpc::query_epoch(args::Query {
         ledger_address: args.ledger_address.clone(),
@@ -164,8 +164,8 @@ pub async fn sign_tx(
     .await;
     let broadcast_data = if args.dry_run {
         tx.header = TxType::Decrypted(DecryptedTx::Decrypted {
-            code_hash: tx.code_hash().clone(),
-            data_hash: tx.data_hash().clone(),
+            code_hash: tx.code_sechash().clone(),
+            data_hash: tx.data_sechash().clone(),
             header_hash: Hash::default(),
             #[cfg(not(feature = "mainnet"))]
             // To be able to dry-run testnet faucet withdrawal, pretend 
@@ -274,8 +274,8 @@ pub async fn sign_wrapper(
     // We use this to determine when the decrypted inner tx makes it
     // on-chain
     let decrypted_header = TxType::Decrypted(DecryptedTx::Decrypted {
-        data_hash: *tx.data_hash(),
-        code_hash: *tx.code_hash(),
+        data_hash: *tx.data_sechash(),
+        code_hash: *tx.code_sechash(),
         header_hash: tx.header_hash(),
         has_valid_pow: pow_solution.is_some(),
     });
