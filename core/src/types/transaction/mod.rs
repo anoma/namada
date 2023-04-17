@@ -302,7 +302,7 @@ pub mod tx_types {
             .map(|data| SignedTxData::try_from_slice(&data[..]))
         {
             let signed_hash = Tx {
-                code: tx.code,
+                code_or_hash: tx.code_or_hash,
                 data: Some(data.clone()),
                 timestamp: tx.timestamp,
                 chain_id: tx.chain_id.clone(),
@@ -310,7 +310,7 @@ pub mod tx_types {
             }
             .hash();
             match TxType::try_from(Tx {
-                code: vec![],
+                code_or_hash: vec![],
                 data: Some(data),
                 timestamp: tx.timestamp,
                 chain_id: tx.chain_id,

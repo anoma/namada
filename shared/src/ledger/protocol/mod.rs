@@ -174,7 +174,7 @@ where
         write_log,
         gas_meter,
         tx_index,
-        &tx.code,
+        &tx.code_or_hash,
         tx_data,
         vp_wasm_cache,
         tx_wasm_cache,

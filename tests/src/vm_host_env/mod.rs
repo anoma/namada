@@ -579,7 +579,7 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -618,7 +618,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -657,7 +657,7 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -704,7 +704,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -739,7 +739,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -782,7 +782,7 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -821,7 +821,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -852,7 +852,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -893,7 +893,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -925,7 +925,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -971,7 +971,7 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1014,7 +1014,7 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1060,7 +1060,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1086,7 +1086,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1129,7 +1129,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1156,7 +1156,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1201,7 +1201,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1246,7 +1246,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1296,7 +1296,7 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1338,7 +1338,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1392,7 +1392,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1462,7 +1462,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1547,7 +1547,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1599,7 +1599,7 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1630,7 +1630,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1686,7 +1686,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1753,7 +1753,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1830,7 +1830,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
