@@ -28,6 +28,7 @@ use crate::ledger::storage::{DBIter, DB};
 use crate::proto::SignedTxData;
 use crate::types::address::{nam, Address, InternalAddress};
 use crate::types::eth_bridge_pool::PendingTransfer;
+use crate::types::ethereum_events::EthAddress;
 use crate::types::storage::Key;
 use crate::types::token::{balance_key, Amount};
 use crate::vm::WasmCacheAccess;
@@ -83,6 +84,51 @@ where
         }
     }
 
+    /// Check that the correct amount of wrapper erc20s were
+    /// sent from the correct account into escrow
+    fn check_werc20s_escrowed(
+        &self,
+        keys_changed: &BTreeSet<Key>,
+        transfer: &PendingTransfer,
+    ) -> Result<bool, Error> {
+        // check that the assets to be transferred were escrowed
+        let asset_key = wrapped_erc20s::Keys::from(&transfer.transfer.asset);
+        let owner_key = asset_key.balance(&transfer.transfer.sender);
+        let escrow_key = asset_key.balance(&BRIDGE_POOL_ADDRESS);
+        if keys_changed.contains(&owner_key)
+            && keys_changed.contains(&escrow_key)
+        {
+            match check_balance_changes(
+                &self.ctx,
+                (&escrow_key).try_into().expect("This should not fail"),
+                (&owner_key).try_into().expect("This should not fail"),
+            ) {
+                Ok(Some((sender, _, amount)))
+                    if check_delta(&sender, &amount, transfer) => {}
+                other => {
+                    tracing::debug!(
+                        "The assets of the transfer were not properly \
+                         escrowed into the Ethereum bridge pool: {:?}",
+                        other
+                    );
+                    return Ok(false);
+                }
+            }
+        } else {
+            tracing::debug!(
+                "The assets of the transfer were not properly escrowed into \
+                 the Ethereum bridge pool."
+            );
+            return Ok(false);
+        }
+
+        tracing::info!(
+            "The Ethereum bridge pool VP accepted the transfer {:?}.",
+            transfer
+        );
+        Ok(true)
+    }
+
     /// Check that the correct amount of Nam was sent
     /// from the correct account into escrow
     fn check_nam_escrowed(&self, delta: EscrowDelta) -> Result<bool, Error> {
@@ -125,10 +171,10 @@ where
     /// Deteremine the debit and credit amounts that should be checked.
     fn escrow_check<'trans>(
         &self,
+        wnam_address: &EthAddress,
         transfer: &'trans PendingTransfer,
     ) -> Result<EscrowCheck<'trans>, Error> {
-        let is_native_asset = transfer.transfer.asset
-            == read_native_erc20_address(&self.ctx.pre())?;
+        let is_native_asset = &transfer.transfer.asset == wnam_address;
         // there is a corner case where the gas fees and escrowed Nam
         // are debited from the same address when mint wNam.
         Ok(
@@ -294,63 +340,31 @@ where
             return Ok(false);
         }
         // The deltas in the escrowed amounts we must check.
-        let escrow_checks = self.escrow_check(&transfer)?;
+        let wnam_address = read_native_erc20_address(&self.ctx.pre())?;
+        let escrow_checks = self.escrow_check(&wnam_address, &transfer)?;
         // check that gas was correctly escrowed.
         if !self.check_nam_escrowed(escrow_checks.gas_check)? {
             return Ok(false);
         }
-        // if we are going to mint wNam on Ethereum, the appropriate
-        // amount of Nam must be escrowed in the Ethereum bridge VP's storage.
-        let wnam_address = read_native_erc20_address(&self.ctx.pre())?;
+        // check the escrowed assets
         if transfer.transfer.asset == wnam_address {
-            // check that correct amount of Nam was put into escrow.
-            return if self.check_nam_escrowed(escrow_checks.token_check)? {
-                tracing::info!(
-                    "The Ethereum bridge pool VP accepted the transfer {:?}.",
-                    transfer
-                );
-                Ok(true)
-            } else {
-                Ok(false)
-            };
-        }
-
-        // check that the assets to be transferred were escrowed
-        let asset_key = wrapped_erc20s::Keys::from(&transfer.transfer.asset);
-        let owner_key = asset_key.balance(&transfer.transfer.sender);
-        let escrow_key = asset_key.balance(&BRIDGE_POOL_ADDRESS);
-        if keys_changed.contains(&owner_key)
-            && keys_changed.contains(&escrow_key)
-        {
-            match check_balance_changes(
-                &self.ctx,
-                (&escrow_key).try_into().expect("This should not fail"),
-                (&owner_key).try_into().expect("This should not fail"),
-            ) {
-                Ok(Some((sender, _, amount)))
-                    if check_delta(&sender, &amount, &transfer) => {}
-                other => {
-                    tracing::debug!(
-                        "The assets of the transfer were not properly \
-                         escrowed into the Ethereum bridge pool: {:?}",
-                        other
-                    );
-                    return Ok(false);
-                }
-            }
+            // if we are going to mint wNam on Ethereum, the appropriate
+            // amount of Nam must be escrowed in the Ethereum bridge VP's
+            // storage.
+            self.check_nam_escrowed(escrow_checks.token_check)
+                .map(|ok| {
+                    if ok {
+                        tracing::info!(
+                            "The Ethereum bridge pool VP accepted the \
+                             transfer {:?}.",
+                            transfer
+                        );
+                    }
+                    ok
+                })
         } else {
-            tracing::debug!(
-                "The assets of the transfer were not properly escrowed into \
-                 the Ethereum bridge pool."
-            );
-            return Ok(false);
+            self.check_werc20s_escrowed(keys_changed, &transfer)
         }
-
-        tracing::info!(
-            "The Ethereum bridge pool VP accepted the transfer {:?}.",
-            transfer
-        );
-        Ok(true)
     }
 }
 
@@ -376,7 +390,6 @@ mod test_bridge_pool_vp {
     use crate::types::address::wnam;
     use crate::types::chain::ChainId;
     use crate::types::eth_bridge_pool::{GasFee, TransferToEthereum};
-    use crate::types::ethereum_events::EthAddress;
     use crate::types::hash::Hash;
     use crate::types::key::{common, ed25519, SecretKey, SigScheme};
     use crate::types::storage::TxIndex;
