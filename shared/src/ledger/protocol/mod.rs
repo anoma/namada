@@ -267,8 +267,6 @@ where
                         }
                     };
 
-                    // TODO vp compiling fee
-
                     wasm::run::vp(
                         &vp_code_hash,
                         tx,

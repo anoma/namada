@@ -1947,14 +1947,16 @@ pub async fn query_conversion(
 pub async fn query_wasm_code_hash(
     code_path: impl AsRef<str>,
     ledger_address: TendermintAddress,
-) -> Option<Vec<u8>> {
+) -> Option<Hash> {
     let client = HttpClient::new(ledger_address.clone()).unwrap();
     let hash_key = Key::wasm_hash(code_path.as_ref());
     match query_storage_value_bytes(&client, &hash_key, None, false)
         .await
         .0
     {
-        Some(hash) => Some(hash),
+        Some(hash) => {
+            Some(Hash::try_from(&hash[..]).expect("Invalid code hash"))
+        }
         None => {
             eprintln!(
                 "The corresponding wasm code of the code path {} doesn't \

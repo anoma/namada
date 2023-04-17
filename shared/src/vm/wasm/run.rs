@@ -94,14 +94,13 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    // TODO gas_meter.add_compiling_fee()
     let (module, store) = if tx_code.as_ref().len() == HASH_LENGTH {
         // we assume that there is no wasm code with HASH_LENGTH
         let code_hash =
             Hash::try_from(tx_code.as_ref()).map_err(Error::CodeHash)?;
         fetch_or_compile(tx_wasm_cache, &code_hash, write_log, storage)?
     } else {
-        match tx_wasm_cache.compile_and_fetch(tx_code)? {
+        match tx_wasm_cache.compile_or_fetch(tx_code)? {
             Some((module, store)) => (module, store),
             None => return Err(Error::NoCompiledWasmCode),
         }
@@ -459,7 +458,7 @@ where
 
             validate_untrusted_wasm(&code).map_err(Error::ValidationError)?;
 
-            match wasm_cache.compile_and_fetch(code)? {
+            match wasm_cache.compile_or_fetch(code)? {
                 Some((module, store)) => Ok((module, store)),
                 None => Err(Error::NoCompiledWasmCode),
             }
