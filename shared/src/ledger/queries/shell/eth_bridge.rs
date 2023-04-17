@@ -426,11 +426,7 @@ where
         )));
     }
 
-    let valset_upd_keys = vote_tallies::Keys::from(&epoch);
-
-    let seen = StorageRead::read(ctx.wl_storage, &valset_upd_keys.seen())?
-        .unwrap_or(false);
-    if !seen {
+    if !ctx.wl_storage.ethbridge_queries().valset_upd_seen(epoch) {
         return Err(storage_api::Error::Custom(CustomError(
             format!(
                 "Validator set update proof is not yet available for the \
@@ -440,6 +436,7 @@ where
         )));
     }
 
+    let valset_upd_keys = vote_tallies::Keys::from(&epoch);
     let proof: EthereumProof<VotingPowersMap> =
         StorageRead::read(ctx.wl_storage, &valset_upd_keys.body())?.expect(
             "EthereumProof is seen in storage, therefore it must exist",
