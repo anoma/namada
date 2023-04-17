@@ -147,6 +147,9 @@ where
                     implicit_vp_code_path
                 )),
             )?;
+        // In dev, we don't check the hash
+        #[cfg(feature = "dev")]
+        let _ = implicit_vp_sha256;
         #[cfg(not(feature = "dev"))]
         {
             assert_eq!(
@@ -268,7 +271,7 @@ where
             balances,
         } in genesis.token_accounts
         {
-            let vp_code_hash = read_wasm_hash(&self.wl_storage, &vp_code_path)?
+            let vp_code_hash = read_wasm_hash(&self.wl_storage, vp_code_path.clone())?
                 .ok_or(Error::LoadingWasm(format!(
                     "Unknown vp code path: {}",
                     implicit_vp_code_path
