@@ -22,7 +22,7 @@ use crate::config;
 use crate::facade::tendermint::{block, Genesis};
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_config::{
-    Error as TendermintError, TendermintConfig,
+    Error as TendermintError, TendermintConfig, TxIndexConfig, TxIndexer,
 };
 
 /// Env. var to output Tendermint log to stdout
@@ -370,6 +370,13 @@ async fn update_tendermint_config(
         config.consensus.timeout_commit =
             tendermint_config.consensus_timeout_commit;
     }
+
+    let indexer = if tendermint_config.tx_index {
+        TxIndexer::Kv
+    } else {
+        TxIndexer::Null
+    };
+    config.tx_index = TxIndexConfig { indexer };
 
     let mut file = OpenOptions::new()
         .write(true)
