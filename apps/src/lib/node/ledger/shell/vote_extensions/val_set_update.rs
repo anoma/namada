@@ -28,7 +28,7 @@ where
     /// To validate a [`validator_set_update::SignedVext`], Namada nodes
     /// check if:
     ///
-    ///  * The signing validator is a consensus validator during the value of
+    ///  * The signing validator is a consensus validator during the epoch
     ///    `signing_epoch` inside the extension.
     ///  * A validator set update proof is not available yet for
     ///    `signing_epoch`.
