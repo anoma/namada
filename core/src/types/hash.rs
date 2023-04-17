@@ -33,6 +33,8 @@ pub type HashResult<T> = std::result::Result<T, Error>;
     Clone,
     Debug,
     Default,
+    PartialOrd,
+    Ord,
     Hash,
     PartialEq,
     Eq,

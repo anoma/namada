@@ -78,7 +78,7 @@ where
             ref vp_code_hash,
         }) => {
             // Read the VP of a new account
-            Ok(Some(vp_code_hash.clone()))
+            Ok(Some(vp_code_hash.to_vec()))
         }
         Some(&write_log::StorageModification::Temp { .. }) => {
             Err(RuntimeError::ReadTemporaryValueError)
@@ -119,8 +119,8 @@ where
         Some(&write_log::StorageModification::InitAccount {
             ref vp_code_hash,
         }) => {
-            // Read the VP of a new account
-            Ok(Some(vp_code_hash.clone()))
+            // Read the VP code hash of a new account
+            Ok(Some(vp_code_hash.to_vec()))
         }
         Some(&write_log::StorageModification::Temp { .. }) => {
             Err(RuntimeError::ReadTemporaryValueError)

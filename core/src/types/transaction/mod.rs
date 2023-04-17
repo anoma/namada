@@ -144,7 +144,7 @@ pub struct UpdateVp {
     /// An address of the account
     pub addr: Address,
     /// The new VP code hash
-    pub vp_code_hash: Vec<u8>,
+    pub vp_code_hash: Hash,
 }
 
 /// A tx data type to initialize a new established account
@@ -164,7 +164,7 @@ pub struct InitAccount {
     /// account.
     pub public_key: common::PublicKey,
     /// The VP code hash
-    pub vp_code_hash: Vec<u8>,
+    pub vp_code_hash: Hash,
 }
 
 /// A tx data type to initialize a new validator account.
@@ -195,7 +195,7 @@ pub struct InitValidator {
     /// immutable once set here.
     pub max_commission_rate_change: Decimal,
     /// The VP code for validator account
-    pub validator_vp_code_hash: Vec<u8>,
+    pub validator_vp_code_hash: Hash,
 }
 
 /// Module that includes helper functions for classifying

@@ -281,7 +281,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
     }
 
     /// Compile a WASM module and persist the compiled modules to files.
-    pub fn compile_and_fetch(
+    pub fn compile_or_fetch(
         &mut self,
         code: impl AsRef<[u8]>,
     ) -> Result<Option<(Module, Store)>, wasm::run::Error> {
@@ -609,7 +609,7 @@ mod test {
                 );
 
                 let fetched =
-                    cache.compile_and_fetch(&tx_read_storage_key.code).unwrap();
+                    cache.compile_or_fetch(&tx_read_storage_key.code).unwrap();
                 assert_matches!(
                     fetched,
                     Some(_),
@@ -646,7 +646,7 @@ mod test {
                     "The module must not be in cache"
                 );
 
-                let fetched = cache.compile_and_fetch(&tx_no_op.code).unwrap();
+                let fetched = cache.compile_or_fetch(&tx_no_op.code).unwrap();
                 assert_matches!(
                     fetched,
                     Some(_),
@@ -696,7 +696,6 @@ mod test {
             cache.in_memory = in_memory;
             cache.progress = Default::default();
             {
-                println!("DEBUG");
                 let fetched = cache.fetch(&tx_read_storage_key.hash).unwrap();
                 assert_matches!(
                     fetched,
@@ -789,7 +788,7 @@ mod test {
                 );
 
                 // Fetching with read-only should not modify the in-memory cache
-                let fetched = cache.compile_and_fetch(&tx_no_op.code).unwrap();
+                let fetched = cache.compile_or_fetch(&tx_no_op.code).unwrap();
                 assert_matches!(
                     fetched,
                     Some(_),
@@ -822,7 +821,7 @@ mod test {
 
         // Try to compile it
         let error = cache
-            .compile_and_fetch(&invalid_wasm)
+            .compile_or_fetch(&invalid_wasm)
             .expect_err("Compilation should fail");
         println!("Error: {}", error);
 
@@ -1014,7 +1013,7 @@ mod test {
                 1,
             );
             let (module, _store) =
-                cache.compile_and_fetch(&code).unwrap().unwrap();
+                cache.compile_or_fetch(&code).unwrap().unwrap();
             loupe::size_of_val(&module) + HASH_LENGTH + extra_bytes
         };
         println!(
