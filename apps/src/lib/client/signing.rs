@@ -16,13 +16,15 @@ use namada::types::hash::Hash;
 use sha2::{Digest, Sha256};
 use data_encoding::HEXLOWER;
 use serde::{Deserialize, Serialize};
-use std::io::{Error, ErrorKind};
+use std::io::{Error, ErrorKind, Write};
 use std::collections::BTreeMap;
 use namada::types::ibc::data::IbcMessage;
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use namada::ibc::core::ics26_routing::msgs::Ics26Envelope;
+use std::env;
+use std::fs::File;
 
 use super::rpc;
 use crate::cli::context::{WalletAddress, WalletKeypair};
@@ -37,6 +39,9 @@ use crate::client::tx::{
     TX_UNBOND_WASM, TX_UPDATE_VP_WASM, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
     VP_USER_WASM,
 };
+
+/// Env. var specifying where to store signing test vectors
+const ENV_VAR_LEDGER_LOG_PATH: &str = "NAMADA_LEDGER_LOG_PATH";
 
 /// Find the public key for the given address and try to load the keypair
 /// for it from the wallet. Panics if the key cannot be found or loaded.
@@ -288,6 +293,26 @@ pub async fn sign_wrapper(
         #[cfg(not(feature = "mainnet"))]
         pow_solution.clone(),
     )));
+
+    // Attempt to decode the construction
+    if let Ok(path) = env::var(ENV_VAR_LEDGER_LOG_PATH) {
+        let mut tx = tx.clone();
+        // Contract the large data blobs in the transaction
+        tx.wallet_filter();
+        // Convert the transaction to Ledger format
+        let decoding = to_ledger_vector(ctx, &tx)
+            .expect("unable to decode transaction");
+        let output = serde_json::to_string(&decoding)
+            .expect("failed to serialize decoding");
+        // Record the transaction at the identified path
+        let mut f = File::options()
+            .append(true)
+            .create(true)
+            .open(path)
+            .expect("failed to open test vector file");
+        writeln!(f, "{},", output)
+            .expect("unable to write test vector to file");
+    }
     
     // Then sign over the bound wrapper
     tx.add_section(Section::Signature(Signature::new(&tx.header_hash(), keypair)));
@@ -361,7 +386,13 @@ fn to_ledger_vector(
     };
 
     let mut j = 0;
-    let code_hash = hash_tx(&tx.code().unwrap_or(vec![]));
+    let code_hash = tx
+        .get_section(tx.code_sechash())
+        .expect("expected tx code section to be present")
+        .code_sec()
+        .expect("expected section to have code tag")
+        .code
+        .hash();
     tv.output_expert.push(format!(
         "{} | Code hash: {}",
         j,
