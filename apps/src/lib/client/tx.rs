@@ -1505,7 +1505,11 @@ fn unzip_option<T, U>(opt: Option<(T, U)>) -> (Option<T>, Option<U>) {
     }
 }
 
-pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
+pub async fn build_transfer(
+    ctx: &mut Context,
+    args: &args::TxTransfer,
+    client: &HttpClient,
+) -> Transfer {
     let source = ctx.get_cached(&args.source).effective_address();
     let target = ctx.get(&args.target).effective_address();
     // Check that the source address exists on chain
@@ -1548,8 +1552,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         }
         None => (None, token::balance_key(&token, &source)),
     };
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-    match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
+    match rpc::query_storage_value::<token::Amount>(client, &balance_key).await
     {
         Some(balance) => {
             if balance < args.amount {
@@ -1591,66 +1594,87 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         _ => None,
     };
 
-    #[cfg(not(feature = "mainnet"))]
-    let is_source_faucet =
-        rpc::is_faucet_account(&source, args.tx.ledger_address.clone()).await;
+    token::Transfer {
+        source,
+        target,
+        token,
+        sub_prefix,
+        amount,
+        key,
+        shielded: None,
+    }
+}
 
-    let signing_address = TxSigningKey::WalletAddress(args.source.to_address());
+pub async fn build_shielded_part(
+    ctx: &mut Context,
+    args: &args::TxTransfer,
+    client: &HttpClient,
+    mut transfer: Transfer,
+) -> (Tx, Option<Epoch>) {
+    // Construct the shielded part of the transaction, if any
+    let stx_result = gen_shielded_transfer(ctx, client, args).await;
+
     let tx_code_hash =
         query_wasm_code_hash(TX_TRANSFER_WASM, args.tx.ledger_address.clone())
             .await
             .unwrap();
 
-    // Loop twice in case the first submission attempt fails
-    for _ in 0..2 {
-        // Construct the shielded part of the transaction, if any
-        let stx_result = gen_shielded_transfer(&mut ctx, &client, &args).await;
-
-        let (shielded, shielded_tx_epoch) = match stx_result {
-            Ok(stx) => unzip_option(stx.map(|x| (x.0, x.2))),
-            Err(builder::Error::ChangeIsNegative(_)) => {
-                eprintln!(
-                    "The balance of the source {} is lower than the amount to \
+    let (shielded, shielded_tx_epoch) = match stx_result {
+        Ok(stx) => unzip_option(stx.map(|x| (x.0, x.2))),
+        Err(builder::Error::ChangeIsNegative(_)) => {
+            eprintln!(
+                "The balance of the source {} is lower than the amount to \
                      be transferred and fees. Amount to transfer is {} {} and \
                      fees are {} {}.",
-                    source.clone(),
-                    args.amount,
-                    token,
-                    args.tx.fee_amount,
-                    ctx.get(&args.tx.fee_token),
-                );
-                safe_exit(1)
-            }
-            Err(err) => panic!("{}", err),
-        };
+                ctx.get_cached(&args.source).effective_address(),
+                args.amount,
+                ctx.get(&args.token),
+                args.tx.fee_amount,
+                ctx.get(&args.tx.fee_token),
+            );
+            safe_exit(1)
+        }
+        Err(err) => panic!("{}", err),
+    };
 
-        // Construct the transparent part of the transaction
-        let transfer = token::Transfer {
-            source: source.clone(),
-            target: target.clone(),
-            token: token.clone(),
-            sub_prefix: sub_prefix.clone(),
-            amount,
-            key: key.clone(),
-            shielded,
-        };
-        tracing::debug!("Transfer data {:?}", transfer);
-        let data = transfer
-            .try_to_vec()
-            .expect("Encoding tx data shouldn't fail");
-        let tx = Tx::new(
+    transfer.shielded = shielded;
+    tracing::debug!("Transfer data {:?}", transfer);
+    let data = transfer
+        .try_to_vec()
+        .expect("Encoding tx data shouldn't fail");
+    (
+        Tx::new(
             tx_code_hash.to_vec(),
             Some(data),
             ctx.config.ledger.chain_id.clone(),
             args.tx.expiration,
-        );
+        ),
+        shielded_tx_epoch,
+    )
+}
+
+pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    let transfer = build_transfer(&mut ctx, &args, &client).await;
+    #[cfg(not(feature = "mainnet"))]
+    let is_source_faucet = rpc::is_faucet_account(
+        &ctx.get_cached(&args.source).effective_address(),
+        args.tx.ledger_address.clone(),
+    )
+    .await;
+
+    // Loop twice in case the first submission attempt fails
+    for _ in 0..2 {
+        let (tx, shielded_tx_epoch) =
+            build_shielded_part(&mut ctx, &args, &client, transfer.clone())
+                .await;
 
         // Dry-run/broadcast/submit the transaction
         let (new_ctx, result) = process_tx(
             ctx,
             &args.tx,
             tx,
-            signing_address.clone(),
+            TxSigningKey::WalletAddress(args.source.to_address()),
             #[cfg(not(feature = "mainnet"))]
             is_source_faucet,
         )
@@ -2312,8 +2336,8 @@ pub async fn submit_reveal_pk_aux(
         ledger_address: args.ledger_address.clone(),
     })
     .await;
-    let to_broadcast = if args.dry_run {
-        TxBroadcastData::DryRun(tx)
+    let (to_broadcast, _) = if args.dry_run {
+        (TxBroadcastData::DryRun(tx), None)
     } else {
         super::signing::sign_wrapper(
             ctx,
@@ -2837,69 +2861,102 @@ impl ProcessTxResponse {
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
 async fn process_tx(
-    ctx: Context,
+    mut ctx: Context,
     args: &args::Tx,
     tx: Tx,
     default_signer: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (Context, ProcessTxResponse) {
-    let (ctx, to_broadcast) = sign_tx(
-        ctx,
-        tx,
-        args,
-        default_signer,
-        #[cfg(not(feature = "mainnet"))]
-        requires_pow,
-    )
-    .await;
-    // NOTE: use this to print the request JSON body:
+    // Loop twice in case the optional unshielding tx fails because of an epoch change
+    for _ in 0..2 {
+        let (to_broadcast, unshielding_tx_epoch) = sign_tx(
+            &mut ctx,
+            tx.clone(),
+            args,
+            default_signer.clone(),
+            #[cfg(not(feature = "mainnet"))]
+            requires_pow,
+        )
+        .await;
+        // NOTE: use this to print the request JSON body:
 
-    // let request =
-    // tendermint_rpc::endpoint::broadcast::tx_commit::Request::new(
-    //     tx_bytes.clone().into(),
-    // );
-    // use tendermint_rpc::Request;
-    // let request_body = request.into_json();
-    // println!("HTTP request body: {}", request_body);
+        // let request =
+        // tendermint_rpc::endpoint::broadcast::tx_commit::Request::new(
+        //     tx_bytes.clone().into(),
+        // );
+        // use tendermint_rpc::Request;
+        // let request_body = request.into_json();
+        // println!("HTTP request body: {}", request_body);
 
-    if args.dry_run {
-        if let TxBroadcastData::DryRun(tx) = to_broadcast {
-            rpc::dry_run_tx(&args.ledger_address, tx.to_bytes()).await;
-            (ctx, ProcessTxResponse::DryRun)
-        } else {
-            panic!(
-                "Expected a dry-run transaction, received a wrapper \
+        if args.dry_run {
+            if let TxBroadcastData::DryRun(tx) = to_broadcast {
+                rpc::dry_run_tx(&args.ledger_address, tx.to_bytes()).await;
+                return (ctx, ProcessTxResponse::DryRun);
+            } else {
+                panic!(
+                    "Expected a dry-run transaction, received a wrapper \
                  transaction instead"
-            );
-        }
-    } else {
-        // Either broadcast or submit transaction and collect result into
-        // sum type
-        if args.broadcast_only {
-            match broadcast_tx(args.ledger_address.clone(), &to_broadcast).await
-            {
-                Ok(resp) => (ctx, ProcessTxResponse::Broadcast(resp)),
-                Err(err) => {
-                    eprintln!(
-                        "Encountered error while broadcasting transaction: {}",
-                        err
-                    );
-                    safe_exit(1)
-                }
+                );
             }
         } else {
-            match submit_tx(args.ledger_address.clone(), to_broadcast).await {
-                Ok(result) => (ctx, ProcessTxResponse::Applied(result)),
-                Err(err) => {
-                    eprintln!(
+            // Either broadcast or submit transaction and collect result into
+            // sum type
+            if args.broadcast_only {
+                match broadcast_tx(args.ledger_address.clone(), &to_broadcast)
+                    .await
+                {
+                    Ok(resp) => {
+                        return (ctx, ProcessTxResponse::Broadcast(resp))
+                    }
+                    Err(err) => {
+                        eprintln!(
                         "Encountered error while broadcasting transaction: {}",
                         err
                     );
-                    safe_exit(1)
+                        break;
+                    }
+                }
+            } else {
+                match submit_tx(args.ledger_address.clone(), to_broadcast).await
+                {
+                    Ok(result) => {
+                        // Query the epoch in which the transaction was probably submitted
+                        let submission_epoch = rpc::query_epoch(
+                            &HttpClient::new(args.ledger_address.clone())
+                                .unwrap(),
+                        )
+                        .await;
+
+                        // If wrapper tx requests the unshielding of tokens for fee payment
+                        if let Some(unshield_epoch) = unshielding_tx_epoch {
+                            // And the transaction was rejected by some vp and the epochs do not match
+                            if result.code == 1.to_string()
+                                && unshield_epoch != submission_epoch
+                            {
+                                // Retry the submission
+                                eprintln!(
+                    "Fee unshielding transaction rejected and this may be due to the \
+                     epoch changing. Attempting to resubmit transaction.",
+                );
+                                continue;
+                            }
+                        }
+
+                        return (ctx, ProcessTxResponse::Applied(result));
+                    }
+                    Err(err) => {
+                        eprintln!(
+                        "Encountered error while broadcasting transaction: {}",
+                        err
+                    );
+                        break;
+                    }
                 }
             }
         }
     }
+
+    safe_exit(1)
 }
 
 /// Save accounts initialized from a tx into the wallet, if any.

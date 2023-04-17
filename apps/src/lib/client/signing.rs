@@ -147,31 +147,31 @@ pub async fn tx_signer(
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
 pub async fn sign_tx(
-    mut ctx: Context,
+    ctx: &mut Context,
     tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> (Context, TxBroadcastData) {
+) -> (TxBroadcastData, Option<Epoch>) {
     if args.dump_tx {
-        dump_tx_helper(&ctx, &tx, "unsigned", None);
+        dump_tx_helper(ctx, &tx, "unsigned", None);
     }
 
-    let keypair = tx_signer(&mut ctx, &args, default).await;
+    let keypair = tx_signer(ctx, args, default).await;
     let tx = tx.sign(&keypair);
     if args.dump_tx {
-        dump_tx_helper(&ctx, &tx, "signed", None);
+        dump_tx_helper(ctx, &tx, "signed", None);
     }
 
     let epoch = rpc::query_and_print_epoch(args::Query {
         ledger_address: args.ledger_address.clone(),
     })
     .await;
-    let broadcast_data = if args.dry_run {
-        TxBroadcastData::DryRun(tx)
+    let (broadcast_data, unshielding_epoch) = if args.dry_run {
+        (TxBroadcastData::DryRun(tx), None)
     } else {
         sign_wrapper(
-            &mut ctx,
+            ctx,
             args,
             epoch,
             tx,
@@ -197,7 +197,7 @@ pub async fn sign_tx(
         dump_tx_helper(&ctx, wrapper_tx, "wrapper", Some(wrapper_hash));
     }
 
-    (ctx, broadcast_data)
+    (broadcast_data, unshielding_epoch)
 }
 
 pub fn dump_tx_helper(
@@ -235,7 +235,7 @@ pub async fn sign_wrapper(
     tx: Tx,
     keypair: &common::SecretKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> TxBroadcastData {
+) -> (TxBroadcastData, Option<Epoch>) {
     let client = HttpClient::new(args.ledger_address.clone()).unwrap();
 
     let fee_amount = if cfg!(feature = "mainnet") {
@@ -254,7 +254,7 @@ pub async fn sign_wrapper(
             .await
             .unwrap_or_default();
 
-    let unshield = match fee_amount.checked_sub(balance) {
+    let (unshield, unshielding_epoch) = match fee_amount.checked_sub(balance) {
         Some(diff) => {
             if let Some(spending_key) = args.fee_unshield {
                 // Unshield funds for fee payment
@@ -273,31 +273,16 @@ pub async fn sign_wrapper(
                     sub_prefix: None,
                     amount: diff,
                 };
-                let (transaction, _, _) =
-                    tx::gen_shielded_transfer(ctx, &client, &transfer_args)
-                        .await
-                        .expect("Error while generating the fee unshielding tx")
-                        .expect("Failed to generate a fee unshielding tx");
+                let transfer =
+                    tx::build_transfer(ctx, &transfer_args, &client).await;
+                let (unsigned_tx, unshielding_epoch) = tx::build_shielded_part(
+                    ctx,
+                    &transfer_args,
+                    &client,
+                    transfer,
+                )
+                .await;
 
-                let transfer = token::Transfer {
-                    source: address::masp(),
-                    target: source.clone(),
-                    token: fee_token.clone(),
-                    sub_prefix: None,
-                    amount: fee_amount,
-                    key: None,
-                    shielded: Some(transaction),
-                };
-                tracing::debug!("Fee unshielding transfer data {:?}", transfer);
-                let data = transfer
-                    .try_to_vec()
-                    .expect("Encoding tx data shouldn't fail");
-                let unsigned_tx = Tx::new(
-                    ctx.read_wasm(tx::TX_TRANSFER_WASM),
-                    Some(data),
-                    ctx.config.ledger.chain_id.clone(),
-                    args.expiration,
-                );
                 balance += diff;
                 let masp_key = find_keypair(
                     &mut ctx.wallet,
@@ -305,7 +290,7 @@ pub async fn sign_wrapper(
                     args.ledger_address.clone(),
                 )
                 .await;
-                Some(unsigned_tx.sign(&masp_key))
+                (Some(unsigned_tx.sign(&masp_key)), unshielding_epoch)
             } else {
                 eprintln!(
             "The wrapper transaction source doesn't have enough balance to \
@@ -315,10 +300,10 @@ pub async fn sign_wrapper(
                     cli::safe_exit(1);
                 }
 
-                None
+                (None, None)
             }
         }
-        None => None,
+        None => (None, None),
     };
 
     #[cfg(not(feature = "mainnet"))]
@@ -368,11 +353,18 @@ pub async fn sign_wrapper(
     // We use this to determine when the decrypted inner tx makes it
     // on-chain
     let decrypted_hash = tx.tx_hash.to_string();
-    TxBroadcastData::Wrapper {
-        tx: tx
-            .sign(keypair, ctx.config.ledger.chain_id.clone(), args.expiration)
-            .expect("Wrapper tx signing keypair should be correct"),
-        wrapper_hash,
-        decrypted_hash,
-    }
+    (
+        TxBroadcastData::Wrapper {
+            tx: tx
+                .sign(
+                    keypair,
+                    ctx.config.ledger.chain_id.clone(),
+                    args.expiration,
+                )
+                .expect("Wrapper tx signing keypair should be correct"),
+            wrapper_hash,
+            decrypted_hash,
+        },
+        unshielding_epoch,
+    )
 }
