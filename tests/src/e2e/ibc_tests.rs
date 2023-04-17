@@ -92,12 +92,22 @@ fn run_ledger_ibc() -> Result<()> {
     let (test_a, test_b) = setup::two_single_node_nets()?;
 
     // Run Chain A
-    let mut ledger_a =
-        run_as!(test_a, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+    let mut ledger_a = run_as!(
+        test_a,
+        Who::Validator(0),
+        Bin::Node,
+        &["ledger", "run", "--tx-index"],
+        Some(40)
+    )?;
     ledger_a.exp_string("Namada ledger node started")?;
     // Run Chain B
-    let mut ledger_b =
-        run_as!(test_b, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+    let mut ledger_b = run_as!(
+        test_b,
+        Who::Validator(0),
+        Bin::Node,
+        &["ledger", "run", "--tx-index"],
+        Some(40)
+    )?;
     ledger_b.exp_string("Namada ledger node started")?;
     ledger_a.exp_string("This node is a validator")?;
     ledger_b.exp_string("This node is a validator")?;
