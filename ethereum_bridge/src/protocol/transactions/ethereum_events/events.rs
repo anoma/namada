@@ -634,12 +634,6 @@ mod tests {
                 name: "bridge".to_string(),
                 address: arbitrary_eth_address(),
             },
-            EthereumEvent::TransfersToEthereum {
-                nonce: arbitrary_nonce(),
-                transfers: vec![],
-                valid_transfers_map: vec![],
-                relayer: gen_implicit_address(),
-            },
             EthereumEvent::UpdateBridgeWhitelist {
                 nonce: arbitrary_nonce(),
                 whitelist: vec![],
@@ -813,6 +807,8 @@ mod tests {
     /// we act on a TransfersToEthereum
     fn test_act_on_timeout_for_transfers_to_eth() {
         let mut wl_storage = TestWlStorage::default();
+        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
+        wl_storage.commit_block().expect("Test failed");
         init_storage(&mut wl_storage);
         // Height 0
         let pending_transfers = init_bridge_pool(&mut wl_storage);
@@ -857,7 +853,9 @@ mod tests {
                 .iter_prefix(&prefix)
                 .expect("Test failed")
                 .count(),
-            1
+            // NOTE: we should have two writes -- one of them being
+            // the bridge pool nonce update
+            2
         );
 
         // Check the gas fee
