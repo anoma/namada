@@ -28,12 +28,14 @@ where
     /// To validate a [`validator_set_update::SignedVext`], Namada nodes
     /// check if:
     ///
-    ///  * The signing validator is a consensus validator during
+    ///  * The signing validator is a consensus validator during the value of
+    ///    `signing_epoch` inside the extension.
+    ///  * A validator set update proof is not available yet for
     ///    `signing_epoch`.
     ///  * The validator correctly signed the extension, with its Ethereum hot
     ///    key.
     ///  * The validator signed over the epoch inside of the extension, whose
-    ///    value should be identical to `signing_epoch`.
+    ///    value should not be greater than `last_epoch`.
     ///  * The voting powers in the vote extension correspond to the voting
     ///    powers of the validators of `signing_epoch + 1`.
     ///  * The voting powers signed over were Ethereum ABI encoded, normalized
@@ -55,7 +57,7 @@ where
     pub fn validate_valset_upd_vext_and_get_it_back(
         &self,
         ext: validator_set_update::SignedVext,
-        signing_epoch: Epoch,
+        last_epoch: Epoch,
     ) -> std::result::Result<
         (token::Amount, validator_set_update::SignedVext),
         VoteExtensionError,
@@ -67,14 +69,27 @@ where
             );
             return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
-        if ext.data.signing_epoch != signing_epoch {
+        let signing_epoch = ext.data.signing_epoch;
+        if signing_epoch > last_epoch {
             tracing::debug!(
-                vext_epoch = ?ext.data.signing_epoch,
-                expected_epoch = ?signing_epoch,
+                vext_epoch = ?signing_epoch,
+                ?last_epoch,
                 "Validator set update vote extension issued for an epoch \
-                 different from the expected one.",
+                 greater than the last one.",
             );
             return Err(VoteExtensionError::UnexpectedEpoch);
+        }
+        if self
+            .wl_storage
+            .ethbridge_queries()
+            .valset_upd_seen(signing_epoch.next())
+        {
+            let err = VoteExtensionError::ValsetUpdProofAvailable;
+            tracing::debug!(
+                proof_epoch = ?signing_epoch.next(),
+                "{err}"
+            );
+            return Err(err);
         }
         // verify if the new epoch validators' voting powers in storage match
         // the voting powers in the vote extension

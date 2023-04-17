@@ -28,6 +28,11 @@ const VALIDATOR_EXPECT_MSG: &str = "Only validators receive this method call.";
 /// The error yielded from validating faulty vote extensions in the shell
 #[derive(Error, Debug)]
 pub enum VoteExtensionError {
+    #[error(
+        "A validator set update proof is already available in storage for the \
+         given epoch"
+    )]
+    ValsetUpdProofAvailable,
     #[error("The length of the transfers and their validity map differ")]
     TransfersLenMismatch,
     #[error("The bridge pool nonce in the vote extension is invalid")]
@@ -400,7 +405,6 @@ where
         txs: &'shell [TxBytes],
     ) -> impl Iterator<Item = TxBytes> + 'shell {
         use namada::types::transaction::protocol::ProtocolTx;
-        let current_epoch = self.wl_storage.storage.get_current_epoch().0;
 
         txs.iter().filter_map(move |tx_bytes| {
             let tx = match Tx::try_from(tx_bytes.as_slice()) {
@@ -428,14 +432,17 @@ where
                     // only include non-stale validator set updates
                     // in block proposals. it might be sitting long
                     // enough in the mempool for it to no longer be
-                    // relevant to propose (e.g. the new epoch was
-                    // installed before this validator set update got
-                    // a chance to be decided). unfortunately, we won't
-                    // be able to remove it from the mempool this way,
-                    // but it will eventually be evicted, getting replaced
+                    // relevant to propose (e.g. a proof was constructed
+                    // before this validator set update got a chance
+                    // to be decided). unfortunately, we won't be able
+                    // to remove it from the mempool this way, but it
+                    // will eventually be evicted, getting replaced
                     // by newer txs.
-                    (ext.data.signing_epoch == current_epoch)
-                        .then(|| tx_bytes.clone())
+                    (!self
+                        .wl_storage
+                        .ethbridge_queries()
+                        .valset_upd_seen(ext.data.signing_epoch.next()))
+                    .then(|| tx_bytes.clone())
                 }
                 _ => None,
             }
