@@ -144,7 +144,7 @@ now, is the minimum duration in blocks of an epoch. Transactions that time out
 should revert the state changes in Namada, including refunding the paid fees
 and escrowed assets.
 
-Timeouts only happen after we process transfer to Ethereum events, to guarantee
+Timeouts only happen after we process transfer to Ethereum events to guarantee
 the consistency of the shared state between Namada and Ethereum. Nonces from
 transfer to Ethereum events will place a total order on these transfers and
 any future relay attempts.
