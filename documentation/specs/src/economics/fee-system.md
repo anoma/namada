@@ -221,7 +221,13 @@ The first condition can be tested statically and requires that:
    purposes)
 
 The spending key associated with this operation could be relative to any address
-as long as the signature of the transfer itself is valid.
+as long as the signature of the transfer itself is valid. Verifying that the
+origin of the transaction is the same as the wrapper's source would be
+impossible anyway for two reasons:
+
+- the transaction is signed by the `masp` internal address, making it impossible
+  to check against the public key field of the wrapper
+- transparent addresses and spending keys are unrelated
 
 If any of the checks fail, the transaction must be discarded. Once these
 controls have been performed, the block proposer should run the actual transfer
