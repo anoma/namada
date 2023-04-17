@@ -81,6 +81,7 @@ where
             vp_whitelist,
             tx_whitelist,
             implicit_vp_code_path,
+            implicit_vp_sha256,
             epochs_per_year,
             pos_gain_p,
             pos_gain_d,
@@ -146,6 +147,19 @@ where
                     implicit_vp_code_path
                 )),
             )?;
+        // In dev, we don't check the hash
+        #[cfg(feature = "dev")]
+        let _ = implicit_vp_sha256;
+        #[cfg(not(feature = "dev"))]
+        {
+            assert_eq!(
+                implicit_vp_code_hash.as_slice(),
+                &implicit_vp_sha256,
+                "Invalid implicit account's VP sha256 hash for {}",
+                implicit_vp_code_path
+            );
+        }
+
         let parameters = Parameters {
             epoch_duration,
             max_proposal_bytes,
@@ -183,6 +197,7 @@ where
         for genesis::EstablishedAccount {
             address,
             vp_code_path,
+            vp_sha256,
             public_key,
             storage,
         } in genesis.established_accounts
@@ -192,6 +207,20 @@ where
                     "Unknown vp code path: {}",
                     implicit_vp_code_path
                 )))?;
+
+            // In dev, we don't check the hash
+            #[cfg(feature = "dev")]
+            let _ = vp_sha256;
+            #[cfg(not(feature = "dev"))]
+            {
+                assert_eq!(
+                    vp_code_hash.as_slice(),
+                    &vp_sha256,
+                    "Invalid established account's VP sha256 hash for {}",
+                    vp_code_path
+                );
+            }
+
             self.wl_storage
                 .write_bytes(&Key::validity_predicate(&address), vp_code_hash)
                 .unwrap();
@@ -238,6 +267,7 @@ where
         for genesis::TokenAccount {
             address,
             vp_code_path,
+            vp_sha256,
             balances,
         } in genesis.token_accounts
         {
@@ -246,6 +276,20 @@ where
                     "Unknown vp code path: {}",
                     implicit_vp_code_path
                 )))?;
+
+            // In dev, we don't check the hash
+            #[cfg(feature = "dev")]
+            let _ = vp_sha256;
+            #[cfg(not(feature = "dev"))]
+            {
+                assert_eq!(
+                    vp_code_hash.as_slice(),
+                    &vp_sha256,
+                    "Invalid token account's VP sha256 hash for {}",
+                    vp_code_path
+                );
+            }
+
             self.wl_storage
                 .write_bytes(&Key::validity_predicate(&address), vp_code_hash)
                 .unwrap();
@@ -267,6 +311,16 @@ where
                 "Unknown vp code path: {}",
                 implicit_vp_code_path
             )))?;
+
+            #[cfg(not(feature = "dev"))]
+            {
+                assert_eq!(
+                    vp_code_hash.as_slice(),
+                    &validator.validator_vp_sha256,
+                    "Invalid validator VP sha256 hash for {}",
+                    validator.validator_vp_code_path
+                );
+            }
 
             let addr = &validator.pos_data.address;
             self.wl_storage
