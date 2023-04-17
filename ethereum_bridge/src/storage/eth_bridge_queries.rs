@@ -1,4 +1,5 @@
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::hints;
 use namada_core::ledger::eth_bridge::storage::active_key;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
     get_nonce_key, get_signed_root_key,
@@ -23,6 +24,7 @@ use namada_proof_of_stake::{
 };
 
 use crate::storage::proof::BridgePoolRootProof;
+use crate::storage::vote_tallies;
 
 /// This enum is used as a parameter to
 /// [`EthBridgeQueriesHook::must_send_valset_upd`].
@@ -106,6 +108,21 @@ where
     #[inline]
     pub fn storage(self) -> &'db WlStorage<D, H> {
         self.wl_storage
+    }
+
+    /// Check if a validator set update proof is available for
+    /// the given [`Epoch`].
+    pub fn valset_upd_seen(self, epoch: Epoch) -> bool {
+        if hints::unlikely(epoch.0 == 0) {
+            unreachable!(
+                "There are no validator set update proofs for the first epoch"
+            );
+        }
+        let valset_upd_keys = vote_tallies::Keys::from(&epoch);
+        self.wl_storage
+            .read(&valset_upd_keys.seen())
+            .expect("Reading a value from storage should not fail")
+            .unwrap_or(false)
     }
 
     /// Check if the bridge is disabled, enabled, or
