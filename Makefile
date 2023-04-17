@@ -13,17 +13,23 @@ wasms_for_tests := wasm_for_tests/wasm_source
 # Paths for all the wasm templates
 wasm_templates := wasm/tx_template wasm/vp_template
 
+ifdef JOBS
+jobs := -j $(JOBS)
+else
+jobs :=
+endif
+
 # TODO upgrade libp2p
 audit-ignores += RUSTSEC-2021-0076
 
 build:
-	$(cargo) build
+	$(cargo) $(jobs) build
 
 build-test:
-	$(cargo) +$(nightly) build --tests -Z unstable-options
+	$(cargo) +$(nightly) build --tests $(jobs) -Z unstable-options
 
 build-release:
-	NAMADA_DEV=false $(cargo) build --release --package namada_apps --manifest-path Cargo.toml
+	NAMADA_DEV=false $(cargo) build $(jobs) --release --package namada_apps --manifest-path Cargo.toml
 
 install-release:
 	NAMADA_DEV=false $(cargo) install --path ./apps --locked
@@ -128,6 +134,7 @@ test-e2e:
 test-unit-abcipp:
 	$(cargo) test \
 		--manifest-path ./apps/Cargo.toml \
+		$(jobs) \
 		--no-default-features \
 		--features "testing std abcipp" \
 		-Z unstable-options \
@@ -136,12 +143,14 @@ test-unit-abcipp:
 	$(cargo) test \
 		--manifest-path \
 		./proof_of_stake/Cargo.toml \
+		$(jobs) \
 		--features "testing" \
 		-Z unstable-options \
 		$(TEST_FILTER) -- \
 		-Z unstable-options --report-time && \
 	$(cargo) test \
 		--manifest-path ./shared/Cargo.toml \
+		$(jobs) \
 		--no-default-features \
 		--features "testing wasm-runtime abcipp ibc-mocks-abcipp" \
 		-Z unstable-options \
@@ -149,6 +158,7 @@ test-unit-abcipp:
 		-Z unstable-options --report-time && \
 	$(cargo) test \
 		--manifest-path ./vm_env/Cargo.toml \
+		$(jobs) \
 		--no-default-features \
 		--features "abcipp" \
 		-Z unstable-options \
@@ -158,6 +168,7 @@ test-unit-abcipp:
 test-unit:
 	$(cargo) +$(nightly) test \
 		$(TEST_FILTER) \
+		$(jobs) \
 		-Z unstable-options \
 		-- --skip e2e \
 		-Z unstable-options --report-time
@@ -166,12 +177,14 @@ test-unit-mainnet:
 	$(cargo) +$(nightly) test \
 		--features "mainnet" \
 		$(TEST_FILTER) \
+		$(jobs)
 		-Z unstable-options \
 		-- --skip e2e \
 		-Z unstable-options --report-time
 
 test-unit-debug:
 	$(debug-cargo) +$(nightly) test \
+		$(jobs)
 		$(TEST_FILTER) -- \
 		-Z unstable-options \
 		-- --skip e2e \

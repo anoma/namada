@@ -122,7 +122,7 @@ mod dev {
         ];
         let token_addresses = address::tokens()
             .into_iter()
-            .map(|(addr, alias)| (alias.into(), addr));
+            .map(|(addr, (alias, _))| (alias.into(), addr));
         addresses.extend(token_addresses);
         addresses
     }

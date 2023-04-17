@@ -14,7 +14,7 @@ use thiserror::Error;
 
 use crate::types::key;
 use crate::types::key::PublicKeyHash;
-use crate::types::token::MaspDenom;
+use crate::types::token::{Denomination, MaspDenom};
 
 /// The length of an established [`Address`] encoded with Borsh.
 pub const ESTABLISHED_ADDRESS_BYTES_LEN: usize = 45;
@@ -558,16 +558,16 @@ pub fn masp_tx_key() -> crate::types::key::common::SecretKey {
 }
 
 /// Temporary helper for testing, a hash map of tokens addresses with their
-/// informal currency codes.
-pub fn tokens() -> HashMap<Address, &'static str> {
+/// informal currency codes and number of decimal places.
+pub fn tokens() -> HashMap<Address, (&'static str, Denomination)> {
     vec![
-        (nam(), "NAM"),
-        (btc(), "BTC"),
-        (eth(), "ETH"),
-        (dot(), "DOT"),
-        (schnitzel(), "Schnitzel"),
-        (apfel(), "Apfel"),
-        (kartoffel(), "Kartoffel"),
+        (nam(), ("NAM", 6.into())),
+        (btc(), ("BTC", 8.into())),
+        (eth(), ("ETH", 18.into())),
+        (dot(), ("DOT", 10.into())),
+        (schnitzel(), ("Schnitzel", 6.into())),
+        (apfel(), ("Apfel", 6.into())),
+        (kartoffel(), ("Kartoffel", 6.into())),
     ]
     .into_iter()
     .collect()

@@ -1607,17 +1607,6 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
             safe_exit(1)
         }
     }
-    // validate the amount given
-    let validated_amount =
-        validate_amount(&client, parsed_args.amount, &parsed_args.token).await;
-    let validate_fee = validate_amount(
-        &client,
-        parsed_args.tx.fee_amount,
-        &parsed_args.tx.fee_token,
-    )
-    .await;
-    parsed_args.amount = InputAmount::Validated(validated_amount);
-    parsed_args.tx.fee_amount = InputAmount::Validated(validate_fee);
     // Check source balance
     let (sub_prefix, balance_key) = match args.sub_prefix {
         Some(sub_prefix) => {
@@ -1633,6 +1622,25 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         }
         None => (None, token::balance_key(&parsed_args.token, &source)),
     };
+    // validate the amount given
+    let validated_amount = validate_amount(
+        &client,
+        parsed_args.amount,
+        &parsed_args.token,
+        &sub_prefix,
+    )
+    .await;
+    let validate_fee = validate_amount(
+        &client,
+        parsed_args.tx.fee_amount,
+        &parsed_args.tx.fee_token,
+        // TODO: Currently multi-tokens cannot be used to pay fees
+        &None,
+    )
+    .await;
+    parsed_args.amount = InputAmount::Validated(validated_amount);
+    parsed_args.tx.fee_amount = InputAmount::Validated(validate_fee);
+
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
     {
         Some(balance) => {
@@ -1640,6 +1648,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
                 let balance_amount = format_denominated_amount(
                     &client,
                     &parsed_args.token,
+                    &sub_prefix,
                     balance,
                 )
                 .await;
@@ -1820,11 +1829,20 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
     {
         Some(balance) => {
             if balance < args.amount {
-                let formatted_amount =
-                    format_denominated_amount(&client, &token, args.amount)
-                        .await;
-                let formatted_balance =
-                    format_denominated_amount(&client, &token, balance).await;
+                let formatted_amount = format_denominated_amount(
+                    &client,
+                    &token,
+                    &sub_prefix,
+                    args.amount,
+                )
+                .await;
+                let formatted_balance = format_denominated_amount(
+                    &client,
+                    &token,
+                    &sub_prefix,
+                    balance,
+                )
+                .await;
                 eprintln!(
                     "The balance of the source {} of token {} is lower than \
                      the amount to be transferred. Amount to transfer is {} \

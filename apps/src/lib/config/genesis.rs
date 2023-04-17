@@ -18,6 +18,7 @@ use namada::types::chain::ProposalBytes;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
+use namada::types::token::Denomination;
 use namada::types::{storage, token};
 use rust_decimal::Decimal;
 
@@ -41,6 +42,7 @@ pub mod genesis_config {
     use namada::types::key::dkg_session_keys::DkgPublicKey;
     use namada::types::key::*;
     use namada::types::time::Rfc3339String;
+    use namada::types::token::Denomination;
     use namada::types::{storage, token};
     use rust_decimal::Decimal;
     use serde::{Deserialize, Serialize};
@@ -207,6 +209,8 @@ pub mod genesis_config {
     pub struct TokenAccountConfig {
         // Address of token account (default: generate).
         pub address: Option<String>,
+        // The number of decimal places amounts of this token has
+        pub denom: Denomination,
         // Filename of token account VP. (default: token VP)
         pub vp: Option<String>,
         // Initial balances held by accounts defined elsewhere.
@@ -400,6 +404,7 @@ pub mod genesis_config {
 
         TokenAccount {
             address: Address::decode(config.address.as_ref().unwrap()).unwrap(),
+            denom: config.denom,
             vp_code_path: token_vp_config.filename.to_owned(),
             vp_sha256: token_vp_config
                 .sha256
@@ -799,6 +804,8 @@ pub struct EstablishedAccount {
 pub struct TokenAccount {
     /// Address
     pub address: Address,
+    /// The number of decimal places amounts of this token has
+    pub denom: Denomination,
     /// Validity predicate code WASM
     pub vp_code_path: String,
     /// Expected SHA-256 hash of the validity predicate wasm
@@ -985,9 +992,10 @@ pub fn genesis() -> Genesis {
         ((&validator.account_key).into(), default_key_tokens),
     ]);
     let token_accounts = address::tokens()
-        .into_keys()
-        .map(|address| TokenAccount {
+        .into_iter()
+        .map(|(address, (_, denom))| TokenAccount {
             address,
+            denom,
             vp_code_path: vp_token_path.into(),
             vp_sha256: Default::default(),
             balances: balances.clone(),

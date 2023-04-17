@@ -12,12 +12,16 @@
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
-use namada_vp_prelude::storage::KeySeg;
+use namada_vp_prelude::storage::{Key, KeySeg};
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
 
 enum KeyType<'a> {
-    Token(&'a Address),
+    Token {
+        token: &'a Address,
+        sub_prefix: Option<Key>,
+        owner: &'a Address,
+    },
     PoS,
     Vp(&'a Address),
     GovernanceVote(&'a Address),
@@ -26,12 +30,20 @@ enum KeyType<'a> {
 
 impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
-        if let Some(address) = token::is_any_token_balance_key(key) {
-            Self::Token(address)
-        } else if let Some((_, address)) =
+        if let Some([token, owner]) = token::is_any_token_balance_key(key) {
+            Self::Token {
+                token,
+                owner,
+                sub_prefix: None,
+            }
+        } else if let Some((sub, [token, owner])) =
             token::is_any_multitoken_balance_key(key)
         {
-            Self::Token(address)
+            Self::Token {
+                token,
+                owner,
+                sub_prefix: Some(sub),
+            }
         } else if proof_of_stake::is_pos_key(key) {
             Self::PoS
         } else if gov_storage::is_vote_key(key) {
@@ -90,7 +102,11 @@ fn validate_tx(
     for key in keys_changed.iter() {
         let key_type: KeyType = key.into();
         let is_valid = match key_type {
-            KeyType::Token(owner) => {
+            KeyType::Token {
+                token,
+                owner,
+                sub_prefix,
+            } => {
                 if owner == &addr {
                     let pre: token::Amount =
                         ctx.read_pre(key)?.unwrap_or_default();
@@ -100,7 +116,7 @@ fn validate_tx(
                     // debit has to signed, credit doesn't
                     let valid = change.non_negative() || *valid_sig;
                     let amount = token::Amount::from(change)
-                        .denominated(owner, &ctx.pre())
+                        .denominated(token, sub_prefix.as_ref(), &ctx.pre())
                         .unwrap();
                     debug_log!(
                         "token key: {}, change: {}, valid_sig: {}, valid \

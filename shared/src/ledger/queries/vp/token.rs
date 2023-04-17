@@ -2,13 +2,13 @@ use namada_core::ledger::storage::{DBIter, StorageHasher, DB};
 use namada_core::ledger::storage_api;
 use namada_core::ledger::storage_api::token::read_denom;
 use namada_core::types::address::Address;
+use namada_core::types::storage::Key;
 use namada_core::types::token;
-use namada_core::types::token::Denomination;
 
 use crate::ledger::queries::RequestCtx;
 
 router! {TOKEN,
-    ( "denomination" / [addr: Address] ) -> Option<token::Denomination> = denomination,
+    ( "denomination" / [addr: Address] / [sub_prefix: opt Key] ) -> Option<token::Denomination> = denomination,
 }
 
 /// Get the number of decimal places (in base 10) for a
@@ -16,10 +16,11 @@ router! {TOKEN,
 fn denomination<D, H>(
     ctx: RequestCtx<'_, D, H>,
     addr: Address,
-) -> storage_api::Result<Option<Denomination>>
+    sub_prefix: Option<Key>,
+) -> storage_api::Result<Option<token::Denomination>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    read_denom(ctx.wl_storage, &addr)
+    read_denom(ctx.wl_storage, &addr, sub_prefix.as_ref())
 }

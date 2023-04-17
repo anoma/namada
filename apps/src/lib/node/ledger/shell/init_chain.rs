@@ -6,6 +6,7 @@ use std::hash::Hash;
 use namada::core::ledger::testnet_pow;
 use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::into_tm_voting_power;
+use namada::ledger::storage_api::token::write_denom;
 use namada::ledger::storage_api::StorageWrite;
 use namada::types::key::*;
 #[cfg(not(feature = "dev"))]
@@ -240,11 +241,21 @@ where
         // Initialize genesis token accounts
         for genesis::TokenAccount {
             address,
+            denom,
             vp_code_path,
             vp_sha256,
             balances,
         } in genesis.token_accounts
         {
+            // associate a token with its denomination.
+            write_denom(
+                &mut self.wl_storage,
+                &address,
+                // TODO: Should we support multi-tokens at genesis?
+                None,
+                denom,
+            )
+            .unwrap();
             let vp_code =
                 vp_code_cache.get_or_insert_with(vp_code_path.clone(), || {
                     wasm_loader::read_wasm(&self.wasm_dir, &vp_code_path)

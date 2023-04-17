@@ -216,10 +216,11 @@ impl Amount {
     pub fn denominated(
         &self,
         token: &Address,
+        sub_prefix: Option<&Key>,
         storage: &impl StorageRead,
     ) -> Option<DenominatedAmount> {
-        let denom =
-            read_denom(storage, token).expect("Should be able to read storage");
+        let denom = read_denom(storage, token, sub_prefix)
+            .expect("Should be able to read storage");
         denom.map(|denom| DenominatedAmount {
             amount: *self,
             denom,
@@ -248,7 +249,10 @@ impl Amount {
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,
+    Serialize,
+    Deserialize,
 )]
+#[serde(transparent)]
 pub struct Denomination(pub u8);
 
 impl From<u8> for Denomination {
@@ -749,23 +753,29 @@ pub fn is_balance_key<'a>(
 }
 
 /// Check if the given storage key is balance key for unspecified token. If it
-/// is, returns the owner.
-pub fn is_any_token_balance_key(key: &Key) -> Option<&Address> {
+/// is, returns the token and owner address.
+pub fn is_any_token_balance_key(key: &Key) -> Option<[&Address; 2]> {
     match &key.segments[..] {
         [
-            DbKeySeg::AddressSeg(_),
+            DbKeySeg::AddressSeg(token),
             DbKeySeg::StringSeg(key),
             DbKeySeg::AddressSeg(owner),
-        ] if key == BALANCE_STORAGE_KEY => Some(owner),
+        ] if key == BALANCE_STORAGE_KEY => Some([token, owner]),
         _ => None,
     }
 }
 
 /// Obtain a storage key denomination of a token.
-pub fn denom_key(token_addr: &Address) -> Key {
-    Key::from(token_addr.to_db_key())
-        .push(&DENOM_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+pub fn denom_key(token_addr: &Address, sub_prefix: Option<&Key>) -> Key {
+    match sub_prefix {
+        Some(sub) => Key::from(token_addr.to_db_key())
+            .join(sub)
+            .push(&DENOM_STORAGE_KEY.to_owned())
+            .expect("Cannot obtain a storage key"),
+        None => Key::from(token_addr.to_db_key())
+            .push(&DENOM_STORAGE_KEY.to_owned())
+            .expect("Cannot obtain a storage key"),
+    }
 }
 
 /// Check if the given storage key is a denomination key for the given token.
@@ -773,6 +783,7 @@ pub fn is_denom_key(token_addr: &Address, key: &Key) -> bool {
     matches!(&key.segments[..],
         [
             DbKeySeg::AddressSeg(addr),
+            ..,
             DbKeySeg::StringSeg(key),
         ] if key == DENOM_STORAGE_KEY && addr == token_addr)
 }
@@ -802,10 +813,13 @@ pub fn is_multitoken_balance_key<'a>(
 }
 
 /// Check if the given storage key is multitoken balance key for unspecified
-/// token. If it is, returns the sub prefix and the owner.
-pub fn is_any_multitoken_balance_key(key: &Key) -> Option<(Key, &Address)> {
+/// token. If it is, returns the sub prefix and the token and owner addresses.
+pub fn is_any_multitoken_balance_key(
+    key: &Key,
+) -> Option<(Key, [&Address; 2])> {
     match key.segments.first() {
-        Some(DbKeySeg::AddressSeg(_)) => multitoken_balance_owner(key),
+        Some(DbKeySeg::AddressSeg(token)) => multitoken_balance_owner(key)
+            .map(|(sub, owner)| (sub, [token, owner])),
         _ => None,
     }
 }
@@ -1085,12 +1099,12 @@ pub mod testing {
 
     /// Generate an arbitrary token amount
     pub fn arb_amount() -> impl Strategy<Value = Amount> {
-        any::<u64>().prop_map(Amount::native_whole)
+        any::<u64>().prop_map(|val| Amount::from_uint(val, 0).unwrap())
     }
 
     /// Generate an arbitrary token amount up to and including given `max` value
     pub fn arb_amount_ceiled(max: u64) -> impl Strategy<Value = Amount> {
-        (0..=max).prop_map(Amount::native_whole)
+        (0..=max).prop_map(|val| Amount::from_uint(val, 0).unwrap())
     }
 
     /// Generate an arbitrary non-zero token amount up to and including given
@@ -1098,6 +1112,6 @@ pub mod testing {
     pub fn arb_amount_non_zero_ceiled(
         max: u64,
     ) -> impl Strategy<Value = Amount> {
-        (1..=max).prop_map(Amount::native_whole)
+        (1..=max).prop_map(|val| Amount::from_uint(val, 0).unwrap())
     }
 }

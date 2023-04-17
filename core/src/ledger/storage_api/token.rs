@@ -3,6 +3,7 @@
 use super::{StorageRead, StorageWrite};
 use crate::ledger::storage_api;
 use crate::types::address::Address;
+use crate::types::storage::Key;
 use crate::types::token;
 pub use crate::types::token::{Amount, Change};
 
@@ -26,11 +27,12 @@ where
 pub fn read_denom<S>(
     storage: &S,
     token: &Address,
+    sub_prefix: Option<&Key>,
 ) -> storage_api::Result<Option<token::Denomination>>
 where
     S: StorageRead,
 {
-    let key = token::denom_key(token);
+    let key = token::denom_key(token, sub_prefix);
     storage.read(&key)
 }
 
@@ -38,12 +40,13 @@ where
 pub fn write_denom<S>(
     storage: &mut S,
     token: &Address,
+    sub_prefix: Option<&Key>,
     denom: token::Denomination,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    let key = token::denom_key(token);
+    let key = token::denom_key(token, sub_prefix);
     storage.write(&key, denom)
 }
 

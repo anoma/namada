@@ -49,7 +49,8 @@ fn validate_tx(
     }
 
     for key in keys_changed.iter() {
-        let is_valid = if let Some(owner) = token::is_any_token_balance_key(key)
+        let is_valid = if let Some([_, owner]) =
+            token::is_any_token_balance_key(key)
         {
             if owner == &addr {
                 let pre: token::Amount = ctx.read_pre(key)?.unwrap_or_default();
@@ -353,6 +354,8 @@ mod tests {
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        // write the denomination of NAM into storage
+        storage_api::token::write_denom(&mut tx_env.wl_storage, &token, None, token::NATIVE_MAX_DECIMAL_PLACES.into()).unwrap();
         tx_env.commit_genesis();
 
         // Construct a PoW solution like a client would

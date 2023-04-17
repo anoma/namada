@@ -92,11 +92,14 @@ where
                     token::is_any_multitoken_balance_key(k),
                     Some((
                         _,
-                        Address::Internal(
-                            InternalAddress::IbcEscrow
-                                | InternalAddress::IbcBurn
-                                | InternalAddress::IbcMint
-                        )
+                        [
+                            _,
+                            Address::Internal(
+                                InternalAddress::IbcEscrow
+                                    | InternalAddress::IbcBurn
+                                    | InternalAddress::IbcMint
+                            )
+                        ]
                     ))
                 )
             })

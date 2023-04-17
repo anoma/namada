@@ -367,8 +367,11 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
                 print!("  {}:", account);
                 for ((addr, denom), val) in amt.components() {
                     let addr_enc = addr.encode();
-                    let readable =
-                        tokens.get(addr).cloned().unwrap_or(addr_enc.as_str());
+                    let readable = tokens
+                        .get(addr)
+                        .cloned()
+                        .map(|a| a.0)
+                        .unwrap_or(addr_enc.as_str());
                     let sign = match val.cmp(&0) {
                         Ordering::Greater => "+",
                         Ordering::Less => "-",
@@ -380,6 +383,9 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
                         format_denominated_amount(
                             &client,
                             addr,
+                            // TODO: apparently MASP doesn't support
+                            // multi-tokens?
+                            &None,
                             token::Amount::from_masp_denominated(
                                 val.unsigned_abs(),
                                 *denom
@@ -399,8 +405,11 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
                 print!("  {}:", fvk_map[&account]);
                 for ((addr, denom), val) in amt.components() {
                     let addr_enc = addr.encode();
-                    let readable =
-                        tokens.get(addr).cloned().unwrap_or(addr_enc.as_str());
+                    let readable = tokens
+                        .get(addr)
+                        .cloned()
+                        .map(|a| a.0)
+                        .unwrap_or(addr_enc.as_str());
                     let sign = match val.cmp(&0) {
                         Ordering::Greater => "+",
                         Ordering::Less => "-",
@@ -412,6 +421,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
                         format_denominated_amount(
                             &client,
                             addr,
+                            &None,
                             token::Amount::from_masp_denominated(
                                 val.unsigned_abs(),
                                 *denom
@@ -517,27 +527,39 @@ pub async fn query_transparent_balance(
         (Some(token), Some(owner)) => {
             let token = ctx.get(&token);
             let owner = ctx.get_cached(&owner);
-            let key = match &args.sub_prefix {
+            let (balance_key, sub_prefix) = match &args.sub_prefix {
                 Some(sub_prefix) => {
                     let sub_prefix = Key::parse(sub_prefix).unwrap();
                     let prefix =
                         token::multitoken_balance_prefix(&token, &sub_prefix);
-                    token::multitoken_balance_key(
-                        &prefix,
-                        &owner.address().unwrap(),
+                    (
+                        token::multitoken_balance_key(
+                            &prefix,
+                            &owner.address().unwrap(),
+                        ),
+                        Some(sub_prefix),
                     )
                 }
-                None => token::balance_key(&token, &owner.address().unwrap()),
+                None => (
+                    token::balance_key(&token, &owner.address().unwrap()),
+                    None,
+                ),
             };
             let currency_code = tokens
                 .get(&token)
-                .map(|c| Cow::Borrowed(*c))
+                .map(|(c, _)| Cow::Borrowed(*c))
                 .unwrap_or_else(|| Cow::Owned(token.to_string()));
-            match query_storage_value::<token::Amount>(&client, &key).await {
+            match query_storage_value::<token::Amount>(&client, &balance_key)
+                .await
+            {
                 Some(balance) => {
-                    let balance =
-                        format_denominated_amount(&client, &token, balance)
-                            .await;
+                    let balance = format_denominated_amount(
+                        &client,
+                        &token,
+                        &sub_prefix,
+                        balance,
+                    )
+                    .await;
                     match &args.sub_prefix {
                         Some(sub_prefix) => {
                             println!(
@@ -676,7 +698,7 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
                 let token = ctx.get(token);
                 let currency_code = tokens
                     .get(&token)
-                    .map(|c| Cow::Borrowed(*c))
+                    .map(|(c, _)| Cow::Borrowed(*c))
                     .unwrap_or_else(|| Cow::Owned(token.to_string()));
                 let mut total_balance = token::Amount::default();
                 for denom in MaspDenom::iter() {
@@ -698,6 +720,8 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
                     let formatted = format_denominated_amount(
                         &client,
                         &token,
+                        // TODO: Is this correct?
+                        &None,
                         total_balance,
                     )
                     .await;
@@ -729,12 +753,21 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
                         found_any = true;
                     }
                     let addr_enc = addr.encode();
-                    let formatted =
-                        format_denominated_amount(&client, addr, asset_value)
-                            .await;
+                    let formatted = format_denominated_amount(
+                        &client,
+                        addr,
+                        // TODO: Is this correct?
+                        &None,
+                        asset_value,
+                    )
+                    .await;
                     println!(
                         "  {}: {}",
-                        tokens.get(addr).cloned().unwrap_or(addr_enc.as_str()),
+                        tokens
+                            .get(addr)
+                            .cloned()
+                            .map(|a| a.0)
+                            .unwrap_or(addr_enc.as_str()),
                         formatted,
                     );
                 }
@@ -763,29 +796,39 @@ async fn print_balances(
     let tokens = address::tokens();
     let currency_code = tokens
         .get(token)
-        .map(|c| Cow::Borrowed(*c))
+        .map(|(c, _)| Cow::Borrowed(*c))
         .unwrap_or_else(|| Cow::Owned(token.to_string()));
     writeln!(w, "Token {}", currency_code).unwrap();
     let mut print_num = 0;
     for (key, balance) in balances {
         let (o, s) = match token::is_any_multitoken_balance_key(&key) {
-            Some((sub_prefix, owner)) => (
+            Some((sub_prefix, [tok, owner])) => (
                 owner.clone(),
                 format!(
                     "with {}: {}, owned by {}",
-                    sub_prefix,
-                    format_denominated_amount(client, token, balance).await,
+                    sub_prefix.clone(),
+                    format_denominated_amount(
+                        client,
+                        tok,
+                        &Some(sub_prefix),
+                        balance
+                    )
+                    .await,
                     lookup_alias(ctx, owner)
                 ),
             ),
             None => {
-                if let Some(owner) = token::is_any_token_balance_key(&key) {
+                if let Some([tok, owner]) =
+                    token::is_any_token_balance_key(&key)
+                {
                     (
                         owner.clone(),
                         format!(
                             ": {}, owned by {}",
-                            format_denominated_amount(client, token, balance)
-                                .await,
+                            format_denominated_amount(
+                                client, tok, &None, balance
+                            )
+                            .await,
                             lookup_alias(ctx, owner)
                         ),
                     )
@@ -1018,7 +1061,7 @@ pub async fn query_shielded_balance(
 
             let currency_code = tokens
                 .get(&token)
-                .map(|c| Cow::Borrowed(*c))
+                .map(|(c, _)| Cow::Borrowed(*c))
                 .unwrap_or_else(|| Cow::Owned(token.to_string()));
             if total_balance.is_zero() {
                 println!(
@@ -1029,8 +1072,14 @@ pub async fn query_shielded_balance(
                 println!(
                     "{}: {}",
                     currency_code,
-                    format_denominated_amount(&client, &token, total_balance)
-                        .await
+                    format_denominated_amount(
+                        &client,
+                        &token,
+                        // TODO: Is this correct?
+                        &None,
+                        total_balance
+                    )
+                    .await
                 );
             }
         }
@@ -1083,6 +1132,7 @@ pub async fn query_shielded_balance(
                             tokens
                                 .get(&addr)
                                 .cloned()
+                                .map(|a| a.0)
                                 .unwrap_or(addr_enc.as_str())
                         );
                         read_tokens.insert(addr.clone());
@@ -1093,7 +1143,9 @@ pub async fn query_shielded_balance(
                                 denom,
                             );
                             let formatted = format_denominated_amount(
-                                &client, &addr, value,
+                                &client, &addr,
+                                // TODO: Is this correct?
+                                &None, value,
                             )
                             .await;
                             println!("  {}, owned by {}", formatted, fvk);
@@ -1111,7 +1163,7 @@ pub async fn query_shielded_balance(
                 }
             }
             // Print zero balances for remaining assets
-            for (token, currency_code) in tokens {
+            for (token, (currency_code, _)) in tokens {
                 if !read_tokens.contains(&token) {
                     println!("Shielded Token {}:", currency_code);
                     println!(
@@ -1129,7 +1181,7 @@ pub async fn query_shielded_balance(
             let mut found_any = false;
             let currency_code = tokens
                 .get(&token)
-                .map(|c| Cow::Borrowed(*c))
+                .map(|(c, _)| Cow::Borrowed(*c))
                 .unwrap_or_else(|| Cow::Owned(token.to_string()));
             println!("Shielded Token {}:", currency_code);
             for fvk in viewing_keys {
@@ -1166,8 +1218,11 @@ pub async fn query_shielded_balance(
                         found_any = true;
                     }
                 }
-                let formatted =
-                    format_denominated_amount(&client, &token, balance).await;
+                let formatted = format_denominated_amount(
+                    &client, &token, // TODO: Is this correct?
+                    &None, balance,
+                )
+                .await;
                 println!("  {}, owned by {}", formatted, fvk);
             }
             if !found_any {
@@ -1237,8 +1292,16 @@ pub async fn print_decoded_balance(
             let addr_enc = addr.encode();
             println!(
                 "{} : {}",
-                tokens.get(addr).cloned().unwrap_or(addr_enc.as_str()),
-                format_denominated_amount(client, addr, amount).await,
+                tokens
+                    .get(addr)
+                    .cloned()
+                    .map(|a| a.0)
+                    .unwrap_or(addr_enc.as_str()),
+                format_denominated_amount(
+                    client, addr, // TODO: Is this correct?
+                    &None, amount,
+                )
+                .await,
             );
         }
     }
@@ -1265,9 +1328,17 @@ pub async fn print_decoded_balance_with_epoch(
             let addr_enc = addr.encode();
             println!(
                 "{} | {} : {}",
-                tokens.get(addr).cloned().unwrap_or(addr_enc.as_str()),
+                tokens
+                    .get(addr)
+                    .cloned()
+                    .map(|a| a.0)
+                    .unwrap_or(addr_enc.as_str()),
                 epoch,
-                format_denominated_amount(client, addr, amount).await,
+                format_denominated_amount(
+                    client, addr, // TODO: Is this correct?
+                    &None, amount,
+                )
+                .await,
             );
         }
     }
@@ -2003,7 +2074,11 @@ pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
         let addr_enc = addr.encode();
         print!(
             "{}[{}]: ",
-            tokens.get(addr).cloned().unwrap_or(addr_enc.as_str()),
+            tokens
+                .get(addr)
+                .cloned()
+                .map(|a| a.0)
+                .unwrap_or(addr_enc.as_str()),
             epoch,
         );
         // Now print out the components of the allowed conversion
@@ -2018,7 +2093,11 @@ pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
                 "{}{} {}[{}]",
                 prefix,
                 val,
-                tokens.get(addr).cloned().unwrap_or(addr_enc.as_str()),
+                tokens
+                    .get(addr)
+                    .cloned()
+                    .map(|a| a.0)
+                    .unwrap_or(addr_enc.as_str()),
                 epoch
             );
             // Future iterations need to be prefixed with +
@@ -2781,10 +2860,14 @@ pub(super) fn unwrap_client_response<T>(
 pub(super) async fn format_denominated_amount(
     client: &HttpClient,
     token: &Address,
+    sub_prefix: &Option<Key>,
     amount: token::Amount,
 ) -> String {
     let denom = unwrap_client_response(
-        RPC.vp().token().denomination(client, token).await,
+        RPC.vp()
+            .token()
+            .denomination(client, token, sub_prefix)
+            .await,
     )
     .unwrap_or_else(|| {
         println!(
@@ -2815,13 +2898,17 @@ pub async fn validate_amount(
     client: &HttpClient,
     amount: InputAmount,
     token: &Address,
+    sub_prefix: &Option<Key>,
 ) -> token::DenominatedAmount {
     let input_amount = match amount {
         InputAmount::Unvalidated(amt) => amt.canonical(),
         InputAmount::Validated(amt) => return amt,
     };
     let denom = unwrap_client_response(
-        RPC.vp().token().denomination(client, token).await,
+        RPC.vp()
+            .token()
+            .denomination(client, token, sub_prefix)
+            .await,
     )
     .unwrap_or_else(|| {
         println!(

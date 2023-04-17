@@ -142,10 +142,10 @@ pub fn transfer_with_keys(
 ) -> TxResult {
     let src_owner = is_any_multitoken_balance_key(src_key).map(|(_, o)| o);
     let src_bal: Option<Amount> = match src_owner {
-        Some(Address::Internal(InternalAddress::IbcMint)) => {
+        Some([_, Address::Internal(InternalAddress::IbcMint)]) => {
             Some(Amount::max_signed())
         }
-        Some(Address::Internal(InternalAddress::IbcBurn)) => {
+        Some([_, Address::Internal(InternalAddress::IbcBurn)]) => {
             log_string("invalid transfer from the burn address");
             unreachable!()
         }
@@ -168,7 +168,7 @@ pub fn transfer_with_keys(
     src_bal.spend(&amount);
     let dest_owner = is_any_multitoken_balance_key(dest_key).map(|(_, o)| o);
     let mut dest_bal: Amount = match dest_owner {
-        Some(Address::Internal(InternalAddress::IbcMint)) => {
+        Some([_, Address::Internal(InternalAddress::IbcMint)]) => {
             log_string("invalid transfer to the mint address");
             unreachable!()
         }
@@ -183,13 +183,13 @@ pub fn transfer_with_keys(
     };
     dest_bal.receive(&amount);
     match src_owner {
-        Some(Address::Internal(InternalAddress::IbcMint)) => {
+        Some([_, Address::Internal(InternalAddress::IbcMint)]) => {
             ctx.write_temp(src_key, src_bal)?;
         }
         _ => ctx.write(src_key, src_bal)?,
     }
     match dest_owner {
-        Some(Address::Internal(InternalAddress::IbcBurn)) => {
+        Some([_, Address::Internal(InternalAddress::IbcBurn)]) => {
             ctx.write_temp(dest_key, dest_bal)?;
         }
         _ => ctx.write(dest_key, dest_bal)?,

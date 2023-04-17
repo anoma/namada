@@ -106,7 +106,7 @@ impl SignedUint {
     }
 
     /// Adds two [`SignedUint`]'s if the absolute value does
-    /// not exceed [`MAX_SIGNED_AMOUNT`], else returns `None`.
+    /// not exceed [`MAX_SIGNED_VALUE`], else returns `None`.
     pub fn checked_add(&self, other: &Self) -> Option<Self> {
         if self.non_negative() == other.non_negative() {
             self.abs().checked_add(other.abs()).and_then(|val| {
@@ -120,7 +120,7 @@ impl SignedUint {
     }
 
     /// Subtracts two [`SignedUint`]'s if the absolute value does
-    /// not exceed [`MAX_SIGNED_AMOUNT`], else returns `None`.
+    /// not exceed [`MAX_SIGNED_VALUE`], else returns `None`.
     pub fn checked_sub(&self, other: &Self) -> Option<Self> {
         self.checked_add(&other.neg())
     }
