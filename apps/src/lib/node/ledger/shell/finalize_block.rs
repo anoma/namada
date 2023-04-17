@@ -1136,33 +1136,33 @@ mod test_finalize_block {
 
     #[test]
     /// Test that adding a new erc20 transfer to the bridge pool
-    /// increments the pool's nonce.
+    /// increments the pool's nonce, whether only invalid transfers
+    /// were relayed or not.
     fn test_bp_nonce_is_incremented() {
+        test_bp_nonce_is_incremented_aux(false);
+        test_bp_nonce_is_incremented_aux(true);
+    }
+
+    /// Helper function to [`test_bp_nonce_is_incremented`].
+    ///
+    /// Sets the validity of the transfer on Ethereum's side.
+    fn test_bp_nonce_is_incremented_aux(valid_transfer: bool) {
         test_bp(|shell: &mut TestShell| {
             let asset = EthAddress([0xff; 20]);
             let receiver = EthAddress([0xaa; 20]);
             let bertha = crate::wallet::defaults::bertha_address();
-            // add `asset` to bertha's balance
+            // add bertha's escrowed `asset` to the pool
             {
                 let asset_key = wrapped_erc20s::Keys::from(&asset);
-                let owner_key = asset_key.balance(&bertha);
-                let amt: Amount = 999_999_u64.into();
-                shell
-                    .wl_storage
-                    .write(&owner_key, amt)
-                    .expect("Test failed");
-            }
-            // add NAM to bertha's balance
-            {
-                let amt: Amount = 999_999_u64.into();
                 let owner_key =
-                    token::balance_key(&namada::types::address::nam(), &bertha);
+                    asset_key.balance(&bridge_pool::BRIDGE_POOL_ADDRESS);
+                let amt: Amount = 999_999_u64.into();
                 shell
                     .wl_storage
                     .write(&owner_key, amt)
                     .expect("Test failed");
             }
-            // add some tokens to the pool
+            // add bertha's gas fees the pool
             {
                 use crate::node::ledger::shell::address::nam;
                 let amt: Amount = 999_999_u64.into();
@@ -1196,7 +1196,7 @@ mod test_finalize_block {
             let ethereum_event = EthereumEvent::TransfersToEthereum {
                 nonce: 0u64.into(),
                 transfers: vec![transfer],
-                valid_transfers_map: vec![true],
+                valid_transfers_map: vec![valid_transfer],
                 relayer: bertha,
             };
             let (protocol_key, _, _) =
