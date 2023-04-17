@@ -129,6 +129,12 @@ where
                 || tx_whitelist.contains(&code_hash.to_string().to_lowercase())
                 || vp_whitelist.contains(&code_hash.to_string().to_lowercase())
             {
+                if name.starts_with("tx_") {
+                    self.tx_wasm_cache.pre_compile(&code);
+                } else if name.starts_with("vp_") {
+                    self.vp_wasm_cache.pre_compile(&code);
+                }
+
                 let code_key = Key::wasm_code(&code_hash);
                 self.wl_storage.write_bytes(&code_key, code)?;
 
@@ -271,11 +277,13 @@ where
             balances,
         } in genesis.token_accounts
         {
-            let vp_code_hash = read_wasm_hash(&self.wl_storage, vp_code_path.clone())?
-                .ok_or(Error::LoadingWasm(format!(
-                    "Unknown vp code path: {}",
-                    implicit_vp_code_path
-                )))?;
+            let vp_code_hash =
+                read_wasm_hash(&self.wl_storage, vp_code_path.clone())?.ok_or(
+                    Error::LoadingWasm(format!(
+                        "Unknown vp code path: {}",
+                        implicit_vp_code_path
+                    )),
+                )?;
 
             // In dev, we don't check the hash
             #[cfg(feature = "dev")]
