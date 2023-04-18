@@ -314,8 +314,9 @@ where
                 tracing::debug!(
                     ?pending_transfer,
                     "Valid transfer to Ethereum detected, compensating the \
-                     relayer"
+                     relayer and burning any Ethereum assets in Namada"
                 );
+                burn_transferred_assets(wl_storage, &pending_transfer)?;
             } else {
                 tracing::debug!(
                     ?pending_transfer,
@@ -479,6 +480,48 @@ where
     tracing::debug!(?transfer, "Refunded Bridge pool transferred assets");
     _ = changed_keys.insert(source);
     _ = changed_keys.insert(target);
+    Ok(changed_keys)
+}
+
+fn burn_transferred_assets<D, H>(
+    wl_storage: &mut WlStorage<D, H>,
+    transfer: &PendingTransfer,
+) -> Result<BTreeSet<Key>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let mut changed_keys = BTreeSet::default();
+
+    let native_erc20_addr = match wl_storage
+        .read_bytes(&bridge_storage::native_erc20_key())?
+    {
+        Some(v) => EthAddress::try_from_slice(&v[..])?,
+        None => {
+            return Err(eyre::eyre!("Could not read wNam key from storage"));
+        }
+    };
+
+    if transfer.transfer.asset == native_erc20_addr {
+        tracing::debug!(?transfer, "Keeping wrapped NAM in escrow");
+        return Ok(BTreeSet::new());
+    }
+
+    let keys: wrapped_erc20s::Keys = (&transfer.transfer.asset).into();
+
+    let escrow_balance_key = keys.balance(&BRIDGE_POOL_ADDRESS);
+    update::amount(wl_storage, &escrow_balance_key, |balance| {
+        balance.spend(&transfer.transfer.amount);
+    })?;
+    _ = changed_keys.insert(escrow_balance_key);
+
+    let supply_key = keys.supply();
+    update::amount(wl_storage, &supply_key, |supply| {
+        supply.spend(&transfer.transfer.amount);
+    })?;
+    _ = changed_keys.insert(supply_key);
+
+    tracing::debug!(?transfer, "Burned wrapped ERC20 tokens");
     Ok(changed_keys)
 }
 
