@@ -187,6 +187,12 @@ impl Wallet {
             })
             .transpose()?
             .unwrap_or_else(|| DerivationPath::default_for_scheme(scheme));
+        if !parsed_derivation_path.is_compatible(scheme) {
+            println!(
+                "WARNING: the specified derivation path may be incompatible \
+                 with the chosen cryptography scheme."
+            )
+        }
         println!("Using HD derivation path {}", parsed_derivation_path);
         let mnemonic = read_mnemonic_code()?;
         let passphrase = read_and_confirm_mnemonic_passphrase();
@@ -231,10 +237,15 @@ impl Wallet {
             })
             .transpose()?;
         if parsed_derivation_path.is_some() {
-            println!(
-                "Using HD derivation path {}",
-                parsed_derivation_path.clone().unwrap()
-            );
+            let parsed_derivation_path =
+                parsed_derivation_path.clone().unwrap();
+            if !parsed_derivation_path.is_compatible(scheme) {
+                println!(
+                    "WARNING: the specified derivation path may be \
+                     incompatible with the chosen cryptography scheme."
+                )
+            }
+            println!("Using HD derivation path {}", parsed_derivation_path);
         }
 
         let seed_and_derivation_path //: Option<Result<Seed, GenRestoreKeyError>>

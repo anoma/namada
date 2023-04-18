@@ -30,6 +30,21 @@ impl DerivationPath {
         Self(DerivationPathInner::new(path))
     }
 
+    pub fn is_compatible(&self, scheme: SchemeType) -> bool {
+        let mut it = self.0.into_iter();
+        let _ = it.next();
+        if let Some(coin_type) = it.next() {
+            let coin_type = coin_type.to_u32();
+            match scheme {
+                SchemeType::Ed25519 => coin_type == NAMADA_COIN_TYPE,
+                SchemeType::Secp256k1 => coin_type == ETH_COIN_TYPE,
+                _ => true,
+            }
+        } else {
+            true
+        }
+    }
+
     fn bip44_base_indexes_for_scheme(scheme: SchemeType) -> Vec<ChildIndex> {
         vec![
             ChildIndex::Hardened(44),
@@ -96,5 +111,52 @@ impl fmt::Display for DerivationPath {
 impl IntoHDeriveDerivationPath for DerivationPath {
     fn into(self) -> Result<HDeriveDerivationPath, HDeriveError> {
         HDeriveDerivationPath::from_str(&self.0.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use namada::types::key::SchemeType;
+
+    use super::DerivationPath;
+
+    #[test]
+    fn path_is_compatible() {
+        let path_empty =
+            DerivationPath::from_path_str(SchemeType::Secp256k1, "m")
+                .expect("Path construction cannot fail.");
+        assert!(path_empty.is_compatible(SchemeType::Ed25519));
+        assert!(path_empty.is_compatible(SchemeType::Secp256k1));
+        assert!(path_empty.is_compatible(SchemeType::Common));
+
+        let path_one =
+            DerivationPath::from_path_str(SchemeType::Secp256k1, "m/44'")
+                .expect("Path construction cannot fail.");
+        assert!(path_one.is_compatible(SchemeType::Ed25519));
+        assert!(path_one.is_compatible(SchemeType::Secp256k1));
+        assert!(path_one.is_compatible(SchemeType::Common));
+
+        let path_two = DerivationPath::from_path_str(
+            SchemeType::Secp256k1,
+            "m/44'/99999'",
+        )
+        .expect("Path construction cannot fail.");
+        assert!(!path_two.is_compatible(SchemeType::Ed25519));
+        assert!(!path_two.is_compatible(SchemeType::Secp256k1));
+        assert!(path_two.is_compatible(SchemeType::Common));
+
+        let path_eth =
+            DerivationPath::from_path_str(SchemeType::Secp256k1, "m/44'/60'")
+                .expect("Path construction cannot fail.");
+        assert!(!path_eth.is_compatible(SchemeType::Ed25519));
+        assert!(path_eth.is_compatible(SchemeType::Secp256k1));
+        assert!(path_eth.is_compatible(SchemeType::Common));
+
+        let path_nam =
+            DerivationPath::from_path_str(SchemeType::Ed25519, "m/44'/877'")
+                .expect("Path construction cannot fail.");
+        assert!(path_nam.is_compatible(SchemeType::Ed25519));
+        assert!(!path_nam.is_compatible(SchemeType::Secp256k1));
+        assert!(path_nam.is_compatible(SchemeType::Common));
     }
 }
