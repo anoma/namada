@@ -22,7 +22,7 @@ use borsh::{schema, BorshSchema};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use madato::types::TableRow;
-use namada::ledger::parameters::Parameters;
+use namada::core::ledger::parameters::Parameters;
 use namada::proto::SignedTxData;
 use namada::types::address::Address;
 use namada::types::key::ed25519::{PublicKey, Signature};
@@ -75,7 +75,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let init_account_schema = transaction::InitAccount::schema_container();
     let init_validator_schema = transaction::InitValidator::schema_container();
     let token_transfer_schema = token::Transfer::schema_container();
-    let update_vp_schema = transaction::UpdateVp::schema_container();
+    let update_vp_schema = transaction::UpdateAccount::schema_container();
     let pos_bond_schema = pos::Bond::schema_container();
     let pos_withdraw_schema = pos::Withdraw::schema_container();
     let wrapper_tx_schema = transaction::WrapperTx::schema_container();

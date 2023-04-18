@@ -11,7 +11,7 @@ pub use types::{
 };
 use vp::VP;
 // Re-export to show in rustdoc!
-pub use vp::{Pos, Vp};
+pub use vp::{Gov, Pos, Vp};
 
 use super::storage::{DBIter, StorageHasher, DB};
 use super::storage_api;

@@ -2,7 +2,6 @@
 
 pub mod address;
 pub mod chain;
-pub mod governance;
 pub mod hash;
 pub mod ibc;
 pub mod internal;
