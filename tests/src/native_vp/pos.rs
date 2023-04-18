@@ -170,6 +170,7 @@ mod tests {
             // Additionally, more cases will be explored every time this test is
             // executed in the CI.
             cases: 5,
+            verbose: 1,
             .. Config::default()
         })]
         #[test]

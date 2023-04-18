@@ -29,6 +29,7 @@ use crate::types::{
 prop_state_machine! {
     #![proptest_config(Config {
         cases: 5,
+        verbose: 1,
         .. Config::default()
     })]
     #[test]
