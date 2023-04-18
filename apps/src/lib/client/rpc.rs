@@ -4,42 +4,46 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryInto;
-use std::fs::File;
+use std::fs::{read_dir, File};
 use std::io::{self, Write};
 use std::iter::Iterator;
 use std::str::FromStr;
 
 use async_std::fs;
-use async_std::path::PathBuf;
 use async_std::prelude::*;
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
 use eyre::{eyre, Context as EyreContext};
+use futures::StreamExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::primitives::ViewingKey;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::Amount;
 use masp_primitives::zip32::ExtendedFullViewingKey;
+use namada::core::ledger::governance::cli::offline::{
+    find_offline_proposal, find_offline_votes, read_offline_files,
+    OfflineSignedProposal, OfflineVote,
+};
+use namada::core::ledger::governance::parameters::GovParams;
+use namada::core::ledger::governance::storage::keys as gov_storage;
+use namada::core::ledger::governance::storage::proposal::StorageProposal;
+use namada::core::ledger::governance::utils::{
+    compute_proposal_result, ProposalStatus, ProposalVotes, TallyType,
+    TallyVote, Vote, VotePower,
+};
+use namada::core::ledger::parameters::{
+    storage as param_storage, EpochDuration,
+};
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
 use namada::core::types::key;
-use namada::core::types::transaction::governance::ProposalType;
 use namada::ledger::events::Event;
-use namada::ledger::governance::parameters::GovParams;
-use namada::ledger::governance::storage as gov_storage;
-use namada::ledger::native_vp::governance::utils::{self, Votes};
-use namada::ledger::parameters::{storage as param_storage, EpochDuration};
-use namada::ledger::pos::{
-    self, BondId, BondsAndUnbondsDetail, CommissionPair, PosParams, Slash,
-};
+use namada::ledger::pos::{self, CommissionPair, PosParams, Slash};
 use namada::ledger::queries::{self, RPC};
 use namada::ledger::storage::ConversionState;
 use namada::proto::{SignedTxData, SigningTx, Tx};
 use namada::types::address::{masp, tokens, Address};
-use namada::types::governance::{
-    OfflineProposal, OfflineVote, ProposalVote, VotePower, VoteType,
-};
 use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
@@ -746,123 +750,6 @@ fn print_balances(
     }
 }
 
-/// Query Proposals
-pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
-    async fn print_proposal(
-        client: &HttpClient,
-        id: u64,
-        current_epoch: Epoch,
-        details: bool,
-    ) -> Option<()> {
-        let author_key = gov_storage::get_author_key(id);
-        let start_epoch_key = gov_storage::get_voting_start_epoch_key(id);
-        let end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
-        let proposal_type_key = gov_storage::get_proposal_type_key(id);
-
-        let author =
-            query_storage_value::<Address>(client, &author_key).await?;
-        let start_epoch =
-            query_storage_value::<Epoch>(client, &start_epoch_key).await?;
-        let end_epoch =
-            query_storage_value::<Epoch>(client, &end_epoch_key).await?;
-        let proposal_type =
-            query_storage_value::<ProposalType>(client, &proposal_type_key)
-                .await?;
-
-        if details {
-            let content_key = gov_storage::get_content_key(id);
-            let grace_epoch_key = gov_storage::get_grace_epoch_key(id);
-            let content = query_storage_value::<HashMap<String, String>>(
-                client,
-                &content_key,
-            )
-            .await?;
-            let grace_epoch =
-                query_storage_value::<Epoch>(client, &grace_epoch_key).await?;
-
-            println!("Proposal: {}", id);
-            println!("{:4}Type: {}", "", proposal_type);
-            println!("{:4}Author: {}", "", author);
-            println!("{:4}Content:", "");
-            for (key, value) in &content {
-                println!("{:8}{}: {}", "", key, value);
-            }
-            println!("{:4}Start Epoch: {}", "", start_epoch);
-            println!("{:4}End Epoch: {}", "", end_epoch);
-            println!("{:4}Grace Epoch: {}", "", grace_epoch);
-            let votes = get_proposal_votes(client, start_epoch, id).await;
-            let total_stake =
-                get_total_staked_tokens(client, start_epoch).await.into();
-            if start_epoch > current_epoch {
-                println!("{:4}Status: pending", "");
-            } else if start_epoch <= current_epoch && current_epoch <= end_epoch
-            {
-                let partial_proposal_result =
-                    utils::compute_tally(votes, total_stake, proposal_type);
-                println!(
-                    "{:4}Yay votes: {}",
-                    "", partial_proposal_result.total_yay_power
-                );
-                println!(
-                    "{:4}Nay votes: {}",
-                    "", partial_proposal_result.total_nay_power
-                );
-                println!("{:4}Status: on-going", "");
-            } else {
-                let proposal_result =
-                    utils::compute_tally(votes, total_stake, proposal_type);
-                println!("{:4}Status: done", "");
-                println!("{:4}Result: {}", "", proposal_result);
-            }
-        } else {
-            println!("Proposal: {}", id);
-            println!("{:4}Type: {}", "", proposal_type);
-            println!("{:4}Author: {}", "", author);
-            println!("{:4}Start Epoch: {}", "", start_epoch);
-            println!("{:4}End Epoch: {}", "", end_epoch);
-            if start_epoch > current_epoch {
-                println!("{:4}Status: pending", "");
-            } else if start_epoch <= current_epoch && current_epoch <= end_epoch
-            {
-                println!("{:4}Status: on-going", "");
-            } else {
-                println!("{:4}Status: done", "");
-            }
-        }
-
-        Some(())
-    }
-
-    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
-    let current_epoch = query_and_print_epoch(args.query.clone()).await;
-    match args.proposal_id {
-        Some(id) => {
-            if print_proposal(&client, id, current_epoch, true)
-                .await
-                .is_none()
-            {
-                eprintln!("No valid proposal was found with id {}", id)
-            }
-        }
-        None => {
-            let last_proposal_id_key = gov_storage::get_counter_key();
-            let last_proposal_id =
-                query_storage_value::<u64>(&client, &last_proposal_id_key)
-                    .await
-                    .unwrap();
-
-            for id in 0..last_proposal_id {
-                if print_proposal(&client, id, current_epoch, false)
-                    .await
-                    .is_none()
-                {
-                    eprintln!("No valid proposal was found with id {}", id)
-                };
-            }
-        }
-    }
-}
-
 /// Get the component of the given amount corresponding to the given token
 pub fn value_by_address(
     amt: &masp_primitives::transaction::components::Amount,
@@ -1173,168 +1060,292 @@ pub async fn get_token_balance(
     query_storage_value(client, &balance_key).await
 }
 
-pub async fn query_proposal_result(
+pub async fn query_proposal_by_id(
+    client: &HttpClient,
+    proposal_id: u64,
+) -> Option<StorageProposal> {
+    unwrap_client_response(
+        RPC.vp().gov().proposal_id(client, &proposal_id).await,
+    )
+}
+
+pub async fn query_proposal_votes(
+    client: &HttpClient,
+    proposal_id: u64,
+) -> Vec<Vote> {
+    unwrap_client_response(
+        RPC.vp().gov().proposal_id_votes(client, &proposal_id).await,
+    )
+}
+
+pub async fn compute_proposal_votes(
+    client: &HttpClient,
+    proposal_id: u64,
+    epoch: Epoch,
+) -> ProposalVotes {
+    let votes = query_proposal_votes(client, proposal_id).await;
+
+    let mut validators_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut validator_voting_power: HashMap<Address, VotePower> =
+        HashMap::default();
+    let mut delegators_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut delegator_voting_power: HashMap<
+        Address,
+        HashMap<Address, VotePower>,
+    > = HashMap::default();
+
+    for vote in votes {
+        if vote.is_validator() {
+            let validator_stake =
+                get_validator_stake(client, epoch, &vote.validator.clone())
+                    .await
+                    .unwrap_or_default();
+
+            validators_vote.insert(vote.validator.clone(), vote.data.into());
+            validator_voting_power
+                .insert(vote.validator, validator_stake.into());
+        } else {
+            let delegator_stake = get_bond_amount_at(
+                client,
+                &vote.delegator,
+                &vote.validator,
+                epoch,
+            )
+            .await
+            .unwrap_or_default();
+
+            delegators_vote.insert(vote.delegator.clone(), vote.data.into());
+            delegator_voting_power
+                .entry(vote.delegator.clone())
+                .or_default()
+                .insert(vote.validator, delegator_stake.into());
+        }
+    }
+
+    ProposalVotes {
+        validators_vote,
+        validator_voting_power,
+        delegators_vote,
+        delegator_voting_power,
+    }
+}
+
+pub async fn compute_offline_proposal_votes(
+    client: &HttpClient,
+    proposal: &OfflineSignedProposal,
+    votes: Vec<OfflineVote>,
+) -> ProposalVotes {
+    let mut validators_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut validator_voting_power: HashMap<Address, VotePower> =
+        HashMap::default();
+    let mut delegators_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut delegator_voting_power: HashMap<
+        Address,
+        HashMap<Address, VotePower>,
+    > = HashMap::default();
+
+    for vote in votes {
+        let is_validator = is_validator(client, &vote.address).await;
+        let is_delegator = is_delegator(client, &vote.address).await;
+        if is_validator {
+            let validator_stake = get_validator_stake(
+                client,
+                proposal.proposal.tally_epoch,
+                &vote.address,
+            )
+            .await
+            .unwrap_or_default();
+            validators_vote.insert(vote.address.clone(), vote.clone().into());
+            validator_voting_power
+                .insert(vote.address.clone(), validator_stake.into());
+        } else if is_delegator {
+            for validator in vote.delegations.clone() {
+                let delegator_stake = get_bond_amount_at(
+                    client,
+                    &vote.address.clone(),
+                    &validator,
+                    proposal.proposal.tally_epoch,
+                )
+                .await
+                .unwrap_or_default();
+
+                delegators_vote
+                    .insert(vote.address.clone(), vote.clone().into());
+                delegator_voting_power
+                    .entry(vote.address.clone())
+                    .or_default()
+                    .insert(validator, delegator_stake.into());
+            }
+        }
+    }
+
+    ProposalVotes {
+        validators_vote,
+        validator_voting_power,
+        delegators_vote,
+        delegator_voting_power,
+    }
+}
+
+pub async fn query_proposal(
     _ctx: Context,
-    args: args::QueryProposalResult,
+    args::QueryProposal { query, proposal_id }: args::QueryProposal,
 ) {
-    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
-    let current_epoch = query_and_print_epoch(args.query.clone()).await;
+    let client = HttpClient::new(query.ledger_address.clone()).unwrap();
+    let current_epoch = query_and_print_epoch(query.clone()).await;
 
-    match args.proposal_id {
-        Some(id) => {
-            let end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
-            let end_epoch =
-                query_storage_value::<Epoch>(&client, &end_epoch_key).await;
-
-            match end_epoch {
-                Some(end_epoch) => {
-                    if current_epoch > end_epoch {
-                        let votes =
-                            get_proposal_votes(&client, end_epoch, id).await;
-                        let proposal_type_key =
-                            gov_storage::get_proposal_type_key(id);
-                        let proposal_type =
-                            query_storage_value::<ProposalType>(
-                                &client,
-                                &proposal_type_key,
-                            )
-                            .await
-                            .expect(
-                                "Could not read proposal type from storage",
-                            );
-                        let total_stake =
-                            get_total_staked_tokens(&client, end_epoch)
-                                .await
-                                .into();
-                        println!("Proposal: {}", id);
-                        let proposal_result = utils::compute_tally(
-                            votes,
-                            total_stake,
-                            proposal_type,
-                        );
-                        println!("{:4}Result: {}", "", proposal_result)
-                    } else {
-                        eprintln!("Proposal is still in progress.");
-                        cli::safe_exit(1)
-                    }
-                }
-                None => {
-                    eprintln!("Error while retriving proposal.");
-                    cli::safe_exit(1)
-                }
+    if let Some(id) = proposal_id {
+        let proposal = match query_proposal_by_id(&client, id).await {
+            Some(proposal) => proposal,
+            None => {
+                eprintln!("Proposal {} doesn't exist.", id);
+                safe_exit(1)
             }
-        }
-        None => {
-            if args.offline {
-                match args.proposal_folder {
-                    Some(path) => {
-                        let mut dir = fs::read_dir(&path)
-                            .await
-                            .expect("Should be able to read the directory.");
-                        let mut files = HashSet::new();
-                        let mut is_proposal_present = false;
+        };
+        println!("{}", proposal.to_string_with_status(current_epoch));
 
-                        while let Some(entry) = dir.next().await {
-                            match entry {
-                                Ok(entry) => match entry.file_type().await {
-                                    Ok(entry_stat) => {
-                                        if entry_stat.is_file() {
-                                            if entry.file_name().eq(&"proposal")
-                                            {
-                                                is_proposal_present = true
-                                            } else if entry
-                                                .file_name()
-                                                .to_string_lossy()
-                                                .starts_with("proposal-vote-")
-                                            {
-                                                // Folder may contain other
-                                                // files than just the proposal
-                                                // and the votes
-                                                files.insert(entry.path());
-                                            }
-                                        }
-                                    }
-                                    Err(e) => {
-                                        eprintln!(
-                                            "Can't read entry type: {}.",
-                                            e
-                                        );
-                                        cli::safe_exit(1)
-                                    }
-                                },
-                                Err(e) => {
-                                    eprintln!("Can't read entry: {}.", e);
-                                    cli::safe_exit(1)
-                                }
-                            }
-                        }
-
-                        if !is_proposal_present {
-                            eprintln!(
-                                "The folder must contain the offline proposal \
-                                 in a file named \"proposal\""
-                            );
-                            cli::safe_exit(1)
-                        }
-
-                        let file = File::open(path.join("proposal"))
-                            .expect("Proposal file must exist.");
-                        let proposal: OfflineProposal =
-                            serde_json::from_reader(file).expect(
-                                "JSON was not well-formatted for proposal.",
-                            );
-
-                        let proposer_pks_map =
-                            get_address_pks_map(&client, &proposal.address)
-                                .await;
-                        let proposer_threshold =
-                            get_address_threshold(&client, &proposal.address)
-                                .await;
-
-                        if !proposal.check_signature(
-                            proposer_pks_map,
-                            proposer_threshold,
-                        ) {
-                            eprintln!(
-                                "Invalid proposal signature from proposer."
-                            );
-                            safe_exit(1)
-                        }
-
-                        let votes = get_proposal_offline_votes(
-                            &client,
-                            proposal.clone(),
-                            files,
-                        )
+        let proposal_status = proposal.get_status(current_epoch);
+        match proposal_status {
+            ProposalStatus::Pending => {
+                println!("{:4}Proposal status: {}", "", proposal_status);
+            }
+            ProposalStatus::OnGoing | ProposalStatus::Ended => {
+                let tally_type: TallyType = proposal.get_tally_type();
+                let total_voting_power =
+                    get_total_staked_tokens(&client, proposal.voting_end_epoch)
                         .await;
-                        let total_stake = get_total_staked_tokens(
-                            &client,
-                            proposal.tally_epoch,
-                        )
-                        .await
-                        .into();
-                        let proposal_result = utils::compute_tally(
-                            votes,
-                            total_stake,
-                            ProposalType::Default(None),
-                        );
-                        println!("{:4}Result: {}", "", proposal_result)
-                    }
-                    None => {
-                        eprintln!(
-                            "Offline flag must be followed by data-path."
-                        );
-                        cli::safe_exit(1)
-                    }
-                };
-            } else {
-                eprintln!(
-                    "Either --proposal-id or --data-path should be provided \
-                     as arguments."
+
+                let votes = compute_proposal_votes(
+                    &client,
+                    id,
+                    proposal.voting_end_epoch,
+                )
+                .await;
+                let proposal_result = compute_proposal_result(
+                    votes,
+                    total_voting_power.into(),
+                    tally_type,
                 );
-                cli::safe_exit(1)
+                println!("{:4}Proposal status: {}", "", proposal_status);
+                println!(
+                    "{:8}Yay votes: {}",
+                    "", proposal_result.total_yay_power
+                );
+                println!(
+                    "{:8}Nay votes: {}",
+                    "", proposal_result.total_nay_power
+                );
             }
         }
+    } else {
+        let last_proposal_id_key = gov_storage::get_counter_key();
+        let last_proposal_id =
+            query_storage_value::<u64>(&client, &last_proposal_id_key)
+                .await
+                .unwrap();
+
+        let from_id = if last_proposal_id > 10 {
+            last_proposal_id - 10
+        } else {
+            0
+        };
+        for id in from_id..last_proposal_id {
+            let proposal = query_proposal_by_id(&client, id)
+                .await
+                .expect("Proposal should be written to storage.");
+            println!("{}", proposal);
+        }
+    }
+}
+
+pub async fn query_proposal_result(
+    ctx: Context,
+    args::QueryProposalResult {
+        query,
+        proposal_id,
+        offline,
+        proposal_folder,
+    }: args::QueryProposalResult,
+) {
+    let client = HttpClient::new(query.ledger_address.clone()).unwrap();
+
+    if proposal_id.is_some() {
+        let id = proposal_id.unwrap();
+        let proposal = match query_proposal_by_id(&client, id).await {
+            Some(proposal) => proposal,
+            None => {
+                eprintln!("Proposal {} doesn't exist.", id);
+                safe_exit(1)
+            }
+        };
+        let tally_type = proposal.get_tally_type();
+        let total_voting_power =
+            get_total_staked_tokens(&client, proposal.voting_end_epoch).await;
+
+        let votes =
+            compute_proposal_votes(&client, id, proposal.voting_end_epoch)
+                .await;
+        let proposal_result = compute_proposal_result(
+            votes,
+            total_voting_power.into(),
+            tally_type,
+        );
+
+        println!("Proposal Id: {} ", id);
+        println!("{:4}{}", "", proposal_result);
+    } else if offline {
+        let proposal_folder = proposal_folder.expect(
+            "The argument --proposal-folder is required with --offline.",
+        );
+        let data_directory: std::fs::ReadDir = read_dir(&proposal_folder)
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Should be able to read {} directory.",
+                    proposal_folder.to_string_lossy()
+                )
+            });
+        let files = read_offline_files(data_directory);
+        let proposal_path = find_offline_proposal(&files);
+        let proposal = if let Some(path) = proposal_path {
+            let proposal = ctx.read_json::<OfflineSignedProposal>(path);
+
+            let proposer_pks_map: HashMap<common::PublicKey, u64> =
+                get_address_pks_map(&client, &proposal.proposal.author).await;
+            let proposer_threshold =
+                get_address_threshold(&client, &proposal.proposal.author).await;
+            if !proposal.validate(proposer_pks_map, proposer_threshold).ok() {
+                eprintln!("Offline proposal has an invalid signature.");
+                safe_exit(1)
+            } else {
+                proposal
+            }
+        } else {
+            eprintln!("Couldn't find a file name offline_proposal_*.json.");
+            safe_exit(1)
+        };
+
+        let votes = find_offline_votes(&files)
+            .iter()
+            .map(|path| ctx.read_json::<OfflineVote>(path))
+            .collect::<Vec<OfflineVote>>();
+
+        let proposal_votes =
+            compute_offline_proposal_votes(&client, &proposal, votes).await;
+        let total_voting_power =
+            get_total_staked_tokens(&client, proposal.proposal.tally_epoch)
+                .await;
+
+        let proposal_result = compute_proposal_result(
+            proposal_votes,
+            total_voting_power.into(),
+            TallyType::TwoThird,
+        );
+
+        println!("Proposal offline: {}", proposal.proposal.hash());
+        println!("{:4}{}", "", proposal_result);
+    } else {
+        eprintln!("Either --proposal-id or --offline argument is required.");
+        safe_exit(1)
     }
 }
 
@@ -1419,6 +1430,7 @@ pub async fn query_bond(
         RPC.vp().pos().bond(client, source, validator, &epoch).await,
     )
 }
+
 pub async fn sign_tx(
     mut ctx: Context,
     args::SignTx {
@@ -1920,6 +1932,16 @@ pub async fn is_delegator_at(
     )
 }
 
+pub async fn get_delegations_at(
+    client: &HttpClient,
+    address: &Address,
+    epoch: Option<Epoch>,
+) -> HashMap<Address, token::Amount> {
+    unwrap_client_response(
+        RPC.vp().pos().delegations_at(client, address, &epoch).await,
+    )
+}
+
 pub async fn get_address_pks_map(
     client: &HttpClient,
     address: &Address,
@@ -2350,251 +2372,6 @@ pub async fn query_result(_ctx: Context, args: args::QueryResult) {
     }
 }
 
-pub async fn get_proposal_votes(
-    client: &HttpClient,
-    epoch: Epoch,
-    proposal_id: u64,
-) -> Votes {
-    let validators = get_all_validators(client, epoch).await;
-
-    let vote_prefix_key =
-        gov_storage::get_proposal_vote_prefix_key(proposal_id);
-    let vote_iter =
-        query_storage_prefix::<ProposalVote>(client, &vote_prefix_key).await;
-
-    let mut validators_votes: HashMap<Address, (VotePower, ProposalVote)> =
-        HashMap::new();
-    let mut delegators: HashMap<
-        Address,
-        HashMap<Address, (VotePower, ProposalVote)>,
-    > = HashMap::new();
-
-    if let Some(vote_iter) = vote_iter {
-        for (key, vote) in vote_iter {
-            let voter_address = gov_storage::get_voter_address(&key)
-                .expect("Vote key should contain the voting address.")
-                .clone();
-            if validators.contains(&voter_address) {
-                let amount: VotePower =
-                    get_validator_stake(client, epoch, &voter_address)
-                        .await
-                        .unwrap_or_default()
-                        .into();
-                validators_votes.insert(voter_address, (amount, vote));
-            } else if !validators.contains(&voter_address) {
-                let validator_address =
-                    gov_storage::get_vote_delegation_address(&key)
-                        .expect(
-                            "Vote key should contain the delegation address.",
-                        )
-                        .clone();
-                let delegator_token_amount = get_bond_amount_at(
-                    client,
-                    &voter_address,
-                    &validator_address,
-                    epoch,
-                )
-                .await;
-                if let Some(amount) = delegator_token_amount {
-                    let entry = delegators.entry(voter_address).or_default();
-                    entry.insert(
-                        validator_address,
-                        (VotePower::from(amount), vote),
-                    );
-                }
-            }
-        }
-    }
-
-    Votes {
-        validators: validators_votes,
-        delegators,
-    }
-}
-
-pub async fn get_proposal_offline_votes(
-    client: &HttpClient,
-    proposal: OfflineProposal,
-    files: HashSet<PathBuf>,
-) -> Votes {
-    // let validators = get_all_validators(client, proposal.tally_epoch).await;
-
-    let proposal_hash = proposal.compute_hash();
-
-    let mut yay_validators: HashMap<Address, (VotePower, ProposalVote)> =
-        HashMap::new();
-    let mut delegators: HashMap<
-        Address,
-        HashMap<Address, (VotePower, ProposalVote)>,
-    > = HashMap::new();
-
-    for path in files {
-        let file = File::open(&path).expect("Proposal file must exist.");
-        let proposal_vote: OfflineVote = serde_json::from_reader(file)
-            .expect("JSON was not well-formatted for offline vote.");
-
-        let proposer_pks_map =
-            get_address_pks_map(client, &proposal.address).await;
-        let proposer_threshold =
-            get_address_threshold(client, &proposal.address).await;
-
-        if !proposal_vote.proposal_hash.eq(&proposal_hash)
-            || !proposal_vote
-                .check_signature(proposer_pks_map, proposer_threshold)
-        {
-            continue;
-        }
-
-        if proposal_vote.vote.is_yay()
-            // && validators.contains(&proposal_vote.address)
-            && unwrap_client_response(
-                RPC.vp().pos().is_validator(client, &proposal_vote.address).await,
-            )
-        {
-            let amount: VotePower = get_validator_stake(
-                client,
-                proposal.tally_epoch,
-                &proposal_vote.address,
-            )
-            .await
-            .unwrap_or_default()
-            .into();
-            yay_validators.insert(
-                proposal_vote.address,
-                (amount, ProposalVote::Yay(VoteType::Default)),
-            );
-        } else if is_delegator_at(
-            client,
-            &proposal_vote.address,
-            proposal.tally_epoch,
-        )
-        .await
-        {
-            // TODO: decide whether to do this with `bond_with_slashing` RPC
-            // endpoint or with `bonds_and_unbonds`
-            let bonds_and_unbonds: pos::types::BondsAndUnbondsDetails =
-                unwrap_client_response(
-                    RPC.vp()
-                        .pos()
-                        .bonds_and_unbonds(
-                            client,
-                            &Some(proposal_vote.address.clone()),
-                            &None,
-                        )
-                        .await,
-                );
-            for (
-                BondId {
-                    source: _,
-                    validator,
-                },
-                BondsAndUnbondsDetail {
-                    bonds,
-                    unbonds: _,
-                    slashes: _,
-                },
-            ) in bonds_and_unbonds
-            {
-                let mut delegated_amount = token::Amount::default();
-                for delta in bonds {
-                    if delta.start <= proposal.tally_epoch {
-                        delegated_amount += delta.amount
-                            - delta.slashed_amount.unwrap_or_default();
-                    }
-                }
-
-                let entry = delegators
-                    .entry(proposal_vote.address.clone())
-                    .or_default();
-                entry.insert(
-                    validator,
-                    (
-                        VotePower::from(delegated_amount),
-                        proposal_vote.vote.clone(),
-                    ),
-                );
-            }
-
-            // let key = pos::bonds_for_source_prefix(&proposal_vote.address);
-            // let bonds_iter =
-            //     query_storage_prefix::<pos::Bonds>(client, &key).await;
-            // if let Some(bonds) = bonds_iter {
-            //     for (key, epoched_bonds) in bonds {
-            //         // Look-up slashes for the validator in this key and
-            //         // apply them if any
-            //         let validator =
-            // pos::get_validator_address_from_bond(&key)
-            //             .expect(
-            //                 "Delegation key should contain validator
-            // address.",             );
-            //         let slashes_key = pos::validator_slashes_key(&validator);
-            //         let slashes = query_storage_value::<pos::Slashes>(
-            //             client,
-            //             &slashes_key,
-            //         )
-            //         .await
-            //         .unwrap_or_default();
-            //         let mut delegated_amount: token::Amount = 0.into();
-            //         let bond = epoched_bonds
-            //             .get(proposal.tally_epoch)
-            //             .expect("Delegation bond should be defined.");
-            //         let mut to_deduct = bond.neg_deltas;
-            //         for (start_epoch, &(mut delta)) in
-            //             bond.pos_deltas.iter().sorted()
-            //         {
-            //             // deduct bond's neg_deltas
-            //             if to_deduct > delta {
-            //                 to_deduct -= delta;
-            //                 // If the whole bond was deducted, continue to
-            //                 // the next one
-            //                 continue;
-            //             } else {
-            //                 delta -= to_deduct;
-            //                 to_deduct = token::Amount::default();
-            //             }
-
-            //             delta = apply_slashes(
-            //                 &slashes,
-            //                 delta,
-            //                 *start_epoch,
-            //                 None,
-            //                 None,
-            //             );
-            //             delegated_amount += delta;
-            //         }
-
-            //         let validator_address =
-            //             pos::get_validator_address_from_bond(&key).expect(
-            //                 "Delegation key should contain validator
-            // address.",             );
-            //         if proposal_vote.vote.is_yay() {
-            //             let entry = yay_delegators
-            //                 .entry(proposal_vote.address.clone())
-            //                 .or_default();
-            //             entry.insert(
-            //                 validator_address,
-            //                 VotePower::from(delegated_amount),
-            //             );
-            //         } else {
-            //             let entry = nay_delegators
-            //                 .entry(proposal_vote.address.clone())
-            //                 .or_default();
-            //             entry.insert(
-            //                 validator_address,
-            //                 VotePower::from(delegated_amount),
-            //             );
-            //         }
-            //     }
-            // }
-        }
-    }
-
-    Votes {
-        validators: yay_validators,
-        delegators,
-    }
-}
-
 pub async fn get_bond_amount_at(
     client: &HttpClient,
     delegator: &Address,
@@ -2690,7 +2467,7 @@ pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {
         .expect("Parameter should be definied.");
 
     GovParams {
-        min_proposal_fund: u64::from(min_proposal_fund),
+        min_proposal_fund,
         max_proposal_code_size,
         min_proposal_period,
         max_proposal_period,

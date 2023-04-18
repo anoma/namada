@@ -34,6 +34,7 @@ ibc-relayer = {version = "0.14.0", default-features = false}
 prost = "0.9.0"
 regex = "1.7.0"
 serde_json = {version = "1.0.65"}
+serde = {version = "1.0.125", features = ["derive"]}
 sha2 = "0.9.3"
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tempfile = "3.2.0"

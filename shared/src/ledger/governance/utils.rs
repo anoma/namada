@@ -1,21 +1,25 @@
 //! Governance utility functions
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use borsh::BorshDeserialize;
-use namada_core::types::governance::ProposalResult;
-use namada_core::types::transaction::governance::ProposalType;
+use namada_core::ledger::governance::cli::onchain::PgfAction;
+use namada_core::ledger::governance::storage::proposal::{
+    AddRemove, PGFAction, ProposalType,
+};
+use namada_core::ledger::governance::storage::vote::StorageProposalVote;
+use namada_core::ledger::governance::utils::{TallyResult, VotePower};
 use namada_proof_of_stake::{
     bond_amount, read_all_validator_addresses, read_pos_params,
     read_validator_stake,
 };
 use thiserror::Error;
 
-use crate::ledger::governance::storage as gov_storage;
+use crate::core::ledger::governance::storage::keys as gov_storage;
+use crate::ledger::events::EventType;
 use crate::ledger::pos::BondId;
 use crate::ledger::storage_api;
 use crate::types::address::Address;
-use crate::types::governance::{ProposalVote, TallyResult, VotePower};
 use crate::types::storage::Epoch;
 use crate::types::token;
 
@@ -23,10 +27,10 @@ use crate::types::token;
 /// outcome
 pub struct Votes {
     /// Map from validators who voted to their total stake amount
-    pub validators: HashMap<Address, (VotePower, ProposalVote)>,
+    pub validators: HashMap<Address, (VotePower, StorageProposalVote)>,
     /// Map from delegation votes to their bond amount
     pub delegators:
-        HashMap<Address, HashMap<Address, (VotePower, ProposalVote)>>,
+        HashMap<Address, HashMap<Address, (VotePower, StorageProposalVote)>>,
 }
 
 /// Proposal errors
@@ -77,6 +81,60 @@ impl ProposalEvent {
             attributes,
         }
     }
+
+    pub fn rejected_proposal_event(proposal_id: u64) -> Self {
+        ProposalEvent::new(
+            EventType::Proposal.to_string(),
+            TallyResult::Rejected,
+            proposal_id,
+            false,
+            false,
+        )
+    }
+
+    pub fn default_proposal_event(
+        proposal_id: u64,
+        has_code: bool,
+        execution_status: bool,
+    ) -> Self {
+        ProposalEvent::new(
+            EventType::Proposal.to_string(),
+            TallyResult::Passed,
+            proposal_id,
+            has_code,
+            execution_status,
+        )
+    }
+
+    pub fn pgf_steward_proposal_event(proposal_id: u64) -> Self {
+        ProposalEvent::new(
+            EventType::Proposal.to_string(),
+            TallyResult::Passed,
+            proposal_id,
+            false,
+            false,
+        )
+    }
+
+    pub fn pgf_payments_proposal_event(proposal_id: u64) -> Self {
+        ProposalEvent::new(
+            EventType::Proposal.to_string(),
+            TallyResult::Passed,
+            proposal_id,
+            false,
+            false,
+        )
+    }
+
+    pub fn eth_proposal_event(proposal_id: u64) -> Self {
+        ProposalEvent::new(
+            EventType::Proposal.to_string(),
+            TallyResult::Passed,
+            proposal_id,
+            false,
+            false,
+        )
+    }
 }
 
 enum ExpectedVote {
@@ -100,93 +158,16 @@ impl ExpectedVote {
     }
 }
 
-/// Computes whether the proposal passed or not
-pub fn compute_tally(
-    votes: Votes,
-    total_stake: VotePower,
-    proposal_type: ProposalType,
-) -> ProposalResult {
-    let Votes {
-        validators,
-        delegators,
-    } = votes;
-
-    let mut total_target_vote_staked_tokens = VotePower::default();
-
-    for (_, (amount, validator_vote)) in validators.iter() {
-        match expected_vote(&proposal_type, validator_vote) {
-            ExpectedVote::Expected => total_target_vote_staked_tokens += amount,
-            ExpectedVote::Opposite => (),
-            ExpectedVote::Wrong => {
-                // Log the error and continue
-                tracing::error!(
-                    "Unexpected vote type. Expected: {}, Found: {}",
-                    proposal_type,
-                    validator_vote
-                );
-            }
-        }
-    }
-
-    if let ProposalType::ETHBridge = proposal_type {
-        for (_, vote_map) in delegators.iter() {
-            for (validator_address, (vote_power, delegator_vote)) in
-                vote_map.iter()
-            {
-                match expected_vote(&proposal_type, delegator_vote) {
-                    ExpectedVote::Expected => {
-                        if !validators.contains_key(validator_address) {
-                            // Add delegator amount whose validator
-                            // didn't vote / voted opposite
-                            total_target_vote_staked_tokens += vote_power;
-                        }
-                    }
-                    ExpectedVote::Opposite => {
-                        // Remove delegator amount whose validator
-                        // validator voted opposite
-                        if validators.contains_key(validator_address) {
-                            total_target_vote_staked_tokens -= vote_power;
-                        }
-                    }
-                    ExpectedVote::Wrong => {
-                        // Log the error and continue
-                        tracing::error!(
-                            "Unexpected vote type. Expected: {}, Found: {}",
-                            proposal_type,
-                            delegator_vote
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    // Proposal passes if threshold of total voting power voted the desired vote
-    if total_target_vote_staked_tokens >= (total_stake / 3) * 2 {
-        ProposalResult {
-            result: TallyResult::Passed(proposal_type.into()),
-            total_voting_power: total_stake,
-            total_yay_power: total_target_vote_staked_tokens,
-            total_nay_power: 0,
-        }
-    } else {
-        ProposalResult {
-            result: TallyResult::Rejected,
-            total_voting_power: total_stake,
-            total_yay_power: total_target_vote_staked_tokens,
-            total_nay_power: 0,
-        }
-    }
-}
-
 fn expected_vote(
     proposal_type: &ProposalType,
-    vote: &ProposalVote,
+    vote: &StorageProposalVote,
 ) -> ExpectedVote {
     let mut result = match vote {
-        ProposalVote::Yay(t) if proposal_type == t => ExpectedVote::Expected,
-        ProposalVote::Yay(_) => ExpectedVote::Wrong,
-        ProposalVote::Nay => ExpectedVote::Opposite,
+        StorageProposalVote::Yay(t) if proposal_type == t => {
+            ExpectedVote::Expected
+        }
+        StorageProposalVote::Yay(_) => ExpectedVote::Wrong,
+        StorageProposalVote::Nay => ExpectedVote::Opposite,
     };
 
     // For PGF payment tally the Nay votes
@@ -211,13 +192,15 @@ where
 
     let vote_prefix_key =
         gov_storage::get_proposal_vote_prefix_key(proposal_id);
-    let vote_iter =
-        storage_api::iter_prefix::<ProposalVote>(storage, &vote_prefix_key)?;
+    let vote_iter = storage_api::iter_prefix::<StorageProposalVote>(
+        storage,
+        &vote_prefix_key,
+    )?;
 
     let mut validators_votes = HashMap::new();
     let mut delegators_votes: HashMap<
         Address,
-        HashMap<Address, (VotePower, ProposalVote)>,
+        HashMap<Address, (VotePower, StorageProposalVote)>,
     > = HashMap::new();
 
     for next_vote in vote_iter {

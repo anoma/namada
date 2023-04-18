@@ -2,9 +2,9 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+use namada::core::ledger::parameters::Parameters;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
-use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::into_tm_voting_power;
 use namada::ledger::storage_api::StorageWrite;
 use namada::types::key::*;

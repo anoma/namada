@@ -22,7 +22,7 @@ use borsh::{schema, BorshSchema};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use madato::types::TableRow;
-use namada::ledger::parameters::Parameters;
+use namada::core::ledger::parameters::Parameters;
 use namada::proto::SignedTxData;
 use namada::types::address::Address;
 use namada::types::key::ed25519::{PublicKey, Signature};

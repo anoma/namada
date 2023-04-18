@@ -4,11 +4,13 @@ pub mod utils;
 
 use std::collections::{BTreeSet, HashSet};
 
-use namada_core::ledger::governance::storage as gov_storage;
+use namada_core::ledger::governance::storage::keys as gov_storage;
+use namada_core::ledger::governance::storage::proposal::{
+    AddRemove, ProposalType,
+};
+use namada_core::ledger::governance::storage::vote::StorageProposalVote;
 use namada_core::ledger::storage;
 use namada_core::ledger::vp_env::VpEnv;
-use namada_core::types::governance::{ProposalVote, VoteType};
-use namada_core::types::transaction::governance::{AddRemove, ProposalType};
 use thiserror::Error;
 use utils::is_valid_validator_voting_period;
 
@@ -176,7 +178,7 @@ where
 
         let voter = gov_storage::get_voter_address(key);
         let delegation_address = gov_storage::get_vote_delegation_address(key);
-        let vote: Option<ProposalVote> = self.ctx.read_post(key)?;
+        let vote: Option<StorageProposalVote> = self.ctx.read_post(key)?;
 
         let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
         let proposal_type: Option<ProposalType> =
@@ -213,16 +215,12 @@ where
                     return Ok(false);
                 }
 
-                if let ProposalVote::Yay(vote_type) = vote {
+                if let StorageProposalVote::Yay(vote_type) = vote {
                     if proposal_type != vote_type {
                         return Ok(false);
                     }
 
-                    if let VoteType::ETHBridge(_sig) = vote_type {
-                        // TODO: Check the validity of the signature with the
-                        // governance ETH key in storage for the given validator
-                        // <https://github.com/anoma/namada/issues/1166>
-                    }
+                    // TODO: Check the validity of the signature with the
                 }
 
                 match proposal_type {
@@ -254,7 +252,7 @@ where
                                 .unwrap_or(false))
                         }
                     }
-                    ProposalType::ETHBridge => Ok(self
+                    ProposalType::ETHBridge(_) => Ok(self
                         .is_validator(
                             pre_voting_start_epoch,
                             verifiers,
@@ -307,7 +305,7 @@ where
                 self.validate_pgf_steward_proposal(changes)
             }
             ProposalType::PGFPayment(_) => Ok(true),
-            ProposalType::ETHBridge => Ok(true),
+            ProposalType::ETHBridge(_) => Ok(true),
         }
     }
 
@@ -329,7 +327,7 @@ where
                 Address::Established(_) => {
                     // Check that established address exists in
                     // storage
-                    let vp_key = Key::validity_predicate(&address);
+                    let vp_key = Key::validity_predicate(address);
                     if !self.ctx.has_key_pre(&vp_key)? {
                         return Ok(false);
                     }
@@ -339,7 +337,8 @@ where
         }
 
         // TODO:
-        // Check that the added addresses are not already part of the Stewards' set
+        // Check that the added addresses are not already part of the Stewards'
+        // set
 
         // TODO:
         // Check that the removed addresses are part of the Stewards' set

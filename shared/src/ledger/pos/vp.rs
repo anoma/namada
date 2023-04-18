@@ -13,7 +13,8 @@ pub use namada_proof_of_stake::types;
 use thiserror::Error;
 
 use super::is_params_key;
-use crate::ledger::native_vp::{self, governance, Ctx, NativeVp};
+use crate::ledger::governance;
+use crate::ledger::native_vp::{self, Ctx, NativeVp};
 // use crate::ledger::pos::{
 //     is_validator_address_raw_hash_key,
 //     is_validator_max_commission_rate_change_key,

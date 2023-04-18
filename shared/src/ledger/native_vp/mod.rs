@@ -1,10 +1,6 @@
 //! Native validity predicate interface associated with internal accounts such
 //! as the PoS and IBC modules.
 
-pub mod governance;
-pub mod parameters;
-pub mod slash_fund;
-
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 

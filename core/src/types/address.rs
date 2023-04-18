@@ -183,9 +183,6 @@ impl Address {
                     InternalAddress::Governance => {
                         internal::GOVERNANCE.to_string()
                     }
-                    InternalAddress::SlashFund => {
-                        internal::SLASH_FUND.to_string()
-                    }
                     InternalAddress::Ibc => internal::IBC.to_string(),
                     InternalAddress::IbcToken(hash) => {
                         format!("{}::{}", PREFIX_IBC, hash)
@@ -244,9 +241,6 @@ impl Address {
                 }
                 internal::GOVERNANCE => {
                     Ok(Address::Internal(InternalAddress::Governance))
-                }
-                internal::SLASH_FUND => {
-                    Ok(Address::Internal(InternalAddress::SlashFund))
                 }
                 internal::ETH_BRIDGE => {
                     Ok(Address::Internal(InternalAddress::EthBridge))
@@ -462,8 +456,6 @@ pub enum InternalAddress {
     IbcMint,
     /// Governance address
     Governance,
-    /// SlashFund address for governance
-    SlashFund,
     /// Bridge to Ethereum
     EthBridge,
 }
@@ -493,7 +485,6 @@ impl Display for InternalAddress {
                 Self::PosSlashPool => "PosSlashPool".to_string(),
                 Self::Parameters => "Parameters".to_string(),
                 Self::Governance => "Governance".to_string(),
-                Self::SlashFund => "SlashFund".to_string(),
                 Self::Ibc => "IBC".to_string(),
                 Self::IbcToken(hash) => format!("IbcToken: {}", hash),
                 Self::IbcEscrow => "IbcEscrow".to_string(),
@@ -769,7 +760,6 @@ pub mod testing {
             InternalAddress::PoS => {}
             InternalAddress::PosSlashPool => {}
             InternalAddress::Governance => {}
-            InternalAddress::SlashFund => {}
             InternalAddress::Parameters => {}
             InternalAddress::Ibc => {}
             InternalAddress::IbcToken(_) => {}
@@ -790,7 +780,6 @@ pub mod testing {
             Just(InternalAddress::IbcBurn),
             Just(InternalAddress::IbcMint),
             Just(InternalAddress::Governance),
-            Just(InternalAddress::SlashFund),
             Just(InternalAddress::EthBridge),
         ]
     }

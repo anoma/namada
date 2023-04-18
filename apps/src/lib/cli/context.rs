@@ -1,18 +1,23 @@
 //! CLI input types can be used for command arguments
 
 use std::env;
+use std::fs::File;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
+use namada::proto::Tx;
 use namada::types::address::Address;
 use namada::types::chain::ChainId;
 use namada::types::key::*;
 use namada::types::masp::*;
+use serde::de::DeserializeOwned;
 
-use super::args;
+use super::args::{self};
 use crate::cli::safe_exit;
+use crate::client::signing::TxSigningKey;
 use crate::client::tx::ShieldedContext;
 use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
@@ -205,6 +210,58 @@ impl Context {
         file_name: impl AsRef<Path>,
     ) -> Option<Vec<u8>> {
         wasm_loader::read_wasm(self.wasm_dir(), file_name).ok()
+    }
+
+    /// Build a [`Tx`].
+    pub fn build_tx(
+        &self,
+        data: impl BorshSerialize,
+        tx_code_type: &str,
+    ) -> Tx {
+        let data = data
+            .try_to_vec()
+            .expect("Encoding proposal data shouldn't fail.");
+        let tx_code = self.read_wasm(tx_code_type);
+
+        Tx::new(tx_code, Some(data))
+    }
+
+    /// Convert a raw string to a context-address
+    pub fn to_context_address(&self, address: String) -> WalletAddress {
+        WalletAddress::new(address)
+    }
+
+    /// Compute the default signing keys
+    pub fn default_signing_keys(
+        &self,
+        signer: Option<WalletAddress>,
+    ) -> Vec<TxSigningKey> {
+        if let Some(signer) = signer {
+            vec![TxSigningKey::WalletAddress(signer)]
+        } else {
+            vec![TxSigningKey::None]
+        }
+    }
+
+    /// Read JSON file from filesystem and convert it to a struct using serde
+    pub fn read_json<T>(&self, filepath: impl AsRef<Path>) -> T
+    where
+        T: DeserializeOwned,
+    {
+        let file = match File::open(&filepath) {
+            Ok(file) => file,
+            Err(e) => {
+                eprintln!("{}", e);
+                safe_exit(1)
+            }
+        };
+        match serde_json::from_reader(file) {
+            Ok(data) => data,
+            Err(_) => {
+                eprintln!("The specified file is not correctly formatted.");
+                safe_exit(1)
+            }
+        }
     }
 }
 
