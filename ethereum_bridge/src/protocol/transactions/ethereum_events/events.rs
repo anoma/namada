@@ -509,7 +509,7 @@ where
 
     if transfer.transfer.asset == native_erc20_addr {
         tracing::debug!(?transfer, "Keeping wrapped NAM in escrow");
-        return Ok(BTreeSet::new());
+        return Ok(changed_keys);
     }
 
     let keys: wrapped_erc20s::Keys = (&transfer.transfer.asset).into();
@@ -660,6 +660,12 @@ mod tests {
                         escrow_balance.try_to_vec().expect("Test failed"),
                     )
                     .expect("Test failed");
+                let asset_keys: wrapped_erc20s::Keys =
+                    (&transfer.transfer.asset).into();
+                update::amount(wl_storage, &asset_keys.supply(), |supply| {
+                    supply.receive(&transfer.transfer.amount);
+                })
+                .expect("Test failed");
             };
             let gas_fee = Amount::from(1);
             let escrow_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
@@ -816,7 +822,10 @@ mod tests {
         )
         .expect("Test failed");
         let mut changed_keys = act_on(&mut wl_storage, event).unwrap();
+        let asset_keys: wrapped_erc20s::Keys = (&EthAddress([0x01; 20])).into();
 
+        assert!(changed_keys.remove(&asset_keys.balance(&BRIDGE_POOL_ADDRESS)));
+        assert!(changed_keys.remove(&asset_keys.supply()));
         assert!(changed_keys.remove(&payer_balance_key));
         assert!(changed_keys.remove(&pool_balance_key));
         assert!(changed_keys.remove(&get_nonce_key()));
