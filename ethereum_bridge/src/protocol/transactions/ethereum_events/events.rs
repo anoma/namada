@@ -316,14 +316,20 @@ where
                     "Valid transfer to Ethereum detected, compensating the \
                      relayer and burning any Ethereum assets in Namada"
                 );
-                burn_transferred_assets(wl_storage, &pending_transfer)?;
+                changed_keys.append(&mut burn_transferred_assets(
+                    wl_storage,
+                    &pending_transfer,
+                )?);
             } else {
                 tracing::debug!(
                     ?pending_transfer,
                     "Invalid transfer to Ethereum detected, compensating the \
                      relayer and refunding assets in Namada"
                 );
-                refund_transferred_assets(wl_storage, &pending_transfer)?;
+                changed_keys.append(&mut refund_transferred_assets(
+                    wl_storage,
+                    &pending_transfer,
+                )?);
             }
             // give the relayer the gas fee for this transfer.
             update::amount(wl_storage, &relayer_rewards_key, |balance| {
