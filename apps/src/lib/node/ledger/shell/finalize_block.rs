@@ -1156,10 +1156,15 @@ mod test_finalize_block {
                 let asset_key = wrapped_erc20s::Keys::from(&asset);
                 let owner_key =
                     asset_key.balance(&bridge_pool::BRIDGE_POOL_ADDRESS);
+                let supply_key = asset_key.supply();
                 let amt: Amount = 999_999_u64.into();
                 shell
                     .wl_storage
                     .write(&owner_key, amt)
+                    .expect("Test failed");
+                shell
+                    .wl_storage
+                    .write(&supply_key, amt)
                     .expect("Test failed");
             }
             // add bertha's gas fees the pool
