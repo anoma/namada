@@ -1704,10 +1704,8 @@ pub mod args {
         arg_opt("fee-spending-key");
     const FORCE: ArgFlag = flag("force");
     const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
-    const FEE_AMOUNT: ArgDefault<token::Amount> =
-        arg_default("fee-amount", DefaultFn(|| token::Amount::from(0)));
-    const GAS_LIMIT: ArgDefault<GasLimit> =
-        arg_default("gas-limit", DefaultFn(|| GasLimit::from(10)));
+    const FEE_AMOUNT: ArgOpt<token::Amount> = arg_opt("fee-amount");
+    const GAS_LIMIT: Arg<GasLimit> = arg("gas-limit");
     const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("fee-token", DefaultFn(|| "NAM".into()));
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
@@ -3027,7 +3025,7 @@ pub mod args {
         /// save it in the wallet.
         pub initialized_account_alias: Option<String>,
         /// The amount being payed (for gas unit) to include the transaction
-        pub fee_amount: token::Amount,
+        pub fee_amount: Option<token::Amount>,
         /// The token in which the fee is being paid
         pub fee_token: WalletAddress,
         /// The optional spending key for fee unshielding

@@ -568,7 +568,7 @@ impl BenchShieldedCtx {
                 port: 1,
             },
             initialized_account_alias: None,
-            fee_amount: Amount::whole(0),
+            fee_amount: None,
             fee_token: FromContext::new(address::nam().to_string()),
             fee_unshield: None,
             gas_limit: GasLimit::from(u64::MAX),

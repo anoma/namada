@@ -261,7 +261,7 @@ pub async fn sign_wrapper(
             if let Some(spending_key) = args.fee_unshield {
                 // Unshield funds for fee payment
                 let tx_args = args::Tx {
-                    fee_amount: 0.into(),
+                    fee_amount: Some(0.into()),
                     fee_unshield: None,
                     gas_limit: u64::MAX.into(),
                     signer: Some(FromContext::new(address::masp().to_string())),

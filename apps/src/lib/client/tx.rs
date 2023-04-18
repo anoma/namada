@@ -1629,7 +1629,7 @@ pub async fn build_shielded_part(
                 ctx.get_cached(&args.source).effective_address(),
                 args.amount,
                 ctx.get(&args.token),
-                args.tx.fee_amount,
+                args.tx.fee_amount.unwrap_or_else(|| 0.into()),
                 ctx.get(&args.tx.fee_token),
             );
             safe_exit(1)
