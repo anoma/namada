@@ -1,155 +1,24 @@
 use std::collections::HashSet;
-use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-use crate::ledger::storage_api::token::Amount;
-use crate::types::address::Address;
-use crate::types::governance::{
-    self, Proposal, ProposalError, ProposalVote, VoteType,
+use crate::ledger::governance::cli::onchain::{
+    DefaultProposal, EthProposal, PgfFundingProposal, PgfStewardProposal,
 };
+use crate::ledger::governance::storage::proposal::{
+    AddRemove, PGFAction, ProposalType,
+};
+use crate::ledger::governance::storage::vote::StorageProposalVote;
+use crate::types::address::Address;
 use crate::types::storage::Epoch;
 
-/// An add or remove action for PGF
-#[derive(
-    Debug,
-    Clone,
-    Hash,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    BorshSerialize,
-    BorshDeserialize,
-    Serialize,
-    Deserialize,
-)]
-pub enum AddRemove<T> {
-    /// Add
-    Add(T),
-    /// Remove
-    Remove(T),
-}
-
-/// The target of a PGF payment
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    Serialize,
-    Deserialize,
-)]
-pub struct PGFTarget {
-    target: Address,
-    amount: Amount,
-}
-
-/// The actions that a PGF Steward can propose to execute
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    Serialize,
-    Deserialize,
-)]
-pub enum PGFAction {
-    /// A continuous payment
-    Continuous(AddRemove<PGFTarget>),
-    /// A retro payment
-    Retro(PGFTarget),
-}
-
-/// The type of a Proposal
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    Serialize,
-    Deserialize,
-)]
-pub enum ProposalType {
-    /// Default governance proposal with the optional wasm code
-    Default(Option<Vec<u8>>),
-    /// PGF stewards proposal
-    PGFSteward(HashSet<AddRemove<Address>>),
-    /// PGF funding proposal
-    PGFPayment(Vec<PGFAction>),
-    /// ETH proposal
-    ETHBridge,
-}
-
-impl Display for ProposalType {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            ProposalType::Default(_) => write!(f, "Default"),
-            ProposalType::PGFSteward(_) => write!(f, "PGF Steward"),
-            ProposalType::PGFPayment(_) => write!(f, "PGF Payment"),
-            ProposalType::ETHBridge => write!(f, "ETH Bridge"),
-        }
-    }
-}
-
-impl PartialEq<VoteType> for ProposalType {
-    fn eq(&self, other: &VoteType) -> bool {
-        match self {
-            Self::Default(_) => {
-                matches!(other, VoteType::Default)
-            }
-            Self::PGFSteward(_) => {
-                matches!(other, VoteType::PGFSteward)
-            }
-            Self::PGFPayment(_) => {
-                matches!(other, VoteType::PGFPayment)
-            }
-            Self::ETHBridge => {
-                matches!(other, VoteType::ETHBridge(_))
-            }
-        }
-    }
-}
-
-impl TryFrom<governance::ProposalType> for ProposalType {
-    type Error = ProposalError;
-
-    fn try_from(value: governance::ProposalType) -> Result<Self, Self::Error> {
-        match value {
-            governance::ProposalType::Default(path) => {
-                if let Some(p) = path {
-                    match std::fs::read(p) {
-                        Ok(code) => Ok(Self::Default(Some(code))),
-                        Err(_) => Err(Self::Error::InvalidProposalData),
-                    }
-                } else {
-                    Ok(Self::Default(None))
-                }
-            }
-            governance::ProposalType::PGFSteward(p) => {
-                match serde_json::from_reader(
-                    std::fs::File::open(p)
-                        .map_err(|_| Self::Error::InvalidProposalData)?,
-                ) {
-                    Ok(actions) => Ok(Self::PGFSteward(actions)),
-                    Err(_) => Err(Self::Error::InvalidProposalData),
-                }
-            }
-            governance::ProposalType::PGFPayment(p) => {
-                match serde_json::from_reader(
-                    std::fs::File::open(p)
-                        .map_err(|_| Self::Error::InvalidProposalData)?,
-                ) {
-                    Ok(actions) => Ok(Self::PGFPayment(actions)),
-                    Err(_) => Err(Self::Error::InvalidProposalData),
-                }
-            }
-            governance::ProposalType::ETHBridge => Ok(Self::ETHBridge),
-        }
-    }
+#[allow(missing_docs)]
+#[derive(Debug, Error)]
+pub enum ProposalError {
+    #[error("Invalid proposal data.")]
+    InvalidProposalData,
 }
 
 /// A tx data type to hold proposal data
@@ -180,38 +49,129 @@ pub struct InitProposalData {
 }
 
 /// A tx data type to hold vote proposal data
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    Serialize,
-    Deserialize,
-)]
+#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
 pub struct VoteProposalData {
     /// The proposal id
     pub id: u64,
     /// The proposal vote
-    pub vote: ProposalVote,
+    pub vote: StorageProposalVote,
     /// The proposal author address
     pub voter: Address,
     /// Delegator addreses
     pub delegations: Vec<Address>,
 }
 
-impl TryFrom<Proposal> for InitProposalData {
+impl TryFrom<DefaultProposal> for InitProposalData {
     type Error = ProposalError;
 
-    fn try_from(proposal: Proposal) -> Result<Self, Self::Error> {
+    fn try_from(value: DefaultProposal) -> Result<Self, Self::Error> {
+        let proposal_type = if let Some(path) = value.data {
+            match std::fs::read(path) {
+                Ok(code) => Ok(ProposalType::Default(Some(code))),
+                Err(_) => Err(Self::Error::InvalidProposalData),
+            }
+        } else {
+            Ok(ProposalType::Default(None))
+        }?;
+        let content = value
+            .proposal
+            .content
+            .try_to_vec()
+            .map_err(|_| Self::Error::InvalidProposalData)?;
+
         Ok(InitProposalData {
-            id: proposal.id,
-            content: proposal.content.try_to_vec().unwrap(),
-            author: proposal.author,
-            r#type: proposal.r#type.try_into()?,
-            voting_start_epoch: proposal.voting_start_epoch,
-            voting_end_epoch: proposal.voting_end_epoch,
-            grace_epoch: proposal.grace_epoch,
+            id: value.proposal.id,
+            content,
+            author: value.proposal.author,
+            r#type: proposal_type,
+            voting_start_epoch: value.proposal.voting_start_epoch,
+            voting_end_epoch: value.proposal.voting_end_epoch,
+            grace_epoch: value.proposal.grace_epoch,
+        })
+    }
+}
+
+impl TryFrom<EthProposal> for InitProposalData {
+    type Error = ProposalError;
+
+    fn try_from(value: EthProposal) -> Result<Self, Self::Error> {
+        let proposal_type = ProposalType::ETHBridge(value.data);
+        let content = value
+            .proposal
+            .content
+            .try_to_vec()
+            .map_err(|_| Self::Error::InvalidProposalData)?;
+        Ok(InitProposalData {
+            id: value.proposal.id,
+            content,
+            author: value.proposal.author,
+            r#type: proposal_type,
+            voting_start_epoch: value.proposal.voting_start_epoch,
+            voting_end_epoch: value.proposal.voting_end_epoch,
+            grace_epoch: value.proposal.grace_epoch,
+        })
+    }
+}
+
+impl TryFrom<PgfStewardProposal> for InitProposalData {
+    type Error = ProposalError;
+
+    fn try_from(value: PgfStewardProposal) -> Result<Self, Self::Error> {
+        let extra_data = value
+            .data
+            .iter()
+            .cloned()
+            .map(|steward| AddRemove::<Address>::try_from(steward).unwrap())
+            .collect::<HashSet<AddRemove<Address>>>();
+        let content = value
+            .proposal
+            .content
+            .try_to_vec()
+            .map_err(|_| Self::Error::InvalidProposalData)?;
+        Ok(InitProposalData {
+            id: value.proposal.id,
+            content,
+            author: value.proposal.author,
+            r#type: ProposalType::PGFSteward(extra_data),
+            voting_start_epoch: value.proposal.voting_start_epoch,
+            voting_end_epoch: value.proposal.voting_end_epoch,
+            grace_epoch: value.proposal.grace_epoch,
+        })
+    }
+}
+
+impl TryFrom<PgfFundingProposal> for InitProposalData {
+    type Error = ProposalError;
+
+    fn try_from(value: PgfFundingProposal) -> Result<Self, Self::Error> {
+        let continous_fundings = value
+            .data
+            .continous
+            .iter()
+            .cloned()
+            .map(|funding| PGFAction::try_from(funding).unwrap())
+            .collect::<Vec<PGFAction>>();
+        let retro_fundings = value
+            .data
+            .retro
+            .iter()
+            .cloned()
+            .map(|funding| PGFAction::try_from(funding).unwrap())
+            .collect::<Vec<PGFAction>>();
+        let extra_data = [continous_fundings, retro_fundings].concat();
+        let content = value
+            .proposal
+            .content
+            .try_to_vec()
+            .map_err(|_| Self::Error::InvalidProposalData)?;
+        Ok(InitProposalData {
+            id: value.proposal.id,
+            content,
+            author: value.proposal.author,
+            r#type: ProposalType::PGFPayment(extra_data),
+            voting_start_epoch: value.proposal.voting_start_epoch,
+            voting_end_epoch: value.proposal.voting_end_epoch,
+            grace_epoch: value.proposal.grace_epoch,
         })
     }
 }

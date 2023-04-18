@@ -6,10 +6,10 @@ use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
+use namada::core::ledger::governance::parameters::GovParams;
+use namada::core::ledger::parameters::EpochDuration;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
-use namada::ledger::governance::parameters::GovParams;
-use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{GenesisValidator, PosParams};
 use namada::types::address::Address;
 #[cfg(not(feature = "dev"))]
@@ -31,10 +31,10 @@ pub mod genesis_config {
 
     use data_encoding::HEXLOWER;
     use eyre::Context;
+    use namada::core::ledger::governance::parameters::GovParams;
+    use namada::core::ledger::parameters::EpochDuration;
     #[cfg(not(feature = "mainnet"))]
     use namada::core::ledger::testnet_pow;
-    use namada::ledger::governance::parameters::GovParams;
-    use namada::ledger::parameters::EpochDuration;
     use namada::ledger::pos::{GenesisValidator, PosParams};
     use namada::types::address::Address;
     use namada::types::chain::ProposalBytes;
@@ -632,7 +632,7 @@ pub mod genesis_config {
             max_proposal_period,
         } = gov_params;
         let gov_params = GovParams {
-            min_proposal_fund,
+            min_proposal_fund: token::Amount::whole(min_proposal_fund),
             max_proposal_code_size,
             min_proposal_period,
             max_proposal_content_size,

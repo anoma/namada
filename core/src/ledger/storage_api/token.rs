@@ -70,3 +70,22 @@ where
     let new_balance = read_balance(storage, token, dest)? + amount;
     storage.write(&key, new_balance)
 }
+
+/// Burn an amount of token for a specific address.
+pub fn burn<S>(
+    storage: &mut S,
+    token: &Address,
+    source: &Address,
+    amount: token::Amount,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = token::balance_key(token, source);
+    let balance = read_balance(storage, token, source)?;
+
+    match balance.checked_sub(amount) {
+        Some(new_balance) => storage.write(&key, new_balance),
+        None => storage.write(&key, token::Amount::default()),
+    }
+}

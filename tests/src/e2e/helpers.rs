@@ -365,3 +365,9 @@ pub fn epoch_sleep(
         }
     }
 }
+
+/// Convert epoch `min_duration` in seconds to `epochs_per_year` genesis
+/// parameter.
+pub fn epochs_per_year_from_min_duration(min_duration: u64) -> u64 {
+    60 * 60 * 24 * 365 / min_duration
+}

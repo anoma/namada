@@ -12,7 +12,6 @@ use async_std::io::prelude::WriteExt;
 use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
-use data_encoding::HEXLOWER_PERMISSIVE;
 use itertools::Either::*;
 use itertools::Itertools;
 use masp_primitives::asset_type::AssetType;
@@ -33,20 +32,24 @@ use masp_primitives::transaction::components::{Amount, OutPoint, TxOut};
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::prover::LocalTxProver;
+use namada::core::ledger::governance::cli::offline::{
+    OfflineProposal, OfflineSignedProposal, OfflineVote,
+};
+use namada::core::ledger::governance::cli::onchain::{
+    DefaultProposal, EthProposal, PgfFundingProposal, PgfStewardProposal,
+    ProposalVote,
+};
+use namada::core::ledger::governance::storage::vote::StorageProposalVote;
 use namada::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
 use namada::ibc::signer::Signer;
 use namada::ibc::timestamp::Timestamp as IbcTimestamp;
 use namada::ibc::tx_msg::Msg;
 use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::cosmos::base::v1beta1::Coin;
-use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::masp;
 use namada::ledger::pos::{CommissionPair, PosParams};
 use namada::proto::Tx;
 use namada::types::address::{masp, masp_tx_key, Address};
-use namada::types::governance::{
-    OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
-};
 use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::masp::{PaymentAddress, TransferTarget};
@@ -58,7 +61,7 @@ use namada::types::token::{
     Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
 use namada::types::transaction::governance::{
-    InitProposalData, ProposalType, VoteProposalData,
+    InitProposalData, VoteProposalData,
 };
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{storage, token};
@@ -1947,154 +1950,155 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
     .await;
 }
 
-pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
-    let file = File::open(&args.proposal_data).expect("File must exist.");
-    let proposal: Proposal =
-        serde_json::from_reader(file).expect("JSON was not well-formatted");
-
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-
-    let signer = WalletAddress::new(proposal.clone().author.to_string());
-    let governance_parameters = rpc::get_governance_parameters(&client).await;
+pub async fn submit_init_proposal(
+    mut ctx: Context,
+    args::InitProposal {
+        tx: tx_args,
+        proposal_data_path,
+        is_offline,
+        is_eth,
+        is_pgf_funding,
+        is_pgf_stewards,
+    }: args::InitProposal,
+) {
+    let ledger_address = tx_args.ledger_address.clone();
+    let client = HttpClient::new(ledger_address.clone()).unwrap();
     let current_epoch = rpc::query_and_print_epoch(args::Query {
-        ledger_address: args.tx.ledger_address.clone(),
+        ledger_address: ledger_address.clone(),
     })
     .await;
 
-    if proposal.voting_start_epoch <= current_epoch
-        || proposal.voting_start_epoch.0
-            % governance_parameters.min_proposal_period
-            != 0
-    {
-        println!("{}", proposal.voting_start_epoch <= current_epoch);
-        println!(
-            "{}",
-            proposal.voting_start_epoch.0
-                % governance_parameters.min_proposal_period
-                == 0
-        );
-        eprintln!(
-            "Invalid proposal start epoch: {} must be greater than current \
-             epoch {} and a multiple of {}",
-            proposal.voting_start_epoch,
-            current_epoch,
-            governance_parameters.min_proposal_period
-        );
-        if !args.tx.force {
-            safe_exit(1)
-        }
-    } else if proposal.voting_end_epoch <= proposal.voting_start_epoch
-        || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
-            < governance_parameters.min_proposal_period
-        || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
-            > governance_parameters.max_proposal_period
-        || proposal.voting_end_epoch.0 % 3 != 0
-    {
-        eprintln!(
-            "Invalid proposal end epoch: difference between proposal start \
-             and end epoch must be at least {} and at max {} and end epoch \
-             must be a multiple of {}",
-            governance_parameters.min_proposal_period,
-            governance_parameters.max_proposal_period,
-            governance_parameters.min_proposal_period
-        );
-        if !args.tx.force {
-            safe_exit(1)
-        }
-    } else if proposal.grace_epoch <= proposal.voting_end_epoch
-        || proposal.grace_epoch.0 - proposal.voting_end_epoch.0
-            < governance_parameters.min_proposal_grace_epochs
-    {
-        eprintln!(
-            "Invalid proposal grace epoch: difference between proposal grace \
-             and end epoch must be at least {}",
-            governance_parameters.min_proposal_grace_epochs
-        );
-        if !args.tx.force {
-            safe_exit(1)
-        }
-    }
+    let governance_parameters = rpc::get_governance_parameters(&client).await;
 
-    if args.offline {
-        let signing_keys = tx_signers(
-            &mut ctx,
-            &args.tx,
-            vec![TxSigningKey::WalletAddress(signer)],
-        )
-        .await;
+    if is_offline {
+        let proposal = ctx.read_json::<OfflineProposal>(&proposal_data_path);
+        let is_valid_proposal = proposal.validate(current_epoch);
+
+        if !is_valid_proposal.ok() {
+            eprintln!("{}", is_valid_proposal);
+            safe_exit(1)
+        }
+
+        let _is_valid_offline_proposal = proposal.validate(current_epoch);
+        let signer = WalletAddress::new(proposal.author.to_string());
+
+        let default_signers = ctx.default_signing_keys(Some(signer));
+        let signing_keys =
+            tx_signers(&mut ctx, &tx_args, default_signers).await;
+
         let pks_map = rpc::get_address_pks_map(&client, &proposal.author).await;
+        let signed_offline_proposal = proposal.sign(signing_keys, pks_map);
 
-        let offline_proposal = OfflineProposal::new(
-            proposal.clone(),
-            proposal.author,
-            signing_keys,
-            pks_map,
-        );
-        let proposal_filename = args
-            .proposal_data
-            .parent()
-            .expect("No parent found")
-            .join("proposal");
-        let out = File::create(&proposal_filename).unwrap();
-        match serde_json::to_writer_pretty(out, &offline_proposal) {
-            Ok(_) => {
-                println!(
-                    "Proposal created: {}.",
-                    proposal_filename.to_string_lossy()
-                );
-            }
-            Err(e) => {
-                eprintln!("Error while creating proposal file: {}.", e);
-                safe_exit(1)
-            }
+        let result = signed_offline_proposal.serialize(&proposal_data_path);
+
+        if let Some(filepath) = result {
+            println!("Proposal serialized to {}", filepath);
+        } else {
+            eprintln!("Couldn't serialize the proposal.");
+            safe_exit(1)
         }
     } else {
-        let tx_data: Result<InitProposalData, _> = proposal.clone().try_into();
-        let init_proposal_data = if let Ok(data) = tx_data {
-            data
+        let init_proposal_data = if is_eth {
+            let proposal = ctx.read_json::<EthProposal>(proposal_data_path);
+            let proposal_author_balance = rpc::get_token_balance(
+                &client,
+                &ctx.native_token,
+                &proposal.proposal.author,
+            )
+            .await
+            .unwrap_or_default();
+
+            let is_proposal_valid = proposal.validate(
+                &governance_parameters,
+                current_epoch,
+                proposal_author_balance,
+            );
+
+            if is_proposal_valid.ok() {
+                InitProposalData::try_from(proposal)
+                    .expect("Should be able to serialize the proposal.")
+            } else {
+                eprintln!("{}", is_proposal_valid);
+                safe_exit(1)
+            }
+        } else if is_pgf_funding {
+            let proposal =
+                ctx.read_json::<PgfFundingProposal>(proposal_data_path);
+
+            // TODO: add check if author is a pgf steward
+            let is_proposal_valid =
+                proposal.validate(&governance_parameters, current_epoch);
+
+            if is_proposal_valid.ok() {
+                InitProposalData::try_from(proposal)
+                    .expect("Should be able to serialize the proposal.")
+            } else {
+                eprintln!("{}", is_proposal_valid);
+                safe_exit(1)
+            }
+        } else if is_pgf_stewards {
+            let proposal =
+                ctx.read_json::<PgfStewardProposal>(proposal_data_path);
+            let proposal_author_balance = rpc::get_token_balance(
+                &client,
+                &ctx.native_token,
+                &proposal.proposal.author,
+            )
+            .await
+            .unwrap_or_default();
+
+            let is_proposal_valid = proposal.validate(
+                &governance_parameters,
+                current_epoch,
+                proposal_author_balance,
+            );
+
+            if is_proposal_valid.ok() {
+                InitProposalData::try_from(proposal)
+                    .expect("Should be able to serialize the proposal.")
+            } else {
+                eprintln!("{}", is_proposal_valid);
+                safe_exit(1)
+            }
         } else {
-            eprintln!("Invalid data for init proposal transaction.");
-            safe_exit(1)
+            let proposal = ctx.read_json::<DefaultProposal>(proposal_data_path);
+            let author = proposal.clone().proposal.author;
+            let proposal_author_balance =
+                rpc::get_token_balance(&client, &ctx.native_token, &author)
+                    .await
+                    .unwrap_or_default();
+
+            let is_proposal_valid = proposal.validate(
+                &governance_parameters,
+                current_epoch,
+                proposal_author_balance,
+            );
+
+            if is_proposal_valid.ok() {
+                InitProposalData::try_from(proposal)
+                    .expect("Should be able to serialize the proposal.")
+            } else {
+                eprintln!("{}", is_proposal_valid);
+                safe_exit(1)
+            }
         };
 
-        let balance = rpc::get_token_balance(
+        let tx = ctx.build_tx(init_proposal_data.clone(), TX_INIT_PROPOSAL);
+
+        let pks_map = rpc::get_address_pks_map(
             &client,
-            &ctx.native_token,
-            &proposal.author,
+            &init_proposal_data.clone().author,
         )
-        .await
-        .unwrap_or_default();
-        if balance
-            < token::Amount::from(governance_parameters.min_proposal_fund)
-        {
-            eprintln!(
-                "Address {} doesn't have enough funds.",
-                &proposal.author
-            );
-            safe_exit(1);
-        }
-
-        if init_proposal_data.content.len()
-            > governance_parameters.max_proposal_content_size as usize
-        {
-            eprintln!("Proposal content size too big.",);
-            safe_exit(1);
-        }
-
-        let data = init_proposal_data
-            .try_to_vec()
-            .expect("Encoding proposal data shouldn't fail");
-        let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
-        let tx = Tx::new(tx_code, Some(data));
-
-        let pks_map = rpc::get_address_pks_map(&client, &proposal.author).await;
+        .await;
+        let signer = WalletAddress::new(init_proposal_data.author.to_string());
+        let default_signers = ctx.default_signing_keys(Some(signer));
 
         process_tx(
             ctx,
-            &args.tx,
+            &tx_args,
             tx,
             pks_map,
-            vec![TxSigningKey::WalletAddress(signer)],
+            default_signers,
             #[cfg(not(feature = "mainnet"))]
             false,
         )
@@ -2102,231 +2106,155 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
     }
 }
 
-pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+pub async fn submit_vote_proposal(
+    mut ctx: Context,
+    args::VoteProposal {
+        tx: tx_args,
+        proposal_id,
+        vote,
+        is_offline,
+        proposal_data_path,
+        voter,
+        eth_key,
+    }: args::VoteProposal,
+) {
+    let ledger_address = tx_args.ledger_address.clone();
+    let client = HttpClient::new(ledger_address.clone()).unwrap();
 
-    // Construct vote
-    let proposal_vote = match args.vote.to_ascii_lowercase().as_str() {
-        "yay" => {
-            if args.proposal_pgf {
-                ProposalVote::Yay(VoteType::PGFSteward)
-            } else if let Some(eth) = args.proposal_stewards_eth {
-                let mut splits = eth.trim().split_ascii_whitespace();
-                // Sign the message
-                let sigkey = splits
-                    .next()
-                    .expect("Expected signing key")
-                    .parse::<common::SecretKey>()
-                    .expect("Signing key parsing failed.");
+    let vote = ProposalVote::from(vote);
+    if !vote.is_valid() {
+        eprintln!("Invalid vote: must be either yay or nay.");
+        safe_exit(1)
+    }
 
-                let msg = splits.next().expect("Missing message to sign");
-                if splits.next().is_some() {
-                    eprintln!("Unexpected argument after message");
-                    safe_exit(1);
-                }
+    let current_epoch =
+        rpc::query_and_print_epoch(args::Query { ledger_address }).await;
 
-                ProposalVote::Yay(VoteType::ETHBridge(common::SigScheme::sign(
-                    &sigkey,
-                    HEXLOWER_PERMISSIVE
-                        .decode(msg.as_bytes())
-                        .expect("Error while decoding message"),
-                )))
-            } else {
-                ProposalVote::Yay(VoteType::Default)
-            }
-        }
-        "nay" => ProposalVote::Nay,
-        _ => {
-            eprintln!("Vote must be either yay or nay");
-            safe_exit(1);
-        }
-    };
+    if is_offline {
+        let proposal_data_path = proposal_data_path.expect(
+            "Voting an offline proposal requires the json of the proposal.",
+        );
+        let proposal =
+            ctx.read_json::<OfflineSignedProposal>(&proposal_data_path);
 
-    if args.offline {
-        if !proposal_vote.is_default_vote() {
-            eprintln!(
-                "Wrong vote type for offline proposal. Just vote yay or nay!"
-            );
-            safe_exit(1);
-        }
-        let proposal_file_path =
-            args.proposal_data.expect("Proposal file should exist.");
-        let file = File::open(&proposal_file_path).expect("File must exist.");
-        let proposal: OfflineProposal =
-            serde_json::from_reader(file).expect("JSON was not well-formatted");
+        let author_address = proposal.clone().proposal.author;
+        let author_pks_map =
+            rpc::get_address_pks_map(&client, &author_address).await;
+        let author_threshold =
+            rpc::get_address_threshold(&client, &author_address).await;
 
-        let proposer_pks_map =
-            rpc::get_address_pks_map(&client, &proposal.author).await;
-        let proposer_threshold =
-            rpc::get_address_threshold(&client, &proposal.address).await;
+        let is_proposal_valid =
+            proposal.validate(author_pks_map, author_threshold).ok();
 
-        if !proposal.check_signature(proposer_pks_map, proposer_threshold) {
-            eprintln!("Invalid proposal signature from proposer.");
+        if !is_proposal_valid {
+            eprint!("{}", is_proposal_valid);
             safe_exit(1)
         }
 
-        let voter_address = ctx.get(&args.address);
-        let signing_keys = tx_signers(
-            &mut ctx,
-            &args.tx,
-            vec![TxSigningKey::WalletAddress(args.address)],
+        let voter_address = ctx.get(&voter);
+        let voter_pks_map =
+            rpc::get_address_pks_map(&client, &voter_address).await;
+        let voter_default_signing_keys = ctx.default_signing_keys(Some(voter));
+
+        let delegator_delegations = rpc::get_delegations_at(
+            &client,
+            &voter_address,
+            Some(proposal.proposal.tally_epoch),
         )
-        .await;
+        .await
+        .keys()
+        .cloned()
+        .collect::<Vec<Address>>();
 
-        let pks_map = rpc::get_address_pks_map(&client, &voter_address).await;
+        if delegator_delegations.is_empty() {
+            eprintln!(
+                "The voter should be a delegator in epoch  {}.",
+                proposal.proposal.tally_epoch
+            );
+        }
 
-        let vote = match args.vote.as_str() {
-            "yay" => ProposalVote::Yay(VoteType::Default),
-            "nay" => ProposalVote::Nay,
-            _ => {
-                eprintln!("Vote must be either yay or nay");
-                safe_exit(1);
-            }
-        };
+        let voter_signing_keys =
+            tx_signers(&mut ctx, &tx_args, voter_default_signing_keys).await;
 
         let offline_vote = OfflineVote::new(
             &proposal,
             vote,
             voter_address.clone(),
-            signing_keys,
-            pks_map,
+            delegator_delegations,
+            voter_signing_keys,
+            voter_pks_map,
         );
 
-        let proposal_vote_filename = proposal_file_path
-            .parent()
-            .expect("No parent found")
-            .join(format!("proposal-vote-{}", &voter_address.to_string()));
-        let out = File::create(&proposal_vote_filename).unwrap();
+        let result = offline_vote.serialize(&proposal_data_path);
 
-        match serde_json::to_writer_pretty(out, &offline_vote) {
-            Ok(_) => {
-                println!(
-                    "Proposal vote created: {}.",
-                    proposal_vote_filename.to_string_lossy()
-                );
-            }
-            Err(e) => {
-                eprintln!("Error while creating proposal vote file: {}.", e);
-                safe_exit(1)
-            }
+        if let Some(filepath) = result {
+            println!("Proposal vote serialized to {}", filepath);
+        } else {
+            eprintln!("Couldn't serialize the proposal vote.");
+            safe_exit(1)
         }
     } else {
-        let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-        let current_epoch = rpc::query_and_print_epoch(args::Query {
-            ledger_address: args.tx.ledger_address.clone(),
-        })
-        .await;
+        let proposal_id = proposal_id.expect("Proposal id must be defined.");
+        let proposal = match rpc::query_proposal_by_id(&client, proposal_id)
+            .await
+        {
+            Some(proposal) => proposal,
+            None => {
+                eprintln!("Proposal with id {} does not exist.", proposal_id);
+                safe_exit(1)
+            }
+        };
 
-        let voter_address = ctx.get(&args.address);
-        let proposal_id = args.proposal_id.unwrap();
-        let proposal_start_epoch_key =
-            gov_storage::get_voting_start_epoch_key(proposal_id);
-        let proposal_start_epoch = rpc::query_storage_value::<Epoch>(
-            &client,
-            &proposal_start_epoch_key,
+        let voter_address = ctx.get(&voter);
+
+        let eth_signing_key = ctx.get_opt_cached(&eth_key);
+        let vote = StorageProposalVote::build(
+            vote,
+            proposal.clone().r#type,
+            eth_signing_key,
+        );
+
+        let vote = if let Some(vote) = vote {
+            vote
+        } else {
+            eprintln!("Invalid vote type.");
+            safe_exit(1)
+        };
+
+        let is_validator = rpc::is_validator(&client, &voter_address).await;
+
+        if !proposal.can_be_voted(current_epoch, is_validator) {
+            eprintln!(
+                "Proposal {} cannot be voted due (invalid start/end epoch).",
+                proposal.id
+            );
+            safe_exit(1)
+        }
+
+        let delegations =
+            rpc::get_delegators_delegation(&client, &voter_address).await;
+
+        let tx_data = VoteProposalData {
+            id: proposal_id,
+            vote,
+            voter: voter_address.clone(),
+            delegations: delegations.into_iter().collect(),
+        };
+
+        let tx = ctx.build_tx(tx_data.clone(), TX_VOTE_PROPOSAL);
+        let pks_map = rpc::get_address_pks_map(&client, &voter_address).await;
+        let default_signers = ctx.default_signing_keys(Some(voter));
+
+        process_tx(
+            ctx,
+            &tx_args,
+            tx,
+            pks_map,
+            default_signers,
+            #[cfg(not(feature = "mainnet"))]
+            false,
         )
         .await;
-
-        // Check vote type and memo
-        let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
-        let proposal_type: ProposalType =
-            rpc::query_storage_value(&client, &proposal_type_key)
-                .await
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Didn't find type of proposal id {} in storage",
-                        proposal_id
-                    )
-                });
-
-        if let ProposalVote::Yay(ref vote_type) = proposal_vote {
-            if &proposal_type != vote_type {
-                eprintln!(
-                    "Expected vote of type {}, found {}",
-                    proposal_type, args.vote
-                );
-                safe_exit(1);
-            }
-        }
-
-        match proposal_start_epoch {
-            Some(epoch) => {
-                if current_epoch < epoch {
-                    eprintln!(
-                        "Current epoch {} is not greater than proposal start \
-                         epoch {}",
-                        current_epoch, epoch
-                    );
-
-                    if !args.tx.force {
-                        safe_exit(1)
-                    }
-                }
-                let mut delegations =
-                    rpc::get_delegators_delegation(&client, &voter_address)
-                        .await;
-
-                // Optimize by quering if a vote from a validator
-                // is equal to ours. If so, we can avoid voting, but ONLY if we
-                // are  voting in the last third of the voting
-                // window, otherwise there's  the risk of the
-                // validator changing his vote and, effectively, invalidating
-                // the delgator's vote
-                if !args.tx.force
-                    && is_safe_voting_window(
-                        args.tx.ledger_address.clone(),
-                        &client,
-                        proposal_id,
-                        epoch,
-                    )
-                    .await
-                {
-                    delegations = filter_delegations(
-                        &client,
-                        delegations,
-                        proposal_id,
-                        &proposal_vote,
-                    )
-                    .await;
-                }
-
-                let tx_data = VoteProposalData {
-                    id: proposal_id,
-                    vote: proposal_vote,
-                    voter: voter_address.clone(),
-                    delegations: delegations.into_iter().collect(),
-                };
-
-                let data = tx_data
-                    .try_to_vec()
-                    .expect("Encoding proposal data shouldn't fail");
-                let tx_code = ctx.read_wasm(TX_VOTE_PROPOSAL);
-                let tx = Tx::new(tx_code, Some(data));
-
-                let pks_map =
-                    rpc::get_address_pks_map(&client, &voter_address).await;
-
-                process_tx(
-                    ctx,
-                    &args.tx,
-                    tx,
-                    pks_map,
-                    vec![TxSigningKey::WalletAddress(args.address)],
-                    #[cfg(not(feature = "mainnet"))]
-                    false,
-                )
-                .await;
-            }
-            None => {
-                eprintln!(
-                    "Proposal start epoch for proposal id {} is not definied.",
-                    proposal_id
-                );
-                if !args.tx.force {
-                    safe_exit(1)
-                }
-            }
-        }
     }
 }
 
@@ -2445,76 +2373,6 @@ pub async fn submit_reveal_pk_aux(
             _ => {}
         }
     }
-}
-
-/// Check if current epoch is in the last third of the voting period of the
-/// proposal. This ensures that it is safe to optimize the vote writing to
-/// storage.
-async fn is_safe_voting_window(
-    ledger_address: TendermintAddress,
-    client: &HttpClient,
-    proposal_id: u64,
-    proposal_start_epoch: Epoch,
-) -> bool {
-    let current_epoch =
-        rpc::query_and_print_epoch(args::Query { ledger_address }).await;
-
-    let proposal_end_epoch_key =
-        gov_storage::get_voting_end_epoch_key(proposal_id);
-    let proposal_end_epoch =
-        rpc::query_storage_value::<Epoch>(client, &proposal_end_epoch_key)
-            .await;
-
-    match proposal_end_epoch {
-        Some(proposal_end_epoch) => {
-            !namada::ledger::native_vp::governance::utils::is_valid_validator_voting_period(
-                current_epoch,
-                proposal_start_epoch,
-                proposal_end_epoch,
-            )
-        }
-        None => {
-            eprintln!("Proposal end epoch is not in the storage.");
-            safe_exit(1)
-        }
-    }
-}
-
-/// Removes validators whose vote corresponds to that of the delegator (needless
-/// vote)
-async fn filter_delegations(
-    client: &HttpClient,
-    delegations: HashSet<Address>,
-    proposal_id: u64,
-    delegator_vote: &ProposalVote,
-) -> HashSet<Address> {
-    // Filter delegations by their validator's vote concurrently
-    let delegations = futures::future::join_all(
-        delegations
-            .into_iter()
-            // we cannot use `filter/filter_map` directly because we want to
-            // return a future
-            .map(|validator_address| async {
-                let vote_key = gov_storage::get_vote_proposal_key(
-                    proposal_id,
-                    validator_address.to_owned(),
-                    validator_address.to_owned(),
-                );
-
-                if let Some(validator_vote) =
-                    rpc::query_storage_value::<ProposalVote>(client, &vote_key)
-                        .await
-                {
-                    if &validator_vote == delegator_vote {
-                        return None;
-                    }
-                }
-                Some(validator_address)
-            }),
-    )
-    .await;
-    // Take out the `None`s
-    delegations.into_iter().flatten().collect()
 }
 
 pub async fn submit_bond(ctx: Context, args: args::Bond) {

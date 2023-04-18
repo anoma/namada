@@ -463,13 +463,16 @@ mod test_finalize_block {
     use std::collections::BTreeMap;
     use std::str::FromStr;
 
-    use namada::ledger::parameters::EpochDuration;
+    use namada::core::ledger::governance::storage::proposal::ProposalType;
+    use namada::core::ledger::governance::storage::vote::{
+        StorageProposalVote, VoteType,
+    };
+    use namada::core::ledger::parameters::EpochDuration;
     use namada::ledger::storage_api;
-    use namada::types::governance::ProposalVote;
     use namada::types::storage::Epoch;
     use namada::types::time::DurationSecs;
     use namada::types::transaction::governance::{
-        InitProposalData, ProposalType, VoteProposalData,
+        InitProposalData, VoteProposalData,
     };
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
 
@@ -835,7 +838,7 @@ mod test_finalize_block {
             min_num_of_blocks: 5,
             min_duration: DurationSecs(0),
         };
-        namada::ledger::parameters::update_epoch_parameter(
+        namada::core::ledger::parameters::update_epoch_parameter(
             &mut shell.wl_storage.storage,
             &epoch_duration,
         )
@@ -873,11 +876,8 @@ mod test_finalize_block {
                 .unwrap();
         };
         // Add a proposal to be accepted and one to be rejected.
-        add_proposal(
-            0,
-            ProposalVote::Yay(namada::types::governance::VoteType::Default),
-        );
-        add_proposal(1, ProposalVote::Nay);
+        add_proposal(0, StorageProposalVote::Yay(VoteType::Default));
+        add_proposal(1, StorageProposalVote::Nay);
 
         // Commit the genesis state
         shell.wl_storage.commit_genesis().unwrap();

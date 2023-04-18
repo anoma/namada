@@ -389,6 +389,7 @@ where
     }
 
     /// Read the value for a storage key dropping any error
+    #[allow(dead_code)]
     pub fn read_storage_key<T>(&self, key: &Key) -> Option<T>
     where
         T: Clone + BorshDeserialize,
@@ -408,6 +409,7 @@ where
     }
 
     /// Read the bytes for a storage key dropping any error
+    #[allow(dead_code)]
     pub fn read_storage_key_bytes(&self, key: &Key) -> Option<Vec<u8>> {
         let result = self.wl_storage.storage.read(key);
 
@@ -710,7 +712,7 @@ where
     ) -> bool {
         if let Some(solution) = &tx.pow_solution {
             if let (Some(faucet_address), _gas) =
-                namada::ledger::parameters::read_faucet_account_parameter(
+                namada::core::ledger::parameters::read_faucet_account_parameter(
                     &self.wl_storage.storage,
                 )
                 .expect("Must be able to read faucet account parameter")
@@ -728,7 +730,7 @@ where
     /// Get fixed amount of fees for wrapper tx
     fn get_wrapper_tx_fees(&self) -> token::Amount {
         let (fees, _gas) =
-            namada::ledger::parameters::read_wrapper_tx_fees_parameter(
+            namada::core::ledger::parameters::read_wrapper_tx_fees_parameter(
                 &self.wl_storage.storage,
             )
             .expect("Must be able to read wrapper tx fees parameter");
@@ -744,7 +746,7 @@ where
     ) -> bool {
         if let Some(solution) = &tx.pow_solution {
             if let (Some(faucet_address), _gas) =
-                namada::ledger::parameters::read_faucet_account_parameter(
+                namada::core::ledger::parameters::read_faucet_account_parameter(
                     &self.wl_storage.storage,
                 )
                 .expect("Must be able to read faucet account parameter")
