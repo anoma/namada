@@ -156,6 +156,181 @@ fn run_ledger_with_ethereum_events_endpoint() -> Result<()> {
     Ok(())
 }
 
+/// Test we can transfer some DAI to an implicit address on Namada,
+/// then back to Ethereum, burning the assets we minted after the
+/// first transfer.
+#[tokio::test]
+async fn test_roundtrip_eth_transfer() -> Result<()> {
+    const CLIENT_COMMAND_TIMEOUT_SECONDS: u64 = 60;
+    const QUERY_TIMEOUT_SECONDS: u64 = 40;
+    const SOLE_VALIDATOR: Who = Who::Validator(0);
+    const RECEIVER: &str = "0x6B175474E89094C55Da98b954EedeAC495271d0F";
+
+    let (test, bg_ledger) = setup_single_validator_test()?;
+
+    let transfer_amount = token::Amount::from(10_000_000);
+    // [`BERTHA`] is a pre-existing implicit address in our wallet
+    let berthas_addr = find_address(&test, BERTHA)?;
+
+    let dai_transfer = TransferToNamada {
+        amount: transfer_amount.to_owned(),
+        asset: DAI_ERC20_ETH_ADDRESS,
+        receiver: berthas_addr.to_owned(),
+    };
+    let bg_ledger =
+        send_transfer_to_namada_event(bg_ledger, dai_transfer, 0.into())
+            .await?;
+
+    // at this point Bertha should have some tokens in Namada
+    let bertha_wdai_balance = find_wrapped_erc20_balance(
+        &test,
+        &SOLE_VALIDATOR,
+        &DAI_ERC20_ETH_ADDRESS,
+        &berthas_addr,
+    )?;
+    assert_eq!(bertha_wdai_balance, transfer_amount);
+
+    // let's transfer them back to Ethereum
+    let ledger_addr = get_actor_rpc(&test, &SOLE_VALIDATOR);
+    let amount = transfer_amount.to_string();
+    let dai_addr = DAI_ERC20_ETH_ADDRESS.to_string();
+    let tx_args = vec![
+        "add-erc20-transfer",
+        "--address",
+        BERTHA,
+        "--signer",
+        BERTHA,
+        "--amount",
+        &amount,
+        "--erc20",
+        &dai_addr,
+        "--ethereum-address",
+        RECEIVER,
+        "--fee-amount",
+        "10",
+        "--fee-payer",
+        BERTHA,
+        "--gas-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--gas-token",
+        NAM,
+        "--ledger-address",
+        &ledger_addr,
+    ];
+
+    let mut namadac_tx = run!(
+        test,
+        Bin::Client,
+        tx_args,
+        Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
+    )
+    .unwrap();
+    namadac_tx.exp_string("Transaction accepted").unwrap();
+    namadac_tx.exp_string("Transaction applied").unwrap();
+    namadac_tx.exp_string("Transaction is valid").unwrap();
+    drop(namadac_tx);
+
+    let mut namadar = run!(
+        test,
+        Bin::Relayer,
+        [
+            "ethereum-bridge-pool",
+            "query",
+            "--ledger-address",
+            &ledger_addr,
+        ],
+        Some(QUERY_TIMEOUT_SECONDS),
+    )
+    .unwrap();
+    // get the returned hash of the transfer.
+    let regex =
+        expectrl::Regex(r#""bridge_pool_contents":(?s).*(?-s)"[0-9A-F]+":"#);
+    let mut hash = String::from_utf8(
+        namadar
+            .session
+            .expect(regex)
+            .unwrap()
+            .get(0)
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap()
+    .split_ascii_whitespace()
+    .last()
+    .unwrap()
+    .to_string();
+    hash.remove(0);
+    hash.truncate(hash.len() - 2);
+
+    let relayer = berthas_addr.to_string();
+    let proof_args = vec![
+        "ethereum-bridge-pool",
+        "construct-proof",
+        "--hash-list",
+        &hash,
+        "--ledger-address",
+        &ledger_addr,
+        "--relayer",
+        &relayer,
+    ];
+    let mut namadar =
+        run!(test, Bin::Relayer, proof_args, Some(QUERY_TIMEOUT_SECONDS),)
+            .unwrap();
+    namadar.exp_string(r#"{"hashes":["#).unwrap();
+
+    let mut client = EventsEndpointClient::default();
+
+    let transfers = EthereumEvent::TransfersToEthereum {
+        nonce: 0.into(),
+        transfers: vec![TransferToEthereum {
+            amount: Amount::whole(100),
+            asset: DAI_ERC20_ETH_ADDRESS,
+            receiver: EthAddress::from_str(RECEIVER).expect("Test failed"),
+            gas_amount: Amount::whole(10),
+            sender: berthas_addr.clone(),
+            gas_payer: berthas_addr.clone(),
+        }],
+        valid_transfers_map: vec![true],
+        relayer: berthas_addr.clone(),
+    };
+
+    client.send(&transfers).await.unwrap();
+    let mut ledger = bg_ledger.foreground();
+    ledger
+        .exp_string(
+            "Applying state updates derived from Ethereum events found in \
+             protocol transaction",
+        )
+        .unwrap();
+    let _bg_ledger = ledger.background();
+    let mut namadar = run!(
+        test,
+        Bin::Relayer,
+        [
+            "ethereum-bridge-pool",
+            "query",
+            "--ledger-address",
+            &ledger_addr,
+        ],
+        Some(QUERY_TIMEOUT_SECONDS),
+    )
+    .unwrap();
+    namadar.exp_string("Bridge pool is empty.").unwrap();
+
+    // bertha's balance should be back at 0
+    let bertha_wdai_balance = find_wrapped_erc20_balance(
+        &test,
+        &SOLE_VALIDATOR,
+        &DAI_ERC20_ETH_ADDRESS,
+        &berthas_addr,
+    )?;
+    assert_eq!(bertha_wdai_balance, 0.into());
+
+    Ok(())
+}
+
 /// In this test, we check the following:
 /// 1. We can successfully add tranfers to the bridge pool.
 /// 2. We can query the bridge pool and it is non-empty.

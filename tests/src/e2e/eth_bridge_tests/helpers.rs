@@ -140,13 +140,7 @@ pub async fn send_transfer_to_namada_event(
         valid_transfers_map: vec![true],
     };
 
-    // TODO(namada#1055): right now, we use a hardcoded Ethereum events endpoint
-    // address that would only work for e2e tests involving a single
-    // validator node - this should become an attribute of the validator under
-    // test once the linked issue is implemented
-    const ETHEREUM_EVENTS_ENDPOINT: &str = "http://0.0.0.0:3030/eth_events";
-    let mut client =
-        EventsEndpointClient::new(ETHEREUM_EVENTS_ENDPOINT.to_string());
+    let mut client = EventsEndpointClient::default();
     client.send(&transfers).await?;
 
     // wait until the transfer is definitely processed
