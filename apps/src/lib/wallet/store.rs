@@ -349,21 +349,25 @@ impl Store {
     /// alias. If none provided, the alias will be the public key hash.
     /// If no encryption password is provided, the keypair will be stored raw
     /// without encryption.
+    /// Optionally, use a given random seed and a BIP44 derivation path.
     /// Returns the alias of the key and a reference-counting pointer to the
-    /// key. Optionally, use a given random seed and a given BIP44
-    /// derivation path.
+    /// key.
     pub fn gen_key(
         &mut self,
         scheme: SchemeType,
         alias: Option<String>,
+        seed_and_derivation_path: Option<(Seed, DerivationPath)>,
         encryption_password: Option<String>,
-        seed: Option<Seed>,
-        derivation_path: DerivationPath,
     ) -> (Alias, common::SecretKey) {
-        let sk = if let Some(seed) = seed {
-            gen_sk_from_seed_and_derivation_path(scheme, seed, derivation_path)
+        let sk = if let Some((seed, derivation_path)) = seed_and_derivation_path
+        {
+            gen_sk_from_seed_and_derivation_path(
+                scheme,
+                seed.as_bytes(),
+                derivation_path,
+            )
         } else {
-            gen_sk(scheme)
+            gen_sk_rng(scheme)
         };
         let pkh: PublicKeyHash = PublicKeyHash::from(&sk.ref_to());
         let (keypair_to_store, raw_keypair) =
@@ -414,7 +418,7 @@ impl Store {
         scheme: SchemeType,
     ) -> ValidatorKeys {
         let protocol_keypair =
-            protocol_keypair.unwrap_or_else(|| gen_sk(scheme));
+            protocol_keypair.unwrap_or_else(|| gen_sk_rng(scheme));
         let dkg_keypair = ferveo_common::Keypair::<EllipticCurve>::new(
             &mut StdRng::from_entropy(),
         );
@@ -844,7 +848,7 @@ impl<'de> Deserialize<'de> for AddressVpType {
 }
 
 /// Generate a new secret key.
-pub fn gen_sk(scheme: SchemeType) -> common::SecretKey {
+pub fn gen_sk_rng(scheme: SchemeType) -> common::SecretKey {
     use rand::rngs::OsRng;
     let mut csprng = OsRng {};
     match scheme {
@@ -863,7 +867,7 @@ pub fn gen_sk(scheme: SchemeType) -> common::SecretKey {
 /// Generate a new secret key from the seed.
 pub fn gen_sk_from_seed_and_derivation_path(
     scheme: SchemeType,
-    seed: Seed,
+    seed: &[u8],
     derivation_path: DerivationPath,
 ) -> common::SecretKey {
     match scheme {
@@ -875,15 +879,12 @@ pub fn gen_sk_from_seed_and_derivation_path(
                 .collect_vec();
             // SLIP10 Ed25519 key derivation function promotes all indexes to
             // hardened indexes.
-            let sk = slip10_ed25519::derive_ed25519_private_key(
-                seed.as_bytes(),
-                &indexes,
-            );
+            let sk = slip10_ed25519::derive_ed25519_private_key(seed, &indexes);
             ed25519::SigScheme::from_bytes(sk).try_to_sk().unwrap()
         }
         SchemeType::Secp256k1 => {
             let xpriv = tiny_hderive::bip32::ExtendedPrivKey::derive(
-                seed.as_bytes(),
+                seed,
                 derivation_path,
             )
             .expect("Secret key derivation should not fail.");

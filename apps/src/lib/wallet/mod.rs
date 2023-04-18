@@ -145,66 +145,61 @@ impl Wallet {
         &mut self,
         scheme: SchemeType,
         alias: Option<String>,
+        seed_and_derivation_path: Option<(Seed, DerivationPath)>,
         encryption_password: Option<String>,
-        seed: Option<Seed>,
-        use_empty_derivation_path: bool,
-        derivation_path: Option<String>,
     ) -> Result<(String, common::SecretKey), GenRestoreKeyError> {
-        let derivation_path = derivation_path
-            .map(|p| {
-                if p.is_empty() {
-                    Ok(DerivationPath::default_for_scheme(scheme))
-                } else {
-                    DerivationPath::from_path_str(&p)
-                        .map_err(GenRestoreKeyError::DerivationPathError)
-                }
-            })
-            .transpose()?;
-        let derivation_path = use_empty_derivation_path
-            .then(DerivationPath::empty)
-            .or(derivation_path)
-            .unwrap();
-        println!("Using HD derivation path {}", derivation_path);
         let (alias, key) = self.store.gen_key(
             scheme,
             alias,
+            seed_and_derivation_path,
             encryption_password,
-            seed,
-            derivation_path,
         );
         // Cache the newly added key
         self.decrypted_key_cache.insert(alias.clone(), key.clone());
         Ok((alias.into(), key))
     }
 
-    /// Restore a keypair from the user mnemonic code (read from stdin) and
-    /// derive an implicit address from its public part
-    /// and insert them into the store with the provided alias, converted to
-    /// lower case. If none provided, the alias will be the public key hash (in
+    /// Restore a keypair from the user mnemonic code (read from stdin) using
+    /// a given BIP44 derivation path and derive an implicit address from its
+    /// public part and insert them into the store with the provided alias,
+    /// converted to lower case.
+    /// If none provided, the alias will be the public key hash (in
     /// lowercase too). If the key is to be encrypted, will prompt for
     /// password from stdin. Stores the key in decrypted key cache and
     /// returns the alias of the key and a reference-counting pointer to the
     /// key.
-    /// TO REMOVE Optionally, use BIP44 derivation path for the key recovery.
     pub fn derive_key_from_user_mnemonic_code(
         &mut self,
         scheme: SchemeType,
         alias: Option<String>,
-        unsafe_dont_encrypt: bool,
-        use_empty_derivation_path: bool,
         derivation_path: Option<String>,
+        unsafe_dont_encrypt: bool,
     ) -> Result<(String, common::SecretKey), GenRestoreKeyError> {
-        let password =
-            read_and_confirm_encryption_password(unsafe_dont_encrypt);
+        let parsed_derivation_path = derivation_path
+            .map(|p| {
+                let is_default = p.eq_ignore_ascii_case("DEFAULT");
+                if is_default {
+                    Ok(DerivationPath::default_for_scheme(scheme))
+                } else {
+                    DerivationPath::from_path_str(scheme, &p)
+                        .map_err(GenRestoreKeyError::DerivationPathError)
+                }
+            })
+            .transpose()?
+            .unwrap_or_else(|| DerivationPath::default_for_scheme(scheme));
+        println!("Using HD derivation path {}", parsed_derivation_path);
         let mnemonic = read_mnemonic_code()?;
-        let seed = Seed::new(&mnemonic, "");
+        let passphrase = read_and_confirm_mnemonic_passphrase();
+        let seed = Seed::new(&mnemonic, &passphrase);
+
+        let encryption_password =
+            read_and_confirm_encryption_password(unsafe_dont_encrypt);
+
         self.gen_and_store_key(
             scheme,
             alias,
-            password,
-            Some(seed),
-            use_empty_derivation_path,
-            derivation_path,
+            Some((seed, parsed_derivation_path)),
+            encryption_password,
         )
     }
 
@@ -215,32 +210,49 @@ impl Wallet {
     /// password from stdin. Stores the key in decrypted key cache and
     /// returns the alias of the key and a reference-counting pointer to the
     /// key. Optionally, use a BIP39 mnemonic code.
-    /// If mnemonic code is not used, the values of derivation path arguments
-    /// are ignored.
-    /// Use empty derivation path if `true` is passed into the respective
-    /// argument. If none BIP44 derivation path is specified, a scheme
-    /// default path is used.
+    /// If a derivation path is specified, derive the key from a generated BIP39
+    /// mnemonic code.
     pub fn gen_key(
         &mut self,
         scheme: SchemeType,
         alias: Option<String>,
-        unsafe_dont_encrypt: bool,
-        use_mnemonic: bool,
-        use_empty_derivation_path: bool,
         derivation_path: Option<String>,
+        unsafe_dont_encrypt: bool,
     ) -> Result<(String, common::SecretKey), GenRestoreKeyError> {
-        let password =
+        let parsed_derivation_path = derivation_path
+            .map(|p| {
+                let is_default = p.eq_ignore_ascii_case("DEFAULT");
+                if is_default {
+                    Ok(DerivationPath::default_for_scheme(scheme))
+                } else {
+                    DerivationPath::from_path_str(scheme, &p)
+                        .map_err(GenRestoreKeyError::DerivationPathError)
+                }
+            })
+            .transpose()?;
+        if parsed_derivation_path.is_some() {
+            println!(
+                "Using HD derivation path {}",
+                parsed_derivation_path.clone().unwrap()
+            );
+        }
+
+        let seed_and_derivation_path //: Option<Result<Seed, GenRestoreKeyError>>
+        = parsed_derivation_path.map(|path| {
+            const MNEMONIC_TYPE: MnemonicType = MnemonicType::Words24;
+            let mnemonic = generate_mnemonic_code(MNEMONIC_TYPE)?;
+            let passphrase = read_and_confirm_mnemonic_passphrase();
+            Ok((Seed::new(&mnemonic, &passphrase), path))
+        }).transpose()?;
+
+        let encryption_password =
             read_and_confirm_encryption_password(unsafe_dont_encrypt);
-        let mnemonic = generate_mnemonic_code(use_mnemonic)?;
-        let passphrase = read_and_confirm_mnemonic_passphrase();
-        let seed = mnemonic.map(|m| Seed::new(&m, &passphrase));
+
         self.gen_and_store_key(
             scheme,
             alias,
-            password,
-            seed,
-            use_empty_derivation_path,
-            derivation_path,
+            seed_and_derivation_path,
+            encryption_password,
         )
     }
 
@@ -631,7 +643,7 @@ impl Wallet {
 }
 
 /// Generates a random mnemonic of the given mnemonic type.
-fn generate_and_print_mnemonic_code(
+fn generate_mnemonic_code(
     mnemonic_type: MnemonicType,
 ) -> Result<Mnemonic, GenRestoreKeyError> {
     const BITS_PER_BYTE: usize = 8;
@@ -653,16 +665,6 @@ fn generate_and_print_mnemonic_code(
     }
 
     Ok(mnemonic)
-}
-
-fn generate_mnemonic_code(
-    use_mnemonic: bool,
-) -> Result<Option<Mnemonic>, GenRestoreKeyError> {
-    const MNEMONIC_TYPE: MnemonicType = MnemonicType::Words24;
-
-    use_mnemonic
-        .then(|| generate_and_print_mnemonic_code(MNEMONIC_TYPE))
-        .transpose()
 }
 
 fn get_secure_user_input<S>(request: S) -> std::io::Result<SecStr>
@@ -763,15 +765,13 @@ pub fn read_encryption_password(prompt_msg: &str) -> String {
 mod tests {
     use bip39::MnemonicType;
 
-    use crate::wallet::generate_and_print_mnemonic_code;
+    use crate::wallet::generate_mnemonic_code;
 
     #[test]
     fn test_generate_mnemonic() {
         const MNEMONIC_TYPE: MnemonicType = MnemonicType::Words12;
-        let mnemonic1 =
-            generate_and_print_mnemonic_code(MNEMONIC_TYPE).unwrap();
-        let mnemonic2 =
-            generate_and_print_mnemonic_code(MNEMONIC_TYPE).unwrap();
+        let mnemonic1 = generate_mnemonic_code(MNEMONIC_TYPE).unwrap();
+        let mnemonic2 = generate_mnemonic_code(MNEMONIC_TYPE).unwrap();
         assert_ne!(mnemonic1.into_phrase(), mnemonic2.into_phrase());
     }
 }

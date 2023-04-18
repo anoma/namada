@@ -309,7 +309,6 @@ fn key_and_address_restore(
         scheme,
         alias,
         unsafe_dont_encrypt,
-        use_empty_derivation_path,
         derivation_path,
     }: args::KeyAndAddressRestore,
 ) {
@@ -317,9 +316,8 @@ fn key_and_address_restore(
     let derived_key = wallet.derive_key_from_user_mnemonic_code(
         scheme,
         alias,
-        unsafe_dont_encrypt,
-        use_empty_derivation_path,
         derivation_path,
+        unsafe_dont_encrypt,
     );
     match derived_key {
         Ok((alias, _key)) => {
@@ -344,20 +342,12 @@ fn key_and_address_gen(
         scheme,
         alias,
         unsafe_dont_encrypt,
-        use_mnemonic,
-        use_empty_derivation_path,
         derivation_path,
     }: args::KeyAndAddressGen,
 ) {
     let mut wallet = ctx.wallet;
-    let generated_key = wallet.gen_key(
-        scheme,
-        alias,
-        unsafe_dont_encrypt,
-        use_mnemonic,
-        use_empty_derivation_path,
-        derivation_path,
-    );
+    let generated_key =
+        wallet.gen_key(scheme, alias, derivation_path, unsafe_dont_encrypt);
     match generated_key {
         Ok((alias, _key)) => {
             wallet.save().unwrap_or_else(|err| eprintln!("{}", err));

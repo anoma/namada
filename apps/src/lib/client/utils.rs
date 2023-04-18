@@ -491,7 +491,7 @@ pub fn init_network(
         config.address = Some(address.to_string());
 
         // Generate the consensus, account and reward keys, unless they're
-        // pre-defined. Do not use mnemonic code. Do not use derivation path.
+        // pre-defined. Do not use mnemonic code / HD derivation path.
         let mut wallet = Wallet::load_or_new(&chain_dir);
 
         let consensus_pk = try_parse_public_key(
@@ -505,10 +505,8 @@ pub fn init_network(
                 .gen_key(
                     SchemeType::Ed25519,
                     Some(alias),
-                    unsafe_dont_encrypt,
-                    false,
-                    true,
                     None,
+                    unsafe_dont_encrypt,
                 )
                 .expect("Key generation should not fail.");
 
@@ -529,10 +527,8 @@ pub fn init_network(
                 .gen_key(
                     SchemeType::Ed25519,
                     Some(alias),
-                    unsafe_dont_encrypt,
-                    false,
-                    true,
                     None,
+                    unsafe_dont_encrypt,
                 )
                 .expect("Key generation should not fail.");
             keypair.ref_to()
@@ -549,10 +545,8 @@ pub fn init_network(
                 .gen_key(
                     SchemeType::Ed25519,
                     Some(alias),
-                    unsafe_dont_encrypt,
-                    false,
-                    true,
                     None,
+                    unsafe_dont_encrypt,
                 )
                 .expect("Key generation should not fail.");
             keypair.ref_to()
@@ -639,10 +633,8 @@ pub fn init_network(
                     .gen_key(
                         SchemeType::Ed25519,
                         Some(name.clone()),
-                        unsafe_dont_encrypt,
-                        false,
-                        true,
                         None,
+                        unsafe_dont_encrypt,
                     )
                     .expect("Key generation should not fail.");
                 let public_key =
@@ -894,10 +886,8 @@ fn init_established_account(
             .gen_key(
                 SchemeType::Ed25519,
                 Some(format!("{}-key", name.as_ref())),
+                None, // do not use mnemonic code / HD derivation code
                 unsafe_dont_encrypt,
-                false, // do not use mnemonic code
-                true,
-                None,
             )
             .expect("Key generation should not fail.");
         let public_key =

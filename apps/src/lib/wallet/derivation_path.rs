@@ -30,11 +30,7 @@ impl DerivationPath {
         Self(DerivationPathInner::new(path))
     }
 
-    pub fn empty() -> Self {
-        Self::new(vec![])
-    }
-
-    fn base_indexes_for_scheme(scheme: SchemeType) -> Vec<ChildIndex> {
+    fn bip44_base_indexes_for_scheme(scheme: SchemeType) -> Vec<ChildIndex> {
         vec![
             ChildIndex::Hardened(44),
             match scheme {
@@ -45,27 +41,19 @@ impl DerivationPath {
         ]
     }
 
-    fn index_for_scheme(scheme: SchemeType, idx: u32) -> ChildIndex {
-        match scheme {
-            SchemeType::Secp256k1 => ChildIndex::Normal(idx),
-            SchemeType::Ed25519 => ChildIndex::Hardened(idx),
-            SchemeType::Common => unimplemented!("not implemented"),
-        }
-    }
-
     fn bip44(
         scheme: SchemeType,
         account: Option<u32>,
         change: Option<u32>,
         address: Option<u32>,
     ) -> Self {
-        let mut indexes = Self::base_indexes_for_scheme(scheme);
+        let mut indexes = Self::bip44_base_indexes_for_scheme(scheme);
         if let Some(account) = account {
-            indexes.push(Self::index_for_scheme(scheme, account));
+            indexes.push(ChildIndex::Hardened(account));
             if let Some(change) = change {
-                indexes.push(Self::index_for_scheme(scheme, change));
+                indexes.push(ChildIndex::Normal(change));
                 if let Some(address) = address {
-                    indexes.push(Self::index_for_scheme(scheme, address));
+                    indexes.push(ChildIndex::Normal(address));
                 }
             }
         }
@@ -76,14 +64,20 @@ impl DerivationPath {
         Self::bip44(scheme, Some(0), Some(0), Some(0))
     }
 
-    pub fn from_path_str(path: &str) -> Result<Self, DerivationPathError> {
+    pub fn from_path_str(
+        scheme: SchemeType,
+        path: &str,
+    ) -> Result<Self, DerivationPathError> {
         let inner = DerivationPathInner::from_str(path).map_err(|err| {
             DerivationPathError::InvalidDerivationPath(err.to_string())
         })?;
         Ok(Self::new(
             inner
                 .into_iter()
-                .map(|c| ChildIndex::Hardened(c.to_u32()))
+                .map(|idx| match scheme {
+                    SchemeType::Ed25519 => ChildIndex::Hardened(idx.to_u32()),
+                    _ => *idx,
+                })
                 .collect::<Vec<_>>(),
         ))
     }
