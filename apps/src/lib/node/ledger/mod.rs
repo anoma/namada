@@ -13,7 +13,7 @@ use std::thread;
 
 use byte_unit::Byte;
 use futures::future::TryFutureExt;
-use namada::ledger::governance::storage as gov_storage;
+use namada::core::ledger::governance::storage::keys as gov_storage;
 use namada::types::storage::Key;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};

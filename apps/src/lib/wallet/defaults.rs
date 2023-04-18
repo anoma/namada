@@ -6,7 +6,8 @@ pub use dev::{
     christel_address, christel_keypair, daewon_address, daewon_keypair, keys,
     validator_address, validator_keypair, validator_keys,
 };
-use namada::ledger::{eth_bridge, governance, pos};
+use namada::core::ledger::governance::ADDRESS as gov_address;
+use namada::ledger::{eth_bridge, pos};
 use namada::types::address::Address;
 use namada::types::key::*;
 
@@ -19,7 +20,7 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
     let mut addresses: Vec<(Alias, Address)> = vec![
         ("pos".into(), pos::ADDRESS),
         ("pos_slash_pool".into(), pos::SLASH_POOL_ADDRESS),
-        ("governance".into(), governance::ADDRESS),
+        ("governance".into(), gov_address),
         ("eth_bridge".into(), eth_bridge::vp::ADDRESS),
     ];
     // Genesis validators
@@ -73,7 +74,8 @@ mod dev {
     use std::collections::HashMap;
 
     use borsh::BorshDeserialize;
-    use namada::ledger::{governance, pos};
+    use namada::core::ledger::governance::ADDRESS as gov_address;
+    use namada::ledger::pos;
     use namada::types::address::{
         apfel, btc, dot, eth, kartoffel, nam, schnitzel, Address,
     };
@@ -132,7 +134,7 @@ mod dev {
         let mut addresses: Vec<(Alias, Address)> = vec![
             ("pos".into(), pos::ADDRESS),
             ("pos_slash_pool".into(), pos::SLASH_POOL_ADDRESS),
-            ("governance".into(), governance::ADDRESS),
+            ("governance".into(), gov_address),
             ("validator".into(), validator_address()),
             ("albert".into(), albert_address()),
             ("bertha".into(), bertha_address()),

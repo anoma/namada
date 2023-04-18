@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use data_encoding::HEXUPPER;
-use namada::ledger::parameters::storage as params_storage;
+use namada::core::ledger::parameters::storage as params_storage;
 use namada::ledger::pos::types::{decimal_mult_u64, into_tm_voting_power};
 use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
@@ -888,7 +888,11 @@ mod test_finalize_block {
     use std::str::FromStr;
 
     use data_encoding::HEXUPPER;
-    use namada::ledger::parameters::EpochDuration;
+    use namada::core::ledger::governance::storage::proposal::ProposalType;
+    use namada::core::ledger::governance::storage::vote::{
+        StorageProposalVote, VoteType,
+    };
+    use namada::core::ledger::parameters::EpochDuration;
     use namada::ledger::storage_api;
     use namada::proof_of_stake::btree_set::BTreeSetShims;
     use namada::proof_of_stake::types::WeightedValidator;
@@ -897,12 +901,11 @@ mod test_finalize_block {
         rewards_accumulator_handle, validator_consensus_key_handle,
         validator_rewards_products_handle,
     };
-    use namada::types::governance::ProposalVote;
     use namada::types::key::tm_consensus_key_raw_hash;
     use namada::types::storage::Epoch;
     use namada::types::time::DurationSecs;
     use namada::types::transaction::governance::{
-        InitProposalData, ProposalType, VoteProposalData,
+        InitProposalData, VoteProposalData,
     };
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
     use namada_test_utils::TestWasms;
@@ -1281,7 +1284,7 @@ mod test_finalize_block {
             min_num_of_blocks: 5,
             min_duration: DurationSecs(0),
         };
-        namada::ledger::parameters::update_epoch_parameter(
+        namada::core::ledger::parameters::update_epoch_parameter(
             &mut shell.wl_storage,
             &epoch_duration,
         )
@@ -1323,11 +1326,8 @@ mod test_finalize_block {
         };
 
         // Add a proposal to be accepted and one to be rejected.
-        add_proposal(
-            0,
-            ProposalVote::Yay(namada::types::governance::VoteType::Default),
-        );
-        add_proposal(1, ProposalVote::Nay);
+        add_proposal(0, StorageProposalVote::Yay(VoteType::Default));
+        add_proposal(1, StorageProposalVote::Nay);
 
         // Commit the genesis state
         shell.wl_storage.commit_block().unwrap();
@@ -1507,11 +1507,9 @@ mod test_finalize_block {
         // won't receive votes from TM since we receive votes at a 1-block
         // delay, so votes will be empty here
         next_block_for_inflation(&mut shell, pkh1.clone(), vec![]);
-        assert!(
-            rewards_accumulator_handle()
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
+        assert!(rewards_accumulator_handle()
+            .is_empty(&shell.wl_storage)
+            .unwrap());
 
         // FINALIZE BLOCK 2. Tell Namada that val1 is the block proposer.
         // Include votes that correspond to block 1. Make val2 the next block's
@@ -1521,11 +1519,9 @@ mod test_finalize_block {
         assert!(rewards_prod_2.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_4.is_empty(&shell.wl_storage).unwrap());
-        assert!(
-            !rewards_accumulator_handle()
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
+        assert!(!rewards_accumulator_handle()
+            .is_empty(&shell.wl_storage)
+            .unwrap());
         // Val1 was the proposer, so its reward should be larger than all
         // others, which should themselves all be equal
         let acc_sum = get_rewards_sum(&shell.wl_storage);
@@ -1626,11 +1622,9 @@ mod test_finalize_block {
             );
             next_block_for_inflation(&mut shell, pkh1.clone(), votes.clone());
         }
-        assert!(
-            rewards_accumulator_handle()
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
+        assert!(rewards_accumulator_handle()
+            .is_empty(&shell.wl_storage)
+            .unwrap());
         let rp1 = rewards_prod_1
             .get(&shell.wl_storage, &Epoch::default())
             .unwrap()

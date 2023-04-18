@@ -1,8 +1,8 @@
 use std::borrow::Borrow;
 use std::collections::BTreeSet;
 
+use namada::core::ledger::parameters::{self, EpochDuration};
 use namada::ledger::gas::BlockGasMeter;
-use namada::ledger::parameters::{self, EpochDuration};
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::testing::TestStorage;
 use namada::ledger::storage::write_log::WriteLog;

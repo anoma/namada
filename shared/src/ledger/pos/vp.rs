@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 use std::panic::{RefUnwindSafe, UnwindSafe};
 
+use namada_core::ledger::storage_api::governance::is_proposal_accepted;
 // use borsh::BorshDeserialize;
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
@@ -13,7 +14,7 @@ pub use namada_proof_of_stake::types;
 use thiserror::Error;
 
 use super::is_params_key;
-use crate::ledger::native_vp::{self, governance, Ctx, NativeVp};
+use crate::ledger::native_vp::{self, Ctx, NativeVp};
 // use crate::ledger::pos::{
 //     is_validator_address_raw_hash_key,
 //     is_validator_max_commission_rate_change_key,
@@ -110,11 +111,8 @@ where
         for key in keys_changed {
             // println!("KEY: {}\n", key);
             if is_params_key(key) {
-                if !governance::utils::is_proposal_accepted(
-                    &self.ctx.pre(),
-                    tx_data,
-                )
-                .map_err(Error::NativeVpError)?
+                if !is_proposal_accepted(&self.ctx.pre(), tx_data)
+                    .map_err(Error::NativeVpError)?
                 {
                     return Ok(false);
                 }

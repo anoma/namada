@@ -140,11 +140,11 @@ fn iterable_to_string<T: fmt::Display>(
     Serialize,
     Deserialize,
 )]
-pub struct UpdateVp {
+pub struct UpdateAccount {
     /// An address of the account
     pub address: Address,
     /// The new VP code hash
-    pub vp_code_hash: Hash,
+    pub vp_code_hash: Option<Hash>,
     /// Public keys
     pub public_keys: Vec<common::PublicKey>,
     /// Account threshold

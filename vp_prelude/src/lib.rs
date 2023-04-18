@@ -16,7 +16,7 @@ use std::convert::TryFrom;
 use std::marker::PhantomData;
 
 pub use borsh::{BorshDeserialize, BorshSerialize};
-pub use namada_core::ledger::governance::storage as gov_storage;
+pub use namada_core::ledger::governance::storage::keys as gov_storage;
 pub use namada_core::ledger::storage_api::{
     self, iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt,
     StorageRead,

@@ -538,7 +538,7 @@ where
 #[cfg(test)]
 mod test_process_proposal {
     use borsh::BorshDeserialize;
-    use namada::ledger::parameters::storage::get_wrapper_tx_fees_key;
+    use namada::core::ledger::parameters::storage::get_wrapper_tx_fees_key;
     use namada::proto::SignedTxData;
     use namada::types::hash::Hash;
     use namada::types::key::*;
