@@ -9,13 +9,13 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
     let signed = SignedTxData::try_from_slice(&tx_data[..])
         .wrap_err("failed to decode SignedTxData")?;
     let data = signed.data.ok_or_err_msg("Missing data")?;
-    let update_vp = transaction::UpdateVp::try_from_slice(&data[..])
+    let update_vp = transaction::UpdateAccount::try_from_slice(&data[..])
         .wrap_err("failed to decode UpdateVp")?;
 
     debug_log!("update VP for: {:#?}", update_vp.addr);
 
-    if let Some(vp_code) = update_vp.vp_code {
-        ctx.update_validity_predicate(&update_vp.addr, vp_code)?;
+    if let Some(vp_code_hash) = update_vp.vp_code_hash {
+        ctx.update_validity_predicate(&update_vp.addr, vp_code_hash)?;
     }
 
     if let Some(threshold) = update_vp.threshold {

@@ -3,11 +3,11 @@
 use std::collections::BTreeSet;
 
 use namada_core::ledger::storage;
+use namada_core::ledger::storage_api::governance::is_proposal_accepted;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::Key;
 use thiserror::Error;
 
-use super::governance;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::vm::WasmCacheAccess;
 
@@ -51,11 +51,10 @@ where
         let result = keys_changed.iter().all(|key| {
             let key_type: KeyType = key.into();
             match key_type {
-                KeyType::PARAMETER => governance::utils::is_proposal_accepted(
-                    &self.ctx.pre(),
-                    tx_data,
-                )
-                .unwrap_or(false),
+                KeyType::PARAMETER => {
+                    is_proposal_accepted(&self.ctx.pre(), tx_data)
+                        .unwrap_or(false)
+                }
                 KeyType::UNKNOWN_PARAMETER => false,
                 KeyType::UNKNOWN => true,
             }
