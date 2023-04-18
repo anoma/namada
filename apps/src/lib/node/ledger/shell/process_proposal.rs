@@ -656,7 +656,6 @@ where
 #[cfg(test)]
 mod test_process_proposal {
     use borsh::BorshDeserialize;
-    use namada::ledger::parameters::storage::get_wrapper_tx_fees_key;
     use namada::ledger::storage_api::StorageWrite;
     use namada::proto::SignedTxData;
     use namada::types::hash::Hash;
@@ -665,7 +664,7 @@ mod test_process_proposal {
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::protocol::ProtocolTxType;
-    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
+    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
@@ -823,14 +822,6 @@ mod test_process_proposal {
     #[test]
     fn test_wrapper_unknown_address() {
         let (mut shell, _) = test_utils::setup(1);
-        shell
-            .wl_storage
-            .write_log
-            .write(
-                &get_wrapper_tx_fees_key(),
-                token::Amount::whole(MIN_FEE).try_to_vec().unwrap(),
-            )
-            .unwrap();
         let keypair = gen_keypair();
         // reduce address balance to match the 100 token min fee
         let balance_key = token::balance_key(
@@ -901,10 +892,6 @@ mod test_process_proposal {
             .wl_storage
             .write(&balance_key, Amount::whole(99))
             .unwrap();
-        shell
-            .wl_storage
-            .write(&get_wrapper_tx_fees_key(), token::Amount::whole(MIN_FEE))
-            .unwrap();
         shell.commit();
 
         let tx = Tx::new(
@@ -915,7 +902,7 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: Amount::whole(100),
+                amount: Amount::from(100),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1365,7 +1352,7 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: 1.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1511,7 +1498,7 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: 1.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1530,7 +1517,7 @@ mod test_process_proposal {
 
         let new_wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: 1.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair_2,

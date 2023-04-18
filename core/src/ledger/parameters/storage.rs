@@ -21,7 +21,7 @@ struct Keys {
     max_proposal_bytes: &'static str,
     max_block_gas: &'static str,
     faucet_account: &'static str,
-    wrapper_tx_fees: &'static str,
+    gas_cost: &'static str,
     gas_table: &'static str,
     fee_unshielding_gas_limit: &'static str,
     fee_unshielding_descriptions_limit: &'static str,
@@ -299,12 +299,12 @@ pub fn get_faucet_account_key() -> Key {
     }
 }
 
-/// Storage key used for staked ratio parameter.
-pub fn get_wrapper_tx_fees_key() -> Key {
+/// Storage key used for the gas cost table
+pub fn get_gas_cost_key() -> Key {
     Key {
         segments: vec![
             DbKeySeg::AddressSeg(ADDRESS),
-            DbKeySeg::StringSeg(Keys::VALUES.wrapper_tx_fees.to_string()),
+            DbKeySeg::StringSeg(Keys::VALUES.gas_cost.to_string()),
         ],
     }
 }

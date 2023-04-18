@@ -25,8 +25,6 @@ pub mod wrapper_tx {
     use crate::types::transaction::encrypted::EncryptedTx;
     use crate::types::transaction::{EncryptionKey, Hash, TxError, TxType};
 
-    /// Minimum fee amount in micro NAMs
-    pub const MIN_FEE: u64 = 100;
     /// TODO: Determine a sane number for this
     const GAS_LIMIT_RESOLUTION: u64 = 1_000_000;
 
@@ -50,6 +48,8 @@ pub mod wrapper_tx {
         InvalidKeyPair,
         #[error("The provided unshielding tx is invalid: {0}")]
         InvalidUnshield(String),
+        #[error("The given Tx fee amount overflowed")]
+        OverflowingFee,
     }
 
     /// A fee is an amount of a specified token
@@ -401,6 +401,13 @@ pub mod wrapper_tx {
             }
 
             Ok(None)
+        }
+
+        /// Get the [`Amount`] of fees to be paid by the given wrapper. Returns an error if the amount overflows
+        pub fn get_tx_fee(&self) -> Result<Amount, WrapperTxErr> {
+            u64::checked_mul(u64::from(&self.gas_limit), self.fee.amount.into())
+                .map(|v| v.into())
+                .ok_or_else(|| WrapperTxErr::OverflowingFee)
         }
     }
 

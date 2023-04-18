@@ -44,8 +44,6 @@ use namada::types::internal::WrapperTxInQueue;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
-#[cfg(not(feature = "mainnet"))]
-use namada::types::transaction::MIN_FEE;
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, WrapperTx,
@@ -776,7 +774,7 @@ where
                 return response;
             }
 
-            // check that the fee payer has sufficient balance
+            // Validate wrapper fees
             if let Err(e) = self.wrapper_fee_check(
                 &wrapper,
                 tx_chain_id,
@@ -912,16 +910,6 @@ where
     }
 
     #[cfg(not(feature = "mainnet"))]
-    /// Get fixed amount of fees for wrapper tx
-    fn get_wrapper_tx_fees(&self) -> token::Amount {
-        let fees = namada::ledger::parameters::read_wrapper_tx_fees_parameter(
-            &self.wl_storage,
-        )
-        .expect("Must be able to read wrapper tx fees parameter");
-        fees.unwrap_or(token::Amount::whole(MIN_FEE))
-    }
-
-    #[cfg(not(feature = "mainnet"))]
     /// Check if the tx has a valid PoW solution and if so invalidate it to
     /// prevent replay.
     fn invalidate_pow_solution_if_valid(
@@ -991,6 +979,22 @@ where
         #[cfg(not(feature = "mainnet"))]
         if self.has_valid_pow_solution(wrapper) {
             return Ok(());
+        }
+
+        // Check that fee token is an allowed one
+        let gas_cost = namada::ledger::parameters::read_gas_cost(
+            &self.wl_storage,
+            &wrapper.fee.token,
+        )
+        .expect("Must be able to read gas cost parameter")
+        .ok_or(format!(
+            "The provided {} token is not allowed for fee payment",
+            wrapper.fee.token
+        ))?;
+
+        if wrapper.fee.amount < gas_cost {
+            // The fees do not match the minimum required
+            return Err(format!("Fee amount {} do not match the minimum required amount {} for token {}", wrapper.fee.amount, gas_cost, wrapper.fee.token));
         }
 
         let mut balance = storage_api::token::read_balance(
@@ -1083,7 +1087,7 @@ where
             }
         }
 
-        if balance >= self.get_wrapper_tx_fees() {
+        if balance >= wrapper.get_tx_fee().map_err(|e| e.to_string())? {
             Ok(())
         } else {
             Err(Error::TxApply(protocol::Error::FeeError))

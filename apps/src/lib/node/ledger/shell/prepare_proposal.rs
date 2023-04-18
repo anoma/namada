@@ -465,7 +465,7 @@ mod test_prepare_proposal {
             }));
             let wrapper_tx = WrapperTx::new(
                 Fee {
-                    amount: 0.into(),
+                    amount: 1.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,

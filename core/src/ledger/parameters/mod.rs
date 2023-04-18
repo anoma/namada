@@ -8,6 +8,7 @@ use rust_decimal::Decimal;
 use thiserror::Error;
 
 use super::storage::types;
+use super::storage_api::token::Amount;
 use super::storage_api::{self, ResultExt, StorageRead, StorageWrite};
 use crate::ledger::storage as ledger_storage;
 use crate::types::address::{Address, InternalAddress};
@@ -63,9 +64,8 @@ pub struct Parameters {
     pub fee_unshielding_gas_limit: u64,
     /// Fee unshielding descriptions limit
     pub fee_unshielding_descriptions_limit: u64,
-    #[cfg(not(feature = "mainnet"))]
-    /// Fixed fees for a wrapper tx to be accepted
-    pub wrapper_tx_fees: Option<token::Amount>,
+    /// Map of the cost per gas unit for every token allowed for fee payment
+    pub gas_cost: BTreeMap<Address, token::Amount>,
     /// Gas table
     pub gas_table: BTreeMap<String, u64>,
 }
@@ -132,8 +132,7 @@ impl Parameters {
             pos_inflation_amount,
             #[cfg(not(feature = "mainnet"))]
             faucet_account,
-            #[cfg(not(feature = "mainnet"))]
-            wrapper_tx_fees,
+            gas_cost,
             gas_table,
             fee_unshielding_gas_limit,
             fee_unshielding_descriptions_limit,
@@ -224,13 +223,9 @@ impl Parameters {
             storage.write(&faucet_account_key, faucet_account)?;
         }
 
-        #[cfg(not(feature = "mainnet"))]
-        {
-            let wrapper_tx_fees_key = storage::get_wrapper_tx_fees_key();
-            let wrapper_tx_fees =
-                wrapper_tx_fees.unwrap_or(token::Amount::whole(100));
-            storage.write(&wrapper_tx_fees_key, wrapper_tx_fees)?;
-        }
+        let gas_cost_key = storage::get_gas_cost_key();
+        storage.write(&gas_cost_key, gas_cost)?;
+
         Ok(())
     }
 }
@@ -405,16 +400,19 @@ where
     storage.read(&faucet_account_key)
 }
 
-#[cfg(not(feature = "mainnet"))]
-/// Read the wrapper tx fees amount, if any
-pub fn read_wrapper_tx_fees_parameter<S>(
+/// Read the cost per unit of gas for the provided token
+pub fn read_gas_cost<S>(
     storage: &S,
-) -> storage_api::Result<Option<token::Amount>>
+    token: &Address,
+) -> storage_api::Result<Option<Amount>>
 where
     S: StorageRead,
 {
-    let wrapper_tx_fees_key = storage::get_wrapper_tx_fees_key();
-    storage.read(&wrapper_tx_fees_key)
+    let gas_cost_table: BTreeMap<Address, Amount> = storage
+        .read(&storage::get_gas_cost_key())?
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()?;
+    Ok(gas_cost_table.get(token).map(|amount| amount.to_owned()))
 }
 
 // Read the all the parameters from storage. Returns the parameters and gas
@@ -536,9 +534,12 @@ where
     #[cfg(not(feature = "mainnet"))]
     let faucet_account = read_faucet_account_parameter(storage)?;
 
-    // read faucet account
-    #[cfg(not(feature = "mainnet"))]
-    let wrapper_tx_fees = read_wrapper_tx_fees_parameter(storage)?;
+    // read gas cost
+    let gas_cost_key = storage::get_gas_cost_key();
+    let value = storage.read(&gas_cost_key)?;
+    let gas_cost: BTreeMap<Address, token::Amount> = value
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()?;
 
     Ok(Parameters {
         epoch_duration,
@@ -555,8 +556,7 @@ where
         pos_inflation_amount,
         #[cfg(not(feature = "mainnet"))]
         faucet_account,
-        #[cfg(not(feature = "mainnet"))]
-        wrapper_tx_fees,
+        gas_cost,
         gas_table,
         fee_unshielding_gas_limit,
         fee_unshielding_descriptions_limit,

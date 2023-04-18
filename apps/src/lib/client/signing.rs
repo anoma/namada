@@ -1,6 +1,8 @@
 //! Helpers for making digital signatures using cryptographic keys from the
 //! wallet.
 
+use std::collections::BTreeMap;
+
 use borsh::BorshSerialize;
 use namada::ledger::parameters::storage as parameter_storage;
 use namada::proof_of_stake::Epoch;
@@ -10,7 +12,7 @@ use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::token;
 use namada::types::token::Amount;
-use namada::types::transaction::{hash_tx, Fee, WrapperTx, MIN_FEE};
+use namada::types::transaction::{hash_tx, Fee, WrapperTx};
 
 use super::rpc;
 use super::tx::gen_shielded_transfer;
@@ -240,15 +242,35 @@ pub async fn sign_wrapper(
 ) -> (TxBroadcastData, Option<Epoch>) {
     let client = HttpClient::new(args.ledger_address.clone()).unwrap();
 
-    let fee_amount = if cfg!(feature = "mainnet") {
-        Amount::whole(MIN_FEE)
-    } else {
-        let wrapper_tx_fees_key = parameter_storage::get_wrapper_tx_fees_key();
-        rpc::query_storage_value::<token::Amount>(&client, &wrapper_tx_fees_key)
-            .await
-            .unwrap_or_default()
-    };
     let fee_token = ctx.get(&args.fee_token);
+    let fee_amount = match args.fee_amount {
+        Some(amount) => amount,
+        None => {
+            let gas_cost_key = parameter_storage::get_gas_cost_key();
+            match rpc::query_storage_value::<BTreeMap<Address, Amount>>(
+                &client,
+                &gas_cost_key,
+            )
+            .await
+            .map(|map| map.get(&fee_token).map(ToOwned::to_owned))
+            .flatten()
+            {
+                Some(amount) => amount,
+                None => {
+                    if !args.force {
+                        eprintln!(
+                            "Could not retrieve the gas cost for token {}",
+                            fee_token
+                        );
+                        cli::safe_exit(1)
+                    } else {
+                        1.into()
+                    }
+                }
+            }
+        }
+    };
+
     let source = Address::from(&keypair.ref_to());
     let balance_key = token::balance_key(&fee_token, &source);
     let mut balance =

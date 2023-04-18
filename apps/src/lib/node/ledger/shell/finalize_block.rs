@@ -930,8 +930,14 @@ where
             .expect("must be able to read")
             .unwrap_or_default();
 
-        let wrapper_fees = self.get_wrapper_tx_fees();
-        match balance.checked_sub(wrapper_fees) {
+        let fees = wrapper.get_tx_fee().unwrap_or_else(|_| {
+            // NOTE: Fees did overflow, it should be impossible to get to this point beacuse of the process_single_tx validation
+            tracing::error!("The fees of wrapper tx did overflow");
+            // Try to charge the maximum amount
+            Amount::max()
+        });
+
+        match balance.checked_sub(fees) {
             Some(amount) => {
                 self.wl_storage
                     .storage
@@ -1057,7 +1063,7 @@ mod test_finalize_block {
     use namada::types::transaction::governance::{
         InitProposalData, ProposalType, VoteProposalData,
     };
-    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
+    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx};
     use namada_test_utils::TestWasms;
     use rust_decimal_macros::dec;
     use test_log::test;
@@ -1102,7 +1108,7 @@ mod test_finalize_block {
             );
             let wrapper = WrapperTx::new(
                 Fee {
-                    amount: MIN_FEE.into(),
+                    amount: 1.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
@@ -1333,7 +1339,7 @@ mod test_finalize_block {
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
-                    amount: MIN_FEE.into(),
+                    amount: 1.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
@@ -1379,7 +1385,7 @@ mod test_finalize_block {
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
-                    amount: MIN_FEE.into(),
+                    amount: 1.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
@@ -1688,11 +1694,9 @@ mod test_finalize_block {
         // won't receive votes from TM since we receive votes at a 1-block
         // delay, so votes will be empty here
         next_block_for_inflation(&mut shell, pkh1.clone(), vec![]);
-        assert!(
-            rewards_accumulator_handle()
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
+        assert!(rewards_accumulator_handle()
+            .is_empty(&shell.wl_storage)
+            .unwrap());
 
         // FINALIZE BLOCK 2. Tell Namada that val1 is the block proposer.
         // Include votes that correspond to block 1. Make val2 the next block's
@@ -1702,11 +1706,9 @@ mod test_finalize_block {
         assert!(rewards_prod_2.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_4.is_empty(&shell.wl_storage).unwrap());
-        assert!(
-            !rewards_accumulator_handle()
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
+        assert!(!rewards_accumulator_handle()
+            .is_empty(&shell.wl_storage)
+            .unwrap());
         // Val1 was the proposer, so its reward should be larger than all
         // others, which should themselves all be equal
         let acc_sum = get_rewards_sum(&shell.wl_storage);
@@ -1807,11 +1809,9 @@ mod test_finalize_block {
             );
             next_block_for_inflation(&mut shell, pkh1.clone(), votes.clone());
         }
-        assert!(
-            rewards_accumulator_handle()
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
+        assert!(rewards_accumulator_handle()
+            .is_empty(&shell.wl_storage)
+            .unwrap());
         let rp1 = rewards_prod_1
             .get(&shell.wl_storage, &Epoch::default())
             .unwrap()
@@ -1938,12 +1938,10 @@ mod test_finalize_block {
         let code = event.attributes.get("code").expect("Testfailed").as_str();
         assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
 
-        assert!(
-            !shell
-                .wl_storage
-                .has_key(&inner_hash_key)
-                .expect("Test failed")
-        )
+        assert!(!shell
+            .wl_storage
+            .has_key(&inner_hash_key)
+            .expect("Test failed"))
     }
 
     /// Test that a wrapper transaction rejected by [`process_proposal`] because
