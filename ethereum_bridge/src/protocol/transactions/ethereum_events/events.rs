@@ -782,8 +782,9 @@ mod tests {
     }
 
     #[test]
-    /// Test that the transfers are deleted in the bridge pool when we act on a
-    /// TransfersToEthereum
+    /// When we act on a [`EthereumEvent::TransfersToEthereum`], test
+    /// that pending transfers are deleted from the Bridge pool, the
+    /// Bridge pool nonce is updated and escrowed assets are burned.
     fn test_act_on_changes_storage_for_transfers_to_eth() {
         let mut wl_storage = TestWlStorage::default();
         test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
