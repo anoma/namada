@@ -285,7 +285,7 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
     let transfers = EthereumEvent::TransfersToEthereum {
         nonce: 0.into(),
         transfers: vec![TransferToEthereum {
-            amount: Amount::whole(100),
+            amount: transfer_amount,
             asset: DAI_ERC20_ETH_ADDRESS,
             receiver: EthAddress::from_str(RECEIVER).expect("Test failed"),
             gas_amount: Amount::whole(10),
