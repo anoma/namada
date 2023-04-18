@@ -742,7 +742,7 @@ pub fn is_validator<S>(
     epoch: namada_core::types::storage::Epoch,
 ) -> storage_api::Result<bool>
 where
-    S: StorageRead + StorageWrite,
+    S: StorageRead,
 {
     let state = validator_state_handle(address).get(storage, epoch, params)?;
     Ok(state.is_some())

@@ -61,6 +61,11 @@ impl Amount {
         self.micro = self.micro.checked_sub(amount.micro).unwrap();
     }
 
+    /// Check if there are enough funds.
+    pub fn can_spend(&self, amount: &Amount) -> bool {
+        self.micro >= amount.micro
+    }
+
     /// Receive a given amount.
     /// Panics on overflow.
     pub fn receive(&mut self, amount: &Amount) {

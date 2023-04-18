@@ -3912,6 +3912,7 @@ dependencies = [
  "regex",
  "rust_decimal",
  "rust_decimal_macros",
+ "serde 1.0.145",
  "serde_json",
  "sha2 0.9.9",
  "tempfile",
