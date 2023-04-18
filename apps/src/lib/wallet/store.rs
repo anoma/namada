@@ -903,6 +903,10 @@ pub fn gen_sk_from_seed_and_derivation_path(
 
 #[cfg(all(test, feature = "dev"))]
 mod test_wallet {
+    use base58::{self, FromBase58};
+    use bip39::{Language, Mnemonic};
+    use hex;
+
     use super::*;
 
     #[test]
@@ -929,5 +933,134 @@ mod test_wallet {
         );
         let data = store.encode();
         let _ = Store::decode(data).expect("Test failed");
+    }
+
+    #[test]
+    fn gen_sk_from_mnemonic_code_secp256k1() {
+        const SCHEME: SchemeType = SchemeType::Secp256k1;
+        const MNEMONIC_CODE: &str = "cruise ball fame lucky fabric govern \
+                                     length fruit permit tonight fame pear \
+                                     horse park key chimney furnace lobster \
+                                     foot example shoot dry fuel lawn";
+        const SEED_EXPECTED: &str = "8601e9f639f995f856c8ecfa3cd298d292253d071d6fa75d50dd31f6ba9df743ec279354a73fe78e6011738027fb994e5d904c476c4679c7c35e82586e14297f";
+        const PASSPHRASE: &str = "test";
+        const DERIVATION_PATH: &str = "m/44'/60'/0'/0/0";
+        const SK_EXPECTED: &str =
+            "9e426cc5f63cdbd5f362adb918a07c2b16c593b2bc1b244f33b9e2c3ac6b265a";
+
+        let mnemonic = Mnemonic::from_phrase(MNEMONIC_CODE, Language::English)
+            .expect("Mnemonic construction cannot fail.");
+        let seed = Seed::new(&mnemonic, PASSPHRASE);
+        assert_eq!(format!("{:x}", seed), SEED_EXPECTED);
+
+        let derivation_path =
+            DerivationPath::from_path_str(SCHEME, DERIVATION_PATH)
+                .expect("Derivation path construction cannot fail");
+
+        let sk = gen_sk_from_seed_and_derivation_path(
+            SCHEME,
+            seed.as_bytes(),
+            derivation_path,
+        );
+
+        assert_eq!(&sk.to_string()[2..], SK_EXPECTED);
+    }
+
+    #[test]
+    fn gen_sk_from_mnemonic_code_ed25519() {
+        const SCHEME: SchemeType = SchemeType::Ed25519;
+        const MNEMONIC_CODE: &str = "cruise ball fame lucky fabric govern \
+                                     length fruit permit tonight fame pear \
+                                     horse park key chimney furnace lobster \
+                                     foot example shoot dry fuel lawn";
+        const SEED_EXPECTED: &str = "8601e9f639f995f856c8ecfa3cd298d292253d071d6fa75d50dd31f6ba9df743ec279354a73fe78e6011738027fb994e5d904c476c4679c7c35e82586e14297f";
+        const PASSPHRASE: &str = "test";
+        const DERIVATION_PATH: &str = "m/44'/877'/0'/0/0";
+        const DERIVATION_PATH_HARDENED: &str = "m/44'/877'/0'/0'/0'";
+
+        let mnemonic = Mnemonic::from_phrase(MNEMONIC_CODE, Language::English)
+            .expect("Mnemonic construction cannot fail.");
+        let seed = Seed::new(&mnemonic, PASSPHRASE);
+        assert_eq!(format!("{:x}", seed), SEED_EXPECTED);
+
+        let derivation_path =
+            DerivationPath::from_path_str(SCHEME, DERIVATION_PATH)
+                .expect("Derivation path construction cannot fail");
+
+        let derivation_path_hardened =
+            DerivationPath::from_path_str(SCHEME, DERIVATION_PATH_HARDENED)
+                .expect("Derivation path construction cannot fail");
+
+        let sk = gen_sk_from_seed_and_derivation_path(
+            SCHEME,
+            seed.as_bytes(),
+            derivation_path,
+        );
+
+        let sk_hard = gen_sk_from_seed_and_derivation_path(
+            SCHEME,
+            seed.as_bytes(),
+            derivation_path_hardened,
+        );
+
+        // check that indexes are promoted to hardened
+        assert_eq!(&sk.to_string(), &sk_hard.to_string());
+    }
+
+    fn do_test_gen_sk_from_seed_and_derivation_path(
+        scheme: SchemeType,
+        seed: &str,
+        derivation_path: &str,
+        priv_key: &str,
+    ) {
+        let sk = gen_sk_from_seed_and_derivation_path(
+            scheme,
+            hex::decode(seed)
+                .expect("Seed parsing cannot fail.")
+                .as_slice(),
+            DerivationPath::from_path_str(scheme, derivation_path)
+                .expect("Derivation path construction cannot fail"),
+        );
+        let sk_expected = if priv_key.starts_with("xprv") {
+            // this is an extended private key encoded in base58
+            let xprv =
+                priv_key.from_base58().expect("XPRV parsing cannot fail.");
+            hex::encode(&xprv[46..78])
+        } else {
+            priv_key.to_string()
+        };
+        assert_eq!(&sk.to_string()[2..], sk_expected);
+    }
+
+    #[test]
+    fn gen_sk_from_seed_secp256k1() {
+        const SCHEME: SchemeType = SchemeType::Secp256k1;
+        // https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki
+        {
+            // Test vector 1
+            const SEED: &str = "000102030405060708090a0b0c0d0e0f";
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m", "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'", "xprv9uHRZZhk6KAJC1avXpDAp4MDc3sQKNxDiPvvkX8Br5ngLNv1TxvUxt4cV1rGL5hj6KCesnDYUhd7oWgT11eZG7XnxHrnYeSvkzY7d2bhkJ7");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/1", "xprv9wTYmMFdV23N2TdNG573QoEsfRrWKQgWeibmLntzniatZvR9BmLnvSxqu53Kw1UmYPxLgboyZQaXwTCg8MSY3H2EU4pWcQDnRnrVA1xe8fs");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/1/2'", "xprv9z4pot5VBttmtdRTWfWQmoH1taj2axGVzFqSb8C9xaxKymcFzXBDptWmT7FwuEzG3ryjH4ktypQSAewRiNMjANTtpgP4mLTj34bhnZX7UiM");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/1/2'/2", "xprvA2JDeKCSNNZky6uBCviVfJSKyQ1mDYahRjijr5idH2WwLsEd4Hsb2Tyh8RfQMuPh7f7RtyzTtdrbdqqsunu5Mm3wDvUAKRHSC34sJ7in334");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/1/2'/2/1000000000", "xprvA41z7zogVVwxVSgdKUHDy1SKmdb533PjDz7J6N6mV6uS3ze1ai8FHa8kmHScGpWmj4WggLyQjgPie1rFSruoUihUZREPSL39UNdE3BBDu76");
+        }
+    }
+
+    #[test]
+    fn gen_sk_from_seed_ed25519() {
+        const SCHEME: SchemeType = SchemeType::Ed25519;
+        // https://github.com/satoshilabs/slips/blob/master/slip-0010.md
+        {
+            // Test vector 1 for ed15519
+            const SEED: &str = "000102030405060708090a0b0c0d0e0f";
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m", "2b4be7f19ee27bbf30c667b642d5f4aa69fd169872f8fc3059c08ebae2eb19e7");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'", "68e0fe46dfb67e368c75379acec591dad19df3cde26e63b93a8e704f1dade7a3");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/1'", "b1d0bad404bf35da785a64ca1ac54b2617211d2777696fbffaf208f746ae84f2");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/1'/2'", "92a5b23c0b8a99e37d07df3fb9966917f5d06e02ddbd909c7e184371463e9fc9");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/1'/2'/2'", "30d1dc7e5fc04c31219ab25a27ae00b50f6fd66622f6e9c913253d6511d1e662");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/1'/2'/2'/1000000000'", "8f94d394a8e8fd6b1bc2f3f49f5c47e385281d5c17e65324b0f62483e37e8793");
+        }
     }
 }
