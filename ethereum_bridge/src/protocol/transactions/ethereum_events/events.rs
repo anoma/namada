@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use borsh::BorshDeserialize;
 use eyre::{Result, WrapErr};
-use namada_core::hints::likely;
+use namada_core::hints;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
     get_nonce_key, get_pending_key, is_pending_transfer_key,
     BRIDGE_POOL_ADDRESS,
@@ -309,41 +309,40 @@ where
     {
         let pending_transfer = event.into();
         let key = get_pending_key(&pending_transfer);
-        if likely(wl_storage.has_key(&key)?) {
-            if likely(is_valid) {
-                tracing::debug!(
-                    ?pending_transfer,
-                    "Valid transfer to Ethereum detected, compensating the \
-                     relayer and burning any Ethereum assets in Namada"
-                );
-                changed_keys.append(&mut burn_transferred_assets(
-                    wl_storage,
-                    &pending_transfer,
-                )?);
-            } else {
-                tracing::debug!(
-                    ?pending_transfer,
-                    "Invalid transfer to Ethereum detected, compensating the \
-                     relayer and refunding assets in Namada"
-                );
-                changed_keys.append(&mut refund_transferred_assets(
-                    wl_storage,
-                    &pending_transfer,
-                )?);
-            }
-            // give the relayer the gas fee for this transfer.
-            update::amount(wl_storage, &relayer_rewards_key, |balance| {
-                balance.receive(&pending_transfer.gas_fee.amount);
-            })?;
-            // the gas fee is removed from escrow.
-            update::amount(wl_storage, &pool_balance_key, |balance| {
-                balance.spend(&pending_transfer.gas_fee.amount);
-            })?;
-            wl_storage.delete(&key)?;
-            _ = pending_keys.remove(&key);
-        } else {
+        if hints::unlikely(!wl_storage.has_key(&key)?) {
             unreachable!("The transfer should exist in the bridge pool");
         }
+        if hints::likely(is_valid) {
+            tracing::debug!(
+                ?pending_transfer,
+                "Valid transfer to Ethereum detected, compensating the \
+                 relayer and burning any Ethereum assets in Namada"
+            );
+            changed_keys.append(&mut burn_transferred_assets(
+                wl_storage,
+                &pending_transfer,
+            )?);
+        } else {
+            tracing::debug!(
+                ?pending_transfer,
+                "Invalid transfer to Ethereum detected, compensating the \
+                 relayer and refunding assets in Namada"
+            );
+            changed_keys.append(&mut refund_transferred_assets(
+                wl_storage,
+                &pending_transfer,
+            )?);
+        }
+        // give the relayer the gas fee for this transfer.
+        update::amount(wl_storage, &relayer_rewards_key, |balance| {
+            balance.receive(&pending_transfer.gas_fee.amount);
+        })?;
+        // the gas fee is removed from escrow.
+        update::amount(wl_storage, &pool_balance_key, |balance| {
+            balance.spend(&pending_transfer.gas_fee.amount);
+        })?;
+        wl_storage.delete(&key)?;
+        _ = pending_keys.remove(&key);
         _ = changed_keys.insert(key);
     }
     if !transfers.is_empty() {
