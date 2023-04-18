@@ -11,7 +11,7 @@ mod tests {
     };
     use proptest::prelude::*;
     use proptest::prop_state_machine;
-    use proptest::state_machine::{AbstractStateMachine, StateMachineTest};
+    use proptest::state_machine::{ReferenceStateMachine, StateMachineTest};
     use proptest::test_runner::Config;
     use test_log::test;
 
@@ -89,7 +89,7 @@ mod tests {
         TryInsert { key: TestKey, is_present: bool },
     }
 
-    impl AbstractStateMachine for AbstractLazySetState {
+    impl ReferenceStateMachine for AbstractLazySetState {
         type State = Self;
         type Transition = Transition;
 
@@ -130,7 +130,7 @@ mod tests {
             }
         }
 
-        fn apply_abstract(
+        fn apply(
             mut state: Self::State,
             transition: &Self::Transition,
         ) -> Self::State {
@@ -183,12 +183,12 @@ mod tests {
     }
 
     impl StateMachineTest for ConcreteLazySetState {
-        type Abstract = AbstractLazySetState;
-        type ConcreteState = Self;
+        type Reference = AbstractLazySetState;
+        type SystemUnderTest = Self;
 
         fn init_test(
-            _initial_state: <Self::Abstract as AbstractStateMachine>::State,
-        ) -> Self::ConcreteState {
+            _initial_state: &<Self::Reference as ReferenceStateMachine>::State,
+        ) -> Self::SystemUnderTest {
             // Init transaction env in which we'll be applying the transitions
             tx_host_env::init();
 
@@ -208,10 +208,11 @@ mod tests {
             }
         }
 
-        fn apply_concrete(
-            mut state: Self::ConcreteState,
-            transition: <Self::Abstract as AbstractStateMachine>::Transition,
-        ) -> Self::ConcreteState {
+        fn apply(
+            mut state: Self::SystemUnderTest,
+            _ref_state: &<Self::Reference as ReferenceStateMachine>::State,
+            transition: <Self::Reference as ReferenceStateMachine>::Transition,
+        ) -> Self::SystemUnderTest {
             // Apply transitions in transaction env
             let ctx = tx_host_env::ctx();
 
