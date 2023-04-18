@@ -202,7 +202,7 @@ light_client_attack_min_slash_rate = 0.001
 # minimum amount of nam token to lock
 min_proposal_fund = 500
 # proposal code size in bytes
-max_proposal_code_size = 300000
+max_proposal_code_size = 30000000000
 # min proposal period length in epochs
 min_proposal_period = 3
 # max proposal period length in epochs

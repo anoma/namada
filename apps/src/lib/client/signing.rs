@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::fs;
 
 use borsh::BorshSerialize;
-use namada::ledger::parameters::storage as parameter_storage;
+use namada::core::ledger::parameters::storage as parameter_storage;
 use namada::proof_of_stake::Epoch;
 use namada::proto::Tx;
 use namada::types::address::{Address, ImplicitAddress};

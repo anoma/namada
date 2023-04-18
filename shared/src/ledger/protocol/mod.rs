@@ -7,12 +7,11 @@ use thiserror::Error;
 
 use crate::ledger::eth_bridge::vp::EthBridge;
 use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter};
+use crate::ledger::governance::GovernanceVp;
 use crate::ledger::ibc::vp::{Ibc, IbcToken};
-use crate::ledger::native_vp::governance::GovernanceVp;
-use crate::ledger::native_vp::parameters::{self, ParametersVp};
 use crate::ledger::native_vp::replay_protection::ReplayProtectionVp;
-use crate::ledger::native_vp::slash_fund::SlashFundVp;
 use crate::ledger::native_vp::{self, NativeVp};
+use crate::ledger::parameter::ParametersVp;
 use crate::ledger::pos::{self, PosVP};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
@@ -49,13 +48,11 @@ pub enum Error {
     #[error("PoS native VP panicked")]
     PosNativeVpRuntime,
     #[error("Parameters native VP: {0}")]
-    ParametersNativeVpError(parameters::Error),
+    ParametersNativeVpError(crate::ledger::parameter::Error),
     #[error("IBC Token native VP: {0}")]
     IbcTokenNativeVpError(crate::ledger::ibc::vp::IbcTokenError),
     #[error("Governance native VP error: {0}")]
-    GovernanceNativeVpError(crate::ledger::native_vp::governance::Error),
-    #[error("SlashFund native VP error: {0}")]
-    SlashFundNativeVpError(crate::ledger::native_vp::slash_fund::Error),
+    GovernanceNativeVpError(crate::ledger::governance::Error),
     #[error("Ethereum bridge native VP error: {0}")]
     EthBridgeNativeVpError(crate::ledger::eth_bridge::vp::Error),
     #[error("Replay protection native VP error: {0}")]
@@ -363,14 +360,6 @@ where
                                 .validate_tx(tx_data, &keys_changed, &verifiers)
                                 .map_err(Error::GovernanceNativeVpError);
                             gas_meter = governance.ctx.gas_meter.into_inner();
-                            result
-                        }
-                        InternalAddress::SlashFund => {
-                            let slash_fund = SlashFundVp { ctx };
-                            let result = slash_fund
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
-                                .map_err(Error::SlashFundNativeVpError);
-                            gas_meter = slash_fund.ctx.gas_meter.into_inner();
                             result
                         }
                         InternalAddress::IbcToken(_)

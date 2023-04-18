@@ -1728,6 +1728,7 @@ pub mod args {
     const OFFLINE_TX: ArgFlag = flag("offline-tx");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
     const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
+    const ETH_SIGNING_KEY: ArgOpt<WalletKeypair> = arg_opt("eth-key");
     const FORCE: ArgFlag = flag("force");
     const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     const GAS_AMOUNT: ArgDefault<token::Amount> =
@@ -1765,6 +1766,9 @@ pub mod args {
         "port-id",
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
     );
+    const PROPOSAL_ETH: ArgFlag = flag("eth");
+    const PROPOSAL_PGF_STEWARD: ArgFlag = flag("pgf-stewards");
+    const PROPOSAL_PGF_FUNDING: ArgFlag = flag("pgf-funding");
     const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
     const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
@@ -1772,8 +1776,6 @@ pub mod args {
     const PUBLIC_KEYS: ArgMulti<WalletPublicKey> = arg_multi("public-keys");
     const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
     const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
-    const PROPOSAL_VOTE_PGF_OPT: ArgFlag = flag("pgf");
-    const PROPOSAL_VOTE_ETH_OPT: ArgOpt<String> = arg_opt("eth");
     const PROPOSAL_VOTE: Arg<String> = arg("vote");
     const RAW_ADDRESS: Arg<Address> = arg("address");
     const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
@@ -2509,21 +2511,33 @@ pub mod args {
         /// Common tx arguments
         pub tx: Tx,
         /// The proposal file path
-        pub proposal_data: PathBuf,
+        pub proposal_data_path: PathBuf,
         /// Flag if proposal should be run offline
-        pub offline: bool,
+        pub is_offline: bool,
+        /// Flag if proposal is of type Pgf stewards
+        pub is_pgf_stewards: bool,
+        /// Flag if proposal is of type Pgf funding
+        pub is_pgf_funding: bool,
+        /// Flag if proposal is of type Eth
+        pub is_eth: bool,
     }
 
     impl Args for InitProposal {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let proposal_data = DATA_PATH.parse(matches);
-            let offline = PROPOSAL_OFFLINE.parse(matches);
+            let proposal_data_path = DATA_PATH.parse(matches);
+            let is_offline = PROPOSAL_OFFLINE.parse(matches);
+            let is_pgf_stewards = PROPOSAL_PGF_STEWARD.parse(matches);
+            let is_pgf_funding = PROPOSAL_PGF_FUNDING.parse(matches);
+            let is_eth = PROPOSAL_ETH.parse(matches);
 
             Self {
                 tx,
-                proposal_data,
-                offline,
+                proposal_data_path,
+                is_offline,
+                is_pgf_funding,
+                is_pgf_stewards,
+                is_eth,
             }
         }
 
@@ -2532,10 +2546,42 @@ pub mod args {
                 .arg(DATA_PATH.def().about(
                     "The data path file (json) that describes the proposal.",
                 ))
+                .arg(PROPOSAL_OFFLINE.def().about(
+                    "Flag if the proposal should be serialized offline (only \
+                     for default types).",
+                ))
                 .arg(
-                    PROPOSAL_OFFLINE
+                    PROPOSAL_ETH
                         .def()
-                        .about("Flag if the proposal vote should run offline."),
+                        .about("Flag if the proposal is of type eth.")
+                        .conflicts_with_all(&[
+                            PROPOSAL_PGF_FUNDING.name,
+                            PROPOSAL_PGF_STEWARD.name,
+                        ]),
+                )
+                .arg(
+                    PROPOSAL_PGF_STEWARD
+                        .def()
+                        .about(
+                            "Flag if the proposal is of type pgf-stewards. \
+                             Used to elect/remove stewards.",
+                        )
+                        .conflicts_with_all(&[
+                            PROPOSAL_ETH.name,
+                            PROPOSAL_PGF_FUNDING.name,
+                        ]),
+                )
+                .arg(
+                    PROPOSAL_PGF_FUNDING
+                        .def()
+                        .about(
+                            "Flag if the proposal is of type pgf-funding. \
+                             Used to control continous/retro pgf fundings.",
+                        )
+                        .conflicts_with_all(&[
+                            PROPOSAL_ETH.name,
+                            PROPOSAL_PGF_STEWARD.name,
+                        ]),
                 )
         }
     }
@@ -2548,38 +2594,34 @@ pub mod args {
         pub proposal_id: Option<u64>,
         /// The vote
         pub vote: String,
-        /// PGF proposal
-        pub proposal_pgf: bool,
-        /// ETH proposal
-        pub proposal_stewards_eth: Option<String>,
         /// Flag if proposal vote should be run offline
-        pub offline: bool,
+        pub is_offline: bool,
         /// The proposal file path
-        pub proposal_data: Option<PathBuf>,
+        pub proposal_data_path: Option<PathBuf>,
         /// The address that will send the vote
-        pub address: WalletAddress,
+        pub voter: WalletAddress,
+        /// The ethereum key to sig a eth proposal
+        pub eth_key: Option<WalletKeypair>,
     }
 
     impl Args for VoteProposal {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let proposal_id = PROPOSAL_ID_OPT.parse(matches);
-            let proposal_pgf = PROPOSAL_VOTE_PGF_OPT.parse(matches);
-            let proposal_eth = PROPOSAL_VOTE_ETH_OPT.parse(matches);
             let vote = PROPOSAL_VOTE.parse(matches);
-            let offline = PROPOSAL_OFFLINE.parse(matches);
-            let proposal_data = DATA_PATH_OPT.parse(matches);
-            let address = ADDRESS.parse(matches);
+            let is_offline = PROPOSAL_OFFLINE.parse(matches);
+            let proposal_data_path = DATA_PATH_OPT.parse(matches);
+            let voter = ADDRESS.parse(matches);
+            let eth_key = ETH_SIGNING_KEY.parse(matches);
 
             Self {
                 tx,
                 proposal_id,
                 vote,
-                proposal_pgf,
-                proposal_stewards_eth: proposal_eth,
-                offline,
-                proposal_data,
-                address,
+                is_offline,
+                proposal_data_path,
+                voter,
+                eth_key,
             }
         }
 
@@ -2591,35 +2633,13 @@ pub mod args {
                         .about("The proposal identifier.")
                         .conflicts_with_all(&[
                             PROPOSAL_OFFLINE.name,
-                            DATA_PATH_OPT.name,
+                            DATA_PATH.name,
                         ]),
                 )
                 .arg(
                     PROPOSAL_VOTE
                         .def()
                         .about("The vote for the proposal. Either yay or nay"),
-                )
-                .arg(
-                    PROPOSAL_VOTE_PGF_OPT
-                        .def()
-                        .about(
-                            "The list of proposed councils and spending \
-                             caps:\n$council1 $cap1 $council2 $cap2 ... \
-                             (council is bech32m encoded address, cap is \
-                             expressed in microNAM",
-                        )
-                        .requires(PROPOSAL_ID.name)
-                        .conflicts_with(PROPOSAL_VOTE_ETH_OPT.name),
-                )
-                .arg(
-                    PROPOSAL_VOTE_ETH_OPT
-                        .def()
-                        .about(
-                            "The signing key and message bytes (hex encoded) \
-                             to be signed: $signing_key $message",
-                        )
-                        .requires(PROPOSAL_ID.name)
-                        .conflicts_with(PROPOSAL_VOTE_PGF_OPT.name),
                 )
                 .arg(
                     PROPOSAL_OFFLINE
@@ -2632,11 +2652,14 @@ pub mod args {
                         .def()
                         .about(
                             "The data path file (json) that describes the \
-                             proposal.",
+                             proposal vote (for offline proposals).",
                         )
-                        .conflicts_with(PROPOSAL_ID.name),
+                        .requires(PROPOSAL_OFFLINE.name),
                 )
-                .arg(ADDRESS.def().about("The address to vote with."))
+                .arg(ADDRESS.def().about("The address of the voter."))
+                .arg(ETH_SIGNING_KEY.def().about(
+                    "The ethereum signing key (if voting a ETH proposal).",
+                ))
         }
     }
 
@@ -2752,7 +2775,8 @@ pub mod args {
                             "The path to the folder containing the proposal \
                              json and votes",
                         )
-                        .conflicts_with(PROPOSAL_ID.name),
+                        .conflicts_with(PROPOSAL_ID.name)
+                        .requires(PROPOSAL_OFFLINE.name),
                 )
         }
     }
