@@ -5,7 +5,7 @@ will be two internal accounts with associated native validity predicates:
 
 - `#EthBridge` - Controls the `/eth_msgs/` [storage](ethereum_events_attestation.md#storage)
   and ledger of balances of minted wrapped Ethereum assets (ERC20 tokens) structured in a
-  ["multitoken"](https://github.com/anoma/anoma/issues/1102) hierarchy.
+  ["multitoken"](../../base-ledger/fungible-token.html#multitoken) hierarchy.
   Also contains in escrow Namada tokens which have been sent to Ethereum,
   pertaining to pending wNAM transfers.
 - `#EthBridgePool` - Holds gas fees to be payed to relayers of transfers to Ethereum,
