@@ -30,6 +30,7 @@ use std::collections::HashMap;
 use masp_primitives::transaction::components::sapling::fees::{OutputView, InputView};
 use masp_primitives::asset_type::AssetType;
 use namada::types::masp::{PaymentAddress, ExtendedViewingKey};
+use itertools::Itertools;
 
 use super::rpc;
 use crate::cli::context::{WalletAddress, WalletKeypair};
@@ -385,11 +386,11 @@ fn make_ledger_amount_addr(
     
     if let Some(token) = tokens.get(&token) {
         output
-            .push(format!("3 | {}Amount: {} {}", prefix, token, amount));
+            .push(format!("{}Amount: {} {}", prefix, token, amount));
     } else {
         output.extend(vec![
-            format!("3 | {}Token: {}", prefix, token),
-            format!("4 | {}Amount: {}", prefix, amount),
+            format!("{}Token: {}", prefix, token),
+            format!("{}Amount: {}", prefix, amount),
         ]);
     }
 }
@@ -410,19 +411,75 @@ fn make_ledger_amount_asset(
         // If the AssetType can be decoded, then at least display Addressees
         if let Some(token) = tokens.get(&token) {
             output
-                .push(format!("3 | {}Amount: {} {}", prefix, token, Amount::from(amount)));
+                .push(format!("{}Amount: {} {}", prefix, token, Amount::from(amount)));
         } else {
             output.extend(vec![
-                format!("3 | {}Token: {}", prefix, token),
-                format!("4 | {}Amount: {}", prefix, Amount::from(amount)),
+                format!("{}Token: {}", prefix, token),
+                format!("{}Amount: {}", prefix, Amount::from(amount)),
             ]);
         }
     } else {
         // Otherwise display the raw AssetTypes
         output.extend(vec![
-            format!("3 | {}Token: {}", prefix, token),
-            format!("4 | {}Amount: {}", prefix, Amount::from(amount)),
+            format!("{}Token: {}", prefix, token),
+            format!("{}Amount: {}", prefix, Amount::from(amount)),
         ]);
+    }
+}
+
+/// Split the lines in the vector that are longer than the Ledger device's
+/// character width
+fn format_outputs(output: &mut Vec<String>) {
+    const LEDGER_WIDTH: usize = 60;
+    
+    let mut i = 0;
+    let mut pos = 0;
+    // Break down each line that is too long one-by-one
+    while pos < output.len() {
+        let prefix_len = i.to_string().len() + 3;
+        let curr_line = output[pos].clone();
+        if curr_line.len() + prefix_len < LEDGER_WIDTH {
+            // No need to split the line in this case
+            output[pos] = format!("{} | {}", i, curr_line);
+            pos += 1;
+        } else {
+            // Line is too long so split it up. Repeat the key on each line
+            let (mut key, mut value) = curr_line.split_once(":").unwrap_or(("", &curr_line));
+            key = key.trim();
+            value = value.trim();
+            if value.is_empty() { value = "(none)" }
+
+            // First comput how many lines we will break the current one up into
+            let mut digits = 1;
+            let mut line_space;
+            let mut lines;
+            loop {
+                let prefix_len = prefix_len + 7 + 2*digits + key.len();
+                line_space = LEDGER_WIDTH - prefix_len;
+                lines = (value.len() + line_space - 1) / line_space;
+                if lines.to_string().len() <= digits {
+                    break
+                } else {
+                    digits += 1;
+                }
+            }
+
+            // Then break up this line according to the above plan
+            output.remove(pos);
+            for (idx, part) in value.chars().chunks(line_space).into_iter().enumerate() {
+                let line = format!(
+                    "{} | {} [{}/{}] : {}",
+                    i,
+                    key,
+                    idx+1,
+                    lines,
+                    part.collect::<String>(),
+                );
+                output.insert(pos, line);
+                pos += 1;
+            }
+        }
+        i += 1;
     }
 }
 
@@ -460,7 +517,6 @@ fn to_ledger_vector(
         ..Default::default()
     };
 
-    let mut j = 0;
     let code_hash = tx
         .get_section(tx.code_sechash())
         .expect("expected tx code section to be present")
@@ -469,11 +525,9 @@ fn to_ledger_vector(
         .code
         .hash();
     tv.output_expert.push(format!(
-        "{} | Code hash: {}",
-        j,
+        "Code hash : {}",
         HEXLOWER.encode(&code_hash.0)
     ));
-    j += 1;
 
     if code_hash == init_account_hash {
         let init_account = InitAccount::try_from_slice(
@@ -496,16 +550,15 @@ fn to_ledger_vector(
         };
 
         tv.output.extend(vec![
-            format!("0 | Type: Init Account"),
-            format!("1 | Public key: {}", init_account.public_key),
-            format!("2 | VP type: {}", vp_code),
+            format!("Type : Init Account"),
+            format!("Public key : {}", init_account.public_key),
+            format!("VP type : {}", vp_code),
         ]);
 
         tv.output_expert.extend(vec![
-            format!("{} | Public key: {}", j, init_account.public_key),
-            format!("{} | VP type: {}", j + 1, HEXLOWER.encode(&extra.0)),
+            format!("Public key : {}", init_account.public_key),
+            format!("VP type : {}", HEXLOWER.encode(&extra.0)),
         ]);
-        j += 2;
     } else if code_hash == init_validator_hash {
         let init_validator = InitValidator::try_from_slice(
             &tx.data().ok_or_else(|| Error::from(ErrorKind::InvalidData))?,
@@ -525,49 +578,43 @@ fn to_ledger_vector(
         };
 
         tv.output.extend(vec![
-            format!("0 | Type: Init Validator"),
-            format!("1 | Account key: {}", init_validator.account_key),
-            format!("2 | Consensus key: {}", init_validator.consensus_key),
-            format!("3 | Protocol key: {}", init_validator.protocol_key),
-            format!("4 | DKG key: {}", init_validator.dkg_key),
-            format!("5 | Commission rate: {}", init_validator.commission_rate),
+            format!("Type : Init Validator"),
+            format!("Account key : {}", init_validator.account_key),
+            format!("Consensus key : {}", init_validator.consensus_key),
+            format!("Protocol key : {}", init_validator.protocol_key),
+            format!("DKG key : {}", init_validator.dkg_key),
+            format!("Commission rate : {}", init_validator.commission_rate),
             format!(
-                "6 | Maximum commission rate change: {}",
+                "Maximum commission rate change : {}",
                 init_validator.max_commission_rate_change
             ),
-            format!("7 | Validator VP type: {}", vp_code,),
+            format!("Validator VP type : {}", vp_code,),
         ]);
 
         tv.output_expert.extend(vec![
-            format!("{} | Account key: {}", j, init_validator.account_key),
+            format!("Account key : {}", init_validator.account_key),
             format!(
-                "{} | Consensus key: {}",
-                j + 1,
+                "Consensus key : {}",
                 init_validator.consensus_key
             ),
             format!(
-                "{} | Protocol key: {}",
-                j + 2,
+                "Protocol key : {}",
                 init_validator.protocol_key
             ),
-            format!("{} | DKG key: {}", j + 3, init_validator.dkg_key),
+            format!("DKG key : {}", init_validator.dkg_key),
             format!(
-                "{} | Commission rate: {}",
-                j + 4,
+                "Commission rate : {}",
                 init_validator.commission_rate
             ),
             format!(
-                "{} | Maximum commission rate change: {}",
-                j + 5,
+                "Maximum commission rate change : {}",
                 init_validator.max_commission_rate_change
             ),
             format!(
-                "{} | Validator VP type: {}",
-                j + 6,
+                "Validator VP type : {}",
                 HEXLOWER.encode(&extra.0)
             ),
         ]);
-        j += 7;
     } else if code_hash == init_proposal_hash {
         let init_proposal_data = InitProposalData::try_from_slice(
             &tx.data().ok_or_else(|| Error::from(ErrorKind::InvalidData))?,
@@ -589,63 +636,58 @@ fn to_ledger_vector(
         });
         let proposal_code = extra.map_or("(none)".to_string(), |x| HEXLOWER.encode(&x.0));
         tv.output.extend(vec![
-            format!("0 | Type: Init proposal"),
-            format!("1 | ID: {}", init_proposal_data_id),
-            format!("2 | Author: {}", init_proposal_data.author),
+            format!("Type : Init proposal"),
+            format!("ID : {}", init_proposal_data_id),
+            format!("Author : {}", init_proposal_data.author),
             format!(
-                "3 | Voting start epoch: {}",
+                "Voting start epoch : {}",
                 init_proposal_data.voting_start_epoch
             ),
             format!(
-                "4 | Voting end epoch: {}",
+                "Voting end epoch : {}",
                 init_proposal_data.voting_end_epoch
             ),
-            format!("5 | Grace epoch: {}", init_proposal_data.grace_epoch),
-            format!("6 | Proposal code: {}", proposal_code),
+            format!("Grace epoch : {}", init_proposal_data.grace_epoch),
+            format!("Proposal code : {}", proposal_code),
         ]);
         let content: BTreeMap<String, String> =
             BorshDeserialize::try_from_slice(&init_proposal_data.content)?;
         if !content.is_empty() {
             for (key, value) in &content {
-                tv.output.push(format!("7 | Content {}: {}", key, value));
+                tv.output.push(format!("Content {} : {}", key, value));
             }
         } else {
-            tv.output.push("7 | Content: (none)".to_string());
+            tv.output.push("Content : (none)".to_string());
         }
 
         tv.output_expert.extend(vec![
-            format!("{} | ID: {}", j, init_proposal_data_id),
-            format!("{} | Author: {}", j + 1, init_proposal_data.author),
+            format!("ID : {}", init_proposal_data_id),
+            format!("Author : {}", init_proposal_data.author),
             format!(
-                "{} | Voting start epoch: {}",
-                j + 2,
+                "Voting start epoch : {}",
                 init_proposal_data.voting_start_epoch
             ),
             format!(
-                "{} | Voting end epoch: {}",
-                j + 3,
+                "Voting end epoch : {}",
                 init_proposal_data.voting_end_epoch
             ),
             format!(
-                "{} | Grace epoch: {}",
-                j + 4,
+                "Grace epoch : {}",
                 init_proposal_data.grace_epoch
             ),
-            format!("{} | Proposal code: {}", j + 5, proposal_code),
+            format!("Proposal code : {}", proposal_code),
         ]);
         if !content.is_empty() {
             for (key, value) in content {
                 tv.output_expert.push(format!(
-                    "{} | Content {}: {}",
-                    j + 6,
+                    "Content {} : {}",
                     key,
                     value
                 ));
             }
         } else {
-            tv.output_expert.push(format!("{} | Content: none", j + 6));
+            tv.output_expert.push(format!("Content : none"));
         }
-        j += 7;
     } else if code_hash == vote_proposal_hash {
         let vote_proposal = VoteProposalData::try_from_slice(
             &tx.data().ok_or_else(|| Error::from(ErrorKind::InvalidData))?,
@@ -654,28 +696,26 @@ fn to_ledger_vector(
         tv.name = "Vote Proposal 0".to_string();
 
         tv.output.extend(vec![
-            format!("0 | Type: Vote Proposal"),
-            format!("1 | ID: {}", vote_proposal.id),
-            format!("2 | Vote: {}", vote_proposal.vote),
-            format!("3 | Voter: {}", vote_proposal.voter),
+            format!("Type : Vote Proposal"),
+            format!("ID : {}", vote_proposal.id),
+            format!("Vote : {}", vote_proposal.vote),
+            format!("Voter : {}", vote_proposal.voter),
         ]);
         for delegation in &vote_proposal.delegations {
-            tv.output.push(format!("4 | Delegations: {}", delegation));
+            tv.output.push(format!("Delegations : {}", delegation));
         }
 
         tv.output_expert.extend(vec![
-            format!("{} | ID: {}", j, vote_proposal.id),
-            format!("{} | Vote: {}", j + 1, vote_proposal.vote),
-            format!("{} | Voter: {}", j + 2, vote_proposal.voter),
+            format!("ID : {}", vote_proposal.id),
+            format!("Vote : {}", vote_proposal.vote),
+            format!("Voter : {}", vote_proposal.voter),
         ]);
         for delegation in vote_proposal.delegations {
             tv.output_expert.push(format!(
-                "{} | Delegations: {}",
-                j + 3,
+                "Delegations : {}",
                 delegation
             ));
         }
-        j += 4;
     } else if code_hash == reveal_pk_hash {
         let public_key = common::PublicKey::try_from_slice(
             &tx.data().ok_or_else(|| Error::from(ErrorKind::InvalidData))?,
@@ -684,13 +724,12 @@ fn to_ledger_vector(
         tv.name = "Init Account 0".to_string();
 
         tv.output.extend(vec![
-            format!("0 | Type: Reveal PK"),
-            format!("1 | Public key: {}", public_key),
+            format!("Type : Reveal PK"),
+            format!("Public key : {}", public_key),
         ]);
 
         tv.output_expert
-            .extend(vec![format!("{} | Public key: {}", j, public_key)]);
-        j += 1;
+            .extend(vec![format!("Public key : {}", public_key)]);
     } else if code_hash == update_vp_hash {
         let transfer = UpdateVp::try_from_slice(
             &tx.data().ok_or_else(|| Error::from(ErrorKind::InvalidData))?,
@@ -710,16 +749,15 @@ fn to_ledger_vector(
         };
 
         tv.output.extend(vec![
-            format!("0 | Type: Update VP"),
-            format!("1 | Address: {}", transfer.addr),
-            format!("2 | VP type: {}", vp_code),
+            format!("Type : Update VP"),
+            format!("Address : {}", transfer.addr),
+            format!("VP type : {}", vp_code),
         ]);
 
         tv.output_expert.extend(vec![
-            format!("{} | Address: {}", j, transfer.addr),
-            format!("{} | VP type: {}", j + 1, HEXLOWER.encode(&extra.0)),
+            format!("Address : {}", transfer.addr),
+            format!("VP type : {}", HEXLOWER.encode(&extra.0)),
         ]);
-        j += 2;
     } else if code_hash == transfer_hash {
         let transfer = Transfer::try_from_slice(
             &tx.data().ok_or_else(|| Error::from(ErrorKind::InvalidData))?,
@@ -744,28 +782,28 @@ fn to_ledger_vector(
 
         tv.name = "Transfer 0".to_string();
 
-        tv.output.push(format!("0 | Type: Transfer"));
+        tv.output.push(format!("Type : Transfer"));
         if transfer.source != masp() {
-            tv.output.push(format!("1 | Sender: {}", transfer.source));
+            tv.output.push(format!("Sender : {}", transfer.source));
             if transfer.target == masp() {
                 make_ledger_amount_addr(&mut tv.output, transfer.amount, &transfer.token, "Sending ");
             }
         } else if let Some(builder) = builder {
             for input in builder.builder.sapling_inputs() {
                 let vk = ExtendedViewingKey::from(input.key().clone());
-                tv.output.push(format!("1 | Sender: {}", vk));
+                tv.output.push(format!("Sender : {}", vk));
                 make_ledger_amount_asset(&mut tv.output, input.value(), &input.asset_type(), &asset_types, "Sending ");
             }
         }
         if transfer.target != masp() {
-            tv.output.push(format!("2 | Destination: {}", transfer.target));
+            tv.output.push(format!("Destination : {}", transfer.target));
             if transfer.source == masp() {
                 make_ledger_amount_addr(&mut tv.output, transfer.amount, &transfer.token, "Receiving ");
             }
         } else if let Some(builder) = builder {
             for output in builder.builder.sapling_outputs() {
                 let pa = PaymentAddress::from(output.address().clone());
-                tv.output.push(format!("1 | Destination: {}", pa));
+                tv.output.push(format!("Destination : {}", pa));
                 make_ledger_amount_asset(&mut tv.output, output.value(), &output.asset_type(), &asset_types, "Receiving ");
             }
         }
@@ -774,10 +812,10 @@ fn to_ledger_vector(
         }
 
         tv.output_expert.extend(vec![
-            format!("{} | Source: {}", j, transfer.source),
-            format!("{} | Target: {}", j + 1, transfer.target),
-            format!("{} | Token: {}", j + 2, transfer.token),
-            format!("{} | Amount: {}", j + 3, transfer.amount),
+            format!("Source : {}", transfer.source),
+            format!("Target : {}", transfer.target),
+            format!("Token : {}", transfer.token),
+            format!("Amount : {}", transfer.amount),
         ]);
     } else if code_hash == ibc_hash {
         let msg = IbcMessage::decode(
@@ -788,7 +826,7 @@ fn to_ledger_vector(
         .map_err(|x| Error::new(ErrorKind::Other, x))?;
 
         tv.name = "IBC 0".to_string();
-        tv.output.push("0 | Type: IBC".to_string());
+        tv.output.push("Type : IBC".to_string());
 
         if let Ics26Envelope::Ics20Msg(transfer) = msg.0 {
             let transfer_token = transfer
@@ -797,46 +835,41 @@ fn to_ledger_vector(
                 .map(|x| format!("{} {}", x.amount, x.denom))
                 .unwrap_or_else(|| "(none)".to_string());
             tv.output.extend(vec![
-                format!("1 | Source port: {}", transfer.source_port),
-                format!("2 | Source channel: {}", transfer.source_channel),
-                format!("3 | Token: {}", transfer_token),
-                format!("4 | Sender: {}", transfer.sender),
-                format!("5 | Receiver: {}", transfer.receiver),
-                format!("6 | Timeout height: {}", transfer.timeout_height),
+                format!("Source port : {}", transfer.source_port),
+                format!("Source channel : {}", transfer.source_channel),
+                format!("Token : {}", transfer_token),
+                format!("Sender : {}", transfer.sender),
+                format!("Receiver : {}", transfer.receiver),
+                format!("Timeout height : {}", transfer.timeout_height),
                 format!(
-                    "7 | Timeout timestamp: {}",
+                    "Timeout timestamp : {}",
                     transfer.timeout_timestamp
                 ),
             ]);
             tv.output_expert.extend(vec![
-                format!("{} | Source port: {}", j, transfer.source_port),
+                format!("Source port : {}", transfer.source_port),
                 format!(
-                    "{} | Source channel: {}",
-                    j + 1,
+                    "Source channel : {}",
                     transfer.source_channel
                 ),
-                format!("{} | Token: {}", j + 2, transfer_token),
-                format!("{} | Sender: {}", j + 3, transfer.sender),
-                format!("{} | Receiver: {}", j + 4, transfer.receiver),
+                format!("Token : {}", transfer_token),
+                format!("Sender : {}", transfer.sender),
+                format!("Receiver : {}", transfer.receiver),
                 format!(
-                    "{} | Timeout height: {}",
-                    j + 5,
+                    "Timeout height : {}",
                     transfer.timeout_height
                 ),
                 format!(
-                    "{} | Timeout timestamp: {}",
-                    j + 6,
+                    "Timeout timestamp : {}",
                     transfer.timeout_timestamp
                 ),
             ]);
-            j += 7;
         } else {
             for line in format!("{:#?}", msg).split('\n') {
                 let stripped = line.trim_start();
-                tv.output.push(format!("1 | {}", stripped));
-                tv.output_expert.push(format!("{} | {}", j, stripped));
+                tv.output.push(format!("Part : {}", stripped));
+                tv.output_expert.push(format!("Part : {}", stripped));
             }
-            j += 1;
         }
     } else if code_hash == bond_hash {
         let bond = pos::Bond::try_from_slice(
@@ -851,18 +884,17 @@ fn to_ledger_vector(
             .map(Address::to_string)
             .unwrap_or_else(|| "(none)".to_string());
         tv.output.extend(vec![
-            format!("0 | Type: Bond"),
-            format!("1 | Source: {}", bond_source),
-            format!("2 | Validator: {}", bond.validator),
-            format!("3 | Amount: {}", bond.amount),
+            format!("Type : Bond"),
+            format!("Source : {}", bond_source),
+            format!("Validator : {}", bond.validator),
+            format!("Amount : {}", bond.amount),
         ]);
 
         tv.output_expert.extend(vec![
-            format!("{} | Source: {}", j, bond_source),
-            format!("{} | Validator: {}", j + 1, bond.validator),
-            format!("{} | Amount: {}", j + 2, bond.amount),
+            format!("Source : {}", bond_source),
+            format!("Validator : {}", bond.validator),
+            format!("Amount : {}", bond.amount),
         ]);
-        j += 3;
     } else if code_hash == unbond_hash {
         let unbond = pos::Unbond::try_from_slice(
             &tx.data().ok_or_else(|| Error::from(ErrorKind::InvalidData))?,
@@ -876,18 +908,17 @@ fn to_ledger_vector(
             .map(Address::to_string)
             .unwrap_or_else(|| "(none)".to_string());
         tv.output.extend(vec![
-            format!("0 | Code: Unbond"),
-            format!("1 | Source: {}", unbond_source),
-            format!("2 | Validator: {}", unbond.validator),
-            format!("3 | Amount: {}", unbond.amount),
+            format!("Code : Unbond"),
+            format!("Source : {}", unbond_source),
+            format!("Validator : {}", unbond.validator),
+            format!("Amount : {}", unbond.amount),
         ]);
 
         tv.output_expert.extend(vec![
-            format!("{} | Source: {}", j, unbond_source),
-            format!("{} | Validator: {}", j + 1, unbond.validator),
-            format!("{} | Amount: {}", j + 2, unbond.amount),
+            format!("Source : {}", unbond_source),
+            format!("Validator : {}", unbond.validator),
+            format!("Amount : {}", unbond.amount),
         ]);
-        j += 3;
     } else if code_hash == withdraw_hash {
         let withdraw = pos::Withdraw::try_from_slice(
             &tx.data().ok_or_else(|| Error::from(ErrorKind::InvalidData))?,
@@ -901,16 +932,15 @@ fn to_ledger_vector(
             .map(Address::to_string)
             .unwrap_or_else(|| "(none)".to_string());
         tv.output.extend(vec![
-            format!("0 | Type: Withdraw"),
-            format!("1 | Source: {}", withdraw_source),
-            format!("2 | Validator: {}", withdraw.validator),
+            format!("Type : Withdraw"),
+            format!("Source : {}", withdraw_source),
+            format!("Validator : {}", withdraw.validator),
         ]);
 
         tv.output_expert.extend(vec![
-            format!("{} | Source: {}", j, withdraw_source),
-            format!("{} | Validator: {}", j + 1, withdraw.validator),
+            format!("Source : {}", withdraw_source),
+            format!("Validator : {}", withdraw.validator),
         ]);
-        j += 2;
     } else if code_hash == change_commission_hash {
         let commission_change = pos::CommissionChange::try_from_slice(
             &tx.data().ok_or_else(|| Error::from(ErrorKind::InvalidData))?,
@@ -919,40 +949,41 @@ fn to_ledger_vector(
         tv.name = "Change Commission 0".to_string();
 
         tv.output.extend(vec![
-            format!("0 | Type: Change commission"),
-            format!("1 | New rate: {}", commission_change.new_rate),
-            format!("2 | Validator: {}", commission_change.validator),
+            format!("Type : Change commission"),
+            format!("New rate : {}", commission_change.new_rate),
+            format!("Validator : {}", commission_change.validator),
         ]);
 
         tv.output_expert.extend(vec![
-            format!("{} | New rate: {}", j, commission_change.new_rate),
-            format!("{} | Validator: {}", j + 1, commission_change.validator),
+            format!("New rate : {}", commission_change.new_rate),
+            format!("Validator : {}", commission_change.validator),
         ]);
-        j += 2;
     }
 
     if let Some(wrapper) = tx.header.wrapper() {
         tv.output_expert.extend(vec![
-            format!("{} | Timestamp: {}", j, tx.timestamp.0),
-            format!("{} | PK: {}", j + 1, wrapper.pk),
-            format!("{} | Epoch: {}", j + 2, wrapper.epoch),
-            format!("{} | Gas limit: {}", j + 3, Amount::from(wrapper.gas_limit)),
-            format!("{} | Fee token: {}", j + 4, wrapper.fee.token),
+            format!("Timestamp : {}", tx.timestamp.0),
+            format!("PK : {}", wrapper.pk),
+            format!("Epoch : {}", wrapper.epoch),
+            format!("Gas limit : {}", Amount::from(wrapper.gas_limit)),
+            format!("Fee token : {}", wrapper.fee.token),
         ]);
         if let Some(token) = tokens.get(&wrapper.fee.token) {
             tv.output_expert.push(format!(
-                "{} | Fee amount: {} {}",
-                j + 5,
+                "Fee amount : {} {}",
                 token,
                 wrapper.fee.amount
             ));
         } else {
             tv.output_expert.push(format!(
-                "{} | Fee amount: {}",
-                j + 5,
+                "Fee amount : {}",
                 wrapper.fee.amount
             ));
         }
     }
+
+    // Finally, index each line and break those that are too long
+    format_outputs(&mut tv.output);
+    format_outputs(&mut tv.output_expert);
     Ok(tv)
 }

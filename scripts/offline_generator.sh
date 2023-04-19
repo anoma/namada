@@ -7,8 +7,8 @@
 # test vectors.
 
 NAMADA_DIR="$(pwd)"
-export NAMADA_LEDGER_LOG_PATH="$(pwd)/testvectors.json"
-export NAMADA_TX_LOG_PATH="$(pwd)/debugouts.txt"
+export NAMADA_LEDGER_LOG_PATH="$(pwd)/vectors.json"
+export NAMADA_TX_LOG_PATH="$(pwd)/debugs.txt"
 
 echo '{
     "content": {
@@ -78,6 +78,6 @@ cargo run --bin namadac -- init-proposal --data-path valid_proposal.json --epoch
 
 rm valid_proposal.json
 
-perl -0777 -i.original -pe 's/,\s*$//igs' testvectors.json
+perl -0777 -i.original -pe 's/,\s*$//igs' $NAMADA_LEDGER_LOG_PATH
 
 echo $'\n]' >> $NAMADA_LEDGER_LOG_PATH
