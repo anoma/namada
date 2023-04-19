@@ -418,8 +418,7 @@ fn key_list(
     if known_keys.is_empty() {
         println!(
             "No known keys. Try `key gen --alias my-key` to generate a new \
-             key. Use `--mnemonic` option in order to generate a new key from \
-             a random mnemonic code."
+             key."
         );
     } else {
         let stdout = io::stdout();
