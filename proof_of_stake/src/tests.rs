@@ -117,6 +117,7 @@ fn test_init_genesis_aux(
     let mut s = TestWlStorage::default();
     s.storage.block.epoch = start_epoch;
 
+    validators.sort_by(|a, b| b.tokens.cmp(&a.tokens));
     init_genesis(&mut s, &params, validators.clone().into_iter(), start_epoch)
         .unwrap();
 
@@ -125,10 +126,7 @@ fn test_init_genesis_aux(
         details.unbonds.is_empty() && details.slashes.is_empty()
     }));
 
-    validators.sort_by(|a, b| a.tokens.cmp(&b.tokens));
-    for (i, validator) in validators.into_iter().rev().enumerate() {
-        println!("Validator {validator:?}");
-
+    for (i, validator) in validators.into_iter().enumerate() {
         let addr = &validator.address;
         let self_bonds = bond_details
             .remove(&BondId {
