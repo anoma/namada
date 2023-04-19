@@ -142,6 +142,8 @@ pub struct Tendermint {
     pub instrumentation_prometheus: bool,
     pub instrumentation_prometheus_listen_addr: SocketAddr,
     pub instrumentation_namespace: String,
+    /// Toggle to enable tx indexing
+    pub tx_index: bool,
 }
 
 impl Ledger {
@@ -189,6 +191,7 @@ impl Ledger {
                     26661,
                 ),
                 instrumentation_namespace: "namadan_tm".to_string(),
+                tx_index: false,
             },
         }
     }

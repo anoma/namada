@@ -72,12 +72,12 @@ impl Ctx {
             dkg_key,
             commission_rate,
             max_commission_rate_change,
-            validator_vp_code,
+            validator_vp_code_hash,
         }: InitValidator,
     ) -> EnvResult<Address> {
         let current_epoch = self.get_block_epoch()?;
         // Init validator account
-        let validator_address = self.init_account(&validator_vp_code)?;
+        let validator_address = self.init_account(&validator_vp_code_hash)?;
         let pk_key = key::pk_key(&validator_address);
         self.write(&pk_key, &account_key)?;
         let protocol_pk_key = key::protocol_pk_key(&validator_address);
