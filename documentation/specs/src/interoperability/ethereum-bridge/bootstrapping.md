@@ -33,7 +33,7 @@ Here is an overview of the steps to follow to enable the Ethereum bridge through
 governance proposal for a given Namada chain:
 
 1. The [smart contracts](./ethereum_smart_contracts.md) of the Ethereum bridge
-   should be deployed a priori, with an initial validator set and other parameters,
+   should be deployed beforehand, with an initial validator set and other parameters,
    such as nonces, from epoch $E_0$. This step can be done by anyone, but ultimately
    it's up to governance validators to decide which addresses to trust.
 2. A governance proposal should be held to agree on an epoch $E_{bridge} > E_0$ at
