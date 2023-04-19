@@ -32,13 +32,14 @@ storage which are yet to be achieve a quorum decision behind them (i.e. whose
 enough to lazily adjust an event's voting power whenever a new vote is made
 for it, to avoid iterating over each Ethereum event in storage.
 
-Validators may never vote more than once for a given event. To ensure that this
-invariant is held, events are timed out if they are not `seen` within the span
-of `unbonding_length` epochs, which corresponds to the period of time necessary
-for bonded tokens to be returned to an address (check the [relevant proof-of-stake section]
-for more details). Timing out an event consists in removing all its associated
-state from storage. Therefore, this mechanism serves another purpose: purging
-forged events from storage, voted on by Byzantine validators.
+Validators may never vote more than once on a given event. To ensure that this
+invariant is held, we keep track of who voted on some event and events are timed
+out if they are not `seen` within the span of `unbonding_length` epochs, which
+corresponds to the period of time necessary for bonded tokens to be returned to
+an address (check the [relevant proof-of-stake section] for more details).
+Timing out an event consists in removing all its associated state from storage.
+Therefore, this mechanism serves another purpose: purging forged events from
+storage, voted on by Byzantine validators.
 
 [relevant proof-of-stake section]: ../../economics/proof-of-stake/bonding-mechanism.md
 
