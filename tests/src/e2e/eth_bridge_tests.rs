@@ -3,7 +3,7 @@ mod helpers;
 use std::num::NonZeroU64;
 use std::str::FromStr;
 
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{eyre, Result};
 use namada::eth_bridge::oracle;
 use namada::ledger::eth_bridge::{
     ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
@@ -225,11 +225,10 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
         Bin::Client,
         tx_args,
         Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
-    )
-    .unwrap();
-    namadac_tx.exp_string("Transaction accepted").unwrap();
-    namadac_tx.exp_string("Transaction applied").unwrap();
-    namadac_tx.exp_string("Transaction is valid").unwrap();
+    )?;
+    namadac_tx.exp_string("Transaction accepted")?;
+    namadac_tx.exp_string("Transaction applied")?;
+    namadac_tx.exp_string("Transaction is valid")?;
     drop(namadac_tx);
 
     let mut namadar = run!(
@@ -242,24 +241,21 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
             &ledger_addr,
         ],
         Some(QUERY_TIMEOUT_SECONDS),
-    )
-    .unwrap();
+    )?;
     // get the returned hash of the transfer.
     let regex =
         expectrl::Regex(r#""bridge_pool_contents":(?s).*(?-s)"[0-9A-F]+":"#);
     let mut hash = String::from_utf8(
         namadar
             .session
-            .expect(regex)
-            .unwrap()
+            .expect(regex)?
             .get(0)
-            .unwrap()
+            .ok_or_else(|| eyre!("failed to retrieve hash with regex"))?
             .to_vec(),
-    )
-    .unwrap()
+    )?
     .split_ascii_whitespace()
     .last()
-    .unwrap()
+    .ok_or_else(|| eyre!("failed to get last token"))?
     .to_string();
     hash.remove(0);
     hash.truncate(hash.len() - 2);
@@ -276,9 +272,8 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
         &relayer,
     ];
     let mut namadar =
-        run!(test, Bin::Relayer, proof_args, Some(QUERY_TIMEOUT_SECONDS),)
-            .unwrap();
-    namadar.exp_string(r#"{"hashes":["#).unwrap();
+        run!(test, Bin::Relayer, proof_args, Some(QUERY_TIMEOUT_SECONDS))?;
+    namadar.exp_string(r#"{"hashes":["#)?;
 
     let mut client = EventsEndpointClient::default();
 
@@ -296,14 +291,12 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
         relayer: berthas_addr.clone(),
     };
 
-    client.send(&transfers).await.unwrap();
+    client.send(&transfers).await?;
     let mut ledger = bg_ledger.foreground();
-    ledger
-        .exp_string(
-            "Applying state updates derived from Ethereum events found in \
-             protocol transaction",
-        )
-        .unwrap();
+    ledger.exp_string(
+        "Applying state updates derived from Ethereum events found in \
+         protocol transaction",
+    )?;
     let _bg_ledger = ledger.background();
     let mut namadar = run!(
         test,
@@ -315,9 +308,8 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
             &ledger_addr,
         ],
         Some(QUERY_TIMEOUT_SECONDS),
-    )
-    .unwrap();
-    namadar.exp_string("Bridge pool is empty.").unwrap();
+    )?;
+    namadar.exp_string("Bridge pool is empty.")?;
 
     // bertha's balance should be back at 0
     let bertha_wdai_balance = find_wrapped_erc20_balance(
