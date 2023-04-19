@@ -527,6 +527,7 @@ where
 mod test_ethbridge_router {
     use std::collections::BTreeMap;
 
+    use assert_matches::assert_matches;
     use borsh::BorshSerialize;
     use namada_core::ledger::eth_bridge::storage::bridge_pool::{
         get_pending_key, get_signed_root_key, BridgePoolTree,
@@ -541,6 +542,7 @@ mod test_ethbridge_router {
     use namada_core::types::voting_power::{
         EthBridgeVotingPower, FractionalVotingPower,
     };
+    use namada_ethereum_bridge::parameters::read_native_erc20_address;
     use namada_ethereum_bridge::protocol::transactions::validator_set_update::aggregate_votes;
     use namada_ethereum_bridge::storage::proof::BridgePoolRootProof;
     use namada_proof_of_stake::pos_queries::PosQueries;
@@ -1318,6 +1320,76 @@ mod test_ethbridge_router {
             .await;
         // thus proof generation should fail
         assert!(resp.is_err());
+    }
+
+    /// Test that reading the wrapped NAM supply fails.
+    #[tokio::test]
+    async fn test_read_wnam_supply_fails() {
+        let mut client = TestClient::new(RPC);
+        assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
+
+        // initialize storage
+        test_utils::init_default_storage(&mut client.wl_storage);
+
+        // commit the changes
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
+
+        // check that reading wrapped NAM fails
+        let native_erc20 =
+            read_native_erc20_address(&client.wl_storage).expect("Test failed");
+        let result = RPC
+            .shell()
+            .eth_bridge()
+            .read_erc20_supply(&client, &native_erc20)
+            .await;
+        let Err(err) = result else {
+            panic!("Test failed");
+        };
+
+        assert_eq!(
+            err.to_string(),
+            "Wrapped NAM's supply is not kept track of"
+        );
+    }
+
+    /// Test reading the supply of an ERC20 token.
+    #[tokio::test]
+    async fn test_read_erc20_supply() {
+        const ERC20_TOKEN: EthAddress = EthAddress([0; 20]);
+
+        let mut client = TestClient::new(RPC);
+        assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
+
+        // initialize storage
+        test_utils::init_default_storage(&mut client.wl_storage);
+
+        // check supply - should be None
+        let result = RPC
+            .shell()
+            .eth_bridge()
+            .read_erc20_supply(&client, &ERC20_TOKEN)
+            .await;
+        assert_matches!(result, Ok(None));
+
+        // write tokens to storage
+        let amount = Amount::whole(12345);
+        let keys: wrapped_erc20s::Keys = (&ERC20_TOKEN).into();
+        client
+            .wl_storage
+            .write(&keys.supply(), amount)
+            .expect("Test failed");
+
+        // check that the supply was updated
+        let result = RPC
+            .shell()
+            .eth_bridge()
+            .read_erc20_supply(&client, &ERC20_TOKEN)
+            .await;
+        assert_matches!(result, Ok(Some(a)) if a == amount);
     }
 }
 
