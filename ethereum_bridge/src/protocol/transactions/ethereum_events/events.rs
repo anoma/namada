@@ -792,7 +792,7 @@ mod tests {
     }
 
     #[test]
-    /// When we act on a [`EthereumEvent::TransfersToEthereum`], test
+    /// When we act on an [`EthereumEvent::TransfersToEthereum`], test
     /// that pending transfers are deleted from the Bridge pool, the
     /// Bridge pool nonce is updated and escrowed assets are burned.
     fn test_act_on_changes_storage_for_transfers_to_eth() {
@@ -800,7 +800,14 @@ mod tests {
         test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
         wl_storage.commit_block().expect("Test failed");
         init_storage(&mut wl_storage);
-        let pending_transfers = init_bridge_pool(&mut wl_storage);
+        let native_erc20 =
+            read_native_erc20_address(&wl_storage).expect("Test failed");
+        let random_erc20 = EthAddress([0xff; 20]);
+        let random_erc20_keys: wrapped_erc20s::Keys = (&random_erc20).into();
+        let pending_transfers = init_bridge_pool_transfers(
+            &mut wl_storage,
+            [native_erc20, random_erc20],
+        );
         init_balance(&mut wl_storage, &pending_transfers);
         let pending_keys: HashSet<Key> =
             pending_transfers.iter().map(get_pending_key).collect();
@@ -833,10 +840,12 @@ mod tests {
         )
         .expect("Test failed");
         let mut changed_keys = act_on(&mut wl_storage, event).unwrap();
-        let asset_keys: wrapped_erc20s::Keys = (&EthAddress([0x01; 20])).into();
 
-        assert!(changed_keys.remove(&asset_keys.balance(&BRIDGE_POOL_ADDRESS)));
-        assert!(changed_keys.remove(&asset_keys.supply()));
+        assert!(
+            changed_keys
+                .remove(&random_erc20_keys.balance(&BRIDGE_POOL_ADDRESS))
+        );
+        assert!(changed_keys.remove(&random_erc20_keys.supply()));
         assert!(changed_keys.remove(&payer_balance_key));
         assert!(changed_keys.remove(&pool_balance_key));
         assert!(changed_keys.remove(&get_nonce_key()));
@@ -1028,5 +1037,96 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    /// Auxiliary function to test wrapped Ethereum ERC20s functionality.
+    fn test_wrapped_erc20s_aux<F>(mut f: F)
+    where
+        F: FnMut(&mut TestWlStorage, EthereumEvent),
+    {
+        let mut wl_storage = TestWlStorage::default();
+        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
+        wl_storage.commit_block().expect("Test failed");
+        init_storage(&mut wl_storage);
+        let native_erc20 =
+            read_native_erc20_address(&wl_storage).expect("Test failed");
+        let random_erc20 = EthAddress([0xff; 20]);
+        let pending_transfers = init_bridge_pool_transfers(
+            &mut wl_storage,
+            [native_erc20, random_erc20],
+        );
+        init_balance(&mut wl_storage, &pending_transfers);
+        let (transfers, valid_transfers_map) = pending_transfers
+            .into_iter()
+            .map(|transfer| {
+                let transfer_to_eth = TransferToEthereum {
+                    amount: transfer.transfer.amount,
+                    asset: transfer.transfer.asset,
+                    receiver: transfer.transfer.recipient,
+                    gas_amount: transfer.gas_fee.amount,
+                    gas_payer: transfer.gas_fee.payer,
+                    sender: transfer.transfer.sender,
+                };
+                (transfer_to_eth, true)
+            })
+            .unzip();
+        let relayer = gen_established_address("random");
+        let event = EthereumEvent::TransfersToEthereum {
+            nonce: arbitrary_nonce(),
+            valid_transfers_map,
+            transfers,
+            relayer,
+        };
+        f(&mut wl_storage, event)
+    }
+
+    #[test]
+    /// When we act on an [`EthereumEvent::TransfersToEthereum`], test
+    /// that the transferred wrapped ERC20 tokens are burned in Namada.
+    fn test_wrapped_erc20s_are_burned() {
+        let random_erc20 = EthAddress([0xff; 20]);
+        let random_erc20_keys: wrapped_erc20s::Keys = (&random_erc20).into();
+
+        #[allow(dead_code)]
+        struct Delta {
+            sender: Address,
+            asset: EthAddress,
+            sent_amount: token::Amount,
+            prev_balance: Option<token::Amount>,
+        }
+
+        test_wrapped_erc20s_aux(|wl_storage, event| {
+            let transfers = match &event {
+                EthereumEvent::TransfersToEthereum { transfers, .. } => transfers.iter(),
+                _ => panic!("Test failed"),
+            };
+            let _deltas = transfers.map(
+                |TransferToEthereum {
+                     asset,
+                     sender,
+                     amount,
+                     ..
+                 }| {
+                    let asset_keys: wrapped_erc20s::Keys = asset.into();
+                    let prev_balance = wl_storage
+                        .read(&asset_keys.balance(sender))
+                        .expect("Test failed");
+                    Delta {
+                        sender: sender.clone(),
+                        asset: *asset,
+                        sent_amount: *amount,
+                        prev_balance,
+                    }
+                },
+            );
+
+            let changed_keys = act_on(wl_storage, event).unwrap();
+
+            assert!(changed_keys.contains(&random_erc20_keys.supply()));
+            assert!(
+                changed_keys
+                    .contains(&random_erc20_keys.balance(&BRIDGE_POOL_ADDRESS))
+            );
+        })
     }
 }
