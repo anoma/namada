@@ -75,8 +75,21 @@ impl DerivationPath {
         Self::new(indexes)
     }
 
+    fn hardened(&self, scheme: SchemeType) -> Self {
+        Self::new(
+            self.0
+                .into_iter()
+                .map(|idx| match scheme {
+                    SchemeType::Ed25519 => ChildIndex::Hardened(idx.to_u32()),
+                    _ => *idx,
+                })
+                .collect::<Vec<_>>(),
+        )
+    }
+
     pub fn default_for_scheme(scheme: SchemeType) -> Self {
-        Self::bip44(scheme, Some(0), Some(0), Some(0))
+        let path = Self::bip44(scheme, Some(0), Some(0), Some(0));
+        path.hardened(scheme)
     }
 
     pub fn from_path_str(
@@ -86,15 +99,7 @@ impl DerivationPath {
         let inner = DerivationPathInner::from_str(path).map_err(|err| {
             DerivationPathError::InvalidDerivationPath(err.to_string())
         })?;
-        Ok(Self::new(
-            inner
-                .into_iter()
-                .map(|idx| match scheme {
-                    SchemeType::Ed25519 => ChildIndex::Hardened(idx.to_u32()),
-                    _ => *idx,
-                })
-                .collect::<Vec<_>>(),
-        ))
+        Ok(Self(inner).hardened(scheme))
     }
 
     pub fn path(&self) -> &[ChildIndex] {
