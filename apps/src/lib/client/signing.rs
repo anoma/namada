@@ -22,9 +22,12 @@ use namada::types::ibc::data::IbcMessage;
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
+use namada::types::address::masp;
 use namada::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use std::env;
 use std::fs::File;
+use masp_primitives::transaction::components::sapling::fees::{OutputView, InputView};
+use namada::types::masp::{PaymentAddress, ExtendedViewingKey};
 
 use super::rpc;
 use crate::cli::context::{WalletAddress, WalletKeypair};
@@ -42,6 +45,8 @@ use crate::client::tx::{
 
 /// Env. var specifying where to store signing test vectors
 const ENV_VAR_LEDGER_LOG_PATH: &str = "NAMADA_LEDGER_LOG_PATH";
+/// Env. var specifying where to store transaction debug outputs
+const ENV_VAR_TX_LOG_PATH: &str = "NAMADA_TX_LOG_PATH";
 
 /// Find the public key for the given address and try to load the keypair
 /// for it from the wallet. Panics if the key cannot be found or loaded.
@@ -293,6 +298,8 @@ pub async fn sign_wrapper(
         #[cfg(not(feature = "mainnet"))]
         pow_solution.clone(),
     )));
+    // Then sign over the bound wrapper
+    tx.add_section(Section::Signature(Signature::new(&tx.header_hash(), keypair)));
 
     // Attempt to decode the construction
     if let Ok(path) = env::var(ENV_VAR_LEDGER_LOG_PATH) {
@@ -313,9 +320,21 @@ pub async fn sign_wrapper(
         writeln!(f, "{},", output)
             .expect("unable to write test vector to file");
     }
+    // Attempt to decode the construction
+    if let Ok(path) = env::var(ENV_VAR_TX_LOG_PATH) {
+        let mut tx = tx.clone();
+        // Contract the large data blobs in the transaction
+        tx.wallet_filter();
+        // Record the transaction at the identified path
+        let mut f = File::options()
+            .append(true)
+            .create(true)
+            .open(path)
+            .expect("failed to open test vector file");
+        writeln!(f, "{:x?},", tx)
+            .expect("unable to write test vector to file");
+    }
     
-    // Then sign over the bound wrapper
-    tx.add_section(Section::Signature(Signature::new(&tx.header_hash(), keypair)));
     // Remove all the sensitive sections
     tx.protocol_filter();
     // Encrypt all sections not relating to the header
@@ -349,6 +368,22 @@ struct LedgerVector {
     output: Vec<String>,
     output_expert: Vec<String>,
     valid: bool,
+}
+
+/// Adds a Ledger output line describing a given transaction amount
+fn make_ledger_amount(output: &mut Vec<String>, amount: Amount, token: &Address, prefix: &str) {
+    // To facilitate lookups of human-readable token names
+    let tokens = tokens();
+    
+    if let Some(token) = tokens.get(&token) {
+        output
+            .push(format!("3 | {}Amount: {} {}", prefix, token, amount));
+    } else {
+        output.extend(vec![
+            format!("3 | {}Token: {}", prefix, token),
+            format!("4 | {}Amount: {}", prefix, amount),
+        ]);
+    }
 }
 
 /// Converts the given transaction to the form that is displayed on the Ledger
@@ -649,24 +684,50 @@ fn to_ledger_vector(
         let transfer = Transfer::try_from_slice(
             &tx.data().ok_or_else(|| Error::from(ErrorKind::InvalidData))?,
         )?;
+        let builder = if let Some(shielded_hash) = transfer.shielded {
+            tx.sections.iter().find_map(|x| {
+                match x {
+                    Section::MaspBuilder(builder) if builder.target == shielded_hash => {
+                        Some(builder)
+                    },
+                    _ => None,
+                }
+            })
+        } else {
+            None
+        };
 
         tv.name = "Transfer 0".to_string();
 
-        tv.output.extend(vec![
-            format!("0 | Type: Transfer"),
-            format!("1 | Sender: {}", transfer.source),
-            format!("2 | Destination: {}", transfer.target),
-        ]);
-        if let Some(token) = tokens.get(&transfer.token) {
-            tv.output
-                .push(format!("3 | Amount: {} {}", token, transfer.amount));
-            j += 3;
-        } else {
-            tv.output.extend(vec![
-                format!("3 | Token: {}", transfer.token),
-                format!("4 | Amount: {}", transfer.amount),
-            ]);
-            j += 4;
+        tv.output.push(format!("0 | Type: Transfer"));
+        if transfer.source != masp() {
+            tv.output.push(format!("1 | Sender: {}", transfer.source));
+            if transfer.target == masp() {
+                make_ledger_amount(&mut tv.output, transfer.amount, &transfer.token, "Sending ");
+            }
+        } else if let Some(builder) = builder {
+            for input in builder.builder.sapling_inputs() {
+                let vk = ExtendedViewingKey::from(input.key().clone());
+                tv.output.push(format!("1 | Sender: {}", vk));
+                tv.output
+                    .push(format!("3 | Sending: {} {}", input.asset_type(), Amount::from(input.value())));
+            }
+        }
+        if transfer.target != masp() {
+            tv.output.push(format!("2 | Destination: {}", transfer.target));
+            if transfer.source == masp() {
+                make_ledger_amount(&mut tv.output, transfer.amount, &transfer.token, "Receiving ");
+            }
+        } else if let Some(builder) = builder {
+            for output in builder.builder.sapling_outputs() {
+                let pa = PaymentAddress::from(output.address().clone());
+                tv.output.push(format!("1 | Destination: {}", pa));
+                tv.output
+                    .push(format!("3 | Receiving: {} {}", output.asset_type(), Amount::from(output.value())));
+            }
+        }
+        if transfer.source != masp() && transfer.target != masp() {
+            make_ledger_amount(&mut tv.output, transfer.amount, &transfer.token, "");
         }
 
         tv.output_expert.extend(vec![
