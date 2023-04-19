@@ -367,6 +367,8 @@ mod test {
     use crate::ledger::queries::RPC;
     use crate::ledger::storage_api::{self, StorageWrite};
     use crate::proto::Tx;
+    use crate::types::hash::Hash;
+    use crate::types::storage::Key;
     use crate::types::{address, token};
 
     #[test]
@@ -395,6 +397,11 @@ mod test {
     {
         // Initialize the `TestClient`
         let mut client = TestClient::new(RPC);
+        // store the wasm code
+        let tx_no_op = TestWasms::TxNoOp.read_bytes();
+        let tx_hash = Hash::sha256(&tx_no_op);
+        let key = Key::wasm_code(&tx_hash);
+        client.wl_storage.storage.write(&key, &tx_no_op).unwrap();
 
         // Request last committed epoch
         let read_epoch = RPC.shell().epoch(&client).await.unwrap();
@@ -402,9 +409,8 @@ mod test {
         assert_eq!(current_epoch, read_epoch);
 
         // Request dry run tx
-        let tx_no_op = TestWasms::TxNoOp.read_bytes();
         let tx = Tx::new(
-            tx_no_op,
+            tx_hash.to_vec(),
             None,
             client.wl_storage.storage.chain_id.clone(),
             None,

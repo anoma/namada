@@ -29,8 +29,8 @@ fn validate_tx(
 
     for key in keys_changed.iter() {
         if key.is_validity_predicate().is_some() {
-            let vp: Vec<u8> = ctx.read_bytes_post(key)?.unwrap();
-            if !is_vp_whitelisted(ctx, &vp)? {
+            let vp_hash: Vec<u8> = ctx.read_bytes_post(key)?.unwrap();
+            if !is_vp_whitelisted(ctx, &vp_hash)? {
                 return reject();
             }
         }

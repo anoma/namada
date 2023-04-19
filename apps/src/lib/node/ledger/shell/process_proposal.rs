@@ -656,7 +656,7 @@ mod test_process_proposal {
                 .try_to_vec()
                 .expect("Test failed");
             Tx {
-                code: vec![],
+                code_or_hash: vec![],
                 data: Some(
                     SignedTxData {
                         sig,

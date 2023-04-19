@@ -108,6 +108,8 @@ pub enum Error {
     BadProposal(u64, String),
     #[error("Error reading wasm: {0}")]
     ReadingWasm(#[from] eyre::Error),
+    #[error("Error loading wasm: {0}")]
+    LoadingWasm(String),
     #[error("Error reading from or writing to storage: {0}")]
     StorageApi(#[from] storage_api::Error),
 }

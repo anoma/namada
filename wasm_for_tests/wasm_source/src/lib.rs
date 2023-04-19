@@ -207,9 +207,9 @@ pub mod main {
         _verifiers: BTreeSet<Address>,
     ) -> VpResult {
         use validity_predicate::EvalVp;
-        let EvalVp { vp_code, input }: EvalVp =
+        let EvalVp { vp_code_hash, input }: EvalVp =
             EvalVp::try_from_slice(&tx_data[..]).unwrap();
-        ctx.eval(vp_code, input)
+        ctx.eval(vp_code_hash, input)
     }
 }
 
