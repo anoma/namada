@@ -53,7 +53,7 @@ it will not be able to authenticate user transfers.
 In this case, the validators from $E$ will need to coordinate, offline, the
 crafting of a transaction including their vote on the validator set of $E + 1$.
 The only way this is impossible is if more than $1/3$ (by stake) of the consensus
-validators from $E$ delete their Ethereum keys, which is extremely unlikely.
+validators from $E$ delete their Ethereum hot keys, which is extremely unlikely.
 
 ## Namada Bridge Relayers
 
