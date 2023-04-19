@@ -1793,6 +1793,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "heck"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
+
+[[package]]
 name = "hermit-abi"
 version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2594,7 +2600,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "async-trait",
  "bellman",
@@ -2619,6 +2625,7 @@ dependencies = [
  "pwasm-utils",
  "rayon",
  "rust_decimal",
+ "rust_decimal_macros",
  "serde_json",
  "sha2 0.9.9",
  "tempfile",
@@ -2638,7 +2645,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "ark-bls12-381",
  "ark-serialize",
@@ -2683,7 +2690,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2692,10 +2699,12 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "borsh",
+ "data-encoding",
  "derivative",
+ "hex",
  "namada_core",
  "once_cell",
  "proptest",
@@ -2707,15 +2716,16 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "borsh",
  "namada_core",
+ "strum",
 ]
 
 [[package]]
 name = "namada_tests"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "chrono",
  "concat-idents",
@@ -2747,7 +2757,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -2762,7 +2772,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "borsh",
  "hex",
@@ -2773,7 +2783,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "borsh",
  "namada_core",
@@ -2786,18 +2796,20 @@ dependencies = [
 
 [[package]]
 name = "namada_wasm"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "borsh",
  "getrandom 0.2.8",
  "masp_primitives",
  "masp_proofs",
  "namada",
+ "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
  "namada_vp_prelude",
  "once_cell",
  "proptest",
+ "ripemd",
  "rust_decimal",
  "tracing",
  "tracing-subscriber",
@@ -3279,7 +3291,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62941722fb675d463659e49c4f3fe1fe792ff24fe5bbaa9c08cd3b98a1c354f5"
 dependencies = [
  "bytes",
- "heck",
+ "heck 0.3.3",
  "itertools",
  "lazy_static",
  "log",
@@ -3653,6 +3665,15 @@ dependencies = [
  "untrusted",
  "web-sys",
  "winapi",
+]
+
+[[package]]
+name = "ripemd"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd124222d17ad93a644ed9d011a40f4fb64aa54275c08cc216524a9ea82fb09f"
+dependencies = [
+ "digest 0.10.5",
 ]
 
 [[package]]
@@ -4233,6 +4254,28 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "strum"
+version = "0.24.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "063e6045c0e62079840579a7e47a355ae92f60eb74daaf156fb1e84ba164e63f"
+dependencies = [
+ "strum_macros",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.24.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e385be0d24f186b4ce2f9982191e7101bb737312ad61c1f2f984f34bcf85d59"
+dependencies = [
+ "heck 0.4.1",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn",
+]
 
 [[package]]
 name = "subtle"
@@ -4854,7 +4897,7 @@ dependencies = [
 
 [[package]]
 name = "tx_template"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "borsh",
  "getrandom 0.2.8",
@@ -4991,7 +5034,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "vp_template"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "borsh",
  "getrandom 0.2.8",

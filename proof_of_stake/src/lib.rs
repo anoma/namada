@@ -15,6 +15,8 @@
 pub mod btree_set;
 pub mod epoched;
 pub mod parameters;
+pub mod pos_queries;
+pub mod rewards;
 pub mod storage;
 pub mod types;
 // pub mod validation;
@@ -34,9 +36,9 @@ use namada_core::ledger::storage_api::collections::lazy_map::{
 use namada_core::ledger::storage_api::collections::{LazyCollection, LazySet};
 use namada_core::ledger::storage_api::token::credit_tokens;
 use namada_core::ledger::storage_api::{
-    self, OptionExt, StorageRead, StorageWrite,
+    self, OptionExt, ResultExt, StorageRead, StorageWrite,
 };
-use namada_core::types::address::{self, Address, InternalAddress};
+use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::key::{
     common, tm_consensus_key_raw_hash, PublicKeyTmRawHash,
 };
@@ -45,28 +47,30 @@ use namada_core::types::token;
 use namada_core::types::token::Amount;
 use once_cell::unsync::Lazy;
 use parameters::PosParams;
+use rewards::PosRewardsCalculator;
 use rust_decimal::Decimal;
 use storage::{
     bonds_for_source_prefix, bonds_prefix, consensus_keys_key,
     get_validator_address_from_bond, into_tm_voting_power, is_bond_key,
-    is_unbond_key, is_validator_slashes_key, mult_amount,
-    mult_change_to_amount, num_consensus_validators_key, params_key,
-    slashes_prefix, unbonds_for_source_prefix, unbonds_prefix,
+    is_unbond_key, is_validator_slashes_key, last_block_proposer_key,
+    mult_amount, mult_change_to_amount, num_consensus_validators_key,
+    params_key, slashes_prefix, unbonds_for_source_prefix, unbonds_prefix,
     validator_address_raw_hash_key, validator_max_commission_rate_change_key,
     BondDetails, BondsAndUnbondsDetail, BondsAndUnbondsDetails,
-    ReverseOrdTokenAmount, UnbondDetails, WeightedValidator,
+    ReverseOrdTokenAmount, RewardsAccumulator, UnbondDetails,
 };
 use thiserror::Error;
 use types::{
-    BelowCapacityValidatorSet, BelowCapacityValidatorSets, Bonds,
+    BelowCapacityValidatorSet, BelowCapacityValidatorSets, BondId, Bonds,
     CommissionRates, ConsensusValidator, ConsensusValidatorSet,
-    ConsensusValidatorSets, GenesisValidator, Position, Slash, SlashType,
-    Slashes, TotalDeltas, Unbonds, ValidatorConsensusKeys, ValidatorDeltas,
-    ValidatorPositionAddresses, ValidatorSetPositions, ValidatorSetUpdate,
-    ValidatorState, ValidatorStates,
+    ConsensusValidatorSets, GenesisValidator, Position, RewardsProducts, Slash,
+    SlashType, Slashes, TotalDeltas, Unbonds, ValidatorConsensusKeys,
+    ValidatorDeltas, ValidatorPositionAddresses, ValidatorSetPositions,
+    ValidatorSetUpdate, ValidatorState, ValidatorStates, VoteInfo,
+    WeightedValidator,
 };
 
-use crate::types::{decimal_mult_u128, BondId};
+use crate::types::decimal_mult_u128;
 
 /// Address of the PoS account implemented as a native VP
 pub const ADDRESS: Address = Address::Internal(InternalAddress::PoS);
@@ -75,9 +79,11 @@ pub const ADDRESS: Address = Address::Internal(InternalAddress::PoS);
 pub const SLASH_POOL_ADDRESS: Address =
     Address::Internal(InternalAddress::PosSlashPool);
 
-/// Address of the staking token (NAM)
-pub fn staking_token_address() -> Address {
-    address::nam()
+/// Address of the staking token (i.e. the native token)
+pub fn staking_token_address(storage: &impl StorageRead) -> Address {
+    storage
+        .get_native_token()
+        .expect("Must be able to read native token address")
 }
 
 #[allow(missing_docs)]
@@ -85,6 +91,13 @@ pub fn staking_token_address() -> Address {
 pub enum GenesisError {
     #[error("Voting power overflow: {0}")]
     VotingPowerOverflow(TryFromIntError),
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum InflationError {
+    #[error("Error in calculating rewards: {0}")]
+    Rewards(rewards::RewardsError),
 }
 
 #[allow(missing_docs)]
@@ -203,6 +216,12 @@ impl From<CommissionRateChangeError> for storage_api::Error {
     }
 }
 
+impl From<InflationError> for storage_api::Error {
+    fn from(err: InflationError) -> Self {
+        Self::new(err)
+    }
+}
+
 /// Get the storage handle to the epoched consensus validator set
 pub fn consensus_validator_set_handle() -> ConsensusValidatorSets {
     let key = storage::consensus_validator_set_key();
@@ -284,6 +303,30 @@ pub fn validator_slashes_handle(validator: &Address) -> Slashes {
     Slashes::open(key)
 }
 
+/// Get the storage handle to the rewards accumulator for the consensus
+/// validators in a given epoch
+pub fn rewards_accumulator_handle() -> RewardsAccumulator {
+    let key = storage::consensus_validator_rewards_accumulator_key();
+    RewardsAccumulator::open(key)
+}
+
+/// Get the storage handle to a validator's self rewards products
+pub fn validator_rewards_products_handle(
+    validator: &Address,
+) -> RewardsProducts {
+    let key = storage::validator_self_rewards_product_key(validator);
+    RewardsProducts::open(key)
+}
+
+/// Get the storage handle to the delegator rewards products associated with a
+/// particular validator
+pub fn delegator_rewards_products_handle(
+    validator: &Address,
+) -> RewardsProducts {
+    let key = storage::validator_delegation_rewards_product_key(validator);
+    RewardsProducts::open(key)
+}
+
 /// Init genesis
 pub fn init_genesis<S>(
     storage: &mut S,
@@ -356,6 +399,7 @@ where
             current_epoch,
         )?;
     }
+
     // Write total deltas to storage
     total_deltas_handle().init_at_genesis(
         storage,
@@ -363,7 +407,8 @@ where
         current_epoch,
     )?;
     // Credit bonded token amount to the PoS account
-    credit_tokens(storage, &staking_token_address(), &ADDRESS, total_bonded)?;
+    let staking_token = staking_token_address(storage);
+    credit_tokens(storage, &staking_token, &ADDRESS, total_bonded)?;
     // Copy the genesis validator set into the pipeline epoch as well
     for epoch in (current_epoch.next()).iter_range(params.pipeline_len) {
         copy_validator_sets_and_positions(
@@ -473,6 +518,29 @@ where
 {
     let key = num_consensus_validators_key();
     storage.write(&key, new_num)
+}
+
+/// Read last block proposer address.
+pub fn read_last_block_proposer_address<S>(
+    storage: &S,
+) -> storage_api::Result<Option<Address>>
+where
+    S: StorageRead,
+{
+    let key = last_block_proposer_key();
+    storage.read(&key)
+}
+
+/// Write last block proposer address.
+pub fn write_last_block_proposer_address<S>(
+    storage: &mut S,
+    address: Address,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = last_block_proposer_key();
+    storage.write(&key, address)
 }
 
 /// Read PoS validator's delta value.
@@ -794,9 +862,10 @@ where
     update_total_deltas(storage, &params, amount, current_epoch)?;
 
     // Transfer the bonded tokens from the source to PoS
+    let staking_token = staking_token_address(storage);
     transfer_tokens(
         storage,
-        &staking_token_address(),
+        &staking_token,
         token::Amount::from_change(amount),
         source,
         &ADDRESS,
@@ -1654,9 +1723,10 @@ where
     }
 
     // Transfer the tokens from the PoS address back to the source
+    let staking_token = staking_token_address(storage);
     transfer_tokens(
         storage,
-        &staking_token_address(),
+        &staking_token,
         withdrawable_amount,
         &ADDRESS,
         source,
@@ -1771,9 +1841,10 @@ where
     validator_slashes_handle(validator).push(storage, slash)?;
 
     // Transfer the slashed tokens from PoS account to Slash Fund address
+    let staking_token = staking_token_address(storage);
     transfer_tokens(
         storage,
-        &staking_token_address(),
+        &staking_token,
         slashed_amount,
         &ADDRESS,
         &SLASH_POOL_ADDRESS,
@@ -1900,7 +1971,9 @@ where
     Ok((total, total_active))
 }
 
-/// Update tendermint validator set
+/// Communicate imminent validator set updates to Tendermint. This function is
+/// called two blocks before the start of a new epoch because Tendermint
+/// validator updates become active two blocks after the updates are submitted.
 pub fn validator_set_update_tendermint<S, T>(
     storage: &S,
     params: &PosParams,
@@ -1910,20 +1983,14 @@ pub fn validator_set_update_tendermint<S, T>(
 where
     S: StorageRead,
 {
-    let current_epoch: Epoch = current_epoch;
-    let current_epoch_u64: u64 = current_epoch.into();
-
-    let previous_epoch: Option<Epoch> = if current_epoch_u64 == 0 {
-        None
-    } else {
-        Some(Epoch::from(current_epoch_u64 - 1))
-    };
+    // Because this is called 2 blocks before a start on an epoch, we're gonna
+    // give Tendermint updates for the next epoch
+    let next_epoch: Epoch = current_epoch.next();
 
     let cur_consensus_validators =
+        consensus_validator_set_handle().at(&next_epoch);
+    let prev_consensus_validators =
         consensus_validator_set_handle().at(&current_epoch);
-    let prev_consensus_validators = previous_epoch.map(|previous_epoch| {
-        consensus_validator_set_handle().at(&previous_epoch)
-    });
 
     let consensus_validators = cur_consensus_validators
         .iter(storage)?
@@ -1943,60 +2010,57 @@ where
 
             // Check if the validator was consensus in the previous epoch with
             // the same stake
-            if prev_consensus_validators.is_some() {
-                if let Some(prev_epoch) = previous_epoch {
-                    // Look up previous state and prev and current voting powers
-                    let prev_state = validator_state_handle(&address)
-                        .get(storage, prev_epoch, params)
-                        .unwrap();
-                    let prev_tm_voting_power = Lazy::new(|| {
-                        let prev_validator_stake =
-                            validator_deltas_handle(&address)
-                                .get_sum(storage, prev_epoch, params)
-                                .unwrap()
-                                .map(token::Amount::from_change)
-                                .unwrap_or_default();
-                        into_tm_voting_power(
-                            params.tm_votes_per_token,
-                            u128::try_from(prev_validator_stake)
-                                .expect("Amount out of bounds")
-                                as u64,
-                        )
-                    });
-                    let cur_tm_voting_power = Lazy::new(|| {
-                        into_tm_voting_power(
-                            params.tm_votes_per_token,
-                            u128::try_from(cur_stake)
-                                .expect("Amount out of bounds")
-                                as u64,
-                        )
-                    });
+            // Look up previous state and prev and current voting powers
+            if !prev_consensus_validators.is_empty(storage).unwrap() {
+                let prev_state = validator_state_handle(&address)
+                    .get(storage, current_epoch, params)
+                    .unwrap();
+                let prev_tm_voting_power = Lazy::new(|| {
+                    let prev_validator_stake =
+                        validator_deltas_handle(&address)
+                            .get_sum(storage, current_epoch, params)
+                            .unwrap()
+                            .map(token::Amount::from_change)
+                            .unwrap_or_default();
+                    into_tm_voting_power(
+                        params.tm_votes_per_token,
+                        u128::try_from(prev_validator_stake)
+                            .expect("Amount out of bounds")
+                            as u64,
+                    )
+                });
+                let cur_tm_voting_power = Lazy::new(|| {
+                    into_tm_voting_power(
+                        params.tm_votes_per_token,
+                        u128::try_from(cur_stake).expect("Amount out of bounds")
+                            as u64,
+                    )
+                });
 
-                    // If its was in `Consensus` before and voting power has not
-                    // changed, skip the update
-                    if matches!(prev_state, Some(ValidatorState::Consensus))
-                        && *prev_tm_voting_power == *cur_tm_voting_power
-                    {
-                        tracing::debug!(
-                            "skipping validator update, {address} is in \
-                             consensus set but voting power hasn't changed"
-                        );
-                        return None;
-                    }
+                // If it was in `Consensus` before and voting power has not
+                // changed, skip the update
+                if matches!(prev_state, Some(ValidatorState::Consensus))
+                    && *prev_tm_voting_power == *cur_tm_voting_power
+                {
+                    tracing::debug!(
+                        "skipping validator update, {address} is in consensus \
+                         set but voting power hasn't changed"
+                    );
+                    return None;
+                }
 
-                    // If both previous and current voting powers are 0, skip
-                    // update
-                    if *prev_tm_voting_power == 0 && *cur_tm_voting_power == 0 {
-                        tracing::info!(
-                            "skipping validator update, {address} is in \
-                             consensus set but without voting power"
-                        );
-                        return None;
-                    }
+                // If both previous and current voting powers are 0, skip
+                // update
+                if *prev_tm_voting_power == 0 && *cur_tm_voting_power == 0 {
+                    tracing::info!(
+                        "skipping validator update, {address} is in consensus \
+                         set but without voting power"
+                    );
+                    return None;
                 }
             }
             let consensus_key = validator_consensus_key_handle(&address)
-                .get(storage, current_epoch, params)
+                .get(storage, next_epoch, params)
                 .unwrap()
                 .unwrap();
             tracing::debug!(
@@ -2011,7 +2075,10 @@ where
             }))
         });
     let cur_below_capacity_validators =
+        below_capacity_validator_set_handle().at(&next_epoch);
+    let prev_below_capacity_vals =
         below_capacity_validator_set_handle().at(&current_epoch);
+
     let below_capacity_validators = cur_below_capacity_validators
         .iter(storage)
         .unwrap()
@@ -2030,22 +2097,16 @@ where
                 cur_stake.to_string_native()
             );
 
-            let prev_tm_voting_power = previous_epoch
-                .map(|prev_epoch| {
-                    let prev_validator_stake =
-                        validator_deltas_handle(&address)
-                            .get_sum(storage, prev_epoch, params)
-                            .unwrap()
-                            .map(token::Amount::from_change)
-                            .unwrap_or_default();
-                    into_tm_voting_power(
-                        params.tm_votes_per_token,
-                        u128::try_from(prev_validator_stake)
-                            .expect("Amount out of bounds")
-                            as u64,
-                    )
-                })
+            let prev_validator_stake = validator_deltas_handle(&address)
+                .get_sum(storage, current_epoch, params)
+                .unwrap()
+                .map(token::Amount::from_change)
                 .unwrap_or_default();
+            let prev_tm_voting_power = into_tm_voting_power(
+                params.tm_votes_per_token,
+                u128::try_from(prev_validator_stake)
+                    .expect("Amount out of bounds") as u64,
+            );
 
             // If the validator previously had no voting power, it wasn't in
             // tendermint set and we have to skip it.
@@ -2057,31 +2118,26 @@ where
                 return None;
             }
 
-            let prev_below_capacity_vals =
-                below_capacity_validator_set_handle()
-                    .at(&previous_epoch.unwrap());
             if !prev_below_capacity_vals.is_empty(storage).unwrap() {
-                if let Some(prev_epoch) = previous_epoch {
-                    // Look up the previous state
-                    let prev_state = validator_state_handle(&address)
-                        .get(storage, prev_epoch, params)
-                        .unwrap();
-                    // If the `prev_state.is_none()`, it's a new validator that
-                    // is `BelowCapacity`, so no update is needed. If it
-                    // previously was `BelowCapacity` there's no update needed
-                    // either.
-                    if !matches!(prev_state, Some(ValidatorState::Consensus)) {
-                        tracing::debug!(
-                            "skipping validator update, {address} is not and \
-                             wasn't previously in consensus set"
-                        );
-                        return None;
-                    }
+                // Look up the previous state
+                let prev_state = validator_state_handle(&address)
+                    .get(storage, current_epoch, params)
+                    .unwrap();
+                // If the `prev_state.is_none()`, it's a new validator that
+                // is `BelowCapacity`, so no update is needed. If it
+                // previously was `BelowCapacity` there's no update needed
+                // either.
+                if !matches!(prev_state, Some(ValidatorState::Consensus)) {
+                    tracing::debug!(
+                        "skipping validator update, {address} is not and \
+                         wasn't previously in consensus set"
+                    );
+                    return None;
                 }
             }
 
             let consensus_key = validator_consensus_key_handle(&address)
-                .get(storage, current_epoch, params)
+                .get(storage, next_epoch, params)
                 .unwrap()
                 .unwrap();
             tracing::debug!(
@@ -2303,6 +2359,9 @@ where
                     }
                     let change: token::Change =
                         BorshDeserialize::try_from_slice(&val_bytes).ok()?;
+                    if change.is_zero() {
+                        return None;
+                    }
                     return Some((bond_id, start, change));
                 }
             }
@@ -2316,24 +2375,33 @@ where
     let mut raw_unbonds = storage_api::iter_prefix_bytes(storage, &prefix)?
         .filter_map(|result| {
             if let Ok((key, val_bytes)) = result {
-                if let Some((_bond_id, _start, withdraw)) = is_unbond_key(&key)
-                {
-                    if let Some((bond_id, start)) = is_bond_key(&key) {
-                        if source.is_some()
-                            && source.as_ref().unwrap() != &bond_id.source
-                        {
-                            return None;
-                        }
-                        if validator.is_some()
-                            && validator.as_ref().unwrap() != &bond_id.validator
-                        {
-                            return None;
-                        }
-                        let amount: token::Amount =
-                            BorshDeserialize::try_from_slice(&val_bytes)
-                                .ok()?;
-                        return Some((bond_id, start, withdraw, amount));
+                if let Some((bond_id, start, withdraw)) = is_unbond_key(&key) {
+                    if source.is_some()
+                        && source.as_ref().unwrap() != &bond_id.source
+                    {
+                        return None;
                     }
+                    if validator.is_some()
+                        && validator.as_ref().unwrap() != &bond_id.validator
+                    {
+                        return None;
+                    }
+                    match (source.clone(), validator.clone()) {
+                        (None, Some(validator)) => {
+                            if bond_id.validator != validator {
+                                return None;
+                            }
+                        }
+                        (Some(owner), None) => {
+                            if owner != bond_id.source {
+                                return None;
+                            }
+                        }
+                        _ => {}
+                    }
+                    let amount: token::Amount =
+                        BorshDeserialize::try_from_slice(&val_bytes).ok()?;
+                    return Some((bond_id, start, withdraw, amount));
                 }
             }
             None
@@ -2416,6 +2484,7 @@ where
 
     let bonds = find_bonds(storage, &source, &validator)?
         .into_iter()
+        .filter(|(_start, change)| *change > token::Change::default())
         .map(|(start, change)| {
             make_bond_details(
                 storage,
@@ -2530,4 +2599,145 @@ fn make_unbond_details<S>(
         amount,
         slashed_amount,
     }
+}
+
+/// Tally a running sum of the fraction of rewards owed to each validator in
+/// the consensus set. This is used to keep track of the rewards due to each
+/// consensus validator over the lifetime of an epoch.
+pub fn log_block_rewards<S>(
+    storage: &mut S,
+    epoch: impl Into<Epoch>,
+    proposer_address: &Address,
+    votes: Vec<VoteInfo>,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    // The votes correspond to the last committed block (n-1 if we are
+    // finalizing block n)
+
+    let epoch: Epoch = epoch.into();
+    let params = read_pos_params(storage)?;
+    let consensus_validators = consensus_validator_set_handle().at(&epoch);
+
+    // Get total stake of the consensus validator set
+    let mut total_consensus_stake = token::Amount::default();
+    for validator in consensus_validators.iter(storage)? {
+        let (
+            NestedSubKey::Data {
+                key: amount,
+                nested_sub_key: _,
+            },
+            _address,
+        ) = validator?;
+        total_consensus_stake += amount;
+    }
+
+    // Get set of signing validator addresses and the combined stake of
+    // these signers
+    let mut signer_set: HashSet<Address> = HashSet::new();
+    let mut total_signing_stake = token::Amount::default();
+    for VoteInfo {
+        validator_address,
+        validator_vp,
+    } in votes
+    {
+        if validator_vp == 0 {
+            continue;
+        }
+
+        let stake_from_deltas =
+            read_validator_stake(storage, &params, &validator_address, epoch)?
+                .unwrap_or_default();
+
+        // Ensure TM stake updates properly with a debug_assert
+        if cfg!(debug_assertions) {
+            debug_assert_eq!(
+                into_tm_voting_power(
+                    params.tm_votes_per_token,
+                    u128::try_from(stake_from_deltas).unwrap() as u64,
+                ),
+                i64::try_from(validator_vp).unwrap_or_default(),
+            );
+        }
+
+        signer_set.insert(validator_address);
+        total_signing_stake += stake_from_deltas;
+    }
+
+    // Get the block rewards coefficients (proposing, signing/voting,
+    // consensus set status)
+    let rewards_calculator = PosRewardsCalculator {
+        proposer_reward: params.block_proposer_reward,
+        signer_reward: params.block_vote_reward,
+        signing_stake: u128::try_from(total_signing_stake).unwrap() as u64,
+        total_stake: u128::try_from(total_consensus_stake).unwrap() as u64,
+    };
+    let coeffs = rewards_calculator
+        .get_reward_coeffs()
+        .map_err(InflationError::Rewards)
+        .into_storage_result()?;
+    tracing::debug!(
+        "PoS rewards coefficients {coeffs:?}, inputs: {rewards_calculator:?}."
+    );
+
+    // println!(
+    //     "TOTAL SIGNING STAKE (LOGGING BLOCK REWARDS) = {}",
+    //     signing_stake
+    // );
+
+    // Compute the fractional block rewards for each consensus validator and
+    // update the reward accumulators
+    let consensus_stake_unscaled: Decimal =
+        total_consensus_stake.as_dec_unscaled();
+    let signing_stake_unscaled: Decimal = total_signing_stake.as_dec_unscaled();
+    let mut values: HashMap<Address, Decimal> = HashMap::new();
+    for validator in consensus_validators.iter(storage)? {
+        let (
+            NestedSubKey::Data {
+                key: stake,
+                nested_sub_key: _,
+            },
+            address,
+        ) = validator?;
+
+        // TODO:
+        // When below-threshold validator set is added, this shouldn't be needed
+        // anymore since some minimal stake will be required to be in at least
+        // the consensus set
+        if stake == token::Amount::default() {
+            continue;
+        }
+
+        let mut rewards_frac = Decimal::default();
+        let stake_unscaled: Decimal = stake.as_dec_unscaled();
+        // println!(
+        //     "NAMADA VALIDATOR STAKE (LOGGING BLOCK REWARDS) OF EPOCH {} =
+        // {}",     epoch, stake
+        // );
+
+        // Proposer reward
+        if address == *proposer_address {
+            rewards_frac += coeffs.proposer_coeff;
+        }
+        // Signer reward
+        if signer_set.contains(&address) {
+            let signing_frac = stake_unscaled / signing_stake_unscaled;
+            rewards_frac += coeffs.signer_coeff * signing_frac;
+        }
+        // Consensus validator reward
+        rewards_frac += coeffs.active_val_coeff
+            * (stake_unscaled / consensus_stake_unscaled);
+
+        // Update the rewards accumulator
+        let prev = rewards_accumulator_handle()
+            .get(storage, &address)?
+            .unwrap_or_default();
+        values.insert(address, prev + rewards_frac);
+    }
+    for (address, value) in values.into_iter() {
+        rewards_accumulator_handle().insert(storage, address, value)?;
+    }
+
+    Ok(())
 }

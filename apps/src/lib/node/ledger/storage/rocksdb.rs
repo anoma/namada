@@ -1,7 +1,6 @@
 //! The persistent storage in RocksDB.
 //!
 //! The current storage tree is:
-//! - `chain_id`
 //! - `height`: the last committed block height
 //! - `tx_queue`: txs to be decrypted in the next block
 //! - `pred`: predecessor values of the top-level keys of the same name
@@ -15,6 +14,7 @@
 //!   - `next_epoch_min_start_time`
 //! - `subspace`: accounts sub-spaces
 //!   - `{address}/{dyn}`: any byte data associated with accounts
+//! - `results`: block results
 //! - `h`: for each block at height `h`:
 //!   - `tree`: merkle tree
 //!     - `root`: root hash
@@ -31,6 +31,7 @@ use std::cmp::Ordering;
 use std::fs::File;
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::Mutex;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
@@ -41,9 +42,11 @@ use namada::ledger::storage::{
 };
 use namada::types::internal::TxQueue;
 use namada::types::storage::{
-    BlockHeight, BlockResults, Header, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
+    BlockHeight, BlockResults, Epoch, Epochs, Header, Key, KeySeg,
+    KEY_SEGMENT_SEPARATOR,
 };
 use namada::types::time::DateTimeUtc;
+use rayon::prelude::*;
 use rocksdb::{
     BlockBasedOptions, Direction, FlushOptions, IteratorMode, Options,
     ReadOptions, SliceTransform, WriteBatch, WriteOptions,
@@ -242,10 +245,14 @@ impl RocksDB {
     }
 
     /// Dump last known block
-    pub fn dump_last_block(&self, out_file_path: std::path::PathBuf) {
+    pub fn dump_last_block(
+        &self,
+        out_file_path: std::path::PathBuf,
+        historic: bool,
+    ) {
         use std::io::Write;
 
-        // Fine the last block height
+        // Find the last block height
         let height: BlockHeight = types::decode(
             self.0
                 .get("height")
@@ -273,34 +280,156 @@ impl RocksDB {
         println!("Will write to {} ...", full_path.to_string_lossy());
 
         let mut dump_it = |prefix: String| {
-            for next in self.0.iterator(IteratorMode::From(
-                prefix.as_bytes(),
-                Direction::Forward,
-            )) {
-                match next {
-                    Err(e) => {
-                        eprintln!(
-                            "Something failed in a \"{prefix}\" iterator: {e}"
-                        )
-                    }
-                    Ok((raw_key, raw_val)) => {
-                        let key = std::str::from_utf8(&raw_key)
-                            .expect("All keys should be valid UTF-8 strings");
-                        let val = HEXLOWER.encode(&raw_val);
-                        let bytes = format!("\"{key}\" = \"{val}\"\n");
-                        file.write_all(bytes.as_bytes())
-                            .expect("Unable to write to output file");
-                    }
-                };
+            let mut read_opts = ReadOptions::default();
+            read_opts.set_total_order_seek(true);
+
+            let mut upper_prefix = prefix.clone().into_bytes();
+            if let Some(last) = upper_prefix.pop() {
+                upper_prefix.push(last + 1);
+            }
+            read_opts.set_iterate_upper_bound(upper_prefix);
+
+            let iter = self.0.iterator_opt(
+                IteratorMode::From(prefix.as_bytes(), Direction::Forward),
+                read_opts,
+            );
+
+            for (key, raw_val, _gas) in PersistentPrefixIterator(
+                PrefixIterator::new(iter, String::default()),
+                // Empty string to prevent prefix stripping, the prefix is
+                // already in the enclosed iterator
+            ) {
+                let val = HEXLOWER.encode(&raw_val);
+                let bytes = format!("\"{key}\" = \"{val}\"\n");
+                file.write_all(bytes.as_bytes())
+                    .expect("Unable to write to output file");
             }
         };
 
-        // Dump accounts subspace and block height data
+        if historic {
+            // Dump the keys prepended with the selected block height (includes
+            // subspace diff keys)
+            dump_it(height.raw());
+        }
+
         dump_it("subspace".to_string());
-        let block_prefix = format!("{}/", height.raw());
-        dump_it(block_prefix);
 
         println!("Done writing to {}", full_path.to_string_lossy());
+    }
+
+    /// Rollback to previous block. Given the inner working of tendermint
+    /// rollback and of the key structure of Namada, calling rollback more than
+    /// once without restarting the chain results in a single rollback.
+    pub fn rollback(
+        &mut self,
+        tendermint_block_height: BlockHeight,
+    ) -> Result<()> {
+        let last_block = self.read_last_block()?.ok_or(Error::DBError(
+            "Missing last block in storage".to_string(),
+        ))?;
+        tracing::info!(
+            "Namada last block height: {}, Tendermint last block height: {}",
+            last_block.height,
+            tendermint_block_height
+        );
+
+        // If the block height to which tendermint rolled back matches the
+        // Namada height, there's no need to rollback
+        if tendermint_block_height == last_block.height {
+            tracing::info!(
+                "Namada height already matches the rollback Tendermint \
+                 height, no need to rollback."
+            );
+            return Ok(());
+        }
+
+        let mut batch = WriteBatch::default();
+        let previous_height =
+            BlockHeight::from(u64::from(last_block.height) - 1);
+
+        // Revert the non-height-prepended metadata storage keys which get
+        // updated with every block. Because of the way we save these
+        // three keys in storage we can only perform one rollback before
+        // restarting the chain
+        tracing::info!("Reverting non-height-prepended metadata keys");
+        batch.put("height", types::encode(&previous_height));
+        for metadata_key in [
+            "next_epoch_min_start_height",
+            "next_epoch_min_start_time",
+            "tx_queue",
+        ] {
+            let previous_key = format!("pred/{}", metadata_key);
+            let previous_value = self
+                .0
+                .get(previous_key.as_bytes())
+                .map_err(|e| Error::DBError(e.to_string()))?
+                .ok_or(Error::UnknownKey { key: previous_key })?;
+
+            batch.put(metadata_key, previous_value);
+            // NOTE: we cannot restore the "pred/" keys themselves since we
+            // don't have their predecessors in storage, but there's no need to
+            // since we cannot do more than one rollback anyway because of
+            // Tendermint.
+        }
+
+        // Delete block results for the last block
+        tracing::info!("Removing last block results");
+        batch.delete(format!("results/{}", last_block.height));
+
+        // Execute next step in parallel
+        let batch = Mutex::new(batch);
+
+        tracing::info!("Restoring previous hight subspace diffs");
+        self.iter_prefix(&Key::default())
+            .par_bridge()
+            .try_for_each(|(key, _value, _gas)| -> Result<()> {
+                // Restore previous height diff if present, otherwise delete the
+                // subspace key
+
+                // Add the prefix back since `iter_prefix` has removed it
+                let prefixed_key = format!("subspace/{}", key);
+
+                match self.read_subspace_val_with_height(
+                    &Key::from(key.to_db_key()),
+                    previous_height,
+                    last_block.height,
+                )? {
+                    Some(previous_value) => {
+                        batch.lock().unwrap().put(&prefixed_key, previous_value)
+                    }
+                    None => batch.lock().unwrap().delete(&prefixed_key),
+                }
+
+                Ok(())
+            })?;
+
+        // Delete any height-prepended key, including subspace diff keys
+        let mut batch = batch.into_inner().unwrap();
+        let prefix = last_block.height.to_string();
+        let mut read_opts = ReadOptions::default();
+        read_opts.set_total_order_seek(true);
+        let mut upper_prefix = prefix.clone().into_bytes();
+        if let Some(last) = upper_prefix.pop() {
+            upper_prefix.push(last + 1);
+        }
+        read_opts.set_iterate_upper_bound(upper_prefix);
+
+        let iter = self.0.iterator_opt(
+            IteratorMode::From(prefix.as_bytes(), Direction::Forward),
+            read_opts,
+        );
+        tracing::info!("Deleting keys prepended with the last height");
+        for (key, _value, _gas) in PersistentPrefixIterator(
+            // Empty prefix string to prevent stripping
+            PrefixIterator::new(iter, String::default()),
+        ) {
+            batch.delete(key);
+        }
+
+        // Write the batch and persist changes to disk
+        tracing::info!("Flushing restored state to disk");
+        self.exec_batch(batch)?;
+        self.flush(true)
     }
 }
 
@@ -488,7 +617,11 @@ impl DB for RocksDB {
         }
     }
 
-    fn write_block(&mut self, state: BlockStateWrite) -> Result<()> {
+    fn write_block(
+        &mut self,
+        state: BlockStateWrite,
+        is_full_commit: bool,
+    ) -> Result<()> {
         let mut batch = WriteBatch::default();
         let BlockStateWrite {
             merkle_tree_stores,
@@ -548,23 +681,25 @@ impl DB for RocksDB {
                 .push(&"tree".to_owned())
                 .map_err(Error::KeyError)?;
             for st in StoreType::iter() {
-                let prefix_key = prefix_key
-                    .push(&st.to_string())
-                    .map_err(Error::KeyError)?;
-                let root_key = prefix_key
-                    .push(&"root".to_owned())
-                    .map_err(Error::KeyError)?;
-                batch.put(
-                    root_key.to_string(),
-                    types::encode(merkle_tree_stores.root(st)),
-                );
-                let store_key = prefix_key
-                    .push(&"store".to_owned())
-                    .map_err(Error::KeyError)?;
-                batch.put(
-                    store_key.to_string(),
-                    merkle_tree_stores.store(st).encode(),
-                );
+                if *st == StoreType::Base || is_full_commit {
+                    let prefix_key = prefix_key
+                        .push(&st.to_string())
+                        .map_err(Error::KeyError)?;
+                    let root_key = prefix_key
+                        .push(&"root".to_owned())
+                        .map_err(Error::KeyError)?;
+                    batch.put(
+                        root_key.to_string(),
+                        types::encode(merkle_tree_stores.root(st)),
+                    );
+                    let store_key = prefix_key
+                        .push(&"store".to_owned())
+                        .map_err(Error::KeyError)?;
+                    batch.put(
+                        store_key.to_string(),
+                        merkle_tree_stores.store(st).encode(),
+                    );
+                }
             }
         }
         // Block header
@@ -644,12 +779,30 @@ impl DB for RocksDB {
     fn read_merkle_tree_stores(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<MerkleTreeStoresRead>> {
-        let mut merkle_tree_stores = MerkleTreeStoresRead::default();
+    ) -> Result<Option<(BlockHeight, MerkleTreeStoresRead)>> {
+        // Get the latest height at which the tree stores were written
         let height_key = Key::from(height.to_db_key());
-        let tree_key = height_key
+        let key = height_key
+            .push(&"pred_epochs".to_owned())
+            .expect("Cannot obtain a storage key");
+        let pred_epochs: Epochs = match self
+            .0
+            .get(key.to_string())
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            Some(b) => types::decode(b).map_err(Error::CodingError)?,
+            None => return Ok(None),
+        };
+        // Read the tree at the first height if no epoch update
+        let stored_height = match pred_epochs.get_epoch_start_height(height) {
+            Some(BlockHeight(0)) | None => BlockHeight(1),
+            Some(h) => h,
+        };
+
+        let tree_key = Key::from(stored_height.to_db_key())
             .push(&"tree".to_owned())
             .map_err(Error::KeyError)?;
+        let mut merkle_tree_stores = MerkleTreeStoresRead::default();
         for st in StoreType::iter() {
             let prefix_key =
                 tree_key.push(&st.to_string()).map_err(Error::KeyError)?;
@@ -682,7 +835,7 @@ impl DB for RocksDB {
                 None => return Ok(None),
             }
         }
-        Ok(Some(merkle_tree_stores))
+        Ok(Some((stored_height, merkle_tree_stores)))
     }
 
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>> {
@@ -923,7 +1076,7 @@ impl DB for RocksDB {
         // Check the length of previous value, if any
         let prev_len = match self
             .0
-            .get(key.to_string())
+            .get(subspace_key.to_string())
             .map_err(|e| Error::DBError(e.into_string()))?
         {
             Some(prev_value) => {
@@ -946,6 +1099,38 @@ impl DB for RocksDB {
 
         Ok(prev_len)
     }
+
+    fn prune_merkle_tree_stores(
+        &mut self,
+        epoch: Epoch,
+        pred_epochs: &Epochs,
+    ) -> Result<()> {
+        match pred_epochs.get_start_height_of_epoch(epoch) {
+            Some(height) => {
+                let mut batch = WriteBatch::default();
+                let prefix_key = Key::from(height.to_db_key())
+                    .push(&"tree".to_owned())
+                    .map_err(Error::KeyError)?;
+                for st in StoreType::iter() {
+                    if *st != StoreType::Base {
+                        let prefix_key = prefix_key
+                            .push(&st.to_string())
+                            .map_err(Error::KeyError)?;
+                        let root_key = prefix_key
+                            .push(&"root".to_owned())
+                            .map_err(Error::KeyError)?;
+                        batch.delete(root_key.to_string());
+                        let store_key = prefix_key
+                            .push(&"store".to_owned())
+                            .map_err(Error::KeyError)?;
+                        batch.delete(store_key.to_string());
+                    }
+                }
+                self.exec_batch(batch)
+            }
+            None => Ok(()),
+        }
+    }
 }
 
 impl<'iter> DBIter<'iter> for RocksDB {
@@ -955,7 +1140,7 @@ impl<'iter> DBIter<'iter> for RocksDB {
         &'iter self,
         prefix: &Key,
     ) -> PersistentPrefixIterator<'iter> {
-        iter_prefix(self, prefix)
+        iter_subspace_prefix(self, prefix)
     }
 
     fn iter_results(&'iter self) -> PersistentPrefixIterator<'iter> {
@@ -977,15 +1162,47 @@ impl<'iter> DBIter<'iter> for RocksDB {
         );
         PersistentPrefixIterator(PrefixIterator::new(iter, db_prefix))
     }
+
+    fn iter_old_diffs(
+        &'iter self,
+        height: BlockHeight,
+    ) -> PersistentPrefixIterator<'iter> {
+        iter_diffs_prefix(self, height, true)
+    }
+
+    fn iter_new_diffs(
+        &'iter self,
+        height: BlockHeight,
+    ) -> PersistentPrefixIterator<'iter> {
+        iter_diffs_prefix(self, height, false)
+    }
 }
 
-fn iter_prefix<'iter>(
+fn iter_subspace_prefix<'iter>(
     db: &'iter RocksDB,
     prefix: &Key,
 ) -> PersistentPrefixIterator<'iter> {
     let db_prefix = "subspace/".to_owned();
     let prefix = format!("{}{}", db_prefix, prefix);
+    iter_prefix(db, db_prefix, prefix)
+}
 
+fn iter_diffs_prefix(
+    db: &RocksDB,
+    height: BlockHeight,
+    is_old: bool,
+) -> PersistentPrefixIterator {
+    let prefix = if is_old { "old" } else { "new" };
+    let db_prefix = format!("{}/diffs/{}/", height.0.raw(), prefix);
+    // get keys without a prefix
+    iter_prefix(db, db_prefix.clone(), db_prefix)
+}
+
+fn iter_prefix(
+    db: &RocksDB,
+    db_prefix: String,
+    prefix: String,
+) -> PersistentPrefixIterator {
     let mut read_opts = ReadOptions::default();
     // don't use the prefix bloom filter
     read_opts.set_total_order_seek(true);
@@ -1161,7 +1378,7 @@ mod test {
             tx_queue: &tx_queue,
         };
 
-        db.write_block(block).unwrap();
+        db.write_block(block, true).unwrap();
 
         let _state = db
             .read_last_block()
@@ -1175,36 +1392,97 @@ mod test {
         let mut db = open(dir.path(), None).unwrap();
 
         let key = Key::parse("test").unwrap();
+        let batch_key = Key::parse("batch").unwrap();
 
         let mut batch = RocksDB::batch();
         let last_height = BlockHeight(100);
         db.batch_write_subspace_val(
             &mut batch,
             last_height,
-            &key,
+            &batch_key,
             vec![1_u8, 1, 1, 1],
         )
         .unwrap();
         db.exec_batch(batch.0).unwrap();
+
+        db.write_subspace_val(last_height, &key, vec![1_u8, 1, 1, 0])
+            .unwrap();
 
         let mut batch = RocksDB::batch();
         let last_height = BlockHeight(111);
         db.batch_write_subspace_val(
             &mut batch,
             last_height,
-            &key,
+            &batch_key,
             vec![2_u8, 2, 2, 2],
         )
         .unwrap();
         db.exec_batch(batch.0).unwrap();
 
+        db.write_subspace_val(last_height, &key, vec![2_u8, 2, 2, 0])
+            .unwrap();
+
+        let prev_value = db
+            .read_subspace_val_with_height(
+                &batch_key,
+                BlockHeight(100),
+                last_height,
+            )
+            .expect("read should succeed");
+        assert_eq!(prev_value, Some(vec![1_u8, 1, 1, 1]));
         let prev_value = db
             .read_subspace_val_with_height(&key, BlockHeight(100), last_height)
             .expect("read should succeed");
-        assert_eq!(prev_value, Some(vec![1_u8, 1, 1, 1]));
+        assert_eq!(prev_value, Some(vec![1_u8, 1, 1, 0]));
 
+        let updated_value = db
+            .read_subspace_val_with_height(
+                &batch_key,
+                BlockHeight(111),
+                last_height,
+            )
+            .expect("read should succeed");
+        assert_eq!(updated_value, Some(vec![2_u8, 2, 2, 2]));
+        let updated_value = db
+            .read_subspace_val_with_height(&key, BlockHeight(111), last_height)
+            .expect("read should succeed");
+        assert_eq!(updated_value, Some(vec![2_u8, 2, 2, 0]));
+
+        let latest_value = db
+            .read_subspace_val(&batch_key)
+            .expect("read should succeed");
+        assert_eq!(latest_value, Some(vec![2_u8, 2, 2, 2]));
         let latest_value =
             db.read_subspace_val(&key).expect("read should succeed");
-        assert_eq!(latest_value, Some(vec![2_u8, 2, 2, 2]));
+        assert_eq!(latest_value, Some(vec![2_u8, 2, 2, 0]));
+
+        let mut batch = RocksDB::batch();
+        let last_height = BlockHeight(222);
+        db.batch_delete_subspace_val(&mut batch, last_height, &batch_key)
+            .unwrap();
+        db.exec_batch(batch.0).unwrap();
+
+        db.delete_subspace_val(last_height, &key).unwrap();
+
+        let deleted_value = db
+            .read_subspace_val_with_height(
+                &batch_key,
+                BlockHeight(222),
+                last_height,
+            )
+            .expect("read should succeed");
+        assert_eq!(deleted_value, None);
+        let deleted_value = db
+            .read_subspace_val_with_height(&key, BlockHeight(222), last_height)
+            .expect("read should succeed");
+        assert_eq!(deleted_value, None);
+
+        let latest_value = db
+            .read_subspace_val(&batch_key)
+            .expect("read should succeed");
+        assert_eq!(latest_value, None);
+        let latest_value =
+            db.read_subspace_val(&key).expect("read should succeed");
+        assert_eq!(latest_value, None);
     }
 }

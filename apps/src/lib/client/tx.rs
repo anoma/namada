@@ -5,12 +5,12 @@ use std::env;
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
-use std::ops::Deref;
 use std::path::PathBuf;
 
 use async_std::io::prelude::WriteExt;
 use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
+use data_encoding::HEXLOWER_PERMISSIVE;
 use itertools::Either::*;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::consensus::{BranchId, TestNetwork};
@@ -43,7 +43,7 @@ use namada::ledger::pos::{CommissionPair, PosParams};
 use namada::proto::Tx;
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::governance::{
-    OfflineProposal, OfflineVote, Proposal, ProposalVote,
+    OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
 use namada::types::key::*;
 use namada::types::masp::{PaymentAddress, TransferTarget};
@@ -56,7 +56,7 @@ use namada::types::token::{
     TX_KEY_PREFIX,
 };
 use namada::types::transaction::governance::{
-    InitProposalData, VoteProposalData,
+    InitProposalData, ProposalType, VoteProposalData,
 };
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{storage, token};
@@ -67,17 +67,15 @@ use sha2::Digest;
 use tokio::time::{Duration, Instant};
 
 use super::rpc;
-use super::types::ShieldedTransferContext;
 use crate::cli::args::InputAmount;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::{
-    format_denominated_amount, make_asset_type, query_conversion,
+    format_denominated_amount, make_asset_type, query_conversion, query_epoch,
     query_storage_value, validate_amount,
 };
 use crate::client::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
 use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
-use crate::client::types::ParsedTxTransferArgs;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
@@ -107,13 +105,27 @@ const ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: &str =
 /// and `/applied` ABCI query endpoints.
 const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 
+/// Unzip an option of a pair into a pair of options
+/// TODO: use `Option::unzip` stabilized in Rust 1.66.0
+fn unzip_option<T, U>(opt: Option<(T, U)>) -> (Option<T>, Option<U>) {
+    match opt {
+        Some((a, b)) => (Some(a), Some(b)),
+        None => (None, None),
+    }
+}
+
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let tx_code = ctx.read_wasm(args.code_path);
     let data = args.data_path.map(|data_path| {
         std::fs::read(data_path).expect("Expected a file at given data path")
     });
-    let tx = Tx::new(tx_code, data);
-    let (ctx, initialized_accounts) = process_tx(
+    let tx = Tx::new(
+        tx_code,
+        data,
+        ctx.config.ledger.chain_id.clone(),
+        args.tx.expiration,
+    );
+    let (ctx, result) = process_tx(
         ctx,
         &args.tx,
         tx,
@@ -122,7 +134,8 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
         false,
     )
     .await;
-    save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
+    save_initialized_accounts(ctx, &args.tx, result.initialized_accounts())
+        .await;
 }
 
 pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
@@ -175,7 +188,12 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
     let data = UpdateVp { addr, vp_code };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let tx = Tx::new(tx_code, Some(data));
+    let tx = Tx::new(
+        tx_code,
+        Some(data),
+        ctx.config.ledger.chain_id.clone(),
+        args.tx.expiration,
+    );
     process_tx(
         ctx,
         &args.tx,
@@ -208,8 +226,13 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let tx = Tx::new(tx_code, Some(data));
-    let (ctx, initialized_accounts) = process_tx(
+    let tx = Tx::new(
+        tx_code,
+        Some(data),
+        ctx.config.ledger.chain_id.clone(),
+        args.tx.expiration,
+    );
+    let (ctx, result) = process_tx(
         ctx,
         &args.tx,
         tx,
@@ -218,7 +241,8 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
         false,
     )
     .await;
-    save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
+    save_initialized_accounts(ctx, &args.tx, result.initialized_accounts())
+        .await;
 }
 
 pub async fn submit_init_validator(
@@ -341,8 +365,13 @@ pub async fn submit_init_validator(
         validator_vp_code,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
-    let tx = Tx::new(tx_code, Some(data));
-    let (mut ctx, initialized_accounts) = process_tx(
+    let tx = Tx::new(
+        tx_code,
+        Some(data),
+        ctx.config.ledger.chain_id.clone(),
+        tx_args.expiration,
+    );
+    let (mut ctx, result) = process_tx(
         ctx,
         &tx_args,
         tx,
@@ -352,51 +381,50 @@ pub async fn submit_init_validator(
     )
     .await;
     if !tx_args.dry_run {
-        let (validator_address_alias, validator_address) =
-            match &initialized_accounts[..] {
-                // There should be 1 account for the validator itself
-                [validator_address] => {
-                    let validator_address_alias = match tx_args
-                        .initialized_account_alias
-                    {
-                        Some(alias) => alias,
-                        None => {
-                            print!(
-                                "Choose an alias for the validator address: "
-                            );
-                            io::stdout().flush().await.unwrap();
-                            let mut alias = String::new();
-                            io::stdin().read_line(&mut alias).await.unwrap();
-                            alias.trim().to_owned()
-                        }
-                    };
-                    let validator_address_alias =
-                        if validator_address_alias.is_empty() {
-                            println!(
-                                "Empty alias given, using {} as the alias.",
-                                validator_address.encode()
-                            );
-                            validator_address.encode()
-                        } else {
-                            validator_address_alias
-                        };
-                    if let Some(new_alias) = ctx.wallet.add_address(
-                        validator_address_alias.clone(),
-                        validator_address.clone(),
-                    ) {
+        let (validator_address_alias, validator_address) = match &result
+            .initialized_accounts()[..]
+        {
+            // There should be 1 account for the validator itself
+            [validator_address] => {
+                let validator_address_alias = match tx_args
+                    .initialized_account_alias
+                {
+                    Some(alias) => alias,
+                    None => {
+                        print!("Choose an alias for the validator address: ");
+                        io::stdout().flush().await.unwrap();
+                        let mut alias = String::new();
+                        io::stdin().read_line(&mut alias).await.unwrap();
+                        alias.trim().to_owned()
+                    }
+                };
+                let validator_address_alias =
+                    if validator_address_alias.is_empty() {
                         println!(
-                            "Added alias {} for address {}.",
-                            new_alias,
+                            "Empty alias given, using {} as the alias.",
                             validator_address.encode()
                         );
-                    }
-                    (validator_address_alias, validator_address.clone())
+                        validator_address.encode()
+                    } else {
+                        validator_address_alias
+                    };
+                if let Some(new_alias) = ctx.wallet.add_address(
+                    validator_address_alias.clone(),
+                    validator_address.clone(),
+                ) {
+                    println!(
+                        "Added alias {} for address {}.",
+                        new_alias,
+                        validator_address.encode()
+                    );
                 }
-                _ => {
-                    eprintln!("Expected two accounts to be created");
-                    safe_exit(1)
-                }
-            };
+                (validator_address_alias, validator_address.clone())
+            }
+            _ => {
+                eprintln!("Expected one account to be created");
+                safe_exit(1)
+            }
+        };
         // add validator address and keys to the wallet
         ctx.wallet
             .add_validator_data(validator_address, validator_keys);
@@ -1336,24 +1364,39 @@ fn convert_amount(
 /// transactions balanced, but it is understood that transparent account changes
 /// are effected only by the amounts and signatures specified by the containing
 /// Transfer object.
-async fn gen_shielded_transfer<C>(
-    ctx: &mut C,
-    args: &ParsedTxTransferArgs,
+async fn gen_shielded_transfer(
+    ctx: &mut Context,
+    client: &HttpClient,
+    args: &args::TxTransfer,
     shielded_gas: bool,
-) -> Result<Option<(Transaction, TransactionMetadata)>, builder::Error>
-where
-    C: ShieldedTransferContext,
-{
-    let spending_key = args.source.spending_key().map(|x| x.into());
-    let payment_address = args.target.payment_address();
+) -> Result<Option<(Transaction, TransactionMetadata, Epoch)>, builder::Error> {
+    // No shielded components are needed when neither source nor destination
+    // are shielded
+    let spending_key = ctx.get_cached(&args.source).spending_key();
+    let payment_address = ctx.get(&args.target).payment_address();
+    // No shielded components are needed when neither source nor
+    // destination are shielded
+    if spending_key.is_none() && payment_address.is_none() {
+        return Ok(None);
+    }
+    // We want to fund our transaction solely from supplied spending key
+    let spending_key = spending_key.map(|x| x.into());
+    let spending_keys: Vec<_> = spending_key.into_iter().collect();
+    // Load the current shielded context given the spending key we
+    // possess
+    let _ = ctx.shielded.load();
+    ctx.shielded
+        .fetch(&args.tx.ledger_address, &spending_keys, &[])
+        .await;
+    // Save the update state so that future fetches can be
+    // short-circuited
+    let _ = ctx.shielded.save();
+
     // Determine epoch in which to submit potential shielded transaction
-    let epoch = ctx.query_epoch(args.tx.ledger_address.clone()).await;
+    let epoch = query_epoch(client).await;
     // Context required for storing which notes are in the source's possesion
     let consensus_branch_id = BranchId::Sapling;
     let memo: Option<Memo> = None;
-    // Transactions with transparent input and shielded output
-    // may be affected if constructed close to epoch boundary
-    let mut epoch_sensitive: bool = false;
 
     // Now we build up the transaction within this object
     let mut builder = Builder::<TestNetwork, OsRng>::new(0u32);
@@ -1376,7 +1419,7 @@ where
         // when MASP source is used. This amount should be <= `u64::MAX`.
         let (_, fee) = convert_amount(
             epoch,
-            &args.tx.fee_token,
+            &ctx.get(&args.tx.fee_token),
             MaspDenom::Zero.denominate(&fee.amount),
             MaspDenom::Zero,
         );
@@ -1388,7 +1431,6 @@ where
         builder.set_fee(Amount::zero())?;
         Amount::zero()
     };
-    let mut epoch_transitions = vec![];
     // break up a transfer into a number of transfers with suitable
     // denominations
     let InputAmount::Validated(amt) = args.amount else {
@@ -1401,7 +1443,7 @@ where
         }
         // Convert transaction amount into MASP types
         let (asset_type, amount) =
-            convert_amount(epoch, &args.token, denom_amount, denom);
+            convert_amount(epoch, &ctx.get(&args.token), denom_amount, denom);
 
         // If there are shielded inputs
         if let Some(sk) = spending_key {
@@ -1414,6 +1456,7 @@ where
             };
             // Locate unspent notes that can help us meet the transaction amount
             let (_, unspent_notes, used_convs) = ctx
+                .shielded
                 .collect_unspent_notes(
                     args.tx.ledger_address.clone(),
                     &to_viewing_key(&sk).vk,
@@ -1441,6 +1484,9 @@ where
                 }
             }
         } else {
+            // No transfer fees come from the shielded transaction for non-MASP
+            // sources
+            builder.set_fee(Amount::zero())?;
             // We add a dummy UTXO to our transaction, but only the source of
             // the parent Transfer object is used to validate fund
             // availability
@@ -1454,7 +1500,6 @@ where
             let hash =
                 ripemd160::Ripemd160::digest(&sha2::Sha256::digest(&secp_pk));
             let script = TransparentAddress::PublicKey(hash.into()).script();
-            epoch_sensitive = true;
             builder.add_transparent_input(
                 secp_sk,
                 OutPoint::new([0u8; 32], 0),
@@ -1478,11 +1523,10 @@ where
                 memo.clone(),
             )?;
         } else {
-            epoch_sensitive = false;
             // Embed the transparent target address into the shielded
             // transaction so that it can be signed
-            let target_enc = args
-                .target
+            let target = ctx.get(&args.target);
+            let target_enc = target
                 .address()
                 .expect("target address should be transparent")
                 .try_to_vec()
@@ -1496,86 +1540,18 @@ where
                 denom_amount,
             )?;
         }
-
-        if epoch_sensitive {
-            let new_epoch =
-                ctx.query_epoch(args.tx.ledger_address.clone()).await;
-
-            // If epoch has changed, recalculate shielded outputs to match new
-            // epoch
-            if new_epoch != epoch {
-                // Hack: build new shielded transfer with updated outputs
-                let mut replay_builder =
-                    Builder::<TestNetwork, OsRng>::new(0u32);
-                replay_builder.set_fee(Amount::zero())?;
-                let ovk_opt = spending_key.map(|x| x.expsk.ovk);
-                let (new_asset_type, _) =
-                    convert_amount(new_epoch, &args.token, denom_amount, denom);
-                replay_builder.add_sapling_output(
-                    ovk_opt,
-                    payment_address.unwrap().into(),
-                    new_asset_type,
-                    denom_amount,
-                    memo.clone(),
-                )?;
-
-                let secp_sk = secp256k1::SecretKey::from_slice(&[0xcd; 32])
-                    .expect("secret key");
-                let secp_ctx =
-                    secp256k1::Secp256k1::<secp256k1::SignOnly>::gen_new();
-                let secp_pk =
-                    secp256k1::PublicKey::from_secret_key(&secp_ctx, &secp_sk)
-                        .serialize();
-                let hash = ripemd160::Ripemd160::digest(&sha2::Sha256::digest(
-                    &secp_pk,
-                ));
-                let script =
-                    TransparentAddress::PublicKey(hash.into()).script();
-                replay_builder.add_transparent_input(
-                    secp_sk,
-                    OutPoint::new([0u8; 32], 0),
-                    TxOut {
-                        asset_type: new_asset_type,
-                        value: denom_amount,
-                        script_pubkey: script,
-                    },
-                )?;
-                let (replay_tx, _) =
-                    replay_builder.build(consensus_branch_id, &prover)?;
-                epoch_transitions.push((
-                    replay_tx,
-                    asset_type,
-                    new_asset_type,
-                    denom_amount,
-                ));
-            }
-        }
     }
     // Build and return the constructed transaction
-    let mut tx = builder.build(consensus_branch_id, &prover);
-    tx = tx.map(|(t, tm)| {
-        let mut temp = t.deref().clone();
-        let mut shielded_outputs = vec![];
-        for (replay_tx, asset_type, new_asset_type, denom_amount) in
-            epoch_transitions
-        {
-            let mut replay_outputs = replay_tx.shielded_outputs.clone();
-            shielded_outputs.append(&mut replay_outputs);
-            temp.value_balance = temp.value_balance.reject(asset_type)
-                - Amount::from_pair(new_asset_type, denom_amount).unwrap();
-        }
-        temp.shielded_outputs = shielded_outputs;
-        (temp.freeze().unwrap(), tm)
-    });
-    tx.map(Some)
+    // Build and return the constructed transaction
+    builder
+        .build(consensus_branch_id, &prover)
+        .map(|(a, b)| Some((a, b, epoch)))
 }
 
-pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
-    let mut parsed_args: ParsedTxTransferArgs =
-        args.parse_from_context(&mut ctx);
+pub async fn submit_transfer(mut ctx: Context, mut args: args::TxTransfer) {
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-    let source = parsed_args.source.effective_address();
-    let target = parsed_args.target.effective_address();
+    let source = ctx.get_cached(&args.source).effective_address();
+    let target = ctx.get(&args.target).effective_address();
     // Check that the source address exists on chain
     let source_exists =
         rpc::known_address(&source, args.tx.ledger_address.clone()).await;
@@ -1594,52 +1570,52 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
             safe_exit(1)
         }
     }
+    let token = ctx.get(&args.token);
+    let fee_token = ctx.get(&args.tx.fee_token);
     // Check that the token address exists on chain
     let token_exists =
-        rpc::known_address(&parsed_args.token, args.tx.ledger_address.clone())
-            .await;
+        rpc::known_address(&token, args.tx.ledger_address.clone()).await;
     if !token_exists {
-        eprintln!(
-            "The token address {} doesn't exist on chain.",
-            parsed_args.token
-        );
+        eprintln!("The token address {} doesn't exist on chain.", token);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+    // Check that the fee token address exists on chain
+    let token_exists =
+        rpc::known_address(&fee_token, args.tx.ledger_address.clone()).await;
+    if !token_exists {
+        eprintln!("The token address {} doesn't exist on chain.", fee_token);
         if !args.tx.force {
             safe_exit(1)
         }
     }
     // Check source balance
-    let (sub_prefix, balance_key) = match args.sub_prefix {
+    let (sub_prefix, balance_key) = match &args.sub_prefix {
         Some(sub_prefix) => {
             let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
-            let prefix = token::multitoken_balance_prefix(
-                &parsed_args.token,
-                &sub_prefix,
-            );
+            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
             (
                 Some(sub_prefix),
                 token::multitoken_balance_key(&prefix, &source),
             )
         }
-        None => (None, token::balance_key(&parsed_args.token, &source)),
+        None => (None, token::balance_key(&token, &source)),
     };
     // validate the amount given
-    let validated_amount = validate_amount(
-        &client,
-        parsed_args.amount,
-        &parsed_args.token,
-        &sub_prefix,
-    )
-    .await;
+    let validated_amount =
+        validate_amount(&client, args.amount, &token, &sub_prefix).await;
     let validate_fee = validate_amount(
         &client,
-        parsed_args.tx.fee_amount,
-        &parsed_args.tx.fee_token,
+        args.tx.fee_amount,
+        &fee_token,
         // TODO: Currently multi-tokens cannot be used to pay fees
         &None,
     )
     .await;
-    parsed_args.amount = InputAmount::Validated(validated_amount);
-    parsed_args.tx.fee_amount = InputAmount::Validated(validate_fee);
+
+    args.amount = InputAmount::Validated(validated_amount);
+    args.tx.fee_amount = InputAmount::Validated(validate_fee);
 
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
     {
@@ -1647,7 +1623,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
             if balance < validated_amount.amount {
                 let balance_amount = format_denominated_amount(
                     &client,
-                    &parsed_args.token,
+                    &token,
                     &sub_prefix,
                     balance,
                 )
@@ -1656,7 +1632,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
                     "The balance of the source {} of token {} is lower than \
                      the amount to be transferred. Amount to transfer is {} \
                      and the balance is {}.",
-                    source, parsed_args.token, validated_amount, balance_amount
+                    source, token, validated_amount, balance_amount
                 );
                 if !args.tx.force {
                     safe_exit(1)
@@ -1666,7 +1642,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         None => {
             eprintln!(
                 "No balance found for the source {} of token {}",
-                source, parsed_args.token
+                source, token
             );
             if !args.tx.force {
                 safe_exit(1)
@@ -1691,13 +1667,13 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
             (
                 TxSigningKey::SecretKey(masp_tx_key()),
                 validated_amount.amount,
-                parsed_args.token.clone(),
+                token.clone(),
             )
         } else {
             (
                 TxSigningKey::WalletAddress(args.source.to_address()),
                 validated_amount.amount,
-                parsed_args.token.clone(),
+                token.clone(),
             )
         };
     // If our chosen signer is the MASP sentinel key, then our shielded inputs
@@ -1715,77 +1691,94 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     #[cfg(not(feature = "mainnet"))]
     let is_source_faucet =
         rpc::is_faucet_account(&source, args.tx.ledger_address.clone()).await;
-    let transfer = token::Transfer {
-        source,
-        target,
-        token,
-        sub_prefix,
-        amount: DenominatedAmount {
-            amount,
-            denom: validated_amount.denom,
-        },
-        key,
-        shielded: {
-            let spending_key = parsed_args.source.spending_key();
-            let payment_address = parsed_args.target.payment_address();
-            // No shielded components are needed when neither source nor
-            // destination are shielded
-            if spending_key.is_none() && payment_address.is_none() {
-                None
-            } else {
-                // We want to fund our transaction solely from supplied spending
-                // key
-                let spending_key = spending_key.map(|x| x.into());
-                let spending_keys: Vec<_> = spending_key.into_iter().collect();
-                // Load the current shielded context given the spending key we
-                // possess
-                let _ = ctx.shielded.load();
-                ctx.shielded
-                    .fetch(&args.tx.ledger_address, &spending_keys, &[])
-                    .await;
-                // Save the update state so that future fetches can be
-                // short-circuited
-                let _ = ctx.shielded.save();
-                let stx_result =
-                    gen_shielded_transfer(&mut ctx, &parsed_args, shielded_gas)
-                        .await;
-                match stx_result {
-                    Ok(stx) => stx.map(|x| x.0),
-                    Err(builder::Error::ChangeIsNegative(_)) => {
-                        eprintln!(
-                            "The balance of the source {} is lower than the \
-                             amount to be transferred and fees. Amount to \
-                             transfer is {} {} and fees are {} {}.",
-                            parsed_args.source,
-                            validated_amount,
-                            parsed_args.token,
-                            validate_fee,
-                            parsed_args.tx.fee_token,
-                        );
-                        safe_exit(1)
-                    }
-                    Err(err) => panic!("{}", err),
-                }
-            }
-        },
-    };
-    tracing::debug!("Transfer data {:?}", transfer);
-    let data = transfer
-        .try_to_vec()
-        .expect("Encoding tx data shouldn't fail");
-    let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
-    let tx = Tx::new(tx_code, Some(data));
-    let signing_address = TxSigningKey::WalletAddress(args.source.to_address());
 
-    process_tx(
-        ctx,
-        &args.tx,
-        tx,
-        signing_address,
-        #[cfg(not(feature = "mainnet"))]
-        is_source_faucet,
-    )
-    .await;
+    let signing_address = TxSigningKey::WalletAddress(args.source.to_address());
+    let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
+
+    // Loop twice in case the first submission attempt fails
+    for _ in 0..2 {
+        // Construct the shielded part of the transaction, if any
+        let stx_result =
+            gen_shielded_transfer(&mut ctx, &client, &args, shielded_gas).await;
+
+        let (shielded, shielded_tx_epoch) = match stx_result {
+            Ok(stx) => unzip_option(stx.map(|x| (x.0, x.2))),
+            Err(builder::Error::ChangeIsNegative(_)) => {
+                eprintln!(
+                    "The balance of the source {} is lower than the amount to \
+                     be transferred and fees. Amount to transfer is {} {} and \
+                     fees are {} {}.",
+                    source.clone(),
+                    validated_amount,
+                    token,
+                    validate_fee,
+                    ctx.get(&args.tx.fee_token),
+                );
+                safe_exit(1)
+            }
+            Err(err) => panic!("{}", err),
+        };
+
+        // Construct the transparent part of the transaction
+        let transfer = token::Transfer {
+            source: source.clone(),
+            target: target.clone(),
+            token: token.clone(),
+            sub_prefix: sub_prefix.clone(),
+            amount: DenominatedAmount {
+                amount,
+                denom: validated_amount.denom,
+            },
+            key: key.clone(),
+            shielded,
+        };
+        tracing::debug!("Transfer data {:?}", transfer);
+        let data = transfer
+            .try_to_vec()
+            .expect("Encoding tx data shouldn't fail");
+        let tx = Tx::new(
+            tx_code.clone(),
+            Some(data),
+            ctx.config.ledger.chain_id.clone(),
+            args.tx.expiration,
+        );
+
+        // Dry-run/broadcast/submit the transaction
+        let (new_ctx, result) = process_tx(
+            ctx,
+            &args.tx,
+            tx,
+            signing_address.clone(),
+            #[cfg(not(feature = "mainnet"))]
+            is_source_faucet,
+        )
+        .await;
+        ctx = new_ctx;
+
+        // Query the epoch in which the transaction was probably submitted
+        let submission_epoch = rpc::query_epoch(&client).await;
+
+        match result {
+            ProcessTxResponse::Applied(resp) if
+            // If a transaction is shielded
+                shielded_tx_epoch.is_some() &&
+            // And it is rejected by a VP
+                resp.code == 1.to_string() &&
+            // And the its submission epoch doesn't match construction epoch
+                shielded_tx_epoch.unwrap() != submission_epoch =>
+            {
+                // Then we probably straddled an epoch boundary. Let's retry...
+                eprintln!(
+                    "MASP transaction rejected and this may be due to the \
+                     epoch changing. Attempting to resubmit transaction.",
+                );
+                continue;
+            },
+            // Otherwise either the transaction was successful or it will not
+            // benefit from resubmission
+            _ => break,
+        }
+    }
 }
 
 pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
@@ -1908,7 +1901,12 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
     prost::Message::encode(&any_msg, &mut data)
         .expect("Encoding tx data shouldn't fail");
 
-    let tx = Tx::new(tx_code, Some(data));
+    let tx = Tx::new(
+        tx_code,
+        Some(data),
+        ctx.config.ledger.chain_id.clone(),
+        args.tx.expiration,
+    );
     process_tx(
         ctx,
         &args.tx,
@@ -2033,9 +2031,11 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         .await
         .unwrap_or_default();
         if balance
-            < token::Amount::native_whole(
+            < token::Amount::from_uint(
                 governance_parameters.min_proposal_fund,
+                0,
             )
+            .unwrap()
         {
             eprintln!(
                 "Address {} doesn't have enough funds.",
@@ -2055,7 +2055,12 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             .try_to_vec()
             .expect("Encoding proposal data shouldn't fail");
         let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
-        let tx = Tx::new(tx_code, Some(data));
+        let tx = Tx::new(
+            tx_code,
+            Some(data),
+            ctx.config.ledger.chain_id.clone(),
+            args.tx.expiration,
+        );
 
         process_tx(
             ctx,
@@ -2077,7 +2082,70 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
         safe_exit(1)
     };
 
+    // Construct vote
+    let proposal_vote = match args.vote.to_ascii_lowercase().as_str() {
+        "yay" => {
+            if let Some(pgf) = args.proposal_pgf {
+                let splits = pgf.trim().split_ascii_whitespace();
+                let address_iter = splits.clone().into_iter().step_by(2);
+                let cap_iter = splits.into_iter().skip(1).step_by(2);
+                let mut set = HashSet::new();
+                for (address, cap) in
+                    address_iter.zip(cap_iter).map(|(addr, cap)| {
+                        (
+                            addr.parse()
+                                .expect("Failed to parse pgf council address"),
+                            cap.parse::<u64>()
+                                .expect("Failed to parse pgf spending cap"),
+                        )
+                    })
+                {
+                    set.insert((
+                        address,
+                        token::Amount::from_uint(cap, 0).unwrap(),
+                    ));
+                }
+
+                ProposalVote::Yay(VoteType::PGFCouncil(set))
+            } else if let Some(eth) = args.proposal_eth {
+                let mut splits = eth.trim().split_ascii_whitespace();
+                // Sign the message
+                let sigkey = splits
+                    .next()
+                    .expect("Expected signing key")
+                    .parse::<common::SecretKey>()
+                    .expect("Signing key parsing failed.");
+
+                let msg = splits.next().expect("Missing message to sign");
+                if splits.next().is_some() {
+                    eprintln!("Unexpected argument after message");
+                    safe_exit(1);
+                }
+
+                ProposalVote::Yay(VoteType::ETHBridge(common::SigScheme::sign(
+                    &sigkey,
+                    HEXLOWER_PERMISSIVE
+                        .decode(msg.as_bytes())
+                        .expect("Error while decoding message"),
+                )))
+            } else {
+                ProposalVote::Yay(VoteType::Default)
+            }
+        }
+        "nay" => ProposalVote::Nay,
+        _ => {
+            eprintln!("Vote must be either yay or nay");
+            safe_exit(1);
+        }
+    };
+
     if args.offline {
+        if !proposal_vote.is_default_vote() {
+            eprintln!(
+                "Wrong vote type for offline proposal. Just vote yay or nay!"
+            );
+            safe_exit(1);
+        }
         let signer = ctx.get(signer);
         let proposal_file_path =
             args.proposal_data.expect("Proposal file should exist.");
@@ -2102,9 +2170,10 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
             args.tx.ledger_address.clone(),
         )
         .await;
+
         let offline_vote = OfflineVote::new(
             &proposal,
-            args.vote,
+            proposal_vote,
             signer.clone(),
             &signing_key,
         );
@@ -2143,6 +2212,56 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
         )
         .await;
 
+        // Check vote type and memo
+        let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
+        let proposal_type: ProposalType =
+            rpc::query_storage_value(&client, &proposal_type_key)
+                .await
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Didn't find type of proposal id {} in storage",
+                        proposal_id
+                    )
+                });
+
+        if let ProposalVote::Yay(ref vote_type) = proposal_vote {
+            if &proposal_type != vote_type {
+                eprintln!(
+                    "Expected vote of type {}, found {}",
+                    proposal_type, args.vote
+                );
+                safe_exit(1);
+            } else if let VoteType::PGFCouncil(set) = vote_type {
+                // Check that addresses proposed as council are established and
+                // are present in storage
+                for (address, _) in set {
+                    match address {
+                        Address::Established(_) => {
+                            let vp_key = Key::validity_predicate(address);
+                            if !rpc::query_has_storage_key(&client, &vp_key)
+                                .await
+                            {
+                                eprintln!(
+                                    "Proposed PGF council {} cannot be found \
+                                     in storage",
+                                    address
+                                );
+                                safe_exit(1);
+                            }
+                        }
+                        _ => {
+                            eprintln!(
+                                "PGF council vote contains a non-established \
+                                 address: {}",
+                                address
+                            );
+                            safe_exit(1);
+                        }
+                    }
+                }
+            }
+        }
+
         match proposal_start_epoch {
             Some(epoch) => {
                 if current_epoch < epoch {
@@ -2179,14 +2298,14 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                         &client,
                         delegations,
                         proposal_id,
-                        &args.vote,
+                        &proposal_vote,
                     )
                     .await;
                 }
 
                 let tx_data = VoteProposalData {
                     id: proposal_id,
-                    vote: args.vote,
+                    vote: proposal_vote,
                     voter: voter_address,
                     delegations: delegations.into_iter().collect(),
                 };
@@ -2195,7 +2314,12 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     .try_to_vec()
                     .expect("Encoding proposal data shouldn't fail");
                 let tx_code = ctx.read_wasm(TX_VOTE_PROPOSAL);
-                let tx = Tx::new(tx_code, Some(data));
+                let tx = Tx::new(
+                    tx_code,
+                    Some(data),
+                    ctx.config.ledger.chain_id.clone(),
+                    args.tx.expiration,
+                );
 
                 process_tx(
                     ctx,
@@ -2267,7 +2391,8 @@ pub async fn submit_reveal_pk_aux(
         .try_to_vec()
         .expect("Encoding a public key shouldn't fail");
     let tx_code = ctx.read_wasm(TX_REVEAL_PK);
-    let tx = Tx::new(tx_code, Some(tx_data));
+    let chain_id = ctx.config.ledger.chain_id.clone();
+    let tx = Tx::new(tx_code, Some(tx_data), chain_id, args.expiration);
 
     // submit_tx without signing the inner tx
     let keypair = if let Some(signing_key) = &args.signing_key {
@@ -2433,6 +2558,15 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
                 safe_exit(1)
             }
         }
+        if source != &validator && rpc::is_validator(&client, source).await {
+            eprintln!(
+                "Cannot bond from a validator account {source} to another \
+                 validator {validator}."
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
     }
     // Check bond's source (source for delegation or validator for self-bonds)
     // balance
@@ -2472,7 +2606,12 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     };
     let data = bond.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let tx = Tx::new(tx_code, Some(data));
+    let tx = Tx::new(
+        tx_code,
+        Some(data),
+        ctx.config.ledger.chain_id.clone(),
+        args.tx.expiration,
+    );
     let default_signer = args.source.unwrap_or(args.validator);
     process_tx(
         ctx,
@@ -2506,6 +2645,11 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
     let bond_amount =
         rpc::query_bond(&client, &bond_source, &validator, None).await;
+    println!(
+        "Bond amount available for unbonding: {} NAM",
+        bond_amount.to_string_native()
+    );
+
     if args.amount > bond_amount {
         eprintln!(
             "The total bonds of the source {} is lower than the amount to be \
@@ -2519,15 +2663,31 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
         }
     }
 
+    // Query the unbonds before submitting the tx
+    let unbonds =
+        rpc::query_unbond_with_slashing(&client, &bond_source, &validator)
+            .await;
+    let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
+    for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
+        let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();
+        *to_withdraw += amount;
+    }
+    let latest_withdrawal_pre = withdrawable.into_iter().last();
+
     let data = pos::Unbond {
         validator: validator.clone(),
         amount: args.amount,
-        source,
+        source: Some(bond_source.clone()),
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx_code = ctx.read_wasm(TX_UNBOND_WASM);
-    let tx = Tx::new(tx_code, Some(data));
+    let tx = Tx::new(
+        tx_code,
+        Some(data),
+        ctx.config.ledger.chain_id.clone(),
+        args.tx.expiration,
+    );
     let default_signer = args.source.unwrap_or(args.validator);
     let (_ctx, _) = process_tx(
         ctx,
@@ -2539,7 +2699,53 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     )
     .await;
 
-    rpc::query_and_print_unbonds(&client, &bond_source, &validator).await;
+    // Query the unbonds post-tx
+    let unbonds =
+        rpc::query_unbond_with_slashing(&client, &bond_source, &validator)
+            .await;
+    let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
+    for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
+        let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();
+        *to_withdraw += amount;
+    }
+    let (latest_withdraw_epoch_post, latest_withdraw_amount_post) =
+        withdrawable.into_iter().last().unwrap();
+
+    if let Some((latest_withdraw_epoch_pre, latest_withdraw_amount_pre)) =
+        latest_withdrawal_pre
+    {
+        match latest_withdraw_epoch_post.cmp(&latest_withdraw_epoch_pre) {
+            std::cmp::Ordering::Less => {
+                eprintln!(
+                    "Unexpected behavior reading the unbonds data has occurred"
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+            std::cmp::Ordering::Equal => {
+                println!(
+                    "Amount {} withdrawable starting from epoch {}",
+                    (latest_withdraw_amount_post - latest_withdraw_amount_pre)
+                        .to_string_native(),
+                    latest_withdraw_epoch_post,
+                );
+            }
+            std::cmp::Ordering::Greater => {
+                println!(
+                    "Amount {} withdrawable starting from epoch {}",
+                    latest_withdraw_amount_post.to_string_native(),
+                    latest_withdraw_epoch_post
+                );
+            }
+        }
+    } else {
+        println!(
+            "Amount {} withdrawable starting from epoch {}",
+            latest_withdraw_amount_post.to_string_native(),
+            latest_withdraw_epoch_post
+        );
+    }
 }
 
 pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
@@ -2595,7 +2801,12 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx_code = ctx.read_wasm(TX_WITHDRAW_WASM);
-    let tx = Tx::new(tx_code, Some(data));
+    let tx = Tx::new(
+        tx_code,
+        Some(data),
+        ctx.config.ledger.chain_id.clone(),
+        args.tx.expiration,
+    );
     let default_signer = args.source.unwrap_or(args.validator);
     process_tx(
         ctx,
@@ -2681,7 +2892,12 @@ pub async fn submit_validator_commission_change(
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let tx = Tx::new(tx_code, Some(data));
+    let tx = Tx::new(
+        tx_code,
+        Some(data),
+        ctx.config.ledger.chain_id.clone(),
+        args.tx.expiration,
+    );
     let default_signer = args.validator;
     process_tx(
         ctx,
@@ -2694,6 +2910,26 @@ pub async fn submit_validator_commission_change(
     .await;
 }
 
+/// Capture the result of running a transaction
+enum ProcessTxResponse {
+    /// Result of submitting a transaction to the blockchain
+    Applied(TxResponse),
+    /// Result of submitting a transaction to the mempool
+    Broadcast(Response),
+    /// Result of dry running transaction
+    DryRun,
+}
+
+impl ProcessTxResponse {
+    /// Get the the accounts that were reported to be initialized
+    fn initialized_accounts(&self) -> Vec<Address> {
+        match self {
+            Self::Applied(result) => result.initialized_accounts.clone(),
+            _ => vec![],
+        }
+    }
+}
+
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
 async fn process_tx(
@@ -2702,7 +2938,7 @@ async fn process_tx(
     tx: Tx,
     default_signer: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> (Context, Vec<Address>) {
+) -> (Context, ProcessTxResponse) {
     let (ctx, to_broadcast) = sign_tx(
         ctx,
         tx,
@@ -2725,7 +2961,7 @@ async fn process_tx(
     if args.dry_run {
         if let TxBroadcastData::DryRun(tx) = to_broadcast {
             rpc::dry_run_tx(&args.ledger_address, tx.to_bytes()).await;
-            (ctx, vec![])
+            (ctx, ProcessTxResponse::DryRun)
         } else {
             panic!(
                 "Expected a dry-run transaction, received a wrapper \
@@ -2735,29 +2971,28 @@ async fn process_tx(
     } else {
         // Either broadcast or submit transaction and collect result into
         // sum type
-        let result = if args.broadcast_only {
-            Left(broadcast_tx(args.ledger_address.clone(), &to_broadcast).await)
-        } else {
-            Right(submit_tx(args.ledger_address.clone(), to_broadcast).await)
-        };
-        // Return result based on executed operation, otherwise deal with
-        // the encountered errors uniformly
-        match result {
-            Right(Ok(result)) => (ctx, result.initialized_accounts),
-            Left(Ok(_)) => (ctx, Vec::default()),
-            Right(Err(err)) => {
-                eprintln!(
-                    "Encountered error while broadcasting transaction: {}",
-                    err
-                );
-                safe_exit(1)
+        if args.broadcast_only {
+            match broadcast_tx(args.ledger_address.clone(), &to_broadcast).await
+            {
+                Ok(resp) => (ctx, ProcessTxResponse::Broadcast(resp)),
+                Err(err) => {
+                    eprintln!(
+                        "Encountered error while broadcasting transaction: {}",
+                        err
+                    );
+                    safe_exit(1)
+                }
             }
-            Left(Err(err)) => {
-                eprintln!(
-                    "Encountered error while broadcasting transaction: {}",
-                    err
-                );
-                safe_exit(1)
+        } else {
+            match submit_tx(args.ledger_address.clone(), to_broadcast).await {
+                Ok(result) => (ctx, ProcessTxResponse::Applied(result)),
+                Err(err) => {
+                    eprintln!(
+                        "Encountered error while broadcasting transaction: {}",
+                        err
+                    );
+                    safe_exit(1)
+                }
             }
         }
     }

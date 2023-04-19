@@ -62,7 +62,7 @@ check-mainnet:
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 
 clippy:
-	NAMADA_DEV=false $(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
+	NAMADA_DEV=false $(cargo) +$(nightly) clippy $(jobs) --all-targets -- -D warnings && \
 	make -C $(wasms) clippy && \
 	make -C $(wasms_for_tests) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true

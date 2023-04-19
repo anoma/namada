@@ -8,13 +8,14 @@ use namada_core::types::address::Address;
 use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_core::types::{storage, token};
 use namada_test_utils::tx_data::TxWriteData;
+use namada_test_utils::TestWasms;
 use namada_tx_prelude::storage::KeySeg;
 use rand::Rng;
 use regex::Regex;
 
-use super::setup::constants::{wasm_abs_path, NAM, VP_ALWAYS_TRUE_WASM};
+use super::setup::constants::NAM;
 use super::setup::{Bin, NamadaCmd, Test};
-use crate::e2e::setup::constants::{ALBERT, TX_WRITE_WASM};
+use crate::e2e::setup::constants::ALBERT;
 use crate::run;
 
 const MULTITOKEN_KEY_SEGMENT: &str = "tokens";
@@ -29,9 +30,8 @@ pub fn init_multitoken_vp(test: &Test, rpc_addr: &str) -> Result<String> {
     // we use a VP that always returns true for the multitoken VP here, as we
     // are testing out the VPs of the sender and receiver of multitoken
     // transactions here - not any multitoken VP itself
-    let multitoken_vp_wasm_path = wasm_abs_path(VP_ALWAYS_TRUE_WASM)
-        .to_string_lossy()
-        .to_string();
+    let multitoken_vp_wasm_path =
+        TestWasms::VpAlwaysTrue.path().to_string_lossy().to_string();
     let multitoken_alias = "multitoken";
 
     let init_account_args = vec![
@@ -99,7 +99,7 @@ pub fn mint_red_tokens(
         .push(&BALANCE_KEY_SEGMENT.to_owned())?
         .push(owner)?;
 
-    let tx_code_path = wasm_abs_path(TX_WRITE_WASM);
+    let tx_code_path = TestWasms::TxWriteStorageKey.path();
     let tx_data_path = write_test_file(
         test,
         TxWriteData {

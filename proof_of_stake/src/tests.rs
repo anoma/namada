@@ -32,7 +32,7 @@ use crate::parameters::PosParams;
 use crate::types::{
     into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,
     ConsensusValidator, GenesisValidator, Position, ReverseOrdTokenAmount,
-    ValidatorSetUpdate, ValidatorState, WeightedValidator,
+    UnbondDetails, ValidatorSetUpdate, ValidatorState, WeightedValidator,
 };
 use crate::{
     become_validator, below_capacity_validator_set_handle, bond_handle,
@@ -204,9 +204,10 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
 
     // Read some data before submitting bond
     let pipeline_epoch = current_epoch + params.pipeline_len;
+    let staking_token = staking_token_address(&s);
     let pos_balance_pre = s
         .read::<token::Amount>(&token::balance_key(
-            &staking_token_address(),
+            &staking_token,
             &super::ADDRESS,
         ))
         .unwrap()
@@ -216,13 +217,8 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
 
     // Self-bond
     let amount_self_bond = token::Amount::from_uint(100_500_000, 0).unwrap();
-    credit_tokens(
-        &mut s,
-        &staking_token_address(),
-        &validator.address,
-        amount_self_bond,
-    )
-    .unwrap();
+    credit_tokens(&mut s, &staking_token, &validator.address, amount_self_bond)
+        .unwrap();
     bond_tokens(
         &mut s,
         None,
@@ -326,9 +322,8 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     // Get a non-validating account with tokens
     let delegator = address::testing::gen_implicit_address();
     let amount_del = token::Amount::from_uint(201_000_000, 0).unwrap();
-    credit_tokens(&mut s, &staking_token_address(), &delegator, amount_del)
-        .unwrap();
-    let balance_key = token::balance_key(&staking_token_address(), &delegator);
+    credit_tokens(&mut s, &staking_token, &delegator, amount_del).unwrap();
+    let balance_key = token::balance_key(&staking_token, &delegator);
     let balance = s
         .read::<token::Amount>(&balance_key)
         .unwrap()
@@ -460,8 +455,12 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     }
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
-    // Unbond the self-bond
-    let amount_self_unbond = token::Amount::from_uint(50_000, 0).unwrap();
+    // Unbond the self-bond with an amount that will remove all of the self-bond
+    // executed after genesis and some of the genesis bond
+    let amount_self_unbond: token::Amount =
+        amount_self_bond + (validator.tokens / 2);
+    let self_unbond_epoch = s.storage.block.epoch;
+
     unbond_tokens(
         &mut s,
         None,
@@ -478,9 +477,11 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         pipeline_epoch - 1,
     )
     .unwrap();
+
     let val_stake_post =
         read_validator_stake(&s, &params, &validator.address, pipeline_epoch)
             .unwrap();
+
     let val_delta = read_validator_delta_value(
         &s,
         &params,
@@ -494,9 +495,16 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     assert_eq!(
         unbond
             .at(&(pipeline_epoch + params.unbonding_len))
+            .get(&s, &Epoch::default())
+            .unwrap(),
+        Some(amount_self_unbond - amount_self_bond)
+    );
+    assert_eq!(
+        unbond
+            .at(&(pipeline_epoch + params.unbonding_len))
             .get(&s, &(self_bond_epoch + params.pipeline_len))
             .unwrap(),
-        Some(amount_self_unbond)
+        Some(amount_self_bond)
     );
     assert_eq!(
         val_stake_pre,
@@ -508,6 +516,68 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
             validator.tokens + amount_self_bond + amount_del
                 - amount_self_unbond
         )
+    );
+
+    // Check all bond and unbond details (self-bonds and delegation)
+    let check_bond_details = |ix, bond_details: BondsAndUnbondsDetails| {
+        println!("Check index {ix}");
+        dbg!(&bond_details);
+        assert_eq!(bond_details.len(), 2);
+        let self_bond_details = bond_details.get(&self_bond_id).unwrap();
+        let delegation_details = bond_details.get(&delegation_bond_id).unwrap();
+        assert_eq!(
+            self_bond_details.bonds.len(),
+            1,
+            "Contains only part of the genesis bond now"
+        );
+        assert_eq!(
+            self_bond_details.bonds[0],
+            BondDetails {
+                start: start_epoch,
+                amount: amount_self_unbond - amount_self_bond,
+                slashed_amount: None
+            },
+        );
+        assert_eq!(
+            delegation_details.bonds[0],
+            BondDetails {
+                start: delegation_epoch + params.pipeline_len,
+                amount: amount_del,
+                slashed_amount: None
+            },
+        );
+        assert_eq!(
+            self_bond_details.unbonds.len(),
+            2,
+            "Contains a full unbond of the last self-bond and an unbond from \
+             the genesis bond"
+        );
+        assert_eq!(
+            self_bond_details.unbonds[0],
+            UnbondDetails {
+                start: start_epoch,
+                withdraw: self_unbond_epoch
+                    + params.pipeline_len
+                    + params.unbonding_len,
+                amount: amount_self_unbond - amount_self_bond,
+                slashed_amount: None
+            }
+        );
+        assert_eq!(
+            self_bond_details.unbonds[1],
+            UnbondDetails {
+                start: self_bond_epoch + params.pipeline_len,
+                withdraw: self_unbond_epoch
+                    + params.pipeline_len
+                    + params.unbonding_len,
+                amount: amount_self_bond,
+                slashed_amount: None
+            }
+        );
+    };
+    check_bond_details(
+        0,
+        bonds_and_unbonds(&s, None, Some(validator.address.clone())).unwrap(),
     );
 
     // Unbond delegation
@@ -575,7 +645,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
 
     let pos_balance = s
         .read::<token::Amount>(&token::balance_key(
-            &staking_token_address(),
+            &staking_token,
             &super::ADDRESS,
         ))
         .unwrap();
@@ -593,7 +663,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
 
     let pos_balance = s
         .read::<token::Amount>(&token::balance_key(
-            &staking_token_address(),
+            &staking_token,
             &super::ADDRESS,
         ))
         .unwrap();
@@ -619,7 +689,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
 
     let pos_balance = s
         .read::<token::Amount>(&token::balance_key(
-            &staking_token_address(),
+            &staking_token,
             &super::ADDRESS,
         ))
         .unwrap();
@@ -694,9 +764,9 @@ fn test_become_validator_aux(
     current_epoch = advance_epoch(&mut s, &params);
 
     // Self-bond to the new validator
+    let staking_token = staking_token_address(&s);
     let amount = token::Amount::from_uint(100_500_000, 0).unwrap();
-    credit_tokens(&mut s, &staking_token_address(), &new_validator, amount)
-        .unwrap();
+    credit_tokens(&mut s, &staking_token, &new_validator, amount).unwrap();
     bond_tokens(&mut s, None, &new_validator, amount, current_epoch).unwrap();
 
     // Check the bond delta
@@ -877,25 +947,15 @@ fn test_validator_sets() {
     )
     .unwrap();
 
-    // Check tendermint validator set updates
-    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
-    assert_eq!(tm_updates.len(), 2);
-    assert_eq!(
-        tm_updates[0],
-        ValidatorSetUpdate::Consensus(ConsensusValidator {
-            consensus_key: pk1.clone(),
-            bonded_stake: u128::try_from(stake1).unwrap() as u64,
-        })
-    );
-    assert_eq!(
-        tm_updates[1],
-        ValidatorSetUpdate::Consensus(ConsensusValidator {
-            consensus_key: pk2.clone(),
-            bonded_stake: u128::try_from(stake2).unwrap() as u64,
-        })
-    );
-
     // Advance to EPOCH 1
+    //
+    // We cannot call `get_tendermint_set_updates` for the genesis state as
+    // `validator_set_update_tendermint` is only called 2 blocks before the
+    // start of an epoch and so we need to give it a predecessor epoch (see
+    // `get_tendermint_set_updates`), which we cannot have on the first
+    // epoch. In any way, the initial validator set is given to Tendermint
+    // from InitChain, so `validator_set_update_tendermint` is
+    // not being used for it.
     let epoch = advance_epoch(&mut s, &params);
     let pipeline_epoch = epoch + params.pipeline_len;
 
@@ -1603,8 +1663,13 @@ fn test_validator_sets_swap() {
 fn get_tendermint_set_updates(
     s: &TestWlStorage,
     params: &PosParams,
-    epoch: Epoch,
+    Epoch(epoch): Epoch,
 ) -> Vec<ValidatorSetUpdate> {
+    // Because the `validator_set_update_tendermint` is called 2 blocks before
+    // the start of a new epoch, it expects to receive the epoch that is before
+    // the start of a new one too and so we give it the predecessor of the
+    // current epoch here to actually get the update for the current epoch.
+    let epoch = Epoch(epoch - 1);
     validator_set_update_tendermint(s, params, epoch, |update| update).unwrap()
 }
 
@@ -1627,7 +1692,11 @@ fn arb_genesis_validators(
     size: Range<usize>,
 ) -> impl Strategy<Value = Vec<GenesisValidator>> {
     let tokens: Vec<_> = (0..size.end)
-        .map(|_| (1..=10_u64).prop_map(token::Amount::native_whole))
+        .map(|_| {
+            (1..=10_u64).prop_map(|val| {
+                token::Amount::from_uint(val, 0).expect("This cannot fail")
+            })
+        })
         .collect();
     (size, tokens).prop_map(|(size, token_amounts)| {
         // use unique seeds to generate validators' address and consensus key

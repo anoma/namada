@@ -557,23 +557,18 @@ mod test {
     use std::cmp::max;
 
     use byte_unit::Byte;
+    use namada_test_utils::TestWasms;
     use tempfile::{tempdir, TempDir};
     use test_log::test;
 
     use super::*;
     use crate::vm::WasmCacheRwAccess;
 
-    const TX_NO_OP: &str = "../wasm_for_tests/tx_no_op.wasm";
-    const TX_READ_STORAGE_KEY: &str =
-        "../wasm_for_tests/tx_read_storage_key.wasm";
-    const VP_ALWAYS_TRUE: &str = "../wasm_for_tests/vp_always_true.wasm";
-    const VP_EVAL: &str = "../wasm_for_tests/vp_eval.wasm";
-
     #[test]
     fn test_fetch_or_compile_valid_wasm() {
         // Load some WASMs and find their hashes and in-memory size
-        let tx_read_storage_key = load_wasm(TX_READ_STORAGE_KEY);
-        let tx_no_op = load_wasm(TX_NO_OP);
+        let tx_read_storage_key = load_wasm(TestWasms::TxReadStorageKey.path());
+        let tx_no_op = load_wasm(TestWasms::TxNoOp.path());
 
         // Create a new cache with the limit set to
         // `max(tx_read_storage_key.size, tx_no_op.size) + 1`
@@ -789,8 +784,8 @@ mod test {
     #[test]
     fn test_pre_compile_valid_wasm() {
         // Load some WASMs and find their hashes and in-memory size
-        let vp_always_true = load_wasm(VP_ALWAYS_TRUE);
-        let vp_eval = load_wasm(VP_EVAL);
+        let vp_always_true = load_wasm(TestWasms::VpAlwaysTrue.path());
+        let vp_eval = load_wasm(TestWasms::VpEval.path());
 
         // Create a new cache with the limit set to
         // `max(vp_always_true.size, vp_eval.size) + 1 + extra_bytes`
@@ -933,7 +928,7 @@ mod test {
     }
 
     /// Get the WASM code bytes, its hash and find the compiled module's size
-    fn load_wasm(file: impl AsRef<str>) -> WasmWithMeta {
+    fn load_wasm(file: impl AsRef<Path>) -> WasmWithMeta {
         // When `WeightScale` calls `loupe::size_of_val` in the cache, for some
         // reason it returns 8 bytes more than the same call in here.
         let extra_bytes = 8;
@@ -952,7 +947,7 @@ mod test {
         };
         println!(
             "Compiled module {} size including the hash: {} ({})",
-            file,
+            file.to_string_lossy(),
             Byte::from_bytes(size as u128).get_appropriate_unit(true),
             size,
         );

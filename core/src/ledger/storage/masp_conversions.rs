@@ -33,8 +33,8 @@ pub fn update_allowed_conversions<D, H>(
     wl_storage: &mut super::WlStorage<D, H>,
 ) -> crate::ledger::storage_api::Result<()>
 where
-    D: super::DB + for<'iter> super::DBIter<'iter>,
-    H: super::StorageHasher,
+    D: 'static + super::DB + for<'iter> super::DBIter<'iter>,
+    H: 'static + super::StorageHasher,
 {
     use masp_primitives::ff::PrimeField;
     use masp_primitives::transaction::components::Amount as MaspAmount;

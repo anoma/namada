@@ -1,7 +1,7 @@
 //! A basic fungible token
 
 use std::fmt::Display;
-use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -231,6 +231,17 @@ impl Amount {
     /// string encodes all necessary decimal places.
     pub fn from_string_precise(string: &str) -> Result<Self, AmountParseError> {
         DenominatedAmount::from_str(string).map(|den| den.amount)
+    }
+
+    /// Convert the amount to [`Decimal`] ignoring its scale (i.e. as an integer
+    /// in micro units).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the stored amount overflows either a u128 or the [`Decimal`]
+    /// type.
+    pub fn as_dec_unscaled(&self) -> Decimal {
+        Into::<Decimal>::into(u128::try_from(self.raw).unwrap())
     }
 }
 
@@ -507,6 +518,12 @@ impl Add for Amount {
     }
 }
 
+impl std::iter::Sum for Amount {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Amount::zero(), |acc, amt| acc + amt)
+    }
+}
+
 impl Mul<u64> for Amount {
     type Output = Amount;
 
@@ -545,6 +562,16 @@ impl Mul<(u64, u64)> for Amount {
         };
         self.raw %= rhs.1;
         (amt, self)
+    }
+}
+
+impl Div<u64> for Amount {
+    type Output = Self;
+
+    fn div(self, rhs: u64) -> Self::Output {
+        Self {
+            raw: self.raw / Uint::from(rhs),
+        }
     }
 }
 
@@ -702,6 +729,7 @@ pub const TX_KEY_PREFIX: &str = "tx-";
 pub const CONVERSION_KEY_PREFIX: &str = "conv";
 /// Key segment prefix for pinned shielded transactions
 pub const PIN_KEY_PREFIX: &str = "pin-";
+const TOTAL_SUPPLY_STORAGE_KEY: &str = "total_supply";
 
 /// Obtain a storage key for user's balance.
 pub fn balance_key(token_addr: &Address, owner: &Address) -> Key {
@@ -796,6 +824,18 @@ pub fn is_masp_key(key: &Key) -> bool {
                 && (key == HEAD_TX_KEY
                     || key.starts_with(TX_KEY_PREFIX)
                     || key.starts_with(PIN_KEY_PREFIX)))
+}
+
+/// Storage key for total supply of a token
+pub fn total_supply_key(token_address: &Address) -> Key {
+    Key::from(token_address.to_db_key())
+        .push(&TOTAL_SUPPLY_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for total supply of a specific token?
+pub fn is_total_supply_key(key: &Key, token_address: &Address) -> bool {
+    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)] if addr == token_address && key == TOTAL_SUPPLY_STORAGE_KEY)
 }
 
 /// Check if the given storage key is multitoken balance key for the given
@@ -1087,6 +1127,15 @@ mod tests {
         let key = original.raw();
         let amount = Amount::parse(key).expect("Test failed");
         assert_eq!(amount, original);
+    }
+
+    #[test]
+    fn test_amount_is_zero() {
+        let zero = Amount::zero();
+        assert!(zero.is_zero());
+
+        let non_zero = Amount::from_uint(1, 0).expect("Test failed");
+        assert!(!non_zero.is_zero());
     }
 }
 

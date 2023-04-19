@@ -37,28 +37,23 @@
 //! `testing::PosStorageChange`.
 //!
 //! - Bond: Requires a validator account in the state (the `#{validator}`
-//!   segments in the keys below). Some of the storage change are optional,
-//!   which depends on whether the bond increases voting power of the validator.
+//!   segments in the keys below).
 //!     - `#{PoS}/bond/#{owner}/#{validator}`
-//!     - `#{PoS}/total_voting_power` (optional)
-//!     - `#{PoS}/validator_set` (optional)
-//!     - `#{PoS}/validator/#{validator}/total_deltas`
-//!     - `#{PoS}/validator/#{validator}/voting_power` (optional)
+//!     - `#{PoS}/total_deltas`
+//!     - `#{PoS}/validator_set`
+//!     - `#{PoS}/validator/#{validator}/deltas`
 //!     - `#{staking_token}/balance/#{PoS}`
 //!
 //!
 //! - Unbond: Requires a bond in the state (the `#{owner}` and `#{validator}`
 //!   segments in the keys below must be the owner and a validator of an
 //!   existing bond). The bond's total amount must be greater or equal to the
-//!   amount that is being unbonded. Some of the storage changes are optional,
-//!   which depends on whether the unbonding decreases voting power of the
-//!   validator.
+//!   amount that is being unbonded.
 //!     - `#{PoS}/bond/#{owner}/#{validator}`
-//!     - `#{PoS}/total_voting_power` (optional)
 //!     - `#{PoS}/unbond/#{owner}/#{validator}`
-//!     - `#{PoS}/validator_set` (optional)
-//!     - `#{PoS}/validator/#{validator}/total_deltas`
-//!     - `#{PoS}/validator/#{validator}/voting_power` (optional)
+//!     - `#{PoS}/total_deltas`
+//!     - `#{PoS}/validator_set`
+//!     - `#{PoS}/validator/#{validator}/deltas`
 //!
 //! - Withdraw: Requires a withdrawable unbond in the state (the `#{owner}` and
 //!   `#{validator}` segments in the keys below must be the owner and a
@@ -67,13 +62,14 @@
 //!     - `#{staking_token}/balance/#{PoS}`
 //!
 //! - Init validator: No state requirements.
-//!     - `#{PoS}/address_raw_hash/{raw_hash}` (the raw_hash is the validator's
-//!       address in Tendermint)
+//!     - `#{PoS}/validator/#{validator}/address_raw_hash` (the raw_hash is the
+//!       validator's address in Tendermint)
 //!     - `#{PoS}/validator_set`
 //!     - `#{PoS}/validator/#{validator}/consensus_key`
 //!     - `#{PoS}/validator/#{validator}/state`
-//!     - `#{PoS}/validator/#{validator}/total_deltas`
-//!     - `#{PoS}/validator/#{validator}/voting_power`
+//!     - `#{PoS}/validator/#{validator}/deltas`
+//!     - `#{PoS}/validator/#{validator}/commission_rate`
+//!     - `#{PoS}/validator/#{validator}/max_commission_rate_change`
 //!
 //!
 //! ## Invalidating transitions
@@ -97,6 +93,7 @@
 //! - add more invalid PoS changes
 //! - add arb invalid storage changes
 //! - add slashes
+//! - add rewards
 
 use namada::ledger::pos::namada_proof_of_stake::init_genesis;
 use namada::proof_of_stake::parameters::PosParams;
