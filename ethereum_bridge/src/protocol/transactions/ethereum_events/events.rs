@@ -572,14 +572,14 @@ mod tests {
         assets_transferred: A,
     ) -> Vec<PendingTransfer>
     where
-        A: IntoIterator<Item = EthAddress>,
+        A: Into<BTreeSet<EthAddress>>,
     {
         let sender = address::testing::established_address_1();
         let payer = address::testing::established_address_2();
 
         // set pending transfers
         let mut pending_transfers = vec![];
-        for (i, asset) in assets_transferred.into_iter().enumerate() {
+        for (i, asset) in assets_transferred.into().into_iter().enumerate() {
             let transfer = PendingTransfer {
                 transfer: eth_bridge_pool::TransferToEthereum {
                     asset,
@@ -609,7 +609,7 @@ mod tests {
     ) -> Vec<PendingTransfer> {
         init_bridge_pool_transfers(
             wl_storage,
-            (0..2).map(|i| EthAddress([i; 20])),
+            (0..2).map(|i| EthAddress([i; 20])).collect::<BTreeSet<_>>(),
         )
     }
 
@@ -1097,7 +1097,9 @@ mod tests {
 
         test_wrapped_erc20s_aux(|wl_storage, event| {
             let transfers = match &event {
-                EthereumEvent::TransfersToEthereum { transfers, .. } => transfers.iter(),
+                EthereumEvent::TransfersToEthereum { transfers, .. } => {
+                    transfers.iter()
+                }
                 _ => panic!("Test failed"),
             };
             let _deltas = transfers.map(
@@ -1127,6 +1129,9 @@ mod tests {
                 changed_keys
                     .contains(&random_erc20_keys.balance(&BRIDGE_POOL_ADDRESS))
             );
+
+            // TODO: check if supplies decreased, the balance of the bridge pool
+            // escrow decreased, and the sender's balance also diminished
         })
     }
 }
