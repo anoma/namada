@@ -18,7 +18,9 @@ use namada_core::ledger::eth_bridge;
 use namada_core::types::ethereum_events::{EthereumEvent, TransferToNamada};
 use namada_core::types::token;
 
-use crate::e2e::helpers::{get_actor_rpc, strip_trailing_newline};
+use crate::e2e::helpers::{
+    get_actor_rpc, rpc_client_do, strip_trailing_newline,
+};
 use crate::e2e::setup::{
     self, set_ethereum_bridge_mode, Bin, NamadaBgCmd, NamadaCmd, Test, Who,
 };
@@ -230,4 +232,20 @@ pub fn find_wrapped_erc20_balance(
         token::Amount::try_from_slice(&HEXLOWER.decode(data_str.as_bytes())?)?;
     bytes.assert_success();
     Ok(amount)
+}
+
+/// Read the total supply of some wrapped ERC20 token in Namada.
+pub async fn read_erc20_supply(
+    ledger_addr: &str,
+    asset: &EthAddress,
+) -> Result<Option<token::Amount>> {
+    rpc_client_do(ledger_addr, |rpc, client| async move {
+        let amount = rpc
+            .shell()
+            .eth_bridge()
+            .read_erc20_supply(&client, asset)
+            .await?;
+        Ok(amount)
+    })
+    .await
 }
