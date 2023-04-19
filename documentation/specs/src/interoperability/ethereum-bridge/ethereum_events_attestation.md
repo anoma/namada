@@ -56,7 +56,8 @@ Validators must not vote to include events that have not met the required
 number of confirmations. Votes on unconfirmed events will eventually time
 out in storage, unless the number of confirmations was only off by a few
 block heights in Ethereum. Assuming that an honest majority of validators
-is operating Namada, only confirmed events will eventually become `seen`.
+is operating Namada (i.e. $\ge \frac{2}{3}$ by voting power), only confirmed
+events will eventually become `seen`.
 
 ## Vote extension protocol transactions
 A batch of Ethereum events $E$ newly confirmed at some block height $H$
