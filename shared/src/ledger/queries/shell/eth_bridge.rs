@@ -60,7 +60,7 @@ router! {ETH_BRIDGE,
 
     // Iterates over all ethereum events and returns the amount of
     // voting power backing each `TransferToEthereum` event.
-    ("pool" / "transfer_to_eth_progress")
+    ( "pool" / "transfer_to_eth_progress" )
         -> HashMap<TransferToEthereum, FractionalVotingPower> = transfer_to_ethereum_progress,
 
     // Request a proof of a validator set signed off for
