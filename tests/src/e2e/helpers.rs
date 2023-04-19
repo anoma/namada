@@ -29,7 +29,7 @@ use super::setup::{
 use crate::e2e::setup::{Bin, Who, APPS_PACKAGE};
 use crate::{run, run_as};
 
-/// Instantiante a new [`HttpClient`] to perform RPC requests with.
+/// Instantiate a new [`HttpClient`] to perform RPC requests with.
 pub async fn rpc_client_do<A, F, R>(ledger_address: &str, mut action: A) -> R
 where
     A: FnMut(Rpc, HttpClient) -> F,
