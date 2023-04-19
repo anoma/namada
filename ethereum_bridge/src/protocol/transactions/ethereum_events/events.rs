@@ -498,13 +498,9 @@ where
 {
     let mut changed_keys = BTreeSet::default();
 
-    let native_erc20_addr = match wl_storage
-        .read_bytes(&bridge_storage::native_erc20_key())?
-    {
-        Some(v) => EthAddress::try_from_slice(&v[..])?,
-        None => {
-            return Err(eyre::eyre!("Could not read wNam key from storage"));
-        }
+    let maybe_addr = wl_storage.read(&bridge_storage::native_erc20_key())?;
+    let Some(native_erc20_addr) = maybe_addr else {
+        return Err(eyre::eyre!("Could not read wNam key from storage"));
     };
 
     if transfer.transfer.asset == native_erc20_addr {
