@@ -24,8 +24,9 @@ use namada_core::types::token::Amount;
 use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::eth_bridge_tests::helpers::{
     attempt_wrapped_erc20_transfer, find_wrapped_erc20_balance,
-    send_transfer_to_namada_event, setup_single_validator_test,
-    EventsEndpointClient, DEFAULT_ETHEREUM_EVENTS_LISTEN_ADDR,
+    read_erc20_supply, send_transfer_to_namada_event,
+    setup_single_validator_test, EventsEndpointClient,
+    DEFAULT_ETHEREUM_EVENTS_LISTEN_ADDR,
 };
 use crate::e2e::helpers::{
     find_address, find_balance, get_actor_rpc, init_established_account,
@@ -168,6 +169,12 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
 
     let (test, bg_ledger) = setup_single_validator_test()?;
 
+    // check the initial supply of DAI - should be None
+    let ledger_addr = get_actor_rpc(&test, &SOLE_VALIDATOR);
+    let dai_supply =
+        read_erc20_supply(&ledger_addr, &DAI_ERC20_ETH_ADDRESS).await?;
+    assert_eq!(dai_supply, None);
+
     let transfer_amount = token::Amount::from(10_000_000);
     // [`BERTHA`] is a pre-existing implicit address in our wallet
     let berthas_addr = find_address(&test, BERTHA)?;
@@ -190,8 +197,12 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
     )?;
     assert_eq!(bertha_wdai_balance, transfer_amount);
 
-    // let's transfer them back to Ethereum
     let ledger_addr = get_actor_rpc(&test, &SOLE_VALIDATOR);
+    let dai_supply =
+        read_erc20_supply(&ledger_addr, &DAI_ERC20_ETH_ADDRESS).await?;
+    assert_eq!(dai_supply, Some(transfer_amount));
+
+    // let's transfer them back to Ethereum
     let amount = transfer_amount.to_string();
     let dai_addr = DAI_ERC20_ETH_ADDRESS.to_string();
     let tx_args = vec![
@@ -319,6 +330,12 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
         &berthas_addr,
     )?;
     assert_eq!(bertha_wdai_balance, 0.into());
+
+    // check the final supply of DAI - should be 0
+    let ledger_addr = get_actor_rpc(&test, &SOLE_VALIDATOR);
+    let dai_supply =
+        read_erc20_supply(&ledger_addr, &DAI_ERC20_ETH_ADDRESS).await?;
+    assert_eq!(dai_supply, Some(0.into()));
 
     Ok(())
 }
