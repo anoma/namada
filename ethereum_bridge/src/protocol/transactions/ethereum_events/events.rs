@@ -567,20 +567,24 @@ mod tests {
             .expect("Test failed");
     }
 
-    fn init_bridge_pool(
+    fn init_bridge_pool_transfers<A>(
         wl_storage: &mut TestWlStorage,
-    ) -> Vec<PendingTransfer> {
+        assets_transferred: A,
+    ) -> Vec<PendingTransfer>
+    where
+        A: IntoIterator<Item = EthAddress>,
+    {
         let sender = address::testing::established_address_1();
         let payer = address::testing::established_address_2();
 
         // set pending transfers
         let mut pending_transfers = vec![];
-        for i in 0..2 {
+        for (i, asset) in assets_transferred.into_iter().enumerate() {
             let transfer = PendingTransfer {
                 transfer: eth_bridge_pool::TransferToEthereum {
-                    asset: EthAddress([i; 20]),
+                    asset,
                     sender: sender.clone(),
-                    recipient: EthAddress([i + 1; 20]),
+                    recipient: EthAddress([i as u8 + 1; 20]),
                     amount: Amount::from(10),
                 },
                 gas_fee: GasFee {
@@ -597,6 +601,16 @@ mod tests {
             pending_transfers.push(transfer);
         }
         pending_transfers
+    }
+
+    #[inline]
+    fn init_bridge_pool(
+        wl_storage: &mut TestWlStorage,
+    ) -> Vec<PendingTransfer> {
+        init_bridge_pool_transfers(
+            wl_storage,
+            (0..2).map(|i| EthAddress([i; 20])),
+        )
     }
 
     fn init_balance(
