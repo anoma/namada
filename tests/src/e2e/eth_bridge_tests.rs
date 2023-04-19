@@ -171,8 +171,9 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
 
     // check the initial supply of DAI - should be None
     let ledger_addr = get_actor_rpc(&test, &SOLE_VALIDATOR);
+    let rpc_addr = format!("http://{ledger_addr}");
     let dai_supply =
-        read_erc20_supply(&ledger_addr, &DAI_ERC20_ETH_ADDRESS).await?;
+        read_erc20_supply(&rpc_addr, &DAI_ERC20_ETH_ADDRESS).await?;
     assert_eq!(dai_supply, None);
 
     let transfer_amount = token::Amount::from(10_000_000);
@@ -197,9 +198,8 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
     )?;
     assert_eq!(bertha_wdai_balance, transfer_amount);
 
-    let ledger_addr = get_actor_rpc(&test, &SOLE_VALIDATOR);
     let dai_supply =
-        read_erc20_supply(&ledger_addr, &DAI_ERC20_ETH_ADDRESS).await?;
+        read_erc20_supply(&rpc_addr, &DAI_ERC20_ETH_ADDRESS).await?;
     assert_eq!(dai_supply, Some(transfer_amount));
 
     // let's transfer them back to Ethereum
@@ -332,9 +332,8 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
     assert_eq!(bertha_wdai_balance, 0.into());
 
     // check the final supply of DAI - should be 0
-    let ledger_addr = get_actor_rpc(&test, &SOLE_VALIDATOR);
     let dai_supply =
-        read_erc20_supply(&ledger_addr, &DAI_ERC20_ETH_ADDRESS).await?;
+        read_erc20_supply(&rpc_addr, &DAI_ERC20_ETH_ADDRESS).await?;
     assert_eq!(dai_supply, Some(0.into()));
 
     Ok(())
