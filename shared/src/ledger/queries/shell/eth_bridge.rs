@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
+use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
 use namada_core::ledger::storage::merkle_tree::StoreRef;
 use namada_core::ledger::storage::{
     DBIter, MerkleTree, StorageHasher, StoreType, DB,
@@ -18,6 +19,7 @@ use namada_core::types::ethereum_events::{
 };
 use namada_core::types::ethereum_structs::RelayProof;
 use namada_core::types::storage::{BlockHeight, DbKeySeg, Key};
+use namada_core::types::token::Amount;
 use namada_core::types::vote_extensions::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,
 };
@@ -94,6 +96,32 @@ router! {ETH_BRIDGE,
 
     // Read the voting powers map for the requested validator set.
     ( "eth_voting_powers" / [height: BlockHeight]) -> VotingPowersMap = eth_voting_powers,
+
+    // Read the total supply of some wrapped ERC20 token in Namada.
+    ( "erc20" / "supply" / [asset: EthAddress] ) -> Option<Amount> = read_erc20_supply,
+}
+
+/// Read the total supply of some wrapped ERC20 token in Namada.
+fn read_erc20_supply<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    asset: EthAddress,
+) -> storage_api::Result<Option<Amount>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let Some(native_erc20) = ctx.wl_storage.read(&native_erc20_key())? else {
+        return Err(storage_api::Error::SimpleMessage(
+            "The Ethereum bridge storage is not initialized",
+        ));
+    };
+    if asset == native_erc20 {
+        return Err(storage_api::Error::SimpleMessage(
+            "Wrapped NAM's supply is not kept track of",
+        ));
+    }
+    let keys: wrapped_erc20s::Keys = (&asset).into();
+    ctx.wl_storage.read(&keys.supply())
 }
 
 /// Helper function to read a smart contract from storage.
