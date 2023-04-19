@@ -1,5 +1,6 @@
 //! E2E test helpers
 
+use std::future::Future;
 use std::path::Path;
 use std::process::Command;
 use std::str::FromStr;
@@ -12,6 +13,8 @@ use color_eyre::owo_colors::OwoColorize;
 use data_encoding::HEXLOWER;
 use escargot::CargoBuild;
 use eyre::eyre;
+use namada::ledger::queries::{Rpc, RPC};
+use namada::tendermint_rpc::HttpClient;
 use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::storage::Epoch;
@@ -25,6 +28,17 @@ use super::setup::{
 };
 use crate::e2e::setup::{Bin, Who, APPS_PACKAGE};
 use crate::{run, run_as};
+
+/// Instantiante a new [`HttpClient`] to perform RPC requests with.
+pub async fn rpc_client_do<A, F, R>(ledger_address: &str, mut action: A) -> R
+where
+    A: FnMut(Rpc, HttpClient) -> F,
+    F: Future<Output = R>,
+{
+    let client =
+        HttpClient::new(ledger_address).expect("Invalid ledger address");
+    action(RPC, client).await
+}
 
 /// Sets up a test chain with a single validator node running in the background,
 /// and returns the [`Test`] handle and [`NamadaBgCmd`] for the validator node.
