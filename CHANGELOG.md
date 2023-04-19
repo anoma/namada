@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## v0.15.1
+
+Namada 0.15.1 is a patch release addressing issues with high storage
+usage due to duplicative storage of wasm code.
+
+### IMPROVEMENTS
+
+- Disable Tendermint tx_index as default
+  ([#1278](https://github.com/anoma/namada/issues/1278))
+- Remove wasm code from tx ([#1297](https://github.com/anoma/namada/issues/1297))
+
 ## v0.15.0
 
 Namada 0.15.0 is a regular minor release featuring various
