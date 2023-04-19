@@ -910,7 +910,7 @@ pub fn get_all_wasms_hashes(
                 Some(
                     wasm.split('.').collect::<Vec<&str>>()[1]
                         .to_owned()
-                        .to_uppercase(),
+                        .to_lowercase(),
                 )
             } else {
                 None

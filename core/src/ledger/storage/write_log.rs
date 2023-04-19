@@ -9,6 +9,7 @@ use thiserror::Error;
 use crate::ledger;
 use crate::ledger::storage::{Storage, StorageHasher};
 use crate::types::address::{Address, EstablishedAddressGen};
+use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
 use crate::types::storage;
 
@@ -48,7 +49,7 @@ pub enum StorageModification {
     /// point to its validity predicate.
     InitAccount {
         /// Validity predicate hash bytes
-        vp_code_hash: Vec<u8>,
+        vp_code_hash: Hash,
     },
     /// Temporary value. This value will be never written to the storage. After
     /// writing a temporary value, it can't be mutated with normal write.
@@ -313,7 +314,7 @@ impl WriteLog {
     pub fn init_account(
         &mut self,
         storage_address_gen: &EstablishedAddressGen,
-        vp_code_hash: Vec<u8>,
+        vp_code_hash: Hash,
     ) -> (Address, u64) {
         // If we've previously generated a new account, we use the local copy of
         // the generator. Otherwise, we create a new copy from the storage
@@ -612,19 +613,20 @@ mod tests {
 
         // init
         let init_vp = "initialized".as_bytes().to_vec();
-        let (addr, gas) = write_log.init_account(&address_gen, init_vp.clone());
+        let vp_hash = Hash::sha256(init_vp);
+        let (addr, gas) = write_log.init_account(&address_gen, vp_hash.clone());
         let vp_key = storage::Key::validity_predicate(&addr);
-        assert_eq!(gas, (vp_key.len() + init_vp.len()) as u64);
+        assert_eq!(gas, (vp_key.len() + vp_hash.len()) as u64);
 
         // read
         let (value, gas) = write_log.read(&vp_key);
         match value.expect("no read value") {
             StorageModification::InitAccount { vp_code_hash } => {
-                assert_eq!(*vp_code_hash, init_vp)
+                assert_eq!(*vp_code_hash, vp_hash)
             }
             _ => panic!("unexpected result"),
         }
-        assert_eq!(gas, (vp_key.len() + init_vp.len()) as u64);
+        assert_eq!(gas, (vp_key.len() + vp_hash.len()) as u64);
 
         // get all
         let (_changed_keys, init_accounts) = write_log.get_partitioned_keys();
@@ -638,12 +640,16 @@ mod tests {
         let address_gen = EstablishedAddressGen::new("test");
 
         let init_vp = "initialized".as_bytes().to_vec();
-        let (addr, _) = write_log.init_account(&address_gen, init_vp);
+        let vp_hash = Hash::sha256(init_vp);
+        let (addr, _) = write_log.init_account(&address_gen, vp_hash);
         let vp_key = storage::Key::validity_predicate(&addr);
 
         // update should fail
         let updated_vp = "updated".as_bytes().to_vec();
-        let result = write_log.write(&vp_key, updated_vp).unwrap_err();
+        let updated_vp_hash = Hash::sha256(updated_vp);
+        let result = write_log
+            .write(&vp_key, updated_vp_hash.to_vec())
+            .unwrap_err();
         assert_matches!(result, Error::UpdateVpOfNewAccount);
     }
 
@@ -653,7 +659,8 @@ mod tests {
         let address_gen = EstablishedAddressGen::new("test");
 
         let init_vp = "initialized".as_bytes().to_vec();
-        let (addr, _) = write_log.init_account(&address_gen, init_vp);
+        let vp_hash = Hash::sha256(init_vp);
+        let (addr, _) = write_log.init_account(&address_gen, vp_hash);
         let vp_key = storage::Key::validity_predicate(&addr);
 
         // delete should fail
@@ -690,7 +697,7 @@ mod tests {
 
         // initialize an account
         let vp1 = Hash::sha256("vp1".as_bytes());
-        let (addr1, _) = write_log.init_account(&address_gen, vp1.to_vec());
+        let (addr1, _) = write_log.init_account(&address_gen, vp1.clone());
         write_log.commit_tx();
 
         // write values
@@ -837,7 +844,7 @@ pub mod testing {
                 Just(StorageModification::Delete),
                 any::<[u8; HASH_LENGTH]>().prop_map(|hash| {
                     StorageModification::InitAccount {
-                        vp_code_hash: hash.to_vec(),
+                        vp_code_hash: Hash(hash),
                     }
                 }),
                 any::<Vec<u8>>()

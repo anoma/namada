@@ -9,7 +9,7 @@ use namada::ledger::pos::{into_tm_voting_power, staking_token_address};
 use namada::ledger::storage_api::token::{
     credit_tokens, read_balance, read_total_supply,
 };
-use namada::ledger::storage_api::StorageWrite;
+use namada::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
 use namada::types::hash::Hash as CodeHash;
 use namada::types::key::*;
 use rust_decimal::Decimal;
@@ -81,6 +81,7 @@ where
             vp_whitelist,
             tx_whitelist,
             implicit_vp_code_path,
+            implicit_vp_sha256,
             epochs_per_year,
             pos_gain_p,
             pos_gain_d,
@@ -125,29 +126,46 @@ where
             );
 
             if (tx_whitelist.is_empty() && vp_whitelist.is_empty())
-                || tx_whitelist.contains(&code_hash.to_string())
-                || vp_whitelist.contains(&code_hash.to_string())
+                || tx_whitelist.contains(&code_hash.to_string().to_lowercase())
+                || vp_whitelist.contains(&code_hash.to_string().to_lowercase())
             {
+                if name.starts_with("tx_") {
+                    self.tx_wasm_cache.pre_compile(&code);
+                } else if name.starts_with("vp_") {
+                    self.vp_wasm_cache.pre_compile(&code);
+                }
+
                 let code_key = Key::wasm_code(&code_hash);
                 self.wl_storage.write_bytes(&code_key, code)?;
 
                 let hash_key = Key::wasm_hash(name);
                 self.wl_storage.write_bytes(&hash_key, code_hash)?;
+            } else {
+                tracing::warn!("The wasm {name} isn't whitelisted.");
             }
         }
 
         // check if implicit_vp wasm is stored
-        let hash_key = Key::wasm_hash(&implicit_vp_code_path);
         let implicit_vp_code_hash =
-            match self.wl_storage.read_bytes(&hash_key)? {
-                Some(hash) => hash,
-                None => {
-                    return Err(Error::LoadingWasm(format!(
-                        "Unknown vp code path: {}",
-                        implicit_vp_code_path
-                    )));
-                }
-            };
+            read_wasm_hash(&self.wl_storage, &implicit_vp_code_path)?.ok_or(
+                Error::LoadingWasm(format!(
+                    "Unknown vp code path: {}",
+                    implicit_vp_code_path
+                )),
+            )?;
+        // In dev, we don't check the hash
+        #[cfg(feature = "dev")]
+        let _ = implicit_vp_sha256;
+        #[cfg(not(feature = "dev"))]
+        {
+            assert_eq!(
+                implicit_vp_code_hash.as_slice(),
+                &implicit_vp_sha256,
+                "Invalid implicit account's VP sha256 hash for {}",
+                implicit_vp_code_path
+            );
+        }
+
         let parameters = Parameters {
             epoch_duration,
             max_proposal_bytes,
@@ -185,20 +203,30 @@ where
         for genesis::EstablishedAccount {
             address,
             vp_code_path,
+            vp_sha256,
             public_key,
             storage,
         } in genesis.established_accounts
         {
-            let hash_key = Key::wasm_hash(&vp_code_path);
-            let vp_code_hash = match self.wl_storage.read_bytes(&hash_key)? {
-                Some(hash) => hash,
-                None => {
-                    return Err(Error::LoadingWasm(format!(
-                        "Unknown vp code path: {}",
-                        vp_code_path
-                    )));
-                }
-            };
+            let vp_code_hash = read_wasm_hash(&self.wl_storage, &vp_code_path)?
+                .ok_or(Error::LoadingWasm(format!(
+                    "Unknown vp code path: {}",
+                    implicit_vp_code_path
+                )))?;
+
+            // In dev, we don't check the hash
+            #[cfg(feature = "dev")]
+            let _ = vp_sha256;
+            #[cfg(not(feature = "dev"))]
+            {
+                assert_eq!(
+                    vp_code_hash.as_slice(),
+                    &vp_sha256,
+                    "Invalid established account's VP sha256 hash for {}",
+                    vp_code_path
+                );
+            }
+
             self.wl_storage
                 .write_bytes(&Key::validity_predicate(&address), vp_code_hash)
                 .unwrap();
@@ -245,19 +273,30 @@ where
         for genesis::TokenAccount {
             address,
             vp_code_path,
+            vp_sha256,
             balances,
         } in genesis.token_accounts
         {
-            let hash_key = Key::wasm_hash(&vp_code_path);
-            let vp_code_hash = match self.wl_storage.read_bytes(&hash_key)? {
-                Some(hash) => hash,
-                None => {
-                    return Err(Error::LoadingWasm(format!(
+            let vp_code_hash =
+                read_wasm_hash(&self.wl_storage, vp_code_path.clone())?.ok_or(
+                    Error::LoadingWasm(format!(
                         "Unknown vp code path: {}",
-                        vp_code_path
-                    )));
-                }
-            };
+                        implicit_vp_code_path
+                    )),
+                )?;
+
+            // In dev, we don't check the hash
+            #[cfg(feature = "dev")]
+            let _ = vp_sha256;
+            #[cfg(not(feature = "dev"))]
+            {
+                assert_eq!(
+                    vp_code_hash.as_slice(),
+                    &vp_sha256,
+                    "Invalid token account's VP sha256 hash for {}",
+                    vp_code_path
+                );
+            }
 
             self.wl_storage
                 .write_bytes(&Key::validity_predicate(&address), vp_code_hash)
@@ -272,16 +311,24 @@ where
         // Initialize genesis validator accounts
         let staking_token = staking_token_address(&self.wl_storage);
         for validator in &genesis.validators {
-            let hash_key = Key::wasm_hash(&validator.validator_vp_code_path);
-            let vp_code_hash = match self.wl_storage.read_bytes(&hash_key)? {
-                Some(hash) => hash,
-                None => {
-                    return Err(Error::LoadingWasm(format!(
-                        "Unknown vp code path: {}",
-                        validator.validator_vp_code_path
-                    )));
-                }
-            };
+            let vp_code_hash = read_wasm_hash(
+                &self.wl_storage,
+                &validator.validator_vp_code_path,
+            )?
+            .ok_or(Error::LoadingWasm(format!(
+                "Unknown vp code path: {}",
+                implicit_vp_code_path
+            )))?;
+
+            #[cfg(not(feature = "dev"))]
+            {
+                assert_eq!(
+                    vp_code_hash.as_slice(),
+                    &validator.validator_vp_sha256,
+                    "Invalid validator VP sha256 hash for {}",
+                    validator.validator_vp_code_path
+                );
+            }
 
             let addr = &validator.pos_data.address;
             self.wl_storage
@@ -367,6 +414,20 @@ where
         }
 
         Ok(response)
+    }
+}
+
+fn read_wasm_hash(
+    storage: &impl StorageRead,
+    path: impl AsRef<str>,
+) -> storage_api::Result<Option<CodeHash>> {
+    let hash_key = Key::wasm_hash(path);
+    match storage.read_bytes(&hash_key)? {
+        Some(value) => {
+            let hash = CodeHash::try_from(&value[..]).into_storage_result()?;
+            Ok(Some(hash))
+        }
+        None => Ok(None),
     }
 }
 

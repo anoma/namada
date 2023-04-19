@@ -327,7 +327,7 @@ where
                                 vp_code_hash,
                             } => {
                                 let gas = vp_code_hash.len() as u64;
-                                return Some((key, vp_code_hash, gas));
+                                return Some((key, vp_code_hash.to_vec(), gas));
                             }
                             write_log::StorageModification::Delete => {
                                 continue;
@@ -366,7 +366,7 @@ where
             Some(&write_log::StorageModification::Delete) => Ok(None),
             Some(&write_log::StorageModification::InitAccount {
                 ref vp_code_hash,
-            }) => Ok(Some(vp_code_hash.clone())),
+            }) => Ok(Some(vp_code_hash.to_vec())),
             Some(&write_log::StorageModification::Temp { ref value }) => {
                 Ok(Some(value.clone()))
             }

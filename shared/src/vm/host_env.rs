@@ -626,7 +626,7 @@ where
                 .try_into()
                 .map_err(TxRuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
-            result_buffer.replace(vp_code_hash.clone());
+            result_buffer.replace(vp_code_hash.to_vec());
             len
         }
         Some(&write_log::StorageModification::Temp { ref value }) => {
@@ -1429,6 +1429,8 @@ where
 
     let storage = unsafe { env.ctx.storage.get() };
     let write_log = unsafe { env.ctx.write_log.get() };
+    let code_hash = Hash::try_from(&code_hash[..])
+        .map_err(|e| TxRuntimeError::InvalidVpCodeHash(e.to_string()))?;
     let (addr, gas) = write_log.init_account(&storage.address_gen, code_hash);
     let addr_bytes =
         addr.try_to_vec().map_err(TxRuntimeError::EncodingError)?;

@@ -25,7 +25,7 @@ The Namada public testnet is permissionless, anyone can join without the authori
 
 
 ## Latest Testnet
-- Namada public testnet 6:
+- Namada public testnet 6 (offline):
   - From date: 29th of March 2023 17.00 UTC 
   - Namada protocol version: `v0.14.3` 
   - Tendermint (Core) version: `v0.1.4-abciplus`
