@@ -26,7 +26,9 @@ use namada::types::address::masp;
 use namada::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use std::env;
 use std::fs::File;
+use std::collections::HashMap;
 use masp_primitives::transaction::components::sapling::fees::{OutputView, InputView};
+use masp_primitives::asset_type::AssetType;
 use namada::types::masp::{PaymentAddress, ExtendedViewingKey};
 
 use super::rpc;
@@ -36,6 +38,7 @@ use crate::client::tendermint_rpc_types::TxBroadcastData;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::HttpClient;
 use crate::wallet::Wallet;
+use crate::client::tx::make_asset_type;
 use crate::client::tx::{
     TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
     TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM, TX_REVEAL_PK, TX_TRANSFER_WASM,
@@ -370,8 +373,13 @@ struct LedgerVector {
     valid: bool,
 }
 
-/// Adds a Ledger output line describing a given transaction amount
-fn make_ledger_amount(output: &mut Vec<String>, amount: Amount, token: &Address, prefix: &str) {
+/// Adds a Ledger output line describing a given transaction amount and address
+fn make_ledger_amount_addr(
+    output: &mut Vec<String>,
+    amount: Amount,
+    token: &Address,
+    prefix: &str,
+) {
     // To facilitate lookups of human-readable token names
     let tokens = tokens();
     
@@ -382,6 +390,38 @@ fn make_ledger_amount(output: &mut Vec<String>, amount: Amount, token: &Address,
         output.extend(vec![
             format!("3 | {}Token: {}", prefix, token),
             format!("4 | {}Amount: {}", prefix, amount),
+        ]);
+    }
+}
+
+/// Adds a Ledger output line describing a given transaction amount and asset
+/// type
+fn make_ledger_amount_asset(
+    output: &mut Vec<String>,
+    amount: u64,
+    token: &AssetType,
+    assets: &HashMap<AssetType, (Address, Epoch)>,
+    prefix: &str,
+) {
+    // To facilitate lookups of human-readable token names
+    let tokens = tokens();
+
+    if let Some((token, _epoch)) = assets.get(token) {
+        // If the AssetType can be decoded, then at least display Addressees
+        if let Some(token) = tokens.get(&token) {
+            output
+                .push(format!("3 | {}Amount: {} {}", prefix, token, Amount::from(amount)));
+        } else {
+            output.extend(vec![
+                format!("3 | {}Token: {}", prefix, token),
+                format!("4 | {}Amount: {}", prefix, Amount::from(amount)),
+            ]);
+        }
+    } else {
+        // Otherwise display the raw AssetTypes
+        output.extend(vec![
+            format!("3 | {}Token: {}", prefix, token),
+            format!("4 | {}Amount: {}", prefix, Amount::from(amount)),
         ]);
     }
 }
@@ -684,10 +724,15 @@ fn to_ledger_vector(
         let transfer = Transfer::try_from_slice(
             &tx.data().ok_or_else(|| Error::from(ErrorKind::InvalidData))?,
         )?;
+        // To facilitate lookups of MASP AssetTypes
+        let mut asset_types = HashMap::new();
         let builder = if let Some(shielded_hash) = transfer.shielded {
             tx.sections.iter().find_map(|x| {
                 match x {
                     Section::MaspBuilder(builder) if builder.target == shielded_hash => {
+                        for (addr, epoch) in &builder.asset_types {
+                            asset_types.insert(make_asset_type(*epoch, addr), (addr.clone(), *epoch));
+                        }
                         Some(builder)
                     },
                     _ => None,
@@ -703,31 +748,29 @@ fn to_ledger_vector(
         if transfer.source != masp() {
             tv.output.push(format!("1 | Sender: {}", transfer.source));
             if transfer.target == masp() {
-                make_ledger_amount(&mut tv.output, transfer.amount, &transfer.token, "Sending ");
+                make_ledger_amount_addr(&mut tv.output, transfer.amount, &transfer.token, "Sending ");
             }
         } else if let Some(builder) = builder {
             for input in builder.builder.sapling_inputs() {
                 let vk = ExtendedViewingKey::from(input.key().clone());
                 tv.output.push(format!("1 | Sender: {}", vk));
-                tv.output
-                    .push(format!("3 | Sending: {} {}", input.asset_type(), Amount::from(input.value())));
+                make_ledger_amount_asset(&mut tv.output, input.value(), &input.asset_type(), &asset_types, "Sending ");
             }
         }
         if transfer.target != masp() {
             tv.output.push(format!("2 | Destination: {}", transfer.target));
             if transfer.source == masp() {
-                make_ledger_amount(&mut tv.output, transfer.amount, &transfer.token, "Receiving ");
+                make_ledger_amount_addr(&mut tv.output, transfer.amount, &transfer.token, "Receiving ");
             }
         } else if let Some(builder) = builder {
             for output in builder.builder.sapling_outputs() {
                 let pa = PaymentAddress::from(output.address().clone());
                 tv.output.push(format!("1 | Destination: {}", pa));
-                tv.output
-                    .push(format!("3 | Receiving: {} {}", output.asset_type(), Amount::from(output.value())));
+                make_ledger_amount_asset(&mut tv.output, output.value(), &output.asset_type(), &asset_types, "Receiving ");
             }
         }
         if transfer.source != masp() && transfer.target != masp() {
-            make_ledger_amount(&mut tv.output, transfer.amount, &transfer.token, "");
+            make_ledger_amount_addr(&mut tv.output, transfer.amount, &transfer.token, "");
         }
 
         tv.output_expert.extend(vec![

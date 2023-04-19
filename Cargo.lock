@@ -3391,7 +3391,7 @@ dependencies = [
 [[package]]
 name = "masp_note_encryption"
 version = "0.2.0"
-source = "git+https://github.com/anoma/masp?branch=murisi/namada-integration#3fee08a7e079a257c20c3a28a1bc3f21157f59a3"
+source = "git+https://github.com/anoma/masp?branch=murisi/namada-integration#1ed99e86d8795a363df170042089283ea9a43d93"
 dependencies = [
  "borsh",
  "chacha20 0.9.1",
@@ -3404,7 +3404,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "0.9.0"
-source = "git+https://github.com/anoma/masp?branch=murisi/namada-integration#3fee08a7e079a257c20c3a28a1bc3f21157f59a3"
+source = "git+https://github.com/anoma/masp?branch=murisi/namada-integration#1ed99e86d8795a363df170042089283ea9a43d93"
 dependencies = [
  "aes",
  "bip0039",
@@ -3434,7 +3434,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "0.9.0"
-source = "git+https://github.com/anoma/masp?branch=murisi/namada-integration#3fee08a7e079a257c20c3a28a1bc3f21157f59a3"
+source = "git+https://github.com/anoma/masp?branch=murisi/namada-integration#1ed99e86d8795a363df170042089283ea9a43d93"
 dependencies = [
  "bellman 0.13.1",
  "blake2b_simd",

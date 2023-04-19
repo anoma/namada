@@ -23,6 +23,11 @@ use masp_primitives::transaction::TransparentAddress;
 use masp_primitives::merkle_tree::{
     CommitmentTree, IncrementalWitness, MerklePath,
 };
+use masp_primitives::transaction::components::sapling::fees::InputView as SaplingInputView;
+use masp_primitives::transaction::components::sapling::fees::OutputView as SaplingOutputView;
+use masp_primitives::transaction::components::transparent::fees::InputView as TransparentInputView;
+use masp_primitives::transaction::components::transparent::fees::OutputView as TransparentOutputView;
+use masp_primitives::transaction::components::sapling::fees::ConvertView;
 use masp_primitives::transaction::fees::fixed::FeeRule;
 use masp_primitives::transaction::Authorization;
 use masp_primitives::transaction::Authorized;
@@ -1311,7 +1316,7 @@ impl ShieldedContext {
 }
 
 /// Make asset type corresponding to given address and epoch
-fn make_asset_type(epoch: Epoch, token: &Address) -> AssetType {
+pub fn make_asset_type(epoch: Epoch, token: &Address) -> AssetType {
     // Typestamp the chosen token with the current epoch
     let token_bytes = (token, epoch.0)
         .try_to_vec()
@@ -1514,6 +1519,60 @@ where
         .map(|(tx, metadata)| Some((builder.map_builder(WalletMap), tx, metadata)))
 }
 
+/// Try to decode the given asset type and add its decoding to the supplied set.
+/// Returns true only if a new decoding has been added to the given set.
+async fn add_asset_type(
+    asset_types: &mut HashSet<(Address, Epoch)>,
+    ctx: &mut Context,
+    client: &HttpClient,
+    asset_type: AssetType,
+) -> bool {
+    if let Some(asset_type) = ctx
+        .shielded
+        .decode_asset_type(client.clone(), asset_type)
+        .await
+    {
+        asset_types.insert(asset_type)
+    } else {
+        false
+    }
+}
+
+/// Collect the asset types used in the given Builder and decode them. This
+/// function provides the data necessary for offline wallets to present asset
+/// type information.
+async fn used_asset_types<P, R, K, N>(
+    ctx: &mut Context,
+    ledger_address: &TendermintAddress,
+    builder: &Builder<P, R, K, N>,
+) -> Result<HashSet<(Address, Epoch)>, RpcError> {
+    let client = HttpClient::new(ledger_address.clone())?;
+    let mut asset_types = HashSet::new();
+    // Collect all the asset types used in the Sapling inputs
+    for input in builder.sapling_inputs() {
+        add_asset_type(&mut asset_types, ctx, &client, input.asset_type()).await;
+    }
+    // Collect all the asset types used in the transparent inputs
+    for input in builder.transparent_inputs() {
+        add_asset_type(&mut asset_types, ctx, &client, input.coin().asset_type()).await;
+    }
+    // Collect all the asset types used in the Sapling outputs
+    for output in builder.sapling_outputs() {
+        add_asset_type(&mut asset_types, ctx, &client, output.asset_type()).await;
+    }
+    // Collect all the asset types used in the transparent outputs
+    for output in builder.transparent_outputs() {
+        add_asset_type(&mut asset_types, ctx, &client, output.asset_type()).await;
+    }
+    // Collect all the asset types used in the Sapling converts
+    for output in builder.sapling_converts() {
+        for (asset_type, _) in Amount::from(output.conversion().clone()).components() {
+            add_asset_type(&mut asset_types, ctx, &client, asset_type.clone()).await;
+        }
+    }
+    Ok(asset_types)
+}
+
 pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     let parsed_args = args.parse_from_context(&mut ctx);
     let source = parsed_args.source.effective_address();
@@ -1692,8 +1751,16 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         let masp_tx = tx.add_section(Section::MaspTx(shielded.1));
         // Get the hash of the MASP Transaction section
         let masp_hash = Hash(masp_tx.hash(&mut Sha256::new()).finalize_reset().into());
+        // Get the decoded asset types used in the transaction to give offline
+        // wallet users more information
+        let asset_types = used_asset_types(
+            &mut ctx,
+            &args.tx.ledger_address,
+            &shielded.0,
+        ).await.unwrap_or_default();
         // Add the MASP Transaction's Builder to the Tx
         tx.add_section(Section::MaspBuilder(MaspBuilder {
+            asset_types,
             // Store how the Info objects map to Descriptors/Outputs
             metadata: shielded.2,
             // Store the data that was used to construct the Transaction

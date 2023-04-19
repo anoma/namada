@@ -9,6 +9,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use std::collections::HashSet;
 
 use super::generated::types;
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
@@ -24,6 +25,8 @@ use crate::types::transaction::EllipticCurve;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::EncryptionKey;
 use crate::types::transaction::TxType;
+use crate::types::address::Address;
+use crate::types::storage::Epoch;
 use crate::types::transaction::WrapperTx;
 use sha2::{Digest, Sha256};
 use crate::types::transaction::WrapperTxErr;
@@ -409,6 +412,9 @@ impl Into<Vec<u8>> for SaplingMetadataSerde {
 pub struct MaspBuilder {
     /// The MASP transaction that this section witnesses
     pub target: crate::types::hash::Hash,
+    /// The decoded set of asset types used by the transaction. Useful for
+    /// offline wallets trying to display AssetTypes.
+    pub asset_types: HashSet<(Address, Epoch)>,
     /// Track how Info objects map to descriptors and outputs
     #[serde(
         serialize_with = "borsh_serde::<SaplingMetadataSerde, _>",
