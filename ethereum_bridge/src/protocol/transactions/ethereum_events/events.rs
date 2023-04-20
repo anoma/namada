@@ -1050,10 +1050,17 @@ mod tests {
         init_storage(&mut wl_storage);
         let native_erc20 =
             read_native_erc20_address(&wl_storage).expect("Test failed");
-        let random_erc20 = EthAddress([0xff; 20]);
         let pending_transfers = init_bridge_pool_transfers(
             &mut wl_storage,
-            [native_erc20, random_erc20],
+            [
+                native_erc20,
+                EthAddress([0xaa; 20]),
+                EthAddress([0xbb; 20]),
+                EthAddress([0xcc; 20]),
+                EthAddress([0xdd; 20]),
+                EthAddress([0xee; 20]),
+                EthAddress([0xff; 20]),
+            ],
         );
         init_balance(&mut wl_storage, &pending_transfers);
         let (transfers, valid_transfers_map) = pending_transfers
@@ -1153,6 +1160,64 @@ mod tests {
                 assert_eq!(balance, burn_balance);
                 assert_eq!(supply, burn_supply);
             }
+        })
+    }
+
+    #[test]
+    /// When we act on an [`EthereumEvent::TransfersToEthereum`], test
+    /// that the transferred wrapped NAM tokens are not burned in
+    /// Namada and instead are kept in escrow, under the Ethereum bridge
+    /// account.
+    fn test_wrapped_nam_not_burned() {
+        test_wrapped_erc20s_aux(|wl_storage, event| {
+            let native_erc20 =
+                read_native_erc20_address(wl_storage).expect("Test failed");
+            let wnam_keys: wrapped_erc20s::Keys = (&native_erc20).into();
+            let escrow_balance_key = balance_key(&nam(), &BRIDGE_ADDRESS);
+
+            // check pre supply
+            assert!(
+                wl_storage
+                    .read_bytes(&wnam_keys.balance(&BRIDGE_POOL_ADDRESS))
+                    .expect("Test failed")
+                    .is_none()
+            );
+            assert!(
+                wl_storage
+                    .read_bytes(&wnam_keys.supply())
+                    .expect("Test failed")
+                    .is_none()
+            );
+
+            // check pre balance
+            let pre_escrowed_balance: token::Amount = wl_storage
+                .read(&escrow_balance_key)
+                .expect("Read must succeed")
+                .expect("Balance must exist");
+
+            _ = act_on(wl_storage, event).unwrap();
+
+            // check post supply
+            assert!(
+                wl_storage
+                    .read_bytes(&wnam_keys.balance(&BRIDGE_POOL_ADDRESS))
+                    .expect("Test failed")
+                    .is_none()
+            );
+            assert!(
+                wl_storage
+                    .read_bytes(&wnam_keys.supply())
+                    .expect("Test failed")
+                    .is_none()
+            );
+
+            // check post balance
+            let post_escrowed_balance: token::Amount = wl_storage
+                .read(&escrow_balance_key)
+                .expect("Read must succeed")
+                .expect("Balance must exist");
+
+            assert_eq!(pre_escrowed_balance, post_escrowed_balance);
         })
     }
 }
