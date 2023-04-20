@@ -9,6 +9,13 @@ TBD
 
 ## Latest Testnet
 
+***24/03/2023*** `public-testnet-7`
+
+The testnet launches on 24/04/2023 at 17:00 UTC with the genesis validators from `public-testnet-7`. It launches with [version v0.15.1](https://github.com/anoma/namada/releases/tag/v0.15.1) and chain-id `TBD`. 
+The pre-genesis validator set will be increased to 175 slots. By 23/04/2023, a new folder derived from [this folder](https://github.com/anoma/namada-testnets/tree/main/namada-public-testnet-6), will be created for testnet 7. Please submit all PRs if you would like to join the pre-genesis validator set by then. In order for the testnet to come online, at least 2/3 of validating voting-power will need to be online, so make sure to read the docs carefully!
+
+The installation docs are updated and can be found [here](./environment-setup.md). The running docs for validators/fullnodes can be found [here](./running-a-full-node.md).
+
 ***29/03/2023*** `public-testnet-6` (offline)
 
 The testnet launches on 29/03/2023 at 17:00 UTC with the genesis validators from `public-testnet-6`. It launches with [version v0.14.3](https://github.com/anoma/namada/releases/tag/v0.14.3) and chain-id `public-testnet-6.0.a0266444b06`. 
