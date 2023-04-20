@@ -61,10 +61,14 @@ Proofs themselves do not alter any state in Ethereum. Rather, they
 authenticate state transitions in Ethereum based on the security
 properties (in the BFT sense) of the Namada network. Carrying out
 state updates in Ethereum is the task of an __Ethereum bridge relayer__.
+The Ethereum bridge relayer must submit proofs to the Ethereum
+bridge smart contracts before the conclusion of each Namada epoch, at
+which point proofs become invalid, due to:
 
-The job of an Ethereum bridge relayer is to submit proofs to the Ethereum
-bridge smart contracts before the conclusion of each Namada epoch. The default
-set of binaries of the Namada chain provide:
+1. Validator set nonces incrementing (we use epoch values for this purpose).
+2. Validator sets themselves changing.
+
+The default set of binaries of the Namada chain provide:
 
 - An automatic validator set update relayer daemon, as well as a manual
   validator set update relayer.
