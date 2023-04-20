@@ -1084,15 +1084,11 @@ mod tests {
     /// When we act on an [`EthereumEvent::TransfersToEthereum`], test
     /// that the transferred wrapped ERC20 tokens are burned in Namada.
     fn test_wrapped_erc20s_are_burned() {
-        let random_erc20 = EthAddress([0xff; 20]);
-        let random_erc20_keys: wrapped_erc20s::Keys = (&random_erc20).into();
-
-        #[allow(dead_code)]
         struct Delta {
-            sender: Address,
             asset: EthAddress,
             sent_amount: token::Amount,
             prev_balance: Option<token::Amount>,
+            prev_supply: Option<token::Amount>,
         }
 
         test_wrapped_erc20s_aux(|wl_storage, event| {
@@ -1102,36 +1098,61 @@ mod tests {
                 }
                 _ => panic!("Test failed"),
             };
-            let _deltas = transfers.map(
-                |TransferToEthereum {
-                     asset,
-                     sender,
-                     amount,
-                     ..
-                 }| {
+            let native_erc20 =
+                read_native_erc20_address(wl_storage).expect("Test failed");
+            let deltas = transfers
+                .filter_map(|TransferToEthereum { asset, amount, .. }| {
+                    if asset == &native_erc20 {
+                        return None;
+                    }
                     let asset_keys: wrapped_erc20s::Keys = asset.into();
                     let prev_balance = wl_storage
-                        .read(&asset_keys.balance(sender))
+                        .read(&asset_keys.balance(&BRIDGE_POOL_ADDRESS))
                         .expect("Test failed");
-                    Delta {
-                        sender: sender.clone(),
+                    let prev_supply = wl_storage
+                        .read(&asset_keys.supply())
+                        .expect("Test failed");
+                    Some(Delta {
                         asset: *asset,
                         sent_amount: *amount,
                         prev_balance,
-                    }
-                },
-            );
+                        prev_supply,
+                    })
+                })
+                .collect::<Vec<_>>();
 
-            let changed_keys = act_on(wl_storage, event).unwrap();
+            _ = act_on(wl_storage, event).unwrap();
 
-            assert!(changed_keys.contains(&random_erc20_keys.supply()));
-            assert!(
-                changed_keys
-                    .contains(&random_erc20_keys.balance(&BRIDGE_POOL_ADDRESS))
-            );
+            for Delta {
+                ref asset,
+                sent_amount,
+                prev_balance,
+                prev_supply,
+            } in deltas
+            {
+                let burn_balance = prev_balance
+                    .unwrap_or_default()
+                    .checked_sub(sent_amount)
+                    .expect("Test failed");
+                let burn_supply = prev_supply
+                    .unwrap_or_default()
+                    .checked_sub(sent_amount)
+                    .expect("Test failed");
 
-            // TODO: check if supplies decreased, the balance of the bridge pool
-            // escrow decreased, and the sender's balance also diminished
+                let asset_keys: wrapped_erc20s::Keys = asset.into();
+
+                let balance: token::Amount = wl_storage
+                    .read(&asset_keys.balance(&BRIDGE_POOL_ADDRESS))
+                    .expect("Read must succeed")
+                    .expect("Balance must exist");
+                let supply: token::Amount = wl_storage
+                    .read(&asset_keys.supply())
+                    .expect("Read must succeed")
+                    .expect("Balance must exist");
+
+                assert_eq!(balance, burn_balance);
+                assert_eq!(supply, burn_supply);
+            }
         })
     }
 }
