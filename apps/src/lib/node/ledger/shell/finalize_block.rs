@@ -3,7 +3,6 @@
 use std::collections::{BTreeMap, HashMap};
 
 use data_encoding::HEXUPPER;
-use namada::core::ledger::slash_fund;
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::parameters::storage as params_storage;
 use namada::ledger::pos::types::{decimal_mult_u64, into_tm_voting_power};
@@ -912,81 +911,13 @@ where
         }
 
         // Charge fee
-        let balance_key =
-            token::balance_key(&wrapper.fee.token, &wrapper.fee_payer());
-        let balance: token::Amount = self
-            .wl_storage
-            .read(&balance_key)
-            .expect("Must be able to read storage")
-            .unwrap_or_default();
-        // If the address of the block proposer is missing, move the fees to the Governance slash pool
-        let block_proposer = block_proposer.unwrap_or(&slash_fund::ADDRESS);
-
-        match wrapper.get_tx_fee() {
-            Ok(fees) => {
-                if balance.checked_sub(fees).is_some() {
-                    storage_api::token::transfer(
-                        &mut self.wl_storage,
-                        &wrapper.fee.token,
-                        &wrapper.fee_payer(),
-                        block_proposer,
-                        fees,
-                    )?;
-                } else {
-                    //FIXME: should do this check before calling this function? And avoid charing fees alltogether? Yes and join with the other one
-                    // Balance was insufficient for fee payment
-                    #[cfg(not(feature = "mainnet"))]
-                    let reject = !has_valid_pow;
-                    #[cfg(feature = "mainnet")]
-                    let reject = true;
-
-                    if reject {
-                        #[cfg(not(feature = "abcipp"))]
-                        {
-                            // Move all the available funds in the transparent balance of the fee payer
-                            storage_api::token::transfer(
-                                &mut self.wl_storage,
-                                &wrapper.fee.token,
-                                &wrapper.fee_payer(),
-                                block_proposer,
-                                balance,
-                            )?;
-
-                            return Err(Error::TxApply(protocol::Error::FeeError("Transparent balance of wrapper's signer was insufficient to pay fee. All the available transparent funds have been moved to the block proposer".to_string())));
-                        }
-                        #[cfg(feature = "abcipp")]
-                        return Err(Error::TxApply(protocol::Error::FeeError(
-                            "Insufficient transparent balance to pay fees",
-                        )));
-                    }
-                }
-            }
-            Err(e) => {
-                // Fee overflow
-                #[cfg(not(feature = "abcipp"))]
-                {
-                    // Move all the available funds in the transparent balance of the fee payer
-                    storage_api::token::transfer(
-                        &mut self.wl_storage,
-                        &wrapper.fee.token,
-                        &wrapper.fee_payer(),
-                        block_proposer,
-                        balance,
-                    )?;
-
-                    return Err(Error::TxApply(protocol::Error::FeeError(
-                    format!("{}. All the available transparent funds have been moved to the block proposer", e
-                ))));
-                }
-
-                #[cfg(feature = "abcipp")]
-                return Error::TxApply(protocol::Error::FeeError(
-                    e.to_string(),
-                ));
-            }
-        }
-
-        Ok(())
+        transfer_fee(
+            &mut self.wl_storage,
+            block_proposer,
+            has_valid_pow,
+            &wrapper,
+        )
+        .map_err(|e| Error::TxApply(protocol::Error::FeeError(e)))
     }
 }
 

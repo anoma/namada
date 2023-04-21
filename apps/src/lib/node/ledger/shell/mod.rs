@@ -46,7 +46,6 @@ use namada::types::internal::WrapperTxInQueue;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
-use namada::types::token::Amount;
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, WrapperTx,
@@ -996,7 +995,7 @@ where
             return Err(format!("Fee amount {} do not match the minimum required amount {} for token {}", wrapper.fee.amount_per_gas_unit, gas_cost, wrapper.fee.token));
         }
 
-        let mut balance = storage_api::token::read_balance(
+        let balance = storage_api::token::read_balance(
             temp_wl_storage,
             &wrapper.fee.token,
             &wrapper.fee_payer(),
@@ -1056,17 +1055,7 @@ where
                 tx_wasm_cache,
             ) {
                 Ok(result) => {
-                    if result.is_accepted() {
-                        // Update the balance
-                        balance = storage_api::token::read_balance(
-                            temp_wl_storage,
-                            &wrapper.fee.token,
-                            &wrapper.fee_payer(),
-                        )
-                        .expect(
-                            "Token balance read in the protocol must not fail",
-                        );
-                    } else {
+                    if !result.is_accepted() {
                         return Err(Error::TxApply(
                             protocol::Error::FeeUnshieldingError(namada::types::transaction::WrapperTxErr::InvalidUnshield(format!(
                             "Some VPs rejected fee unshielding: {:#?}",
@@ -1086,76 +1075,97 @@ where
             }
         }
 
-        // If the address of the block proposer is missing, move the fees to the Governance slash pool
-        let block_proposer = block_proposer.unwrap_or(&slash_fund::ADDRESS);
+        transfer_fee(
+            wl_storage,
+            block_proposer,
+            self.has_valid_pow_solution(&wrapper),
+            &wrapper,
+        )
+    }
+}
 
-        //FIXME: join this with finalize_block?
-        match wrapper.get_tx_fee() {
-            Ok(fees) => {
-                if balance.checked_sub(fees).is_some() {
-                    storage_api::token::transfer(
-                        wl_storage,
-                        &wrapper.fee.token,
-                        &wrapper.fee_payer(),
-                        block_proposer,
-                        fees,
-                    )
-                    .map_err(|e| e.to_string())?;
-                } else {
-                    // Balance was insufficient for fee payment
-                    // Balance was insufficient for fee payment
-                    #[cfg(not(feature = "mainnet"))]
-                    let reject = !self.has_valid_pow_solution(&wrapper);
-                    #[cfg(feature = "mainnet")]
-                    let reject = true;
+/// Perform the actual transfer of fess from the fee payer to the block proposer. If the block proposer is not provided, fees will be moved to the slash fund internal address
+pub fn transfer_fee<S>(
+    wl_storage: &mut S,
+    block_proposer: Option<&Address>,
+    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
+    wrapper: &WrapperTx,
+) -> std::result::Result<(), String>
+where
+    S: StorageWrite + StorageRead,
+{
+    let balance_key =
+        token::balance_key(&wrapper.fee.token, &wrapper.fee_payer());
+    let balance: token::Amount = wl_storage
+        .read(&balance_key)
+        .expect("Must be able to read storage")
+        .unwrap_or_default();
+    let block_proposer = block_proposer.unwrap_or(&slash_fund::ADDRESS);
 
-                    if reject {
-                        #[cfg(not(feature = "abcipp"))]
-                        {
-                            // Move all the available funds in the transparent balance of the fee payer
-                            storage_api::token::transfer(
-                                wl_storage,
-                                &wrapper.fee.token,
-                                &wrapper.fee_payer(),
-                                block_proposer,
-                                balance,
-                            )
-                            .map_err(|e| e.to_string())?;
+    match wrapper.get_tx_fee() {
+        Ok(fees) => {
+            if balance.checked_sub(fees).is_some() {
+                storage_api::token::transfer(
+                    wl_storage,
+                    &wrapper.fee.token,
+                    &wrapper.fee_payer(),
+                    block_proposer,
+                    fees,
+                )
+                .map_err(|e| e.to_string())
+            } else {
+                // Balance was insufficient for fee payment
+                #[cfg(not(feature = "mainnet"))]
+                let reject = !has_valid_pow;
+                #[cfg(feature = "mainnet")]
+                let reject = true;
 
-                            return Err("Transparent balance of wrapper's signer was insufficient to pay fee. All the available transparent funds have been moved to the block proposer".to_string());
-                        }
-                        #[cfg(feature = "abcipp")]
-                        return Err(
-                            "Insufficient transparent balance to pay fees",
-                        );
+                if reject {
+                    #[cfg(not(feature = "abcipp"))]
+                    {
+                        // Move all the available funds in the transparent balance of the fee payer
+                        storage_api::token::transfer(
+                            wl_storage,
+                            &wrapper.fee.token,
+                            &wrapper.fee_payer(),
+                            block_proposer,
+                            balance,
+                        )
+                        .map_err(|e| e.to_string())?;
+
+                        return Err("Transparent balance of wrapper's signer was insufficient to pay fee. All the available transparent funds have been moved to the block proposer".to_string());
                     }
+                    #[cfg(feature = "abcipp")]
+                    return Err("Insufficient transparent balance to pay fees"
+                        .to_string());
+                } else {
+                    tracing::debug!("Balance was insufficient for fee payment but a valid PoW was provided");
+                    Ok(())
                 }
-            }
-            Err(e) => {
-                // Fee overflow
-                #[cfg(not(feature = "abcipp"))]
-                {
-                    // Move all the available funds in the transparent balance of the fee payer
-                    storage_api::token::transfer(
-                        wl_storage,
-                        &wrapper.fee.token,
-                        &wrapper.fee_payer(),
-                        block_proposer,
-                        balance,
-                    )
-                    .map_err(|e| e.to_string())?;
-
-                    return Err(
-                    format!("{}. All the available transparent funds have been moved to the block proposer", e
-                ));
-                }
-
-                #[cfg(feature = "abcipp")]
-                return Err(e.to_string());
             }
         }
+        Err(e) => {
+            // Fee overflow
+            #[cfg(not(feature = "abcipp"))]
+            {
+                // Move all the available funds in the transparent balance of the fee payer
+                storage_api::token::transfer(
+                    wl_storage,
+                    &wrapper.fee.token,
+                    &wrapper.fee_payer(),
+                    block_proposer,
+                    balance,
+                )
+                .map_err(|e| e.to_string())?;
 
-        Ok(())
+                return Err(
+                    format!("{}. All the available transparent funds have been moved to the block proposer", e
+                ));
+            }
+
+            #[cfg(feature = "abcipp")]
+            return Err(e.to_string());
+        }
     }
 }
 
