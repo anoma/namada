@@ -876,7 +876,7 @@ mod test_process_proposal {
             Err(TestError::RejectProposal(response)) => {
                 assert_eq!(
                     response[0].result.code,
-                    u32::from(ErrorCodes::InvalidTx)
+                    u32::from(ErrorCodes::FeeError)
                 );
                 assert_eq!(
                     response[0].result.info,
@@ -938,12 +938,12 @@ mod test_process_proposal {
             Err(TestError::RejectProposal(response)) => {
                 assert_eq!(
                     response[0].result.code,
-                    u32::from(ErrorCodes::InvalidTx)
+                    u32::from(ErrorCodes::FeeError)
                 );
                 assert_eq!(
                     response[0].result.info,
                     "Error trying to apply a transaction: Insufficient \
-                     balance to pay fee"
+                                     balance to pay fee"
                         .to_string()
                 );
             }

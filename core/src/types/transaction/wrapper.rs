@@ -404,7 +404,6 @@ pub mod wrapper_tx {
         }
 
         /// Get the [`Amount`] of fees to be paid by the given wrapper. Returns an error if the amount overflows
-        //FIXME: unit test this
         pub fn get_tx_fee(&self) -> Result<Amount, WrapperTxErr> {
             u64::checked_mul(
                 u64::from(&self.gas_limit),
