@@ -23,6 +23,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada::core::ledger::slash_fund;
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::{BlockGasMeter, TxGasMeter};
@@ -34,6 +35,7 @@ use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, TempWlStorage, WlStorage, DB,
 };
+use namada::ledger::storage_api::StorageWrite;
 use namada::ledger::storage_api::{self, StorageRead};
 use namada::ledger::{ibc, parameters, pos, protocol, replay_protection};
 use namada::proof_of_stake::{self, read_pos_params, slash};
@@ -44,6 +46,7 @@ use namada::types::internal::WrapperTxInQueue;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
+use namada::types::token::Amount;
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, WrapperTx,
@@ -141,6 +144,7 @@ pub enum ErrorCodes {
     ExpiredTx = 13,
     BlockGasLimit = 14,
     TxGasLimit = 15,
+    FeeError = 16,
 }
 
 impl ErrorCodes {
@@ -158,7 +162,7 @@ impl ErrorCodes {
             | DecryptedTxGasLimit => true,
             InvalidTx | InvalidSig | InvalidOrder | ExtraTxs
             | Undecryptable | AllocationError | ReplayTx | InvalidChainId
-            | ExpiredTx | BlockGasLimit | TxGasLimit => false,
+            | ExpiredTx | BlockGasLimit | TxGasLimit | FeeError => false,
         }
     }
 }
@@ -783,8 +787,9 @@ where
                 None,
                 &mut self.vp_wasm_cache.clone(),
                 &mut self.tx_wasm_cache.clone(),
+                None,
             ) {
-                response.code = ErrorCodes::InvalidTx.into();
+                response.code = ErrorCodes::FeeError.into();
                 response.log = e.to_string();
                 return response;
             }
@@ -970,17 +975,11 @@ where
         gas_table: Option<Cow<BTreeMap<String, u64>>>,
         vp_wasm_cache: &mut VpCache<CA>,
         tx_wasm_cache: &mut TxCache<CA>,
+        block_proposer: Option<&Address>,
     ) -> Result<()>
     where
         CA: 'static + WasmCacheAccess + Sync,
     {
-        // In testnets with a faucet, tx is allowed to skip fees if
-        // it includes a valid PoW
-        #[cfg(not(feature = "mainnet"))]
-        if self.has_valid_pow_solution(wrapper) {
-            return Ok(());
-        }
-
         // Check that fee token is an allowed one
         let gas_cost = namada::ledger::parameters::read_gas_cost(
             &self.wl_storage,
@@ -992,9 +991,9 @@ where
             wrapper.fee.token
         ))?;
 
-        if wrapper.fee.amount < gas_cost {
+        if wrapper.fee.amount_per_gas_unit < gas_cost {
             // The fees do not match the minimum required
-            return Err(format!("Fee amount {} do not match the minimum required amount {} for token {}", wrapper.fee.amount, gas_cost, wrapper.fee.token));
+            return Err(format!("Fee amount {} do not match the minimum required amount {} for token {}", wrapper.fee.amount_per_gas_unit, gas_cost, wrapper.fee.token));
         }
 
         let mut balance = storage_api::token::read_balance(
@@ -1087,11 +1086,76 @@ where
             }
         }
 
-        if balance >= wrapper.get_tx_fee().map_err(|e| e.to_string())? {
-            Ok(())
-        } else {
-            Err(Error::TxApply(protocol::Error::FeeError))
+        // If the address of the block proposer is missing, move the fees to the Governance slash pool
+        let block_proposer = block_proposer.unwrap_or(&slash_fund::ADDRESS);
+
+        //FIXME: join this with finalize_block?
+        match wrapper.get_tx_fee() {
+            Ok(fees) => {
+                if balance.checked_sub(fees).is_some() {
+                    storage_api::token::transfer(
+                        wl_storage,
+                        &wrapper.fee.token,
+                        &wrapper.fee_payer(),
+                        block_proposer,
+                        fees,
+                    )
+                    .map_err(|e| e.to_string())?;
+                } else {
+                    // Balance was insufficient for fee payment
+                    // Balance was insufficient for fee payment
+                    #[cfg(not(feature = "mainnet"))]
+                    let reject = !self.has_valid_pow_solution(&wrapper);
+                    #[cfg(feature = "mainnet")]
+                    let reject = true;
+
+                    if reject {
+                        #[cfg(not(feature = "abcipp"))]
+                        {
+                            // Move all the available funds in the transparent balance of the fee payer
+                            storage_api::token::transfer(
+                                wl_storage,
+                                &wrapper.fee.token,
+                                &wrapper.fee_payer(),
+                                block_proposer,
+                                balance,
+                            )
+                            .map_err(|e| e.to_string())?;
+
+                            return Err("Transparent balance of wrapper's signer was insufficient to pay fee. All the available transparent funds have been moved to the block proposer".to_string());
+                        }
+                        #[cfg(feature = "abcipp")]
+                        return Err(
+                            "Insufficient transparent balance to pay fees",
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                // Fee overflow
+                #[cfg(not(feature = "abcipp"))]
+                {
+                    // Move all the available funds in the transparent balance of the fee payer
+                    storage_api::token::transfer(
+                        wl_storage,
+                        &wrapper.fee.token,
+                        &wrapper.fee_payer(),
+                        block_proposer,
+                        balance,
+                    )
+                    .map_err(|e| e.to_string())?;
+
+                    return Err(
+                    format!("{}. All the available transparent funds have been moved to the block proposer", e
+                ));
+                }
+
+                #[cfg(feature = "abcipp")]
+                return Err(e.to_string());
+            }
         }
+
+        Ok(())
     }
 }
 
@@ -1355,7 +1419,7 @@ mod test_utils {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: native_token,
             },
             &keypair,
@@ -1434,7 +1498,7 @@ mod test_mempool_validate {
 
         let mut wrapper = WrapperTx::new(
             Fee {
-                amount: 100.into(),
+                amount_per_gas_unit: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1490,7 +1554,7 @@ mod test_mempool_validate {
 
         let mut wrapper = WrapperTx::new(
             Fee {
-                amount: 100.into(),
+                amount_per_gas_unit: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1523,7 +1587,7 @@ mod test_mempool_validate {
             };
 
             // we mount a malleability attack to try and remove the fee
-            new_wrapper.fee.amount = 0.into();
+            new_wrapper.fee.amount_per_gas_unit = 0.into();
             let new_data = TxType::Wrapper(new_wrapper)
                 .try_to_vec()
                 .expect("Test failed");
@@ -1593,7 +1657,7 @@ mod test_mempool_validate {
 
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 100.into(),
+                amount_per_gas_unit: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1762,7 +1826,7 @@ mod test_mempool_validate {
 
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 100.into(),
+                amount_per_gas_unit: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1800,7 +1864,7 @@ mod test_mempool_validate {
 
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 100.into(),
+                amount_per_gas_unit: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,

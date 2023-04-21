@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use data_encoding::HEXUPPER;
+use namada::core::ledger::slash_fund;
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::parameters::storage as params_storage;
 use namada::ledger::pos::types::{decimal_mult_u64, into_tm_voting_power};
@@ -84,8 +85,6 @@ where
             .read(&parameters::storage::get_gas_table_storage_key())
             .expect("Error while reading from storage")
             .expect("Missing gas table in storage");
-        //FIXME: better to create a struct to manage the Fees inside this funcion? Maybe als ofor the checks in process and prepare proposals
-        let mut total_fee_table = HashMap::<Address, Amount>::default();
 
         if new_epoch {
             namada::ledger::storage::update_allowed_conversions(
@@ -117,16 +116,8 @@ where
         let native_block_proposer_address = {
             let tm_raw_hash_string =
                 tm_raw_hash_to_string(req.proposer_address);
-            // The block proposer coming from the Tendermint request is expected to have a correct value. Without a block proposer, Namada does not have a target address for the fee payment mechanism which, therefore, cannot be complied with
-            find_validator_by_raw_hash(
-                &self.wl_storage,
-                tm_raw_hash_string,
-            )
-            .unwrap()
-            .expect(
-                "Unable to find native validator address of block proposer \
-                 from tendermint raw hash",
-            )
+            find_validator_by_raw_hash(&self.wl_storage, tm_raw_hash_string)
+                .unwrap()
         };
 
         // Tracks the accepted transactions
@@ -218,10 +209,11 @@ where
 
                 #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
                 if let TxType::Wrapper(wrapper) = &tx_type {
-                    // Charge fee if wrapper transaction went out of gas
-                    //FIXME: this should also be done for fee errors? But i need a custom error code
-                    if ErrorCodes::from_u32(processed_tx.result.code).unwrap()
-                        == ErrorCodes::TxGasLimit
+                    // Charge fee if wrapper transaction went out of gas or failed because of fees
+                    let error_code =
+                        ErrorCodes::from_u32(processed_tx.result.code).unwrap();
+                    if (error_code == ErrorCodes::TxGasLimit)
+                        | (error_code == ErrorCodes::FeeError)
                     {
                         #[cfg(not(feature = "mainnet"))]
                         let has_valid_pow =
@@ -231,8 +223,8 @@ where
                             &gas_table,
                             #[cfg(not(feature = "mainnet"))]
                             has_valid_pow,
-                            &mut total_fee_table,
-                        )?; 
+                            native_block_proposer_address.as_ref(),
+                        )?;
                     }
                 }
 
@@ -279,8 +271,8 @@ where
                             &gas_table,
                             #[cfg(not(feature = "mainnet"))]
                             has_valid_pow,
-                            &mut total_fee_table,
-                        )?; 
+                            native_block_proposer_address.as_ref(),
+                        )?;
 
                         // Account for gas
                         if let Err(e) =
@@ -475,29 +467,6 @@ where
             response.events.push(tx_event);
         }
 
-        // Credit the fees collected to the block proposer
-        for (token, amount) in total_fee_table {
-            let balance_key =
-                token::balance_key(&token, &native_block_proposer_address);
-            let balance: token::Amount = self
-                .wl_storage
-                .read(&balance_key)
-                .expect("must be able to read")
-                .unwrap_or_default();
-
-            let new_balance = balance.checked_add(amount).ok_or_else(|| {
-                storage_api::Error::new_const(
-                    "Token balance of the block proposer overflowed",
-                )
-            })?;
-            //FIXME: I should probably avoid getting to this point. I need to validate the fee payment in process proposal and prepare proposal and, If overflow at any point reject the single tx (in prepare) or the entire block (in process)
-
-            self.wl_storage
-                .storage
-                .write(&balance_key, new_balance.try_to_vec().unwrap())
-                .expect("Must be able to write to storage");
-        }
-
         stats.set_tx_cache_size(
             self.tx_wasm_cache.get_size(),
             self.tx_wasm_cache.get_cache_size(),
@@ -550,10 +519,12 @@ where
             self.apply_inflation(current_epoch)?;
         }
 
-        write_last_block_proposer_address(
-            &mut self.wl_storage,
-            native_block_proposer_address,
-        )?;
+        if let Some(block_proposer_address) = native_block_proposer_address {
+            write_last_block_proposer_address(
+                &mut self.wl_storage,
+                block_proposer_address,
+            )?;
+        }
 
         self.event_log_mut().log_events(response.events.clone());
         tracing::debug!("End finalize_block {height} of epoch {current_epoch}");
@@ -854,14 +825,17 @@ where
         Ok(())
     }
 
-    /// Charge fee for the provided wrapper transaction. This function only removes the fee [`Amount`] from the transparent balance of the fee payer and updates the fee table accordingly. The total amount of fees must be moved to the block proposer transparent balance at the end of the [`finalize_block`] function. This avoids multiple writes to the storage and enforces a more fair execution of the decrypted transactions. Returns an error if the accumulated fee amount to be credited to the block proposer overflows
-    #[cfg(not(feature = "abcipp"))]
+    /// Charge fee for the provided wrapper transaction. In ABCI returns an error if the balance of the block proposer overflows. In ABCI++ returns error if:
+    /// - The unshielding fails
+    /// - Fee amount overflows
+    /// - Not enough funds are available to pay the entire amount of the fee
+    /// - The accumulated fee amount to be credited to the block proposer overflows
     fn charge_fee(
         &mut self,
         wrapper: &WrapperTx,
         gas_table: &BTreeMap<String, u64>,
         #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
-        fee_table: &mut HashMap<Address, Amount>,
+        block_proposer: Option<&Address>,
     ) -> Result<()> {
         // Unshield funds if requested
         if wrapper.unshield.is_some() {
@@ -945,174 +919,70 @@ where
             .read(&balance_key)
             .expect("Must be able to read storage")
             .unwrap_or_default();
+        // If the address of the block proposer is missing, move the fees to the Governance slash pool
+        let block_proposer = block_proposer.unwrap_or(&slash_fund::ADDRESS);
 
-        //FIXME: improve this double match if possible
         match wrapper.get_tx_fee() {
             Ok(fees) => {
-                
-match balance.checked_sub(fees) {
-            Some(amount) => {
-                self.wl_storage
-                    .storage
-                    .write(&balance_key, amount.try_to_vec().unwrap())
-                    .expect("Must be able to write to storage");
+                if balance.checked_sub(fees).is_some() {
+                    storage_api::token::transfer(
+                        &mut self.wl_storage,
+                        &wrapper.fee.token,
+                        &wrapper.fee_payer(),
+                        block_proposer,
+                        fees,
+                    )?;
+                } else {
+                    //FIXME: should do this check before calling this function? And avoid charing fees alltogether? Yes and join with the other one
+                    // Balance was insufficient for fee payment
+                    #[cfg(not(feature = "mainnet"))]
+                    let reject = !has_valid_pow;
+                    #[cfg(feature = "mainnet")]
+                    let reject = true;
 
-                let accumulated_amount = fee_table
-                    .entry(wrapper.fee.token.to_owned())
-                    .or_insert(Amount::default());
-                *accumulated_amount = accumulated_amount
-                    .checked_add(amount)
-                    .ok_or_else(|| {
-                        storage_api::Error::new_const(
-                            "Accumulated token balance of the block proposer overflowed",
-                        )
-                    })?;
-            }
-            None => {
-                // Balance was insufficient for fee payment
-                #[cfg(not(feature = "mainnet"))]
-                let reject = !has_valid_pow;
-                #[cfg(feature = "mainnet")]
-                let reject = true;
+                    if reject {
+                        #[cfg(not(feature = "abcipp"))]
+                        {
+                            // Move all the available funds in the transparent balance of the fee payer
+                            storage_api::token::transfer(
+                                &mut self.wl_storage,
+                                &wrapper.fee.token,
+                                &wrapper.fee_payer(),
+                                block_proposer,
+                                balance,
+                            )?;
 
-                if reject {
-                    // Burn remaining funds
-                    self.wl_storage
-                        .storage
-                        .write(
-                            &balance_key,
-                            Amount::from(0).try_to_vec().unwrap(),
-                        )
-                        .unwrap();
-
-                    let accumulated_amount = fee_table
-                        .entry(wrapper.fee.token.to_owned())
-                        .or_insert(Amount::default());
-                    *accumulated_amount =
-                        accumulated_amount.checked_add(balance).ok_or_else(|| storage_api::Error::new_const(
-                                
-                            "Accumulated token balance of the block proposer overflowed",
-                            ))?;
-                         return Err(Error::TxApply(protocol::Error::FeeError("Transparent balance of wrapper's signer was insufficient to pay fee. All the available transparent funds have been moved to the block proposer".to_string())));
+                            return Err(Error::TxApply(protocol::Error::FeeError("Transparent balance of wrapper's signer was insufficient to pay fee. All the available transparent funds have been moved to the block proposer".to_string())));
+                        }
+                        #[cfg(feature = "abcipp")]
+                        return Err(Error::TxApply(protocol::Error::FeeError(
+                            "Insufficient transparent balance to pay fees",
+                        )));
+                    }
                 }
             }
-        }
-            },
-            Err(e)=> {
-                
+            Err(e) => {
+                // Fee overflow
+                #[cfg(not(feature = "abcipp"))]
+                {
+                    // Move all the available funds in the transparent balance of the fee payer
+                    storage_api::token::transfer(
+                        &mut self.wl_storage,
+                        &wrapper.fee.token,
+                        &wrapper.fee_payer(),
+                        block_proposer,
+                        balance,
+                    )?;
 
-                    self.wl_storage
-                        .storage
-                        .write(
-                            &balance_key,
-                            Amount::from(0).try_to_vec().unwrap(),
-                        )
-                        .unwrap();
-                    let accumulated_amount = fee_table
-                        .entry(wrapper.fee.token.to_owned())
-                        .or_insert(Amount::default());
-                    *accumulated_amount = accumulated_amount.checked_add(balance).ok_or_else(|| storage_api::Error::new_const("Accumulated token balance of the block proposer overflowed"))?;
                     return Err(Error::TxApply(protocol::Error::FeeError(
-                    
-e.to_string()               )));
-            }
-        }
-
-
-        
-        Ok(())
-    }
-
-    /// Charge fee for the provided wrapper transaction. This function only removes the fee [`Amount`] from the transparent balance of the fee payer and updates the fee table accordingly. The total amount of fees must be moved to the block proposer transparent balance at the end of the [`finalize_block`] function. This avoids multiple writes to the storage and enforces a more fair execution of the decrypted transactions. Returns an error if:
-    /// - The unshielding fails
-    /// - Fee amount overflows
-    /// - Not enough funds are available to pay the entire amount of the fee
-    /// - The accumulated fee amount to be credited to the block proposer overflows
-    /// Because of the checks in process_proposal and the order of execution of txs (Wrappers first), this function should never fail
-    #[cfg(feature = "abcipp")]
-    fn charge_fee(
-        &mut self,
-        wrapper: &WrapperTx,
-        gas_table: &BTreeMap<String, u64>,
-        #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
-        fee_table: &mut HashMap<Address, Amount>,
-    ) -> Result<()> {
-        // Unshield funds if requested
-        if let Some(unshield) = &wrapper.unshield {
-            // The unshielding tx does not charge gas, instantiate a limitless
-            // custom gas meter for this step
-            let mut gas_meter = TxGasMeter::new(u64::MAX);
-
-            let resul = apply_tx(
-                TxType::Decrypted(DecryptedTx::Decrypted {
-                    tx: unshield.to_owned(),
-                    has_valid_pow: false,
-                }),
-                TxIndex::default(),
-                &mut gas_meter,
-                gas_table,
-                &mut self.wl_storage.write_log,
-                &self.wl_storage.storage,
-                &mut self.vp_wasm_cache,
-                &mut self.tx_wasm_cache,
-            )?;
-            if result.is_accepted() {
-                self.wl_storage.write_log.commit_tx();
-            } else {
-                self.wl_storage.write_log.drop_tx();
-                return Err(Error::TxApply(protocol::Error::FeeError(
-                    format!(
-                        "The unshielding tx is invalid, some VPs rejected \
-                             it: {:#?}",
-                        result.vps_result.rejected_vps
-                    ),
-                )));
-            }
-        }
-
-        // Charge fee
-        let balance_key =
-            token::balance_key(&wrapper.fee.token, &wrapper.fee_payer());
-        let balance: token::Amount = self
-            .wl_storage
-            .read(&balance_key)
-            .expect("Must be able to read storage")
-            .unwrap_or_default();
-
-        let fees = wrapper.get_tx_fee().map_err(|e| {
-            Error::TxApply(protocol::Error::FeeError(format!("The fees of wrapper tx unexpectedly did overflow in finalize block")));
-        })?;
-
-        match balance.checked_sub(fees) {
-            Some(amount) => {
-                self.wl_storage
-                    .storage
-                    .write(&balance_key, amount.try_to_vec().unwrap())
-                    .expect("Must be able to write to storage");
-
-                let accumulated_amount = fee_table
-                    .entry(wrapper.fee.token.to_owned())
-                    .or_insert(Amount::default());
-                *accumulated_amount = accumulated_amount
-                    .checked_add(amount)
-                    .ok_or_else(|| {
-                        storage_api::Error::new_const(
-                            "Token balance of the block proposer overflowed",
-                        )
-                    })?;
-            }
-            None => {
-                // Balance was insufficient for fee payment
-                #[cfg(not(feature = "mainnet"))]
-                let reject = !has_valid_pow;
-                #[cfg(feature = "mainnet")]
-                let reject = true;
-
-                if reject {
-                    return Err(Error::TxApply(protocol::Error::FeeError(
-                        "Insufficient transparent balance to pay fees",
-                    )));
+                    format!("{}. All the available transparent funds have been moved to the block proposer", e
+                ))));
                 }
+
+                #[cfg(feature = "abcipp")]
+                return Error::TxApply(protocol::Error::FeeError(
+                    e.to_string(),
+                ));
             }
         }
 
@@ -1258,7 +1128,7 @@ mod test_finalize_block {
             );
             let wrapper = WrapperTx::new(
                 Fee {
-                    amount: 1.into(),
+                    amount_per_gas_unit: 1.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
@@ -1339,7 +1209,7 @@ mod test_finalize_block {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1404,7 +1274,7 @@ mod test_finalize_block {
             );
         let wrapper = WrapperTx {
             fee: Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             pk: keypair.ref_to(),
@@ -1489,7 +1359,7 @@ mod test_finalize_block {
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
-                    amount: 1.into(),
+                    amount_per_gas_unit: 1.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
@@ -1535,7 +1405,7 @@ mod test_finalize_block {
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
-                    amount: 1.into(),
+                    amount_per_gas_unit: 1.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
@@ -2039,7 +1909,7 @@ mod test_finalize_block {
         );
         let wrapper_tx = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -2115,7 +1985,7 @@ mod test_finalize_block {
         );
         let wrapper_tx = WrapperTx::new(
             Fee {
-                amount: 1.into(),
+                amount_per_gas_unit: 1.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,

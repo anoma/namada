@@ -5,9 +5,11 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
+use namada::proof_of_stake::find_validator_by_raw_hash;
 use namada::types::address::Address;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::hash::Hash;
+use namada::types::key::tm_raw_hash_to_string;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::storage::BlockHash;
 use namada::types::storage::BlockHeight;
@@ -160,9 +162,24 @@ impl AbcippShim {
                             .and_then(|header| header.time.to_owned()),
                     );
 
-                    let (processing_results, _) = self
-                        .service
-                        .process_txs(&self.delivered_txs, block_time);
+                    let block_proposer = begin_block_request
+                        .header
+                        .as_ref()
+                        .and_then(|header| {
+                            let tm_raw_hash_string =
+                                tm_raw_hash_to_string(&header.proposer_address);
+                            find_validator_by_raw_hash(
+                                &self.service.wl_storage,
+                                tm_raw_hash_string,
+                            )
+                            .unwrap()
+                        });
+
+                    let (processing_results, _) = self.service.process_txs(
+                        &self.delivered_txs,
+                        block_time,
+                        block_proposer.as_ref(),
+                    );
                     let mut txs = Vec::with_capacity(self.delivered_txs.len());
                     let mut delivered = vec![];
                     std::mem::swap(&mut self.delivered_txs, &mut delivered);

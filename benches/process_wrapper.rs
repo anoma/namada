@@ -10,6 +10,7 @@ use namada::types::storage::BlockHeight;
 use namada::types::time::DateTimeUtc;
 use namada::types::transaction::{Fee, WrapperTx};
 use namada_apps::node::ledger::shell::process_proposal::ValidationMeta;
+use namada_apps::node::ledger::shell::FeeAccumulator;
 use namada_apps::wallet::defaults;
 use namada_benches::{generate_tx, BenchShell, TX_TRANSFER_WASM};
 
@@ -35,7 +36,7 @@ fn process_tx(c: &mut Criterion) {
     let wrapper = WrapperTx::new(
         Fee {
             token: address::nam(),
-            amount: Amount::whole(200),
+            amount_per_gas_unit: Amount::whole(200),
         },
         &defaults::albert_keypair(),
         0.into(),
@@ -63,6 +64,7 @@ fn process_tx(c: &mut Criterion) {
                     ValidationMeta::from(&shell.wl_storage),
                     shell.vp_wasm_cache.clone(),
                     shell.tx_wasm_cache.clone(),
+                    Some(defaults::daewon_address()),
                 )
             },
             |(
@@ -72,6 +74,7 @@ fn process_tx(c: &mut Criterion) {
                 mut validation_meta,
                 mut vp_wasm_cache,
                 mut tx_wasm_cache,
+                block_proposer,
             )| {
                 assert_eq!(
                     // Assert that the wrapper transaction was valid
@@ -86,7 +89,8 @@ fn process_tx(c: &mut Criterion) {
                             &gas_table,
                             &mut 0,
                             &mut vp_wasm_cache,
-                            &mut tx_wasm_cache
+                            &mut tx_wasm_cache,
+                            block_proposer
                         )
                         .code,
                     0

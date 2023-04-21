@@ -9,9 +9,12 @@ use namada::core::ledger::parameters;
 use namada::ledger::gas::BlockGasMeter;
 use namada::ledger::storage::{DBIter, StorageHasher, TempWlStorage, DB};
 use namada::ledger::storage_api::StorageRead;
+use namada::proof_of_stake::find_validator_by_raw_hash;
 use namada::proof_of_stake::pos_queries::PosQueries;
 use namada::proto::Tx;
+use namada::types::address::Address;
 use namada::types::internal::WrapperTxInQueue;
+use namada::types::key::tm_raw_hash_to_string;
 use namada::types::time::DateTimeUtc;
 use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
@@ -54,8 +57,19 @@ where
             let alloc = self.get_encrypted_txs_allocator();
 
             // add encrypted txs
-            let (encrypted_txs, alloc) =
-                self.build_encrypted_txs(alloc, &req.txs, &req.time);
+            let tm_raw_hash_string =
+                tm_raw_hash_to_string(req.proposer_address);
+            let block_proposer = find_validator_by_raw_hash(
+                &self.wl_storage,
+                tm_raw_hash_string,
+            )
+            .unwrap();
+            let (encrypted_txs, alloc) = self.build_encrypted_txs(
+                alloc,
+                &req.txs,
+                &req.time,
+                block_proposer.as_ref(),
+            );
             let mut txs = encrypted_txs;
 
             // decrypt the wrapper txs included in the previous block
@@ -128,6 +142,7 @@ where
         mut alloc: EncryptedTxBatchAllocator,
         txs: &[TxBytes],
         block_time: &Option<Timestamp>,
+        block_proposer: Option<&Address>,
     ) -> (Vec<TxBytes>, BlockSpaceAllocator<BuildingDecryptedTxBatch>) {
         let pos_queries = self.wl_storage.pos_queries();
         let block_time = block_time.clone().and_then(|block_time| {
@@ -153,7 +168,7 @@ where
         let txs = txs
             .iter()
             .filter_map(|tx_bytes| {
-                match self.validate_wrapper_bytes(tx_bytes, &mut temp_block_gas_meter, block_time, &mut temp_wl_storage, &gas_table, &mut vp_wasm_cache, &mut tx_wasm_cache) {
+                match self.validate_wrapper_bytes(tx_bytes, &mut temp_block_gas_meter, block_time, &mut temp_wl_storage, &gas_table, &mut vp_wasm_cache, &mut tx_wasm_cache, block_proposer) {
                     Ok(()) => {
                         temp_wl_storage.write_log.commit_tx();
                         Some(tx_bytes.to_owned())
@@ -211,6 +226,7 @@ where
         gas_table: &BTreeMap<String, u64>,
         vp_wasm_cache: &mut VpCache<CA>,
         tx_wasm_cache: &mut TxCache<CA>,
+        block_proposer: Option<&Address>,
     ) -> Result<(), ()>
     where
         CA: 'static + WasmCacheAccess + Sync,
@@ -250,6 +266,7 @@ where
                 Some(Cow::Borrowed(gas_table)),
                 vp_wasm_cache,
                 tx_wasm_cache,
+                block_proposer,
             )
             .map_err(|_| ())
         } else {
@@ -397,7 +414,7 @@ mod test_prepare_proposal {
             Some(
                 WrapperTx::new(
                     Fee {
-                        amount: 0.into(),
+                        amount_per_gas_unit: 0.into(),
                         token: shell.wl_storage.storage.native_token.clone(),
                     },
                     &keypair,
@@ -465,7 +482,7 @@ mod test_prepare_proposal {
             }));
             let wrapper_tx = WrapperTx::new(
                 Fee {
-                    amount: 1.into(),
+                    amount_per_gas_unit: 1.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
@@ -521,7 +538,7 @@ mod test_prepare_proposal {
         );
         let wrapper_tx = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -576,7 +593,7 @@ mod test_prepare_proposal {
 
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 100.into(),
+                amount_per_gas_unit: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -618,7 +635,7 @@ mod test_prepare_proposal {
 
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 100.into(),
+                amount_per_gas_unit: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,

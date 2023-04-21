@@ -423,7 +423,7 @@ pub async fn sign_wrapper(
     let tx = {
         WrapperTx::new(
             Fee {
-                amount: fee_amount,
+                amount_per_gas_unit: fee_amount,
                 token: fee_token,
             },
             keypair,

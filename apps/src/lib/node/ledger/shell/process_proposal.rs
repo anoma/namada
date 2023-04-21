@@ -9,6 +9,7 @@ use namada::core::ledger::storage::WlStorage;
 use namada::core::types::hash::Hash;
 use namada::ledger::gas::TxVpGasMetering;
 use namada::ledger::storage::TempWlStorage;
+use namada::proof_of_stake::find_validator_by_raw_hash;
 use namada::proof_of_stake::pos_queries::PosQueries;
 use namada::types::hash::HASH_LENGTH;
 use namada::types::internal::WrapperTxInQueue;
@@ -86,8 +87,15 @@ where
         &self,
         req: RequestProcessProposal,
     ) -> ProcessProposal {
-        let (tx_results, metadata) =
-            self.process_txs(&req.txs, self.get_block_timestamp(req.time));
+        let tm_raw_hash_string = tm_raw_hash_to_string(&req.proposer_address);
+        let block_proposer =
+            find_validator_by_raw_hash(&self.wl_storage, tm_raw_hash_string)
+                .unwrap();
+        let (tx_results, metadata) = self.process_txs(
+            &req.txs,
+            self.get_block_timestamp(req.time),
+            block_proposer.as_ref(),
+        );
 
         // Erroneous transactions were detected when processing
         // the leader's proposal. We allow txs that do not
@@ -139,6 +147,7 @@ where
         &self,
         txs: &[TxBytes],
         block_time: DateTimeUtc,
+        block_proposer: Option<&Address>,
     ) -> (Vec<TxResult>, ValidationMeta) {
         let mut tx_queue_iter = self.wl_storage.storage.tx_queue.iter();
         let mut temp_wl_storage = TempWlStorage::new(&self.wl_storage.storage);
@@ -173,6 +182,7 @@ where
                     &mut wrapper_index,
                     &mut vp_wasm_cache,
                     &mut tx_wasm_cache,
+                    block_proposer,
                 );
                 if let ErrorCodes::Ok =
                     ErrorCodes::from_u32(result.code).unwrap()
@@ -224,6 +234,7 @@ where
         wrapper_index: &mut usize,
         vp_wasm_cache: &mut VpCache<CA>,
         tx_wasm_cache: &mut TxCache<CA>,
+        block_proposer: Option<&Address>,
     ) -> TxResult
     where
         CA: 'static + WasmCacheAccess + Sync,
@@ -612,6 +623,7 @@ where
                         Some(Cow::Borrowed(gas_table)),
                         vp_wasm_cache,
                         tx_wasm_cache,
+                        block_proposer,
                     ) {
                         Ok(()) => {
                             temp_wl_storage
@@ -625,7 +637,7 @@ where
                             }
                         }
                         Err(e) => TxResult {
-                            code: ErrorCodes::InvalidTx.into(),
+                            code: ErrorCodes::FeeError.into(),
                             info: e.to_string(),
                         },
                     }
@@ -687,7 +699,7 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -741,7 +753,7 @@ mod test_process_proposal {
         let timestamp = tx.timestamp;
         let mut wrapper = WrapperTx::new(
             Fee {
-                amount: 100.into(),
+                amount_per_gas_unit: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -773,7 +785,7 @@ mod test_process_proposal {
             };
 
             // we mount a malleability attack to try and remove the fee
-            new_wrapper.fee.amount = 0.into();
+            new_wrapper.fee.amount_per_gas_unit = 0.into();
             let new_data = TxType::Wrapper(new_wrapper)
                 .try_to_vec()
                 .expect("Test failed");
@@ -841,7 +853,7 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 1.into(),
+                amount_per_gas_unit: 1.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -902,7 +914,7 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: Amount::from(100),
+                amount_per_gas_unit: Amount::from(100),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -954,7 +966,7 @@ mod test_process_proposal {
             );
             let wrapper = WrapperTx::new(
                 Fee {
-                    amount: i.into(),
+                    amount_per_gas_unit: i.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
@@ -1024,7 +1036,7 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1087,7 +1099,7 @@ mod test_process_proposal {
         );
         let mut wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1143,7 +1155,7 @@ mod test_process_proposal {
         let inner_tx = EncryptedTx::encrypt(&tx, pubkey);
         let wrapper = WrapperTx {
             fee: Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             pk: keypair.ref_to(),
@@ -1277,7 +1289,7 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1352,7 +1364,7 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 1.into(),
+                amount_per_gas_unit: 1.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1411,7 +1423,7 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1498,7 +1510,7 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 1.into(),
+                amount_per_gas_unit: 1.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1517,7 +1529,7 @@ mod test_process_proposal {
 
         let new_wrapper = WrapperTx::new(
             Fee {
-                amount: 1.into(),
+                amount_per_gas_unit: 1.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair_2,
@@ -1572,7 +1584,7 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1642,7 +1654,7 @@ mod test_process_proposal {
         let signed_decrypted = decrypted.sign(&keypair);
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1705,7 +1717,7 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1757,7 +1769,7 @@ mod test_process_proposal {
         let signed_decrypted = decrypted.sign(&keypair);
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1818,7 +1830,7 @@ mod test_process_proposal {
         let signed_decrypted = decrypted.sign(&keypair);
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1875,7 +1887,7 @@ mod test_process_proposal {
 
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 100.into(),
+                amount_per_gas_unit: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1921,7 +1933,7 @@ mod test_process_proposal {
 
         let wrapper = WrapperTx::new(
             Fee {
-                amount: 100.into(),
+                amount_per_gas_unit: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,

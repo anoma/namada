@@ -453,7 +453,7 @@ pub mod tx_types {
             // the signed tx
             let wrapper = WrapperTx::new(
                 Fee {
-                    amount: 10.into(),
+                    amount_per_gas_unit: 10.into(),
                     token: nam(),
                 },
                 &keypair,
@@ -493,7 +493,7 @@ pub mod tx_types {
             // the signed tx
             let wrapper = WrapperTx::new(
                 Fee {
-                    amount: 10.into(),
+                    amount_per_gas_unit: 10.into(),
                     token: nam(),
                 },
                 &keypair,
