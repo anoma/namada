@@ -132,7 +132,7 @@ test-e2e:
 		-Z unstable-options --report-time
 
 test-unit-abcipp:
-	$(cargo) test \
+	$(cargo) +$(nightly) test \
 		--manifest-path ./apps/Cargo.toml \
 		$(jobs) \
 		--no-default-features \
@@ -140,7 +140,7 @@ test-unit-abcipp:
 		-Z unstable-options \
 		$(TEST_FILTER) -- \
 		-Z unstable-options --report-time && \
-	$(cargo) test \
+	$(cargo) +$(nightly) test \
 		--manifest-path \
 		./proof_of_stake/Cargo.toml \
 		$(jobs) \
@@ -148,19 +148,11 @@ test-unit-abcipp:
 		-Z unstable-options \
 		$(TEST_FILTER) -- \
 		-Z unstable-options --report-time && \
-	$(cargo) test \
+	$(cargo) +$(nightly) test \
 		--manifest-path ./shared/Cargo.toml \
 		$(jobs) \
 		--no-default-features \
-		--features "testing wasm-runtime abcipp ibc-mocks-abcipp" \
-		-Z unstable-options \
-		$(TEST_FILTER) -- \
-		-Z unstable-options --report-time && \
-	$(cargo) test \
-		--manifest-path ./vm_env/Cargo.toml \
-		$(jobs) \
-		--no-default-features \
-		--features "abcipp" \
+		--features "testing wasm-runtime abcipp ibc-mocks-abcipp ferveo-tpke" \
 		-Z unstable-options \
 		$(TEST_FILTER) -- \
 		-Z unstable-options --report-time
