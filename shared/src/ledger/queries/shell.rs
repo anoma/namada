@@ -4,7 +4,7 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
-use namada_core::types::storage::{BlockHeight, BlockResults};
+use namada_core::types::storage::{BlockHeight, BlockResults, Key};
 use namada_core::types::token::MaspDenom;
 
 use crate::ledger::events::log::dumb_queries;
@@ -21,6 +21,7 @@ use crate::types::transaction::TxResult;
 
 type Conversion = (
     Address,
+    Option<Key>,
     MaspDenom,
     Epoch,
     masp_primitives::transaction::components::Amount,
@@ -142,7 +143,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     // Conversion values are constructed on request
-    if let Some(((addr, denom), epoch, conv, pos)) = ctx
+    if let Some(((addr, sub_prefix, denom), epoch, conv, pos)) = ctx
         .wl_storage
         .storage
         .conversion_state
@@ -151,6 +152,7 @@ where
     {
         Ok((
             addr.clone(),
+            sub_prefix.clone(),
             *denom,
             *epoch,
             Into::<masp_primitives::transaction::components::Amount>::into(

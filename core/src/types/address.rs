@@ -14,6 +14,7 @@ use thiserror::Error;
 
 use crate::types::key;
 use crate::types::key::PublicKeyHash;
+use crate::types::storage::Key;
 use crate::types::token::{Denomination, MaspDenom};
 
 /// The length of an established [`Address`] encoded with Borsh.
@@ -596,15 +597,16 @@ pub fn tokens() -> HashMap<Address, (&'static str, Denomination)> {
 /// Temporary helper for testing, a hash map of tokens addresses with their
 /// MASP XAN incentive schedules. If the reward is (a, b) then a rewarded tokens
 /// are dispensed for every b possessed tokens.
-pub fn masp_rewards() -> HashMap<(Address, MaspDenom), (u64, u64)> {
+pub fn masp_rewards() -> HashMap<(Address, Option<Key>, MaspDenom), (u64, u64)>
+{
     vec![
-        ((nam(), MaspDenom::Zero), (0, 100)),
-        ((btc(), MaspDenom::Zero), (1, 100)),
-        ((eth(), MaspDenom::Zero), (2, 100)),
-        ((dot(), MaspDenom::Zero), (3, 100)),
-        ((schnitzel(), MaspDenom::Zero), (4, 100)),
-        ((apfel(), MaspDenom::Zero), (5, 100)),
-        ((kartoffel(), MaspDenom::Zero), (6, 100)),
+        ((nam(), None, MaspDenom::Zero), (0, 100)),
+        ((btc(), None, MaspDenom::Zero), (1, 100)),
+        ((eth(), None, MaspDenom::Zero), (2, 100)),
+        ((dot(), None, MaspDenom::Zero), (3, 100)),
+        ((schnitzel(), None, MaspDenom::Zero), (4, 100)),
+        ((apfel(), None, MaspDenom::Zero), (5, 100)),
+        ((kartoffel(), None, MaspDenom::Zero), (6, 100)),
     ]
     .into_iter()
     .collect()

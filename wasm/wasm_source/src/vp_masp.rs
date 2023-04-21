@@ -149,7 +149,7 @@ fn validate_tx(
                 debug_log!(
                     "Transparent output to a transaction to the masp must be \
                      beteween 1 and 4 but is {}",
-                    shielded_tx.vin.len()
+                    shielded_tx.vout.len()
                 );
                 return reject();
             }
@@ -224,12 +224,13 @@ fn validate_tx(
             // Handle shielded output
             // The following boundary conditions must be satisfied
             // 1. Zero transparent output
+
             // Satisfies 1.
             if !shielded_tx.vout.is_empty() {
                 debug_log!(
                     "Transparent output to a transaction from the masp must \
                      be 0 but is {}",
-                    shielded_tx.vin.len()
+                    shielded_tx.vout.len()
                 );
                 return reject();
             }

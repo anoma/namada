@@ -2778,6 +2778,8 @@ pub mod args {
         pub owner: Option<WalletBalanceOwner>,
         /// Address of a token
         pub token: Option<WalletAddress>,
+        /// sub-prefix if querying a multi-token
+        pub sub_prefix: Option<String>,
     }
 
     impl Args for QueryTransfers {
@@ -2785,10 +2787,12 @@ pub mod args {
             let query = Query::parse(matches);
             let owner = BALANCE_OWNER.parse(matches);
             let token = TOKEN_OPT.parse(matches);
+            let sub_prefix = SUB_PREFIX.parse(matches);
             Self {
                 query,
                 owner,
                 token,
+                sub_prefix,
             }
         }
 
@@ -2800,6 +2804,11 @@ pub mod args {
                 .arg(TOKEN_OPT.def().about(
                     "The token address that queried transfers must involve.",
                 ))
+                .arg(
+                    SUB_PREFIX.def().about(
+                        "The token's sub prefix whose balance to query.",
+                    ),
+                )
         }
     }
 

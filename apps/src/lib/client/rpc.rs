@@ -257,7 +257,11 @@ pub async fn query_tx_deltas(
                                 denom.denominate(&transfer.amount);
                             if denominated != 0 {
                                 let tfer_delta = Amount::from_nonnegative(
-                                    (transfer.token.clone(), denom),
+                                    (
+                                        transfer.token.clone(),
+                                        transfer.sub_prefix.clone(),
+                                        denom,
+                                    ),
                                     denominated,
                                 )
                                 .expect("invalid value for amount");
@@ -291,6 +295,7 @@ pub async fn query_tx_deltas(
 /// Query the specified accepted transfers from the ledger
 pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
     let query_token = args.token.as_ref().map(|x| ctx.get(x));
+    let sub_prefix = args.sub_prefix.map(|s| Key::parse(s).unwrap());
     let query_owner = args.owner.as_ref().map(|x| ctx.get_cached(x));
     // Obtain the effects of all shielded and transparent transactions
     let transfers = query_tx_deltas(
@@ -340,19 +345,21 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
             shielded_accounts.insert(acc, dec);
         }
         // Check if this transfer pertains to the supplied token
-        relevant &= match &query_token {
-            Some(token) => {
-                tfer_delta
-                    .values()
-                    .zip(MaspDenom::iter())
-                    .any(|(x, denom)| x[&(token.clone(), denom)] != 0)
-                    || shielded_accounts
-                        .values()
-                        .zip(MaspDenom::iter())
-                        .any(|(x, denom)| x[&(token.clone(), denom)] != 0)
-            }
-            None => true,
-        };
+        relevant &=
+            match &query_token {
+                Some(token) => {
+                    tfer_delta.values().zip(MaspDenom::iter()).any(
+                        |(x, denom)| {
+                            x[&(token.clone(), sub_prefix.clone(), denom)] != 0
+                        },
+                    ) || shielded_accounts.values().zip(MaspDenom::iter()).any(
+                        |(x, denom)| {
+                            x[&(token.clone(), sub_prefix.clone(), denom)] != 0
+                        },
+                    )
+                }
+                None => true,
+            };
         // Filter out those entries that do not satisfy user query
         if !relevant {
             continue;
@@ -362,7 +369,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
         for (account, amt) in tfer_delta {
             if account != masp() {
                 print!("  {}:", account);
-                for ((addr, denom), val) in amt.components() {
+                for ((addr, sub_prefix, denom), val) in amt.components() {
                     let token_alias = lookup_alias(&ctx, addr);
                     let sign = match val.cmp(&0) {
                         Ordering::Greater => "+",
@@ -370,14 +377,12 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
                         Ordering::Equal => "",
                     };
                     print!(
-                        " {}{} {}",
+                        " {}{} {}{}",
                         sign,
                         format_denominated_amount(
                             &client,
                             addr,
-                            // TODO: apparently MASP doesn't support
-                            // multi-tokens?
-                            &None,
+                            sub_prefix,
                             token::Amount::from_masp_denominated(
                                 val.unsigned_abs(),
                                 *denom
@@ -385,6 +390,10 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
                         )
                         .await,
                         token_alias,
+                        sub_prefix
+                            .as_ref()
+                            .map(|k| format!("/{}", k))
+                            .unwrap_or_default(),
                     );
                 }
                 println!();
@@ -395,7 +404,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
         for (account, amt) in shielded_accounts {
             if fvk_map.contains_key(&account) {
                 print!("  {}:", fvk_map[&account]);
-                for ((addr, denom), val) in amt.components() {
+                for ((addr, sub_prefix, denom), val) in amt.components() {
                     let token_alias = lookup_alias(&ctx, addr);
                     let sign = match val.cmp(&0) {
                         Ordering::Greater => "+",
@@ -403,19 +412,23 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
                         Ordering::Equal => "",
                     };
                     print!(
-                        " {}{} {}",
+                        " {}{} {}{}",
                         sign,
                         format_denominated_amount(
                             &client,
                             addr,
-                            &None,
+                            sub_prefix,
                             token::Amount::from_masp_denominated(
                                 val.unsigned_abs(),
                                 *denom
                             )
                         )
                         .await,
-                        token_alias
+                        token_alias,
+                        sub_prefix
+                            .as_ref()
+                            .map(|k| format!("/{}", k))
+                            .unwrap_or_default()
                     );
                 }
                 println!();
@@ -670,22 +683,27 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
                 .await
         }
         // Now print out the received quantities according to CLI arguments
-        match (balance, args.token.as_ref()) {
-            (Err(PinnedBalanceError::InvalidViewingKey), _) => println!(
+        match (balance, args.token.as_ref(), args.sub_prefix.as_ref()) {
+            (Err(PinnedBalanceError::InvalidViewingKey), _, _) => println!(
                 "Supplied viewing key cannot decode transactions to given \
                  payment address."
             ),
-            (Err(PinnedBalanceError::NoTransactionPinned), _) => {
+            (Err(PinnedBalanceError::NoTransactionPinned), _, _) => {
                 println!("Payment address {} has not yet been consumed.", owner)
             }
-            (Ok((balance, epoch)), Some(token)) => {
+            (Ok((balance, epoch)), Some(token), sub_prefix) => {
                 let token = ctx.get(token);
                 let token_alias = lookup_alias(ctx, &token);
                 let mut total_balance = token::Amount::default();
                 for denom in MaspDenom::iter() {
                     // Extract and print only the specified token from the total
-                    let (_asset_type, value) =
-                        value_by_address(&balance, token.clone(), denom, epoch);
+                    let (_asset_type, value) = value_by_address(
+                        &balance,
+                        token.clone(),
+                        sub_prefix,
+                        denom,
+                        epoch,
+                    );
                     total_balance += token::Amount::from_masp_denominated(
                         value as u64,
                         denom,
@@ -694,33 +712,43 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
                 if total_balance.is_zero() {
                     println!(
                         "Payment address {} was consumed during epoch {}. \
-                         Received no shielded {}",
-                        owner, epoch, token_alias
+                         Received no shielded {}{}",
+                        owner,
+                        epoch,
+                        token_alias,
+                        sub_prefix
+                            .map(|k| format!("/{}", k))
+                            .unwrap_or_default()
                     );
                 } else {
                     let formatted = format_denominated_amount(
                         &client,
                         &token,
-                        // TODO: Is this correct?
-                        &None,
+                        &sub_prefix.map(|k| Key::parse(k).unwrap()),
                         total_balance,
                     )
                     .await;
                     println!(
                         "Payment address {} was consumed during epoch {}. \
-                         Received {} {}",
-                        owner, epoch, formatted, token_alias
+                         Received {} {}{}",
+                        owner,
+                        epoch,
+                        formatted,
+                        token_alias,
+                        sub_prefix
+                            .map(|k| format!("/{}", k))
+                            .unwrap_or_default()
                     );
                 }
             }
-            (Ok((balance, epoch)), None) => {
+            (Ok((balance, epoch)), None, _) => {
                 let mut found_any = false;
                 // Print balances by human-readable token names
                 let balance = ctx
                     .shielded
                     .decode_amount(client.clone(), balance, epoch)
                     .await;
-                for ((addr, denom), value) in balance.components() {
+                for ((addr, sub_prefix, denom), value) in balance.components() {
                     let asset_value = token::Amount::from_masp_denominated(
                         *value as u64,
                         *denom,
@@ -736,17 +764,20 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
                     let formatted = format_denominated_amount(
                         &client,
                         addr,
-                        // TODO: Is this correct?
-                        &None,
+                        sub_prefix,
                         asset_value,
                     )
                     .await;
                     println!(
-                        "  {}: {}",
+                        "  {}{}: {}",
                         tokens
                             .get(addr)
                             .cloned()
                             .unwrap_or_else(|| addr.clone()),
+                        sub_prefix
+                            .as_ref()
+                            .map(|k| format!("/{}", k))
+                            .unwrap_or_default(),
                         formatted,
                     );
                 }
@@ -966,17 +997,12 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
 pub fn value_by_address(
     amt: &masp_primitives::transaction::components::Amount,
     token: Address,
+    sub_prefix: Option<&String>,
     denom: MaspDenom,
     epoch: Epoch,
 ) -> (AssetType, i64) {
     // Compute the unique asset identifier from the token address
-    let asset_type = AssetType::new(
-        (token, denom, epoch.0)
-            .try_to_vec()
-            .expect("token addresses should serialize")
-            .as_ref(),
-    )
-    .unwrap();
+    let asset_type = make_asset_type(epoch, &token, &sub_prefix, denom);
     (asset_type, amt[&asset_type])
 }
 
@@ -1039,13 +1065,8 @@ pub async fn query_shielded_balance(
                         .expect("context should contain viewing key")
                 };
                 // Compute the unique asset identifier from the token address
-                let asset_type = AssetType::new(
-                    (token.clone(), denom, epoch.0)
-                        .try_to_vec()
-                        .expect("token addresses should serialize")
-                        .as_ref(),
-                )
-                .unwrap();
+                let asset_type =
+                    make_asset_type(epoch, &token, &args.sub_prefix, denom);
                 total_balance += token::Amount::from_masp_denominated(
                     balance[&asset_type] as u64,
                     denom,
@@ -1055,18 +1076,25 @@ pub async fn query_shielded_balance(
             let token_alias = lookup_alias(ctx, &token);
             if total_balance.is_zero() {
                 println!(
-                    "No shielded {} balance found for given key",
-                    token_alias
+                    "No shielded {}{} balance found for given key",
+                    token_alias,
+                    args.sub_prefix
+                        .as_ref()
+                        .map(|k| format!("/{}", k))
+                        .unwrap_or_default(),
                 );
             } else {
                 println!(
-                    "{}: {}",
+                    "{}{}: {}",
                     token_alias,
+                    args.sub_prefix
+                        .as_ref()
+                        .map(|k| format!("/{}", k))
+                        .unwrap_or_default(),
                     format_denominated_amount(
                         &client,
                         &token,
-                        // TODO: Is this correct?
-                        &None,
+                        &args.sub_prefix.map(|k| Key::parse(k).unwrap()),
                         total_balance
                     )
                     .await
@@ -1112,16 +1140,20 @@ pub async fn query_shielded_balance(
                     .decode_asset_type(client.clone(), asset_type)
                     .await;
                 match decoded {
-                    Some((addr, denom, asset_epoch))
+                    Some((addr, sub_prefix, denom, asset_epoch))
                         if asset_epoch == epoch =>
                     {
                         // Only assets with the current timestamp count
                         println!(
-                            "Shielded Token {}:",
+                            "Shielded Token {}{}:",
                             tokens
                                 .get(&addr)
                                 .cloned()
-                                .unwrap_or_else(|| addr.clone())
+                                .unwrap_or_else(|| addr.clone()),
+                            sub_prefix
+                                .as_ref()
+                                .map(|k| format!("/{}", k))
+                                .unwrap_or_default(),
                         );
                         read_tokens.insert(addr.clone());
                         let mut found_any = false;
@@ -1131,9 +1163,10 @@ pub async fn query_shielded_balance(
                                 denom,
                             );
                             let formatted = format_denominated_amount(
-                                &client, &addr,
-                                // TODO: Is this correct?
-                                &None, value,
+                                &client,
+                                &addr,
+                                &sub_prefix,
+                                value,
                             )
                             .await;
                             println!("  {}, owned by {}", formatted, fvk);
@@ -1169,17 +1202,19 @@ pub async fn query_shielded_balance(
             let token = ctx.get(&token);
             let mut found_any = false;
             let token_alias = lookup_alias(ctx, &token);
-            println!("Shielded Token {}:", token_alias);
+            println!(
+                "Shielded Token {}{}:",
+                token_alias,
+                args.sub_prefix
+                    .as_ref()
+                    .map(|k| format!("/{}", k))
+                    .unwrap_or_default()
+            );
             for fvk in viewing_keys {
                 let mut balance = token::Amount::default();
                 for denom in MaspDenom::iter() {
-                    let asset_type = AssetType::new(
-                        (token.clone(), denom, epoch.0)
-                            .try_to_vec()
-                            .expect("token addresses should serialize")
-                            .as_ref(),
-                    )
-                    .unwrap();
+                    let asset_type =
+                        make_asset_type(epoch, &token, &args.sub_prefix, denom);
                     // Query the multi-asset balance at the given spending key
                     let viewing_key = ExtendedFullViewingKey::from(fvk).fvk.vk;
                     let denom_balance = if no_conversions {
@@ -1205,8 +1240,10 @@ pub async fn query_shielded_balance(
                     }
                 }
                 let formatted = format_denominated_amount(
-                    &client, &token, // TODO: Is this correct?
-                    &None, balance,
+                    &client,
+                    &token,
+                    &args.sub_prefix.as_ref().map(|k| Key::parse(k).unwrap()),
+                    balance,
                 )
                 .await;
                 println!("  {}, owned by {}", formatted, fvk);
@@ -1263,26 +1300,27 @@ pub async fn print_decoded_balance(
     decoded_balance: MaspDenominatedAmount,
 ) {
     let mut balances = HashMap::new();
-    for ((addr, denom), value) in decoded_balance.components() {
+    for ((addr, sub_prefix, denom), value) in decoded_balance.components() {
         let asset_value =
             token::Amount::from_masp_denominated(*value as u64, *denom);
         balances
-            .entry(addr)
+            .entry((addr, sub_prefix))
             .and_modify(|val| *val += asset_value)
             .or_insert(asset_value);
     }
     if balances.is_empty() {
         println!("No shielded balance found for given key");
     } else {
-        for (addr, amount) in balances {
+        for ((addr, sub_prefix), amount) in balances {
             println!(
-                "{} : {}",
+                "{}{} : {}",
                 lookup_alias(ctx, addr),
-                format_denominated_amount(
-                    client, addr, // TODO: Is this correct?
-                    &None, amount,
-                )
-                .await,
+                sub_prefix
+                    .as_ref()
+                    .map(|k| format!("/{}", k))
+                    .unwrap_or_default(),
+                format_denominated_amount(client, addr, sub_prefix, amount,)
+                    .await,
             );
         }
     }
@@ -1291,31 +1329,34 @@ pub async fn print_decoded_balance(
 pub async fn print_decoded_balance_with_epoch(
     ctx: &mut Context,
     client: &HttpClient,
-    decoded_balance: Amount<(Address, MaspDenom, Epoch)>,
+    decoded_balance: Amount<(Address, Option<Key>, MaspDenom, Epoch)>,
 ) {
     let tokens = ctx.tokens();
     let mut balances = HashMap::new();
-    for ((addr, denom, epoch), value) in decoded_balance.components() {
+    for ((addr, sub_prefix, denom, epoch), value) in
+        decoded_balance.components()
+    {
         let asset_value =
             token::Amount::from_masp_denominated(*value as u64, *denom);
         balances
-            .entry((addr, epoch))
+            .entry((addr, sub_prefix, epoch))
             .and_modify(|val| *val += asset_value)
             .or_insert(asset_value);
     }
     if balances.is_empty() {
         println!("No shielded balance found for given key");
     } else {
-        for ((addr, epoch), amount) in balances {
+        for ((addr, sub_prefix, epoch), amount) in balances {
             println!(
-                "{} | {} : {}",
+                "{}{} | {} : {}",
                 tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
+                sub_prefix
+                    .as_ref()
+                    .map(|k| format!("/{}", k))
+                    .unwrap_or_default(),
                 epoch,
-                format_denominated_amount(
-                    client, addr, // TODO: Is this correct?
-                    &None, amount,
-                )
-                .await,
+                format_denominated_amount(client, addr, sub_prefix, amount,)
+                    .await,
             );
         }
     }
@@ -2082,7 +2123,7 @@ pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
             .expect("Conversions should be defined");
     // Track whether any non-sentinel conversions are found
     let mut conversions_found = false;
-    for ((addr, _), epoch, conv, _) in conv_state.assets.values() {
+    for ((addr, sub, _), epoch, conv, _) in conv_state.assets.values() {
         let amt: masp_primitives::transaction::components::Amount =
             conv.clone().into();
         // If the user has specified any targets, then meet them
@@ -2096,8 +2137,9 @@ pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
         conversions_found = true;
         // Print the asset to which the conversion applies
         print!(
-            "{}[{}]: ",
+            "{}{}[{}]: ",
             tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
+            sub.as_ref().map(|k| format!("/{}", k)).unwrap_or_default(),
             epoch,
         );
         // Now print out the components of the allowed conversion
@@ -2105,13 +2147,14 @@ pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
         for (asset_type, val) in amt.components() {
             // Look up the address and epoch of asset to facilitate pretty
             // printing
-            let ((addr, _), epoch, _, _) = &conv_state.assets[asset_type];
+            let ((addr, sub, _), epoch, _, _) = &conv_state.assets[asset_type];
             // Now print out this component of the conversion
             print!(
-                "{}{} {}[{}]",
+                "{}{} {}{}[{}]",
                 prefix,
                 val,
                 tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
+                sub.as_ref().map(|k| format!("/{}", k)).unwrap_or_default(),
                 epoch
             );
             // Future iterations need to be prefixed with +
@@ -2131,6 +2174,7 @@ pub async fn query_conversion(
     asset_type: AssetType,
 ) -> Option<(
     Address,
+    Option<Key>,
     MaspDenom,
     Epoch,
     masp_primitives::transaction::components::Amount,
@@ -2845,13 +2889,22 @@ pub(super) async fn format_denominated_amount(
 }
 
 /// Make asset type corresponding to given address and epoch
-pub fn make_asset_type(
+pub fn make_asset_type<T: std::fmt::Display>(
     epoch: Epoch,
     token: &Address,
+    sub_prefix: &Option<T>,
     denom: MaspDenom,
 ) -> AssetType {
     // Typestamp the chosen token with the current epoch
-    let token_bytes = (token, denom, epoch.0)
+    let token_bytes = (
+        token,
+        sub_prefix
+            .as_ref()
+            .map(|k| k.to_string())
+            .unwrap_or_default(),
+        denom,
+        epoch.0,
+    )
         .try_to_vec()
         .expect("token should serialize");
     // Generate the unique asset identifier from the unique token address

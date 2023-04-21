@@ -1153,7 +1153,8 @@ fn masp_incentives() -> Result<()> {
     )?;
     client.exp_string(&format!(
         "nam: {}",
-        ((amt20 * masp_rewards[&(btc(), MaspDenom::Zero)]).0 * (ep1.0 - ep0.0))
+        ((amt20 * masp_rewards[&(btc(), None, MaspDenom::Zero)]).0
+            * (ep1.0 - ep0.0))
             .to_string_native()
     ))?;
     client.assert_success();
@@ -1175,7 +1176,8 @@ fn masp_incentives() -> Result<()> {
     )?;
     client.exp_string(&format!(
         "nam: {}",
-        ((amt20 * masp_rewards[&(btc(), MaspDenom::Zero)]).0 * (ep1.0 - ep0.0))
+        ((amt20 * masp_rewards[&(btc(), None, MaspDenom::Zero)]).0
+            * (ep1.0 - ep0.0))
             .to_string_native()
     ))?;
     client.assert_success();
@@ -1218,7 +1220,8 @@ fn masp_incentives() -> Result<()> {
     )?;
     client.exp_string(&format!(
         "nam: {}",
-        ((amt20 * masp_rewards[&(btc(), MaspDenom::Zero)]).0 * (ep2.0 - ep0.0))
+        ((amt20 * masp_rewards[&(btc(), None, MaspDenom::Zero)]).0
+            * (ep2.0 - ep0.0))
             .to_string_native()
     ))?;
     client.assert_success();
@@ -1240,7 +1243,8 @@ fn masp_incentives() -> Result<()> {
     )?;
     client.exp_string(&format!(
         "nam: {}",
-        ((amt20 * masp_rewards[&(btc(), MaspDenom::Zero)]).0 * (ep2.0 - ep0.0))
+        ((amt20 * masp_rewards[&(btc(), None, MaspDenom::Zero)]).0
+            * (ep2.0 - ep0.0))
             .to_string_native(),
     ))?;
     client.assert_success();
@@ -1344,7 +1348,8 @@ fn masp_incentives() -> Result<()> {
     )?;
     client.exp_string(&format!(
         "nam: {}",
-        ((amt30 * masp_rewards[&(eth(), MaspDenom::Zero)]).0 * (ep4.0 - ep3.0))
+        ((amt30 * masp_rewards[&(eth(), None, MaspDenom::Zero)]).0
+            * (ep4.0 - ep3.0))
             .to_string_native(),
     ))?;
     client.assert_success();
@@ -1367,9 +1372,9 @@ fn masp_incentives() -> Result<()> {
     )?;
     client.exp_string(&format!(
         "nam: {}",
-        (((amt20 * masp_rewards[&(btc(), MaspDenom::Zero)]).0
+        (((amt20 * masp_rewards[&(btc(), None, MaspDenom::Zero)]).0
             * (ep4.0 - ep0.0))
-            + ((amt30 * masp_rewards[&(eth(), MaspDenom::Zero)]).0
+            + ((amt30 * masp_rewards[&(eth(), None, MaspDenom::Zero)]).0
                 * (ep4.0 - ep3.0)))
             .to_string_native()
     ))?;
@@ -1439,7 +1444,8 @@ fn masp_incentives() -> Result<()> {
     )?;
     client.exp_string(&format!(
         "nam: {}",
-        ((amt30 * masp_rewards[&(eth(), MaspDenom::Zero)]).0 * (ep.0 - ep3.0))
+        ((amt30 * masp_rewards[&(eth(), None, MaspDenom::Zero)]).0
+            * (ep.0 - ep3.0))
             .to_string_native()
     ))?;
     client.assert_success();
@@ -1463,9 +1469,9 @@ fn masp_incentives() -> Result<()> {
     )?;
     client.exp_string(&format!(
         "nam: {}",
-        (((amt20 * masp_rewards[&(btc(), MaspDenom::Zero)]).0
+        (((amt20 * masp_rewards[&(btc(), None, MaspDenom::Zero)]).0
             * (ep.0 - ep0.0))
-            + ((amt30 * masp_rewards[&(eth(), MaspDenom::Zero)]).0
+            + ((amt30 * masp_rewards[&(eth(), None, MaspDenom::Zero)]).0
                 * (ep.0 - ep3.0)))
             .to_string_native()
     ))?;
@@ -1533,7 +1539,8 @@ fn masp_incentives() -> Result<()> {
     )?;
     client.exp_string(&format!(
         "nam: {}",
-        ((amt20 * masp_rewards[&(btc(), MaspDenom::Zero)]).0 * (ep6.0 - ep0.0))
+        ((amt20 * masp_rewards[&(btc(), None, MaspDenom::Zero)]).0
+            * (ep6.0 - ep0.0))
             .to_string_native()
     ))?;
     client.assert_success();
@@ -1556,9 +1563,9 @@ fn masp_incentives() -> Result<()> {
     )?;
     client.exp_string(&format!(
         "nam: {}",
-        (((amt20 * masp_rewards[&(btc(), MaspDenom::Zero)]).0
+        (((amt20 * masp_rewards[&(btc(), None, MaspDenom::Zero)]).0
             * (ep6.0 - ep0.0))
-            + ((amt30 * masp_rewards[&(eth(), MaspDenom::Zero)]).0
+            + ((amt30 * masp_rewards[&(eth(), None, MaspDenom::Zero)]).0
                 * (ep5.0 - ep3.0)))
             .to_string_native()
     ))?;
@@ -1584,7 +1591,8 @@ fn masp_incentives() -> Result<()> {
     )?;
     client.exp_string(&format!(
         "nam: {}",
-        ((amt20 * masp_rewards[&(btc(), MaspDenom::Zero)]).0 * (ep6.0 - ep0.0))
+        ((amt20 * masp_rewards[&(btc(), None, MaspDenom::Zero)]).0
+            * (ep6.0 - ep0.0))
             .to_string_native()
     ))?;
     client.assert_success();
@@ -1606,7 +1614,8 @@ fn masp_incentives() -> Result<()> {
     )?;
     client.exp_string(&format!(
         "nam: {}",
-        ((amt30 * masp_rewards[&(eth(), MaspDenom::Zero)]).0 * (ep5.0 - ep3.0))
+        ((amt30 * masp_rewards[&(eth(), None, MaspDenom::Zero)]).0
+            * (ep5.0 - ep3.0))
             .to_string_native()
     ))?;
     client.assert_success();
@@ -1629,9 +1638,9 @@ fn masp_incentives() -> Result<()> {
     )?;
     client.exp_string(&format!(
         "nam: {}",
-        (((amt20 * masp_rewards[&(btc(), MaspDenom::Zero)]).0
+        (((amt20 * masp_rewards[&(btc(), None, MaspDenom::Zero)]).0
             * (ep6.0 - ep0.0))
-            + ((amt30 * masp_rewards[&(eth(), MaspDenom::Zero)]).0
+            + ((amt30 * masp_rewards[&(eth(), None, MaspDenom::Zero)]).0
                 * (ep5.0 - ep3.0)))
             .to_string_native()
     ))?;
@@ -1654,7 +1663,7 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            &((amt30 * masp_rewards[&(eth(), MaspDenom::Zero)]).0
+            &((amt30 * masp_rewards[&(eth(), None, MaspDenom::Zero)]).0
                 * (ep5.0 - ep3.0))
                 .to_string_native(),
             "--signer",
@@ -1683,7 +1692,7 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            &((amt20 * masp_rewards[&(btc(), MaspDenom::Zero)]).0
+            &((amt20 * masp_rewards[&(btc(), None, MaspDenom::Zero)]).0
                 * (ep6.0 - ep0.0))
                 .to_string_native(),
             "--signer",
