@@ -206,8 +206,9 @@ fn determine_check_type(
     for key in keys_changed.into_iter() {
         let key = match wrapped_erc20s::Key::try_from(key) {
             Ok(key) => {
-                // Until burning is implemented, we disallow changes to any
-                // supply keys via wasm transactions
+                // Disallow changes to any supply keys via wasm transactions,
+                // since these should only ever be changed via FinalizeBlock
+                // after a successful transfer to or from Ethereum
                 if matches!(key.suffix, wrapped_erc20s::KeyType::Supply) {
                     tracing::debug!(
                         ?key,

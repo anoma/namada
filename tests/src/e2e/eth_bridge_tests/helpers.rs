@@ -18,7 +18,9 @@ use namada_core::ledger::eth_bridge;
 use namada_core::types::ethereum_events::{EthereumEvent, TransferToNamada};
 use namada_core::types::token;
 
-use crate::e2e::helpers::{get_actor_rpc, strip_trailing_newline};
+use crate::e2e::helpers::{
+    get_actor_rpc, rpc_client_do, strip_trailing_newline,
+};
 use crate::e2e::setup::{
     self, set_ethereum_bridge_mode, Bin, NamadaBgCmd, NamadaCmd, Test, Who,
 };
@@ -140,13 +142,7 @@ pub async fn send_transfer_to_namada_event(
         valid_transfers_map: vec![true],
     };
 
-    // TODO(namada#1055): right now, we use a hardcoded Ethereum events endpoint
-    // address that would only work for e2e tests involving a single
-    // validator node - this should become an attribute of the validator under
-    // test once the linked issue is implemented
-    const ETHEREUM_EVENTS_ENDPOINT: &str = "http://0.0.0.0:3030/eth_events";
-    let mut client =
-        EventsEndpointClient::new(ETHEREUM_EVENTS_ENDPOINT.to_string());
+    let mut client = EventsEndpointClient::default();
     client.send(&transfers).await?;
 
     // wait until the transfer is definitely processed
@@ -236,4 +232,20 @@ pub fn find_wrapped_erc20_balance(
         token::Amount::try_from_slice(&HEXLOWER.decode(data_str.as_bytes())?)?;
     bytes.assert_success();
     Ok(amount)
+}
+
+/// Read the total supply of some wrapped ERC20 token in Namada.
+pub async fn read_erc20_supply(
+    ledger_addr: &str,
+    asset: &EthAddress,
+) -> Result<Option<token::Amount>> {
+    rpc_client_do(ledger_addr, |rpc, client| async move {
+        let amount = rpc
+            .shell()
+            .eth_bridge()
+            .read_erc20_supply(&client, asset)
+            .await?;
+        Ok(amount)
+    })
+    .await
 }
