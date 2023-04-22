@@ -5,6 +5,7 @@ use crate::types::storage::{DbKeySeg, Key, KeySeg};
 const PROPOSAL_PREFIX: &str = "proposal";
 const PROPOSAL_VOTE: &str = "vote";
 const PROPOSAL_AUTHOR: &str = "author";
+const PROPOSAL_TYPE: &str = "type";
 const PROPOSAL_CONTENT: &str = "content";
 const PROPOSAL_START_EPOCH: &str = "start_epoch";
 const PROPOSAL_END_EPOCH: &str = "end_epoch";
@@ -65,7 +66,7 @@ pub fn is_author_key(key: &Key) -> bool {
     }
 }
 
-/// Check if key is proposal key
+/// Check if key is proposal code key
 pub fn is_proposal_code_key(key: &Key) -> bool {
     match &key.segments[..] {
         [
@@ -166,6 +167,24 @@ pub fn is_end_epoch_key(key: &Key) -> bool {
         ] if addr == &ADDRESS
             && prefix == PROPOSAL_PREFIX
             && end_epoch == PROPOSAL_END_EPOCH =>
+        {
+            id.parse::<u64>().is_ok()
+        }
+        _ => false,
+    }
+}
+
+/// Check if key is proposal type key
+pub fn is_proposal_type_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(id),
+            DbKeySeg::StringSeg(proposal_type),
+        ] if addr == &ADDRESS
+            && prefix == PROPOSAL_PREFIX
+            && proposal_type == PROPOSAL_TYPE =>
         {
             id.parse::<u64>().is_ok()
         }
@@ -334,6 +353,15 @@ pub fn get_author_key(id: u64) -> Key {
         .expect("Cannot obtain a storage key")
 }
 
+/// Get key of a proposal type
+pub fn get_proposal_type_key(id: u64) -> Key {
+    proposal_prefix()
+        .push(&id.to_string())
+        .expect("Cannot obtain a storage key")
+        .push(&PROPOSAL_TYPE.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
 /// Get key of proposal voting start epoch
 pub fn get_voting_start_epoch_key(id: u64) -> Key {
     proposal_prefix()
@@ -370,21 +398,21 @@ pub fn get_grace_epoch_key(id: u64) -> Key {
         .expect("Cannot obtain a storage key")
 }
 
-/// Get proposal code key
-pub fn get_proposal_code_key(id: u64) -> Key {
-    proposal_prefix()
-        .push(&id.to_string())
-        .expect("Cannot obtain a storage key")
-        .push(&PROPOSAL_CODE.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
 /// Get the proposal committing key prefix
 pub fn get_commiting_proposals_prefix(epoch: u64) -> Key {
     proposal_prefix()
         .push(&PROPOSAL_COMMITTING_EPOCH.to_owned())
         .expect("Cannot obtain a storage key")
         .push(&epoch.to_string())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get proposal code key
+pub fn get_proposal_code_key(id: u64) -> Key {
+    proposal_prefix()
+        .push(&id.to_string())
+        .expect("Cannot obtain a storage key")
+        .push(&PROPOSAL_CODE.to_owned())
         .expect("Cannot obtain a storage key")
 }
 

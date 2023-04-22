@@ -19,17 +19,59 @@ If you find a bug, please submit an issue with the `bug` [issue template](https:
   5. [Becoming a validator post-genesis](./post-genesis-validator.md)
 ![testnet_flowchart](../images/testnet_flowchart.png)
 
-## Latest Testnet
 The Namada public testnet is permissionless, anyone can join without the authorisation of a centralised party. Expect frequent upgrades (every two weeks).
 
+## Latest Upgrade
 
-- Most recent testnet:
+
+## Latest Testnet
+- Namada public testnet 6 (offline):
+  - From date: 29th of March 2023 17.00 UTC 
+  - Namada protocol version: `v0.14.3` 
+  - Tendermint (Core) version: `v0.1.4-abciplus`
+  - CHAIN_ID: `public-testnet-6.0.a0266444b06`
+
+
+## Testnet History Timeline
+
+- Namada public testnet 5:
+  - From date: 15th of March 2023  
+  - Namada protocol version: `v0.14.2` 
+  - Tendermint version: `v0.1.4-abciplus`
+  - CHAIN_ID: `public-testnet-5.0.d25aa64ace6`
+
+- Namada public testnet 4:
+  - From date: 22nd of February 2023  
+  - Namada protocol version: `v0.14.1` 
+  - Tendermint version: `v0.1.4-abciplus`
+  - CHAIN_ID: `public-testnet-4.0.16a35d789f4`
+
+- Namada public testnet 3 hotfix (did not suffice):
+  - From date: 13th of February 2023  
+  - Namada protocol version: `v0.13.4` 
+  - Tendermint version: `v0.1.4-abciplus`
+  - CHAIN_ID: `public-testnet-3.0.81edd4d6eb6`
+
+- Namada public testnet 3:
+  - From date: 9th of February 2023  
+  - Namada protocol version: `v0.13.3` 
+  - Tendermint version: `v0.1.4-abciplus`
+  - CHAIN_ID: `public-testnet-3.0.81edd4d6eb6`
+
+- Namada public testnet 2.1.2 hotfix:
+  - From date: 25th of January 2023  
+  - Namada protocol version: `v0.13.3` 
+  - Tendermint version: `v0.1.4-abciplus`
+  - CHAIN_ID: `public-testnet-2.1.4014f207f6d`
+
+  Due to a bug,  a [hotfix](https://github.com/anoma/namada/releases/tag/v0.13.3) was released. 
+  This needed to be installed and applied before `18:00:00 UTC` on `2023-01-25`.
+
+- Namada public testnet 2.1.2:
   - From date: 24th of January 2023  
   - Namada protocol version: `v0.13.2` 
   - Tendermint version: `v0.1.4-abciplus`
   - CHAIN_ID: `public-testnet-2.1.4014f207f6d`
-
-## Testnet History Timeline
 
 - Namada public testnet 2.1:
   - From date: 17th of January 2023  

@@ -31,11 +31,13 @@ mod tests {
     use namada::ledger::tx_env::TxEnv;
     use namada::proto::{Tx};
     use namada::tendermint_proto::Protobuf;
+    use namada::types::chain::ChainId;
     use namada::types::key::*;
     use namada::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
     use namada::types::time::DateTimeUtc;
     use namada::types::token::{self, Amount};
     use namada::types::{address, key};
+    use namada_test_utils::TestWasms;
     use namada_tx_prelude::{
         BorshDeserialize, BorshSerialize, StorageRead, StorageWrite,
     };
@@ -50,10 +52,6 @@ mod tests {
     use super::{ibc, tx, vp};
     use crate::tx::{tx_host_env, TestTxEnv};
     use crate::vp::{vp_host_env, TestVpEnv};
-
-    // paths to the WASMs used for tests
-    const VP_ALWAYS_TRUE_WASM: &str = "../wasm_for_tests/vp_always_true.wasm";
-    const VP_ALWAYS_FALSE_WASM: &str = "../wasm_for_tests/vp_always_false.wasm";
 
     #[test]
     fn test_tx_read_write() {
@@ -171,10 +169,8 @@ mod tests {
         tx_host_env::with(|env| {
             for i in sub_keys.iter() {
                 let key = prefix.push(i).unwrap();
-                let value = i.try_to_vec().unwrap();
-                env.storage.write(&key, value).unwrap();
+                env.wl_storage.write(&key, i).unwrap();
             }
-            env.storage.commit().unwrap();
         });
 
         // Then try to iterate over their prefix
@@ -227,9 +223,14 @@ mod tests {
         // The environment must be initialized first
         tx_host_env::init();
 
-        let code =
-            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
-        tx::ctx().init_account(code).unwrap();
+        let code = TestWasms::VpAlwaysTrue.read_bytes();
+        let code_hash = Hash::sha256(&code);
+        tx_host_env::with(|env| {
+            // store wasm code
+            let key = Key::wasm_code(&code_hash);
+            env.wl_storage.storage.write(&key, code.clone()).unwrap();
+        });
+        tx::ctx().init_account(code_hash).unwrap();
     }
 
     #[test]
@@ -239,39 +240,47 @@ mod tests {
 
         assert_eq!(
             tx::ctx().get_chain_id().unwrap(),
-            tx_host_env::with(|env| env.storage.get_chain_id().0)
+            tx_host_env::with(|env| env.wl_storage.storage.get_chain_id().0)
         );
         assert_eq!(
             tx::ctx().get_block_height().unwrap(),
-            tx_host_env::with(|env| env.storage.get_block_height().0)
+            tx_host_env::with(|env| env
+                .wl_storage
+                .storage
+                .get_block_height()
+                .0)
         );
         assert_eq!(
             tx::ctx().get_block_hash().unwrap(),
-            tx_host_env::with(|env| env.storage.get_block_hash().0)
+            tx_host_env::with(|env| env.wl_storage.storage.get_block_hash().0)
         );
         assert_eq!(
             tx::ctx().get_block_epoch().unwrap(),
-            tx_host_env::with(|env| env.storage.get_current_epoch().0)
+            tx_host_env::with(|env| env
+                .wl_storage
+                .storage
+                .get_current_epoch()
+                .0)
         );
         assert_eq!(
             tx::ctx().get_native_token().unwrap(),
-            tx_host_env::with(|env| env.storage.native_token.clone())
+            tx_host_env::with(|env| env
+                .wl_storage
+                .storage
+                .native_token
+                .clone())
         );
     }
 
     /// An example how to write a VP host environment integration test
     #[test]
     fn test_vp_host_env() {
-        // The environment must be initialized first
-        vp_host_env::init();
-
-        // We can add some data to the environment
-        let key_raw = "key";
-        let key = storage::Key::parse(key_raw).unwrap();
         let value = "test".to_string();
-        let value_raw = value.try_to_vec().unwrap();
-        vp_host_env::with(|env| {
-            env.write_log.write(&key, value_raw.clone()).unwrap()
+        let addr = address::testing::established_address_1();
+        let key = storage::Key::from(addr.to_db_key());
+        // We can write some data from a transaction
+        vp_host_env::init_from_tx(addr, TestTxEnv::default(), |_addr| {
+            tx::ctx().write(&key, &value).unwrap();
         });
 
         let read_pre_value: Option<String> = vp::CTX.read_pre(&key).unwrap();
@@ -287,16 +296,16 @@ mod tests {
         let addr = address::testing::established_address_1();
         let addr_key = storage::Key::from(addr.to_db_key());
 
-        // Write some value to storage
+        // Write some value to storage ...
         let existing_key =
             addr_key.join(&Key::parse("existing_key_raw").unwrap());
         let existing_value = vec![2_u8; 1000];
-        // Values written to storage have to be encoded with Borsh
-        let existing_value_encoded = existing_value.try_to_vec().unwrap();
         tx_env
-            .storage
-            .write(&existing_key, existing_value_encoded)
+            .wl_storage
+            .write(&existing_key, &existing_value)
             .unwrap();
+        // ... and commit it
+        tx_env.wl_storage.commit_tx();
 
         // In a transaction, write override the existing key's value and add
         // another key-value
@@ -376,13 +385,13 @@ mod tests {
         // We'll write sub-key in some random order to check prefix iter's order
         let sub_keys = [2_i32, 1, i32::MAX, -1, 260, -2, i32::MIN, 5, 0];
 
-        // Write some values to storage
+        // Write some values to storage ...
         for i in sub_keys.iter() {
             let key = prefix.push(i).unwrap();
-            let value = i.try_to_vec().unwrap();
-            tx_env.storage.write(&key, value).unwrap();
+            tx_env.wl_storage.write(&key, i).unwrap();
         }
-        tx_env.storage.commit().unwrap();
+        // ... and commit them
+        tx_env.wl_storage.commit_tx();
 
         // In a transaction, write override the existing key's value and add
         // another key-value
@@ -416,7 +425,10 @@ mod tests {
             .map(|item| item.unwrap());
 
         // The order in post also has to be sorted
-        let expected_post = sub_keys.iter().sorted().map(|i| {
+        let mut expected_keys = sub_keys.to_vec();
+        // Add value from `new_key`
+        expected_keys.push(11);
+        let expected_post = expected_keys.iter().sorted().map(|i| {
             let val = if *i == 5 { 100 } else { *i };
             (prefix.push(i).unwrap(), val)
         });
@@ -433,7 +445,7 @@ mod tests {
         let pk_key = key::pk_key(&addr);
         let keypair = key::testing::keypair_1();
         let pk = keypair.ref_to();
-        env.storage
+        env.wl_storage
             .write(&pk_key, pk.try_to_vec().unwrap())
             .unwrap();
         // Initialize the environment
@@ -441,6 +453,7 @@ mod tests {
 
         // Use some arbitrary bytes for tx code
         let code = vec![4, 3, 2, 1, 0];
+        let expiration = Some(DateTimeUtc::now());
         for data in &[
             // Tx with some arbitrary data
             vec![1, 2, 3, 4].repeat(10),
@@ -449,6 +462,8 @@ mod tests {
         ] {
             let signed_tx_data = vp_host_env::with(|env| {
                 let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+                tx.chain_id = env.wl_storage.storage.chain_id.clone();
+                tx.expiration = expiration;
                 tx.set_code(Code::new(code.clone()));
                 tx.set_data(Data::new(data.clone()));
                 tx.add_section(Section::Signature(Signature::new(
@@ -490,23 +505,35 @@ mod tests {
 
         assert_eq!(
             vp::CTX.get_chain_id().unwrap(),
-            vp_host_env::with(|env| env.storage.get_chain_id().0)
+            vp_host_env::with(|env| env.wl_storage.storage.get_chain_id().0)
         );
         assert_eq!(
             vp::CTX.get_block_height().unwrap(),
-            vp_host_env::with(|env| env.storage.get_block_height().0)
+            vp_host_env::with(|env| env
+                .wl_storage
+                .storage
+                .get_block_height()
+                .0)
         );
         assert_eq!(
             vp::CTX.get_block_hash().unwrap(),
-            vp_host_env::with(|env| env.storage.get_block_hash().0)
+            vp_host_env::with(|env| env.wl_storage.storage.get_block_hash().0)
         );
         assert_eq!(
             vp::CTX.get_block_epoch().unwrap(),
-            vp_host_env::with(|env| env.storage.get_current_epoch().0)
+            vp_host_env::with(|env| env
+                .wl_storage
+                .storage
+                .get_current_epoch()
+                .0)
         );
         assert_eq!(
             vp::CTX.get_native_token().unwrap(),
-            vp_host_env::with(|env| env.storage.native_token.clone())
+            vp_host_env::with(|env| env
+                .wl_storage
+                .storage
+                .native_token
+                .clone())
         );
     }
 
@@ -516,7 +543,7 @@ mod tests {
         vp_host_env::init();
 
         // evaluating without any code should fail
-        let empty_code = vec![];
+        let empty_code = Hash::zero();
         let input_data = vec![];
         let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
         tx.set_code(Code::new(vec![]));
@@ -533,8 +560,13 @@ mod tests {
         assert!(!result);
 
         // evaluating the VP template which always returns `true` should pass
-        let code =
-            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+        let code = TestWasms::VpAlwaysTrue.read_bytes();
+        let code_hash = Hash::sha256(&code);
+        vp_host_env::with(|env| {
+            // store wasm codes
+            let key = Key::wasm_code(&code_hash);
+            env.wl_storage.storage.write(&key, code.clone()).unwrap();
+        });
         let input_data = vec![];
         let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
         tx.set_code(Code::new(vec![]));
@@ -547,13 +579,18 @@ mod tests {
             tx.data_sechash(),
             &key::testing::keypair_1(),
         )));
-        let result = vp::CTX.eval(code, tx).unwrap();
+        let result = vp::CTX.eval(code_hash, tx).unwrap();
         assert!(result);
 
         // evaluating the VP template which always returns `false` shouldn't
         // pass
-        let code =
-            std::fs::read(VP_ALWAYS_FALSE_WASM).expect("cannot load wasm");
+        let code = TestWasms::VpAlwaysFalse.read_bytes();
+        let code_hash = Hash::sha256(&code);
+        vp_host_env::with(|env| {
+            // store wasm codes
+            let key = Key::wasm_code(&code_hash);
+            env.wl_storage.storage.write(&key, code.clone()).unwrap();
+        });
         let input_data = vec![];
         let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
         tx.set_code(Code::new(vec![]));
@@ -566,7 +603,7 @@ mod tests {
             tx.data_sechash(),
             &key::testing::keypair_1(),
         )));
-        let result = vp::CTX.eval(code, tx).unwrap();
+        let result = vp::CTX.eval(code_hash, tx).unwrap();
         assert!(!result);
     }
 
@@ -619,7 +656,7 @@ mod tests {
             IbcError::ClientError(_),
         ));
         // drop the transaction
-        env.write_log.drop_tx();
+        env.wl_storage.drop_tx();
 
         // Start a transaction to create a new client
         tx_host_env::set(env);
@@ -651,10 +688,14 @@ mod tests {
         // Commit
         env.commit_tx_and_block();
         // update the block height for the following client update
-        env.storage
+        env.wl_storage
+            .storage
             .begin_block(BlockHash::default(), BlockHeight(2))
             .unwrap();
-        env.storage.set_header(tm_dummy_header()).unwrap();
+        env.wl_storage
+            .storage
+            .set_header(tm_dummy_header())
+            .unwrap();
 
         // Start an invalid transaction
         tx_host_env::set(env);
@@ -707,7 +748,7 @@ mod tests {
             IbcError::ClientError(_),
         ));
         // drop the transaction
-        env.write_log.drop_tx();
+        env.wl_storage.drop_tx();
 
         // Start a transaction to update the client
         tx_host_env::set(env);
@@ -738,10 +779,14 @@ mod tests {
         // Commit
         env.commit_tx_and_block();
         // update the block height for the following client update
-        env.storage
+        env.wl_storage
+            .storage
             .begin_block(BlockHash::default(), BlockHeight(3))
             .unwrap();
-        env.storage.set_header(tm_dummy_header()).unwrap();
+        env.wl_storage
+            .storage
+            .set_header(tm_dummy_header())
+            .unwrap();
 
         // Start a transaction to upgrade the client
         tx_host_env::set(env);
@@ -780,7 +825,10 @@ mod tests {
         let (client_id, client_state, writes) = ibc::prepare_client();
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
-                env.storage.write(&key, &val).expect("write error");
+                env.wl_storage
+                    .storage
+                    .write(&key, &val)
+                    .expect("write error");
             });
         });
 
@@ -826,7 +874,7 @@ mod tests {
             IbcError::ConnectionError(_),
         ));
         // drop the transaction
-        env.write_log.drop_tx();
+        env.wl_storage.drop_tx();
 
         // Start a transaction for ConnectionOpenInit
         tx_host_env::set(env);
@@ -857,7 +905,10 @@ mod tests {
         // Commit
         env.commit_tx_and_block();
         // set a block header again
-        env.storage.set_header(tm_dummy_header()).unwrap();
+        env.wl_storage
+            .storage
+            .set_header(tm_dummy_header())
+            .unwrap();
 
         // Start the next transaction for ConnectionOpenAck
         tx_host_env::set(env);
@@ -897,7 +948,10 @@ mod tests {
         let mut env = tx_host_env::take();
         let (client_id, client_state, writes) = ibc::prepare_client();
         writes.into_iter().for_each(|(key, val)| {
-            env.storage.write(&key, &val).expect("write error");
+            env.wl_storage
+                .storage
+                .write(&key, &val)
+                .expect("write error");
         });
 
         // Start a transaction for ConnectionOpenTry
@@ -929,7 +983,10 @@ mod tests {
         // Commit
         env.commit_tx_and_block();
         // set a block header again
-        env.storage.set_header(tm_dummy_header()).unwrap();
+        env.wl_storage
+            .storage
+            .set_header(tm_dummy_header())
+            .unwrap();
 
         // Start the next transaction for ConnectionOpenConfirm
         tx_host_env::set(env);
@@ -971,7 +1028,10 @@ mod tests {
         writes.extend(conn_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
-                env.storage.write(&key, &val).expect("write error");
+                env.wl_storage
+                    .storage
+                    .write(&key, &val)
+                    .expect("write error");
             });
         });
 
@@ -1018,7 +1078,7 @@ mod tests {
             IbcError::ChannelError(_),
         ));
         // drop the transaction
-        env.write_log.drop_tx();
+        env.wl_storage.drop_tx();
 
         // Start an invalid transaction
         tx_host_env::set(env);
@@ -1070,7 +1130,7 @@ mod tests {
             IbcError::ChannelError(_),
         ));
         // drop the transaction
-        env.write_log.drop_tx();
+        env.wl_storage.drop_tx();
 
         // Start a transaction for ChannelOpenInit
         tx_host_env::set(env);
@@ -1141,7 +1201,10 @@ mod tests {
         writes.extend(conn_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
-                env.storage.write(&key, &val).expect("write error");
+                env.wl_storage
+                    .storage
+                    .write(&key, &val)
+                    .expect("write error");
             });
         });
 
@@ -1218,7 +1281,10 @@ mod tests {
         writes.extend(channel_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
-                env.storage.write(&key, &val).expect("write error");
+                env.wl_storage
+                    .storage
+                    .write(&key, &val)
+                    .expect("write error");
             });
         });
 
@@ -1264,7 +1330,10 @@ mod tests {
         writes.extend(channel_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
-                env.storage.write(&key, &val).expect("write error");
+                env.wl_storage
+                    .storage
+                    .write(&key, &val)
+                    .expect("write error");
             });
         });
 
@@ -1311,7 +1380,10 @@ mod tests {
         writes.extend(channel_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
-                env.storage.write(&key, &val).expect("write error");
+                env.wl_storage
+                    .storage
+                    .write(&key, &val)
+                    .expect("write error");
             });
         });
 
@@ -1413,7 +1485,10 @@ mod tests {
         writes.insert(key, init_bal.try_to_vec().unwrap());
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
-                env.storage.write(&key, &val).expect("write error");
+                env.wl_storage
+                    .storage
+                    .write(&key, &val)
+                    .expect("write error");
             });
         });
 
@@ -1478,7 +1553,10 @@ mod tests {
 
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
-                env.storage.write(&key, &val).expect("write error");
+                env.wl_storage
+                    .storage
+                    .write(&key, &val)
+                    .expect("write error");
             });
         });
 
@@ -1542,7 +1620,10 @@ mod tests {
         writes.extend(channel_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
-                env.storage.write(&key, &val).expect("write error");
+                env.wl_storage
+                    .storage
+                    .write(&key, &val)
+                    .expect("write error");
             });
         });
         // escrow in advance
@@ -1554,7 +1635,10 @@ mod tests {
         );
         let val = Amount::from(1_000_000_000u64).try_to_vec().unwrap();
         tx_host_env::with(|env| {
-            env.storage.write(&escrow, &val).expect("write error");
+            env.wl_storage
+                .storage
+                .write(&escrow, &val)
+                .expect("write error");
         });
 
         // Set this chain as the source zone
@@ -1618,7 +1702,10 @@ mod tests {
         writes.extend(channel_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
-                env.storage.write(&key, &val).expect("write error");
+                env.wl_storage
+                    .storage
+                    .write(&key, &val)
+                    .expect("write error");
             });
         });
 
@@ -1704,7 +1791,10 @@ mod tests {
         writes.extend(channel_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
-                env.storage.write(&key, &val).expect("write error");
+                env.wl_storage
+                    .storage
+                    .write(&key, &val)
+                    .expect("write error");
             });
         });
 
@@ -1761,7 +1851,10 @@ mod tests {
         writes.extend(channel_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
-                env.storage.write(&key, &val).expect("write error");
+                env.wl_storage
+                    .storage
+                    .write(&key, &val)
+                    .expect("write error");
             })
         });
 
@@ -1839,7 +1932,10 @@ mod tests {
         writes.extend(channel_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
-                env.storage.write(&key, &val).expect("write error");
+                env.wl_storage
+                    .storage
+                    .write(&key, &val)
+                    .expect("write error");
             })
         });
 

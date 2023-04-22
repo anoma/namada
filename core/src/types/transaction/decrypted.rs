@@ -12,6 +12,7 @@ pub mod decrypted_tx {
     use crate::proto::Tx;
     use crate::types::transaction::{Hash, TxType, WrapperTx};
     use sha2::{Digest, Sha256};
+    use crate::types::chain::ChainId;
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, serde::Serialize, serde::Deserialize)]
     #[allow(clippy::large_enum_variant)]
@@ -28,8 +29,6 @@ pub mod decrypted_tx {
             code_hash: Hash,
             #[allow(dead_code)]
             data_hash: Hash,
-            #[allow(dead_code)]
-            header_hash: Hash,
             #[cfg(not(feature = "mainnet"))]
             /// A PoW solution can be used to allow zero-fee testnet
             /// transactions.
@@ -49,25 +48,6 @@ pub mod decrypted_tx {
         pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
             hasher.update(self.try_to_vec().expect("unable to serialize decrypted tx"));
             hasher
-        }
-
-        /// Return the hash used as a commitment to the tx's contents in the
-        /// wrapper tx that includes this tx as an encrypted payload.
-        pub fn hash_commitment(&self) -> Hash {
-            match self {
-                DecryptedTx::Decrypted {
-                    header_hash,
-                    code_hash: _,
-                    data_hash: _,
-                    #[cfg(not(feature = "mainnet"))]
-                        has_valid_pow: _,
-                } => header_hash.clone(),
-                DecryptedTx::Undecryptable(wrapper) =>
-                    Hash(TxType::Wrapper(wrapper.clone())
-                         .hash(&mut Sha256::new())
-                         .finalize_reset()
-                         .into()),
-            }
         }
     }
 

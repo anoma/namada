@@ -14,6 +14,7 @@ use index_set::vec::VecIndexSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use super::key::common;
 use crate::bytes::ByteBuf;
 use crate::types::address::{self, Address};
 use crate::types::hash::Hash;
@@ -53,6 +54,12 @@ pub const RESERVED_ADDRESS_PREFIX: char = '#';
 pub const VP_KEY_PREFIX: char = '?';
 /// The reserved storage key for validity predicates
 pub const RESERVED_VP_KEY: &str = "?";
+/// The reserved storage key prefix for wasm codes
+pub const WASM_KEY_PREFIX: &str = "wasm";
+/// The reserved storage key prefix for wasm codes
+pub const WASM_CODE_PREFIX: &str = "code";
+/// The reserved storage key prefix for wasm code hashes
+pub const WASM_HASH_PREFIX: &str = "hash";
 
 /// Transaction index within block.
 #[derive(
@@ -159,6 +166,15 @@ pub struct BlockHeight(pub u64);
 impl Display for BlockHeight {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl FromStr for BlockHeight {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let raw: u64 = FromStr::from_str(s)?;
+        Ok(Self(raw))
     }
 }
 
@@ -524,6 +540,24 @@ impl Key {
         Some((KeyRef { segments: prefix }, last))
     }
 
+    /// Returns a key of the wasm code of the given hash
+    pub fn wasm_code(code_hash: &Hash) -> Self {
+        let mut segments =
+            Self::from(WASM_KEY_PREFIX.to_owned().to_db_key()).segments;
+        segments.push(DbKeySeg::StringSeg(WASM_CODE_PREFIX.to_owned()));
+        segments.push(DbKeySeg::StringSeg(code_hash.to_string()));
+        Key { segments }
+    }
+
+    /// Returns a key of the wasm code hash of the given code path
+    pub fn wasm_hash(code_path: impl AsRef<str>) -> Self {
+        let mut segments =
+            Self::from(WASM_KEY_PREFIX.to_owned().to_db_key()).segments;
+        segments.push(DbKeySeg::StringSeg(WASM_HASH_PREFIX.to_owned()));
+        segments.push(DbKeySeg::StringSeg(code_path.as_ref().to_string()));
+        Key { segments }
+    }
+
     /// Returns a key of the validity predicate of the given address
     /// Only this function can push "?" segment for validity predicate
     pub fn validity_predicate(addr: &Address) -> Self {
@@ -834,6 +868,43 @@ impl_int_key_seg!(u32, i32, 4);
 impl_int_key_seg!(u64, i64, 8);
 impl_int_key_seg!(u128, i128, 16);
 
+impl KeySeg for Epoch {
+    fn parse(string: String) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let raw = u64::parse(string)?;
+        Ok(Epoch(raw))
+    }
+
+    fn raw(&self) -> String {
+        self.to_string()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        self.0.to_db_key()
+    }
+}
+
+impl KeySeg for common::PublicKey {
+    fn parse(string: String) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let raw = common::PublicKey::from_str(&string)
+            .map_err(|err| Error::ParseKeySeg(err.to_string()))?;
+        Ok(raw)
+    }
+
+    fn raw(&self) -> String {
+        self.to_string()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::StringSeg(self.raw())
+    }
+}
+
 /// Epoch identifier. Epochs are identified by consecutive numbers.
 #[derive(
     Clone,
@@ -1018,7 +1089,7 @@ pub struct Epochs {
     first_known_epoch: Epoch,
     /// The block heights of the first block of each known epoch.
     /// Invariant: the values must be sorted in ascending order.
-    first_block_heights: Vec<BlockHeight>,
+    pub first_block_heights: Vec<BlockHeight>,
 }
 
 impl Default for Epochs {
@@ -1079,6 +1150,47 @@ impl Epochs {
         }
         None
     }
+
+    /// Look-up the starting block height of an epoch at or before a given
+    /// height.
+    pub fn get_epoch_start_height(
+        &self,
+        height: BlockHeight,
+    ) -> Option<BlockHeight> {
+        for start_height in self.first_block_heights.iter().rev() {
+            if *start_height <= height {
+                return Some(*start_height);
+            }
+        }
+        None
+    }
+
+    /// Look-up the starting block height of the given epoch
+    pub fn get_start_height_of_epoch(
+        &self,
+        epoch: Epoch,
+    ) -> Option<BlockHeight> {
+        if epoch < self.first_known_epoch {
+            return None;
+        }
+
+        let mut cur_epoch = self.first_known_epoch;
+        for height in &self.first_block_heights {
+            if epoch == cur_epoch {
+                return Some(*height);
+            } else {
+                cur_epoch = cur_epoch.next();
+            }
+        }
+        None
+    }
+
+    /// Return all starting block heights for each successive Epoch.
+    ///
+    /// __INVARIANT:__ The returned values are sorted in ascending order.
+    pub fn first_block_heights(&self) -> &[BlockHeight] {
+        &self.first_block_heights
+    }
 }
 
 /// A value of a storage prefix iterator.
@@ -1095,6 +1207,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::types::address::testing::arb_address;
 
     proptest! {
         /// Tests that any key that doesn't contain reserved prefixes is valid.
@@ -1180,10 +1293,30 @@ mod tests {
         epochs.new_epoch(BlockHeight(10), max_age_num_blocks);
         println!("epochs {:#?}", epochs);
         assert_eq!(epochs.get_epoch(BlockHeight(0)), Some(Epoch(0)));
+        assert_eq!(
+            epochs.get_epoch_start_height(BlockHeight(0)),
+            Some(BlockHeight(0))
+        );
         assert_eq!(epochs.get_epoch(BlockHeight(9)), Some(Epoch(0)));
+        assert_eq!(
+            epochs.get_epoch_start_height(BlockHeight(9)),
+            Some(BlockHeight(0))
+        );
         assert_eq!(epochs.get_epoch(BlockHeight(10)), Some(Epoch(1)));
+        assert_eq!(
+            epochs.get_epoch_start_height(BlockHeight(10)),
+            Some(BlockHeight(10))
+        );
         assert_eq!(epochs.get_epoch(BlockHeight(11)), Some(Epoch(1)));
+        assert_eq!(
+            epochs.get_epoch_start_height(BlockHeight(11)),
+            Some(BlockHeight(10))
+        );
         assert_eq!(epochs.get_epoch(BlockHeight(100)), Some(Epoch(1)));
+        assert_eq!(
+            epochs.get_epoch_start_height(BlockHeight(100)),
+            Some(BlockHeight(10))
+        );
 
         // epoch 2
         epochs.new_epoch(BlockHeight(20), max_age_num_blocks);
@@ -1192,8 +1325,20 @@ mod tests {
         assert_eq!(epochs.get_epoch(BlockHeight(9)), Some(Epoch(0)));
         assert_eq!(epochs.get_epoch(BlockHeight(10)), Some(Epoch(1)));
         assert_eq!(epochs.get_epoch(BlockHeight(11)), Some(Epoch(1)));
+        assert_eq!(
+            epochs.get_epoch_start_height(BlockHeight(11)),
+            Some(BlockHeight(10))
+        );
         assert_eq!(epochs.get_epoch(BlockHeight(20)), Some(Epoch(2)));
+        assert_eq!(
+            epochs.get_epoch_start_height(BlockHeight(20)),
+            Some(BlockHeight(20))
+        );
         assert_eq!(epochs.get_epoch(BlockHeight(100)), Some(Epoch(2)));
+        assert_eq!(
+            epochs.get_epoch_start_height(BlockHeight(100)),
+            Some(BlockHeight(20))
+        );
 
         // epoch 3, epoch 0 and 1 should be trimmed
         epochs.new_epoch(BlockHeight(200), max_age_num_blocks);
@@ -1204,7 +1349,15 @@ mod tests {
         assert_eq!(epochs.get_epoch(BlockHeight(11)), None);
         assert_eq!(epochs.get_epoch(BlockHeight(20)), Some(Epoch(2)));
         assert_eq!(epochs.get_epoch(BlockHeight(100)), Some(Epoch(2)));
+        assert_eq!(
+            epochs.get_epoch_start_height(BlockHeight(100)),
+            Some(BlockHeight(20))
+        );
         assert_eq!(epochs.get_epoch(BlockHeight(200)), Some(Epoch(3)));
+        assert_eq!(
+            epochs.get_epoch_start_height(BlockHeight(200)),
+            Some(BlockHeight(200))
+        );
 
         // increase the limit
         max_age_num_blocks = 200;
@@ -1252,6 +1405,48 @@ mod tests {
         assert_eq!(epochs.get_epoch(BlockHeight(550)), Some(Epoch(7)));
         assert_eq!(epochs.get_epoch(BlockHeight(600)), Some(Epoch(8)));
     }
+
+    proptest! {
+        /// Ensure that addresses in storage keys preserve the order of the
+        /// addresses.
+        #[test]
+        fn test_address_in_storage_key_order(
+            addr1 in arb_address(),
+            addr2 in arb_address(),
+        ) {
+            test_address_in_storage_key_order_aux(addr1, addr2)
+        }
+    }
+
+    fn test_address_in_storage_key_order_aux(addr1: Address, addr2: Address) {
+        println!("addr1 {addr1}");
+        println!("addr2 {addr2}");
+        let expected_order = addr1.cmp(&addr2);
+
+        // Turn the addresses into strings
+        let str1 = addr1.to_string();
+        let str2 = addr2.to_string();
+        println!("addr1 str {str1}");
+        println!("addr1 str {str2}");
+        let order = str1.cmp(&str2);
+        assert_eq!(order, expected_order);
+
+        // Turn the addresses into storage keys
+        let key1 = Key::from(addr1.to_db_key());
+        let key2 = Key::from(addr2.to_db_key());
+        println!("addr1 key {key1}");
+        println!("addr2 key {key2}");
+        let order = key1.cmp(&key2);
+        assert_eq!(order, expected_order);
+
+        // Turn the addresses into raw storage keys (formatted to strings)
+        let raw1 = addr1.raw();
+        let raw2 = addr2.raw();
+        println!("addr 1 raw {raw1}");
+        println!("addr 2 raw {raw2}");
+        let order = raw1.cmp(&raw2);
+        assert_eq!(order, expected_order);
+    }
 }
 
 /// Helpers for testing with storage types.
@@ -1279,8 +1474,13 @@ pub mod testing {
     /// Generate an arbitrary [`Key`] other than a validity predicate key.
     pub fn arb_key_no_vp() -> impl Strategy<Value = Key> {
         // a key from key segments
-        collection::vec(arb_key_seg(), 1..5)
+        collection::vec(arb_key_seg(), 2..5)
             .prop_map(|segments| Key { segments })
+            .prop_filter("Key length must be below IBC limit", |key| {
+                let key_str = key.to_string();
+                let bytes = key_str.as_bytes();
+                bytes.len() <= IBC_KEY_LIMIT
+            })
     }
 
     /// Generate an arbitrary [`Key`] for a given address storage sub-space.
@@ -1311,7 +1511,7 @@ pub mod testing {
     pub fn arb_key_seg() -> impl Strategy<Value = DbKeySeg> {
         prop_oneof![
             // the string segment is 5 time more likely to be generated
-            5 => "[a-zA-Z0-9_]{1,100}".prop_map(DbKeySeg::StringSeg),
+            5 => "[a-zA-Z0-9_]{1,20}".prop_map(DbKeySeg::StringSeg),
             1 => arb_address().prop_map(DbKeySeg::AddressSeg),
         ]
     }

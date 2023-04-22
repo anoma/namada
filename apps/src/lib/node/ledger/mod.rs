@@ -22,6 +22,7 @@ use tower::ServiceBuilder;
 
 use self::abortable::AbortableSpawner;
 use self::shims::abcipp_shim::AbciService;
+use crate::cli::args;
 use crate::config::utils::num_of_threads;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_proto::abci::CheckTxType;
@@ -58,15 +59,16 @@ const ENV_VAR_RAYON_THREADS: &str = "NAMADA_RAYON_THREADS";
 impl Shell {
     fn load_proposals(&mut self) {
         let proposals_key = gov_storage::get_commiting_proposals_prefix(
-            self.storage.last_epoch.0,
+            self.wl_storage.storage.last_epoch.0,
         );
 
-        let (proposal_iter, _) = self.storage.iter_prefix(&proposals_key);
+        let (proposal_iter, _) =
+            self.wl_storage.storage.iter_prefix(&proposals_key);
         for (key, _, _) in proposal_iter {
             let key =
                 Key::from_str(key.as_str()).expect("Key should be parsable");
             if gov_storage::get_commit_proposal_epoch(&key).unwrap()
-                != self.storage.last_epoch.0
+                != self.wl_storage.storage.last_epoch.0
             {
                 // NOTE: `iter_prefix` iterate over the matching prefix. In this
                 // case  a proposal with grace_epoch 110 will be
@@ -88,7 +90,12 @@ impl Shell {
         match req {
             Request::InitChain(init) => {
                 tracing::debug!("Request InitChain");
-                self.init_chain(init).map(Response::InitChain)
+                self.init_chain(
+                    init,
+                    #[cfg(feature = "dev")]
+                    1,
+                )
+                .map(Response::InitChain)
             }
             Request::Info(_) => Ok(Response::Info(self.last_state())),
             Request::Query(query) => Ok(Response::Query(self.query(query))),
@@ -196,6 +203,29 @@ pub fn run(config: config::Ledger, wasm_dir: PathBuf) {
 /// Resets the tendermint_node state and removes database files
 pub fn reset(config: config::Ledger) -> Result<(), shell::Error> {
     shell::reset(config)
+}
+
+/// Dump Namada ledger node's DB from a block into a file
+pub fn dump_db(
+    config: config::Ledger,
+    args::LedgerDumpDb {
+        // block_height,
+        out_file_path,
+        historic,
+    }: args::LedgerDumpDb,
+) {
+    use namada::ledger::storage::DB;
+
+    let chain_id = config.chain_id;
+    let db_path = config.shell.db_dir(&chain_id);
+
+    let db = storage::PersistentDB::open(db_path, None);
+    db.dump_last_block(out_file_path, historic);
+}
+
+/// Roll Namada state back to the previous height
+pub fn rollback(config: config::Ledger) -> Result<(), shell::Error> {
+    shell::rollback(config)
 }
 
 /// Runs and monitors a few concurrent tasks.
@@ -427,8 +457,8 @@ fn start_abci_broadcaster_shell(
     #[cfg(not(feature = "dev"))]
     let genesis = genesis::genesis(&config.shell.base_dir, &config.chain_id);
     #[cfg(feature = "dev")]
-    let genesis = genesis::genesis();
-    let (shell, abci_service) = AbcippShim::new(
+    let genesis = genesis::genesis(1);
+    let (shell, abci_service, service_handle) = AbcippShim::new(
         config,
         wasm_dir,
         broadcaster_sender,
@@ -444,8 +474,13 @@ fn start_abci_broadcaster_shell(
     // Start the ABCI server
     let abci = spawner
         .spawn_abortable("ABCI", move |aborter| async move {
-            let res =
-                run_abci(abci_service, ledger_address, abci_abort_recv).await;
+            let res = run_abci(
+                abci_service,
+                service_handle,
+                ledger_address,
+                abci_abort_recv,
+            )
+            .await;
 
             drop(aborter);
             res
@@ -478,6 +513,7 @@ fn start_abci_broadcaster_shell(
 /// mempool, snapshot, and info.
 async fn run_abci(
     abci_service: AbciService,
+    service_handle: tokio::sync::broadcast::Sender<()>,
     ledger_address: SocketAddr,
     abort_recv: tokio::sync::oneshot::Receiver<()>,
 ) -> shell::Result<()> {
@@ -504,13 +540,13 @@ async fn run_abci(
         )
         .finish()
         .unwrap();
-
     tokio::select! {
         // Run the server with the ABCI service
         status = server.listen(ledger_address) => {
             status.map_err(|err| Error::TowerServer(err.to_string()))
         },
         resp_sender = abort_recv => {
+            _ = service_handle.send(());
             match resp_sender {
                 Ok(()) => {
                     tracing::info!("Shutting down ABCI server...");

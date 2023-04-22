@@ -15,7 +15,7 @@ the form of native protocol tokens. A multi-asset shielded transfer
 wallet is provided in order to facilitate safe and private user
 interaction with the protocol.
 
-* Blogpost: [Introducing Namada: Shielded transfers with any assets](https://medium.com/namadanetwork/introducing-namada-shielded-transfers-with-any-assets-dce2e579384c)
+* Blogpost: [Introducing Namada: Interchain Asset-agnostic Privacy](https://blog.namada.net/introducing-namada-interchain-asset-agnostic-privacy/)
 
 ## 📓 Docs
 
@@ -87,4 +87,3 @@ Please see the [contributing page](./CONTRIBUTING.md).
 ### Dependencies
 
 The ledger currently requires that the Heliax fork of tendermint[v0.1.4-abciplus] is installed and available on path. This can be achieved through following [these instructions](https://docs.namada.net/user-guide/install/installing-tendermint.html)
-

@@ -4,15 +4,17 @@
 use borsh::{BorshSerialize, BorshDeserialize};
 use namada::ledger::parameters::storage as parameter_storage;
 use namada::proto::{Data, Code, Tx, Section, Signature};
-use namada::types::address::{tokens, Address, ImplicitAddress};
+use namada::types::address::{Address, ImplicitAddress};
+use namada::proof_of_stake::Epoch;
+use namada::types::hash::Hash;
 use namada::types::key::*;
-use namada::types::storage::Epoch;
 use namada::types::token;
 use namada::types::token::{Transfer, Amount};
 use namada::types::transaction::{hash_tx, pos, Fee, WrapperTx, MIN_FEE, InitAccount, InitValidator, UpdateVp};
+use namada::types::address::{kartoffel, btc, nam, eth, dot, schnitzel, apfel};
 use namada::types::transaction::TxType;
 use namada::types::transaction::decrypted::DecryptedTx;
-use namada::types::hash::Hash;
+use namada::types::transaction::RawHeader;
 use sha2::{Digest, Sha256};
 use data_encoding::HEXLOWER;
 use serde::{Deserialize, Serialize};
@@ -145,7 +147,7 @@ pub async fn tx_signer(
                 &signer,
                 args.ledger_address.clone(),
             )
-            .await;
+                .await;
             // Check if the signer is implicit account that needs to reveal its
             // PK first
             if matches!(signer, Address::Implicit(_)) {
@@ -181,31 +183,38 @@ pub async fn sign_tx(
     default: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (Context, TxBroadcastData) {
+    if args.dump_tx {
+        dump_tx_helper(&ctx, &tx, "unsigned", None);
+    }
+
     let keypair = tx_signer(&mut ctx, args, default).await;
     // Sign over the transacttion data
     tx.add_section(Section::Signature(Signature::new(tx.data_sechash(), &keypair)));
     // Sign over the transaction code
     tx.add_section(Section::Signature(Signature::new(tx.code_sechash(), &keypair)));
 
+    if args.dump_tx {
+        dump_tx_helper(&ctx, &tx, "signed", None);
+    }
+
     let epoch = match args.epoch {
         Some(epoch) if args.unchecked => epoch,
         _ => {
-            rpc::query_epoch(args::Query {
+            rpc::query_and_print_epoch(args::Query {
                 ledger_address: args.ledger_address.clone(),
             })
                 .await
         }
     };
     let broadcast_data = if args.dry_run {
-        tx.header = TxType::Decrypted(DecryptedTx::Decrypted {
-            code_hash: tx.code_sechash().clone(),
-            data_hash: tx.data_sechash().clone(),
-            header_hash: Hash::default(),
+        tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
+            code_hash: Hash::default(),
+            data_hash: Hash::default(),
             #[cfg(not(feature = "mainnet"))]
             // To be able to dry-run testnet faucet withdrawal, pretend 
             // that we got a valid PoW
             has_valid_pow: true,
-        });
+        }));
         TxBroadcastData::DryRun(tx)
     } else {
         sign_wrapper(
@@ -217,9 +226,43 @@ pub async fn sign_tx(
             #[cfg(not(feature = "mainnet"))]
             requires_pow,
         )
-        .await
+            .await
     };
+
+    if args.dump_tx && !args.dry_run {
+        let (wrapper_tx, wrapper_hash) = match broadcast_data {
+            TxBroadcastData::DryRun(_) => panic!(
+                "somehow created a dry run transaction without --dry-run"
+            ),
+            TxBroadcastData::Wrapper {
+                ref tx,
+                ref wrapper_hash,
+                decrypted_hash: _,
+            } => (tx, wrapper_hash),
+        };
+
+        dump_tx_helper(&ctx, wrapper_tx, "wrapper", Some(wrapper_hash));
+    }
+
     (ctx, broadcast_data)
+}
+
+pub fn dump_tx_helper(
+    ctx: &Context,
+    tx: &Tx,
+    extension: &str,
+    precomputed_hash: Option<&String>,
+) {
+    let chain_dir = ctx.config.ledger.chain_dir();
+    let hash = match precomputed_hash {
+        Some(hash) => hash.to_owned(),
+        None => format!("{}", tx.header_hash()),
+    };
+    let filename = chain_dir.join(hash).with_extension(extension);
+    let tx_bytes = tx.to_bytes();
+
+    std::fs::write(filename, tx_bytes)
+        .expect("expected to be able to write tx dump file");
 }
 
 /// Create a wrapper tx from a normal tx. Get the hash of the
@@ -302,6 +345,8 @@ pub async fn sign_wrapper(
         #[cfg(not(feature = "mainnet"))]
         pow_solution.clone(),
     )));
+    tx.chain_id = ctx.config.ledger.chain_id.clone();
+    tx.expiration = args.expiration;
     // Then sign over the bound wrapper
     tx.add_section(Section::Signature(Signature::new(&tx.header_hash(), keypair)));
 
@@ -347,15 +392,11 @@ pub async fn sign_wrapper(
     let wrapper_hash = tx.header_hash().to_string();
     // We use this to determine when the decrypted inner tx makes it
     // on-chain
-    let decrypted_header = TxType::Decrypted(DecryptedTx::Decrypted {
-        data_hash: *tx.data_sechash(),
-        code_hash: *tx.code_sechash(),
-        header_hash: tx.header_hash(),
-        has_valid_pow: pow_solution.is_some(),
-    });
-    let decrypted_hash = Hash(
-        decrypted_header.hash(&mut Sha256::new()).finalize_reset().into()
-    ).to_string();
+    let decrypted_hash = tx
+        .clone()
+        .update_header(TxType::Raw(RawHeader::default()))
+        .header_hash()
+        .to_string();
     TxBroadcastData::Wrapper {
         tx,
         wrapper_hash,
@@ -372,6 +413,21 @@ struct LedgerVector {
     output: Vec<String>,
     output_expert: Vec<String>,
     valid: bool,
+}
+
+/// The tokens that will be hardcoded into the wallet
+fn tokens() -> HashMap<Address, &'static str> {
+    vec![
+        (nam(), "NAM"),
+        (btc(), "BTC"),
+        (eth(), "ETH"),
+        (dot(), "DOT"),
+        (schnitzel(), "Schnitzel"),
+        (apfel(), "Apfel"),
+        (kartoffel(), "Kartoffel"),
+    ]
+        .into_iter()
+        .collect()
 }
 
 /// Adds a Ledger output line describing a given transaction amount and address
@@ -538,7 +594,7 @@ fn to_ledger_vector(
 
         tv.name = "Init Account 0".to_string();
 
-        let extra = tx.get_section(&init_account.vp_code)
+        let extra = tx.get_section(&init_account.vp_code_hash)
             .and_then(Section::extra_data_sec)
             .expect("unable to load vp code")
             .code
@@ -566,7 +622,7 @@ fn to_ledger_vector(
 
         tv.name = "Init Validator 0".to_string();
 
-        let extra = tx.get_section(&init_validator.validator_vp_code)
+        let extra = tx.get_section(&init_validator.validator_vp_code_hash)
             .and_then(Section::extra_data_sec)
             .expect("unable to load vp code")
             .code
@@ -627,14 +683,6 @@ fn to_ledger_vector(
             .as_ref()
             .map(u64::to_string)
             .unwrap_or_else(|| "(none)".to_string());
-        let extra = init_proposal_data.proposal_code.map(|vp_code| {
-            tx.get_section(&vp_code)
-                .and_then(Section::extra_data_sec)
-                .expect("unable to load vp code")
-                .code
-                .hash()
-        });
-        let proposal_code = extra.map_or("(none)".to_string(), |x| HEXLOWER.encode(&x.0));
         tv.output.extend(vec![
             format!("Type : Init proposal"),
             format!("ID : {}", init_proposal_data_id),
@@ -648,7 +696,6 @@ fn to_ledger_vector(
                 init_proposal_data.voting_end_epoch
             ),
             format!("Grace epoch : {}", init_proposal_data.grace_epoch),
-            format!("Proposal code : {}", proposal_code),
         ]);
         let content: BTreeMap<String, String> =
             BorshDeserialize::try_from_slice(&init_proposal_data.content)?;
@@ -675,7 +722,6 @@ fn to_ledger_vector(
                 "Grace epoch : {}",
                 init_proposal_data.grace_epoch
             ),
-            format!("Proposal code : {}", proposal_code),
         ]);
         if !content.is_empty() {
             for (key, value) in content {
@@ -737,7 +783,7 @@ fn to_ledger_vector(
 
         tv.name = "Update VP 0".to_string();
 
-        let extra = tx.get_section(&transfer.vp_code)
+        let extra = tx.get_section(&transfer.vp_code_hash)
             .and_then(Section::extra_data_sec)
             .expect("unable to load vp code")
             .code

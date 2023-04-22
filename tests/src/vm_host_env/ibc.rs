@@ -64,15 +64,16 @@ use namada::ledger::tx_env::TxEnv;
 use namada::proto::{Tx};
 use namada::tendermint_proto::Protobuf;
 use namada::types::address::{self, Address, InternalAddress};
+use namada::types::hash::Hash;
 use namada::types::ibc::data::{FungibleTokenPacketData, PacketAck};
 use namada::types::storage::{self, BlockHash, BlockHeight, Key, TxIndex};
 use namada::types::token::{self, Amount};
 use namada::vm::{wasm, WasmCacheRwAccess};
+use namada_test_utils::TestWasms;
 use namada_tx_prelude::StorageWrite;
 
 use crate::tx::{self, *};
 
-const VP_ALWAYS_TRUE_WASM: &str = "../wasm_for_tests/vp_always_true.wasm";
 const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
 
 pub struct TestIbcVp<'a> {
@@ -115,6 +116,7 @@ pub fn validate_ibc_vp_from_tx<'a>(
     tx: &'a Tx,
 ) -> std::result::Result<bool, namada::ledger::ibc::vp::Error> {
     let (verifiers, keys_changed) = tx_env
+        .wl_storage
         .write_log
         .verifiers_and_changed_keys(&tx_env.verifiers);
     let addr = Address::Internal(InternalAddress::Ibc);
@@ -129,8 +131,8 @@ pub fn validate_ibc_vp_from_tx<'a>(
 
     let ctx = Ctx::new(
         &ADDRESS,
-        &tx_env.storage,
-        &tx_env.write_log,
+        &tx_env.wl_storage.storage,
+        &tx_env.wl_storage.write_log,
         &tx,
         &TxIndex(0),
         VpGasMeter::new(0),
@@ -150,6 +152,7 @@ pub fn validate_token_vp_from_tx<'a>(
     target: &Key,
 ) -> std::result::Result<bool, namada::ledger::ibc::vp::IbcTokenError> {
     let (verifiers, keys_changed) = tx_env
+        .wl_storage
         .write_log
         .verifiers_and_changed_keys(&tx_env.verifiers);
     if !keys_changed.contains(target) {
@@ -164,8 +167,8 @@ pub fn validate_token_vp_from_tx<'a>(
 
     let ctx = Ctx::new(
         &ADDRESS,
-        &tx_env.storage,
-        &tx_env.write_log,
+        &tx_env.wl_storage.storage,
+        &tx_env.wl_storage.write_log,
         &tx,
         &TxIndex(0),
         VpGasMeter::new(0),
@@ -180,21 +183,32 @@ pub fn validate_token_vp_from_tx<'a>(
 
 /// Initialize the test storage. Requires initialized [`tx_host_env::ENV`].
 pub fn init_storage() -> (Address, Address) {
+    // wasm for init_account
+    let code = TestWasms::VpAlwaysTrue.read_bytes();
+    let code_hash = Hash::sha256(&code);
+
     tx_host_env::with(|env| {
-        init_genesis_storage(&mut env.storage);
+        init_genesis_storage(&mut env.wl_storage);
+        // store wasm code
+        let key = Key::wasm_code(&code_hash);
+        env.wl_storage.storage.write(&key, code.clone()).unwrap();
+
         // block header to check timeout timestamp
-        env.storage.set_header(tm_dummy_header()).unwrap();
-        env.storage
+        env.wl_storage
+            .storage
+            .set_header(tm_dummy_header())
+            .unwrap();
+        env.wl_storage
+            .storage
             .begin_block(BlockHash::default(), BlockHeight(1))
             .unwrap();
     });
 
     // initialize a token
-    let code = std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
-    let token = tx::ctx().init_account(code.clone()).unwrap();
+    let token = tx::ctx().init_account(code_hash.clone()).unwrap();
 
     // initialize an account
-    let account = tx::ctx().init_account(code).unwrap();
+    let account = tx::ctx().init_account(code_hash).unwrap();
     let key = token::balance_key(&token, &account);
     let init_bal = Amount::from(1_000_000_000u64);
     tx::ctx().write(&key, init_bal).unwrap();

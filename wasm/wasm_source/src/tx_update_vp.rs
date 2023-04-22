@@ -12,13 +12,11 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         .wrap_err("failed to decode UpdateVp")?;
 
     debug_log!("update VP for: {:#?}", update_vp.addr);
-
-    let vp_code = signed.get_section(&update_vp.vp_code)
+    let vp_code_hash = signed.get_section(&update_vp.vp_code_hash)
         .ok_or_err_msg("vp code section not found")?
-        .extra_data()
-        .ok_or_err_msg("vp code section must be tagged as extra")?;
-    ctx.update_validity_predicate(
-        &update_vp.addr,
-        vp_code,
-    )
+        .extra_data_sec()
+        .ok_or_err_msg("vp code section must be tagged as extra")?
+        .code
+        .hash();
+    ctx.update_validity_predicate(&update_vp.addr, vp_code_hash)
 }

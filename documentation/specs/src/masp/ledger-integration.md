@@ -266,13 +266,7 @@ Below, the conditions necessary to maintain consistency between the MASP validit
   * the transparent transaction value pool's amount must equal the containing wrapper transaction's fee amount
   * the transparent transaction value pool's asset type must be derived from the containing wrapper transaction's fee token
     * the derivation must be done as specified in `0.3 Derivation of Asset Generator from Asset Identifer`
-* If the source address is not the MASP validity predicate, then:
-  * there must be exactly one transparent input in the shielded transaction and:
-    * its value must equal that of amount in the containing transfer - this prevents stealing/losing funds from/to the pool
-    * its asset type must be derived from the token address raw bytes and the current epoch once Borsh serialized from the type `(Address, Epoch)`:
-      * the address dependency prevents stealing/losing funds from/to the pool
-      * the current epoch requirement ensures that withdrawers receive their full reward when leaving the shielded pool
-      * the derivation must be done as specified in `0.3 Derivation of Asset Generator from Asset Identifer`
+* If the source address is not the MASP validity predicate, then the transparent transaction value pool's amount must equal zero
 
 ## Remarks
 Below are miscellaneous remarks on the capabilities and limitations of the current MASP implementation:

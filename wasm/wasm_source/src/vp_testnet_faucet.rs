@@ -76,14 +76,14 @@ fn validate_tx(
             let has_post: bool = ctx.has_key_post(key)?;
             if owner == &addr {
                 if has_post {
-                    let vp: Vec<u8> = ctx.read_bytes_post(key)?.unwrap();
-                    return Ok(*valid_sig && is_vp_whitelisted(ctx, &vp)?);
+                    let vp_hash: Vec<u8> = ctx.read_bytes_post(key)?.unwrap();
+                    return Ok(*valid_sig && is_vp_whitelisted(ctx, &vp_hash)?);
                 } else {
                     return reject();
                 }
             } else {
-                let vp: Vec<u8> = ctx.read_bytes_post(key)?.unwrap();
-                return is_vp_whitelisted(ctx, &vp);
+                let vp_hash: Vec<u8> = ctx.read_bytes_post(key)?.unwrap();
+                return is_vp_whitelisted(ctx, &vp_hash);
             }
         } else {
             // Allow any other key change if authorized by a signature
@@ -102,6 +102,7 @@ fn validate_tx(
 #[cfg(test)]
 mod tests {
     use address::testing::arb_non_internal_address;
+    use namada_test_utils::TestWasms;
     // Use this as `#[test]` annotation to enable logging
     use namada_tests::log::test;
     use namada_tests::tx::{self, tx_host_env, TestTxEnv};
@@ -111,11 +112,10 @@ mod tests {
     use namada_vp_prelude::key::{RefTo, SigScheme};
     use proptest::prelude::*;
     use storage::testing::arb_account_storage_key_no_vp;
+    use namada::types::transaction::{TxType, RawHeader};
+    use namada::proto::{Code, Signature, Data};
 
     use super::*;
-
-    const VP_ALWAYS_TRUE_WASM: &str =
-        "../../wasm_for_tests/vp_always_true.wasm";
 
     /// Allows anyone to withdraw up to 1_000 tokens in a single tx
     pub const MAX_FREE_DEBIT: i128 = 1_000_000_000; // in micro units
@@ -123,7 +123,8 @@ mod tests {
     /// Test that no-op transaction (i.e. no storage modifications) accepted.
     #[test]
     fn test_no_op_transaction() {
-        let tx_data: Vec<u8> = vec![];
+        let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+        tx_data.set_data(Data::new(vec![]));
         let addr: Address = address::testing::established_address_1();
         let keys_changed: BTreeSet<storage::Key> = BTreeSet::default();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -166,12 +167,14 @@ mod tests {
                 amount,
                 &None,
                 &None,
+                &None,
             )
             .unwrap();
         });
 
         let vp_env = vp_host_env::take();
-        let tx_data: Vec<u8> = vec![];
+        let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+        tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -190,8 +193,10 @@ mod tests {
         let mut tx_env = TestTxEnv::default();
 
         let vp_owner = address::testing::established_address_1();
-        let vp_code =
-            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+        let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
+        let vp_hash = sha256(&vp_code);
+        // for the update
+        tx_env.store_wasm_code(vp_code);
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
@@ -200,12 +205,13 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_code)
+                .update_validity_predicate(address, &vp_hash)
                 .unwrap();
         });
 
         let vp_env = vp_host_env::take();
-        let tx_data: Vec<u8> = vec![];
+        let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+        tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -226,8 +232,10 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let keypair = key::testing::keypair_1();
         let public_key = &keypair.ref_to();
-        let vp_code =
-            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+        let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
+        let vp_hash = sha256(&vp_code);
+        // for the update
+        tx_env.store_wasm_code(vp_code);
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
@@ -238,21 +246,22 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_code)
+                .update_validity_predicate(address, &vp_hash)
                 .unwrap();
         });
 
         let mut vp_env = vp_host_env::take();
-        let tx = vp_env.tx.clone();
-        let signed_tx = tx.sign(&keypair);
-        let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
-        vp_env.tx = signed_tx;
+        let mut tx = vp_env.tx.clone();
+        tx.set_data(Data::new(vec![]));
+        tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &keypair)));
+        let signed_tx = tx.clone();
+        vp_env.tx = signed_tx.clone();
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
                 .unwrap()
         );
     }
@@ -284,7 +293,7 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();
         let withdrawal_limit = token::Amount::from(MAX_FREE_DEBIT as u64);
-        testnet_pow::init_faucet_storage(&mut tx_env.storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
+        testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
 
         let target = address::testing::established_address_2();
         let token = address::nam();
@@ -296,15 +305,17 @@ mod tests {
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        tx_env.commit_genesis();
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
         // Apply transfer in a transaction
-        tx_host_env::token::transfer(tx::ctx(), address, &target, &token, None, amount, &None, &None).unwrap();
+        tx_host_env::token::transfer(tx::ctx(), address, &target, &token, None, amount, &None, &None, &None).unwrap();
         });
 
         let vp_env = vp_host_env::take();
-        let tx_data: Vec<u8> = vec![];
+        let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+        tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
         vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -323,7 +334,7 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();
         let withdrawal_limit = token::Amount::from(MAX_FREE_DEBIT as u64);
-        testnet_pow::init_faucet_storage(&mut tx_env.storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
+        testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
 
         let target = address::testing::established_address_2();
         let target_key = key::testing::keypair_1();
@@ -336,9 +347,10 @@ mod tests {
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        tx_env.commit_genesis();
 
         // Construct a PoW solution like a client would
-        let challenge = testnet_pow::Challenge::new(&mut tx_env.storage, &vp_owner, target.clone()).unwrap();
+        let challenge = testnet_pow::Challenge::new(&mut tx_env.wl_storage, &vp_owner, target.clone()).unwrap();
         let solution = challenge.solve();
         let solution_bytes = solution.try_to_vec().unwrap();
         // The signature itself doesn't matter and is not being checked in this
@@ -352,13 +364,15 @@ mod tests {
             let valid = solution.validate(tx::ctx(), address, target.clone()).unwrap();
             assert!(valid);
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(tx::ctx(), address, &target, &token, None, amount, &None, &None).unwrap();
+            tx_host_env::token::transfer(tx::ctx(), address, &target, &token, None, amount, &None, &None, &None).unwrap();
         });
 
         let mut vp_env = vp_host_env::take();
         // This is set by the protocol when the wrapper tx has a valid PoW
         vp_env.has_valid_pow = true;
-        let tx_data: Vec<u8> = solution_bytes;
+        let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+        tx_data.set_data(Data::new(solution_bytes));
+        tx_data.add_section(Section::Signature(Signature::new(&tx_data.data_sechash(), &target_key)));
         let keys_changed: BTreeSet<storage::Key> =
         vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -380,7 +394,7 @@ mod tests {
             // Init the VP
             let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();
             let withdrawal_limit = token::Amount::from(MAX_FREE_DEBIT as u64);
-            testnet_pow::init_faucet_storage(&mut tx_env.storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
+            testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
 
             let keypair = key::testing::keypair_1();
             let public_key = &keypair.ref_to();
@@ -403,15 +417,16 @@ mod tests {
             });
 
             let mut vp_env = vp_host_env::take();
-            let tx = vp_env.tx.clone();
-            let signed_tx = tx.sign(&keypair);
-            let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
-            vp_env.tx = signed_tx;
+            let mut tx = vp_env.tx.clone();
+            tx.set_data(Data::new(vec![]));
+            tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &keypair)));
+            let signed_tx = tx.clone();
+            vp_env.tx = signed_tx.clone();
             let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
             let verifiers: BTreeSet<Address> = BTreeSet::default();
             vp_host_env::set(vp_env);
-            assert!(validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers).unwrap());
+            assert!(validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers).unwrap());
         }
     }
 }

@@ -13,15 +13,17 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let slashed =
         ctx.withdraw_tokens(withdraw.source.as_ref(), &withdraw.validator)?;
     if slashed != token::Amount::default() {
-        debug_log!("Withdrawal slashed for {}", slashed);
+        debug_log!("New withdrawal slashed for {}", slashed);
     }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use namada::ledger::pos::{BondId, GenesisValidator, PosParams, PosVP};
-    use namada::proto::Tx;
+    use namada::ledger::pos::{GenesisValidator, PosParams, PosVP};
+    use namada::proof_of_stake::unbond_handle;
+    use namada::proto::{Code, Data, Signature, Tx};
+    use namada::types::chain::ChainId;
     use namada::types::storage::Epoch;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
@@ -35,6 +37,7 @@ mod tests {
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use proptest::prelude::*;
+    use namada::types::transaction::{TxType, RawHeader};
 
     use super::*;
 
@@ -54,7 +57,7 @@ mod tests {
         withdraw in arb_withdraw(),
         // A key to sign the transaction
         key in arb_common_keypair(),
-        pos_params in arb_pos_params()) {
+        pos_params in arb_pos_params(None)) {
             test_tx_withdraw_aux(initial_stake, unbonded_amount, withdraw, key,
                 pos_params).unwrap()
         }
@@ -91,7 +94,7 @@ mod tests {
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
         let native_token = tx_host_env::with(|tx_env| {
-            let native_token = tx_env.storage.native_token.clone();
+            let native_token = tx_env.wl_storage.storage.native_token.clone();
             if is_delegation {
                 let source = withdraw.source.as_ref().unwrap();
                 tx_env.spawn_accounts([source]);
@@ -129,23 +132,37 @@ mod tests {
 
         tx_host_env::commit_tx_and_block();
 
-        // Fast forward to unbonding offset epoch so that it's possible to
-        // withdraw the unbonded tokens
+        // Fast forward to pipeline + unbonding offset epoch so that it's
+        // possible to withdraw the unbonded tokens
         tx_host_env::with(|env| {
-            for _ in 0..pos_params.unbonding_len {
-                env.storage.block.epoch = env.storage.block.epoch.next();
+            for _ in 0..(pos_params.pipeline_len + pos_params.unbonding_len) {
+                env.wl_storage.storage.block.epoch =
+                    env.wl_storage.storage.block.epoch.next();
             }
         });
+        let bond_epoch = if is_delegation {
+            Epoch(pos_params.pipeline_len)
+        } else {
+            Epoch::default()
+        };
+        let withdraw_epoch =
+            Epoch(pos_params.pipeline_len + pos_params.unbonding_len);
+
         assert_eq!(
-            tx_host_env::with(|env| env.storage.block.epoch),
-            Epoch(pos_params.unbonding_len)
+            tx_host_env::with(|env| env.wl_storage.storage.block.epoch),
+            Epoch(pos_params.pipeline_len + pos_params.unbonding_len)
         );
 
         let tx_code = vec![];
         let tx_data = withdraw.try_to_vec().unwrap();
-        let tx = Tx::new(tx_code, Some(tx_data));
-        let signed_tx = tx.sign(&key);
-        let tx_data = signed_tx.data.unwrap();
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.chain_id = ChainId::default();
+        tx.set_code(Code::new(tx_code));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &key)));
+        tx.add_section(Section::Signature(Signature::new(&tx.code_sechash(), &key)));
+        let signed_tx = tx.clone();
+        let tx_data = signed_tx.data().unwrap();
 
         // Read data before we apply tx:
         let pos_balance_key = token::balance_key(
@@ -160,22 +177,21 @@ mod tests {
             .source
             .clone()
             .unwrap_or_else(|| withdraw.validator.clone());
-        let unbond_id = BondId {
-            validator: withdraw.validator,
-            source: unbond_src,
-        };
-        let unbonds_pre = ctx().read_unbond(&unbond_id)?.unwrap();
-        assert_eq!(
-            unbonds_pre.get(pos_params.unbonding_len).unwrap().sum(),
-            unbonded_amount
-        );
 
-        apply_tx(ctx(), tx_data)?;
+        let handle = unbond_handle(&unbond_src, &withdraw.validator);
+
+        let unbond_pre =
+            handle.at(&withdraw_epoch).get(ctx(), &bond_epoch).unwrap();
+
+        assert_eq!(unbond_pre, Some(unbonded_amount));
+
+        apply_tx(ctx(), signed_tx)?;
 
         // Read the data after the tx is executed
-        let unbonds_post = ctx().read_unbond(&unbond_id)?;
+        let unbond_post =
+            handle.at(&withdraw_epoch).get(ctx(), &bond_epoch).unwrap();
         assert!(
-            unbonds_post.is_none(),
+            unbond_post.is_none(),
             "Because we're withdraw the full unbonded amount, there should be \
              no unbonds left"
         );

@@ -15,11 +15,17 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::HashSet;
 
-    use namada::ledger::pos::{BondId, GenesisValidator, PosParams, PosVP};
-    use namada::proof_of_stake::types::{Bond, Unbond};
-    use namada::proto::Tx;
+    use namada::ledger::pos::{GenesisValidator, PosParams, PosVP};
+    use namada::proof_of_stake::types::WeightedValidator;
+    use namada::proof_of_stake::{
+        bond_handle, read_consensus_validator_set_addresses_with_stake,
+        read_total_stake, read_validator_stake, unbond_handle,
+    };
+    use namada::proto::{Tx, Code, Data, Signature};
+    use namada::types::transaction::{RawHeader, TxType};
+    use namada::types::chain::ChainId;
     use namada::types::storage::Epoch;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
@@ -48,7 +54,7 @@ mod tests {
         (initial_stake, unbond) in arb_initial_stake_and_unbond(),
         // A key to sign the transaction
         key in arb_common_keypair(),
-        pos_params in arb_pos_params()) {
+        pos_params in arb_pos_params(None)) {
             test_tx_unbond_aux(initial_stake, unbond, key, pos_params).unwrap()
         }
     }
@@ -59,8 +65,10 @@ mod tests {
         key: key::common::SecretKey,
         pos_params: PosParams,
     ) -> TxResult {
+        dbg!(&initial_stake, &unbond);
         let is_delegation = matches!(
             &unbond.source, Some(source) if *source != unbond.validator);
+
         let consensus_key = key::testing::keypair_1().ref_to();
         let commission_rate = rust_decimal::Decimal::new(5, 2);
         let max_commission_rate_change = rust_decimal::Decimal::new(1, 2);
@@ -82,7 +90,7 @@ mod tests {
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
         let native_token = tx_host_env::with(|tx_env| {
-            let native_token = tx_env.storage.native_token.clone();
+            let native_token = tx_env.wl_storage.storage.native_token.clone();
             if is_delegation {
                 let source = unbond.source.as_ref().unwrap();
                 tx_env.spawn_accounts([source]);
@@ -114,18 +122,23 @@ mod tests {
 
         let tx_code = vec![];
         let tx_data = unbond.try_to_vec().unwrap();
-        let tx = Tx::new(tx_code, Some(tx_data));
-        let signed_tx = tx.sign(&key);
-        let tx_data = signed_tx.data.unwrap();
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.chain_id = ChainId::default();
+        tx.set_data(Data::new(tx_data));
+        tx.set_code(Code::new(tx_code));
+        tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &key)));
+        tx.add_section(Section::Signature(Signature::new(&tx.code_sechash(), &key)));
+        let signed_tx = tx.clone();
+        let tx_data = signed_tx.data().unwrap();
 
         let unbond_src = unbond
             .source
             .clone()
             .unwrap_or_else(|| unbond.validator.clone());
-        let unbond_id = BondId {
-            validator: unbond.validator.clone(),
-            source: unbond_src,
-        };
+        // let unbond_id = BondId {
+        //     validator: unbond.validator.clone(),
+        //     source: unbond_src.clone(),
+        // };
 
         let pos_balance_key = token::balance_key(
             &native_token,
@@ -136,15 +149,45 @@ mod tests {
             .expect("PoS must have balance");
         assert_eq!(pos_balance_pre, initial_stake);
 
-        let _total_deltas_pre = ctx().read_total_deltas()?;
-        let validator_sets_pre = ctx().read_validator_set()?;
-        let _validator_deltas_pre =
-            ctx().read_validator_deltas(&unbond.validator)?.unwrap();
-        let bonds_pre = ctx().read_bond(&unbond_id)?.unwrap();
-        dbg!(&bonds_pre);
+        let bond_handle = bond_handle(&unbond_src, &unbond.validator);
+
+        let mut epoched_total_stake_pre: Vec<token::Amount> = Vec::new();
+        let mut epoched_validator_stake_pre: Vec<token::Amount> = Vec::new();
+        let mut epoched_bonds_pre: Vec<Option<token::Amount>> = Vec::new();
+        let mut epoched_validator_set_pre: Vec<HashSet<WeightedValidator>> =
+            Vec::new();
+
+        for epoch in 0..=pos_params.unbonding_len {
+            epoched_total_stake_pre.push(read_total_stake(
+                ctx(),
+                &pos_params,
+                Epoch(epoch),
+            )?);
+            epoched_validator_stake_pre.push(
+                read_validator_stake(
+                    ctx(),
+                    &pos_params,
+                    &unbond.validator,
+                    Epoch(epoch),
+                )?
+                .unwrap(),
+            );
+            epoched_bonds_pre.push(
+                bond_handle
+                    .get_delta_val(ctx(), Epoch(epoch), &pos_params)?
+                    .map(token::Amount::from_change),
+            );
+            epoched_validator_set_pre.push(
+                read_consensus_validator_set_addresses_with_stake(
+                    ctx(),
+                    Epoch(epoch),
+                )?,
+            );
+        }
+        // dbg!(&epoched_bonds_pre);
 
         // Apply the unbond tx
-        apply_tx(ctx(), tx_data)?;
+        apply_tx(ctx(), signed_tx)?;
 
         // Read the data after the tx is executed.
         // The following storage keys should be updated:
@@ -152,10 +195,16 @@ mod tests {
         //     - `#{PoS}/validator/#{validator}/deltas`
         //     - `#{PoS}/total_deltas`
         //     - `#{PoS}/validator_set`
-        let total_deltas_post = ctx().read_total_deltas()?;
-        let validator_deltas_post =
-            ctx().read_validator_deltas(&unbond.validator)?;
-        let validator_sets_post = ctx().read_validator_set()?;
+        let mut epoched_bonds_post: Vec<Option<token::Amount>> = Vec::new();
+
+        for epoch in 0..=pos_params.unbonding_len {
+            epoched_bonds_post.push(
+                bond_handle
+                    .get_delta_val(ctx(), Epoch(epoch), &pos_params)?
+                    .map(token::Amount::from_change),
+            );
+        }
+        // dbg!(&epoched_bonds_post);
 
         let expected_amount_before_pipeline = if is_delegation {
             // When this is a delegation, there will be no bond until pipeline
@@ -168,24 +217,30 @@ mod tests {
         // Before pipeline offset, there can only be self-bond for genesis
         // validator. In case of a delegation the state is setup so that there
         // is no bond until pipeline offset.
-        //
-        // TODO: check if this test is correct (0 -> unbonding?)
         for epoch in 0..pos_params.pipeline_len {
             assert_eq!(
-                validator_deltas_post.as_ref().unwrap().get(epoch),
-                Some(expected_amount_before_pipeline.into()),
+                read_validator_stake(
+                    ctx(),
+                    &pos_params,
+                    &unbond.validator,
+                    Epoch(epoch)
+                )?,
+                Some(expected_amount_before_pipeline),
                 "The validator deltas before the pipeline offset must not \
                  change - checking in epoch: {epoch}"
             );
             assert_eq!(
-                total_deltas_post.get(epoch),
-                Some(expected_amount_before_pipeline.into()),
+                read_total_stake(ctx(), &pos_params, Epoch(epoch))?,
+                expected_amount_before_pipeline,
                 "The total deltas before the pipeline offset must not change \
                  - checking in epoch: {epoch}"
             );
             assert_eq!(
-                validator_sets_pre.get(epoch),
-                validator_sets_post.get(epoch),
+                epoched_validator_set_pre[epoch as usize],
+                read_consensus_validator_set_addresses_with_stake(
+                    ctx(),
+                    Epoch(epoch),
+                )?,
                 "Validator set before pipeline offset must not change - \
                  checking epoch {epoch}"
             );
@@ -195,24 +250,33 @@ mod tests {
         // self-bond, both of which are initialized to the same `initial_stake`
         for epoch in pos_params.pipeline_len..pos_params.unbonding_len {
             assert_eq!(
-                validator_deltas_post.as_ref().unwrap().get(epoch),
-                Some(initial_stake.into()),
-                "The validator deltas at and after the unbonding offset must \
+                read_validator_stake(
+                    ctx(),
+                    &pos_params,
+                    &unbond.validator,
+                    Epoch(epoch)
+                )?,
+                Some(initial_stake - unbond.amount),
+                "The validator deltas at and after the pipeline offset must \
                  have changed - checking in epoch: {epoch}"
             );
             assert_eq!(
-                total_deltas_post.get(epoch),
-                Some(initial_stake.into()),
-                "The total deltas at and after the unbonding offset must have \
+                read_total_stake(ctx(), &pos_params, Epoch(epoch))?,
+                (initial_stake - unbond.amount),
+                "The total deltas at and after the pipeline offset must have \
                  changed - checking in epoch: {epoch}"
             );
-            assert_eq!(
-                validator_sets_pre.get(epoch),
-                validator_sets_post.get(epoch),
-                "Validator set at and after pipeline offset should be the \
-                 same since we are before the unbonding offset - checking \
-                 epoch {epoch}"
-            );
+            if epoch == pos_params.pipeline_len {
+                assert_ne!(
+                    epoched_validator_set_pre[epoch as usize],
+                    read_consensus_validator_set_addresses_with_stake(
+                        ctx(),
+                        Epoch(epoch),
+                    )?,
+                    "The validator set at and after pipeline offset should \
+                     have changed - checking epoch {epoch}"
+                );
+            }
         }
 
         {
@@ -220,15 +284,21 @@ mod tests {
             let expected_stake =
                 i128::from(initial_stake) - i128::from(unbond.amount);
             assert_eq!(
-                validator_deltas_post.as_ref().unwrap().get(epoch),
+                read_validator_stake(
+                    ctx(),
+                    &pos_params,
+                    &unbond.validator,
+                    Epoch(epoch)
+                )?
+                .map(|v| v.change()),
                 Some(expected_stake),
                 "The total deltas at after the unbonding offset epoch must be \
                  decremented by the unbonded amount - checking in epoch: \
                  {epoch}"
             );
             assert_eq!(
-                total_deltas_post.get(epoch),
-                Some(expected_stake),
+                read_total_stake(ctx(), &pos_params, Epoch(epoch))?.change(),
+                expected_stake,
                 "The total deltas at after the unbonding offset epoch must be \
                  decremented by the unbonded amount - checking in epoch: \
                  {epoch}"
@@ -246,13 +316,18 @@ mod tests {
 
         //     - `#{PoS}/unbond/#{owner}/#{validator}`
         // Check that the unbond doesn't exist until unbonding offset
-        let unbonds_post = ctx().read_unbond(&unbond_id)?.unwrap();
-        let bonds_post = ctx().read_bond(&unbond_id)?.unwrap();
-        for epoch in 0..pos_params.unbonding_len {
-            let unbond: Option<Unbond> = unbonds_post.get(epoch);
+
+        // Outer epoch is end (withdrawable), inner epoch is beginning of
+        let unbond_handle = unbond_handle(&unbond_src, &unbond.validator);
+
+        // let unbonds_post = ctx().read_unbond(&unbond_id)?.unwrap();
+        // let bonds_post = ctx().read_bond(&unbond_id)?.unwrap();
+
+        for epoch in 0..(pos_params.pipeline_len + pos_params.unbonding_len) {
+            let unbond = unbond_handle.at(&Epoch(epoch));
 
             assert!(
-                unbond.is_none(),
+                unbond.is_empty(ctx())?,
                 "There should be no unbond until unbonding offset - checking \
                  epoch {epoch}"
             );
@@ -264,47 +339,58 @@ mod tests {
             // This bond was a genesis validator self-bond
             Epoch::default()
         };
-        let end_epoch = Epoch::from(pos_params.unbonding_len - 1);
+        // let end_epoch = Epoch::from(pos_params.unbonding_len - 1);
 
-        let expected_unbond = if unbond.amount == token::Amount::default() {
-            HashMap::new()
-        } else {
-            HashMap::from_iter([((start_epoch, end_epoch), unbond.amount)])
-        };
-        let actual_unbond: Unbond =
-            unbonds_post.get(pos_params.unbonding_len).unwrap();
+        // let expected_unbond = if unbond.amount == token::Amount::default() {
+        //     HashMap::new()
+        // } else {
+        //     HashMap::from_iter([((start_epoch, end_epoch), unbond.amount)])
+        // };
+
+        // Ensure that the unbond is structured as expected, withdrawable at
+        // pipeline + unbonding offsets
+        let actual_unbond_amount = unbond_handle
+            .at(&Epoch::from(
+                pos_params.pipeline_len + pos_params.unbonding_len,
+            ))
+            .get(ctx(), &start_epoch)?;
         assert_eq!(
-            actual_unbond.deltas, expected_unbond,
-            "Delegation at unbonding offset should be equal to the unbonded \
-             amount"
+            actual_unbond_amount,
+            Some(unbond.amount),
+            "Delegation at pipeline + unbonding offset should be equal to the \
+             unbonded amount"
         );
 
-        for epoch in pos_params.pipeline_len..pos_params.unbonding_len {
-            let bond: Bond = bonds_post.get(epoch).unwrap();
-            let expected_bond =
-                HashMap::from_iter([(start_epoch, initial_stake)]);
-            assert_eq!(
-                bond.pos_deltas, expected_bond,
-                "Before unbonding offset, the bond should be untouched, \
-                 checking epoch {epoch}"
-            );
-        }
+        for epoch in
+            start_epoch.0..(pos_params.pipeline_len + pos_params.unbonding_len)
         {
-            let epoch = pos_params.unbonding_len + 1;
-            let bond: Bond = bonds_post.get(epoch).unwrap();
-            let expected_bond =
-                HashMap::from_iter([(start_epoch, initial_stake)]);
+            let bond_amount =
+                bond_handle.get_sum(ctx(), Epoch(epoch), &pos_params)?;
+
+            let expected_amount = initial_stake - unbond.amount;
             assert_eq!(
-                bond.pos_deltas, expected_bond,
-                "At unbonding offset, the pos deltas should not change, \
-                 checking epoch {epoch}"
+                bond_amount,
+                Some(expected_amount.change()),
+                "After the tx is applied, the bond should be changed in \
+                 place, checking epoch {epoch}"
             );
-            assert_eq!(
-                bond.neg_deltas, unbond.amount,
-                "At unbonding offset, the unbonded amount should have been \
-                 deducted, checking epoch {epoch}"
-            )
         }
+        // {
+        //     let epoch = pos_params.unbonding_len + 1;
+        //     let bond: Bond = bonds_post.get(epoch).unwrap();
+        //     let expected_bond =
+        //         HashMap::from_iter([(start_epoch, initial_stake)]);
+        //     assert_eq!(
+        //         bond.pos_deltas, expected_bond,
+        //         "At unbonding offset, the pos deltas should not change, \
+        //          checking epoch {epoch}"
+        //     );
+        //     assert_eq!(
+        //         bond.neg_deltas, unbond.amount,
+        //         "At unbonding offset, the unbonded amount should have been \
+        //          deducted, checking epoch {epoch}"
+        //     )
+        // }
 
         // Use the tx_env to run PoS VP
         let tx_env = tx_host_env::take();

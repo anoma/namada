@@ -152,8 +152,8 @@ fn iterable_to_string<T: fmt::Display>(
 pub struct UpdateVp {
     /// An address of the account
     pub addr: Address,
-    /// The new VP code
-    pub vp_code: Hash,
+    /// The new VP code hash
+    pub vp_code_hash: Hash,
 }
 
 /// A tx data type to initialize a new established account
@@ -172,8 +172,8 @@ pub struct InitAccount {
     /// for signature verification of transactions for the newly created
     /// account.
     pub public_key: common::PublicKey,
-    /// The VP code
-    pub vp_code: Hash,
+    /// The VP code hash
+    pub vp_code_hash: Hash,
 }
 
 /// A tx data type to initialize a new validator account.
@@ -204,7 +204,7 @@ pub struct InitValidator {
     /// immutable once set here.
     pub max_commission_rate_change: Decimal,
     /// The VP code for validator account
-    pub validator_vp_code: Hash,
+    pub validator_vp_code_hash: Hash,
 }
 
 /// Represents an ordinary transaction
@@ -425,7 +425,6 @@ fn test_process_tx_decrypted_unsigned() {
     let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
         code_hash: Hash::default(),
         data_hash: Hash::default(),
-        header_hash: Hash::default(),
         #[cfg(not(feature = "mainnet"))]
         has_valid_pow: false,
     }));
@@ -436,7 +435,6 @@ fn test_process_tx_decrypted_unsigned() {
         TxType::Decrypted(DecryptedTx::Decrypted {
             code_hash,
             data_hash,
-            header_hash,
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: _,
         }) => {
@@ -464,7 +462,6 @@ fn test_process_tx_decrypted_signed() {
     let mut decrypted = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
         code_hash: Hash::default(),
         data_hash: Hash::default(),
-        header_hash: Hash::default(),
         #[cfg(not(feature = "mainnet"))]
         has_valid_pow: false,
     }));
@@ -480,7 +477,6 @@ fn test_process_tx_decrypted_signed() {
     decrypted.validate_header().expect("Test failed");
     match decrypted.header() {
         TxType::Decrypted(DecryptedTx::Decrypted {
-            header_hash,
             code_hash,
             data_hash,
             #[cfg(not(feature = "mainnet"))]

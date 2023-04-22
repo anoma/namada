@@ -82,7 +82,7 @@ where
     /// Otherwise returns the result of evaluation.
     fn eval(
         &self,
-        vp_code: Vec<u8>,
+        vp_code: Hash,
         input_data: Tx,
     ) -> Result<bool, storage_api::Error>;
 

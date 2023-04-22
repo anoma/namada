@@ -61,7 +61,4 @@ pub trait TxEnv: StorageRead + StorageWrite {
 
     /// Get time of the current block header as rfc 3339 string
     fn get_block_time(&self) -> Result<Rfc3339String, storage_api::Error>;
-
-    /// Get the transaction index
-    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error>;
 }

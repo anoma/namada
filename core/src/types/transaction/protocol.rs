@@ -33,6 +33,7 @@ mod protocol_txs {
 
     use super::*;
     use crate::proto::{Tx, Data, Code, Signature, Section, TxError};
+    use crate::types::chain::ChainId;
     use crate::types::key::*;
     use crate::types::transaction::{EllipticCurve, TxType};
     use crate::types::hash::Hash;
@@ -100,6 +101,7 @@ mod protocol_txs {
             signing_key: &common::SecretKey,
             wasm_dir: &'a Path,
             wasm_loader: F,
+            chain_id: ChainId,
         ) -> Tx
         where
             F: FnOnce(&'a str, &'static str) -> Vec<u8>,
@@ -125,7 +127,6 @@ mod protocol_txs {
                 signing_key,
             )));
             outer_tx
-            
         }
     }
 

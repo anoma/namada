@@ -1,10 +1,11 @@
 # Execution
 
-The Namada ledger execution system is based on an initial version of the [Namada protocol](https://specs.namada.net). The system implements a generic computational substrate with WASM-based transactions and validity predicate verification architecture, on top of which specific features of Namada such as IBC, proof-of-stake, and the MASP are built.
+The Namada ledger execution system is based on an initial version of the Anoma execution model. The system implements a generic computational substrate with WASM-based transactions and validity predicate verification architecture, on top of which specific features of Namada such as IBC, proof-of-stake, and the MASP are built.
 
 ## Validity predicates
 
-Conceptually, a validity predicate (VP) is a function from the transaction's data and the storage state prior and posterior to a transaction execution returning a boolean value. A transaction may modify any data in the accounts' dynamic storage sub-space. Upon transaction execution, the VPs associated with the accounts whose storage has been modified are invoked to verify the transaction. If any of them reject the transaction, all of its storage modifications are discarded. 
+Conceptually, a validity predicate (VP) is a function from the transaction's data and the storage state prior and posterior to a transaction execution returning a boolean value. A transaction may modify any data in the accounts' dynamic storage sub-space. Upon transaction execution, the VPs associated with the accounts whose storage has been modified are invoked to verify the transaction. If any of them reject the transaction, all of its storage modifications are discarded; if all accept, the storage modifications are written.
+
 ## Namada ledger
 
 The Namada ledger is built on top of [Tendermint](https://docs.tendermint.com/master/spec/)'s [ABCI](https://docs.tendermint.com/master/spec/abci/) interface with a slight deviation from the ABCI convention: in Namada, the transactions are currently *not* being executed in ABCI's [`DeliverTx` method](https://docs.tendermint.com/master/spec/abci/abci.html), but rather in the [`EndBlock` method](https://docs.tendermint.com/master/spec/abci/abci.html). The reason for this is to prepare for future DKG and threshold decryption integration. 
@@ -27,7 +28,6 @@ Supported validity predicates for Namada:
     - SlashFund (see [spec](./governance.md#SlashFundAddress))
     - Protocol parameters
 - WASM
-    - Fungible token (see [spec](./core-concepts.md))
+    - Fungible token (see [spec](./fungible-token.md))
     - MASP (see [spec](../masp.md))
-    - Implicit account VP (see [spec](./core-concepts.md))
-    - k-of-n multisignature VP (see [spec](./core-concepts.md))
+    - k-of-n multisignature VP (see [spec](./multisignature.md))

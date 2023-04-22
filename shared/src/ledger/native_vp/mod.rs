@@ -3,6 +3,7 @@
 
 pub mod governance;
 pub mod parameters;
+pub mod replay_protection;
 pub mod slash_fund;
 
 use std::cell::RefCell;
@@ -176,7 +177,7 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    type PrefixIter<'iter> = <DB as storage::DBIter<'iter>>::PrefixIter where Self: 'iter;
+    type PrefixIter<'iter> = storage::PrefixIter<'iter, DB> where Self: 'iter;
 
     fn read_bytes(
         &self,
@@ -198,18 +199,21 @@ where
         vp_host_fns::has_key_pre(
             &mut self.ctx.gas_meter.borrow_mut(),
             self.ctx.storage,
+            self.ctx.write_log,
             key,
         )
         .into_storage_result()
     }
 
-    fn iter_next<'iter>(
+    fn iter_prefix<'iter>(
         &'iter self,
-        iter: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
-        vp_host_fns::iter_pre_next::<DB>(
+        prefix: &crate::types::storage::Key,
+    ) -> Result<Self::PrefixIter<'iter>, storage_api::Error> {
+        vp_host_fns::iter_prefix_pre(
             &mut self.ctx.gas_meter.borrow_mut(),
-            iter,
+            self.ctx.write_log,
+            self.ctx.storage,
+            prefix,
         )
         .into_storage_result()
     }
@@ -217,11 +221,12 @@ where
     // ---- Methods below are implemented in `self.ctx`, because they are
     //      the same in `pre/post` ----
 
-    fn iter_prefix<'iter>(
+    fn iter_next<'iter>(
         &'iter self,
-        prefix: &crate::types::storage::Key,
-    ) -> Result<Self::PrefixIter<'iter>, storage_api::Error> {
-        self.ctx.iter_prefix(prefix)
+        iter: &mut Self::PrefixIter<'iter>,
+    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
+        vp_host_fns::iter_next::<DB>(&mut self.ctx.gas_meter.borrow_mut(), iter)
+            .into_storage_result()
     }
 
     fn get_chain_id(&self) -> Result<String, storage_api::Error> {
@@ -240,6 +245,10 @@ where
         self.ctx.get_block_epoch()
     }
 
+    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
+        self.ctx.get_tx_index().into_storage_result()
+    }
+
     fn get_native_token(&self) -> Result<Address, storage_api::Error> {
         self.ctx.get_native_token()
     }
@@ -252,7 +261,7 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    type PrefixIter<'iter> = <DB as storage::DBIter<'iter>>::PrefixIter where Self:'iter;
+    type PrefixIter<'iter> = storage::PrefixIter<'iter, DB> where Self: 'iter;
 
     fn read_bytes(
         &self,
@@ -280,14 +289,15 @@ where
         .into_storage_result()
     }
 
-    fn iter_next<'iter>(
+    fn iter_prefix<'iter>(
         &'iter self,
-        iter: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
-        vp_host_fns::iter_post_next::<DB>(
+        prefix: &crate::types::storage::Key,
+    ) -> Result<Self::PrefixIter<'iter>, storage_api::Error> {
+        vp_host_fns::iter_prefix_post(
             &mut self.ctx.gas_meter.borrow_mut(),
             self.ctx.write_log,
-            iter,
+            self.ctx.storage,
+            prefix,
         )
         .into_storage_result()
     }
@@ -295,11 +305,12 @@ where
     // ---- Methods below are implemented in `self.ctx`, because they are
     //      the same in `pre/post` ----
 
-    fn iter_prefix<'iter>(
+    fn iter_next<'iter>(
         &'iter self,
-        prefix: &crate::types::storage::Key,
-    ) -> Result<Self::PrefixIter<'iter>, storage_api::Error> {
-        self.ctx.iter_prefix(prefix)
+        iter: &mut Self::PrefixIter<'iter>,
+    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
+        vp_host_fns::iter_next::<DB>(&mut self.ctx.gas_meter.borrow_mut(), iter)
+            .into_storage_result()
     }
 
     fn get_chain_id(&self) -> Result<String, storage_api::Error> {
@@ -318,6 +329,10 @@ where
         self.ctx.get_block_epoch()
     }
 
+    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
+        self.ctx.get_tx_index().into_storage_result()
+    }
+
     fn get_native_token(&self) -> Result<Address, storage_api::Error> {
         Ok(self.ctx.storage.native_token.clone())
     }
@@ -331,7 +346,7 @@ where
 {
     type Post = CtxPostStorageRead<'view, 'a, DB, H, CA>;
     type Pre = CtxPreStorageRead<'view, 'a, DB, H, CA>;
-    type PrefixIter<'iter> = <DB as storage::DBIter<'iter>>::PrefixIter where Self: 'iter;
+    type PrefixIter<'iter> = storage::PrefixIter<'iter, DB> where Self: 'iter;
 
     fn pre(&'view self) -> Self::Pre {
         CtxPreStorageRead { ctx: self }
@@ -418,8 +433,9 @@ where
         &'iter self,
         prefix: &Key,
     ) -> Result<Self::PrefixIter<'iter>, storage_api::Error> {
-        vp_host_fns::iter_prefix(
+        vp_host_fns::iter_prefix_pre(
             &mut self.gas_meter.borrow_mut(),
+            self.write_log,
             self.storage,
             prefix,
         )
@@ -428,7 +444,7 @@ where
 
     fn eval(
         &self,
-        vp_code: Vec<u8>,
+        vp_code_hash: Hash,
         input_data: Tx,
     ) -> Result<bool, storage_api::Error> {
         #[cfg(feature = "wasm-runtime")]
@@ -464,7 +480,8 @@ where
                 #[cfg(not(feature = "mainnet"))]
                 false,
             );
-            match eval_runner.eval_native_result(ctx, vp_code, input_data) {
+            match eval_runner.eval_native_result(ctx, vp_code_hash, input_data)
+            {
                 Ok(result) => Ok(result),
                 Err(err) => {
                     tracing::warn!(

@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use namada::types::chain::ChainId;
+use namada::types::storage::BlockHeight;
 use namada::types::time::Rfc3339String;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -67,6 +68,27 @@ impl From<String> for TendermintMode {
     }
 }
 
+/// An action to be performed at a
+/// certain block height.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Action {
+    /// Stop the chain.
+    Halt,
+    /// Suspend consensus indefinitely.
+    Suspend,
+}
+
+/// An action to be performed at a
+/// certain block height along with the
+/// given height.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActionAtHeight {
+    /// The height at which to take action.
+    pub height: BlockHeight,
+    /// The action to take.
+    pub action: Action,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Ledger {
     pub genesis_time: Rfc3339String,
@@ -95,6 +117,8 @@ pub struct Shell {
     db_dir: PathBuf,
     /// Use the [`Ledger::tendermint_dir()`] method to read the value.
     tendermint_dir: PathBuf,
+    /// An optional action to take when a given blockheight is reached.
+    pub action_at_height: Option<ActionAtHeight>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -118,6 +142,8 @@ pub struct Tendermint {
     pub instrumentation_prometheus: bool,
     pub instrumentation_prometheus_listen_addr: SocketAddr,
     pub instrumentation_namespace: String,
+    /// Toggle to enable tx indexing
+    pub tx_index: bool,
 }
 
 impl Ledger {
@@ -142,6 +168,7 @@ impl Ledger {
                 storage_read_past_height_limit: Some(3600),
                 db_dir: DB_DIR.into(),
                 tendermint_dir: TENDERMINT_DIR.into(),
+                action_at_height: None,
             },
             tendermint: Tendermint {
                 rpc_address: SocketAddr::new(
@@ -164,6 +191,7 @@ impl Ledger {
                     26661,
                 ),
                 instrumentation_namespace: "namadan_tm".to_string(),
+                tx_index: false,
             },
         }
     }

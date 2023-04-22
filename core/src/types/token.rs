@@ -39,10 +39,18 @@ pub const MAX_DECIMAL_PLACES: u32 = 6;
 /// Decimal scale of token [`Amount`] and [`Change`].
 pub const SCALE: u64 = 1_000_000;
 
+/// The largest value that can be represented by this integer type
+pub const MAX_AMOUNT: Amount = Amount { micro: u64::MAX };
+
 /// A change in tokens amount
 pub type Change = i128;
 
 impl Amount {
+    /// Returns whether an amount is zero.
+    pub fn is_zero(&self) -> bool {
+        self.micro == 0
+    }
+
     /// Get the amount as a [`Change`]
     pub fn change(&self) -> Change {
         self.micro as Change
@@ -72,7 +80,14 @@ impl Amount {
         Self { micro: u64::MAX }
     }
 
-    /// Checked subtraction
+    /// Checked addition. Returns `None` on overflow.
+    pub fn checked_add(&self, amount: Amount) -> Option<Self> {
+        self.micro
+            .checked_add(amount.micro)
+            .map(|result| Self { micro: result })
+    }
+
+    /// Checked subtraction. Returns `None` on underflow
     pub fn checked_sub(&self, amount: Amount) -> Option<Self> {
         self.micro
             .checked_sub(amount.micro)
@@ -88,6 +103,23 @@ impl Amount {
         Self {
             micro: change as u64,
         }
+    }
+
+    /// Convert the amount to [`Decimal`] ignoring its scale (i.e. as an integer
+    /// in micro units).
+    pub fn as_dec_unscaled(&self) -> Decimal {
+        Into::<Decimal>::into(self.micro)
+    }
+
+    /// Convert from a [`Decimal`] that's not scaled (i.e. an integer
+    /// in micro units).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the given decimal is not an integer that fits `u64`.
+    pub fn from_dec_unscaled(micro: Decimal) -> Self {
+        let res = micro.to_u64().unwrap();
+        Self { micro: res }
     }
 }
 
@@ -207,6 +239,24 @@ impl SubAssign for Amount {
     }
 }
 
+impl KeySeg for Amount {
+    fn parse(string: String) -> super::storage::Result<Self>
+    where
+        Self: Sized,
+    {
+        let micro = u64::parse(string)?;
+        Ok(Self { micro })
+    }
+
+    fn raw(&self) -> String {
+        self.micro.raw()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        self.micro.to_db_key()
+    }
+}
+
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum AmountParseError {
@@ -270,6 +320,7 @@ pub const TX_KEY_PREFIX: &str = "tx-";
 pub const CONVERSION_KEY_PREFIX: &str = "conv";
 /// Key segment prefix for pinned shielded transactions
 pub const PIN_KEY_PREFIX: &str = "pin-";
+const TOTAL_SUPPLY_STORAGE_KEY: &str = "total_supply";
 
 /// Obtain a storage key for user's balance.
 pub fn balance_key(token_addr: &Address, owner: &Address) -> Key {
@@ -341,6 +392,18 @@ pub fn is_masp_key(key: &Key) -> bool {
                 && (key == HEAD_TX_KEY
                     || key.starts_with(TX_KEY_PREFIX)
                     || key.starts_with(PIN_KEY_PREFIX)))
+}
+
+/// Storage key for total supply of a token
+pub fn total_supply_key(token_address: &Address) -> Key {
+    Key::from(token_address.to_db_key())
+        .push(&TOTAL_SUPPLY_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for total supply of a specific token?
+pub fn is_total_supply_key(key: &Key, token_address: &Address) -> bool {
+    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)] if addr == token_address && key == TOTAL_SUPPLY_STORAGE_KEY)
 }
 
 /// Check if the given storage key is multitoken balance key for the given
@@ -491,6 +554,46 @@ mod tests {
 
         let zero = Amount::from(0);
         assert_eq!("0", zero.to_string());
+    }
+
+    #[test]
+    fn test_amount_checked_sub() {
+        let max = Amount::from(u64::MAX);
+        let one = Amount::from(1);
+        let zero = Amount::from(0);
+
+        assert_eq!(zero.checked_sub(zero), Some(zero));
+        assert_eq!(zero.checked_sub(one), None);
+        assert_eq!(zero.checked_sub(max), None);
+
+        assert_eq!(max.checked_sub(zero), Some(max));
+        assert_eq!(max.checked_sub(one), Some(max - one));
+        assert_eq!(max.checked_sub(max), Some(zero));
+    }
+
+    #[test]
+    fn test_amount_checked_add() {
+        let max = Amount::from(u64::MAX);
+        let one = Amount::from(1);
+        let zero = Amount::from(0);
+
+        assert_eq!(zero.checked_add(zero), Some(zero));
+        assert_eq!(zero.checked_add(one), Some(one));
+        assert_eq!(zero.checked_add(max - one), Some(max - one));
+        assert_eq!(zero.checked_add(max), Some(max));
+
+        assert_eq!(max.checked_add(zero), Some(max));
+        assert_eq!(max.checked_add(one), None);
+        assert_eq!(max.checked_add(max), None);
+    }
+
+    #[test]
+    fn test_amount_is_zero() {
+        let zero = Amount::from(0);
+        assert!(zero.is_zero());
+
+        let non_zero = Amount::from(1);
+        assert!(!non_zero.is_zero());
     }
 }
 

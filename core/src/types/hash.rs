@@ -34,8 +34,9 @@ pub type HashResult<T> = std::result::Result<T, Error>;
     Copy,
     Debug,
     Default,
-    Hash,
     PartialOrd,
+    Ord,
+    Hash,
     PartialEq,
     Eq,
     BorshSerialize,
@@ -120,7 +121,8 @@ impl Hash {
         Self(*digest.as_ref())
     }
 
-    fn zero() -> Self {
+    /// Return zeros
+    pub fn zero() -> Self {
         Self([0u8; HASH_LENGTH])
     }
 

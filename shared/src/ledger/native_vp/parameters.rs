@@ -54,7 +54,7 @@ where
             let data = if let Some(data) = tx_data.data() { data } else { return false; };
             match key_type {
                 KeyType::PARAMETER => governance::utils::is_proposal_accepted(
-                    self.ctx.storage,
+                    &self.ctx.pre(),
                     &data,
                 )
                 .unwrap_or(false),

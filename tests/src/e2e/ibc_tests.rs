@@ -92,15 +92,30 @@ fn run_ledger_ibc() -> Result<()> {
     let (test_a, test_b) = setup::two_single_node_nets()?;
 
     // Run Chain A
-    let mut ledger_a =
-        run_as!(test_a, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+    let mut ledger_a = run_as!(
+        test_a,
+        Who::Validator(0),
+        Bin::Node,
+        &["ledger", "run", "--tx-index"],
+        Some(40)
+    )?;
     ledger_a.exp_string("Namada ledger node started")?;
     // Run Chain B
-    let mut ledger_b =
-        run_as!(test_b, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+    let mut ledger_b = run_as!(
+        test_b,
+        Who::Validator(0),
+        Bin::Node,
+        &["ledger", "run", "--tx-index"],
+        Some(40)
+    )?;
     ledger_b.exp_string("Namada ledger node started")?;
     ledger_a.exp_string("This node is a validator")?;
     ledger_b.exp_string("This node is a validator")?;
+
+    // Wait for a first block
+    ledger_a.exp_string("Committed block hash")?;
+    ledger_b.exp_string("Committed block hash")?;
+
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
 
@@ -269,7 +284,7 @@ fn update_client_with_height(
 ) -> Result<()> {
     // check the current(stale) state on the target chain
     let key = client_state_key(target_client_id);
-    let (value, _) = query_value_with_proof(target_test, &key, target_height)?;
+    let (value, _) = query_value_with_proof(target_test, &key, None)?;
     let client_state = match value {
         Some(v) => AnyClientState::decode_vec(&v)
             .map_err(|e| eyre!("Decoding the client state failed: {}", e))?,
@@ -462,7 +477,7 @@ fn get_connection_proofs(
     // we need proofs at the height of the previous block
     let query_height = target_height.decrement().unwrap();
     let key = connection_key(conn_id);
-    let (_, tm_proof) = query_value_with_proof(test, &key, query_height)?;
+    let (_, tm_proof) = query_value_with_proof(test, &key, Some(query_height))?;
     let connection_proof = convert_proof(tm_proof)?;
 
     let (client_state, client_state_proof, consensus_proof) =
@@ -633,7 +648,7 @@ fn get_channel_proofs(
     // we need proofs at the height of the previous block
     let query_height = target_height.decrement().unwrap();
     let key = channel_key(port_channel_id);
-    let (_, tm_proof) = query_value_with_proof(test, &key, query_height)?;
+    let (_, tm_proof) = query_value_with_proof(test, &key, Some(query_height))?;
     let proof = convert_proof(tm_proof)?;
 
     let (_, client_state_proof, consensus_proof) =
@@ -657,7 +672,8 @@ fn get_client_states(
     target_height: Height, // should have been already decremented
 ) -> Result<(AnyClientState, CommitmentProofBytes, ConsensusProof)> {
     let key = client_state_key(client_id);
-    let (value, tm_proof) = query_value_with_proof(test, &key, target_height)?;
+    let (value, tm_proof) =
+        query_value_with_proof(test, &key, Some(target_height))?;
     let client_state = match value {
         Some(v) => AnyClientState::decode_vec(&v)
             .map_err(|e| eyre!("Decoding the client state failed: {}", e))?,
@@ -672,7 +688,8 @@ fn get_client_states(
 
     let height = client_state.latest_height();
     let key = consensus_state_key(client_id, height);
-    let (_, tm_proof) = query_value_with_proof(test, &key, target_height)?;
+    let (_, tm_proof) =
+        query_value_with_proof(test, &key, Some(target_height))?;
     let proof = convert_proof(tm_proof)?;
     let consensus_proof = ConsensusProof::new(proof, height)
         .map_err(|e| eyre!("Creating ConsensusProof failed: error {}", e))?;
@@ -774,7 +791,7 @@ fn transfer_received_token(
         "0",
         "--gas-token",
         NAM,
-        "--ledger-address",
+        "--node",
         &rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
@@ -990,7 +1007,7 @@ fn get_commitment_proof(
         &packet.source_channel,
         packet.sequence,
     );
-    let (_, tm_proof) = query_value_with_proof(test, &key, query_height)?;
+    let (_, tm_proof) = query_value_with_proof(test, &key, Some(query_height))?;
     let commitment_proof = convert_proof(tm_proof)?;
 
     Proofs::new(commitment_proof, None, None, None, target_height)
@@ -1009,7 +1026,7 @@ fn get_ack_proof(
         &packet.destination_channel,
         packet.sequence,
     );
-    let (_, tm_proof) = query_value_with_proof(test, &key, query_height)?;
+    let (_, tm_proof) = query_value_with_proof(test, &key, Some(query_height))?;
     let ack_proof = convert_proof(tm_proof)?;
 
     Proofs::new(ack_proof, None, None, None, target_height)
@@ -1028,7 +1045,7 @@ fn get_receipt_absence_proof(
         &packet.destination_channel,
         packet.sequence,
     );
-    let (_, tm_proof) = query_value_with_proof(test, &key, query_height)?;
+    let (_, tm_proof) = query_value_with_proof(test, &key, Some(query_height))?;
     let absence_proof = convert_proof(tm_proof)?;
 
     Proofs::new(absence_proof, None, None, None, target_height)
@@ -1044,8 +1061,6 @@ fn submit_ibc_tx(
     let data = make_ibc_data(message);
     std::fs::write(&data_path, data).expect("writing data failed");
 
-    let code_path = wasm_abs_path(TX_IBC_WASM);
-    let code_path = code_path.to_string_lossy();
     let data_path = data_path.to_string_lossy();
     let rpc = get_actor_rpc(test, &Who::Validator(0));
     let mut client = run!(
@@ -1054,7 +1069,7 @@ fn submit_ibc_tx(
         [
             "tx",
             "--code-path",
-            &code_path,
+            TX_IBC_WASM,
             "--data-path",
             &data_path,
             "--signer",
@@ -1065,7 +1080,7 @@ fn submit_ibc_tx(
             "0",
             "--gas-token",
             NAM,
-            "--ledger-address",
+            "--node",
             &rpc
         ],
         Some(40)
@@ -1107,7 +1122,7 @@ fn transfer(
         &channel_id,
         "--port-id",
         &port_id,
-        "--ledger-address",
+        "--node",
         &rpc,
     ];
     let sp = sub_prefix.clone().unwrap_or_default();
@@ -1235,7 +1250,7 @@ fn get_event(test: &Test, height: u32) -> Result<Option<IbcEvent>> {
 fn query_value_with_proof(
     test: &Test,
     key: &Key,
-    height: Height,
+    height: Option<Height>,
 ) -> Result<(Option<Vec<u8>>, TmProof)> {
     let rpc = get_actor_rpc(test, &Who::Validator(0));
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
@@ -1243,7 +1258,7 @@ fn query_value_with_proof(
     let result = Runtime::new().unwrap().block_on(query_storage_value_bytes(
         &client,
         key,
-        Some(BlockHeight(height.revision_height)),
+        height.map(|h| BlockHeight(h.revision_height)),
         true,
     ));
     match result {
@@ -1271,8 +1286,7 @@ fn check_balances(
 
     // Check the balances on Chain A
     let rpc_a = get_actor_rpc(test_a, &Who::Validator(0));
-    let query_args =
-        vec!["balance", "--token", NAM, "--ledger-address", &rpc_a];
+    let query_args = vec!["balance", "--token", NAM, "--node", &rpc_a];
     let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
     // Check the source balance
     let expected = ": 900000, owned by albert".to_string();
@@ -1308,10 +1322,10 @@ fn check_balances(
         NAM,
         "--sub-prefix",
         &sub_prefix,
-        "--ledger-address",
+        "--node",
         &rpc_b,
     ];
-    let expected = format!("NAM with {}: 100000", sub_prefix);
+    let expected = format!("nam with {}: 100000", sub_prefix);
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
@@ -1342,10 +1356,10 @@ fn check_balances_after_non_ibc(
         NAM,
         "--sub-prefix",
         &sub_prefix,
-        "--ledger-address",
+        "--node",
         &rpc,
     ];
-    let expected = format!("NAM with {}: 50000", sub_prefix);
+    let expected = format!("nam with {}: 50000", sub_prefix);
     let mut client = run!(test, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
@@ -1359,10 +1373,10 @@ fn check_balances_after_non_ibc(
         NAM,
         "--sub-prefix",
         &sub_prefix,
-        "--ledger-address",
+        "--node",
         &rpc,
     ];
-    let expected = format!("NAM with {}: 50000", sub_prefix);
+    let expected = format!("nam with {}: 50000", sub_prefix);
     let mut client = run!(test, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
@@ -1381,8 +1395,7 @@ fn check_balances_after_back(
 
     // Check the balances on Chain A
     let rpc_a = get_actor_rpc(test_a, &Who::Validator(0));
-    let query_args =
-        vec!["balance", "--token", NAM, "--ledger-address", &rpc_a];
+    let query_args = vec!["balance", "--token", NAM, "--node", &rpc_a];
     let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
     // Check the source balance
     let expected = ": 950000, owned by albert".to_string();
@@ -1418,10 +1431,10 @@ fn check_balances_after_back(
         NAM,
         "--sub-prefix",
         &sub_prefix,
-        "--ledger-address",
+        "--node",
         &rpc_b,
     ];
-    let expected = format!("NAM with {}: 0", sub_prefix);
+    let expected = format!("nam with {}: 0", sub_prefix);
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();

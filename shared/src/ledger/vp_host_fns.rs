@@ -3,7 +3,7 @@
 use std::num::TryFromIntError;
 
 use namada_core::types::address::Address;
-use namada_core::types::hash::Hash;
+use namada_core::types::hash::{Hash, HASH_LENGTH};
 use namada_core::types::storage::{
     BlockHash, BlockHeight, Epoch, Key, TxIndex,
 };
@@ -14,7 +14,7 @@ use crate::ledger::gas;
 use crate::ledger::gas::VpGasMeter;
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, write_log, Storage, StorageHasher};
-use crate::proto::{Tx};
+use crate::proto::{Tx, Section};
 use crate::types::transaction::hash_tx;
 
 /// These runtime errors will abort VP execution immediately
@@ -37,6 +37,8 @@ pub enum RuntimeError {
     ReadTemporaryValueError,
     #[error("Trying to read a permament value with read_temp")]
     ReadPermanentValueError,
+    #[error("Invalid transaction code hash")]
+    InvalidCodeHash,
 }
 
 /// VP environment function result
@@ -74,10 +76,10 @@ where
             Ok(None)
         }
         Some(&write_log::StorageModification::InitAccount {
-            ref vp, ..
+            ref vp_code_hash,
         }) => {
             // Read the VP of a new account
-            Ok(Some(vp.clone()))
+            Ok(Some(vp_code_hash.to_vec()))
         }
         Some(&write_log::StorageModification::Temp { .. }) => {
             Err(RuntimeError::ReadTemporaryValueError)
@@ -116,10 +118,10 @@ where
             Ok(None)
         }
         Some(&write_log::StorageModification::InitAccount {
-            ref vp, ..
+            ref vp_code_hash,
         }) => {
-            // Read the VP of a new account
-            Ok(Some(vp.clone()))
+            // Read the VP code hash of a new account
+            Ok(Some(vp_code_hash.to_vec()))
         }
         Some(&write_log::StorageModification::Temp { .. }) => {
             Err(RuntimeError::ReadTemporaryValueError)
@@ -158,16 +160,32 @@ pub fn read_temp(
 pub fn has_key_pre<DB, H>(
     gas_meter: &mut VpGasMeter,
     storage: &Storage<DB, H>,
+    write_log: &WriteLog,
     key: &Key,
 ) -> EnvResult<bool>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    let (present, gas) =
-        storage.has_key(key).map_err(RuntimeError::StorageError)?;
+    // Try to read from the write log first
+    let (log_val, gas) = write_log.read_pre(key);
     add_gas(gas_meter, gas)?;
-    Ok(present)
+    match log_val {
+        Some(&write_log::StorageModification::Write { .. }) => Ok(true),
+        Some(&write_log::StorageModification::Delete) => {
+            // The given key has been deleted
+            Ok(false)
+        }
+        Some(&write_log::StorageModification::InitAccount { .. }) => Ok(true),
+        Some(&write_log::StorageModification::Temp { .. }) => Ok(true),
+        None => {
+            // When not found in write log, try to check the storage
+            let (present, gas) =
+                storage.has_key(key).map_err(RuntimeError::StorageError)?;
+            add_gas(gas_meter, gas)?;
+            Ok(present)
+        }
+    }
 }
 
 /// Storage `has_key` in posterior state (after tx execution). It will try to
@@ -253,7 +271,9 @@ pub fn get_tx_code_hash(
     gas_meter: &mut VpGasMeter,
     tx: &Tx,
 ) -> EnvResult<Option<Hash>> {
-    let hash = tx.code().map(|x| hash_tx(&x));
+    let hash = tx.get_section(tx.code_sechash())
+        .and_then(Section::code_sec)
+        .map(|x| x.code.hash());
     add_gas(gas_meter, MIN_STORAGE_GAS)?;
     Ok(hash)
 }
@@ -296,27 +316,44 @@ where
     Ok(storage.native_token.clone())
 }
 
-/// Storage prefix iterator, ordered by storage keys. It will try to get an
-/// iterator from the storage.
-pub fn iter_prefix<'a, DB, H>(
+/// Storage prefix iterator for prior state (before tx execution), ordered by
+/// storage keys. It will try to get an iterator from the storage.
+pub fn iter_prefix_pre<'a, DB, H>(
     gas_meter: &mut VpGasMeter,
+    write_log: &'a WriteLog,
     storage: &'a Storage<DB, H>,
     prefix: &Key,
-) -> EnvResult<<DB as storage::DBIter<'a>>::PrefixIter>
+) -> EnvResult<storage::PrefixIter<'a, DB>>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    let (iter, gas) = storage.iter_prefix(prefix);
+    let (iter, gas) = storage::iter_prefix_pre(write_log, storage, prefix);
     add_gas(gas_meter, gas)?;
     Ok(iter)
 }
 
-/// Storage prefix iterator for prior state (before tx execution). It will try
-/// to read from the storage.
-pub fn iter_pre_next<DB>(
+/// Storage prefix iterator for posterior state (after tx execution), ordered by
+/// storage keys. It will try to get an iterator from the storage.
+pub fn iter_prefix_post<'a, DB, H>(
     gas_meter: &mut VpGasMeter,
-    iter: &mut <DB as storage::DBIter<'_>>::PrefixIter,
+    write_log: &'a WriteLog,
+    storage: &'a Storage<DB, H>,
+    prefix: &Key,
+) -> EnvResult<storage::PrefixIter<'a, DB>>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    let (iter, gas) = storage::iter_prefix_post(write_log, storage, prefix);
+    add_gas(gas_meter, gas)?;
+    Ok(iter)
+}
+
+/// Get the next item in a storage prefix iterator (pre or post).
+pub fn iter_next<DB>(
+    gas_meter: &mut VpGasMeter,
+    iter: &mut storage::PrefixIter<DB>,
 ) -> EnvResult<Option<(String, Vec<u8>)>>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -324,43 +361,6 @@ where
     if let Some((key, val, gas)) = iter.next() {
         add_gas(gas_meter, gas)?;
         return Ok(Some((key, val)));
-    }
-    Ok(None)
-}
-
-/// Storage prefix iterator next for posterior state (after tx execution). It
-/// will try to read from the write log first and if no entry found then from
-/// the storage.
-pub fn iter_post_next<DB>(
-    gas_meter: &mut VpGasMeter,
-    write_log: &WriteLog,
-    iter: &mut <DB as storage::DBIter<'_>>::PrefixIter,
-) -> EnvResult<Option<(String, Vec<u8>)>>
-where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-{
-    for (key, val, iter_gas) in iter {
-        let (log_val, log_gas) = write_log.read(
-            &Key::parse(key.clone()).map_err(RuntimeError::StorageDataError)?,
-        );
-        add_gas(gas_meter, iter_gas + log_gas)?;
-        match log_val {
-            Some(&write_log::StorageModification::Write { ref value }) => {
-                return Ok(Some((key, value.clone())));
-            }
-            Some(&write_log::StorageModification::Delete) => {
-                // check the next because the key has already deleted
-                continue;
-            }
-            Some(&write_log::StorageModification::InitAccount { .. }) => {
-                // a VP of a new account doesn't need to be iterated
-                continue;
-            }
-            Some(&write_log::StorageModification::Temp { .. }) => {
-                return Err(RuntimeError::ReadTemporaryValueError);
-            }
-            None => return Ok(Some((key, val))),
-        }
     }
     Ok(None)
 }

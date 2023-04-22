@@ -20,7 +20,9 @@ mod tests {
     use std::cmp;
 
     use namada::ledger::pos::{PosParams, PosVP};
-    use namada::proto::Tx;
+    use namada::proof_of_stake::validator_commission_rate_handle;
+    use namada::proto::{Data, Code, Signature, Tx};
+    use namada::types::chain::ChainId;
     use namada::types::storage::Epoch;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
@@ -31,12 +33,11 @@ mod tests {
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use namada_tx_prelude::token;
-    use namada_vp_prelude::proof_of_stake::{
-        CommissionRates, GenesisValidator,
-    };
+    use namada_vp_prelude::proof_of_stake::GenesisValidator;
     use proptest::prelude::*;
     use rust_decimal::prelude::ToPrimitive;
     use rust_decimal::Decimal;
+    use namada::types::transaction::{TxType, RawHeader};
 
     use super::*;
 
@@ -53,7 +54,7 @@ mod tests {
             commission_state_change in arb_commission_info(),
             // A key to sign the transaction
             key in arb_common_keypair(),
-            pos_params in arb_pos_params()) {
+            pos_params in arb_pos_params(None)) {
             test_tx_change_validator_commission_aux(commission_state_change.2, commission_state_change.0, commission_state_change.1, key, pos_params).unwrap()
         }
     }
@@ -78,20 +79,31 @@ mod tests {
 
         let tx_code = vec![];
         let tx_data = commission_change.try_to_vec().unwrap();
-        let tx = Tx::new(tx_code, Some(tx_data));
-        let signed_tx = tx.sign(&key);
-        let tx_data = signed_tx.data.unwrap();
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.chain_id = ChainId::default();
+        tx.set_data(Data::new(tx_data));
+        tx.set_code(Code::new(tx_code));
+        tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &key)));
+        tx.add_section(Section::Signature(Signature::new(&tx.code_sechash(), &key)));
+        let signed_tx = tx.clone();
+        let tx_data = signed_tx.data().unwrap();
 
         // Read the data before the tx is executed
-        let commission_rates_pre: CommissionRates = ctx()
-            .read_validator_commission_rate(&commission_change.validator)?
-            .expect("PoS validator must have commission rates");
-        let commission_rate = *commission_rates_pre
-            .get(0)
-            .expect("PoS validator must have commission rate at genesis");
-        assert_eq!(commission_rate, initial_rate);
+        let commission_rate_handle =
+            validator_commission_rate_handle(&commission_change.validator);
 
-        apply_tx(ctx(), tx_data)?;
+        let mut commission_rates_pre = Vec::<Option<Decimal>>::new();
+        for epoch in Epoch::default().iter_range(pos_params.unbonding_len + 1) {
+            commission_rates_pre.push(commission_rate_handle.get(
+                ctx(),
+                epoch,
+                &pos_params,
+            )?)
+        }
+
+        assert_eq!(commission_rates_pre[0], Some(initial_rate));
+
+        apply_tx(ctx(), signed_tx)?;
 
         // Read the data after the tx is executed
 
@@ -99,21 +111,17 @@ mod tests {
 
         //     - `#{PoS}/validator/#{validator}/commission_rate`
 
-        let commission_rates_post: CommissionRates = ctx()
-            .read_validator_commission_rate(&commission_change.validator)?
-            .unwrap();
-
         // Before pipeline, the commission rates should not change
         for epoch in 0..pos_params.pipeline_len {
             assert_eq!(
-                commission_rates_pre.get(epoch),
-                commission_rates_post.get(epoch),
+                commission_rates_pre[epoch as usize],
+                commission_rate_handle.get(ctx(), Epoch(epoch), &pos_params)?,
                 "The commission rates before the pipeline offset must not \
                  change - checking in epoch: {epoch}"
             );
             assert_eq!(
-                Some(&initial_rate),
-                commission_rates_post.get(epoch),
+                Some(initial_rate),
+                commission_rate_handle.get(ctx(), Epoch(epoch), &pos_params)?,
                 "The commission rates before the pipeline offset must not \
                  change - checking in epoch: {epoch}"
             );
@@ -122,14 +130,14 @@ mod tests {
         // After pipeline, the commission rates should have changed
         for epoch in pos_params.pipeline_len..=pos_params.unbonding_len {
             assert_ne!(
-                commission_rates_pre.get(epoch),
-                commission_rates_post.get(epoch),
+                commission_rates_pre[epoch as usize],
+                commission_rate_handle.get(ctx(), Epoch(epoch), &pos_params)?,
                 "The commission rate after the pipeline offset must have \
                  changed - checking in epoch: {epoch}"
             );
             assert_eq!(
-                Some(&commission_change.new_rate),
-                commission_rates_post.get(epoch),
+                Some(commission_change.new_rate),
+                commission_rate_handle.get(ctx(), Epoch(epoch), &pos_params)?,
                 "The commission rate after the pipeline offset must be the \
                  new_rate - checking in epoch: {epoch}"
             );

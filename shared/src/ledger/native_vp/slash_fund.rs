@@ -67,7 +67,7 @@ where
                         return false;
                     };
                     governance::utils::is_proposal_accepted(
-                        self.ctx.storage,
+                        &self.ctx.pre(),
                         &data,
                     )
                     .unwrap_or(false)

@@ -3,39 +3,25 @@
 use std::collections::BTreeSet;
 use std::panic::{RefUnwindSafe, UnwindSafe};
 
-use borsh::BorshDeserialize;
-use itertools::Itertools;
+// use borsh::BorshDeserialize;
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
-pub use namada_proof_of_stake::types::{self, Slash, Slashes, ValidatorStates};
-use namada_proof_of_stake::validation::validate;
-use namada_proof_of_stake::{impl_pos_read_only, validation, PosReadOnly};
-use rust_decimal::Decimal;
+// use namada_proof_of_stake::validation::validate;
+use namada_proof_of_stake::read_pos_params;
+pub use namada_proof_of_stake::types;
+// use rust_decimal::Decimal;
 use thiserror::Error;
 
-use super::{
-    bond_key, is_bond_key, is_params_key, is_total_deltas_key, is_unbond_key,
-    is_validator_deltas_key, is_validator_set_key, params_key,
-    total_deltas_key, unbond_key, validator_commission_rate_key,
-    validator_consensus_key_key, validator_deltas_key,
-    validator_max_commission_rate_change_key, validator_set_key,
-    validator_slashes_key, validator_state_key, BondId, Bonds, CommissionRates,
-    TotalDeltas, Unbonds, ValidatorConsensusKeys, ValidatorDeltas,
-    ValidatorSets,
-};
-use crate::ledger::native_vp::{
-    self, governance, Ctx, CtxPostStorageRead, CtxPreStorageRead, NativeVp,
-};
-use crate::ledger::pos::{
-    is_validator_address_raw_hash_key, is_validator_commission_rate_key,
-    is_validator_consensus_key_key,
-    is_validator_max_commission_rate_change_key, is_validator_state_key,
-};
+use super::is_params_key;
+use crate::ledger::native_vp::{self, governance, Ctx, NativeVp};
+// use crate::ledger::pos::{
+//     is_validator_address_raw_hash_key,
+//     is_validator_max_commission_rate_change_key,
+// };
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::ledger::storage_api::StorageRead;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Key, KeySeg};
-use crate::types::token;
 use crate::vm::WasmCacheAccess;
 use crate::proto::{Tx};
 
@@ -112,218 +98,61 @@ where
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
-        use validation::Data;
-        use validation::DataUpdate::{self, *};
-        use validation::ValidatorUpdate::*;
+        // use validation::Data;
+        // use validation::DataUpdate::{self, *};
+        // use validation::ValidatorUpdate::*;
 
         let addr = Address::Internal(Self::ADDR);
-        let mut changes: Vec<DataUpdate> = vec![];
-        let current_epoch = self.ctx.pre().get_block_epoch()?;
-        let staking_token_address = self.ctx.pre().get_native_token()?;
+        // let mut changes: Vec<DataUpdate> = vec![];
+        let _current_epoch = self.ctx.pre().get_block_epoch()?;
+
+        println!("\nVALIDATING TX\n");
 
         for key in keys_changed {
+            // println!("KEY: {}\n", key);
             if is_params_key(key) {
                 let data = if let Some(data) = tx_data.data() {
                     data
                 } else {
                     return Ok(false);
                 };
-                return governance::utils::is_proposal_accepted(
-                    self.ctx.storage,
+                if !governance::utils::is_proposal_accepted(
+                    &self.ctx.pre(),
                     &data,
                 )
-                .map_err(Error::NativeVpError);
-            } else if is_validator_set_key(key) {
-                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
-                    ValidatorSets::try_from_slice(&bytes[..]).ok()
-                });
-                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
-                    ValidatorSets::try_from_slice(&bytes[..]).ok()
-                });
-                changes.push(ValidatorSet(Data { pre, post }));
-            } else if let Some(validator) = is_validator_state_key(key) {
-                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
-                    ValidatorStates::try_from_slice(&bytes[..]).ok()
-                });
-                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
-                    ValidatorStates::try_from_slice(&bytes[..]).ok()
-                });
-                changes.push(Validator {
-                    address: validator.clone(),
-                    update: State(Data { pre, post }),
-                });
-            } else if let Some(validator) = is_validator_consensus_key_key(key)
-            {
-                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
-                    ValidatorConsensusKeys::try_from_slice(&bytes[..]).ok()
-                });
-                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
-                    ValidatorConsensusKeys::try_from_slice(&bytes[..]).ok()
-                });
-                changes.push(Validator {
-                    address: validator.clone(),
-                    update: ConsensusKey(Data { pre, post }),
-                });
-            } else if let Some(validator) = is_validator_deltas_key(key) {
-                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
-                    namada_proof_of_stake::types::ValidatorDeltas::try_from_slice(&bytes[..]).ok()
-                });
-                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
-                    namada_proof_of_stake::types::ValidatorDeltas::try_from_slice(&bytes[..]).ok()
-                });
-                changes.push(Validator {
-                    address: validator.clone(),
-                    update: ValidatorDeltas(Data { pre, post }),
-                });
-            } else if let Some(raw_hash) =
-                is_validator_address_raw_hash_key(key)
-            {
-                let pre =
-                    self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
-                        Address::try_from_slice(&bytes[..]).ok()
-                    });
-                let post =
-                    self.ctx.post().read_bytes(key)?.and_then(|bytes| {
-                        Address::try_from_slice(&bytes[..]).ok()
-                    });
-                changes.push(ValidatorAddressRawHash {
-                    raw_hash: raw_hash.to_string(),
-                    data: Data { pre, post },
-                });
-            } else if let Some(owner) =
-                token::is_balance_key(&staking_token_address, key)
-            {
-                if owner != &addr {
-                    continue;
+                .map_err(Error::NativeVpError)?
+                {
+                    return Ok(false);
                 }
-                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
-                    token::Amount::try_from_slice(&bytes[..]).ok()
-                });
-                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
-                    token::Amount::try_from_slice(&bytes[..]).ok()
-                });
-                changes.push(Balance(Data { pre, post }));
-            } else if let Some(bond_id) = is_bond_key(key) {
-                let pre =
-                    self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
-                        Bonds::try_from_slice(&bytes[..]).ok()
-                    });
-                let post =
-                    self.ctx.post().read_bytes(key)?.and_then(|bytes| {
-                        Bonds::try_from_slice(&bytes[..]).ok()
-                    });
-                // For bonds, we need to look-up slashes
-                let slashes = self
-                    .ctx
-                    .pre()
-                    .read_bytes(&validator_slashes_key(&bond_id.validator))?
-                    .and_then(|bytes| Slashes::try_from_slice(&bytes[..]).ok())
-                    .unwrap_or_default();
-                changes.push(Bond {
-                    id: bond_id.clone(),
-                    data: Data { pre, post },
-                    slashes,
-                });
-            } else if let Some(unbond_id) = is_unbond_key(key) {
-                let pre =
-                    self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
-                        Unbonds::try_from_slice(&bytes[..]).ok()
-                    });
-                let post =
-                    self.ctx.post().read_bytes(key)?.and_then(|bytes| {
-                        Unbonds::try_from_slice(&bytes[..]).ok()
-                    });
-                // For unbonds, we need to look-up slashes
-                let slashes = self
-                    .ctx
-                    .pre()
-                    .read_bytes(&validator_slashes_key(&unbond_id.validator))?
-                    .and_then(|bytes| Slashes::try_from_slice(&bytes[..]).ok())
-                    .unwrap_or_default();
-                changes.push(Unbond {
-                    id: unbond_id.clone(),
-                    data: Data { pre, post },
-                    slashes,
-                });
-            } else if is_total_deltas_key(key) {
-                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
-                    super::TotalDeltas::try_from_slice(&bytes[..]).ok()
-                });
-                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
-                    super::TotalDeltas::try_from_slice(&bytes[..]).ok()
-                });
-                changes.push(TotalDeltas(Data { pre, post }));
-            } else if let Some(address) = is_validator_commission_rate_key(key)
-            {
-                let max_change = self
-                    .ctx
-                    .pre()
-                    .read_bytes(&validator_max_commission_rate_change_key(
-                        address,
-                    ))?
-                    .and_then(|bytes| Decimal::try_from_slice(&bytes[..]).ok());
-                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
-                    CommissionRates::try_from_slice(&bytes[..]).ok()
-                });
-                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
-                    CommissionRates::try_from_slice(&bytes[..]).ok()
-                });
-                changes.push(Validator {
-                    address: address.clone(),
-                    update: CommissionRate(Data { pre, post }, max_change),
-                });
-            } else if let Some(address) =
-                is_validator_max_commission_rate_change_key(key)
-            {
-                let pre =
-                    self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
-                        Decimal::try_from_slice(&bytes[..]).ok()
-                    });
-                let post =
-                    self.ctx.post().read_bytes(key)?.and_then(|bytes| {
-                        Decimal::try_from_slice(&bytes[..]).ok()
-                    });
-                changes.push(Validator {
-                    address: address.clone(),
-                    update: MaxCommissionRateChange(Data { pre, post }),
-                });
             } else if key.segments.get(0) == Some(&addr.to_db_key()) {
                 // Unknown changes to this address space are disallowed
-                tracing::info!("PoS unrecognized key change {} rejected", key);
-                return Ok(false);
+                // tracing::info!("PoS unrecognized key change {} rejected",
+                // key);
+                tracing::info!(
+                    "PoS unrecognized key change {} typically rejected but \
+                     letting pass for now while implementing new lazy PoS \
+                     storage",
+                    key
+                );
+                // return Ok(false);
             } else {
                 // Unknown changes anywhere else are permitted
             }
         }
 
-        let params = self.ctx.pre().read_pos_params()?;
-        let errors = validate(&params, changes, current_epoch);
-        Ok(if errors.is_empty() {
-            true
-        } else {
-            tracing::info!(
-                "PoS validation errors:\n - {}",
-                errors.iter().format("\n - ")
-            );
-            false
-        })
+        let _params = read_pos_params(&self.ctx.pre())?;
+        // let errors = validate(&params, changes, current_epoch);
+        // Ok(if errors.is_empty() {
+        //     true
+        // } else {
+        //     tracing::info!(
+        //         "PoS validation errors:\n - {}",
+        //         errors.iter().format("\n - ")
+        //     );
+        //     false
+        // })
+        Ok(true)
     }
-}
-
-impl_pos_read_only! {
-    impl<'view, 'a: 'view, DB, H, CA> PosReadOnly for CtxPreStorageRead<'view, 'a, DB, H, CA>
-        where
-            DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter> +'static,
-            H: StorageHasher +'static,
-            CA: WasmCacheAccess +'static
-}
-
-impl_pos_read_only! {
-    impl<'view, 'a: 'view, DB, H, CA> PosReadOnly for CtxPostStorageRead<'view, 'a, DB, H, CA>
-        where
-            DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter> +'static,
-            H: StorageHasher +'static,
-            CA: WasmCacheAccess +'static
 }
 
 impl From<native_vp::Error> for Error {

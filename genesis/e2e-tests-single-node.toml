@@ -36,7 +36,7 @@ Bertha = 1000000
 Christel = 1000000
 "Christel.public_key" = 100
 Daewon = 1000000
-faucet = 9223372036854
+faucet = 9223372036
 "faucet.public_key" = 100
 "validator-0.public_key" = 100
 
@@ -170,7 +170,7 @@ pos_gain_d = 0.1
 
 # Proof of stake parameters.
 [pos_params]
-# Maximum number of active validators.
+# Maximum number of consensus validators.
 max_validator_slots = 128
 # Pipeline length (in epochs). Any change in the validator set made in
 # epoch 'n' will become active in epoch 'n + pipeline_len'.
@@ -179,7 +179,7 @@ pipeline_len = 2
 # for a fault in epoch 'n' up through epoch 'n + unbonding_len'.
 unbonding_len = 3
 # Votes per fundamental staking token (namnam)
-tm_votes_per_token = 1
+tm_votes_per_token = 0.1
 # Reward for proposing a block.
 block_proposer_reward = 0.125
 # Reward for voting on a block.

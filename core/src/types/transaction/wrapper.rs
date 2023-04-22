@@ -13,11 +13,15 @@ pub mod wrapper_tx {
 
     use crate::proto::{Tx, Code, Data, Signature, Section, TxError};
     use crate::types::address::Address;
+    use crate::types::chain::ChainId;
     use crate::types::key::*;
     use crate::types::storage::Epoch;
+    use crate::types::time::DateTimeUtc;
     use crate::types::token::Amount;
     use crate::types::transaction::{Hash, TxType};
     use sha2::{Digest, Sha256};
+    #[cfg(feature = "ferveo-tpke")]
+    use crate::types::transaction::{EncryptionKey};
 
     /// Minimum fee amount in micro NAMs
     pub const MIN_FEE: u64 = 100;
@@ -358,7 +362,7 @@ pub mod wrapper_tx {
             assert_matches!(err, WrapperTxErr::DecryptedHash);
         }
 
-        /// We check that even if the encrypted payload and has of its
+        /// We check that even if the encrypted payload and hash of its
         /// contents are correctly changed, we detect fraudulent activity
         /// via the signature.
         #[test]

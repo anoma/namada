@@ -14,6 +14,7 @@ use std::collections::HashSet;
 use super::generated::types;
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint_proto::abci::ResponseDeliverTx;
+use crate::types::chain::ChainId;
 use crate::types::key::*;
 use crate::types::time::DateTimeUtc;
 #[cfg(feature = "ferveo-tpke")]
@@ -149,6 +150,14 @@ impl Code {
         Self {
             salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
             code: CodeHash::Code(code),
+        }
+    }
+
+    /// Make a new code section with the given hash
+    pub fn from_hash(hash: crate::types::hash::Hash) -> Self {
+        Self {
+            salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
+            code: CodeHash::Hash(hash),
         }
     }
 
@@ -611,6 +620,8 @@ pub enum TxError {
     Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize,
 )]
 pub struct Tx {
+    pub chain_id: ChainId,
+    pub expiration: Option<DateTimeUtc>,
     /// A transaction timestamp
     pub timestamp: DateTimeUtc,
     /// Type indicating how to process transaction
@@ -636,6 +647,8 @@ impl Tx {
     pub fn new(header: TxType) -> Self {
         Tx {
             header,
+            chain_id: ChainId::default(),
+            expiration: None,
             timestamp: DateTimeUtc::now(),
             sections: vec![],
         }
@@ -652,7 +665,7 @@ impl Tx {
     }
 
     /// Update the header whilst maintaining existing cross-references
-    pub fn update_header(&mut self, header: TxType) {
+    pub fn update_header(&mut self, header: TxType) -> &mut Self {
         // Capture the data and code hashes that will be overwritten
         let data_hash = self.data_sechash().clone();
         let code_hash = self.code_sechash().clone();
@@ -660,6 +673,7 @@ impl Tx {
         // Rebind the data and code hashes
         self.set_data_sechash(data_hash);
         self.set_code_sechash(code_hash);
+        self
     }
 
     /// Get the transaction section with the given hash
@@ -868,7 +882,7 @@ impl Tx {
             }
         }
         self.data().ok_or(WrapperTxErr::DecryptedHash)?;
-        self.code().ok_or(WrapperTxErr::DecryptedHash)?;
+        self.get_section(self.code_sechash()).ok_or(WrapperTxErr::DecryptedHash)?;
         Ok(())
     }
 

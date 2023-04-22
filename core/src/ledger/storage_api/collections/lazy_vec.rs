@@ -12,7 +12,7 @@ use super::LazyCollection;
 use crate::ledger::storage_api::validation::{self, Data};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead, StorageWrite};
 use crate::ledger::vp_env::VpEnv;
-use crate::types::storage::{self, DbKeySeg};
+use crate::types::storage::{self, DbKeySeg, KeySeg};
 
 /// Subkey pointing to the length of the LazyVec
 pub const LEN_SUBKEY: &str = "len";
@@ -35,7 +35,7 @@ pub struct LazyVec<T> {
 }
 
 /// Possible sub-keys of a [`LazyVec`]
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum SubKey {
     /// Length sub-key
     Len,
@@ -144,6 +144,16 @@ where
             Some(Some(suffix)) => suffix,
         };
 
+        // A helper to validate the 2nd key segment
+        let validate_sub_key = |raw_sub_key| {
+            if let Ok(index) = storage::KeySeg::parse(raw_sub_key) {
+                Ok(Some(SubKey::Data(index)))
+            } else {
+                Err(ValidationError::InvalidSubKey(key.clone()))
+                    .into_storage_result()
+            }
+        };
+
         // Match the suffix against expected sub-keys
         match &suffix.segments[..] {
             [DbKeySeg::StringSeg(sub)] if sub == LEN_SUBKEY => {
@@ -152,12 +162,12 @@ where
             [DbKeySeg::StringSeg(sub_a), DbKeySeg::StringSeg(sub_b)]
                 if sub_a == DATA_SUBKEY =>
             {
-                if let Ok(index) = storage::KeySeg::parse(sub_b.clone()) {
-                    Ok(Some(SubKey::Data(index)))
-                } else {
-                    Err(ValidationError::InvalidSubKey(key.clone()))
-                        .into_storage_result()
-                }
+                validate_sub_key(sub_b.clone())
+            }
+            [DbKeySeg::StringSeg(sub_a), DbKeySeg::AddressSeg(sub_b)]
+                if sub_a == DATA_SUBKEY =>
+            {
+                validate_sub_key(sub_b.raw())
             }
             _ => Err(ValidationError::InvalidSubKey(key.clone()))
                 .into_storage_result(),
@@ -476,11 +486,12 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::ledger::storage::testing::TestStorage;
+    use crate::ledger::storage::testing::TestWlStorage;
+    use crate::types::address::{self, Address};
 
     #[test]
     fn test_lazy_vec_basics() -> storage_api::Result<()> {
-        let mut storage = TestStorage::default();
+        let mut storage = TestWlStorage::default();
 
         let key = storage::Key::parse("test").unwrap();
         let lazy_vec = LazyVec::<u32>::open(key);
@@ -510,6 +521,60 @@ mod test {
         assert!(lazy_vec.pop(&mut storage)?.is_none());
         assert!(lazy_vec.get(&storage, 0)?.is_none());
         assert!(lazy_vec.get(&storage, 1)?.is_none());
+
+        let storage_key = lazy_vec.get_data_key(0);
+        assert_eq!(
+            lazy_vec.is_valid_sub_key(&storage_key).unwrap(),
+            Some(SubKey::Data(0))
+        );
+
+        let storage_key2 = lazy_vec.get_data_key(1);
+        assert_eq!(
+            lazy_vec.is_valid_sub_key(&storage_key2).unwrap(),
+            Some(SubKey::Data(1))
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_lazy_vec_with_addr() -> storage_api::Result<()> {
+        let mut storage = TestWlStorage::default();
+
+        let key = storage::Key::parse("test").unwrap();
+        let lazy_vec = LazyVec::<Address>::open(key);
+
+        // Push a new value and check that it's added
+        let val = address::testing::established_address_1();
+        lazy_vec.push(&mut storage, val.clone())?;
+        assert!(!lazy_vec.is_empty(&storage)?);
+        assert!(lazy_vec.len(&storage)? == 1);
+        assert_eq!(lazy_vec.iter(&storage)?.next().unwrap()?, val);
+        assert_eq!(lazy_vec.get(&storage, 0)?.unwrap(), val);
+        assert!(lazy_vec.get(&storage, 1)?.is_none());
+
+        let val2 = address::testing::established_address_2();
+        lazy_vec.push(&mut storage, val2.clone())?;
+
+        assert_eq!(lazy_vec.len(&storage)?, 2);
+        let mut iter = lazy_vec.iter(&storage)?;
+        // The iterator order follows the indices
+        assert_eq!(iter.next().unwrap()?, val);
+        assert_eq!(iter.next().unwrap()?, val2);
+        assert!(iter.next().is_none());
+        drop(iter);
+
+        let storage_key = lazy_vec.get_data_key(0);
+        assert_eq!(
+            lazy_vec.is_valid_sub_key(&storage_key).unwrap(),
+            Some(SubKey::Data(0))
+        );
+
+        let storage_key2 = lazy_vec.get_data_key(1);
+        assert_eq!(
+            lazy_vec.is_valid_sub_key(&storage_key2).unwrap(),
+            Some(SubKey::Data(1))
+        );
 
         Ok(())
     }
