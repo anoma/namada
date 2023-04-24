@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     git \
     libssl-dev \
     pkg-config \
+    protobuf-compiler \
     && apt-get clean
 
 COPY --from=planner /app/recipe.json recipe.json
