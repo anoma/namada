@@ -472,7 +472,7 @@ where
 
     fn eval(
         &self,
-        vp_code: Vec<u8>,
+        vp_code_hash: Hash,
         input_data: Vec<u8>,
     ) -> Result<bool, storage_api::Error> {
         #[cfg(feature = "wasm-runtime")]
@@ -508,7 +508,8 @@ where
                 #[cfg(not(feature = "mainnet"))]
                 false,
             );
-            match eval_runner.eval_native_result(ctx, vp_code, input_data) {
+            match eval_runner.eval_native_result(ctx, vp_code_hash, input_data)
+            {
                 Ok(result) => Ok(result),
                 Err(err) => {
                     tracing::warn!(

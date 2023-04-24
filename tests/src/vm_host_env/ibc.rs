@@ -82,6 +82,7 @@ use namada::proto::Tx;
 use namada::tendermint::time::Time as TmTime;
 use namada::tendermint_proto::Protobuf as TmProtobuf;
 use namada::types::address::{self, Address, InternalAddress};
+use namada::types::hash::Hash;
 use namada::types::storage::{
     self, BlockHash, BlockHeight, Epoch, Key, TxIndex,
 };
@@ -204,6 +205,10 @@ pub fn validate_token_vp_from_tx<'a>(
 
 /// Initialize the test storage. Requires initialized [`tx_host_env::ENV`].
 pub fn init_storage() -> (Address, Address) {
+    // wasm for init_account
+    let code = TestWasms::VpAlwaysTrue.read_bytes();
+    let code_hash = Hash::sha256(&code);
+
     tx_host_env::with(|env| {
         ibc::init_genesis_storage(&mut env.wl_storage);
         pos::init_genesis_storage(
@@ -212,6 +217,10 @@ pub fn init_storage() -> (Address, Address) {
             vec![get_dummy_genesis_validator()].into_iter(),
             Epoch(1),
         );
+        // store wasm code
+        let key = Key::wasm_code(&code_hash);
+        env.wl_storage.storage.write(&key, code.clone()).unwrap();
+
         // block header to check timeout timestamp
         env.wl_storage
             .storage
@@ -224,11 +233,10 @@ pub fn init_storage() -> (Address, Address) {
     });
 
     // initialize a token
-    let code = TestWasms::VpAlwaysTrue.read_bytes();
-    let token = tx::ctx().init_account(code.clone()).unwrap();
+    let token = tx::ctx().init_account(code_hash.clone()).unwrap();
 
     // initialize an account
-    let account = tx::ctx().init_account(code).unwrap();
+    let account = tx::ctx().init_account(code_hash).unwrap();
     let key = token::balance_key(&token, &account);
     let init_bal = Amount::whole(100);
     let bytes = init_bal.try_to_vec().expect("encoding failed");

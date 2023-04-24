@@ -95,12 +95,22 @@ fn run_ledger_ibc() -> Result<()> {
     let (test_a, test_b) = setup_two_single_node_nets()?;
 
     // Run Chain A
-    let mut ledger_a =
-        run_as!(test_a, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+    let mut ledger_a = run_as!(
+        test_a,
+        Who::Validator(0),
+        Bin::Node,
+        &["ledger", "run", "--tx-index"],
+        Some(40)
+    )?;
     ledger_a.exp_string("Namada ledger node started")?;
     // Run Chain B
-    let mut ledger_b =
-        run_as!(test_b, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+    let mut ledger_b = run_as!(
+        test_b,
+        Who::Validator(0),
+        Bin::Node,
+        &["ledger", "run", "--tx-index"],
+        Some(40)
+    )?;
     ledger_b.exp_string("Namada ledger node started")?;
     ledger_a.exp_string("This node is a validator")?;
     ledger_b.exp_string("This node is a validator")?;
@@ -959,8 +969,6 @@ fn submit_ibc_tx(
     let data = make_ibc_data(message);
     std::fs::write(&data_path, data).expect("writing data failed");
 
-    let code_path = wasm_abs_path(TX_IBC_WASM);
-    let code_path = code_path.to_string_lossy();
     let data_path = data_path.to_string_lossy();
     let rpc = get_actor_rpc(test, &Who::Validator(0));
     let mut client = run!(
@@ -969,7 +977,7 @@ fn submit_ibc_tx(
         [
             "tx",
             "--code-path",
-            &code_path,
+            TX_IBC_WASM,
             "--data-path",
             &data_path,
             "--signer",

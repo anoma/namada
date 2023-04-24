@@ -53,8 +53,8 @@ pub fn is_tx_whitelisted(ctx: &Ctx) -> VpResult {
         || whitelist.contains(&tx_hash.to_string().to_lowercase()))
 }
 
-pub fn is_vp_whitelisted(ctx: &Ctx, vp_bytes: &[u8]) -> VpResult {
-    let vp_hash = sha256(vp_bytes);
+pub fn is_vp_whitelisted(ctx: &Ctx, vp_hash: &[u8]) -> VpResult {
+    let vp_hash = Hash::try_from(vp_hash).unwrap();
     let key = parameters::storage::get_vp_whitelist_storage_key();
     let whitelist: Vec<String> = ctx.read_pre(&key)?.unwrap_or_default();
     // if whitelist is empty, allow any transaction
@@ -272,11 +272,7 @@ impl<'view> VpEnv<'view> for Ctx {
         iter_prefix_pre_impl(prefix)
     }
 
-    fn eval(
-        &self,
-        vp_code: Vec<u8>,
-        input_data: Vec<u8>,
-    ) -> Result<bool, Error> {
+    fn eval(&self, vp_code: Hash, input_data: Vec<u8>) -> Result<bool, Error> {
         let result = unsafe {
             namada_vp_eval(
                 vp_code.as_ptr() as _,

@@ -29,6 +29,7 @@ mod tests {
     use namada::ledger::tx_env::TxEnv;
     use namada::proto::{SignedTxData, Tx};
     use namada::types::chain::ChainId;
+    use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
     use namada::types::time::DateTimeUtc;
@@ -219,7 +220,13 @@ mod tests {
         tx_host_env::init();
 
         let code = TestWasms::VpAlwaysTrue.read_bytes();
-        tx::ctx().init_account(code).unwrap();
+        let code_hash = Hash::sha256(&code);
+        tx_host_env::with(|env| {
+            // store wasm code
+            let key = Key::wasm_code(&code_hash);
+            env.wl_storage.storage.write(&key, code.clone()).unwrap();
+        });
+        tx::ctx().init_account(code_hash).unwrap();
     }
 
     #[test]
@@ -526,22 +533,34 @@ mod tests {
         vp_host_env::init();
 
         // evaluating without any code should fail
-        let empty_code = vec![];
+        let empty_code = Hash::zero();
         let input_data = vec![];
         let result = vp::CTX.eval(empty_code, input_data).unwrap();
         assert!(!result);
 
         // evaluating the VP template which always returns `true` should pass
         let code = TestWasms::VpAlwaysTrue.read_bytes();
+        let code_hash = Hash::sha256(&code);
+        vp_host_env::with(|env| {
+            // store wasm codes
+            let key = Key::wasm_code(&code_hash);
+            env.wl_storage.storage.write(&key, code.clone()).unwrap();
+        });
         let input_data = vec![];
-        let result = vp::CTX.eval(code, input_data).unwrap();
+        let result = vp::CTX.eval(code_hash, input_data).unwrap();
         assert!(result);
 
         // evaluating the VP template which always returns `false` shouldn't
         // pass
         let code = TestWasms::VpAlwaysFalse.read_bytes();
+        let code_hash = Hash::sha256(&code);
+        vp_host_env::with(|env| {
+            // store wasm codes
+            let key = Key::wasm_code(&code_hash);
+            env.wl_storage.storage.write(&key, code.clone()).unwrap();
+        });
         let input_data = vec![];
-        let result = vp::CTX.eval(code, input_data).unwrap();
+        let result = vp::CTX.eval(code_hash, input_data).unwrap();
         assert!(!result);
     }
 
@@ -557,7 +576,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -594,7 +613,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -634,7 +653,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -670,7 +689,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -711,7 +730,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -747,7 +766,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -790,7 +809,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -826,7 +845,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -869,7 +888,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -905,7 +924,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -950,7 +969,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1003,7 +1022,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1053,7 +1072,7 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1102,7 +1121,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1178,7 +1197,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1254,7 +1273,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1343,7 +1362,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1435,7 +1454,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1531,7 +1550,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
@@ -1617,7 +1636,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: vec![],
+            code_or_hash: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),

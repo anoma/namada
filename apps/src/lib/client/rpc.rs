@@ -1942,6 +1942,31 @@ pub async fn query_conversion(
     ))
 }
 
+/// Query a wasm code hash
+pub async fn query_wasm_code_hash(
+    code_path: impl AsRef<str>,
+    ledger_address: TendermintAddress,
+) -> Option<Hash> {
+    let client = HttpClient::new(ledger_address.clone()).unwrap();
+    let hash_key = Key::wasm_hash(code_path.as_ref());
+    match query_storage_value_bytes(&client, &hash_key, None, false)
+        .await
+        .0
+    {
+        Some(hash) => {
+            Some(Hash::try_from(&hash[..]).expect("Invalid code hash"))
+        }
+        None => {
+            eprintln!(
+                "The corresponding wasm code of the code path {} doesn't \
+                 exist on chain.",
+                code_path.as_ref(),
+            );
+            None
+        }
+    }
+}
+
 /// Query a storage value and decode it with [`BorshDeserialize`].
 pub async fn query_storage_value<T>(
     client: &HttpClient,
