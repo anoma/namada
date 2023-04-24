@@ -4,7 +4,6 @@ use std::collections::{BTreeMap, HashSet};
 use std::fmt::{self, Display};
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -13,10 +12,13 @@ use crate::types::hash::Hash;
 use crate::types::key::common::{self, Signature};
 use crate::types::key::SigScheme;
 use crate::types::storage::Epoch;
-use crate::types::token::{Amount, NATIVE_SCALE};
+use crate::types::token::{
+    Amount, DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES,
+};
+use crate::types::uint::Uint;
 
 /// Type alias for vote power
-pub type VotePower = u128;
+pub type VotePower = Uint;
 
 /// A PGF cocuncil composed of the address and spending cap
 pub type Council = (Address, Amount);
@@ -141,19 +143,30 @@ pub struct ProposalResult {
 
 impl Display for ProposalResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let percentage = Decimal::checked_div(
-            self.total_yay_power.into(),
-            self.total_voting_power.into(),
-        )
-        .unwrap_or_default();
+        let percentage = DenominatedAmount {
+            amount: Amount::from_uint(
+                self.total_yay_power
+                    .fixed_precision_div(&self.total_voting_power, 4)
+                    .unwrap_or_default(),
+                0,
+            )
+            .unwrap(),
+            denom: 2.into(),
+        };
 
         write!(
             f,
-            "{} with {} yay votes over {} ({:.2}%)",
+            "{} with {} yay votes over {} ({}%)",
             self.result,
-            self.total_yay_power / NATIVE_SCALE as u128,
-            self.total_voting_power / NATIVE_SCALE as u128,
-            percentage.checked_mul(100.into()).unwrap_or_default()
+            DenominatedAmount {
+                amount: Amount::from_uint(self.total_yay_power, 0).unwrap(),
+                denom: NATIVE_MAX_DECIMAL_PLACES.into()
+            },
+            DenominatedAmount {
+                amount: Amount::from_uint(self.total_voting_power, 0).unwrap(),
+                denom: NATIVE_MAX_DECIMAL_PLACES.into()
+            },
+            percentage
         )
     }
 }

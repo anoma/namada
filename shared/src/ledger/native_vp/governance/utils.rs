@@ -98,7 +98,7 @@ pub fn compute_tally(
             for (_, (amount, validator_vote)) in yay_validators.iter() {
                 if let ProposalVote::Yay(vote_type) = validator_vote {
                     if proposal_type == vote_type {
-                        total_yay_staked_tokens += amount;
+                        total_yay_staked_tokens += *amount;
                     } else {
                         // Log the error and continue
                         tracing::error!(
@@ -129,7 +129,7 @@ pub fn compute_tally(
                             if !yay_validators.contains_key(validator_address) {
                                 // YAY: Add delegator amount whose validator
                                 // didn't vote / voted nay
-                                total_yay_staked_tokens += vote_power;
+                                total_yay_staked_tokens += *vote_power;
                             }
                         }
                         ProposalVote::Nay => {
@@ -137,7 +137,7 @@ pub fn compute_tally(
                             // validator vote yay
 
                             if yay_validators.contains_key(validator_address) {
-                                total_yay_staked_tokens -= vote_power;
+                                total_yay_staked_tokens -= *vote_power;
                             }
                         }
 
@@ -175,14 +175,14 @@ pub fn compute_tally(
                     result: tally_result,
                     total_voting_power: total_stake,
                     total_yay_power: total_yay_staked_tokens,
-                    total_nay_power: 0,
+                    total_nay_power: 0.into(),
                 })
             } else {
                 Ok(ProposalResult {
                     result: TallyResult::Rejected,
                     total_voting_power: total_stake,
                     total_yay_power: total_yay_staked_tokens,
-                    total_nay_power: 0,
+                    total_nay_power: 0.into(),
                 })
             }
         }
@@ -193,8 +193,9 @@ pub fn compute_tally(
                     validator_vote
                 {
                     for v in votes {
-                        *total_yay_staked_tokens.entry(v).or_insert(0) +=
-                            amount;
+                        *total_yay_staked_tokens
+                            .entry(v)
+                            .or_insert(VotePower::zero()) += *amount;
                     }
                 } else {
                     // Log the error and continue
@@ -235,7 +236,7 @@ pub fn compute_tally(
                                                     total_yay_staked_tokens
                                                         .get_mut(vote)
                                                 {
-                                                    *power -= vote_power;
+                                                    *power -= *vote_power;
                                                 } else {
                                                     return Err(Error::Tally(
                                                         format!(
@@ -251,7 +252,9 @@ pub fn compute_tally(
                                                 // this, add voting power
                                                 *total_yay_staked_tokens
                                                     .entry(vote)
-                                                    .or_insert(0) += vote_power;
+                                                    .or_insert(
+                                                        VotePower::zero(),
+                                                    ) += *vote_power;
                                             }
                                         }
                                     } else {
@@ -271,7 +274,8 @@ pub fn compute_tally(
                                     for vote in delegator_votes {
                                         *total_yay_staked_tokens
                                             .entry(vote)
-                                            .or_insert(0) += vote_power;
+                                            .or_insert(VotePower::zero()) +=
+                                            *vote_power;
                                     }
                                 }
                             }
@@ -294,7 +298,7 @@ pub fn compute_tally(
                                                 total_yay_staked_tokens
                                                     .get_mut(vote)
                                             {
-                                                *power -= vote_power;
+                                                *power -= *vote_power;
                                             } else {
                                                 return Err(Error::Tally(
                                                     format!(
@@ -333,14 +337,16 @@ pub fn compute_tally(
             // At least 1/3 of the total voting power must vote Yay
             let total_yay_voted_power = total_yay_staked_tokens
                 .iter()
-                .fold(0, |acc, (_, vote_power)| acc + vote_power);
+                .fold(VotePower::zero(), |acc, (_, vote_power)| {
+                    acc + *vote_power
+                });
 
-            match total_yay_voted_power.checked_mul(3) {
+            match total_yay_voted_power.checked_mul(3.into()) {
                 Some(v) if v < total_stake => Ok(ProposalResult {
                     result: TallyResult::Rejected,
                     total_voting_power: total_stake,
                     total_yay_power: total_yay_voted_power,
-                    total_nay_power: 0,
+                    total_nay_power: VotePower::zero(),
                 }),
                 _ => {
                     // Select the winner council based on approval voting
@@ -359,7 +365,7 @@ pub fn compute_tally(
                         result: TallyResult::Passed(Tally::PGFCouncil(council)),
                         total_voting_power: total_stake,
                         total_yay_power: total_yay_voted_power,
-                        total_nay_power: 0,
+                        total_nay_power: VotePower::zero(),
                     })
                 }
             }

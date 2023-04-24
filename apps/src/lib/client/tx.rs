@@ -1435,7 +1435,7 @@ async fn gen_shielded_transfer(
         let (_, fee) = convert_amount(
             epoch,
             &ctx.get(&args.tx.fee_token),
-            &args.sub_prefix.as_ref(),
+            &None,
             MaspDenom::Zero.denominate(&fee.amount),
             MaspDenom::Zero,
         );
@@ -1470,7 +1470,9 @@ async fn gen_shielded_transfer(
         if let Some(sk) = spending_key {
             // If the gas is coming from the shielded pool, then our shielded
             // inputs must also cover the gas fee
-            let required_amt = if shielded_gas {
+            let required_amt = if shielded_gas && denom == MaspDenom::Zero {
+                // TODO: This could overflow the amount. Need carry logic.
+                // TODO: Move this up out of the loop.
                 amount + fee.clone()
             } else {
                 amount
@@ -1649,10 +1651,17 @@ pub async fn submit_transfer(mut ctx: Context, mut args: args::TxTransfer) {
                 )
                 .await;
                 eprintln!(
-                    "The balance of the source {} of token {} is lower than \
+                    "The balance of the source {} of token {}{} is lower than \
                      the amount to be transferred. Amount to transfer is {} \
                      and the balance is {}.",
-                    source, token, validated_amount, balance_amount
+                    source,
+                    token,
+                    validated_amount,
+                    args.sub_prefix
+                        .as_ref()
+                        .map(|s| format!("/{}", s))
+                        .unwrap_or_default(),
+                    balance_amount
                 );
                 if !args.tx.force {
                     safe_exit(1)
@@ -1661,8 +1670,13 @@ pub async fn submit_transfer(mut ctx: Context, mut args: args::TxTransfer) {
         }
         None => {
             eprintln!(
-                "No balance found for the source {} of token {}",
-                source, token
+                "No balance found for the source {} of token {}{}",
+                source,
+                token,
+                args.sub_prefix
+                    .as_ref()
+                    .map(|s| format!("/{}", s))
+                    .unwrap_or_default(),
             );
             if !args.tx.force {
                 safe_exit(1)
@@ -1729,11 +1743,15 @@ pub async fn submit_transfer(mut ctx: Context, mut args: args::TxTransfer) {
             Err(builder::Error::ChangeIsNegative(_)) => {
                 eprintln!(
                     "The balance of the source {} is lower than the amount to \
-                     be transferred and fees. Amount to transfer is {} {} and \
-                     fees are {} {}.",
+                     be transferred and fees. Amount to transfer is {} {}{} \
+                     and fees are {} {}.",
                     source.clone(),
                     validated_amount,
                     token,
+                    args.sub_prefix
+                        .as_ref()
+                        .map(|s| format!("/{}", s))
+                        .unwrap_or_default(),
                     validate_fee,
                     ctx.get(&args.tx.fee_token),
                 );
@@ -1830,7 +1848,7 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
     }
     // Check source balance
     let (sub_prefix, balance_key) = match args.sub_prefix {
-        Some(sub_prefix) => {
+        Some(ref sub_prefix) => {
             let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
             let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
             (
@@ -1860,10 +1878,17 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
                 )
                 .await;
                 eprintln!(
-                    "The balance of the source {} of token {} is lower than \
+                    "The balance of the source {} of token {}{} is lower than \
                      the amount to be transferred. Amount to transfer is {} \
                      and the balance is {}.",
-                    source, token, formatted_amount, formatted_balance
+                    source,
+                    token,
+                    args.sub_prefix
+                        .as_ref()
+                        .map(|s| format!("/{}", s))
+                        .unwrap_or_default(),
+                    formatted_amount,
+                    formatted_balance
                 );
                 if !args.tx.force {
                     safe_exit(1)

@@ -75,7 +75,7 @@ where
     let mut current_convs =
         BTreeMap::<(Address, Option<Key>, MaspDenom), AllowedConversion>::new();
     // Reward all tokens according to above reward rates
-    for ((addr, sub_prefix, denom), reward) in &masp_rewards {
+    for ((addr, sub_prefix), reward) in &masp_rewards {
         // Dispense a transparent reward in parallel to the shielded rewards
         let addr_bal: token::Amount = match sub_prefix {
             None => wl_storage
@@ -93,38 +93,40 @@ where
         // Since floor(a) + floor(b) <= floor(a+b), there will always be
         // enough rewards to reimburse users
         total_reward += (addr_bal * *reward).0;
-        // Provide an allowed conversion from previous timestamp. The
-        // negative sign allows each instance of the old asset to be
-        // cancelled out/replaced with the new asset
-        let old_asset = encode_asset_type(
-            addr.clone(),
-            sub_prefix,
-            *denom,
-            wl_storage.storage.last_epoch,
-        );
-        let new_asset = encode_asset_type(
-            addr.clone(),
-            sub_prefix,
-            *denom,
-            wl_storage.storage.block.epoch,
-        );
-        current_convs.insert(
-            (addr.clone(), sub_prefix.clone(), *denom),
-            (MaspAmount::from_pair(old_asset, -(reward.1 as i64)).unwrap()
-                + MaspAmount::from_pair(new_asset, reward.1).unwrap()
-                + MaspAmount::from_pair(reward_asset, reward.0).unwrap())
-            .into(),
-        );
-        // Add a conversion from the previous asset type
-        wl_storage.storage.conversion_state.assets.insert(
-            old_asset,
-            (
-                (addr.clone(), sub_prefix.clone(), *denom),
+        for denom in token::MaspDenom::iter() {
+            // Provide an allowed conversion from previous timestamp. The
+            // negative sign allows each instance of the old asset to be
+            // cancelled out/replaced with the new asset
+            let old_asset = encode_asset_type(
+                addr.clone(),
+                sub_prefix,
+                denom,
                 wl_storage.storage.last_epoch,
-                MaspAmount::zero().into(),
-                0,
-            ),
-        );
+            );
+            let new_asset = encode_asset_type(
+                addr.clone(),
+                sub_prefix,
+                denom,
+                wl_storage.storage.block.epoch,
+            );
+            current_convs.insert(
+                (addr.clone(), sub_prefix.clone(), denom),
+                (MaspAmount::from_pair(old_asset, -(reward.1 as i64)).unwrap()
+                    + MaspAmount::from_pair(new_asset, reward.1).unwrap()
+                    + MaspAmount::from_pair(reward_asset, reward.0).unwrap())
+                .into(),
+            );
+            // Add a conversion from the previous asset type
+            wl_storage.storage.conversion_state.assets.insert(
+                old_asset,
+                (
+                    (addr.clone(), sub_prefix.clone(), denom),
+                    wl_storage.storage.last_epoch,
+                    MaspAmount::zero().into(),
+                    0,
+                ),
+            );
+        }
     }
 
     // Try to distribute Merkle leaf updating as evenly as possible across
@@ -190,24 +192,26 @@ where
 
     // Add purely decoding entries to the assets map. These will be
     // overwritten before the creation of the next commitment tree
-    for (addr, sub_prefix, denom) in masp_rewards.keys() {
-        // Add the decoding entry for the new asset type. An uncommited
-        // node position is used since this is not a conversion.
-        let new_asset = encode_asset_type(
-            addr.clone(),
-            sub_prefix,
-            *denom,
-            wl_storage.storage.block.epoch,
-        );
-        wl_storage.storage.conversion_state.assets.insert(
-            new_asset,
-            (
-                (addr.clone(), sub_prefix.clone(), *denom),
+    for (addr, sub_prefix) in masp_rewards.keys() {
+        for denom in token::MaspDenom::iter() {
+            // Add the decoding entry for the new asset type. An uncommited
+            // node position is used since this is not a conversion.
+            let new_asset = encode_asset_type(
+                addr.clone(),
+                sub_prefix,
+                denom,
                 wl_storage.storage.block.epoch,
-                MaspAmount::zero().into(),
-                wl_storage.storage.conversion_state.tree.size(),
-            ),
-        );
+            );
+            wl_storage.storage.conversion_state.assets.insert(
+                new_asset,
+                (
+                    (addr.clone(), sub_prefix.clone(), denom),
+                    wl_storage.storage.block.epoch,
+                    MaspAmount::zero().into(),
+                    wl_storage.storage.conversion_state.tree.size(),
+                ),
+            );
+        }
     }
 
     // Save the current conversion state in order to avoid computing

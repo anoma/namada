@@ -32,6 +32,19 @@ impl_uint_num_traits!(Uint, 4);
 pub const MAX_VALUE: Uint = Uint([u64::MAX; 4]);
 
 impl Uint {
+    /// Divide two [`Uint`]s with scaled to allow the `denom` number
+    /// of decimal places.
+    ///
+    /// This method is checked and will return `None` if
+    ///  * `self` * 10^(`denom`) overflows 256 bits
+    ///  * `other` is  zero (`checked_div` will return `None`).
+    pub fn fixed_precision_div(&self, rhs: &Self, denom: u8) -> Option<Self> {
+        let lhs = Uint::from(10)
+            .checked_pow(Uint::from(denom))
+            .and_then(|res| res.checked_mul(*self))?;
+        lhs.checked_div(*rhs)
+    }
+
     /// Compute the two's complement of a number.
     fn negate(&self) -> Self {
         Self(
@@ -263,6 +276,35 @@ impl TryFrom<SignedUint> for i128 {
 #[cfg(test)]
 mod test_uint {
     use super::*;
+
+    /// Test that dividing two [`Uint`]s with the specified precision
+    /// works correctly and performs correct checks.
+    #[test]
+    fn test_fixed_precision_div() {
+        let zero = Uint::zero();
+        let two = Uint::from(2);
+        let three = Uint::from(3);
+
+        assert_eq!(
+            zero.fixed_precision_div(&two, 10).expect("Test failed"),
+            zero
+        );
+        assert!(two.fixed_precision_div(&zero, 3).is_none());
+        assert_eq!(
+            three.fixed_precision_div(&two, 1).expect("Test failed"),
+            Uint::from(15)
+        );
+        assert_eq!(
+            two.fixed_precision_div(&three, 2).expect("Test failed"),
+            Uint::from(66)
+        );
+        assert_eq!(
+            two.fixed_precision_div(&three, 3).expect("Satan lives"),
+            Uint::from(666)
+        );
+        assert!(two.fixed_precision_div(&three, 77).is_none());
+        assert!(Uint::from(20).fixed_precision_div(&three, 76).is_none());
+    }
 
     /// Test that adding one to the max signed
     /// value gives zero.
