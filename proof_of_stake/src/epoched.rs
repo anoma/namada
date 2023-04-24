@@ -21,6 +21,8 @@ use crate::parameters::PosParams;
 pub const LAZY_MAP_SUB_KEY: &str = "lazy_map";
 /// Sub-key for an epoched data structure's last (most recent) epoch of update
 pub const LAST_UPDATE_SUB_KEY: &str = "last_update";
+/// Sub-key for an epoched data structure's oldest epoch with some data
+pub const OLDEST_EPOCH_SUB_KEY: &str = "oldest_epoch";
 
 /// Discrete epoched data handle
 pub struct Epoched<
@@ -86,7 +88,7 @@ where
     {
         let key = self.get_last_update_storage_key();
         storage.write(&key, current_epoch)?;
-
+        self.set_oldest_epoch(storage, current_epoch)?;
         self.set_at_epoch(storage, value, current_epoch, 0)
     }
 
@@ -175,19 +177,22 @@ where
         S: StorageWrite + StorageRead,
     {
         let last_update = self.get_last_update(storage)?;
-        if let Some(last_update) = last_update {
-            if last_update < current_epoch {
+        let oldest_epoch = self.get_oldest_epoch(storage)?;
+        if let (Some(last_update), Some(oldest_epoch)) =
+            (last_update, oldest_epoch)
+        {
+            let oldest_to_keep = current_epoch
+                .0
+                .checked_sub(NUM_PAST_EPOCHS)
+                .unwrap_or_default();
+            if oldest_epoch.0 < oldest_to_keep {
+                let diff = oldest_to_keep - oldest_epoch.0;
                 // Go through the epochs before the expected oldest epoch and
                 // keep the latest one
                 tracing::debug!(
                     "Trimming data for epoched data in epoch {current_epoch}, \
                      last updated at {last_update}."
                 );
-                let diff = current_epoch
-                    .checked_sub(last_update)
-                    .unwrap_or_default()
-                    .0;
-                let oldest_epoch = Self::sub_past_epochs(last_update);
                 let data_handler = self.get_data_handler();
                 let mut latest_value: Option<Data> = None;
                 // Remove data before the new oldest epoch, keep the latest
@@ -213,15 +218,22 @@ where
                             latest_value,
                         )?;
                     }
+                    self.set_oldest_epoch(storage, new_oldest_epoch)?;
                 }
                 // Update the epoch of the last update to the current epoch
                 let key = self.get_last_update_storage_key();
                 storage.write(&key, current_epoch)?;
+                return Ok(());
             }
-        } else {
-            // Set the epoch of the last update to the current epoch
-            let key = self.get_last_update_storage_key();
-            storage.write(&key, current_epoch)?;
+        }
+
+        // Set the epoch of the last update to the current epoch
+        let key = self.get_last_update_storage_key();
+        storage.write(&key, current_epoch)?;
+
+        // If there's no oldest epoch written yet, set it to the current one
+        if oldest_epoch.is_none() {
+            self.set_oldest_epoch(storage, current_epoch)?;
         }
         Ok(())
     }
@@ -253,6 +265,35 @@ where
 
     fn sub_past_epochs(epoch: Epoch) -> Epoch {
         Epoch(epoch.0.checked_sub(NUM_PAST_EPOCHS).unwrap_or_default())
+    }
+
+    fn get_oldest_epoch_storage_key(&self) -> storage::Key {
+        self.storage_prefix
+            .push(&OLDEST_EPOCH_SUB_KEY.to_owned())
+            .unwrap()
+    }
+
+    fn get_oldest_epoch<S>(
+        &self,
+        storage: &S,
+    ) -> storage_api::Result<Option<Epoch>>
+    where
+        S: StorageRead,
+    {
+        let key = self.get_oldest_epoch_storage_key();
+        storage.read(&key)
+    }
+
+    fn set_oldest_epoch<S>(
+        &self,
+        storage: &mut S,
+        new_oldest_epoch: Epoch,
+    ) -> storage_api::Result<()>
+    where
+        S: StorageRead + StorageWrite,
+    {
+        let key = self.get_oldest_epoch_storage_key();
+        storage.write(&key, new_oldest_epoch)
     }
 }
 
@@ -378,6 +419,7 @@ where
     {
         let key = self.get_last_update_storage_key();
         storage.write(&key, current_epoch)?;
+        self.set_oldest_epoch(storage, current_epoch)?;
         self.set_at_epoch(storage, value, current_epoch, 0)
     }
 
@@ -477,19 +519,22 @@ where
         S: StorageWrite + StorageRead,
     {
         let last_update = self.get_last_update(storage)?;
-        if let Some(last_update) = last_update {
-            if last_update < current_epoch {
+        let oldest_epoch = self.get_oldest_epoch(storage)?;
+        if let (Some(last_update), Some(oldest_epoch)) =
+            (last_update, oldest_epoch)
+        {
+            let oldest_to_keep = current_epoch
+                .0
+                .checked_sub(NUM_PAST_EPOCHS)
+                .unwrap_or_default();
+            if oldest_epoch.0 < oldest_to_keep {
+                let diff = oldest_to_keep - oldest_epoch.0;
                 // Go through the epochs before the expected oldest epoch and
                 // sum them into it
                 tracing::debug!(
                     "Trimming data for epoched delta data in epoch \
                      {current_epoch}, last updated at {last_update}."
                 );
-                let diff = current_epoch
-                    .checked_sub(last_update)
-                    .unwrap_or_default()
-                    .0;
-                let oldest_epoch = Self::sub_past_epochs(last_update);
                 let data_handler = self.get_data_handler();
                 // Find the sum of values before the new oldest epoch to be kept
                 let mut sum: Option<Data> = None;
@@ -521,15 +566,22 @@ where
                         new_oldest_epoch,
                         new_oldest_epoch_data,
                     )?;
+                    self.set_oldest_epoch(storage, new_oldest_epoch)?;
                 }
                 // Update the epoch of the last update to the current epoch
                 let key = self.get_last_update_storage_key();
                 storage.write(&key, current_epoch)?;
+                return Ok(());
             }
-        } else {
-            // Set the epoch of the last update to the current epoch
-            let key = self.get_last_update_storage_key();
-            storage.write(&key, current_epoch)?;
+        }
+
+        // Set the epoch of the last update to the current epoch
+        let key = self.get_last_update_storage_key();
+        storage.write(&key, current_epoch)?;
+
+        // If there's no oldest epoch written yet, set it to the current one
+        if oldest_epoch.is_none() {
+            self.set_oldest_epoch(storage, current_epoch)?;
         }
         Ok(())
     }
@@ -575,6 +627,35 @@ where
 
     fn sub_past_epochs(epoch: Epoch) -> Epoch {
         Epoch(epoch.0.checked_sub(NUM_PAST_EPOCHS).unwrap_or_default())
+    }
+
+    fn get_oldest_epoch_storage_key(&self) -> storage::Key {
+        self.storage_prefix
+            .push(&OLDEST_EPOCH_SUB_KEY.to_owned())
+            .unwrap()
+    }
+
+    fn get_oldest_epoch<S>(
+        &self,
+        storage: &S,
+    ) -> storage_api::Result<Option<Epoch>>
+    where
+        S: StorageRead,
+    {
+        let key = self.get_oldest_epoch_storage_key();
+        storage.read(&key)
+    }
+
+    fn set_oldest_epoch<S>(
+        &self,
+        storage: &mut S,
+        new_oldest_epoch: Epoch,
+    ) -> storage_api::Result<()>
+    where
+        S: StorageRead + StorageWrite,
+    {
+        let key = self.get_oldest_epoch_storage_key();
+        storage.write(&key, new_oldest_epoch)
     }
 }
 
