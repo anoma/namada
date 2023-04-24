@@ -150,12 +150,10 @@ where
     match proposal_code {
         Some(proposal_code) => {
             let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
-                code_hash: Hash::default(),
-                data_hash: Hash::default(),
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: false,
             }));
-            tx.chain_id = shell.chain_id.clone();
+            tx.header.chain_id = shell.chain_id.clone();
             tx.set_data(Data::new(encode(&id)));
             tx.set_code(Code::new(proposal_code));
             let tx_type = tx.header();

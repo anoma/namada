@@ -37,7 +37,7 @@ mod tests {
     use proptest::prelude::*;
     use rust_decimal::prelude::ToPrimitive;
     use rust_decimal::Decimal;
-    use namada::types::transaction::{TxType, RawHeader};
+    use namada::types::transaction::{TxType};
 
     use super::*;
 
@@ -79,8 +79,7 @@ mod tests {
 
         let tx_code = vec![];
         let tx_data = commission_change.try_to_vec().unwrap();
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-        tx.chain_id = ChainId::default();
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_data(Data::new(tx_data));
         tx.set_code(Code::new(tx_code));
         tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &key)));

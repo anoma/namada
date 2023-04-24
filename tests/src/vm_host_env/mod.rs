@@ -42,7 +42,6 @@ mod tests {
         BorshDeserialize, BorshSerialize, StorageRead, StorageWrite,
     };
     use namada::types::transaction::TxType;
-    use namada::types::transaction::RawHeader;
     use namada_vp_prelude::VpEnv;
     use prost::Message;
     use test_log::test;
@@ -461,9 +460,9 @@ mod tests {
             vec![],
         ] {
             let signed_tx_data = vp_host_env::with(|env| {
-                let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-                tx.chain_id = env.wl_storage.storage.chain_id.clone();
-                tx.expiration = expiration;
+                let mut tx = Tx::new(TxType::Raw);
+                tx.header.chain_id = env.wl_storage.storage.chain_id.clone();
+                tx.header.expiration = expiration;
                 tx.set_code(Code::new(code.clone()));
                 tx.set_data(Data::new(data.clone()));
                 tx.add_section(Section::Signature(Signature::new(
@@ -545,7 +544,7 @@ mod tests {
         // evaluating without any code should fail
         let empty_code = Hash::zero();
         let input_data = vec![];
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(input_data));
         tx.add_section(Section::Signature(Signature::new(
@@ -568,7 +567,7 @@ mod tests {
             env.wl_storage.storage.write(&key, code.clone()).unwrap();
         });
         let input_data = vec![];
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(input_data));
         tx.add_section(Section::Signature(Signature::new(
@@ -592,7 +591,7 @@ mod tests {
             env.wl_storage.storage.write(&key, code.clone()).unwrap();
         });
         let input_data = vec![];
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(input_data));
         tx.add_section(Section::Signature(Signature::new(
@@ -621,7 +620,7 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
@@ -663,7 +662,7 @@ mod tests {
         let msg = ibc::msg_create_client();
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -705,7 +704,7 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
@@ -755,7 +754,7 @@ mod tests {
         let msg = ibc::msg_update_client(client_id.clone());
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -793,7 +792,7 @@ mod tests {
         let msg = ibc::msg_upgrade_client(client_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -839,7 +838,7 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
@@ -881,7 +880,7 @@ mod tests {
         let msg = ibc::msg_connection_open_init(client_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -915,7 +914,7 @@ mod tests {
         let msg = ibc::msg_connection_open_ack(conn_id, client_state);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -959,7 +958,7 @@ mod tests {
         let msg = ibc::msg_connection_open_try(client_id, client_state);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -994,7 +993,7 @@ mod tests {
         let msg = ibc::msg_connection_open_confirm(conn_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -1043,7 +1042,7 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
@@ -1089,7 +1088,7 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
@@ -1138,7 +1137,7 @@ mod tests {
         let msg = ibc::msg_channel_open_init(port_id.clone(), conn_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -1167,7 +1166,7 @@ mod tests {
         let msg = ibc::msg_channel_open_ack(port_id, channel_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -1213,7 +1212,7 @@ mod tests {
         let msg = ibc::msg_channel_open_try(port_id.clone(), conn_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -1244,7 +1243,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -1293,7 +1292,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -1342,7 +1341,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -1396,7 +1395,7 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
 
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -1442,7 +1441,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -1500,7 +1499,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -1574,7 +1573,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -1662,7 +1661,7 @@ mod tests {
         let msg = ibc::msg_packet_recv(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -1718,7 +1717,7 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
 
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -1752,7 +1751,7 @@ mod tests {
         let msg = ibc::msg_packet_ack(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -1812,7 +1811,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -1882,7 +1881,7 @@ mod tests {
         let msg = ibc::msg_timeout(packet.clone(), ibc::sequence(1));
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
@@ -1962,7 +1961,7 @@ mod tests {
         let msg = ibc::msg_timeout_on_close(packet.clone(), ibc::sequence(1));
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(

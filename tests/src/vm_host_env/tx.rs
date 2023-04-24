@@ -7,7 +7,7 @@ use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::testing::TestStorage;
 use namada::ledger::storage::write_log::WriteLog;
 use namada::proto::{Tx};
-use namada::types::transaction::{RawHeader, TxType};
+use namada::types::transaction::{TxType};
 use namada::ledger::storage::{Sha256Hasher, WlStorage};
 use namada::types::address::Address;
 use namada::types::storage::{Key, TxIndex};
@@ -67,7 +67,8 @@ impl Default for TestTxEnv {
             storage: TestStorage::default(),
             write_log: WriteLog::default(),
         };
-        let chain_id = wl_storage.storage.chain_id.clone();
+        let mut tx = Tx::new(TxType::Raw);
+        tx.header.chain_id = wl_storage.storage.chain_id.clone();
         Self {
             wl_storage,
             iterators: PrefixIterators::default(),
@@ -79,13 +80,7 @@ impl Default for TestTxEnv {
             vp_cache_dir,
             tx_wasm_cache,
             tx_cache_dir,
-            tx: Tx {
-                chain_id,
-                ..Tx::new(TxType::Raw(RawHeader {
-                    code_hash: Hash::default(),
-                    data_hash: Hash::default(),
-                }))
-            },
+            tx,
         }
     }
 }

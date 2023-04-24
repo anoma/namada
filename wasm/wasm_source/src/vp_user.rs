@@ -198,7 +198,7 @@ mod tests {
     use namada_vp_prelude::key::RefTo;
     use proptest::prelude::*;
     use storage::testing::arb_account_storage_key_no_vp;
-    use namada::types::transaction::{TxType, RawHeader};
+    use namada::types::transaction::{TxType};
     use namada::proto::{Signature, Code, Data};
 
     use super::*;
@@ -206,7 +206,7 @@ mod tests {
     /// Test that no-op transaction (i.e. no storage modifications) accepted.
     #[test]
     fn test_no_op_transaction() {
-        let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx_data = Tx::new(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         let addr: Address = address::testing::established_address_1();
         let keys_changed: BTreeSet<storage::Key> = BTreeSet::default();
@@ -256,7 +256,7 @@ mod tests {
         });
 
         let vp_env = vp_host_env::take();
-        let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx_data = Tx::new(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
@@ -304,7 +304,7 @@ mod tests {
         });
 
         let vp_env = vp_host_env::take();
-        let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx_data = Tx::new(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
@@ -424,7 +424,7 @@ mod tests {
         });
 
         let vp_env = vp_host_env::take();
-        let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx_data = Tx::new(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
@@ -544,7 +544,7 @@ mod tests {
         });
 
         let vp_env = vp_host_env::take();
-        let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx_data = Tx::new(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
@@ -600,7 +600,7 @@ mod tests {
             });
 
             let vp_env = vp_host_env::take();
-            let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+            let mut tx_data = Tx::new(TxType::Raw);
             tx_data.set_data(Data::new(vec![]));
             let keys_changed: BTreeSet<storage::Key> =
                 vp_env.all_touched_storage_keys();
@@ -681,7 +681,7 @@ mod tests {
         });
 
         let vp_env = vp_host_env::take();
-        let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx_data = Tx::new(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
@@ -890,7 +890,7 @@ mod tests {
         tx_env.store_wasm_code(vp_code);
 
         // hardcoded hash of VP_ALWAYS_TRUE_WASM
-        tx_env.init_parameters(None, None, Some(vec!["390DB589C5C2E246D513B1D5F2729FFE3C644647A9AAB56FF8C4EC3EB689EE1C".to_string()]));
+        tx_env.init_parameters(None, None, Some(vec!["4C421F984EBF8A746A85882608B4375DBA4EC9FAD06DD9D1175D260F5294134D".to_string()]));
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);

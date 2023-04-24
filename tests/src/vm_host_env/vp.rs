@@ -5,7 +5,7 @@ use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::testing::TestStorage;
 use namada::ledger::storage::write_log::WriteLog;
 use namada::proto::{Tx};
-use namada::types::transaction::{RawHeader, TxType};
+use namada::types::transaction::{TxType};
 use namada::ledger::storage::{Sha256Hasher, WlStorage};
 use namada::types::address::{self, Address};
 use namada::types::storage::{self, Key, TxIndex};
@@ -70,16 +70,14 @@ impl Default for TestVpEnv {
             storage: TestStorage::default(),
             write_log: WriteLog::default(),
         };
-        let chain_id = wl_storage.storage.chain_id.clone();
+        let mut tx = Tx::new(TxType::Raw);
+        tx.header.chain_id = wl_storage.storage.chain_id.clone();
         Self {
             addr: address::testing::established_address_1(),
             wl_storage,
             iterators: PrefixIterators::default(),
             gas_meter: VpGasMeter::default(),
-            tx: Tx { chain_id, ..Tx::new(TxType::Raw(RawHeader {
-                code_hash: Hash::default(),
-                data_hash: Hash::default(),
-            }))},
+            tx,
             tx_index: TxIndex::default(),
             keys_changed: BTreeSet::default(),
             verifiers: BTreeSet::default(),

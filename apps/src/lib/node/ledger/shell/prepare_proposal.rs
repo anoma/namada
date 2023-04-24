@@ -147,7 +147,7 @@ where
                     // If tx doesn't have an expiration it is valid. If time cannot be
                     // retrieved from block default to last block datetime which has
                     // already been checked by mempool_validate, so it's valid
-                    if let (Some(block_time), Some(exp)) = (block_time.as_ref(), &tx.expiration) {
+                    if let (Some(block_time), Some(exp)) = (block_time.as_ref(), &tx.header.expiration) {
                         if block_time > exp { return None }
                     }
                     if tx.validate_header().is_ok() && tx.header().wrapper().is_some() {
@@ -226,8 +226,6 @@ where
                         Some(()) => {
                             let mut inner_tx = inner_tx.clone();
                             inner_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
-                                code_hash: Hash::default(),
-                                data_hash: Hash::default(),
                                 #[cfg(not(feature = "mainnet"))]
                                 has_valid_pow: *has_valid_pow,
                             }));
@@ -237,9 +235,9 @@ where
                         // treated as undecryptable
                         None => {
                             let mut inner_tx = inner_tx.clone();
-                            inner_tx.header = TxType::Decrypted(
-                                DecryptedTx::Undecryptable(tx.clone())
-                            );
+                            inner_tx.update_header(TxType::Decrypted(
+                                DecryptedTx::Undecryptable
+                            ));
                             inner_tx
                         },
                     }.to_bytes()
@@ -299,7 +297,7 @@ mod test_prepare_proposal {
     use borsh::BorshSerialize;
     use namada::proof_of_stake::Epoch;
     use namada::types::transaction::{Fee, WrapperTx};
-    use namada::proto::{Code, Data, Section, Signature};
+    use namada::proto::{Header, Code, Data, Section, Signature};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{self, gen_keypair};
@@ -314,7 +312,7 @@ mod test_prepare_proposal {
             "wasm_code".as_bytes().to_owned(),
             Some(SignedOuterTxData {data: Some("transaction_data".as_bytes().to_owned()), sig: None}),
 );
-    tx.chain_id = shell.chain_id.clone();
+    tx.header.chain_id = shell.chain_id.clone();
         let req = RequestPrepareProposal {
             txs: vec![tx.to_bytes()],
             ..Default::default()
@@ -343,7 +341,7 @@ mod test_prepare_proposal {
                 None,
             ))
         );
-        wrapper.chain_id = shell.chain_id.clone();
+        wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction_data".as_bytes().to_owned()));
         wrapper.encrypt(&Default::default());
@@ -384,7 +382,7 @@ mod test_prepare_proposal {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             )));
-            tx.chain_id = shell.chain_id.clone();
+            tx.header.chain_id = shell.chain_id.clone();
             tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
             tx.set_data(Data::new(format!("transaction data: {}", i).as_bytes().to_owned()));
             tx.add_section(Section::Signature(Signature::new(&tx.header_hash(), &keypair)));
@@ -394,8 +392,6 @@ mod test_prepare_proposal {
             expected_wrapper.push(tx.clone());
             req.txs.push(tx.to_bytes());
             tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
-                code_hash: Hash::default(),
-                data_hash: Hash::default(),
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: false,
             }));
@@ -404,12 +400,12 @@ mod test_prepare_proposal {
         // we extract the inner data from the txs for testing
         // equality since otherwise changes in timestamps would
         // fail the test
-        let expected_txs: Vec<TxType> = expected_wrapper
+        let expected_txs: Vec<Header> = expected_wrapper
             .into_iter()
             .chain(expected_decrypted.into_iter())
             .map(|tx| tx.header.clone())
             .collect();
-        let received: Vec<TxType> = shell
+        let received: Vec<Header> = shell
             .prepare_proposal(req)
             .txs
             .into_iter()
@@ -443,8 +439,8 @@ mod test_prepare_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         )));
-        wrapper_tx.chain_id = shell.chain_id.clone();
-        wrapper_tx.expiration = Some(tx_time);
+        wrapper_tx.header.chain_id = shell.chain_id.clone();
+        wrapper_tx.header.expiration = Some(tx_time);
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper_tx.add_section(Section::Signature(Signature::new(

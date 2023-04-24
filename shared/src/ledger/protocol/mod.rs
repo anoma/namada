@@ -98,11 +98,9 @@ where
     block_gas_meter
         .add_base_transaction_fee(tx_length)
         .map_err(Error::GasError)?;
-    match tx.header() {
-        TxType::Raw(_) => Err(Error::TxTypeError),
+    match tx.header().tx_type {
+        TxType::Raw => Err(Error::TxTypeError),
         TxType::Decrypted(DecryptedTx::Decrypted {
-            code_hash: _,
-            data_hash: _,
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow,
         }) => {

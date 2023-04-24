@@ -315,7 +315,7 @@ mod tests {
     use core::time::Duration;
     use std::convert::TryFrom;
     use std::str::FromStr;
-    use crate::types::transaction::{TxType, RawHeader};
+    use crate::types::transaction::{TxType};
     use crate::proto::{Code, Data, Signature, Section};
 
     use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
@@ -618,8 +618,8 @@ mod tests {
         keys_changed.insert(client_state_key);
 
         let verifiers = BTreeSet::new();
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
@@ -661,8 +661,8 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
@@ -759,8 +759,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = wl_storage.storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
@@ -834,8 +834,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = wl_storage.storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
@@ -901,8 +901,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
@@ -1002,8 +1002,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = wl_storage.storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
@@ -1112,8 +1112,8 @@ mod tests {
         let tx_index = TxIndex::default();
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = wl_storage.storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
@@ -1206,8 +1206,8 @@ mod tests {
         let tx_index = TxIndex::default();
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = wl_storage.storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
@@ -1286,8 +1286,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = wl_storage.storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
@@ -1385,8 +1385,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = wl_storage.storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
@@ -1495,8 +1495,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = wl_storage.storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
@@ -1602,8 +1602,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = wl_storage.storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
@@ -1653,8 +1653,8 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = wl_storage.storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
@@ -1705,8 +1705,8 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = wl_storage.storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
@@ -1807,8 +1807,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = wl_storage.storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
@@ -1914,8 +1914,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = wl_storage.storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
@@ -2029,8 +2029,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = wl_storage.storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
@@ -2135,8 +2135,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = wl_storage.storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
@@ -2252,8 +2252,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = wl_storage.storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
@@ -2316,8 +2316,8 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = wl_storage.storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(

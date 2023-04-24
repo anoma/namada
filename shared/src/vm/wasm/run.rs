@@ -14,7 +14,6 @@ use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::proto::{Tx, Code, Data, Section, CodeHash};
-use crate::types::transaction::RawHeader;
 use crate::types::address::Address;
 use crate::types::hash::{Error as TxHashError, Hash, HASH_LENGTH};
 use crate::types::internal::HostEnvResult;
@@ -553,7 +552,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
         let (mut tx_cache, _) =
             wasm::compilation_cache::common::testing::cache();
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut outer_tx = Tx::new(TxType::Raw);
         outer_tx.set_code(Code::new(tx_code.clone()));
         outer_tx.set_data(Data::new(tx_data.clone()));
         let result = tx(
@@ -570,7 +569,7 @@ mod tests {
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
         let tx_data = 2_usize.pow(24).try_to_vec().unwrap();
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut outer_tx = Tx::new(TxType::Raw);
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         let error = tx(
@@ -619,7 +618,7 @@ mod tests {
         // Allocating `2^23` (8 MiB) should be below the memory limit and
         // shouldn't fail
         let input = 2_usize.pow(23).try_to_vec().unwrap();
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(input));
         let eval_vp = EvalVp {
@@ -627,8 +626,8 @@ mod tests {
             input: tx,
         };
         let tx_data = eval_vp.try_to_vec().unwrap();
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = storage.chain_id.clone();
         outer_tx.set_code(Code::new(vec![]));
         outer_tx.set_data(Data::new(tx_data));
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
@@ -654,7 +653,7 @@ mod tests {
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
         let input = 2_usize.pow(24).try_to_vec().unwrap();
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(input));
         let eval_vp = EvalVp {
@@ -662,8 +661,8 @@ mod tests {
             input: tx,
         };
         let tx_data = eval_vp.try_to_vec().unwrap();
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = storage.chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.set_code(Code::new(vec![]));
         // When the `eval`ed VP runs out of memory, its result should be
@@ -713,8 +712,8 @@ mod tests {
         // Allocating `2^23` (8 MiB) should be below the memory limit and
         // shouldn't fail
         let tx_data = 2_usize.pow(23).try_to_vec().unwrap();
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = storage.chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.set_code(Code::new(vec![]));
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
@@ -737,8 +736,8 @@ mod tests {
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
         let tx_data = 2_usize.pow(24).try_to_vec().unwrap();
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = storage.chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         let error = vp(
             &code_hash,
@@ -785,7 +784,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
         let (mut tx_cache, _) =
             wasm::compilation_cache::common::testing::cache();
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut outer_tx = Tx::new(TxType::Raw);
         outer_tx.set_code(Code::new(tx_no_op));
         outer_tx.set_data(Data::new(tx_data));
         let result = tx(
@@ -841,8 +840,8 @@ mod tests {
         // limit and should fail
         let len = 2_usize.pow(24);
         let tx_data: Vec<u8> = vec![6_u8; len];
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = storage.chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.set_code(Code::new(vec![]));
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
@@ -913,7 +912,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
         let (mut tx_cache, _) =
             wasm::compilation_cache::common::testing::cache();
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut outer_tx = Tx::new(TxType::Raw);
         outer_tx.set_code(Code::new(tx_read_key));
         outer_tx.set_data(Data::new(tx_data));
         let error = tx(
@@ -961,8 +960,8 @@ mod tests {
         // Borsh.
         storage.write(&key, value.try_to_vec().unwrap()).unwrap();
         let tx_data = key.try_to_vec().unwrap();
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = storage.chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.set_code(Code::new(vec![]));
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
@@ -1024,7 +1023,7 @@ mod tests {
         // Borsh.
         storage.write(&key, value.try_to_vec().unwrap()).unwrap();
         let input = 2_usize.pow(23).try_to_vec().unwrap();
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_data(Data::new(input));
         tx.set_code(Code::new(vec![]));
         let eval_vp = EvalVp {
@@ -1032,8 +1031,8 @@ mod tests {
             input: tx,
         };
         let tx_data = eval_vp.try_to_vec().unwrap();
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
-        outer_tx.chain_id = storage.chain_id.clone();
+        let mut outer_tx = Tx::new(TxType::Raw);
+        outer_tx.header.chain_id = storage.chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.set_code(Code::new(vec![]));
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
@@ -1105,7 +1104,7 @@ mod tests {
         let key = Key::wasm_code(&code_hash);
         write_log.write(&key, tx_code).unwrap();
 
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut outer_tx = Tx::new(TxType::Raw);
         outer_tx.set_code(Code::from_hash(code_hash));
         outer_tx.set_data(Data::new(tx_data));
         
@@ -1149,7 +1148,7 @@ mod tests {
         )
             .expect("unexpected error converting wat2wasm").into_owned();
 
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut outer_tx = Tx::new(TxType::Raw);
         let tx_index = TxIndex::default();
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");

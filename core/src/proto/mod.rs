@@ -3,7 +3,7 @@
 pub mod generated;
 mod types;
 
-pub use types::{Dkg, Error, Tx, Data, Code, Signature, Section, TxError, MaspBuilder, CodeHash};
+pub use types::{Dkg, Error, Tx, Data, Code, Signature, Section, TxError, MaspBuilder, CodeHash, Header};
 
 #[cfg(test)]
 mod tests {

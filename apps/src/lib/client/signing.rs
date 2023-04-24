@@ -14,7 +14,6 @@ use namada::types::transaction::{hash_tx, pos, Fee, WrapperTx, MIN_FEE, InitAcco
 use namada::types::address::{kartoffel, btc, nam, eth, dot, schnitzel, apfel};
 use namada::types::transaction::TxType;
 use namada::types::transaction::decrypted::DecryptedTx;
-use namada::types::transaction::RawHeader;
 use sha2::{Digest, Sha256};
 use data_encoding::HEXLOWER;
 use serde::{Deserialize, Serialize};
@@ -208,8 +207,6 @@ pub async fn sign_tx(
     };
     let broadcast_data = if args.dry_run {
         tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
-            code_hash: Hash::default(),
-            data_hash: Hash::default(),
             #[cfg(not(feature = "mainnet"))]
             // To be able to dry-run testnet faucet withdrawal, pretend 
             // that we got a valid PoW
@@ -345,8 +342,8 @@ pub async fn sign_wrapper(
         #[cfg(not(feature = "mainnet"))]
         pow_solution.clone(),
     )));
-    tx.chain_id = ctx.config.ledger.chain_id.clone();
-    tx.expiration = args.expiration;
+    tx.header.chain_id = ctx.config.ledger.chain_id.clone();
+    tx.header.expiration = args.expiration;
     // Then sign over the bound wrapper
     tx.add_section(Section::Signature(Signature::new(&tx.header_hash(), keypair)));
 
@@ -394,7 +391,7 @@ pub async fn sign_wrapper(
     // on-chain
     let decrypted_hash = tx
         .clone()
-        .update_header(TxType::Raw(RawHeader::default()))
+        .update_header(TxType::Raw)
         .header_hash()
         .to_string();
     TxBroadcastData::Wrapper {
@@ -1008,7 +1005,7 @@ fn to_ledger_vector(
 
     if let Some(wrapper) = tx.header.wrapper() {
         tv.output_expert.extend(vec![
-            format!("Timestamp : {}", tx.timestamp.0),
+            format!("Timestamp : {}", tx.header.timestamp.0),
             format!("PK : {}", wrapper.pk),
             format!("Epoch : {}", wrapper.epoch),
             format!("Gas limit : {}", Amount::from(wrapper.gas_limit)),

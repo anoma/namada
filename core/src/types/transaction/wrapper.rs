@@ -177,12 +177,6 @@ pub mod wrapper_tx {
         pub epoch: Epoch,
         /// Max amount of gas that can be used when executing the inner tx
         pub gas_limit: GasLimit,
-        /// sha-2 hash of the data section acting as a commitment
-        /// the contents of the encrypted payload
-        pub data_hash: Hash,
-        /// sha-2 hash of the code section acting as a commitment
-        /// the contents of the encrypted payload
-        pub code_hash: Hash,
         #[cfg(not(feature = "mainnet"))]
         /// A PoW solution can be used to allow zero-fee testnet transactions
         pub pow_solution: Option<crate::ledger::testnet_pow::Solution>,
@@ -207,8 +201,6 @@ pub mod wrapper_tx {
                 pk: keypair.ref_to(),
                 epoch,
                 gas_limit,
-                data_hash: Hash::default(),
-                code_hash: Hash::default(),
                 #[cfg(not(feature = "mainnet"))]
                 pow_solution,
             }

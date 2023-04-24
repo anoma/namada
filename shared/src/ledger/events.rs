@@ -13,7 +13,7 @@ use crate::ledger::native_vp::governance::utils::ProposalEvent;
 use crate::tendermint_proto::abci::EventAttribute;
 use crate::types::ibc::IbcEvent;
 #[cfg(feature = "ferveo-tpke")]
-use crate::types::transaction::{hash_tx, TxType, RawHeader};
+use crate::types::transaction::{hash_tx, TxType};
 use crate::types::hash::Hash;
 use crate::proto::Tx;
 use sha2::{Digest, Sha256};
@@ -71,7 +71,7 @@ impl Event {
     /// already filled in
     #[cfg(feature = "ferveo-tpke")]
     pub fn new_tx_event(tx: &Tx, height: u64) -> Self {
-        let mut event = match tx.header() {
+        let mut event = match tx.header().tx_type {
             TxType::Wrapper(wrapper) => {
                 let mut event = Event {
                     event_type: EventType::Accepted,
@@ -90,7 +90,7 @@ impl Event {
                 };
                 event["hash"] = tx
                     .clone()
-                    .update_header(TxType::Raw(RawHeader::default()))
+                    .update_header(TxType::Raw)
                     .header_hash()
                     .to_string();
                 event

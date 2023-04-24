@@ -37,7 +37,7 @@ mod tests {
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use proptest::prelude::*;
-    use namada::types::transaction::{TxType, RawHeader};
+    use namada::types::transaction::{TxType};
 
     use super::*;
 
@@ -155,8 +155,7 @@ mod tests {
 
         let tx_code = vec![];
         let tx_data = withdraw.try_to_vec().unwrap();
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-        tx.chain_id = ChainId::default();
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(tx_code));
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &key)));

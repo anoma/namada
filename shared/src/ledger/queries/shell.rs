@@ -390,14 +390,12 @@ mod test {
 
         // Request dry run tx
         let mut outer_tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
-            code_hash: Hash::default(),
-            data_hash: Hash::default(),
             #[cfg(not(feature = "mainnet"))]
             // To be able to dry-run testnet faucet withdrawal, pretend 
             // that we got a valid PoW
             has_valid_pow: true,
         }));
-        outer_tx.chain_id = client.wl_storage.storage.chain_id.clone();
+        outer_tx.header.chain_id = client.wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::from_hash(tx_hash));
         outer_tx.set_data(Data::new(vec![]));
         let tx_bytes = outer_tx.to_bytes();

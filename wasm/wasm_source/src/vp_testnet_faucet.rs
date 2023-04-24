@@ -112,7 +112,7 @@ mod tests {
     use namada_vp_prelude::key::{RefTo, SigScheme};
     use proptest::prelude::*;
     use storage::testing::arb_account_storage_key_no_vp;
-    use namada::types::transaction::{TxType, RawHeader};
+    use namada::types::transaction::{TxType};
     use namada::proto::{Code, Signature, Data};
 
     use super::*;
@@ -123,7 +123,7 @@ mod tests {
     /// Test that no-op transaction (i.e. no storage modifications) accepted.
     #[test]
     fn test_no_op_transaction() {
-        let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx_data = Tx::new(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         let addr: Address = address::testing::established_address_1();
         let keys_changed: BTreeSet<storage::Key> = BTreeSet::default();
@@ -173,7 +173,7 @@ mod tests {
         });
 
         let vp_env = vp_host_env::take();
-        let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx_data = Tx::new(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
@@ -210,7 +210,7 @@ mod tests {
         });
 
         let vp_env = vp_host_env::take();
-        let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx_data = Tx::new(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
@@ -314,7 +314,7 @@ mod tests {
         });
 
         let vp_env = vp_host_env::take();
-        let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx_data = Tx::new(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
         vp_env.all_touched_storage_keys();
@@ -370,7 +370,7 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         // This is set by the protocol when the wrapper tx has a valid PoW
         vp_env.has_valid_pow = true;
-        let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx_data = Tx::new(TxType::Raw);
         tx_data.set_data(Data::new(solution_bytes));
         tx_data.add_section(Section::Signature(Signature::new(&tx_data.data_sechash(), &target_key)));
         let keys_changed: BTreeSet<storage::Key> =

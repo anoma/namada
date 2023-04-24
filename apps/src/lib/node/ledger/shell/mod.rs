@@ -47,7 +47,7 @@ use namada::types::token::{self};
 use namada::types::transaction::MIN_FEE;
 use namada::types::transaction::{
     hash_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
-    EllipticCurve, PairingEngine, TxType, RawHeader,
+    EllipticCurve, PairingEngine, TxType,
 };
 use namada::types::{address, hash};
 use namada::vm::wasm::{TxCache, VpCache};
@@ -674,17 +674,17 @@ where
         };
 
         // Tx chain id
-        if tx.chain_id != self.chain_id {
+        if tx.header.chain_id != self.chain_id {
             response.code = ErrorCodes::InvalidChainId.into();
             response.log = format!(
                 "Tx carries a wrong chain id: expected {}, found {}",
-                self.chain_id, tx.chain_id
+                self.chain_id, tx.header.chain_id
             );
             return response;
         }
 
         // Tx expiration
-        if let Some(exp) = tx.expiration {
+        if let Some(exp) = tx.header.expiration {
             let last_block_timestamp = self.get_block_timestamp(None);
 
             if last_block_timestamp > exp {
@@ -708,10 +708,10 @@ where
         };
 
         // Tx type check
-        if let TxType::Wrapper(wrapper) = tx_type {
+        if let TxType::Wrapper(wrapper) = tx_type.tx_type {
             // Replay protection check
             let inner_tx_hash = &tx.clone()
-                    .update_header(TxType::Raw(RawHeader::default()))
+                    .update_header(TxType::Raw)
                     .header_hash();
             let inner_hash_key = replay_protection::get_tx_hash_key(inner_tx_hash);
             if self
@@ -1178,7 +1178,7 @@ mod test_utils {
             #[cfg(not(feature = "mainnet"))]
             None,
         )));
-        wrapper.chain_id = shell.chain_id.clone();
+        wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.encrypt(&Default::default());
@@ -1246,7 +1246,7 @@ mod test_mempool_validate {
             #[cfg(not(feature = "mainnet"))]
             None,
         )));
-        unsigned_wrapper.chain_id = shell.chain_id.clone();
+        unsigned_wrapper.header.chain_id = shell.chain_id.clone();
         unsigned_wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         unsigned_wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         unsigned_wrapper.encrypt(&Default::default());
@@ -1281,7 +1281,7 @@ mod test_mempool_validate {
             #[cfg(not(feature = "mainnet"))]
             None,
         )));
-        invalid_wrapper.chain_id = shell.chain_id.clone();
+        invalid_wrapper.header.chain_id = shell.chain_id.clone();
         invalid_wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         invalid_wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         invalid_wrapper.add_section(Section::Signature(Signature::new(&invalid_wrapper.header_hash(), &keypair)));
@@ -1290,7 +1290,7 @@ mod test_mempool_validate {
         // we mount a malleability attack to try and remove the fee
         let mut new_wrapper = invalid_wrapper.header().wrapper().expect("Test failed");
         new_wrapper.fee.amount = 0.into();
-        invalid_wrapper.header = TxType::Wrapper(new_wrapper);
+        invalid_wrapper.update_header(TxType::Wrapper(new_wrapper));
 
         let mut result = shell.mempool_validate(
             invalid_wrapper.to_bytes().as_ref(),
@@ -1310,8 +1310,8 @@ mod test_mempool_validate {
         let (shell, _) = TestShell::new();
 
         // Test Raw TxType
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-        tx.chain_id = shell.chain_id.clone();
+        let mut tx = Tx::new(TxType::Raw);
+        tx.header.chain_id = shell.chain_id.clone();
         tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
 
         let result = shell.mempool_validate(
@@ -1341,7 +1341,7 @@ mod test_mempool_validate {
             #[cfg(not(feature = "mainnet"))]
             None,
         )));
-        wrapper.chain_id = shell.chain_id.clone();
+        wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(&wrapper.header_hash(), &keypair)));
@@ -1388,7 +1388,7 @@ mod test_mempool_validate {
         );
 
         let inner_tx_hash = wrapper.clone()
-            .update_header(TxType::Raw(RawHeader::default()))
+            .update_header(TxType::Raw)
             .header_hash();
         // Write inner hash in storage
         let inner_hash_key = replay_protection::get_tx_hash_key(&inner_tx_hash);
@@ -1434,8 +1434,8 @@ mod test_mempool_validate {
         let keypair = super::test_utils::gen_keypair();
 
         let wrong_chain_id = ChainId("Wrong chain id".to_string());
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-        tx.chain_id = wrong_chain_id.clone();
+        let mut tx = Tx::new(TxType::Raw);
+        tx.header.chain_id = wrong_chain_id.clone();
         tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         tx.add_section(Section::Signature(Signature::new(&tx.header_hash(), &keypair)));
@@ -1461,9 +1461,9 @@ mod test_mempool_validate {
 
         let keypair = super::test_utils::gen_keypair();
 
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-        tx.expiration = Some(DateTimeUtc::now());
-        tx.chain_id = shell.chain_id.clone();
+        let mut tx = Tx::new(TxType::Raw);
+        tx.header.expiration = Some(DateTimeUtc::now());
+        tx.header.chain_id = shell.chain_id.clone();
         tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         tx.add_section(Section::Signature(Signature::new(&tx.header_hash(), &keypair)));

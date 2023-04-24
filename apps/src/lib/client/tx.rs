@@ -52,7 +52,7 @@ use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::masp;
 use namada::ledger::pos::{BondId, Bonds, CommissionRates, Unbonds};
 use namada::proto::{Data, Code, Signature, Tx, Section, MaspBuilder};
-use namada::types::transaction::{RawHeader, TxType};
+use namada::types::transaction::{TxType};
 use namada::ledger::pos::{CommissionPair, PosParams};
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::governance::{
@@ -132,9 +132,9 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let data = args.data_path.map(|data_path| {
         std::fs::read(data_path).expect("Expected a file at given data path")
     });
-    let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-    tx.chain_id = ctx.config.ledger.chain_id.clone();
-    tx.expiration = args.tx.expiration;
+    let mut tx = Tx::new(TxType::Raw);
+    tx.header.chain_id = ctx.config.ledger.chain_id.clone();
+    tx.header.expiration = args.tx.expiration;
     data.map(|data| tx.set_data(Data::new(data)));
     tx.set_code(Code::from_hash(tx_code_hash));
     
@@ -201,9 +201,9 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
             .await
             .unwrap();
 
-    let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-    tx.chain_id = ctx.config.ledger.chain_id.clone();
-    tx.expiration = args.tx.expiration;
+    let mut tx = Tx::new(TxType::Raw);
+    tx.header.chain_id = ctx.config.ledger.chain_id.clone();
+    tx.header.expiration = args.tx.expiration;
     let extra = tx.add_section(Section::ExtraData(Code::from_hash(vp_code_hash)));
     let extra_hash = Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
     let data = UpdateVp { addr, vp_code_hash: extra_hash };
@@ -239,9 +239,9 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
         .await
         .unwrap();
 
-    let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-    tx.chain_id = ctx.config.ledger.chain_id.clone();
-    tx.expiration = args.tx.expiration;
+    let mut tx = Tx::new(TxType::Raw);
+    tx.header.chain_id = ctx.config.ledger.chain_id.clone();
+    tx.header.expiration = args.tx.expiration;
     let extra = tx.add_section(Section::ExtraData(Code::from_hash(vp_code_hash)));
     let extra_hash = Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
     let data = InitAccount { public_key, vp_code_hash: extra_hash };
@@ -371,7 +371,7 @@ pub async fn submit_init_validator(
     .await
     .unwrap();
 
-    let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+    let mut tx = Tx::new(TxType::Raw);
     let extra = tx.add_section(Section::ExtraData(Code::from_hash(validator_vp_code_hash)));
     let extra_hash = Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
     let data = InitValidator {
@@ -384,8 +384,8 @@ pub async fn submit_init_validator(
         validator_vp_code_hash: extra_hash,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
-    tx.chain_id = ctx.config.ledger.chain_id.clone();
-    tx.expiration = tx_args.expiration;
+    tx.header.chain_id = ctx.config.ledger.chain_id.clone();
+    tx.header.expiration = tx_args.expiration;
     tx.set_data(Data::new(data));
     tx.set_code(Code::from_hash(tx_code_hash));
     
@@ -1768,9 +1768,9 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
             Err(err) => panic!("{}", err),
         };
 
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-        tx.chain_id = ctx.config.ledger.chain_id.clone();
-        tx.expiration = args.tx.expiration;
+        let mut tx = Tx::new(TxType::Raw);
+        tx.header.chain_id = ctx.config.ledger.chain_id.clone();
+        tx.header.expiration = args.tx.expiration;
         // Add the MASP Transaction and its Builder to facilitate validation
         let (masp_hash, shielded_tx_epoch) = if let Some(shielded) = shielded {
             // Add a MASP Transaction section to the Tx
@@ -1971,9 +1971,9 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
     prost::Message::encode(&any_msg, &mut data)
         .expect("Encoding tx data shouldn't fail");
 
-    let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-    tx.chain_id = ctx.config.ledger.chain_id.clone();
-    tx.expiration = args.tx.expiration;
+    let mut tx = Tx::new(TxType::Raw);
+    tx.header.chain_id = ctx.config.ledger.chain_id.clone();
+    tx.header.expiration = args.tx.expiration;
     tx.set_data(Data::new(data));
     tx.set_code(Code::from_hash(tx_code_hash));
     
@@ -2132,7 +2132,7 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         }
 
         let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         let data = init_proposal_data
             .try_to_vec()
             .expect("Encoding proposal data shouldn't fail");
@@ -2142,8 +2142,8 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         )
         .await
         .unwrap();
-        tx.chain_id = ctx.config.ledger.chain_id.clone();
-        tx.expiration = args.tx.expiration;
+        tx.header.chain_id = ctx.config.ledger.chain_id.clone();
+        tx.header.expiration = args.tx.expiration;
         tx.set_data(Data::new(data));
         tx.set_code(Code::from_hash(tx_code_hash));
 
@@ -2408,9 +2408,9 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                 )
                     .await
                     .unwrap();
-                let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-                tx.chain_id = ctx.config.ledger.chain_id.clone();
-                tx.expiration = args.tx.expiration;
+                let mut tx = Tx::new(TxType::Raw);
+                tx.header.chain_id = ctx.config.ledger.chain_id.clone();
+                tx.header.expiration = args.tx.expiration;
                 tx.set_data(Data::new(data));
                 tx.set_code(Code::from_hash(tx_code_hash));
 
@@ -2490,15 +2490,13 @@ pub async fn submit_reveal_pk_aux(
         .await
         .unwrap();
     let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
-        data_hash: Hash::default(),
-        code_hash: Hash::default(),
         #[cfg(not(feature = "mainnet"))]
         // To be able to dry-run testnet faucet withdrawal, pretend 
         // that we got a valid PoW
         has_valid_pow: true,
     }));
-    tx.chain_id = ctx.config.ledger.chain_id.clone();
-    tx.expiration = args.expiration;
+    tx.header.chain_id = ctx.config.ledger.chain_id.clone();
+    tx.header.expiration = args.expiration;
     tx.set_data(Data::new(tx_data));
     tx.set_code(Code::from_hash(tx_code_hash));
 
@@ -2731,9 +2729,9 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     };
     let data = bond.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-        tx.chain_id = ctx.config.ledger.chain_id.clone();
-        tx.expiration = args.tx.expiration;
+        let mut tx = Tx::new(TxType::Raw);
+        tx.header.chain_id = ctx.config.ledger.chain_id.clone();
+        tx.header.expiration = args.tx.expiration;
     tx.set_data(Data::new(data));
     tx.set_code(Code::from_hash(tx_code_hash));
     let default_signer = args.source.unwrap_or(args.validator);
@@ -2808,9 +2806,9 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
                     query_wasm_code_hash(TX_UNBOND_WASM, args.tx.ledger_address.clone())
                     .await
                     .unwrap();
-                let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-                tx.chain_id = ctx.config.ledger.chain_id.clone();
-                tx.expiration = args.tx.expiration;
+                let mut tx = Tx::new(TxType::Raw);
+                tx.header.chain_id = ctx.config.ledger.chain_id.clone();
+                tx.header.expiration = args.tx.expiration;
                 tx.set_data(Data::new(data));
                 tx.set_code(Code::from_hash(tx_code_hash));
                 
@@ -2931,9 +2929,9 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
         query_wasm_code_hash(TX_WITHDRAW_WASM, args.tx.ledger_address.clone())
         .await
         .unwrap();
-    let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-    tx.chain_id = ctx.config.ledger.chain_id.clone();
-    tx.expiration = args.tx.expiration;
+    let mut tx = Tx::new(TxType::Raw);
+    tx.header.chain_id = ctx.config.ledger.chain_id.clone();
+    tx.header.expiration = args.tx.expiration;
     tx.set_data(Data::new(data));
     tx.set_code(Code::from_hash(tx_code_hash));
 
@@ -3034,9 +3032,9 @@ pub async fn submit_validator_commission_change(
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-      let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-      tx.chain_id = ctx.config.ledger.chain_id.clone();
-      tx.expiration = args.tx.expiration;
+      let mut tx = Tx::new(TxType::Raw);
+      tx.header.chain_id = ctx.config.ledger.chain_id.clone();
+      tx.header.expiration = args.tx.expiration;
       tx.set_data(Data::new(data));
       tx.set_code(Code::from_hash(tx_code_hash));
       

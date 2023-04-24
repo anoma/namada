@@ -383,7 +383,7 @@ fn extract_payload(
 ) {
     let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
     tx.decrypt(privkey);
-    if let TxType::Wrapper(w) = tx.header() {
+    if let TxType::Wrapper(w) = tx.header().tx_type {
         *wrapper = Some(w);
     }
     let _ = tx.data().map(|signed| {

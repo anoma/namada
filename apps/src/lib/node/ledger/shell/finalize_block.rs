@@ -128,7 +128,7 @@ where
                 == ErrorCodes::InvalidSig
             {
                 
-                let mut tx_event = match tx.header() {
+                let mut tx_event = match tx.header().tx_type {
                     (TxType::Wrapper(_) | TxType::Protocol(_)) => {
                         Event::new_tx_event(&tx, height.0)
                     }
@@ -174,7 +174,7 @@ where
                 // if the rejected tx was decrypted, remove it
                 // from the queue of txs to be processed and remove the hash
                 // from storage
-                if let TxType::Decrypted(_) = &tx_type {
+                if let TxType::Decrypted(_) = &tx_type.tx_type {
                     let tx_hash = self
                         .wl_storage
                         .storage
@@ -183,7 +183,7 @@ where
                         .expect("Missing wrapper tx in queue")
                         .inner_tx
                         .clone()
-                        .update_header(TxType::Raw(RawHeader::default()))
+                        .update_header(TxType::Raw)
                         .header_hash();
                     let tx_hash_key =
                         replay_protection::get_tx_hash_key(&tx_hash);
@@ -195,7 +195,7 @@ where
                 continue;
             }
 
-            let (mut tx_event, tx_unsigned_hash) = match &tx_type {
+            let (mut tx_event, tx_unsigned_hash) = match &tx_type.tx_type {
                 TxType::Wrapper(wrapper) => {
                     let mut tx_event = Event::new_tx_event(&tx, height.0);
 
@@ -212,7 +212,7 @@ where
 
                     let inner_tx_hash_key = replay_protection::get_tx_hash_key(
                         &tx.clone()
-                            .update_header(TxType::Raw(RawHeader::default()))
+                            .update_header(TxType::Raw)
                             .header_hash()
                     );
                     self.wl_storage
@@ -293,14 +293,12 @@ where
                         .expect("Missing wrapper tx in queue")
                         .inner_tx
                         .clone()
-                        .update_header(TxType::Raw(RawHeader::default()))
+                        .update_header(TxType::Raw)
                         .header_hash();
                     let mut event = Event::new_tx_event(&tx, height.0);
 
                     match inner {
                         DecryptedTx::Decrypted {
-                            code_hash: _,
-                            data_hash: _,
                             has_valid_pow: _,
                         } => {
                             if let Some(code_sec) = tx
@@ -310,7 +308,7 @@ where
                                 stats.increment_tx_type(code_sec.code.hash().to_string());
                             }
                         }
-                        DecryptedTx::Undecryptable(_) => {
+                        DecryptedTx::Undecryptable => {
                             event["log"] =
                                 "Transaction could not be decrypted.".into();
                             event["code"] = ErrorCodes::Undecryptable.into();
@@ -318,7 +316,7 @@ where
                     }
                     (event, Some(wrapper_hash))
                 }
-                TxType::Raw(_) => {
+                TxType::Raw => {
                     tracing::error!(
                         "Internal logic error: FinalizeBlock received a \
                          TxType::Raw transaction"
@@ -958,7 +956,7 @@ mod test_finalize_block {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             )));
-            wrapper.chain_id = shell.chain_id.clone();
+            wrapper.header.chain_id = shell.chain_id.clone();
             wrapper.set_data(Data::new("wasm_code".as_bytes().to_owned()));
             wrapper.set_code(Code::new(format!("transaction data: {}", i).as_bytes().to_owned()));
             wrapper.add_section(Section::Signature(Signature::new(&wrapper.header_hash(), &keypair)));
@@ -1006,11 +1004,11 @@ mod test_finalize_block {
             // so we check the hashes of the inner txs for equality
             let valid_tx = valid_tx.next().expect("Test failed");
             assert_eq!(
-                wrapper.tx.code_hash,
+                wrapper.inner_tx.header.code_hash,
                 *valid_tx.code_sechash()
             );
             assert_eq!(
-                wrapper.tx.data_hash,
+                wrapper.inner_tx.header.data_hash,
                 *valid_tx.data_sechash()
             );
             counter += 1;
@@ -1037,15 +1035,13 @@ mod test_finalize_block {
             #[cfg(not(feature = "mainnet"))]
             None,
         )));
-        outer_tx.chain_id = shell.chain_id.clone();
+        outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new(String::from("transaction data").as_bytes().to_owned()));
         outer_tx.encrypt(&Default::default());
         shell.enqueue_tx(outer_tx.header().wrapper().expect("expected wrapper"), outer_tx.clone());
 
         outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
-            data_hash: Hash::default(),
-            code_hash: Hash::default(),
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
         }));
@@ -1163,7 +1159,7 @@ mod test_finalize_block {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             )));
-            outer_tx.chain_id = shell.chain_id.clone();
+            outer_tx.header.chain_id = shell.chain_id.clone();
             outer_tx.set_code(Code::new(tx_code.clone()));
             outer_tx.set_data(Data::new(
                 format!("Decrypted transaction data: {}", i)
@@ -1173,8 +1169,6 @@ mod test_finalize_block {
             outer_tx.encrypt(&Default::default());
             shell.enqueue_tx(outer_tx.header().wrapper().expect("expected wrapper"), outer_tx.clone());
             outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
-                code_hash: Hash::default(),
-                data_hash: Hash::default(),
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: false,
             }));
@@ -1201,7 +1195,7 @@ mod test_finalize_block {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             )));
-            wrapper_tx.chain_id = shell.chain_id.clone();
+            wrapper_tx.header.chain_id = shell.chain_id.clone();
             wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
             wrapper_tx.set_data(Data::new(
                 format!("Encrypted transaction data: {}", i).as_bytes().to_owned()
@@ -1260,8 +1254,8 @@ mod test_finalize_block {
         let mut counter = 0;
         for wrapper in shell.iter_tx_queue() {
             let next = txs.next().expect("Test failed");
-            assert_eq!(wrapper.tx.code_hash, *next.code_sechash());
-            assert_eq!(wrapper.tx.data_hash, *next.data_sechash());
+            assert_eq!(wrapper.inner_tx.header.code_hash, *next.code_sechash());
+            assert_eq!(wrapper.inner_tx.header.data_hash, *next.data_sechash());
             counter += 1;
         }
         assert_eq!(counter, 2);
@@ -1708,22 +1702,20 @@ mod test_finalize_block {
             #[cfg(not(feature = "mainnet"))]
             None,
         )));
-        wrapper_tx.chain_id = shell.chain_id.clone();
+        wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.set_code(Code::new(tx_code));
         wrapper_tx.set_data(Data::new("Encrypted transaction data".as_bytes().to_owned()));
         let mut decrypted_tx = wrapper_tx.clone();
         wrapper_tx.encrypt(&Default::default());
 
         decrypted_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
-            data_hash: Hash::default(),
-            code_hash: Hash::default(),
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
         }));
 
         // Write inner hash in storage
         let inner_hash_key =
-            replay_protection::get_tx_hash_key(&wrapper_tx.clone().update_header(TxType::Raw(RawHeader::default())).header_hash());
+            replay_protection::get_tx_hash_key(&wrapper_tx.clone().update_header(TxType::Raw).header_hash());
         shell
             .wl_storage
             .storage

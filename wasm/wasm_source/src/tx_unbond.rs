@@ -24,7 +24,7 @@ mod tests {
         read_total_stake, read_validator_stake, unbond_handle,
     };
     use namada::proto::{Tx, Code, Data, Signature};
-    use namada::types::transaction::{RawHeader, TxType};
+    use namada::types::transaction::{TxType};
     use namada::types::chain::ChainId;
     use namada::types::storage::Epoch;
     use namada_tests::log::test;
@@ -122,8 +122,7 @@ mod tests {
 
         let tx_code = vec![];
         let tx_data = unbond.try_to_vec().unwrap();
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
-        tx.chain_id = ChainId::default();
+        let mut tx = Tx::new(TxType::Raw);
         tx.set_data(Data::new(tx_data));
         tx.set_code(Code::new(tx_code));
         tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &key)));

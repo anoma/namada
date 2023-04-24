@@ -46,10 +46,6 @@ mod protocol_txs {
     pub struct ProtocolTx {
         /// we require ProtocolTxs be signed
         pub pk: common::PublicKey,
-        /// The hash of the code section for this message
-        pub code_hash: Hash,
-        /// The hash of the data section for this message
-        pub data_hash: Hash,
         /// The type of protocol message being sent
         pub tx: ProtocolTxType,
     }
@@ -115,8 +111,6 @@ mod protocol_txs {
             let mut outer_tx = Tx::new(TxType::Protocol(ProtocolTx {
                 pk: signing_key.ref_to(),
                 tx: Self::NewDkgKeypair,
-                code_hash: Hash::default(),
-                data_hash: Hash::default(),
             }));
             outer_tx.set_code(Code::new(code));
             outer_tx.set_data(Data::new(

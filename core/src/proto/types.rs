@@ -25,6 +25,8 @@ use crate::types::transaction::DecryptedTx;
 use crate::types::transaction::EllipticCurve;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::EncryptionKey;
+#[cfg(feature = "ferveo-tpke")]
+use crate::types::transaction::protocol::ProtocolTx;
 use crate::types::transaction::TxType;
 use crate::types::address::Address;
 use crate::types::storage::Epoch;
@@ -601,6 +603,73 @@ impl Section {
     }
 }
 
+/// A Namada transaction header indicating where transaction subcomponents can
+/// be found
+#[derive(
+    Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize,
+)]
+pub struct Header {
+    /// The chain which this transaction is being submitted to
+    pub chain_id: ChainId,
+    /// The time at which this transaction expires
+    pub expiration: Option<DateTimeUtc>,
+    /// A transaction timestamp
+    pub timestamp: DateTimeUtc,
+    /// The SHA-256 hash of the transaction's code section
+    pub code_hash: crate::types::hash::Hash,
+    /// The SHA-256 hash of the transaction's data section
+    pub data_hash: crate::types::hash::Hash,
+    /// The type of this transaction
+    pub tx_type: TxType,
+}
+
+impl Header {
+    /// Make a new header of the given transaction type
+    pub fn new(tx_type: TxType) -> Self {
+        Self {
+            tx_type,
+            chain_id: ChainId::default(),
+            expiration: None,
+            timestamp: DateTimeUtc::now(),
+            code_hash: crate::types::hash::Hash::default(),
+            data_hash: crate::types::hash::Hash::default(),
+        }
+    }
+    /// Get the hash of this transaction header.
+    pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
+        hasher.update(self.try_to_vec().expect("unable to serialize transaction header"));
+        hasher
+    }
+
+    /// Get the wrapper header if it is present
+    pub fn wrapper(&self) -> Option<WrapperTx> {
+        if let TxType::Wrapper(wrapper) = &self.tx_type {
+            Some(wrapper.clone())
+        } else {
+            None
+        }
+    }
+
+    /// Get the decrypted header if it is present
+    pub fn decrypted(&self) -> Option<DecryptedTx> {
+        if let TxType::Decrypted(decrypted) = &self.tx_type {
+            Some(decrypted.clone())
+        } else {
+            None
+        }
+    }
+
+    #[cfg(feature = "ferveo-tpke")]
+    /// Get the protocol header if it is present
+    pub fn protocol(&self) -> Option<ProtocolTx> {
+        if let TxType::Protocol(protocol) = &self.tx_type {
+            Some(protocol.clone())
+        } else {
+            None
+        }
+    }
+}
+
 /// Errors relating to decrypting a wrapper tx and its
 /// encrypted payload from a Tx type
 #[allow(missing_docs)]
@@ -614,18 +683,14 @@ pub enum TxError {
     Deserialization(String),
 }
 
-/// A namada transaction is represented as a header followed by a series of
+/// A Namada transaction is represented as a header followed by a series of
 /// seections providing additional details.
 #[derive(
     Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize,
 )]
 pub struct Tx {
-    pub chain_id: ChainId,
-    pub expiration: Option<DateTimeUtc>,
-    /// A transaction timestamp
-    pub timestamp: DateTimeUtc,
     /// Type indicating how to process transaction
-    pub header: TxType,
+    pub header: Header,
     /// Additional details necessary to process transaction
     pub sections: Vec<Section>,
 }
@@ -646,16 +711,13 @@ impl Tx {
     /// Create a transaction of the given type
     pub fn new(header: TxType) -> Self {
         Tx {
-            header,
-            chain_id: ChainId::default(),
-            expiration: None,
-            timestamp: DateTimeUtc::now(),
+            header: Header::new(header),
             sections: vec![],
         }
     }
 
     /// Get the transaction header
-    pub fn header(&self) -> TxType {
+    pub fn header(&self) -> Header {
         self.header.clone()
     }
 
@@ -665,14 +727,8 @@ impl Tx {
     }
 
     /// Update the header whilst maintaining existing cross-references
-    pub fn update_header(&mut self, header: TxType) -> &mut Self {
-        // Capture the data and code hashes that will be overwritten
-        let data_hash = self.data_sechash().clone();
-        let code_hash = self.code_sechash().clone();
-        self.header = header;
-        // Rebind the data and code hashes
-        self.set_data_sechash(data_hash);
-        self.set_code_sechash(code_hash);
+    pub fn update_header(&mut self, tx_type: TxType) -> &mut Self {
+        self.header.tx_type = tx_type;
         self
     }
 
@@ -696,46 +752,12 @@ impl Tx {
 
     /// Get the hash of this transaction's code from the heeader
     pub fn code_sechash(&self) -> &crate::types::hash::Hash {
-        match &self.header {
-            TxType::Raw(raw) => {
-                &raw.code_hash
-            },
-            TxType::Wrapper(wrapper) => {
-                &wrapper.code_hash
-            },
-            TxType::Decrypted(DecryptedTx::Decrypted {code_hash, ..}) => {
-                code_hash
-            },
-            TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)) => {
-                &wrapper.code_hash
-            },
-            #[cfg(feature = "ferveo-tpke")]
-            TxType::Protocol(proto) => {
-                &proto.code_hash
-            },
-        }
+        &self.header.code_hash
     }
 
     /// Set the transaction code hash stored in the header
     pub fn set_code_sechash(&mut self, hash: crate::types::hash::Hash) {
-        match &mut self.header {
-            TxType::Raw(raw) => {
-                raw.code_hash = hash;
-            },
-            TxType::Wrapper(wrapper) => {
-                wrapper.code_hash = hash;
-            },
-            TxType::Decrypted(DecryptedTx::Decrypted {code_hash, ..}) => {
-                *code_hash = hash;
-            },
-            TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)) => {
-                wrapper.code_hash = hash;
-            },
-            #[cfg(feature = "ferveo-tpke")]
-            TxType::Protocol(proto) => {
-                proto.code_hash = hash;
-            },
-        }
+        self.header.code_hash = hash
     }
 
     /// Get the code designated by the transaction code hash in the header
@@ -759,46 +781,12 @@ impl Tx {
 
     /// Get the transaction data hash stored in the header
     pub fn data_sechash(&self) -> &crate::types::hash::Hash {
-        match &self.header {
-            TxType::Raw(raw) => {
-                &raw.data_hash
-            },
-            TxType::Wrapper(wrapper) => {
-                &wrapper.data_hash
-            },
-            TxType::Decrypted(DecryptedTx::Decrypted {data_hash, ..}) => {
-                data_hash
-            },
-            TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)) => {
-                &wrapper.data_hash
-            },
-            #[cfg(feature = "ferveo-tpke")]
-            TxType::Protocol(proto) => {
-                &proto.data_hash
-            },
-        }
+        &self.header.data_hash
     }
 
     /// Set the transaction data hash stored in the header
     pub fn set_data_sechash(&mut self, hash: crate::types::hash::Hash) {
-        match &mut self.header {
-            TxType::Raw(raw) => {
-                raw.data_hash = hash;
-            },
-            TxType::Wrapper(wrapper) => {
-                wrapper.data_hash = hash;
-            },
-            TxType::Decrypted(DecryptedTx::Decrypted {data_hash, ..}) => {
-                *data_hash = hash;
-            },
-            TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)) => {
-                wrapper.data_hash = hash;
-            },
-            #[cfg(feature = "ferveo-tpke")]
-            TxType::Protocol(proto) => {
-                proto.data_hash = hash;
-            },
-        }
+        self.header.data_hash = hash
     }
 
     /// Add the given code to the transaction and set the hash in the header
@@ -917,7 +905,7 @@ impl Tx {
     /// 1. The wrapper tx is indeed signed
     /// 2. The signature is valid
     pub fn validate_header(&self) -> std::result::Result<(), TxError> {
-        match self.header() {
+        match &self.header.tx_type {
             // verify signature and extract signed data
             TxType::Wrapper(wrapper) => {
                 self.verify_signature(&wrapper.pk, &self.header_hash())
@@ -944,7 +932,7 @@ impl Tx {
             // we extract the signed data, but don't check the signature
             TxType::Decrypted(_) => Ok(()),
             // return as is
-            TxType::Raw(_) => Ok(()),
+            TxType::Raw => Ok(()),
         }
     }
 

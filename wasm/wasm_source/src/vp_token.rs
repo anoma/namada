@@ -117,7 +117,7 @@ mod tests {
     use namada_tests::tx::{self, TestTxEnv};
     use namada_tests::vp::*;
     use namada_vp_prelude::storage_api::StorageWrite;
-    use namada::types::transaction::{RawHeader, TxType};
+    use namada::types::transaction::{TxType};
     use namada::proto::{Code, Signature, Data};
 
     use super::*;
@@ -152,7 +152,7 @@ mod tests {
         });
 
         let vp_env = vp_host_env::take();
-        let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx_data = Tx::new(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
@@ -206,7 +206,7 @@ mod tests {
         });
 
         let vp_env = vp_host_env::take();
-        let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx_data = Tx::new(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
@@ -259,7 +259,7 @@ mod tests {
         });
 
         let vp_env = vp_host_env::take();
-        let mut tx_data = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx_data = Tx::new(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();

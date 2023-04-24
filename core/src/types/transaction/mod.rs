@@ -207,21 +207,12 @@ pub struct InitValidator {
     pub validator_vp_code_hash: Hash,
 }
 
-/// Represents an ordinary transaction
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize, Default)]
-pub struct RawHeader {
-    /// The SHA-256 hash of the transaction's code section
-    pub code_hash: Hash,
-    /// The SHA-256 hash of the transaction's data section
-    pub data_hash: Hash,
-}
-
 /// Struct that classifies that kind of Tx
 /// based on the contents of its data.
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize)]
 pub enum TxType {
     /// An ordinary tx
-    Raw(RawHeader),
+    Raw,
     /// A Tx that contains an encrypted raw tx
     Wrapper(WrapperTx),
     /// An attempted decryption of a wrapper tx
@@ -236,43 +227,6 @@ impl TxType {
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
         hasher.update(self.try_to_vec().expect("unable to serialize header"));
         hasher
-    }
-
-    /// Get the raw header if it is present
-    pub fn raw(&self) -> Option<RawHeader> {
-        if let Self::Raw(raw) = self {
-            Some(raw.clone())
-        } else {
-            None
-        }
-    }
-
-    /// Get the wrapper header if it is present
-    pub fn wrapper(&self) -> Option<WrapperTx> {
-        if let Self::Wrapper(wrapper) = self {
-            Some(wrapper.clone())
-        } else {
-            None
-        }
-    }
-
-    /// Get the decrypted header if it is present
-    pub fn decrypted(&self) -> Option<DecryptedTx> {
-        if let Self::Decrypted(decrypted) = self {
-            Some(decrypted.clone())
-        } else {
-            None
-        }
-    }
-
-    #[cfg(feature = "ferveo-tpke")]
-    /// Get the protocol header if it is present
-    pub fn protocol(&self) -> Option<ProtocolTx> {
-        if let Self::Protocol(protocol) = self {
-            Some(protocol.clone())
-        } else {
-            None
-        }
     }
 }
 
@@ -295,13 +249,13 @@ mod test_process_tx {
     /// data and returns an identical copy
     #[test]
     fn test_process_tx_raw_tx_no_data() {
-        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut outer_tx = Tx::new(TxType::Raw);
         let code_sec = outer_tx.set_code(Code::new("wasm code".as_bytes().to_owned())).clone();
         outer_tx.validate_header().expect("Test failed");
-        match outer_tx.header() {
-            TxType::Raw(raw) => assert_eq!(
+        match outer_tx.header().tx_type {
+            TxType::Raw => assert_eq!(
                 Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into()),
-                raw.code_hash,
+                outer_tx.header.code_hash,
             ),
             _ => panic!("Test failed: Expected Raw Tx"),
         }
@@ -312,20 +266,20 @@ mod test_process_tx {
     /// of the inner data
     #[test]
     fn test_process_tx_raw_tx_some_data() {
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         let code_sec = tx.set_code(Code::new("wasm code".as_bytes().to_owned())).clone();
         let data_sec = tx.set_data(Data::new("transaction data".as_bytes().to_owned())).clone();
 
         tx.validate_header().expect("Test failed");
-        match tx.header() {
-            TxType::Raw(raw) => {
+        match tx.header().tx_type {
+            TxType::Raw => {
                 assert_eq!(
                     Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into()),
-                    raw.code_hash,
+                    tx.header().code_hash,
                 );
                 assert_eq!(
                     Hash(data_sec.hash(&mut Sha256::new()).finalize_reset().into()),
-                    raw.data_hash,
+                    tx.header().data_hash,
                 );
             },
             _ => panic!("Test failed: Expected Raw Tx"),
@@ -336,22 +290,22 @@ mod test_process_tx {
     /// signed data and returns an identical copy of the inner data
     #[test]
     fn test_process_tx_raw_tx_some_signed_data() {
-        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        let mut tx = Tx::new(TxType::Raw);
         let code_sec = tx.set_code(Code::new("wasm code".as_bytes().to_owned())).clone();
         let data_sec = tx.set_data(Data::new("transaction data".as_bytes().to_owned())).clone();
         tx.add_section(Section::Signature(Signature::new(tx.code_sechash(), &gen_keypair())));
         tx.add_section(Section::Signature(Signature::new(tx.data_sechash(), &gen_keypair())));
 
         tx.validate_header().expect("Test failed");
-        match tx.header() {
-            TxType::Raw(raw) => {
+        match tx.header().tx_type {
+            TxType::Raw => {
                 assert_eq!(
                     Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into()),
-                    raw.code_hash,
+                    tx.header().code_hash,
                 );
                 assert_eq!(
                     Hash(data_sec.hash(&mut Sha256::new()).finalize_reset().into()),
-                    raw.data_hash,
+                    tx.header().data_hash,
                 );
             },
             _ => panic!("Test failed: Expected Raw Tx"),
@@ -381,7 +335,7 @@ mod test_process_tx {
         tx.encrypt(&Default::default());
 
         tx.validate_header().expect("Test failed");
-        match tx.header() {
+        match tx.header().tx_type {
             TxType::Wrapper(wrapper) => {
                 tx.decrypt(<EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator())
                     .expect("Test failed");
@@ -423,23 +377,25 @@ mod test_process_tx {
 #[test]
 fn test_process_tx_decrypted_unsigned() {
     let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
-        code_hash: Hash::default(),
-        data_hash: Hash::default(),
         #[cfg(not(feature = "mainnet"))]
         has_valid_pow: false,
     }));
     let code_sec = tx.set_code(Code::new("transaction data".as_bytes().to_owned())).clone();
     let data_sec = tx.set_data(Data::new("transaction data".as_bytes().to_owned())).clone();
     tx.validate_header().expect("Test failed");
-    match tx.header() {
+    match tx.header().tx_type {
         TxType::Decrypted(DecryptedTx::Decrypted {
-            code_hash,
-            data_hash,
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: _,
         }) => {
-            assert_eq!(code_hash, Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into()));
-            assert_eq!(data_hash, Hash(data_sec.hash(&mut Sha256::new()).finalize_reset().into()));
+            assert_eq!(
+                tx.header().code_hash,
+                Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into()),
+            );
+            assert_eq!(
+                tx.header().data_hash,
+                Hash(data_sec.hash(&mut Sha256::new()).finalize_reset().into()),
+            );
         }
         _ => panic!("Test failed"),
     }
@@ -460,8 +416,6 @@ fn test_process_tx_decrypted_signed() {
     
     use crate::types::key::Signature as S;
     let mut decrypted = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
-        code_hash: Hash::default(),
-        data_hash: Hash::default(),
         #[cfg(not(feature = "mainnet"))]
         has_valid_pow: false,
     }));
@@ -475,15 +429,19 @@ fn test_process_tx_decrypted_signed() {
     let code_sec = decrypted.set_code(Code::new("transaction data".as_bytes().to_owned())).clone();
     let data_sec = decrypted.set_data(Data::new("transaction data".as_bytes().to_owned())).clone();
     decrypted.validate_header().expect("Test failed");
-    match decrypted.header() {
+    match decrypted.header().tx_type {
         TxType::Decrypted(DecryptedTx::Decrypted {
-            code_hash,
-            data_hash,
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: _,
         }) => {
-            assert_eq!(code_hash, Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into()));
-            assert_eq!(data_hash, Hash(data_sec.hash(&mut Sha256::new()).finalize_reset().into()));
+            assert_eq!(
+                decrypted.header.code_hash,
+                Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into()),
+            );
+            assert_eq!(
+                decrypted.header.data_hash,
+                Hash(data_sec.hash(&mut Sha256::new()).finalize_reset().into()),
+            );
         }
         _ => panic!("Test failed"),
     }

@@ -22,13 +22,6 @@ pub mod decrypted_tx {
     pub enum DecryptedTx {
         /// The decrypted payload
         Decrypted {
-            /// Inner tx.
-            // For some reason, we get `warning: fields `tx` and
-            // `has_valid_pow` are never read` even though they are being used!
-            #[allow(dead_code)]
-            code_hash: Hash,
-            #[allow(dead_code)]
-            data_hash: Hash,
             #[cfg(not(feature = "mainnet"))]
             /// A PoW solution can be used to allow zero-fee testnet
             /// transactions.
@@ -40,7 +33,7 @@ pub mod decrypted_tx {
             has_valid_pow: bool,
         },
         /// The wrapper whose payload could not be decrypted
-        Undecryptable(WrapperTx),
+        Undecryptable,
     }
 
     impl DecryptedTx {
@@ -62,7 +55,7 @@ pub mod decrypted_tx {
     ) -> bool {
         match decrypted {
             DecryptedTx::Decrypted { .. } => true,
-            DecryptedTx::Undecryptable(tx) => otx.decrypt(privkey).is_err(),
+            DecryptedTx::Undecryptable => otx.decrypt(privkey).is_err(),
         }
     }
 }
