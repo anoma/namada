@@ -1,21 +1,21 @@
-#[cfg(not(feature = "abcipp"))]
-use tower_abci::{Request, Response};
-#[cfg(feature = "abcipp")]
-use tower_abci_abcipp::{Request, Response};
+use crate::facade::tower_abci::{Request, Response};
 
 pub mod shim {
     use std::convert::TryFrom;
 
+    use thiserror::Error;
+
+    use super::{Request as Req, Response as Resp};
     #[cfg(not(feature = "abcipp"))]
-    use tendermint_proto::abci::{
+    use crate::facade::tendermint_proto::abci::ResponseEndBlock;
+    use crate::facade::tendermint_proto::abci::{
         RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
         RequestFlush, RequestInfo, RequestInitChain, RequestListSnapshots,
         RequestLoadSnapshotChunk, RequestOfferSnapshot, RequestPrepareProposal,
         RequestProcessProposal, RequestQuery, ResponseApplySnapshotChunk,
-        ResponseCheckTx, ResponseCommit, ResponseEcho, ResponseEndBlock,
-        ResponseFlush, ResponseInfo, ResponseInitChain, ResponseListSnapshots,
-        ResponseLoadSnapshotChunk, ResponseOfferSnapshot,
-        ResponsePrepareProposal, ResponseQuery, VoteInfo,
+        ResponseCheckTx, ResponseCommit, ResponseEcho, ResponseFlush,
+        ResponseInfo, ResponseInitChain, ResponseListSnapshots,
+        ResponseLoadSnapshotChunk, ResponseOfferSnapshot, ResponseQuery,
     };
     #[cfg(feature = "abcipp")]
     use tendermint_proto_abcipp::abci::{
@@ -30,9 +30,6 @@ pub mod shim {
         ResponsePrepareProposal, ResponseQuery, ResponseVerifyVoteExtension,
         VoteInfo,
     };
-    use thiserror::Error;
-
-    use super::{Request as Req, Response as Resp};
     use crate::node::ledger::shell;
 
     pub type TxBytes = Vec<u8>;
@@ -282,7 +279,8 @@ pub mod shim {
         use namada::ledger::events::EventLevel;
 
         use crate::facade::tendermint_proto::abci::{
-            Event as TmEvent, ResponseProcessProposal, ValidatorUpdate,
+            Event as TmEvent, ResponsePrepareProposal, ResponseProcessProposal,
+            ValidatorUpdate,
         };
         #[cfg(not(feature = "abcipp"))]
         use crate::facade::tendermint_proto::types::ConsensusParams;
@@ -308,6 +306,26 @@ pub mod shim {
 
         #[cfg(not(feature = "abcipp"))]
         impl From<PrepareProposal> for super::ResponsePrepareProposal {
+            fn from(resp: PrepareProposal) -> Self {
+                Self { txs: resp.txs }
+            }
+        }
+        #[derive(Debug, Default)]
+        pub struct PrepareProposal {
+            pub txs: Vec<super::TxBytes>,
+        }
+
+        #[cfg(feature = "abcipp")]
+        impl From<PrepareProposal> for ResponsePrepareProposal {
+            fn from(_: PrepareProposal) -> Self {
+                // TODO(namada#198): When abci++ arrives, we should return a
+                // real response.
+                Self::default()
+            }
+        }
+
+        #[cfg(not(feature = "abcipp"))]
+        impl From<PrepareProposal> for ResponsePrepareProposal {
             fn from(resp: PrepareProposal) -> Self {
                 Self { txs: resp.txs }
             }

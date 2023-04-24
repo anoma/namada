@@ -5,6 +5,7 @@ use std::time::Duration;
 use color_eyre::eyre::Result;
 use namada_apps::cli::cmds::*;
 use namada_apps::cli::{self, safe_exit};
+use namada_apps::client::eth_bridge::bridge_pool;
 use namada_apps::client::{rpc, tx, utils};
 use namada_apps::facade::tendermint::block::Height;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
@@ -65,6 +66,10 @@ pub async fn main() -> Result<()> {
                 Sub::Withdraw(Withdraw(args)) => {
                     wait_until_node_is_synched(&args.tx.ledger_address).await;
                     tx::submit_withdraw(ctx, args).await;
+                }
+                // Eth bridge pool
+                Sub::AddToEthBridgePool(args) => {
+                    bridge_pool::add_to_eth_bridge_pool(ctx, args.0).await;
                 }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(args)) => {

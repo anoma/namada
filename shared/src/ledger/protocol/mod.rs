@@ -1,13 +1,15 @@
 //! The ledger's protocol
+
 use std::collections::BTreeSet;
 use std::panic;
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
-use crate::ledger::eth_bridge::vp::EthBridge;
 use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter};
 use crate::ledger::ibc::vp::{Ibc, IbcToken};
+use crate::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
+use crate::ledger::native_vp::ethereum_bridge::vp::EthBridge;
 use crate::ledger::native_vp::governance::GovernanceVp;
 use crate::ledger::native_vp::parameters::{self, ParametersVp};
 use crate::ledger::native_vp::replay_protection::ReplayProtectionVp;
@@ -15,12 +17,13 @@ use crate::ledger::native_vp::slash_fund::SlashFundVp;
 use crate::ledger::native_vp::{self, NativeVp};
 use crate::ledger::pos::{self, PosVP};
 use crate::ledger::storage::write_log::WriteLog;
-use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use crate::ledger::storage::{DBIter, Storage, StorageHasher, WlStorage, DB};
 use crate::proto::{self, Tx};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
 use crate::types::storage;
 use crate::types::storage::TxIndex;
+use crate::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
 use crate::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
 use crate::vm::wasm::{TxCache, VpCache};
 use crate::vm::{self, wasm, WasmCacheAccess};
@@ -34,6 +37,8 @@ pub enum Error {
     TxDecodingError(proto::Error),
     #[error("Transaction runner error: {0}")]
     TxRunnerError(vm::wasm::run::Error),
+    #[error(transparent)]
+    ProtocolTxError(#[from] eyre::Error),
     #[error("Txs must either be encrypted or a decryption of an encrypted tx")]
     TxTypeError,
     #[error("Gas error: {0}")]
@@ -62,92 +67,251 @@ pub enum Error {
     ReplayProtectionNativeVpError(
         crate::ledger::native_vp::replay_protection::Error,
     ),
+    #[error("Ethereum bridge pool native VP error: {0}")]
+    BridgePoolNativeVpError(native_vp::ethereum_bridge::bridge_pool_vp::Error),
     #[error("Access to an internal address {0} is forbidden")]
     AccessForbidden(InternalAddress),
+}
+
+/// Shell parameters for running wasm transactions.
+#[allow(missing_docs)]
+pub enum ShellParams<'a, D, H, CA>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    CA: 'static + WasmCacheAccess + Sync,
+{
+    /// Parameters passed to dry ran txs.
+    DryRun {
+        storage: &'a Storage<D, H>,
+        vp_wasm_cache: &'a mut VpCache<CA>,
+        tx_wasm_cache: &'a mut TxCache<CA>,
+    },
+    /// Parameters passed to mutating tx executions.
+    Mutating {
+        block_gas_meter: &'a mut BlockGasMeter,
+        wl_storage: &'a mut WlStorage<D, H>,
+        vp_wasm_cache: &'a mut VpCache<CA>,
+        tx_wasm_cache: &'a mut TxCache<CA>,
+    },
 }
 
 /// Result of applying a transaction
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Apply a given transaction
-///
-/// The only Tx Types that should be input here are `Decrypted` and `Wrapper`
+/// Dispatch a given transaction to be applied based on its type. Some storage
+/// updates may be derived and applied natively rather than via the wasm
+/// environment, in which case validity predicates will be bypassed.
 ///
 /// If the given tx is a successfully decrypted payload apply the necessary
 /// vps. Otherwise, we include the tx on chain with the gas charge added
 /// but no further validations.
 #[allow(clippy::too_many_arguments)]
-pub fn apply_tx<D, H, CA>(
-    tx: TxType,
+pub fn dispatch_tx<'a, D, H, CA>(
+    tx_type: TxType,
     tx_length: usize,
     tx_index: TxIndex,
-    block_gas_meter: &mut BlockGasMeter,
-    write_log: &mut WriteLog,
-    storage: &Storage<D, H>,
-    vp_wasm_cache: &mut VpCache<CA>,
-    tx_wasm_cache: &mut TxCache<CA>,
+    block_gas_meter: &'a mut BlockGasMeter,
+    wl_storage: &'a mut WlStorage<D, H>,
+    vp_wasm_cache: &'a mut VpCache<CA>,
+    tx_wasm_cache: &'a mut TxCache<CA>,
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    // Base gas cost for applying the tx
-    block_gas_meter
-        .add_base_transaction_fee(tx_length)
-        .map_err(Error::GasError)?;
-    match tx {
+    match tx_type {
         TxType::Raw(_) => Err(Error::TxTypeError),
         TxType::Decrypted(DecryptedTx::Decrypted {
             tx,
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow,
-        }) => {
-            let verifiers = execute_tx(
-                &tx,
-                &tx_index,
-                storage,
+        }) => apply_wasm_tx(
+            tx,
+            tx_length,
+            &tx_index,
+            ShellParams::Mutating {
                 block_gas_meter,
-                write_log,
+                wl_storage,
                 vp_wasm_cache,
                 tx_wasm_cache,
-            )?;
+            },
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow,
+        ),
+        TxType::Protocol(ProtocolTx { tx, .. }) => {
+            apply_protocol_tx(tx, wl_storage)
+        }
+        TxType::Wrapper(_)
+        | TxType::Decrypted(DecryptedTx::Undecryptable(_)) => {
+            // do nothing.
+            // 1) we can only apply state updates on encrypted txs
+            // at the next block height
+            // 2) undecryptable txs should not perform any state
+            // updates either. errors are emitted at a layer above,
+            // in `Shell::finalize_block()`.
+            Ok(TxResult::default())
+        }
+    }
+}
 
-            let vps_result = check_vps(
-                &tx,
-                &tx_index,
-                storage,
+/// Apply a transaction going via the wasm environment. Gas will be metered and
+/// validity predicates will be triggered in the normal way.
+pub(crate) fn apply_wasm_tx<'a, D, H, CA>(
+    tx: Tx,
+    tx_length: usize,
+    tx_index: &TxIndex,
+    shell_params: ShellParams<'a, D, H, CA>,
+    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
+) -> Result<TxResult>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    CA: 'static + WasmCacheAccess + Sync,
+{
+    let mut default_gas_meter = Default::default();
+    let mut default_write_log = Default::default();
+
+    let (block_gas_meter, storage, write_log, vp_wasm_cache, tx_wasm_cache) =
+        match shell_params {
+            ShellParams::Mutating {
                 block_gas_meter,
-                write_log,
-                &verifiers,
+                wl_storage,
                 vp_wasm_cache,
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow,
-            )?;
+                tx_wasm_cache,
+            } => (
+                block_gas_meter,
+                &wl_storage.storage,
+                &mut wl_storage.write_log,
+                vp_wasm_cache,
+                tx_wasm_cache,
+            ),
+            ShellParams::DryRun {
+                storage,
+                vp_wasm_cache,
+                tx_wasm_cache,
+            } => (
+                &mut default_gas_meter,
+                storage,
+                &mut default_write_log,
+                vp_wasm_cache,
+                tx_wasm_cache,
+            ),
+        };
 
-            let gas_used = block_gas_meter
-                .finalize_transaction()
-                .map_err(Error::GasError)?;
-            let initialized_accounts = write_log.get_initialized_accounts();
-            let changed_keys = write_log.get_keys();
-            let ibc_event = write_log.take_ibc_event();
+    // Base gas cost for applying the tx
+    block_gas_meter
+        .add_base_transaction_fee(tx_length)
+        .map_err(Error::GasError)?;
+    let verifiers = execute_tx(
+        &tx,
+        tx_index,
+        storage,
+        block_gas_meter,
+        write_log,
+        vp_wasm_cache,
+        tx_wasm_cache,
+    )?;
 
-            Ok(TxResult {
-                gas_used,
-                changed_keys,
-                vps_result,
-                initialized_accounts,
-                ibc_event,
-            })
+    let vps_result = check_vps(CheckVps {
+        tx: &tx,
+        tx_index,
+        storage,
+        gas_meter: block_gas_meter,
+        write_log,
+        verifiers_from_tx: &verifiers,
+        vp_wasm_cache,
+        #[cfg(not(feature = "mainnet"))]
+        has_valid_pow,
+    })?;
+
+    let gas_used = block_gas_meter
+        .finalize_transaction()
+        .map_err(Error::GasError)?;
+    let initialized_accounts = write_log.get_initialized_accounts();
+    let changed_keys = write_log.get_keys();
+    let ibc_event = write_log.take_ibc_event();
+
+    Ok(TxResult {
+        gas_used,
+        changed_keys,
+        vps_result,
+        initialized_accounts,
+        ibc_event,
+    })
+}
+
+/// Apply a derived transaction to storage based on some protocol transaction.
+/// The logic here must be completely deterministic and will be executed by all
+/// full nodes every time a protocol transaction is included in a block. Storage
+/// is updated natively rather than via the wasm environment, so gas does not
+/// need to be metered and validity predicates are bypassed. A [`TxResult`]
+/// containing changed keys and the like should be returned in the normal way.
+pub(crate) fn apply_protocol_tx<D, H>(
+    tx: ProtocolTxType,
+    storage: &mut WlStorage<D, H>,
+) -> Result<TxResult>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    use namada_ethereum_bridge::protocol::transactions;
+
+    use crate::types::vote_extensions::{
+        ethereum_events, validator_set_update,
+    };
+
+    match tx {
+        ProtocolTxType::EthEventsVext(ext) => {
+            let ethereum_events::VextDigest { events, .. } =
+                ethereum_events::VextDigest::singleton(ext);
+            transactions::ethereum_events::apply_derived_tx(storage, events)
+                .map_err(Error::ProtocolTxError)
+        }
+        ProtocolTxType::BridgePoolVext(ext) => {
+            transactions::bridge_pool_roots::apply_derived_tx(
+                storage,
+                ext.into(),
+            )
+            .map_err(Error::ProtocolTxError)
+        }
+        ProtocolTxType::ValSetUpdateVext(ext) => {
+            // NOTE(feature = "abcipp"): we will not need to apply any
+            // storage changes when we rollback to ABCI++; this is because
+            // the decided vote extension digest should have >2/3 of the
+            // voting power already, which is the whole reason why we
+            // have to apply state updates with `abciplus` - we need
+            // to aggregate votes consisting of >2/3 of the voting power
+            // on a validator set update.
+            //
+            // we could, however, emit some kind of event, notifying a
+            // relayer process of a newly available validator set update;
+            // for this, we need to receive a mutable reference to the
+            // event log, in `apply_protocol_tx()`
+            transactions::validator_set_update::aggregate_votes(
+                storage,
+                validator_set_update::VextDigest::singleton(ext),
+            )
+            .map_err(Error::ProtocolTxError)
+        }
+        ProtocolTxType::EthereumEvents(_)
+        | ProtocolTxType::BridgePool(_)
+        | ProtocolTxType::ValidatorSetUpdate(_) => {
+            // TODO(namada#198): implement this
+            tracing::warn!(
+                "Attempt made to apply an unimplemented protocol transaction, \
+                 no actions will be taken"
+            );
+            Ok(TxResult::default())
         }
         _ => {
-            let gas_used = block_gas_meter
-                .finalize_transaction()
-                .map_err(Error::GasError)?;
-            Ok(TxResult {
-                gas_used,
-                ..Default::default()
-            })
+            tracing::error!(
+                "Attempt made to apply an unsupported protocol transaction! - \
+                 {:#?}",
+                tx
+            );
+            Err(Error::TxTypeError)
         }
     }
 }
@@ -182,20 +346,37 @@ where
     .map_err(Error::TxRunnerError)
 }
 
-/// Check the acceptance of a transaction by validity predicates
-#[allow(clippy::too_many_arguments)]
-fn check_vps<D, H, CA>(
-    tx: &Tx,
-    tx_index: &TxIndex,
-    storage: &Storage<D, H>,
-    gas_meter: &mut BlockGasMeter,
-    write_log: &WriteLog,
-    verifiers_from_tx: &BTreeSet<Address>,
-    vp_wasm_cache: &mut VpCache<CA>,
+/// Arguments to [`check_vps`].
+struct CheckVps<'a, D, H, CA>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    CA: 'static + WasmCacheAccess + Sync,
+{
+    tx: &'a Tx,
+    tx_index: &'a TxIndex,
+    storage: &'a Storage<D, H>,
+    gas_meter: &'a mut BlockGasMeter,
+    write_log: &'a WriteLog,
+    verifiers_from_tx: &'a BTreeSet<Address>,
+    vp_wasm_cache: &'a mut VpCache<CA>,
     #[cfg(not(feature = "mainnet"))]
-    // This is true when the wrapper of this tx contained a valid
-    // `testnet_pow::Solution`
     has_valid_pow: bool,
+}
+
+/// Check the acceptance of a transaction by validity predicates
+fn check_vps<D, H, CA>(
+    CheckVps {
+        tx,
+        tx_index,
+        storage,
+        gas_meter,
+        write_log,
+        verifiers_from_tx,
+        vp_wasm_cache,
+        #[cfg(not(feature = "mainnet"))]
+        has_valid_pow,
+    }: CheckVps<'_, D, H, CA>,
 ) -> Result<VpsResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -216,7 +397,6 @@ where
         write_log,
         initial_gas,
         vp_wasm_cache,
-        #[cfg(not(feature = "mainnet"))]
         has_valid_pow,
     )?;
     tracing::debug!("Total VPs gas cost {:?}", vps_result.gas_used);
@@ -403,6 +583,14 @@ where
                                 replay_protection_vp.ctx.gas_meter.into_inner();
                             result
                         }
+                        InternalAddress::EthBridgePool => {
+                            let bridge_pool = BridgePoolVp { ctx };
+                            let result = bridge_pool
+                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .map_err(Error::BridgePoolNativeVpError);
+                            gas_meter = bridge_pool.ctx.gas_meter.into_inner();
+                            result
+                        }
                     };
 
                     accepted
@@ -465,4 +653,140 @@ fn merge_vp_results(
         gas_used,
         errors,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use borsh::BorshDeserialize;
+    use eyre::Result;
+    use namada_core::ledger::storage_api::StorageRead;
+    use namada_core::proto::{SignableEthMessage, Signed};
+    use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
+    use namada_core::types::ethereum_events::{
+        EthereumEvent, TransferToNamada,
+    };
+    use namada_core::types::keccak::keccak_hash;
+    use namada_core::types::storage::BlockHeight;
+    use namada_core::types::token::Amount;
+    use namada_core::types::vote_extensions::bridge_pool_roots::BridgePoolRootVext;
+    use namada_core::types::vote_extensions::ethereum_events::EthereumEventsVext;
+    use namada_core::types::{address, key};
+    use namada_ethereum_bridge::protocol::transactions::votes::Votes;
+    use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
+    use namada_ethereum_bridge::storage::proof::EthereumProof;
+    use namada_ethereum_bridge::storage::vote_tallies;
+    use namada_ethereum_bridge::{bridge_pool_vp, test_utils};
+
+    use super::*;
+
+    #[test]
+    /// Tests that if the same [`ProtocolTxType::EthEventsVext`] is applied
+    /// twice within the same block, it doesn't result in voting power being
+    /// double counted.
+    fn test_apply_protocol_tx_duplicate_eth_events_vext() -> Result<()> {
+        let validator_a = address::testing::established_address_2();
+        let validator_b = address::testing::established_address_3();
+        let (mut wl_storage, _) = test_utils::setup_storage_with_validators(
+            HashMap::from_iter(vec![
+                (validator_a.clone(), 100_u64.into()),
+                (validator_b, 100_u64.into()),
+            ]),
+        );
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 1.into(),
+            transfers: vec![TransferToNamada {
+                amount: Amount::from(100),
+                asset: DAI_ERC20_ETH_ADDRESS,
+                receiver: address::testing::established_address_4(),
+            }],
+            valid_transfers_map: vec![true],
+        };
+        let vext = EthereumEventsVext {
+            block_height: BlockHeight(100),
+            validator_addr: address::testing::established_address_2(),
+            ethereum_events: vec![event.clone()],
+        };
+        let signing_key = key::testing::keypair_1();
+        let signed = vext.sign(&signing_key);
+        let tx = ProtocolTxType::EthEventsVext(signed);
+
+        apply_protocol_tx(tx.clone(), &mut wl_storage)?;
+        apply_protocol_tx(tx, &mut wl_storage)?;
+
+        let eth_msg_keys = vote_tallies::Keys::from(&event);
+        let seen_by_bytes = wl_storage.read_bytes(&eth_msg_keys.seen_by())?;
+        let seen_by_bytes = seen_by_bytes.unwrap();
+        assert_eq!(
+            Votes::try_from_slice(&seen_by_bytes)?,
+            Votes::from([(validator_a, BlockHeight(100))])
+        );
+
+        // the vote should have only be applied once
+        let voting_power_bytes =
+            wl_storage.read_bytes(&eth_msg_keys.voting_power())?;
+        let voting_power_bytes = voting_power_bytes.unwrap();
+        assert_eq!(<(u64, u64)>::try_from_slice(&voting_power_bytes)?, (1, 2));
+
+        Ok(())
+    }
+
+    #[test]
+    /// Tests that if the same [`ProtocolTxType::BridgePoolVext`] is applied
+    /// twice within the same block, it doesn't result in voting power being
+    /// double counted.
+    fn test_apply_protocol_tx_duplicate_bp_roots_vext() -> Result<()> {
+        let validator_a = address::testing::established_address_2();
+        let validator_b = address::testing::established_address_3();
+        let (mut wl_storage, keys) = test_utils::setup_storage_with_validators(
+            HashMap::from_iter(vec![
+                (validator_a.clone(), 100_u64.into()),
+                (validator_b, 100_u64.into()),
+            ]),
+        );
+        bridge_pool_vp::init_storage(&mut wl_storage);
+
+        let root = wl_storage.ethbridge_queries().get_bridge_pool_root();
+        let nonce = wl_storage.ethbridge_queries().get_bridge_pool_nonce();
+        test_utils::commit_bridge_pool_root_at_height(
+            &mut wl_storage.storage,
+            &root,
+            100.into(),
+        );
+        let to_sign = keccak_hash([root.0, nonce.to_bytes()].concat());
+        let signing_key = key::testing::keypair_1();
+        let hot_key =
+            &keys[&address::testing::established_address_2()].eth_bridge;
+        let sig = Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig;
+        let vext = BridgePoolRootVext {
+            block_height: BlockHeight(100),
+            validator_addr: address::testing::established_address_2(),
+            sig,
+        }
+        .sign(&signing_key);
+        let tx = ProtocolTxType::BridgePoolVext(vext);
+        apply_protocol_tx(tx.clone(), &mut wl_storage)?;
+        apply_protocol_tx(tx, &mut wl_storage)?;
+
+        let bp_root_keys = vote_tallies::Keys::from(
+            vote_tallies::BridgePoolRoot(EthereumProof::new((root, nonce))),
+        );
+        let root_seen_by_bytes =
+            wl_storage.read_bytes(&bp_root_keys.seen_by())?;
+        assert_eq!(
+            Votes::try_from_slice(root_seen_by_bytes.as_ref().unwrap())?,
+            Votes::from([(validator_a, BlockHeight(100))])
+        );
+        // the vote should have only be applied once
+        let root_voting_power_bytes =
+            wl_storage.read_bytes(&bp_root_keys.voting_power())?;
+        assert_eq!(
+            <(u64, u64)>::try_from_slice(
+                root_voting_power_bytes.as_ref().unwrap()
+            )?,
+            (1, 2)
+        );
+        Ok(())
+    }
 }

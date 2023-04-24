@@ -10,7 +10,7 @@
 pub use tendermint_rpc;
 #[cfg(feature = "tendermint-rpc-abcipp")]
 pub use tendermint_rpc_abcipp as tendermint_rpc;
-#[cfg(feature = "abciplus")]
+#[cfg(not(feature = "abcipp"))]
 pub use {ibc, ibc_proto, tendermint, tendermint_proto};
 #[cfg(feature = "abcipp")]
 pub use {
@@ -23,6 +23,13 @@ pub mod ledger;
 pub use namada_core::proto;
 pub mod types;
 pub mod vm;
+
+pub mod eth_bridge {
+    //! Namada Ethereum bridge re-exports.
+    pub use ethers;
+    pub use namada_core::types::ethereum_structs as structs;
+    pub use namada_ethereum_bridge::*;
+}
 
 #[cfg(test)]
 #[macro_use]

@@ -1,3 +1,5 @@
+mod eth_bridge;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
@@ -6,6 +8,7 @@ use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::BlockResults;
 
+use self::eth_bridge::{EthBridge, ETH_BRIDGE};
 use crate::ledger::events::log::dumb_queries;
 use crate::ledger::events::Event;
 use crate::ledger::queries::types::{RequestCtx, RequestQuery};
@@ -26,6 +29,11 @@ type Conversion = (
 );
 
 router! {SHELL,
+    // Shell provides storage read access, block metadata and can dry-run a tx
+
+    // Ethereum bridge specific queries
+    ( "eth_bridge" ) = (sub ETH_BRIDGE),
+
     // Epoch of the last committed block
     ( "epoch" ) -> Epoch = epoch,
 
@@ -44,18 +52,17 @@ router! {SHELL,
     ( "has_key" / [storage_key: storage::Key] )
         -> bool = storage_has_key,
 
-    // Block results access - read bit-vec
-    ( "results" ) -> Vec<BlockResults> = read_results,
-
     // Conversion state access - read conversion
     ( "conv" / [asset_type: AssetType] ) -> Conversion = read_conversion,
+
+    // Block results access - read bit-vec
+    ( "results" ) -> Vec<BlockResults> = read_results,
 
     // was the transaction accepted?
     ( "accepted" / [tx_hash: Hash] ) -> Option<Event> = accepted,
 
     // was the transaction applied?
     ( "applied" / [tx_hash: Hash] ) -> Option<Event> = applied,
-
 }
 
 // Handlers:
@@ -69,30 +76,22 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    use crate::ledger::gas::BlockGasMeter;
-    use crate::ledger::protocol;
-    use crate::ledger::storage::write_log::WriteLog;
+    use crate::ledger::protocol::{self, ShellParams};
     use crate::proto::Tx;
     use crate::types::storage::TxIndex;
-    use crate::types::transaction::{DecryptedTx, TxType};
 
-    let mut gas_meter = BlockGasMeter::default();
-    let mut write_log = WriteLog::default();
     let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
-    let tx = TxType::Decrypted(DecryptedTx::Decrypted {
-        tx,
-        #[cfg(not(feature = "mainnet"))]
-        has_valid_pow: true,
-    });
-    let data = protocol::apply_tx(
+    let data = protocol::apply_wasm_tx(
         tx,
         request.data.len(),
-        TxIndex(0),
-        &mut gas_meter,
-        &mut write_log,
-        &ctx.wl_storage.storage,
-        &mut ctx.vp_wasm_cache,
-        &mut ctx.tx_wasm_cache,
+        &TxIndex(0),
+        ShellParams::DryRun {
+            storage: &ctx.wl_storage.storage,
+            vp_wasm_cache: &mut ctx.vp_wasm_cache,
+            tx_wasm_cache: &mut ctx.tx_wasm_cache,
+        },
+        #[cfg(not(feature = "mainnet"))]
+        true,
     )
     .into_storage_result()?;
     let data = data.try_to_vec().into_storage_result()?;
@@ -343,6 +342,7 @@ where
 
 #[cfg(test)]
 mod test {
+
     use borsh::BorshDeserialize;
     use namada_test_utils::TestWasms;
 

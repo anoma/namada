@@ -13,6 +13,7 @@ use super::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error, Result, DB,
 };
 use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
+use crate::types::ethereum_structs;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::internal::TxQueue;
 use crate::types::storage::{
@@ -89,6 +90,14 @@ impl DB for MockDB {
             None => return Ok(None),
         };
 
+        let ethereum_height: Option<ethereum_structs::BlockHeight> =
+            match self.0.borrow().get("ethereum_height") {
+                Some(bytes) => {
+                    types::decode(bytes).map_err(Error::CodingError)?
+                }
+                None => return Ok(None),
+            };
+
         // Load data at the height
         let prefix = format!("{}/", height.raw());
         let upper_prefix = format!("{}/", height.next_height().raw());
@@ -164,6 +173,7 @@ impl DB for MockDB {
                     results,
                     #[cfg(feature = "ferveo-tpke")]
                     tx_queue,
+                    ethereum_height,
                 }))
             }
             _ => Err(Error::Temporary {
@@ -189,6 +199,7 @@ impl DB for MockDB {
             next_epoch_min_start_time,
             address_gen,
             results,
+            ethereum_height,
             #[cfg(feature = "ferveo-tpke")]
             tx_queue,
         }: BlockStateWrite = state;
@@ -202,6 +213,9 @@ impl DB for MockDB {
             "next_epoch_min_start_time".into(),
             types::encode(&next_epoch_min_start_time),
         );
+        self.0
+            .borrow_mut()
+            .insert("ethereum_height".into(), types::encode(&ethereum_height));
         #[cfg(feature = "ferveo-tpke")]
         {
             self.0
@@ -357,12 +371,15 @@ impl DB for MockDB {
 
     fn read_subspace_val_with_height(
         &self,
-        _key: &Key,
+        key: &Key,
         _height: BlockHeight,
         _last_height: BlockHeight,
     ) -> Result<Option<Vec<u8>>> {
-        // Mock DB can read only the latest value for now
-        unimplemented!()
+        tracing::warn!(
+            "read_subspace_val_with_height is not implemented, will read \
+             subspace value from latest height"
+        );
+        self.read_subspace_val(key)
     }
 
     fn write_subspace_val(

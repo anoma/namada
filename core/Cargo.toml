@@ -30,6 +30,7 @@ abcipp = [
   "ibc-abcipp",
   "tendermint-abcipp",
   "tendermint-proto-abcipp",
+  "namada_tests/abcipp"
 ]
 abciplus = [
   "ibc",
@@ -44,6 +45,10 @@ ibc-mocks = [
 ]
 ibc-mocks-abcipp = [
   "ibc-abcipp/mocks",
+]
+
+ethers-derive = [
+  "ethbridge-structs/ethers-derive"
 ]
 
 # for integration tests and test utilies
@@ -68,9 +73,12 @@ chrono = {version = "0.4.22", default-features = false, features = ["clock", "st
 data-encoding = "2.3.2"
 derivative = "2.2.0"
 ed25519-consensus = "1.2.0"
-ferveo = {optional = true, git = "https://github.com/anoma/ferveo"}
-ferveo-common = {git = "https://github.com/anoma/ferveo"}
-tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo"}
+ethabi = "18.0.0"
+ethbridge-structs = { git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.17.0" }
+eyre = "0.6.8"
+ferveo = {optional = true, git = "https://github.com/anoma/ferveo", rev = "9e5e91c954158e7cff45c483fd06cd649a81553f"}
+ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "9e5e91c954158e7cff45c483fd06cd649a81553f"}
+tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo", rev = "9e5e91c954158e7cff45c483fd06cd649a81553f"}
 # TODO using the same version of tendermint-rs as we do here.
 ibc = {version = "0.14.0", default-features = false, optional = true}
 ibc-proto = {version = "0.17.1", default-features = false, optional = true}
@@ -81,6 +89,9 @@ index-set = {git = "https://github.com/heliaxdev/index-set", tag = "v0.7.1", fea
 itertools = "0.10.0"
 libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
 masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
+num256 = "0.3.5"
+num-rational = "0.4.1"
+num-traits = "0.2.15"
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm", optional = true}
 prost = "0.9.0"
 prost-types = "0.9.0"
@@ -97,6 +108,7 @@ tendermint-proto = {version = "0.23.6", optional = true}
 tendermint-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
 tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
 thiserror = "1.0.30"
+tiny-keccak = {version = "2.0.2", features = ["keccak"]}
 tracing = "0.1.30"
 zeroize = {version = "1.5.5", features = ["zeroize_derive"]}
 

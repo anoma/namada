@@ -7,7 +7,8 @@ use itertools::Itertools;
 use thiserror::Error;
 
 use crate::ledger;
-use crate::ledger::storage::{Storage, StorageHasher};
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::Storage;
 use crate::types::address::{Address, EstablishedAddressGen};
 use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;

@@ -35,6 +35,7 @@ use std::sync::Mutex;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
+use namada::core::types::ethereum_structs;
 use namada::ledger::storage::types::PrefixIterator;
 use namada::ledger::storage::{
     types, BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error,
@@ -517,6 +518,18 @@ impl DB for RocksDB {
             }
         };
 
+        let ethereum_height: Option<ethereum_structs::BlockHeight> = match self
+            .0
+            .get("ethereum_height")
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            None => {
+                tracing::error!("Couldn't load ethereum height from the DB");
+                return Ok(None);
+            }
+        };
+
         // Load data at the height
         let prefix = format!("{}/", height.raw());
         let mut read_opts = ReadOptions::default();
@@ -608,6 +621,7 @@ impl DB for RocksDB {
                     next_epoch_min_start_time,
                     address_gen,
                     tx_queue,
+                    ethereum_height,
                 }))
             }
             _ => Err(Error::Temporary {
@@ -635,6 +649,7 @@ impl DB for RocksDB {
             next_epoch_min_start_time,
             address_gen,
             tx_queue,
+            ethereum_height,
         }: BlockStateWrite = state;
 
         // Epoch start height and time
@@ -673,6 +688,7 @@ impl DB for RocksDB {
             batch.put("pred/tx_queue", pred_tx_queue);
         }
         batch.put("tx_queue", types::encode(&tx_queue));
+        batch.put("ethereum_height", types::encode(&ethereum_height));
 
         let prefix_key = Key::from(height.to_db_key());
         // Merkle tree
@@ -1329,7 +1345,8 @@ mod imp {
 
 #[cfg(test)]
 mod test {
-    use namada::ledger::storage::{MerkleTree, Sha256Hasher};
+    use namada::ledger::storage::traits::Sha256Hasher;
+    use namada::ledger::storage::MerkleTree;
     use namada::types::address::EstablishedAddressGen;
     use namada::types::storage::{BlockHash, Epoch, Epochs};
     use tempfile::tempdir;
@@ -1376,6 +1393,7 @@ mod test {
             next_epoch_min_start_time,
             address_gen: &address_gen,
             tx_queue: &tx_queue,
+            ethereum_height: None,
         };
 
         db.write_block(block, true).unwrap();

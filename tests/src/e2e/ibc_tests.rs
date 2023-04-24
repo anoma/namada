@@ -67,13 +67,14 @@ use ibc_relayer::light_client::{LightClient, Verified};
 use namada::core::ledger::ibc::actions::{commitment_prefix, port_channel_id};
 use namada::ledger::ibc::storage::*;
 use namada::ledger::storage::ics23_specs::ibc_proof_specs;
-use namada::ledger::storage::Sha256Hasher;
+use namada::ledger::storage::traits::Sha256Hasher;
 use namada::types::address::{Address, InternalAddress};
 use namada::types::key::PublicKey;
 use namada::types::storage::{BlockHeight, Key, RESERVED_ADDRESS_PREFIX};
 use namada::types::token::Amount;
 use namada_apps::client::rpc::query_storage_value_bytes;
 use namada_apps::client::utils::id_from_pk;
+use namada_apps::config::ethereum_bridge;
 use setup::constants::*;
 use tendermint::block::Header as TmHeader;
 use tendermint::merkle::proof::Proof as TmProof;
@@ -83,6 +84,7 @@ use tendermint_proto::Protobuf;
 use tendermint_rpc::{Client, HttpClient, Url};
 use tokio::runtime::Runtime;
 
+use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::helpers::{find_address, get_actor_rpc, get_validator_pk};
 use crate::e2e::setup::{self, sleep, Bin, NamadaCmd, Test, Who};
 use crate::{run, run_as};
@@ -90,6 +92,20 @@ use crate::{run, run_as};
 #[test]
 fn run_ledger_ibc() -> Result<()> {
     let (test_a, test_b) = setup::two_single_node_nets()?;
+    set_ethereum_bridge_mode(
+        &test_a,
+        &test_a.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+    set_ethereum_bridge_mode(
+        &test_b,
+        &test_b.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // Run Chain A
     let mut ledger_a = run_as!(

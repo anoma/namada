@@ -3,21 +3,23 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::io::Write;
 use std::num::ParseIntError;
-use std::ops::{Add, Deref, Div, Mul, Rem, Sub};
+use std::ops::{Add, AddAssign, Deref, Div, Mul, Rem, Sub};
 use std::str::FromStr;
 
-use arse_merkle_tree::traits::Value;
-use arse_merkle_tree::{InternalKey, Key as TreeKey};
+use arse_merkle_tree::InternalKey;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
+use ics23::CommitmentProof;
 use index_set::vec::VecIndexSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::key::common;
 use crate::bytes::ByteBuf;
+use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
 use crate::types::address::{self, Address};
 use crate::types::hash::Hash;
+use crate::types::keccak::{KeccakHash, TryFromError};
 use crate::types::time::DateTimeUtc;
 
 /// The maximum size of an IBC key (in bytes) allowed in merkle-ized storage
@@ -26,18 +28,20 @@ pub const IBC_KEY_LIMIT: usize = 120;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("TEMPORARY error: {error}")]
-    Temporary { error: String },
     #[error("Error parsing address: {0}")]
     ParseAddress(address::DecodeError),
     #[error("Error parsing address from a storage key")]
     ParseAddressFromKey,
     #[error("Reserved prefix or string is specified: {0}")]
     InvalidKeySeg(String),
-    #[error("Error parsing key segment {0}")]
+    #[error("Error parsing key segment: {0}")]
     ParseKeySeg(String),
-    #[error("Could not parse string: '{0}' into requested type: {1}")]
-    ParseError(String, String),
+    #[error("Error parsing block hash: {0}")]
+    ParseBlockHash(String),
+    #[error("The key is empty")]
+    EmptyKey,
+    #[error("They key is missing sub-key segments: {0}")]
+    MissingSegments(String),
 }
 
 /// Result for functions that may fail
@@ -169,15 +173,6 @@ impl Display for BlockHeight {
     }
 }
 
-impl FromStr for BlockHeight {
-    type Err = ParseIntError;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        let raw: u64 = FromStr::from_str(s)?;
-        Ok(Self(raw))
-    }
-}
-
 impl Add<u64> for BlockHeight {
     type Output = BlockHeight;
 
@@ -186,9 +181,37 @@ impl Add<u64> for BlockHeight {
     }
 }
 
+impl Sub<u64> for BlockHeight {
+    type Output = Self;
+
+    fn sub(self, rhs: u64) -> Self::Output {
+        Self(self.0 - rhs)
+    }
+}
+
+impl AddAssign for BlockHeight {
+    fn add_assign(&mut self, other: Self) {
+        self.0 += other.0;
+    }
+}
+
+impl AddAssign<u64> for BlockHeight {
+    fn add_assign(&mut self, other: u64) {
+        self.0 += other;
+    }
+}
+
 impl From<BlockHeight> for u64 {
     fn from(height: BlockHeight) -> Self {
         height.0
+    }
+}
+
+impl FromStr for BlockHeight {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(Self(s.parse::<u64>()?))
     }
 }
 
@@ -242,13 +265,11 @@ impl TryFrom<&[u8]> for BlockHash {
 
     fn try_from(value: &[u8]) -> Result<Self> {
         if value.len() != BLOCK_HASH_LENGTH {
-            return Err(Error::Temporary {
-                error: format!(
-                    "Unexpected block hash length {}, expected {}",
-                    value.len(),
-                    BLOCK_HASH_LENGTH
-                ),
-            });
+            return Err(Error::ParseBlockHash(format!(
+                "Unexpected block hash length {}, expected {}",
+                value.len(),
+                BLOCK_HASH_LENGTH
+            )));
         }
         let mut hash = [0; 32];
         hash.copy_from_slice(value);
@@ -260,18 +281,7 @@ impl TryFrom<Vec<u8>> for BlockHash {
     type Error = self::Error;
 
     fn try_from(value: Vec<u8>) -> Result<Self> {
-        if value.len() != BLOCK_HASH_LENGTH {
-            return Err(Error::Temporary {
-                error: format!(
-                    "Unexpected block hash length {}, expected {}",
-                    value.len(),
-                    BLOCK_HASH_LENGTH
-                ),
-            });
-        }
-        let mut hash = [0; 32];
-        hash.copy_from_slice(&value);
-        Ok(BlockHash(hash))
+        value.as_slice().try_into()
     }
 }
 
@@ -365,35 +375,6 @@ pub enum TreeKeyError {
     InvalidMerkleKey(String),
 }
 
-impl TreeKey<IBC_KEY_LIMIT> for StringKey {
-    type Error = TreeKeyError;
-
-    fn as_slice(&self) -> &[u8] {
-        &self.original.as_slice()[..self.length]
-    }
-
-    fn try_from_bytes(bytes: &[u8]) -> std::result::Result<Self, Self::Error> {
-        let mut tree_key = [0u8; IBC_KEY_LIMIT];
-        let mut original = [0u8; IBC_KEY_LIMIT];
-        let mut length = 0;
-        for (i, byte) in bytes.iter().enumerate() {
-            if i >= IBC_KEY_LIMIT {
-                return Err(TreeKeyError::InvalidMerkleKey(
-                    "Input IBC key is too large".into(),
-                ));
-            }
-            original[i] = *byte;
-            tree_key[i] = byte.wrapping_add(1);
-            length += 1;
-        }
-        Ok(Self {
-            original,
-            tree_key: tree_key.into(),
-            length,
-        })
-    }
-}
-
 impl Deref for StringKey {
     type Target = InternalKey<IBC_KEY_LIMIT>;
 
@@ -461,13 +442,23 @@ impl From<TreeBytes> for Vec<u8> {
     }
 }
 
-impl Value for TreeBytes {
-    fn as_slice(&self) -> &[u8] {
-        self.0.as_slice()
-    }
+/// Type of membership proof from a merkle tree
+pub enum MembershipProof {
+    /// ICS23 compliant membership proof
+    ICS23(CommitmentProof),
+    /// Bespoke membership proof for the Ethereum bridge pool
+    BridgePool(BridgePoolProof),
+}
 
-    fn zero() -> Self {
-        TreeBytes::zero()
+impl From<CommitmentProof> for MembershipProof {
+    fn from(proof: CommitmentProof) -> Self {
+        Self::ICS23(proof)
+    }
+}
+
+impl From<BridgePoolProof> for MembershipProof {
+    fn from(proof: BridgePoolProof) -> Self {
+        Self::BridgePool(proof)
     }
 }
 
@@ -616,21 +607,14 @@ impl Key {
         match self.segments.split_first() {
             Some((_, rest)) => {
                 if rest.is_empty() {
-                    Err(Error::Temporary {
-                        error: format!(
-                            "The key doesn't have the sub segments: {}",
-                            self
-                        ),
-                    })
+                    Err(Error::MissingSegments(format!("{self}")))
                 } else {
                     Ok(Self {
                         segments: rest.to_vec(),
                     })
                 }
             }
-            None => Err(Error::Temporary {
-                error: "The key is empty".to_owned(),
-            }),
+            None => Err(Error::EmptyKey),
         }
     }
 
@@ -787,6 +771,36 @@ impl KeySeg for BlockHeight {
     }
 }
 
+impl KeySeg for Epoch {
+    fn parse(string: String) -> Result<Self> {
+        string
+            .split_once('=')
+            .and_then(|(prefix, epoch)| (prefix == "E").then_some(epoch))
+            .ok_or_else(|| {
+                Error::ParseKeySeg(format!(
+                    "Invalid epoch prefix on key: {string}"
+                ))
+            })
+            .and_then(|epoch| {
+                epoch.parse::<u64>().map_err(|e| {
+                    Error::ParseKeySeg(format!(
+                        "Unexpected epoch value {epoch}, {e}"
+                    ))
+                })
+            })
+            .map(Epoch)
+    }
+
+    fn raw(&self) -> String {
+        let &Epoch(epoch) = self;
+        format!("E={epoch}")
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::StringSeg(self.raw())
+    }
+}
+
 impl KeySeg for Address {
     fn parse(mut seg: String) -> Result<Self> {
         match seg.chars().next() {
@@ -804,6 +818,37 @@ impl KeySeg for Address {
 
     fn to_db_key(&self) -> DbKeySeg {
         DbKeySeg::AddressSeg(self.clone())
+    }
+}
+
+impl KeySeg for Hash {
+    fn parse(seg: String) -> Result<Self> {
+        seg.try_into().map_err(|e: crate::types::hash::Error| {
+            Error::ParseKeySeg(e.to_string())
+        })
+    }
+
+    fn raw(&self) -> String {
+        self.to_string()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::StringSeg(self.raw())
+    }
+}
+
+impl KeySeg for KeccakHash {
+    fn parse(seg: String) -> Result<Self> {
+        seg.try_into()
+            .map_err(|e: TryFromError| Error::ParseKeySeg(e.to_string()))
+    }
+
+    fn raw(&self) -> String {
+        self.to_string()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::StringSeg(self.raw())
     }
 }
 
@@ -1191,6 +1236,13 @@ impl Epochs {
     pub fn first_block_heights(&self) -> &[BlockHeight] {
         &self.first_block_heights
     }
+
+    /// Return all starting block heights for each successive Epoch.
+    ///
+    /// __INVARIANT:__ The returned values are sorted in ascending order.
+    pub fn first_block_heights(&self) -> &[BlockHeight] {
+        &self.first_block_heights
+    }
 }
 
 /// A value of a storage prefix iterator.
@@ -1228,6 +1280,19 @@ mod tests {
             let addr = address::testing::established_address_1();
             let key = Key::from(addr.to_db_key()).push(&s).expect("cannnot push the segment");
             assert_eq!(key.segments[1].raw(), s);
+        }
+
+        /// Test roundtrip parsing of key segments derived from [`Epoch`]
+        /// values.
+        #[test]
+        fn test_parse_epoch_key_segment(e in 0..=u64::MAX) {
+            let original_epoch = Epoch(e);
+            let key_seg = match original_epoch.to_db_key() {
+                DbKeySeg::StringSeg(s) => s,
+                _ => panic!("Test failed"),
+            };
+            let parsed_epoch: Epoch = KeySeg::parse(key_seg).expect("Test failed");
+            assert_eq!(original_epoch, parsed_epoch);
         }
     }
 

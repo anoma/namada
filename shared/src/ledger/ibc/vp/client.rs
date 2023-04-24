@@ -33,7 +33,8 @@ use crate::ibc::core::ics23_commitment::commitment::CommitmentRoot;
 use crate::ibc::core::ics24_host::identifier::ClientId;
 use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use crate::ledger::native_vp::VpEnv;
-use crate::ledger::storage::{self, StorageHasher};
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::{self};
 use crate::tendermint_proto::Protobuf;
 use crate::types::ibc::data::{Error as IbcDataError, IbcMessage};
 use crate::types::storage::{BlockHeight, Key};
@@ -574,7 +575,7 @@ where
             .map_err(|_| Ics02Error::implementation_specific())?;
         match header {
             Some(h) => Ok(TmConsensusState {
-                root: CommitmentRoot::from_bytes(h.hash.as_slice()),
+                root: CommitmentRoot::from_bytes(h.hash.0.as_slice()),
                 timestamp: h.time.try_into().unwrap(),
                 next_validators_hash: h.next_validators_hash.into(),
             }

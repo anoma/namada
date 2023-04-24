@@ -14,7 +14,9 @@ use crate::types::hash::Hash;
 use crate::types::time::DurationSecs;
 use crate::types::token;
 
-const ADDRESS: Address = Address::Internal(InternalAddress::Parameters);
+/// The internal address for storage keys representing parameters than
+/// can be changed via governance.
+pub const ADDRESS: Address = Address::Internal(InternalAddress::Parameters);
 
 /// Protocol parameters
 #[derive(
@@ -377,7 +379,7 @@ where
     storage.read(&wrapper_tx_fees_key)
 }
 
-// Read the all the parameters from storage. Returns the parameters and gas
+/// Read all the parameters from storage. Returns the parameters and gas
 /// cost.
 pub fn read<S>(storage: &S) -> storage_api::Result<Parameters>
 where

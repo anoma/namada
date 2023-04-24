@@ -44,12 +44,13 @@ use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
-use namada::types::key::*;
+use namada::types::key::{self, *};
 use namada::types::masp::{PaymentAddress, TransferTarget};
 use namada::types::storage::{
-    BlockHeight, Epoch, Key, KeySeg, TxIndex, RESERVED_ADDRESS_PREFIX,
+    self, BlockHeight, Epoch, Key, KeySeg, TxIndex, RESERVED_ADDRESS_PREFIX,
 };
 use namada::types::time::DateTimeUtc;
+use namada::types::token;
 use namada::types::token::{
     Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
@@ -58,6 +59,7 @@ use namada::types::transaction::governance::{
 };
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{storage, token};
+use namada::vm;
 use rand_core::{CryptoRng, OsRng, RngCore};
 use rust_decimal::Decimal;
 use sha2::Digest;
@@ -244,6 +246,8 @@ pub async fn submit_init_validator(
         scheme,
         account_key,
         consensus_key,
+        eth_cold_key,
+        eth_hot_key,
         protocol_key,
         commission_rate,
         max_commission_rate_change,
@@ -259,6 +263,8 @@ pub async fn submit_init_validator(
 
     let validator_key_alias = format!("{}-key", alias);
     let consensus_key_alias = format!("{}-consensus-key", alias);
+    let eth_hot_key_alias = format!("{}-eth-hot-key", alias);
+    let eth_cold_key_alias = format!("{}-eth-cold-key", alias);
     let account_key = ctx.get_opt_cached(&account_key).unwrap_or_else(|| {
         println!("Generating validator account key...");
         ctx.wallet
@@ -292,14 +298,58 @@ pub async fn submit_init_validator(
                 .1
         });
 
+    let eth_cold_key = ctx
+        .get_opt_cached(&eth_cold_key)
+        .map(|key| match key {
+            common::SecretKey::Secp256k1(_) => key,
+            common::SecretKey::Ed25519(_) => {
+                eprintln!("Eth cold key can only be secp256k1");
+                safe_exit(1)
+            }
+        })
+        .unwrap_or_else(|| {
+            println!("Generating Eth cold key...");
+            ctx.wallet
+                .gen_key(
+                    // Note that ETH only allows secp256k1
+                    SchemeType::Secp256k1,
+                    Some(eth_cold_key_alias.clone()),
+                    unsafe_dont_encrypt,
+                )
+                .1
+        });
+
+    let eth_hot_key = ctx
+        .get_opt_cached(&eth_hot_key)
+        .map(|key| match key {
+            common::SecretKey::Secp256k1(_) => key,
+            common::SecretKey::Ed25519(_) => {
+                eprintln!("Eth hot key can only be secp256k1");
+                safe_exit(1)
+            }
+        })
+        .unwrap_or_else(|| {
+            println!("Generating Eth hot key...");
+            ctx.wallet
+                .gen_key(
+                    // Note that ETH only allows secp256k1
+                    SchemeType::Secp256k1,
+                    Some(eth_hot_key_alias.clone()),
+                    unsafe_dont_encrypt,
+                )
+                .1
+        });
     let protocol_key = ctx.get_opt_cached(&protocol_key);
 
     if protocol_key.is_none() {
         println!("Generating protocol signing key...");
     }
+    let eth_hot_pk = eth_hot_key.ref_to();
     // Generate the validator keys
-    let validator_keys =
-        ctx.wallet.gen_validator_keys(protocol_key, scheme).unwrap();
+    let validator_keys = ctx
+        .wallet
+        .gen_validator_keys(Some(eth_hot_pk), protocol_key, scheme)
+        .unwrap();
     let protocol_key = validator_keys.get_protocol_keypair().ref_to();
     let dkg_key = validator_keys
         .dkg_keypair
@@ -349,6 +399,14 @@ pub async fn submit_init_validator(
     let data = InitValidator {
         account_key,
         consensus_key: consensus_key.ref_to(),
+        eth_cold_key: key::secp256k1::PublicKey::try_from_pk(
+            &eth_cold_key.ref_to(),
+        )
+        .unwrap(),
+        eth_hot_key: key::secp256k1::PublicKey::try_from_pk(
+            &eth_hot_key.ref_to(),
+        )
+        .unwrap(),
         protocol_key,
         dkg_key,
         commission_rate,
@@ -2855,7 +2913,7 @@ impl ProcessTxResponse {
 
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
-async fn process_tx(
+pub async fn process_tx(
     ctx: Context,
     args: &args::Tx,
     tx: Tx,

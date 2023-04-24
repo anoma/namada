@@ -1,6 +1,7 @@
 //! Storage API for querying data about Proof-of-stake related
 //! data. This includes validator and epoch related data.
 use borsh::BorshDeserialize;
+use namada_core::ferveo_common::TendermintValidator;
 use namada_core::ledger::parameters::storage::get_max_proposal_bytes_key;
 use namada_core::ledger::parameters::EpochDuration;
 use namada_core::ledger::storage::WlStorage;
@@ -10,16 +11,25 @@ use namada_core::tendermint_proto::google::protobuf;
 use namada_core::tendermint_proto::types::EvidenceParams;
 use namada_core::types::address::Address;
 use namada_core::types::chain::ProposalBytes;
+use namada_core::types::key::dkg_session_keys::DkgPublicKey;
 use namada_core::types::storage::{BlockHeight, Epoch};
+use namada_core::types::transaction::EllipticCurve;
 use namada_core::types::{key, token};
 use thiserror::Error;
 
 use crate::types::{ConsensusValidatorSet, WeightedValidator};
-use crate::{consensus_validator_set_handle, PosParams};
+use crate::{
+    consensus_validator_set_handle, find_validator_by_raw_hash,
+    read_pos_params, validator_eth_cold_key_handle,
+    validator_eth_hot_key_handle, ConsensusValidatorSet, PosParams,
+};
 
 /// Errors returned by [`PosQueries`] operations.
 #[derive(Error, Debug)]
 pub enum Error {
+    /// A storage error occurred.
+    #[error("Storage error: {0}")]
+    Storage(storage_api::Error),
     /// The given address is not among the set of consensus validators for
     /// the corresponding epoch.
     #[error(
@@ -164,6 +174,52 @@ where
         }
     }
 
+    /// Lookup data about a validator from their protocol signing key.
+    pub fn get_validator_from_protocol_pk(
+        &self,
+        pk: &key::common::PublicKey,
+        epoch: Option<Epoch>,
+    ) -> Result<TendermintValidator<EllipticCurve>> {
+        let pk_bytes = pk
+            .try_to_vec()
+            .expect("Serializing public key should not fail");
+        let epoch = epoch
+            .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
+        self.get_active_validators(Some(epoch))
+            .iter()
+            .find(|validator| {
+                let pk_key = key::protocol_pk_key(&validator.address);
+                match self.wl_storage.storage.read(&pk_key) {
+                    Ok((Some(bytes), _)) => bytes == pk_bytes,
+                    _ => false,
+                }
+            })
+            .map(|validator| {
+                let dkg_key =
+                    key::dkg_session_keys::dkg_pk_key(&validator.address);
+                let bytes = self
+                    .wl_storage
+                    .storage
+                    .read(&dkg_key)
+                    .expect("Validator should have public dkg key")
+                    .0
+                    .expect("Validator should have public dkg key");
+                let dkg_publickey =
+                    &<DkgPublicKey as BorshDeserialize>::deserialize(
+                        &mut bytes.as_ref(),
+                    )
+                    .expect(
+                        "DKG public key in storage should be deserializable",
+                    );
+                TendermintValidator {
+                    power: validator.bonded_stake.into(),
+                    address: validator.address.to_string(),
+                    public_key: dkg_publickey.into(),
+                }
+            })
+            .ok_or_else(|| Error::NotValidatorKey(pk.to_string(), epoch))
+    }
+
     /// Lookup data about a validator from their address.
     pub fn get_validator_from_address(
         self,
@@ -269,6 +325,60 @@ where
         )
         .expect("Must be able to read ProposalBytes from storage")
         .expect("ProposalBytes must be present in storage")
+    }
+
+    /// Fetch the first [`BlockHeight`] of the last [`Epoch`]
+    /// committed to storage.
+    #[inline]
+    pub fn get_epoch_start_height(self) -> BlockHeight {
+        // NOTE: the first stored height in `fst_block_heights_of_each_epoch`
+        // is 0, because of a bug (should be 1), so this code needs to
+        // handle that case
+        //
+        // we can remove this check once that's fixed
+        if self.wl_storage.storage.last_epoch.0 == 0 {
+            return BlockHeight(1);
+        }
+        self.wl_storage
+            .storage
+            .block
+            .pred_epochs
+            .first_block_heights()
+            .last()
+            .copied()
+            .expect("The block height of the current epoch should be known")
+    }
+
+    /// Get a validator's Ethereum hot key from storage, at the given epoch, or
+    /// the last one, if none is provided.
+    pub fn read_validator_eth_hot_key(
+        &self,
+        validator: &Address,
+        epoch: Option<Epoch>,
+    ) -> Option<key::common::PublicKey> {
+        let epoch = epoch
+            .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
+        let params = self.get_pos_params();
+        validator_eth_hot_key_handle(validator)
+            .get(self.wl_storage, epoch, &params)
+            .ok()
+            .flatten()
+    }
+
+    /// Get a validator's Ethereum cold key from storage, at the given epoch, or
+    /// the last one, if none is provided.
+    pub fn read_validator_eth_cold_key(
+        &self,
+        validator: &Address,
+        epoch: Option<Epoch>,
+    ) -> Option<key::common::PublicKey> {
+        let epoch = epoch
+            .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
+        let params = self.get_pos_params();
+        validator_eth_cold_key_handle(validator)
+            .get(self.wl_storage, epoch, &params)
+            .ok()
+            .flatten()
     }
 }
 

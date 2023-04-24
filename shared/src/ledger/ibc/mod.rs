@@ -10,7 +10,8 @@ use namada_core::ledger::ibc::storage::{
 use namada_core::ledger::storage::WlStorage;
 use namada_core::ledger::storage_api::StorageWrite;
 
-use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::{self as ledger_storage, Storage};
 
 /// Initialize storage in the genesis block.
 pub fn init_genesis_storage<DB, H>(storage: &mut WlStorage<DB, H>)

@@ -25,6 +25,9 @@ build-test:
 build-release:
 	NAMADA_DEV=false $(cargo) build --release --package namada_apps --manifest-path Cargo.toml
 
+build-debug:
+	NAMADA_DEV=false $(cargo) build --package namada_apps --manifest-path Cargo.toml
+
 install-release:
 	NAMADA_DEV=false $(cargo) install --path ./apps --locked
 
@@ -70,15 +73,18 @@ clippy-abcipp:
 		--manifest-path ./proof_of_stake/Cargo.toml \
 		--features "testing" && \
 	$(cargo) +$(nightly) clippy --all-targets \
+		--manifest-path ./core/Cargo.toml \
+		--no-default-features \
+		--features "testing wasm-runtime abcipp ibc-mocks-abcipp ferveo-tpke"
+	$(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./shared/Cargo.toml \
 		--no-default-features \
 		--features "testing wasm-runtime abcipp ibc-mocks-abcipp ferveo-tpke" && \
 	$(cargo) +$(nightly) clippy \
 		--all-targets \
 		--manifest-path ./vm_env/Cargo.toml \
-		--no-default-features && \
-	make -C $(wasms) clippy && \
-	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
+		--no-default-features \
+		--features "abcipp"
 
 clippy-mainnet:
 	$(cargo) +$(nightly) clippy --all-targets --features "mainnet" -- -D warnings
@@ -141,16 +147,22 @@ test-unit-abcipp:
 		$(TEST_FILTER) -- \
 		-Z unstable-options --report-time && \
 	$(cargo) test \
+		--manifest-path ./core/Cargo.toml \
+		--no-default-features \
+		--features "testing wasm-runtime abcipp ibc-mocks-abcipp ferveo-tpke" \
+			$(TEST_FILTER) -- \
+			-Z unstable-options --report-time && \
+	$(cargo) test \
 		--manifest-path ./shared/Cargo.toml \
 		--no-default-features \
-		--features "testing wasm-runtime abcipp ibc-mocks-abcipp" \
+		--features "testing wasm-runtime abcipp ibc-mocks-abcipp ferveo-tpke" \
 		-Z unstable-options \
 		$(TEST_FILTER) -- \
 		-Z unstable-options --report-time && \
 	$(cargo) test \
 		--manifest-path ./vm_env/Cargo.toml \
 		--no-default-features \
-		--features "abcipp" \
+		--features "namada_core/abcipp" \
 		-Z unstable-options \
 		$(TEST_FILTER) -- \
 		-Z unstable-options --report-time

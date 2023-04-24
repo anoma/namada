@@ -38,10 +38,6 @@ governance.
 confirmations, that must be at least the protocol-specified minimum number of
 confirmations but is initially set to __100__.
 
-Validators must not vote to include events that have not met the required
-number of confirmations. Voting on unconfirmed events is considered a
-slashable offence.
-
 ## Storage
 To make including new events easy, we take the approach of always overwriting
 the state with the new state rather than applying state diffs. The storage

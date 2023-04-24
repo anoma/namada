@@ -13,12 +13,13 @@ pub mod write_log;
 use core::fmt::Debug;
 use std::cmp::Ordering;
 
+use borsh::BorshSerialize;
+use merkle_tree::StorageBytes;
 pub use merkle_tree::{
-    MembershipProof, MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite,
-    StoreType,
+    MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreType,
 };
 use thiserror::Error;
-pub use traits::{Sha256Hasher, StorageHasher};
+pub use traits::{DummyHasher, KeccakHasher, Sha256Hasher, StorageHasher};
 pub use wl_storage::{
     iter_prefix_post, iter_prefix_pre, PrefixIter, TempWlStorage, WlStorage,
 };
@@ -26,6 +27,7 @@ pub use wl_storage::{
 #[cfg(feature = "wasm-runtime")]
 pub use self::masp_conversions::update_allowed_conversions;
 pub use self::masp_conversions::{encode_asset_type, ConversionState};
+use crate::ledger::eth_bridge::storage::bridge_pool::is_pending_transfer_key;
 use crate::ledger::gas::MIN_STORAGE_GAS;
 use crate::ledger::parameters::{self, EpochDuration, Parameters};
 use crate::ledger::storage::merkle_tree::{
@@ -38,7 +40,6 @@ use crate::types::address::{
 };
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
 use crate::types::hash::{Error as HashError, Hash};
-// TODO
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::internal::TxQueue;
 use crate::types::storage::{
@@ -46,7 +47,7 @@ use crate::types::storage::{
     TxIndex, BLOCK_HASH_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
-use crate::types::token;
+use crate::types::{ethereum_structs, token};
 
 /// A result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
@@ -102,6 +103,9 @@ where
     pub tx_queue: TxQueue,
     /// How many block heights in the past can the storage be queried
     pub storage_read_past_height_limit: Option<u64>,
+    /// The latest block height on Ethereum processed, if
+    /// the bridge is enabled.
+    pub ethereum_height: Option<ethereum_structs::BlockHeight>,
 }
 
 /// The block storage data
@@ -175,6 +179,9 @@ pub struct BlockStateRead {
     /// Wrapper txs to be decrypted in the next block proposal
     #[cfg(feature = "ferveo-tpke")]
     pub tx_queue: TxQueue,
+    /// The latest block height on Ethereum processed, if
+    /// the bridge is enabled.
+    pub ethereum_height: Option<ethereum_structs::BlockHeight>,
 }
 
 /// The block's state to write into the database.
@@ -202,6 +209,9 @@ pub struct BlockStateWrite<'a> {
     /// Wrapper txs to be decrypted in the next block proposal
     #[cfg(feature = "ferveo-tpke")]
     pub tx_queue: &'a TxQueue,
+    /// The latest block height on Ethereum processed, if
+    /// the bridge is enabled.
+    pub ethereum_height: Option<&'a ethereum_structs::BlockHeight>,
 }
 
 /// A database backend.
@@ -384,6 +394,7 @@ where
             tx_queue: TxQueue::default(),
             native_token,
             storage_read_past_height_limit,
+            ethereum_height: None,
         }
     }
 
@@ -402,6 +413,7 @@ where
             address_gen,
             #[cfg(feature = "ferveo-tpke")]
             tx_queue,
+            ethereum_height,
         }) = self.db.read_last_block()?
         {
             self.block.hash = hash;
@@ -438,6 +450,7 @@ where
             {
                 self.tx_queue = tx_queue;
             }
+            self.ethereum_height = ethereum_height;
             tracing::debug!("Loaded storage from DB");
         } else {
             tracing::info!("No state could be found");
@@ -473,6 +486,7 @@ where
             address_gen: &self.address_gen,
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: &self.tx_queue,
+            ethereum_height: self.ethereum_height.as_ref(),
         };
         self.db.write_block(state, is_full_commit)?;
         self.last_height = self.block.height;
@@ -565,7 +579,15 @@ where
         // but with gas and storage bytes len diff accounting
         tracing::debug!("storage write key {}", key,);
         let value = value.as_ref();
-        self.block.tree.update(key, value)?;
+        if is_pending_transfer_key(key) {
+            // The tree of the bright pool stores the current height for the
+            // pending transfer
+            let height =
+                self.block.height.try_to_vec().expect("Encoding failed");
+            self.block.tree.update(key, height)?;
+        } else {
+            self.block.tree.update(key, value)?;
+        }
 
         let len = value.len();
         let gas = key.len() + len;
@@ -720,7 +742,12 @@ where
         Ok(tree)
     }
 
-    /// Get the existence proof
+    /// Get a Tendermint-compatible existence proof.
+    ///
+    /// Proofs from the Ethereum bridge pool are not
+    /// Tendermint-compatible. Requesting for a key
+    /// belonging to the bridge pool will cause this
+    /// method to error.
     #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
     pub fn get_existence_proof(
         &self,
@@ -749,7 +776,6 @@ where
     }
 
     /// Get the non-existence proof
-    #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
     pub fn get_non_existence_proof(
         &self,
         key: &Key,
@@ -881,7 +907,15 @@ where
         value: impl AsRef<[u8]>,
     ) -> Result<i64> {
         let value = value.as_ref();
-        self.block.tree.update(key, value)?;
+        if is_pending_transfer_key(key) {
+            // The tree of the bright pool stores the current height for the
+            // pending transfer
+            let height =
+                self.block.height.try_to_vec().expect("Encoding failed");
+            self.block.tree.update(key, height)?;
+        } else {
+            self.block.tree.update(key, value)?;
+        }
         self.db
             .batch_write_subspace_val(batch, self.block.height, key, value)
     }
@@ -983,6 +1017,7 @@ pub mod testing {
                 tx_queue: TxQueue::default(),
                 native_token: address::nam(),
                 storage_read_past_height_limit: Some(1000),
+                ethereum_height: None,
             }
         }
     }

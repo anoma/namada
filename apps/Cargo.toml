@@ -39,6 +39,12 @@ doc = false
 name = "namadaw"
 path = "src/bin/namada-wallet/main.rs"
 
+# Namada relayer
+[[bin]]
+doc = false
+name = "namadar"
+path = "src/bin/namada-relayer/main.rs"
+
 [features]
 default = ["std", "abciplus"]
 mainnet = [
@@ -48,7 +54,6 @@ dev = ["namada/dev"]
 std = ["ed25519-consensus/std", "rand/std", "rand_core/std"]
 # for integration tests and test utilies
 testing = ["dev"]
-
 abcipp = [
     "namada/abcipp",
     "namada/tendermint-rpc-abcipp",
@@ -57,6 +62,7 @@ abcipp = [
     "tendermint-proto-abcipp",
     "tendermint-rpc-abcipp",
     "tower-abci-abcipp",
+    "namada/tendermint-abcipp"
 ]
 
 abciplus = [
@@ -86,13 +92,20 @@ byte-unit = "4.0.13"
 byteorder = "1.4.2"
 # https://github.com/clap-rs/clap/issues/1037
 clap = {git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2", default-features = false, features = ["std", "suggestions", "color", "cargo"]}
+clarity = "0.5.1"
 color-eyre = "0.5.10"
 config = "0.11.0"
 data-encoding = "2.3.2"
 derivative = "2.2.0"
 ed25519-consensus = "1.2.0"
-ferveo = {git = "https://github.com/anoma/ferveo"}
-ferveo-common = {git = "https://github.com/anoma/ferveo"}
+ethabi = "18.0.0"
+ethbridge-bridge-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.17.0"}
+ethbridge-bridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.17.0"}
+ethbridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.17.0"}
+ethbridge-governance-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.17.0"}
+ethbridge-governance-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.17.0"}
+ferveo = {git = "https://github.com/anoma/ferveo", rev = "9e5e91c954158e7cff45c483fd06cd649a81553f"}
+ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "9e5e91c954158e7cff45c483fd06cd649a81553f"}
 eyre = "0.6.5"
 flate2 = "1.0.22"
 file-lock = "2.0.2"
@@ -100,12 +113,15 @@ futures = "0.3"
 itertools = "0.10.1"
 libc = "0.2.97"
 libloading = "0.7.2"
+message-io = {version = "0.14.3", default-features = false, features = ["websocket"]}
+num256 = "0.3.5"
 num-derive = "0.3.3"
 num-rational = "0.4.1"
 num-traits = "0.2.14"
 num_cpus = "1.13.0"
 once_cell = "1.8.0"
 orion = "0.16.0"
+parse_duration = "2.1.1"
 prost = "0.9.0"
 prost-types = "0.9.0"
 rand = {version = "0.8", default-features = false}
@@ -119,6 +135,8 @@ rpassword = "5.0.1"
 serde = {version = "1.0.125", features = ["derive"]}
 serde_bytes = "0.11.5"
 serde_json = {version = "1.0.62", features = ["raw_value"]}
+serde_regex = "1.1.0"
+semver = "1.0.14"
 sha2 = "0.9.3"
 signal-hook = "0.3.9"
 # sysinfo with disabled multithread feature
@@ -133,7 +151,7 @@ tendermint = {version = "0.23.6", optional = true}
 tendermint-config = {version = "0.23.6", optional = true}
 tendermint-proto = {version = "0.23.6", optional = true}
 tendermint-rpc = {version = "0.23.6", features = ["http-client", "websocket-client"], optional = true}
-thiserror = "1.0.30"
+thiserror = "1.0.36"
 tokio = {version = "1.8.2", features = ["full"]}
 toml = "0.5.8"
 tonic = "0.6.1"
@@ -145,6 +163,7 @@ tower-abci = {version = "0.1.0", optional = true}
 tracing = "0.1.30"
 tracing-log = "0.1.2"
 tracing-subscriber = {version = "0.3.7", features = ["env-filter", "json"]}
+web30 = "0.19.1"
 websocket = "0.26.2"
 winapi = "0.3.9"
 #libmasp = { git = "https://github.com/anoma/masp", branch = "murisi/masp-incentive" }
@@ -154,7 +173,11 @@ bimap = {version = "0.6.2", features = ["serde"]}
 rust_decimal = "1.26.1"
 rust_decimal_macros = "1.26.1"
 
+warp = "0.3.2"
+bytes = "1.1.0"
+
 [dev-dependencies]
+assert_matches = "1.5.0"
 namada = {path = "../shared", default-features = false, features = ["testing", "wasm-runtime"]}
 namada_test_utils = {path = "../test_utils"}
 bit-set = "0.5.2"
