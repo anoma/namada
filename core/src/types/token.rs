@@ -16,7 +16,7 @@ use crate::ledger::storage_api::StorageRead;
 use crate::types::address::{masp, Address, DecodeError as AddressError};
 use crate::types::storage;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
-use crate::types::uint::{self, SignedUint, Uint};
+use crate::types::uint::{self, I256, Uint};
 
 /// Amount in micro units. For different granularity another representation
 /// might be more appropriate.
@@ -49,7 +49,7 @@ pub const NATIVE_MAX_DECIMAL_PLACES: u8 = 6;
 pub const NATIVE_SCALE: u64 = 1_000_000;
 
 /// A change in tokens amount
-pub type Change = SignedUint;
+pub type Change = I256;
 
 impl Amount {
     /// Get the amount as a [`Change`]
@@ -207,7 +207,7 @@ impl Amount {
     pub fn to_string_native(&self) -> String {
         DenominatedAmount {
             amount: *self,
-            denom: 6.into(),
+            denom:NATIVE_MAX_DECIMAL_PLACES.into(),
         }
         .to_string_precise()
     }

@@ -1426,26 +1426,30 @@ async fn gen_shielded_transfer(
         LocalTxProver::with_default_location()
             .expect("unable to load MASP Parameters")
     };
-    let fee = if spending_key.is_some() {
+    let fee_amount = if spending_key.is_some() {
         let InputAmount::Validated(fee) = args.tx.fee_amount else {
             unreachable!("The function `gen_shielded_transfer` is only called by `submit_tx` which validates amounts.")
         };
         // Transaction fees need to match the amount in the wrapper Transfer
         // when MASP source is used. This amount should be <= `u64::MAX`.
-        let (_, fee) = convert_amount(
+        let (_, shielded_fee) = convert_amount(
             epoch,
             &ctx.get(&args.tx.fee_token),
             &None,
             MaspDenom::Zero.denominate(&fee.amount),
             MaspDenom::Zero,
         );
-        builder.set_fee(fee.clone())?;
-        fee
+        builder.set_fee(shielded_fee)?;
+        if shielded_gas {
+            fee.amount
+        } else {
+            token::Amount::zero()
+        }
     } else {
         // No transfer fees come from the shielded transaction for non-MASP
         // sources
         builder.set_fee(Amount::zero())?;
-        Amount::zero()
+        token::Amount::zero()
     };
     // break up a transfer into a number of transfers with suitable
     // denominations
@@ -1453,12 +1457,12 @@ async fn gen_shielded_transfer(
         unreachable!("The function `gen_shielded_transfer` is only called by `submit_tx` which validates amounts.")
     };
     for denom in MaspDenom::iter() {
-        let denom_amount = denom.denominate(&amt.amount);
+        let denom_amount = denom.denominate(&(amt.amount + fee_amount));
         if denom_amount == 0 {
             continue;
         }
         // Convert transaction amount into MASP types
-        let (asset_type, amount) = convert_amount(
+        let (asset_type, required_amt) = convert_amount(
             epoch,
             &ctx.get(&args.token),
             &args.sub_prefix.as_ref(),
@@ -1468,15 +1472,6 @@ async fn gen_shielded_transfer(
 
         // If there are shielded inputs
         if let Some(sk) = spending_key {
-            // If the gas is coming from the shielded pool, then our shielded
-            // inputs must also cover the gas fee
-            let required_amt = if shielded_gas && denom == MaspDenom::Zero {
-                // TODO: This could overflow the amount. Need carry logic.
-                // TODO: Move this up out of the loop.
-                amount + fee.clone()
-            } else {
-                amount
-            };
             // Locate unspent notes that can help us meet the transaction amount
             let (_, unspent_notes, used_convs) = ctx
                 .shielded

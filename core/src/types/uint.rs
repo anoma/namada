@@ -71,7 +71,7 @@ impl Uint {
     }
 }
 
-/// The maximum absolute value a [`SignedUint`] may have.
+/// The maximum absolute value a [`I256`] may have.
 /// Note the the last digit is 2^63 - 1. We add this cap so
 /// we can use two's complement.
 pub const MAX_SIGNED_VALUE: Uint =
@@ -83,9 +83,9 @@ const MINUS_ZERO: Uint = Uint([0u64, 0u64, 0u64, 9223372036854775808]);
 #[derive(
     Copy, Clone, Debug, Default, PartialEq, Eq, BorshSerialize, BorshDeserialize,
 )]
-pub struct SignedUint(Uint);
+pub struct I256(Uint);
 
-impl SignedUint {
+impl I256 {
     /// Check if the amount is not negative (greater
     /// than or equal to zero)
     pub fn non_negative(&self) -> bool {
@@ -118,7 +118,7 @@ impl SignedUint {
         sign
     }
 
-    /// Adds two [`SignedUint`]'s if the absolute value does
+    /// Adds two [`I256`]'s if the absolute value does
     /// not exceed [`MAX_SIGNED_VALUE`], else returns `None`.
     pub fn checked_add(&self, other: &Self) -> Option<Self> {
         if self.non_negative() == other.non_negative() {
@@ -132,7 +132,7 @@ impl SignedUint {
         }
     }
 
-    /// Subtracts two [`SignedUint`]'s if the absolute value does
+    /// Subtracts two [`I256`]'s if the absolute value does
     /// not exceed [`MAX_SIGNED_VALUE`], else returns `None`.
     pub fn checked_sub(&self, other: &Self) -> Option<Self> {
         self.checked_add(&other.neg())
@@ -144,14 +144,14 @@ impl SignedUint {
     }
 }
 
-impl From<u64> for SignedUint {
+impl From<u64> for I256 {
     fn from(val: u64) -> Self {
-        SignedUint::try_from(Uint::from(val))
+        I256::try_from(Uint::from(val))
             .expect("A u64 will always fit in this type")
     }
 }
 
-impl TryFrom<Uint> for SignedUint {
+impl TryFrom<Uint> for I256 {
     type Error = Box<dyn 'static + std::error::Error>;
 
     fn try_from(value: Uint) -> Result<Self, Self::Error> {
@@ -165,7 +165,7 @@ impl TryFrom<Uint> for SignedUint {
     }
 }
 
-impl Neg for SignedUint {
+impl Neg for I256 {
     type Output = Self;
 
     fn neg(self) -> Self::Output {
@@ -173,7 +173,7 @@ impl Neg for SignedUint {
     }
 }
 
-impl PartialOrd for SignedUint {
+impl PartialOrd for I256 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self.non_negative(), other.non_negative()) {
             (true, false) => Some(Ordering::Greater),
@@ -192,16 +192,16 @@ impl PartialOrd for SignedUint {
     }
 }
 
-impl Ord for SignedUint {
+impl Ord for I256 {
     fn cmp(&self, other: &Self) -> Ordering {
         self.partial_cmp(other).unwrap()
     }
 }
 
-impl Add<SignedUint> for SignedUint {
+impl Add<I256> for I256 {
     type Output = Self;
 
-    fn add(self, rhs: SignedUint) -> Self::Output {
+    fn add(self, rhs: I256) -> Self::Output {
         match (self.non_negative(), rhs.non_negative()) {
             (true, true) => Self(self.0 + rhs.0),
             (false, false) => -Self(self.abs() + rhs.abs()),
@@ -224,13 +224,13 @@ impl Add<SignedUint> for SignedUint {
     }
 }
 
-impl AddAssign for SignedUint {
+impl AddAssign for I256 {
     fn add_assign(&mut self, rhs: Self) {
         *self = *self + rhs;
     }
 }
 
-impl Sub for SignedUint {
+impl Sub for I256 {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
@@ -238,7 +238,7 @@ impl Sub for SignedUint {
     }
 }
 
-impl From<i128> for SignedUint {
+impl From<i128> for I256 {
     fn from(val: i128) -> Self {
         if val < 0 {
             let abs = Self((-val).into());
@@ -249,22 +249,22 @@ impl From<i128> for SignedUint {
     }
 }
 
-impl From<i64> for SignedUint {
+impl From<i64> for I256 {
     fn from(val: i64) -> Self {
         Self::from(val as i128)
     }
 }
 
-impl From<i32> for SignedUint {
+impl From<i32> for I256 {
     fn from(val: i32) -> Self {
         Self::from(val as i128)
     }
 }
 
-impl TryFrom<SignedUint> for i128 {
+impl TryFrom<I256> for i128 {
     type Error = std::io::Error;
 
-    fn try_from(value: SignedUint) -> Result<Self, Self::Error> {
+    fn try_from(value: I256) -> Result<Self, Self::Error> {
         if !value.non_negative() {
             Ok(-(u128::try_from(Amount::from_change(value))? as i128))
         } else {
@@ -311,12 +311,12 @@ mod test_uint {
     #[test]
     fn test_max_signed_value() {
         let signed =
-            SignedUint::try_from(MAX_SIGNED_VALUE).expect("Test failed");
-        let one = SignedUint::try_from(Uint::from(1u64)).expect("Test failed");
+            I256::try_from(MAX_SIGNED_VALUE).expect("Test failed");
+        let one = I256::try_from(Uint::from(1u64)).expect("Test failed");
         let overflow = signed + one;
         assert_eq!(
             overflow,
-            SignedUint::try_from(Uint::zero()).expect("Test failed")
+            I256::try_from(Uint::zero()).expect("Test failed")
         );
         assert!(signed.checked_add(&one).is_none());
         assert!((-signed).checked_sub(&one).is_none());
@@ -331,7 +331,7 @@ mod test_uint {
         assert!(larger > smaller);
         assert_eq!(smaller, MAX_SIGNED_VALUE);
         assert_eq!(larger, MINUS_ZERO);
-        assert!(SignedUint::try_from(MINUS_ZERO).is_err());
+        assert!(I256::try_from(MINUS_ZERO).is_err());
         let zero = Uint::zero();
         assert_eq!(zero, zero.negate());
     }
@@ -340,25 +340,25 @@ mod test_uint {
     /// sign.
     #[test]
     fn test_non_negative() {
-        let zero = SignedUint::try_from(Uint::zero()).expect("Test failed");
+        let zero = I256::try_from(Uint::zero()).expect("Test failed");
         assert!(zero.non_negative());
         assert!((-zero).non_negative());
-        let negative = SignedUint(Uint([1u64, 0, 0, 2u64.pow(63)]));
+        let negative = I256(Uint([1u64, 0, 0, 2u64.pow(63)]));
         assert!(!negative.non_negative());
         assert!((-negative).non_negative());
-        let positive = SignedUint(MAX_SIGNED_VALUE);
+        let positive = I256(MAX_SIGNED_VALUE);
         assert!(positive.non_negative());
         assert!(!(-positive).non_negative());
     }
 
-    /// Test that the absolute vale is computed correctly
+    /// Test that the absolute value is computed correctly.
     #[test]
     fn test_abs() {
-        let zero = SignedUint::try_from(Uint::zero()).expect("Test failed");
-        let neg_one = SignedUint(Uint::max_value());
-        let neg_eight = SignedUint(Uint::max_value() - Uint::from(7));
-        let two = SignedUint(Uint::from(2));
-        let ten = SignedUint(Uint::from(10));
+        let zero = I256::try_from(Uint::zero()).expect("Test failed");
+        let neg_one = I256(Uint::max_value());
+        let neg_eight = I256(Uint::max_value() - Uint::from(7));
+        let two = I256(Uint::from(2));
+        let ten = I256(Uint::from(10));
 
         assert_eq!(zero.abs(), Uint::zero());
         assert_eq!(neg_one.abs(), Uint::from(1));
@@ -367,15 +367,15 @@ mod test_uint {
         assert_eq!(ten.abs(), Uint::from(10));
     }
 
-    /// Test that the absolute vale is computed correctly
+    /// Test that the string representation is created correctly.
     #[test]
     fn test_to_string_native() {
         let native_scaling = Uint::exp10(6);
-        let zero = SignedUint::try_from(Uint::zero()).expect("Test failed");
-        let neg_one = -SignedUint(native_scaling);
-        let neg_eight = -SignedUint(Uint::from(8) * native_scaling);
-        let two = SignedUint(Uint::from(2) * native_scaling);
-        let ten = SignedUint(Uint::from(10) * native_scaling);
+        let zero = I256::try_from(Uint::zero()).expect("Test failed");
+        let neg_one = -I256(native_scaling);
+        let neg_eight = -I256(Uint::from(8) * native_scaling);
+        let two = I256(Uint::from(2) * native_scaling);
+        let ten = I256(Uint::from(10) * native_scaling);
 
         assert_eq!(zero.to_string_native(), "0.000000");
         assert_eq!(neg_one.to_string_native(), "-1.000000");
@@ -387,22 +387,22 @@ mod test_uint {
     /// Test that we correctly handle arithmetic with two's complement
     #[test]
     fn test_arithmetic() {
-        let zero = SignedUint::try_from(Uint::zero()).expect("Test failed");
-        let neg_one = SignedUint(Uint::max_value());
-        let neg_eight = SignedUint(Uint::max_value() - Uint::from(7));
-        let two = SignedUint(Uint::from(2));
-        let ten = SignedUint(Uint::from(10));
+        let zero = I256::try_from(Uint::zero()).expect("Test failed");
+        let neg_one = I256(Uint::max_value());
+        let neg_eight = I256(Uint::max_value() - Uint::from(7));
+        let two = I256(Uint::from(2));
+        let ten = I256(Uint::from(10));
 
         assert_eq!(zero + neg_one, neg_one);
         assert_eq!(neg_one - zero, neg_one);
-        assert_eq!(zero - neg_one, SignedUint(Uint::one()));
+        assert_eq!(zero - neg_one, I256(Uint::one()));
         assert_eq!(two - neg_eight, ten);
-        assert_eq!(two + ten, SignedUint(Uint::from(12)));
+        assert_eq!(two + ten, I256(Uint::from(12)));
         assert_eq!(ten - two, -neg_eight);
         assert_eq!(two - ten, neg_eight);
-        assert_eq!(neg_eight + neg_one, -SignedUint(Uint::from(9)));
-        assert_eq!(neg_one - neg_eight, SignedUint(Uint::from(7)));
-        assert_eq!(neg_eight - neg_one, -SignedUint(Uint::from(7)));
+        assert_eq!(neg_eight + neg_one, -I256(Uint::from(9)));
+        assert_eq!(neg_one - neg_eight, I256(Uint::from(7)));
+        assert_eq!(neg_eight - neg_one, -I256(Uint::from(7)));
         assert_eq!(neg_eight - two, -ten);
         assert!((two - two).is_zero());
     }
