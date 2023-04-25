@@ -42,7 +42,7 @@ The message should be a high-level description of the changes that should explai
 If none of the sections fit, new sections may be added. To find the existing section names, you can use e.g.:
 
 ```shell
-for i in $(ls -d .changelog/*/*/); do basename "$i"; done
+for i in $(ls -d .changelog/*/*/); do basename "$i"; done | sort | uniq
 ```
 
 ## Development priorities
