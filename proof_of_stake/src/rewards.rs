@@ -1,10 +1,12 @@
 //! PoS rewards distribution.
 
-use rust_decimal::Decimal;
-use rust_decimal_macros::dec;
 use thiserror::Error;
+use namada_core::types::token::{Amount, DenominatedAmount};
+use namada_core::types::uint::Uint;
+use crate::types::Dec;
 
-const MIN_PROPOSER_REWARD: Decimal = dec!(0.01);
+/// This is equal to 0.01.
+const MIN_PROPOSER_REWARD: Dec = Dec(Uint([10000u64, 0u64, 0u64, 0u64]));
 
 /// Errors during rewards calculation
 #[derive(Debug, Error)]
@@ -16,8 +18,8 @@ pub enum RewardsError {
          least 2/3 of the total bonded stake)."
     )]
     InsufficientVotes {
-        votes_needed: u64,
-        signing_stake: u64,
+        votes_needed: Uint,
+        signing_stake: Uint,
     },
     /// rewards coefficients are not set
     #[error("Rewards coefficients are not properly set.")]
@@ -28,9 +30,9 @@ pub enum RewardsError {
 #[derive(Debug, Copy, Clone)]
 #[allow(missing_docs)]
 pub struct PosRewards {
-    pub proposer_coeff: Decimal,
-    pub signer_coeff: Decimal,
-    pub active_val_coeff: Decimal,
+    pub proposer_coeff: Dec,
+    pub signer_coeff: Dec,
+    pub active_val_coeff: Dec,
 }
 
 /// Holds relevant PoS parameters and is used to calculate the coefficients for
@@ -38,13 +40,13 @@ pub struct PosRewards {
 #[derive(Debug, Copy, Clone)]
 pub struct PosRewardsCalculator {
     /// Rewards fraction that goes to the block proposer
-    pub proposer_reward: Decimal,
+    pub proposer_reward: Dec,
     /// Rewards fraction that goes to the block signers
-    pub signer_reward: Decimal,
+    pub signer_reward: Dec,
     /// Total stake of validators who signed the block
-    pub signing_stake: u64,
+    pub signing_stake: Amount,
     /// Total stake of the whole consensus set
-    pub total_stake: u64,
+    pub total_stake: Amount,
 }
 
 impl PosRewardsCalculator {
@@ -64,18 +66,18 @@ impl PosRewardsCalculator {
 
         if signing_stake < votes_needed {
             return Err(RewardsError::InsufficientVotes {
-                votes_needed,
-                signing_stake,
+                votes_needed: votes_needed.into(),
+                signing_stake: signing_stake.into(),
             });
         }
 
         // Logic for determining the coefficients.
-        let proposer_coeff = proposer_reward
-            * Decimal::from(signing_stake - votes_needed)
-            / Decimal::from(total_stake)
+        let proposer_coeff = Dec::from(proposer_reward
+            * (signing_stake - votes_needed))
+            / Dec::from(total_stake)
             + MIN_PROPOSER_REWARD;
         let signer_coeff = signer_reward;
-        let active_val_coeff = dec!(1.0) - proposer_coeff - signer_coeff;
+        let active_val_coeff = Dec::one() - proposer_coeff - signer_coeff;
 
         let coeffs = PosRewards {
             proposer_coeff,
@@ -87,7 +89,7 @@ impl PosRewardsCalculator {
     }
 
     /// Implement as ceiling of (2/3) * validator set stake
-    fn get_min_required_votes(&self) -> u64 {
-        ((2 * self.total_stake) + 3 - 1) / 3
+    fn get_min_required_votes(&self) -> Amount {
+        ((self.total_stake * 2u64) + (3u64 - 1u64)) / 3u64
     }
 }

@@ -5,6 +5,7 @@ use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use thiserror::Error;
+use crate::types::Dec;
 
 /// Proof-of-Stake system parameters, set at genesis and can only be changed via
 /// governance
@@ -23,22 +24,22 @@ pub struct PosParams {
     /// The voting power per fundamental unit of the staking token (namnam).
     /// Used in validators' voting power calculation to interface with
     /// tendermint.
-    pub tm_votes_per_token: Decimal,
+    pub tm_votes_per_token: Dec,
     /// Amount of tokens rewarded to a validator for proposing a block
-    pub block_proposer_reward: Decimal,
+    pub block_proposer_reward: Dec,
     /// Amount of tokens rewarded to each validator that voted on a block
     /// proposal
-    pub block_vote_reward: Decimal,
+    pub block_vote_reward: Dec,
     /// Maximum staking rewards rate per annum
-    pub max_inflation_rate: Decimal,
+    pub max_inflation_rate: Dec,
     /// Target ratio of staked NAM tokens to total NAM tokens
-    pub target_staked_ratio: Decimal,
+    pub target_staked_ratio: Dec,
     /// Fraction of validator's stake that should be slashed on a duplicate
     /// vote.
-    pub duplicate_vote_min_slash_rate: Decimal,
+    pub duplicate_vote_min_slash_rate: Dec,
     /// Fraction of validator's stake that should be slashed on a light client
     /// attack.
-    pub light_client_attack_min_slash_rate: Decimal,
+    pub light_client_attack_min_slash_rate: Dec,
 }
 
 impl Default for PosParams {
@@ -49,17 +50,17 @@ impl Default for PosParams {
             unbonding_len: 21,
             // 1 voting power per 1 fundamental token (10^6 per NAM or 1 per
             // namnam)
-            tm_votes_per_token: dec!(1.0),
-            block_proposer_reward: dec!(0.125),
-            block_vote_reward: dec!(0.1),
+            tm_votes_per_token: Dec::one(),
+            block_proposer_reward: Dec::new(125, 3).expect("Test failed"),
+            block_vote_reward: Dec::new(1, 1).expect("Test failed"),
             // PoS inflation of 10%
-            max_inflation_rate: dec!(0.1),
+            max_inflation_rate: Dec::new(1, 1).expect("Test failed"),
             // target staked ratio of 2/3
-            target_staked_ratio: dec!(0.6667),
+            target_staked_ratio: Dec::new(6667, 4).expect("Test failed"),
             // slash 0.1%
-            duplicate_vote_min_slash_rate: dec!(0.001),
+            duplicate_vote_min_slash_rate: Dec::new(1, 3).expect("Test failed"),
             // slash 0.1%
-            light_client_attack_min_slash_rate: dec!(0.001),
+            light_client_attack_min_slash_rate: Dec::new(1, 3).expect("Test failed"),
         }
     }
 }
@@ -73,7 +74,7 @@ pub enum ValidationError {
     )]
     TotalVotingPowerTooLarge(u64),
     #[error("Votes per token cannot be greater than 1, got {0}")]
-    VotesPerTokenGreaterThanOne(Decimal),
+    VotesPerTokenGreaterThanOne(Dec),
     #[error("Pipeline length must be >= 2, got {0}")]
     PipelineLenTooShort(u64),
     #[error(
@@ -188,7 +189,7 @@ pub mod testing {
                 max_validator_slots,
                 pipeline_len,
                 unbonding_len,
-                tm_votes_per_token: Decimal::from(tm_votes_per_token) / dec!(10_000),
+                tm_votes_per_token: Dec(Uint::from(tm_votes_per_token)) / Dec(Uint::from(10_000)),
                 // The rest of the parameters that are not being used in the PoS
                 // VP are constant for now
                 ..Default::default()

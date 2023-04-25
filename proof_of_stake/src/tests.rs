@@ -29,11 +29,7 @@ use test_log::test;
 
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::PosParams;
-use crate::types::{
-    into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,
-    ConsensusValidator, GenesisValidator, Position, ReverseOrdTokenAmount,
-    UnbondDetails, ValidatorSetUpdate, ValidatorState, WeightedValidator,
-};
+use crate::types::{into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails, ConsensusValidator, GenesisValidator, Position, ReverseOrdTokenAmount, UnbondDetails, ValidatorSetUpdate, ValidatorState, WeightedValidator, Dec};
 use crate::{
     become_validator, below_capacity_validator_set_handle, bond_handle,
     bond_tokens, bonds_and_unbonds, consensus_validator_set_handle,
@@ -1708,8 +1704,8 @@ fn arb_genesis_validators(
                 let consensus_sk = common_sk_from_simple_seed(seed);
                 let consensus_key = consensus_sk.to_public();
 
-                let commission_rate = Decimal::new(5, 2);
-                let max_commission_rate_change = Decimal::new(1, 3);
+                let commission_rate = Dec::new(5, 2).expect("Test failed");
+                let max_commission_rate_change = Dec::new(1, 3).expect("Test failed");
                 GenesisValidator {
                     address,
                     tokens,

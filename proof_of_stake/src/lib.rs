@@ -44,22 +44,22 @@ use namada_core::types::key::{
 };
 pub use namada_core::types::storage::Epoch;
 use namada_core::types::token;
-use namada_core::types::token::Amount;
+use namada_core::types::token::{Amount, DenominatedAmount};
 use once_cell::unsync::Lazy;
 use parameters::PosParams;
 use rewards::PosRewardsCalculator;
-use rust_decimal::Decimal;
 use storage::{
     bonds_for_source_prefix, bonds_prefix, consensus_keys_key,
     get_validator_address_from_bond, into_tm_voting_power, is_bond_key,
     is_unbond_key, is_validator_slashes_key, last_block_proposer_key,
-    mult_amount, mult_change_to_amount, num_consensus_validators_key,
-    params_key, slashes_prefix, unbonds_for_source_prefix, unbonds_prefix,
+    num_consensus_validators_key, params_key, slashes_prefix,
+    unbonds_for_source_prefix, unbonds_prefix,
     validator_address_raw_hash_key, validator_max_commission_rate_change_key,
     BondDetails, BondsAndUnbondsDetail, BondsAndUnbondsDetails,
     ReverseOrdTokenAmount, RewardsAccumulator, UnbondDetails,
 };
 use thiserror::Error;
+use namada_core::types::uint::Uint;
 use types::{
     BelowCapacityValidatorSet, BelowCapacityValidatorSets, BondId, Bonds,
     CommissionRates, ConsensusValidator, ConsensusValidatorSet,
@@ -70,7 +70,7 @@ use types::{
     WeightedValidator,
 };
 
-use crate::types::decimal_mult_u128;
+use crate::types::Dec;
 
 /// Address of the PoS account implemented as a native VP
 pub const ADDRESS: Address = Address::Internal(InternalAddress::PoS);
@@ -168,9 +168,9 @@ pub enum SlashError {
 #[derive(Error, Debug)]
 pub enum CommissionRateChangeError {
     #[error("Unexpected negative commission rate {0} for validator {1}")]
-    NegativeRate(Decimal, Address),
+    NegativeRate(DenominatedAmount, Address),
     #[error("Rate change of {0} is too large for validator {1}")]
-    RateChangeTooLarge(Decimal, Address),
+    RateChangeTooLarge(DenominatedAmount, Address),
     #[error(
         "There is no maximum rate change written in storage for validator {0}"
     )]
@@ -477,7 +477,7 @@ where
 pub fn read_validator_max_commission_rate_change<S>(
     storage: &S,
     validator: &Address,
-) -> storage_api::Result<Option<Decimal>>
+) -> storage_api::Result<Option<DenominatedAmount>>
 where
     S: StorageRead,
 {
@@ -489,7 +489,7 @@ where
 pub fn write_validator_max_commission_rate_change<S>(
     storage: &mut S,
     validator: &Address,
-    change: Decimal,
+    change: DenominatedAmount,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -1585,8 +1585,8 @@ pub fn become_validator<S>(
     address: &Address,
     consensus_key: &common::PublicKey,
     current_epoch: Epoch,
-    commission_rate: Decimal,
-    max_commission_rate_change: Decimal,
+    commission_rate: DenominatedAmount,
+    max_commission_rate_change: DenominatedAmount,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -1739,19 +1739,19 @@ where
 pub fn change_validator_commission_rate<S>(
     storage: &mut S,
     validator: &Address,
-    new_rate: Decimal,
+    new_rate: DenominatedAmount,
     current_epoch: Epoch,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    if new_rate < Decimal::ZERO {
-        return Err(CommissionRateChangeError::NegativeRate(
-            new_rate,
-            validator.clone(),
-        )
-        .into());
-    }
+    // if new_rate < Uint::zero() {
+    //     return Err(CommissionRateChangeError::NegativeRate(
+    //         new_rate,
+    //         validator.clone(),
+    //     )
+    //     .into());
+    // }
 
     let max_change =
         read_validator_max_commission_rate_change(storage, validator)?;
@@ -2688,10 +2688,9 @@ where
 
     // Compute the fractional block rewards for each consensus validator and
     // update the reward accumulators
-    let consensus_stake_unscaled: Decimal =
-        total_consensus_stake.as_dec_unscaled();
-    let signing_stake_unscaled: Decimal = total_signing_stake.as_dec_unscaled();
-    let mut values: HashMap<Address, Decimal> = HashMap::new();
+    let consensus_stake_unscaled: Dec  = total_consensus_stake.into();
+    let signing_stake_unscaled: Dec = total_signing_stake.into();
+    let mut values: HashMap<Address, Dec>= HashMap::new();
     for validator in consensus_validators.iter(storage)? {
         let (
             NestedSubKey::Data {
@@ -2709,8 +2708,8 @@ where
             continue;
         }
 
-        let mut rewards_frac = Decimal::default();
-        let stake_unscaled: Decimal = stake.as_dec_unscaled();
+        let mut rewards_frac = Dec::zero();
+        let stake_unscaled: Dec = stake.into();
         // println!(
         //     "NAMADA VALIDATOR STAKE (LOGGING BLOCK REWARDS) OF EPOCH {} =
         // {}",     epoch, stake

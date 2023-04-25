@@ -5,7 +5,7 @@ mod rev_order;
 use core::fmt::Debug;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
-use std::fmt::Display;
+use std::fmt::{Display, Formatter, Write};
 use std::hash::Hash;
 use std::ops::Sub;
 
@@ -21,8 +21,7 @@ use namada_core::types::storage::{Epoch, KeySeg};
 use namada_core::types::token;
 use namada_core::types::token::{Amount, NATIVE_MAX_DECIMAL_PLACES};
 pub use rev_order::ReverseOrdTokenAmount;
-use rust_decimal::prelude::{Decimal, ToPrimitive};
-use rust_decimal::RoundingStrategy;
+use namada_core::types::uint::Uint;
 
 use crate::parameters::PosParams;
 
@@ -124,7 +123,7 @@ pub type TotalDeltas = crate::epoched::EpochedDelta<
 
 /// Epoched validator commission rate
 pub type CommissionRates =
-    crate::epoched::Epoched<Decimal, crate::epoched::OffsetPipelineLen>;
+    crate::epoched::Epoched<Dec, crate::epoched::OffsetPipelineLen>;
 
 /// Epoched validator's bonds
 pub type Bonds = crate::epoched::EpochedDelta<
@@ -143,17 +142,17 @@ pub type ConsensusKeys = LazySet<common::PublicKey>;
 /// Commission rate and max commission rate change per epoch for a validator
 pub struct CommissionPair {
     /// Validator commission rate
-    pub commission_rate: Decimal,
+    pub commission_rate: Dec,
     /// Validator max commission rate change per epoch
-    pub max_commission_change_per_epoch: Decimal,
+    pub max_commission_change_per_epoch: Dec,
 }
 
 /// Epoched rewards products
-pub type RewardsProducts = LazyMap<Epoch, Decimal>;
+pub type RewardsProducts = LazyMap<Epoch, Dec>;
 
 /// Consensus validator rewards accumulator (for tracking the fractional block
 /// rewards owed over the course of an epoch)
-pub type RewardsAccumulator = LazyMap<Address, Decimal>;
+pub type RewardsAccumulator = LazyMap<Address, Dec>;
 
 // --------------------------------------------------------------------------------------------
 
@@ -177,9 +176,9 @@ pub struct GenesisValidator {
     /// A public key used for signing validator's consensus actions
     pub consensus_key: common::PublicKey,
     /// Commission rate charged on rewards for delegators (bounded inside 0-1)
-    pub commission_rate: Decimal,
+    pub commission_rate: Dec,
     /// Maximum change in commission rate permitted per epoch
-    pub max_commission_rate_change: Decimal,
+    pub max_commission_rate_change: Dec,
 }
 
 /// An update of the consensus and below-capacity validator set.
@@ -446,7 +445,7 @@ impl Display for BondId {
 impl SlashType {
     /// Get the slash rate applicable to the given slash type from the PoS
     /// parameters.
-    pub fn get_slash_rate(&self, params: &PosParams) -> Decimal {
+    pub fn get_slash_rate(&self, params: &PosParams) -> Dec {
         match self {
             SlashType::DuplicateVote => params.duplicate_vote_min_slash_rate,
             SlashType::LightClientAttack => {
@@ -465,51 +464,186 @@ impl Display for SlashType {
     }
 }
 
-/// Multiply a value of type Decimal with one of type u64 and then return the
-/// truncated u64
-pub fn decimal_mult_u128(dec: Decimal, int: u128) -> u128 {
-    let prod = dec * Decimal::from(int);
-    // truncate the number to the floor
-    prod.to_u128().expect("Product is out of bounds")
+// --------------------------------------------------------------------------------------------
+
+/// The numbrer of Dec places for PoS rational calculations
+pub const POS_DECIMAL_PRECISION: u8 = 6;
+
+/// A 256 bit number with [`POS_DECIMAL_PRECISION`] number of Dec places.
+///
+/// To be precise, an instance X of this type should be interpeted as the Dec
+/// X * 10 ^ (-[`POS_DECIMAL_PRECISION`])
+#[derive(
+    Clone,
+    Copy,
+    Default,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Debug,
+    Hash,
+)]
+pub struct Dec(pub Uint);
+
+impl std::ops::Deref for Dec {
+    type Target = Uint;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
-/// Multiply a value of type Decimal with one of type i128 and then return the
-/// truncated i128
-pub fn decimal_mult_i128(dec: Decimal, int: i128) -> i128 {
-    let prod = dec * Decimal::from(int);
-    // truncate the number to the floor
-    prod.to_i128().expect("Product is out of bounds")
+impl std::ops::DerefMut for Dec {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
 }
 
-/// Multiply a value of type Decimal with one of type Uint and then convert it
-/// to an Amount type
-pub fn mult_change_to_amount(
-    dec: Decimal,
-    change: token::Change,
-) -> token::Amount {
-    // this function is used for slashing calculations. We want to err
-    // on the side of slashing more, not less.
-    let dec =
-        dec.round_dp_with_strategy(6, RoundingStrategy::ToPositiveInfinity);
-    Amount::from_decimal(dec, NATIVE_MAX_DECIMAL_PLACES).unwrap() * change.abs()
+impl Dec {
+    pub fn trunc_div(&self, rhs: &Self) -> Option<Self> {
+        self.0.fixed_precision_div(rhs, POS_DECIMAL_PRECISION)
+            .map(Self)
+    }
+
+    pub fn zero() -> Self {
+        Self(Uint::zero())
+    }
+
+    pub fn one() -> Self {
+        Self(Uint::one())
+    }
+
+    pub fn new(matissa: u64, scale: u8) -> Option<Self> {
+        if scale > POS_DECIMAL_PRECISION {
+            None
+        } else {
+            Uint::exp10((POS_DECIMAL_PRECISION - scale) as usize)
+                .checked_mul(Uint::from(matissa))
+                .map(Self)
+        }
+    }
 }
 
-/// Multiply a value of type Decimal with one of type Amount and then return the
-/// truncated Amount
-pub fn mult_amount(dec: Decimal, amount: token::Amount) -> token::Amount {
-    let dec =
-        dec.round_dp_with_strategy(6, RoundingStrategy::ToPositiveInfinity);
-    Amount::from_decimal(dec, NATIVE_MAX_DECIMAL_PLACES).unwrap() * amount
+impl From<Amount> for Dec {
+    fn from(amt: Amount) -> Self {
+        Self(amt.into())
+    }
 }
+
+impl std::ops::Add<Dec> for Dec {
+    type Output = Self;
+
+    fn add(self, rhs: Dec) -> Self::Output {
+        Self(self.0 + rhs.0)
+    }
+}
+
+impl std::ops::Add<u64> for Dec {
+    type Output = Self;
+
+    fn add(self, rhs: u64) -> Self::Output {
+        Self(self.0 + Uint::from(rhs))
+    }
+}
+
+impl std::ops::Sub<Dec> for Dec {
+    type Output = Self;
+
+    fn sub(self, rhs: Dec) -> Self::Output {
+        Self(self.0 - rhs.0)
+    }
+}
+
+impl std::ops::Mul<u128> for Dec {
+    type Output = Dec;
+
+    fn mul(self, rhs: u128) -> Self::Output {
+        Self(self.0 * Uint::from(rhs))
+    }
+}
+
+impl std::ops::Mul<Amount> for Dec {
+    type Output = Amount;
+
+    fn mul(self, rhs: Amount) -> Self::Output {
+        self.0 * rhs
+    }
+}
+
+impl std::ops::Mul<Dec> for Dec {
+    type Output = Self;
+
+    fn mul(self, rhs: Dec) -> Self::Output {
+        Self(self.0 * rhs.0)
+    }
+}
+
+impl std::ops::Div<Dec> for Dec {
+    type Output = Self;
+
+    fn div(self, rhs: Dec) -> Self::Output {
+        Self(self.0 / rhs.0)
+    }
+}
+
+impl Display for Dec {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let string = self.0.to_string();
+        f.write_str(&string)
+    }
+}
+
+// --------------------------------------------------------------------------------------------
+
+// /// Multiply a value of type Dec with one of type u64 and then return the
+// /// truncated u64
+// pub fn decimal_mult_u128(dec: Dec, int: u128) -> u128 {
+//     let prod = dec * Dec::from(int);
+//     // truncate the number to the floor
+//     prod.to_u128().expect("Product is out of bounds")
+// }
+//
+// /// Multiply a value of type Dec with one of type i128 and then return the
+// /// truncated i128
+// pub fn decimal_mult_i128(dec: Dec, int: i128) -> i128 {
+//     let prod = dec * Dec::from(int);
+//     // truncate the number to the floor
+//     prod.to_i128().expect("Product is out of bounds")
+// }
+
+// /// Multiply a value of type Dec with one of type Uint and then convert it
+// /// to an Amount type
+// pub fn mult_change_to_amount(
+//     dec: Dec,
+//     change: token::Change,
+// ) -> token::Amount {
+//     // this function is used for slashing calculations. We want to err
+//     // on the side of slashing more, not less.
+//     let dec =
+//         dec.round_dp_with_strategy(6, RoundingStrategy::ToPositiveInfinity);
+//     Amount::from_Dec(dec, NATIVE_MAX_Dec_PLACES).unwrap() * change.abs()
+// }
+
+// /// Multiply a value of type Dec with one of type Amount and then return the
+// /// truncated Amount
+// pub fn mult_amount(dec: Dec, amount: token::Amount) -> token::Amount {
+//     let dec =
+//         dec.round_dp_with_strategy(6, RoundingStrategy::ToPositiveInfinity);
+//     Amount::from_Dec(dec, NATIVE_MAX_Dec_PLACES).unwrap() * amount
+// }
 
 /// Calculate voting power in the tendermint context (which is stored as i64)
 /// from the number of tokens
 pub fn into_tm_voting_power(
-    votes_per_token: Decimal,
-    tokens: impl Into<u64>,
+    votes_per_token: Dec,
+    tokens: Amount,
 ) -> i64 {
-    let prod = decimal_mult_u128(votes_per_token, tokens.into() as u128);
-    i64::try_from(prod).expect("Invalid voting power")
+    let pow = votes_per_token * u128::try_from(tokens).expect("Voting power out of bounds");
+    i64::try_from(pow.0).expect("Invalid voting power")
 }
 
 #[cfg(test)]

@@ -518,6 +518,14 @@ impl Add for Amount {
     }
 }
 
+impl Add<u64> for Amount {
+    type Output = Self;
+
+    fn add(self, rhs: u64) -> Self::Output {
+        Self { raw: self.raw + Uint::from(rhs)}
+    }
+}
+
 impl std::iter::Sum for Amount {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.fold(Amount::zero(), |acc, amt| acc + amt)
