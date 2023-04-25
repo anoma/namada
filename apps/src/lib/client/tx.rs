@@ -1362,14 +1362,20 @@ fn convert_amount(
     epoch: Epoch,
     token: &Address,
     sub_prefix: &Option<&String>,
-    val: u64,
-    denom: MaspDenom,
-) -> (AssetType, Amount) {
-    let asset_type = make_asset_type(epoch, token, sub_prefix, denom);
-    // Combine the value and unit into one amount
-    let amount = Amount::from_nonnegative(asset_type, val)
-        .expect("invalid value for amount");
-    (asset_type, amount)
+    val: &token::Amount,
+) -> ([AssetType; 4], Amount) {
+    let mut amount = Amount::zero();
+    let asset_types: [AssetType; 4] = MaspDenom::iter().map(|denom| {
+        let asset_type = make_asset_type(epoch, token, sub_prefix, denom);
+        // Combine the value and unit into one amount
+        amount += Amount::from_nonnegative(asset_type, denom.denominate(val))
+            .expect("invalid value for amount");
+        asset_type
+    })
+    .collect()
+    .try_into()
+    .expect("This can't fail");
+    (asset_types, amount)
 }
 
 /// Make shielded components to embed within a Transfer object. If no shielded
@@ -1426,7 +1432,23 @@ async fn gen_shielded_transfer(
         LocalTxProver::with_default_location()
             .expect("unable to load MASP Parameters")
     };
-    let fee_amount = if spending_key.is_some() {
+
+    // break up a transfer into a number of transfers with suitable
+    // denominations
+    let InputAmount::Validated(amt) = args.amount else {
+        unreachable!("The function `gen_shielded_transfer` is only called by `submit_tx` which validates amounts.")
+    };
+
+    // Convert transaction amount into MASP types
+    let (asset_types, amount) = convert_amount(
+        epoch,
+        &ctx.get(&args.token),
+        &args.sub_prefix.as_ref(),
+        &amt.amount,
+    );
+
+    // If there are shielded inputs
+    if let Some(sk) = spending_key {
         let InputAmount::Validated(fee) = args.tx.fee_amount else {
             unreachable!("The function `gen_shielded_transfer` is only called by `submit_tx` which validates amounts.")
         };
@@ -1436,111 +1458,83 @@ async fn gen_shielded_transfer(
             epoch,
             &ctx.get(&args.tx.fee_token),
             &None,
-            MaspDenom::Zero.denominate(&fee.amount),
-            MaspDenom::Zero,
+            &fee.amount,
         );
-        builder.set_fee(shielded_fee)?;
-        if shielded_gas {
-            fee.amount
-        } else {
-            token::Amount::zero()
+        builder.set_fee(shielded_fee.clone())?;
+        let required_amt = if shielded_gas { amount + shielded_fee } else { amount };
+        // Locate unspent notes that can help us meet the transaction amount
+        let (_, unspent_notes, used_convs) = ctx
+            .shielded
+            .collect_unspent_notes(
+                args.tx.ledger_address.clone(),
+                &to_viewing_key(&sk).vk,
+                required_amt,
+                epoch,
+            )
+            .await;
+        // Commit the notes found to our transaction
+        for (diversifier, note, merkle_path) in unspent_notes {
+            builder.add_sapling_spend(
+                sk,
+                diversifier,
+                note,
+                merkle_path,
+            )?;
+        }
+        // Commit the conversion notes used during summation
+        for (conv, wit, value) in used_convs.values() {
+            if *value > 0 {
+                builder.add_convert(
+                    conv.clone(),
+                    *value as u64,
+                    wit.clone(),
+                )?;
+            }
         }
     } else {
         // No transfer fees come from the shielded transaction for non-MASP
         // sources
         builder.set_fee(Amount::zero())?;
-        token::Amount::zero()
-    };
-    // break up a transfer into a number of transfers with suitable
-    // denominations
-    let InputAmount::Validated(amt) = args.amount else {
-        unreachable!("The function `gen_shielded_transfer` is only called by `submit_tx` which validates amounts.")
-    };
-    for denom in MaspDenom::iter() {
-        let denom_amount = denom.denominate(&(amt.amount + fee_amount));
-        if denom_amount == 0 {
-            continue;
-        }
-        // Convert transaction amount into MASP types
-        let (asset_type, required_amt) = convert_amount(
-            epoch,
-            &ctx.get(&args.token),
-            &args.sub_prefix.as_ref(),
-            denom_amount,
-            denom,
-        );
-
-        // If there are shielded inputs
-        if let Some(sk) = spending_key {
-            // Locate unspent notes that can help us meet the transaction amount
-            let (_, unspent_notes, used_convs) = ctx
-                .shielded
-                .collect_unspent_notes(
-                    args.tx.ledger_address.clone(),
-                    &to_viewing_key(&sk).vk,
-                    required_amt,
-                    epoch,
-                )
-                .await;
-            // Commit the notes found to our transaction
-            for (diversifier, note, merkle_path) in unspent_notes {
-                builder.add_sapling_spend(
-                    sk,
-                    diversifier,
-                    note,
-                    merkle_path,
-                )?;
-            }
-            // Commit the conversion notes used during summation
-            for (conv, wit, value) in used_convs.values() {
-                if *value > 0 {
-                    builder.add_convert(
-                        conv.clone(),
-                        *value as u64,
-                        wit.clone(),
-                    )?;
-                }
-            }
-        } else {
-            // No transfer fees come from the shielded transaction for non-MASP
-            // sources
-            builder.set_fee(Amount::zero())?;
-            // We add a dummy UTXO to our transaction, but only the source of
-            // the parent Transfer object is used to validate fund
-            // availability
-            let secp_sk = secp256k1::SecretKey::from_slice(&[0xcd; 32])
-                .expect("secret key");
-            let secp_ctx =
-                secp256k1::Secp256k1::<secp256k1::SignOnly>::gen_new();
-            let secp_pk =
-                secp256k1::PublicKey::from_secret_key(&secp_ctx, &secp_sk)
-                    .serialize();
-            let hash =
-                ripemd160::Ripemd160::digest(&sha2::Sha256::digest(&secp_pk));
-            let script = TransparentAddress::PublicKey(hash.into()).script();
+        // We add a dummy UTXO to our transaction, but only the source of
+        // the parent Transfer object is used to validate fund
+        // availability
+        let secp_sk = secp256k1::SecretKey::from_slice(&[0xcd; 32])
+            .expect("secret key");
+        let secp_ctx =
+            secp256k1::Secp256k1::<secp256k1::SignOnly>::gen_new();
+        let secp_pk =
+            secp256k1::PublicKey::from_secret_key(&secp_ctx, &secp_sk)
+                .serialize();
+        let hash =
+            ripemd160::Ripemd160::digest(&sha2::Sha256::digest(&secp_pk));
+        let script = TransparentAddress::PublicKey(hash.into()).script();
+        for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter()) {
             builder.add_transparent_input(
                 secp_sk,
                 OutPoint::new([0u8; 32], 0),
                 TxOut {
-                    asset_type,
-                    value: denom_amount,
-                    script_pubkey: script,
+                    asset_type: *asset_type,
+                    value: denom.denominate(&amt),
+                    script_pubkey: script.clone(),
                 },
             )?;
         }
+    }
 
-        // Now handle the outputs of this transaction
-        // If there is a shielded output
-        if let Some(pa) = payment_address {
-            let ovk_opt = spending_key.map(|x| x.expsk.ovk);
+    // Now handle the outputs of this transaction
+    // If there is a shielded output
+    if let Some(pa) = payment_address {
+        let ovk_opt = spending_key.map(|x| x.expsk.ovk);
+        for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter()) {
             builder.add_sapling_output(
                 ovk_opt,
                 pa.into(),
-                asset_type,
-                denom_amount,
+                *asset_type,
+                denom.denominate(&amt),
                 memo.clone(),
             )?;
-        } else {
+        }
+    } else {
             // Embed the transparent target address into the shielded
             // transaction so that it can be signed
             let target = ctx.get(&args.target);
@@ -1552,13 +1546,15 @@ async fn gen_shielded_transfer(
             let hash = ripemd160::Ripemd160::digest(&sha2::Sha256::digest(
                 target_enc.as_ref(),
             ));
-            builder.add_transparent_output(
-                &TransparentAddress::PublicKey(hash.into()),
-                asset_type,
-                denom_amount,
-            )?;
+            for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter()) {
+                builder.add_transparent_output(
+                    &TransparentAddress::PublicKey(hash.into()),
+                    *asset_type,
+                    denom.denominate(&amt),
+                )?;
+            }
         }
-    }
+
     // Build and return the constructed transaction
     builder
         .build(consensus_branch_id, &prover)
