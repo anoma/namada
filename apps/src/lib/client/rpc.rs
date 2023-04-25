@@ -1131,67 +1131,86 @@ pub async fn query_shielded_balance(
             }
 
             // These are the asset types for which we have human-readable names
-            let mut read_tokens = HashSet::new();
+            let mut read_tokens: HashMap<Address, Vec<Option<Key>>> = HashMap::new();
             // Print non-zero balances whose asset types can be decoded
+            // TODO Implement a function for this
+
+            let mut balance_map = HashMap::new();
             for (asset_type, balances) in balances {
-                // Decode the asset type
                 let decoded = ctx
                     .shielded
                     .decode_asset_type(client.clone(), asset_type)
                     .await;
+
                 match decoded {
                     Some((addr, sub_prefix, denom, asset_epoch))
                         if asset_epoch == epoch =>
                     {
-                        // Only assets with the current timestamp count
-                        println!(
-                            "Shielded Token {}{}:",
-                            tokens
-                                .get(&addr)
-                                .cloned()
-                                .unwrap_or_else(|| addr.clone()),
-                            sub_prefix
-                                .as_ref()
-                                .map(|k| format!("/{}", k))
-                                .unwrap_or_default(),
-                        );
-                        read_tokens.insert(addr.clone());
-                        let mut found_any = false;
-                        for (fvk, value) in balances {
-                            let value = token::Amount::from_masp_denominated(
-                                value as u64,
-                                denom,
-                            );
-                            let formatted = format_denominated_amount(
-                                &client,
-                                &addr,
-                                &sub_prefix,
-                                value,
-                            )
-                            .await;
-                            println!("  {}, owned by {}", formatted, fvk);
-                            found_any = true;
-                        }
-                        if !found_any {
+                        // remove this from here, should not be making the hashtable creation any uglier
+                        if balances.is_empty() {
                             println!(
                                 "No shielded {} balance found for any wallet \
                                  key",
                                 asset_type
                             );
                         }
+                        let asset_type = (addr, sub_prefix);
+                        for (fvk, value) in balances {
+                            let token_value = token::Amount::from_masp_denominated(value as u64, denom);
+                            balance_map.entry((fvk, asset_type.clone())).and_modify(|value_2| *value_2 += token_value).or_insert(token_value);
+                        }
+
                     }
                     _ => {}
-                }
+                };
+            }
+            for  ((fvk, (addr, sub_prefix)), token_balance) in balance_map {
+                read_tokens.entry(addr.clone()).and_modify(|addr_vec| addr_vec.push(sub_prefix.clone())).or_insert(vec![sub_prefix.clone()]);
+                // Only assets with the current timestamp count
+                println!(
+                    "Shielded Token {}{}:",
+                    tokens
+                        .get(&addr)
+                        .cloned()
+                        .unwrap_or_else(|| addr.clone()),
+                    sub_prefix
+                        .as_ref()
+                        .map(|k| format!("/{}", k))
+                        .unwrap_or_default(),
+                );
+                let formatted = format_denominated_amount(
+                    &client,
+                    &addr,
+                    &sub_prefix,
+                    token_balance,
+                )
+                    .await;
+                println!("  {}, owned by {}", formatted, fvk);
             }
             // Print zero balances for remaining assets
             for token in tokens {
-                if !read_tokens.contains(&token) {
+                if let Some(sub_addrs) = read_tokens.get(&token) {
                     let token_alias = lookup_alias(ctx, &token);
-                    println!("Shielded Token {}:", token_alias);
-                    println!(
-                        "No shielded {} balance found for any wallet key",
-                        token_alias
-                    );
+                    for sub_addr in sub_addrs {
+                        match sub_addr {
+                            // abstract out these prints
+                            Some(sub_addr) => {
+                                println!("Shielded Token {}/{}:", token_alias, sub_addr);
+                                println!(
+                                    "No shielded {}/{} balance found for any wallet key",
+                                    token_alias, sub_addr
+                                );
+
+                            }
+                            None => {
+                                println!("Shielded Token {}:", token_alias, );
+                                println!(
+                                    "No shielded {} balance found for any wallet key",
+                                    token_alias
+                                );
+                            }
+                        }
+                    }
                 }
             }
         }
