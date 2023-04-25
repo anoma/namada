@@ -42,6 +42,7 @@ use namada::ledger::masp;
 use namada::ledger::pos::{CommissionPair, PosParams};
 use namada::proto::Tx;
 use namada::types::address::{masp, masp_tx_key, Address};
+use namada::types::dec::Dec;
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
@@ -61,7 +62,6 @@ use namada::types::transaction::governance::{
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{storage, token};
 use rand_core::{CryptoRng, OsRng, RngCore};
-use rust_decimal::Decimal;
 use sha2::Digest;
 use tokio::time::{Duration, Instant};
 
@@ -332,7 +332,7 @@ pub async fn submit_init_validator(
             .unwrap();
 
     // Validate the commission rate data
-    if commission_rate > Decimal::ONE || commission_rate < Decimal::ZERO {
+    if commission_rate > Dec::one() || commission_rate < Dec::zero() {
         eprintln!(
             "The validator commission rate must not exceed 1.0 or 100%, and \
              it must be 0 or positive"
@@ -341,8 +341,8 @@ pub async fn submit_init_validator(
             safe_exit(1)
         }
     }
-    if max_commission_rate_change > Decimal::ONE
-        || max_commission_rate_change < Decimal::ZERO
+    if max_commission_rate_change > Dec::one()
+        || max_commission_rate_change < Dec::zero()
     {
         eprintln!(
             "The validator maximum change in commission rate per epoch must \
@@ -1365,16 +1365,18 @@ fn convert_amount(
     val: &token::Amount,
 ) -> ([AssetType; 4], Amount) {
     let mut amount = Amount::zero();
-    let asset_types: [AssetType; 4] = MaspDenom::iter().map(|denom| {
-        let asset_type = make_asset_type(epoch, token, sub_prefix, denom);
-        // Combine the value and unit into one amount
-        amount += Amount::from_nonnegative(asset_type, denom.denominate(val))
-            .expect("invalid value for amount");
-        asset_type
-    })
-    .collect()
-    .try_into()
-    .expect("This can't fail");
+    let asset_types: [AssetType; 4] = MaspDenom::iter()
+        .map(|denom| {
+            let asset_type = make_asset_type(epoch, token, sub_prefix, denom);
+            // Combine the value and unit into one amount
+            amount +=
+                Amount::from_nonnegative(asset_type, denom.denominate(val))
+                    .expect("invalid value for amount");
+            asset_type
+        })
+        .collect()
+        .try_into()
+        .expect("This can't fail");
     (asset_types, amount)
 }
 
@@ -1461,7 +1463,11 @@ async fn gen_shielded_transfer(
             &fee.amount,
         );
         builder.set_fee(shielded_fee.clone())?;
-        let required_amt = if shielded_gas { amount + shielded_fee } else { amount };
+        let required_amt = if shielded_gas {
+            amount + shielded_fee
+        } else {
+            amount
+        };
         // Locate unspent notes that can help us meet the transaction amount
         let (_, unspent_notes, used_convs) = ctx
             .shielded
@@ -1474,12 +1480,7 @@ async fn gen_shielded_transfer(
             .await;
         // Commit the notes found to our transaction
         for (diversifier, note, merkle_path) in unspent_notes {
-            builder.add_sapling_spend(
-                sk,
-                diversifier,
-                note,
-                merkle_path,
-            )?;
+            builder.add_sapling_spend(sk, diversifier, note, merkle_path)?;
         }
         // Commit the conversion notes used during summation
         for (conv, wit, value) in used_convs.values() {
@@ -1498,10 +1499,9 @@ async fn gen_shielded_transfer(
         // We add a dummy UTXO to our transaction, but only the source of
         // the parent Transfer object is used to validate fund
         // availability
-        let secp_sk = secp256k1::SecretKey::from_slice(&[0xcd; 32])
-            .expect("secret key");
-        let secp_ctx =
-            secp256k1::Secp256k1::<secp256k1::SignOnly>::gen_new();
+        let secp_sk =
+            secp256k1::SecretKey::from_slice(&[0xcd; 32]).expect("secret key");
+        let secp_ctx = secp256k1::Secp256k1::<secp256k1::SignOnly>::gen_new();
         let secp_pk =
             secp256k1::PublicKey::from_secret_key(&secp_ctx, &secp_sk)
                 .serialize();
@@ -1535,25 +1535,25 @@ async fn gen_shielded_transfer(
             )?;
         }
     } else {
-            // Embed the transparent target address into the shielded
-            // transaction so that it can be signed
-            let target = ctx.get(&args.target);
-            let target_enc = target
-                .address()
-                .expect("target address should be transparent")
-                .try_to_vec()
-                .expect("target address encoding");
-            let hash = ripemd160::Ripemd160::digest(&sha2::Sha256::digest(
-                target_enc.as_ref(),
-            ));
-            for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter()) {
-                builder.add_transparent_output(
-                    &TransparentAddress::PublicKey(hash.into()),
-                    *asset_type,
-                    denom.denominate(&amt),
-                )?;
-            }
+        // Embed the transparent target address into the shielded
+        // transaction so that it can be signed
+        let target = ctx.get(&args.target);
+        let target_enc = target
+            .address()
+            .expect("target address should be transparent")
+            .try_to_vec()
+            .expect("target address encoding");
+        let hash = ripemd160::Ripemd160::digest(&sha2::Sha256::digest(
+            target_enc.as_ref(),
+        ));
+        for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter()) {
+            builder.add_transparent_output(
+                &TransparentAddress::PublicKey(hash.into()),
+                *asset_type,
+                denom.denominate(&amt),
+            )?;
         }
+    }
 
     // Build and return the constructed transaction
     builder
@@ -2912,7 +2912,7 @@ pub async fn submit_validator_commission_change(
 
     let validator = ctx.get(&args.validator);
     if rpc::is_validator(&client, &validator).await {
-        if args.rate < Decimal::ZERO || args.rate > Decimal::ONE {
+        if args.rate < Dec::zero() || args.rate > Dec::one() {
             eprintln!("Invalid new commission rate, received {}", args.rate);
             if !args.tx.force {
                 safe_exit(1)
@@ -2932,7 +2932,7 @@ pub async fn submit_validator_commission_change(
                 commission_rate,
                 max_commission_change_per_epoch,
             }) => {
-                if (args.rate - commission_rate).abs()
+                if args.rate.abs_diff(&commission_rate)
                     > max_commission_change_per_epoch
                 {
                     eprintln!(

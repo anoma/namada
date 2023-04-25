@@ -6,6 +6,7 @@ use itertools::Itertools;
 use namada_core::ledger::storage::testing::TestWlStorage;
 use namada_core::ledger::storage_api::{token, StorageRead};
 use namada_core::types::address::{self, Address};
+use namada_core::types::dec::Dec;
 use namada_core::types::key;
 use namada_core::types::key::common::PublicKey;
 use namada_core::types::storage::Epoch;
@@ -14,7 +15,6 @@ use proptest::prelude::*;
 use proptest::prop_state_machine;
 use proptest::state_machine::{AbstractStateMachine, StateMachineTest};
 use proptest::test_runner::Config;
-use rust_decimal::Decimal;
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see
 // `tracing` logs from tests
 use test_log::test;
@@ -81,8 +81,8 @@ enum Transition {
     InitValidator {
         address: Address,
         consensus_key: PublicKey,
-        commission_rate: Decimal,
-        max_commission_rate_change: Decimal,
+        commission_rate: Dec,
+        max_commission_rate_change: Dec,
     },
     Bond {
         id: BondId,

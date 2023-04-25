@@ -1,11 +1,9 @@
 //! Proof-of-Stake system parameters
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use rust_decimal::prelude::ToPrimitive;
-use rust_decimal::Decimal;
-use rust_decimal_macros::dec;
+use namada_core::types::dec::Dec;
+use namada_core::types::uint::Uint;
 use thiserror::Error;
-use crate::types::Dec;
 
 /// Proof-of-Stake system parameters, set at genesis and can only be changed via
 /// governance
@@ -60,7 +58,8 @@ impl Default for PosParams {
             // slash 0.1%
             duplicate_vote_min_slash_rate: Dec::new(1, 3).expect("Test failed"),
             // slash 0.1%
-            light_client_attack_min_slash_rate: Dec::new(1, 3).expect("Test failed"),
+            light_client_attack_min_slash_rate: Dec::new(1, 3)
+                .expect("Test failed"),
         }
     }
 }
@@ -72,7 +71,7 @@ pub enum ValidationError {
         "Maximum total voting power is too large: got {0}, expected at most \
          {MAX_TOTAL_VOTING_POWER}"
     )]
-    TotalVotingPowerTooLarge(u64),
+    TotalVotingPowerTooLarge(Uint),
     #[error("Votes per token cannot be greater than 1, got {0}")]
     VotesPerTokenGreaterThanOne(Dec),
     #[error("Pipeline length must be >= 2, got {0}")]
@@ -118,24 +117,24 @@ impl PosParams {
         // TODO: decide if this is still a check we want to do (in its current
         // state with our latest voting power conventions, it will fail
         // always)
-        let max_total_voting_power = Decimal::from(self.max_validator_slots)
-            * self.tm_votes_per_token
-            * Decimal::from(TOKEN_MAX_AMOUNT);
+        let max_total_voting_power = *self.tm_votes_per_token
+            * Uint::from(TOKEN_MAX_AMOUNT)
+            * Uint::from(self.max_validator_slots);
         match i64::try_from(max_total_voting_power) {
             Ok(max_total_voting_power_i64) => {
                 if max_total_voting_power_i64 > MAX_TOTAL_VOTING_POWER {
                     errors.push(ValidationError::TotalVotingPowerTooLarge(
-                        max_total_voting_power.to_u64().unwrap(),
+                        max_total_voting_power,
                     ))
                 }
             }
             Err(_) => errors.push(ValidationError::TotalVotingPowerTooLarge(
-                max_total_voting_power.to_u64().unwrap(),
+                max_total_voting_power,
             )),
         }
 
         // Check that there is no more than 1 vote per token
-        if self.tm_votes_per_token > dec!(1.0) {
+        if self.tm_votes_per_token > Dec::one() {
             errors.push(ValidationError::VotesPerTokenGreaterThanOne(
                 self.tm_votes_per_token,
             ))
@@ -170,8 +169,8 @@ mod tests {
 /// Testing helpers
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use namada_core::types::dec::Dec;
     use proptest::prelude::*;
-    use rust_decimal::Decimal;
 
     use super::*;
 
@@ -189,7 +188,7 @@ pub mod testing {
                 max_validator_slots,
                 pipeline_len,
                 unbonding_len,
-                tm_votes_per_token: Dec(Uint::from(tm_votes_per_token)) / Dec(Uint::from(10_000)),
+                tm_votes_per_token: Dec::new(tm_votes_per_token, 4).expect("Test failed"),
                 // The rest of the parameters that are not being used in the PoS
                 // VP are constant for now
                 ..Default::default()
@@ -197,10 +196,9 @@ pub mod testing {
         }
     }
 
-    /// Get an arbitrary rate - a Decimal value between 0 and 1 inclusive, with
+    /// Get an arbitrary rate - a Dec value between 0 and 1 inclusive, with
     /// some fixed precision
-    pub fn arb_rate() -> impl Strategy<Value = Decimal> {
-        (0..=100_000_u64)
-            .prop_map(|num| Decimal::from(num) / Decimal::from(100_000_u64))
+    pub fn arb_rate() -> impl Strategy<Value = Dec> {
+        (0..=100_000_u64).prop_map(|num| Dec::new(num, 5).expect("Test failed"))
     }
 }

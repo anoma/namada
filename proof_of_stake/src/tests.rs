@@ -13,6 +13,7 @@ use namada_core::types::address::testing::{
     address_from_simple_seed, arb_established_address,
 };
 use namada_core::types::address::{Address, EstablishedAddressGen};
+use namada_core::types::dec::Dec;
 use namada_core::types::key::common::{PublicKey, SecretKey};
 use namada_core::types::key::testing::{
     arb_common_keypair, common_sk_from_simple_seed,
@@ -21,15 +22,17 @@ use namada_core::types::storage::Epoch;
 use namada_core::types::{address, key, token};
 use proptest::prelude::*;
 use proptest::test_runner::Config;
-use rust_decimal::Decimal;
-use rust_decimal_macros::dec;
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see
 // `tracing` logs from tests
 use test_log::test;
 
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::PosParams;
-use crate::types::{into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails, ConsensusValidator, GenesisValidator, Position, ReverseOrdTokenAmount, UnbondDetails, ValidatorSetUpdate, ValidatorState, WeightedValidator, Dec};
+use crate::types::{
+    into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,
+    ConsensusValidator, GenesisValidator, Position, ReverseOrdTokenAmount,
+    UnbondDetails, ValidatorSetUpdate, ValidatorState, WeightedValidator,
+};
 use crate::{
     become_validator, below_capacity_validator_set_handle, bond_handle,
     bond_tokens, bonds_and_unbonds, consensus_validator_set_handle,
@@ -741,8 +744,8 @@ fn test_become_validator_aux(
         &new_validator,
         &consensus_key,
         current_epoch,
-        Decimal::new(5, 2),
-        Decimal::new(5, 2),
+        Dec::new(5, 2).expect("Dec creation failed"),
+        Dec::new(5, 2).expect("Dec creation failed"),
     )
     .unwrap();
 
@@ -927,15 +930,17 @@ fn test_validator_sets() {
                 address: val1.clone(),
                 tokens: stake1,
                 consensus_key: pk1.clone(),
-                commission_rate: Decimal::new(1, 1),
-                max_commission_rate_change: Decimal::new(1, 1),
+                commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
+                max_commission_rate_change: Dec::new(1, 1)
+                    .expect("Dec creation failed"),
             },
             GenesisValidator {
                 address: val2.clone(),
                 tokens: stake2,
                 consensus_key: pk2.clone(),
-                commission_rate: Decimal::new(1, 1),
-                max_commission_rate_change: Decimal::new(1, 1),
+                commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
+                max_commission_rate_change: Dec::new(1, 1)
+                    .expect("Dec creation failed"),
             },
         ]
         .into_iter(),
@@ -1472,7 +1477,7 @@ fn test_validator_sets_swap() {
     let params = PosParams {
         max_validator_slots: 2,
         // Set 0.1 votes per token
-        tm_votes_per_token: dec!(0.1),
+        tm_votes_per_token: Dec::new(1, 1).expect("Dec creation failed"),
         ..Default::default()
     };
     let addr_seed = "seed";
@@ -1537,15 +1542,17 @@ fn test_validator_sets_swap() {
                 address: val1,
                 tokens: stake1,
                 consensus_key: pk1,
-                commission_rate: Decimal::new(1, 1),
-                max_commission_rate_change: Decimal::new(1, 1),
+                commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
+                max_commission_rate_change: Dec::new(1, 1)
+                    .expect("Dec creation failed"),
             },
             GenesisValidator {
                 address: val2.clone(),
                 tokens: stake2,
                 consensus_key: pk2,
-                commission_rate: Decimal::new(1, 1),
-                max_commission_rate_change: Decimal::new(1, 1),
+                commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
+                max_commission_rate_change: Dec::new(1, 1)
+                    .expect("Dec creation failed"),
             },
         ]
         .into_iter(),
@@ -1570,20 +1577,8 @@ fn test_validator_sets_swap() {
     let stake3 = stake3 + bond3;
 
     assert!(stake2 < stake3);
-    assert_eq!(
-        into_tm_voting_power(
-            params.tm_votes_per_token,
-            u128::try_from(stake2).unwrap() as u64
-        ),
-        0
-    );
-    assert_eq!(
-        into_tm_voting_power(
-            params.tm_votes_per_token,
-            u128::try_from(stake3).unwrap() as u64
-        ),
-        0
-    );
+    assert_eq!(into_tm_voting_power(params.tm_votes_per_token, stake2), 0);
+    assert_eq!(into_tm_voting_power(params.tm_votes_per_token, stake3), 0);
 
     update_validator_set(&mut s, &params, &val2, bond2.change(), epoch)
         .unwrap();
@@ -1606,14 +1601,8 @@ fn test_validator_sets_swap() {
     let stake3 = stake3 + bonds;
     assert!(stake2 < stake3);
     assert_eq!(
-        into_tm_voting_power(
-            params.tm_votes_per_token,
-            u128::try_from(stake2).unwrap() as u64
-        ),
-        into_tm_voting_power(
-            params.tm_votes_per_token,
-            u128::try_from(stake3).unwrap() as u64
-        )
+        into_tm_voting_power(params.tm_votes_per_token, stake2),
+        into_tm_voting_power(params.tm_votes_per_token, stake3)
     );
 
     update_validator_set(&mut s, &params, &val2, bonds.change(), epoch)
@@ -1705,7 +1694,8 @@ fn arb_genesis_validators(
                 let consensus_key = consensus_sk.to_public();
 
                 let commission_rate = Dec::new(5, 2).expect("Test failed");
-                let max_commission_rate_change = Dec::new(1, 3).expect("Test failed");
+                let max_commission_rate_change =
+                    Dec::new(1, 3).expect("Test failed");
                 GenesisValidator {
                     address,
                     tokens,

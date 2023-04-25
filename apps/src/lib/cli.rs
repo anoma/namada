@@ -1622,6 +1622,7 @@ pub mod args {
     use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
+    use namada::types::dec::Dec;
     use namada::types::key::*;
     use namada::types::masp::MaspValue;
     use namada::types::storage::{self, BlockHeight, Epoch};
@@ -1629,7 +1630,6 @@ pub mod args {
     use namada::types::token;
     use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
     use namada::types::transaction::GasLimit;
-    use rust_decimal::Decimal;
 
     use super::context::*;
     use super::utils::*;
@@ -1662,7 +1662,7 @@ pub mod args {
     const CHANNEL_ID: Arg<ChannelId> = arg("channel-id");
     const CODE_PATH: Arg<PathBuf> = arg("code-path");
     const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
-    const COMMISSION_RATE: Arg<Decimal> = arg("commission-rate");
+    const COMMISSION_RATE: Arg<Dec> = arg("commission-rate");
     const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<Timeout> = arg_default(
         "consensus-timeout-commit",
         DefaultFn(|| Timeout::from_str("1s").unwrap()),
@@ -1709,7 +1709,7 @@ pub mod args {
     const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("node");
     const LOCALHOST: ArgFlag = flag("localhost");
     const MASP_VALUE: Arg<MaspValue> = arg("value");
-    const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =
+    const MAX_COMMISSION_RATE_CHANGE: Arg<Dec> =
         arg("max-commission-rate-change");
     const MODE: ArgOpt<String> = arg_opt("mode");
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
@@ -2183,8 +2183,8 @@ pub mod args {
         pub account_key: Option<WalletPublicKey>,
         pub consensus_key: Option<WalletKeypair>,
         pub protocol_key: Option<WalletPublicKey>,
-        pub commission_rate: Decimal,
-        pub max_commission_rate_change: Decimal,
+        pub commission_rate: Dec,
+        pub max_commission_rate_change: Dec,
         pub validator_vp_code_path: Option<PathBuf>,
         pub unsafe_dont_encrypt: bool,
     }
@@ -2893,7 +2893,7 @@ pub mod args {
         /// Validator address (should be self)
         pub validator: WalletAddress,
         /// Value to which the tx changes the commission rate
-        pub rate: Decimal,
+        pub rate: Dec,
     }
 
     impl Args for TxCommissionRateChange {
@@ -3674,8 +3674,8 @@ pub mod args {
     #[derive(Clone, Debug)]
     pub struct InitGenesisValidator {
         pub alias: String,
-        pub commission_rate: Decimal,
-        pub max_commission_rate_change: Decimal,
+        pub commission_rate: Dec,
+        pub max_commission_rate_change: Dec,
         pub net_address: SocketAddr,
         pub unsafe_dont_encrypt: bool,
         pub key_scheme: SchemeType,

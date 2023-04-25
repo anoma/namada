@@ -2,9 +2,7 @@
 //! proof-of-stake, providing liquity to shielded asset pools, and public goods
 //! funding.
 
-use rust_decimal::prelude::ToPrimitive;
-use rust_decimal::Decimal;
-use rust_decimal_macros::dec;
+use namada_core::types::dec::Dec;
 
 use crate::types::token;
 
@@ -21,8 +19,8 @@ pub enum RewardsType {
 /// Holds the PD controller values that should be updated in storage
 #[allow(missing_docs)]
 pub struct ValsToUpdate {
-    pub locked_ratio: Decimal,
-    pub inflation: u64,
+    pub locked_ratio: Dec,
+    pub inflation: token::Amount,
 }
 
 /// PD controller used to dynamically adjust the rewards rates
@@ -33,17 +31,17 @@ pub struct RewardsController {
     /// Total token supply
     pub total_tokens: token::Amount,
     /// PD target locked ratio
-    pub locked_ratio_target: Decimal,
+    pub locked_ratio_target: Dec,
     /// PD last locked ratio
-    pub locked_ratio_last: Decimal,
+    pub locked_ratio_last: Dec,
     /// Maximum reward rate
-    pub max_reward_rate: Decimal,
+    pub max_reward_rate: Dec,
     /// Last inflation amount
     pub last_inflation_amount: token::Amount,
     /// Nominal proportional gain
-    pub p_gain_nom: Decimal,
+    pub p_gain_nom: Dec,
     /// Nominal derivative gain
-    pub d_gain_nom: Decimal,
+    pub d_gain_nom: Dec,
     /// Number of epochs per year
     pub epochs_per_year: u64,
 }
@@ -63,9 +61,9 @@ impl RewardsController {
             epochs_per_year,
         } = self;
 
-        let locked = locked_tokens.as_dec_unscaled();
-        let total = total_tokens.as_dec_unscaled();
-        let epochs_py: Decimal = (epochs_per_year).into();
+        let locked = Dec::from(locked_tokens);
+        let total = Dec::from(total_tokens);
+        let epochs_py: Dec = epochs_per_year.into();
 
         let locked_ratio = locked / total;
         let max_inflation = total * max_reward_rate / epochs_py;
@@ -76,16 +74,15 @@ impl RewardsController {
         let delta_error = locked_ratio_last - locked_ratio;
         let control_val = p_gain * error - d_gain * delta_error;
 
-        let last_inflation_amount =
-            Decimal::try_from(last_inflation_amount).unwrap();
+        let last_inflation_amount = Dec::from(last_inflation_amount);
         let inflation = if last_inflation_amount + control_val > max_inflation {
             max_inflation
-        } else if last_inflation_amount + control_val > dec!(0.0) {
+        } else if last_inflation_amount + control_val > Dec::zero() {
             last_inflation_amount + control_val
         } else {
-            dec!(0.0)
+            Dec::zero()
         };
-        let inflation: u64 = inflation.to_u64().unwrap();
+        let inflation = token::Amount::from(inflation);
 
         ValsToUpdate {
             locked_ratio,

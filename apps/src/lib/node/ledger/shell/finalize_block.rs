@@ -5,9 +5,7 @@ use std::collections::HashMap;
 use data_encoding::HEXUPPER;
 use namada::ledger::parameters::storage as params_storage;
 use namada::ledger::pos::types::into_tm_voting_power;
-use namada::ledger::pos::{
-    decimal_mult_u128, namada_proof_of_stake, staking_token_address,
-};
+use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ledger::storage_api::token::credit_tokens;
 use namada::ledger::storage_api::{StorageRead, StorageWrite};
@@ -20,10 +18,10 @@ use namada::proof_of_stake::{
     write_last_block_proposer_address,
 };
 use namada::types::address::Address;
+use namada::types::dec::Dec;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::types::token::{total_supply_key, Amount};
-use rust_decimal::prelude::Decimal;
 
 use super::governance::execute_governance_proposals;
 use super::*;
@@ -616,14 +614,14 @@ where
         let epochs_per_year: u64 = self
             .read_storage_key(&params_storage::get_epochs_per_year_key())
             .expect("Epochs per year should exist in storage");
-        let pos_p_gain_nom: Decimal = self
+        let pos_p_gain_nom: Dec = self
             .read_storage_key(&params_storage::get_pos_gain_p_key())
             .expect("PoS P-gain factor should exist in storage");
-        let pos_d_gain_nom: Decimal = self
+        let pos_d_gain_nom: Dec = self
             .read_storage_key(&params_storage::get_pos_gain_d_key())
             .expect("PoS D-gain factor should exist in storage");
 
-        let pos_last_staked_ratio: Decimal = self
+        let pos_last_staked_ratio: Dec = self
             .read_storage_key(&params_storage::get_staked_ratio_key())
             .expect("PoS staked ratio should exist in storage");
         let pos_last_inflation_amount: u64 = self
@@ -642,12 +640,12 @@ where
 
         // TODO: properly fetch these values (arbitrary for now)
         let masp_locked_supply: Amount = Amount::default();
-        let masp_locked_ratio_target = Decimal::new(5, 1);
-        let masp_locked_ratio_last = Decimal::new(5, 1);
-        let masp_max_inflation_rate = Decimal::new(2, 1);
-        let masp_last_inflation_rate = Decimal::new(12, 2);
-        let masp_p_gain = Decimal::new(1, 1);
-        let masp_d_gain = Decimal::new(1, 1);
+        let masp_locked_ratio_target = Dec::new(5, 1);
+        let masp_locked_ratio_last = Dec::new(5, 1);
+        let masp_max_inflation_rate = Dec::new(2, 1);
+        let masp_last_inflation_rate = Dec::new(12, 2);
+        let masp_p_gain = Dec::new(1, 1);
+        let masp_d_gain = Dec::new(1, 1);
 
         // Run rewards PD controller
         let pos_controller = inflation::RewardsController {
@@ -707,15 +705,14 @@ where
         //
         // TODO: think about changing the reward to Decimal
         let mut reward_tokens_remaining = inflation;
-        let mut new_rewards_products: HashMap<Address, (Decimal, Decimal)> =
+        let mut new_rewards_products: HashMap<Address, (Dec, Dec)> =
             HashMap::new();
         for acc in rewards_accumulator_handle().iter(&self.wl_storage)? {
             let (address, value) = acc?;
 
             // Get reward token amount for this validator
-            let fractional_claim =
-                value / Decimal::from(num_blocks_in_last_epoch);
-            let reward = decimal_mult_u128(fractional_claim, inflation as u128);
+            let fractional_claim = value / Dec::from(num_blocks_in_last_epoch);
+            let reward = fractional_claim * inflation;
 
             // Get validator data at the last epoch
             let stake = read_validator_stake(
@@ -724,25 +721,25 @@ where
                 &address,
                 last_epoch,
             )?
-            .map(|v| Decimal::try_from(v).unwrap_or_default())
+            .map(Dec::from)
             .unwrap_or_default();
             let last_rewards_product =
                 validator_rewards_products_handle(&address)
                     .get(&self.wl_storage, &last_epoch)?
-                    .unwrap_or(Decimal::ONE);
+                    .unwrap_or(Dec::one());
             let last_delegation_product =
                 delegator_rewards_products_handle(&address)
                     .get(&self.wl_storage, &last_epoch)?
-                    .unwrap_or(Decimal::ONE);
+                    .unwrap_or(Dec::one());
             let commission_rate = validator_commission_rate_handle(&address)
                 .get(&self.wl_storage, last_epoch, &params)?
                 .expect("Should be able to find validator commission rate");
 
-            let new_product = last_rewards_product
-                * (Decimal::ONE + Decimal::from(reward) / stake);
+            let new_product =
+                last_rewards_product * (Dec::one() + Dec::from(reward) / stake);
             let new_delegation_product = last_delegation_product
-                * (Decimal::ONE
-                    + (Decimal::ONE - commission_rate) * Decimal::from(reward)
+                * (Dec::one()
+                    + (Dec::one() - commission_rate) * Dec::from(reward)
                         / stake);
             new_rewards_products
                 .insert(address, (new_product, new_delegation_product));
@@ -768,8 +765,7 @@ where
         let staking_token = staking_token_address(&self.wl_storage);
 
         // Mint tokens to the PoS account for the last epoch's inflation
-        let pos_reward_tokens =
-            Amount::from_uint(inflation - reward_tokens_remaining, 0).unwrap();
+        let pos_reward_tokens = inflation - reward_tokens_remaining;
         tracing::info!(
             "Minting tokens for PoS rewards distribution into the PoS \
              account. Amount: {}.",
@@ -782,7 +778,7 @@ where
             pos_reward_tokens,
         )?;
 
-        if reward_tokens_remaining > 0 {
+        if reward_tokens_remaining > token::Amount::zero() {
             let amount = Amount::from_uint(reward_tokens_remaining, 0).unwrap();
             tracing::info!(
                 "Minting tokens remaining from PoS rewards distribution into \
@@ -907,6 +903,7 @@ mod test_finalize_block {
         rewards_accumulator_handle, validator_consensus_key_handle,
         validator_rewards_products_handle,
     };
+    use namada::types::dec::POS_DECIMAL_PRECISION;
     use namada::types::governance::ProposalVote;
     use namada::types::key::tm_consensus_key_raw_hash;
     use namada::types::storage::Epoch;
@@ -1509,18 +1506,18 @@ mod test_finalize_block {
         let rewards_prod_3 = validator_rewards_products_handle(&val3.address);
         let rewards_prod_4 = validator_rewards_products_handle(&val4.address);
 
-        let is_decimal_equal_enough =
-            |target: Decimal, to_compare: Decimal| -> bool {
-                // also return false if to_compare > target since this should
-                // never happen for the use cases
-                if to_compare < target {
-                    let tolerance = Decimal::new(1, 9);
-                    let res = Decimal::ONE - to_compare / target;
-                    res < tolerance
-                } else {
-                    to_compare == target
-                }
-            };
+        let is_decimal_equal_enough = |target: Dec, to_compare: Dec| -> bool {
+            // also return false if to_compare > target since this should
+            // never happen for the use cases
+            if to_compare < target {
+                let tolerance = Dec::new(1, POS_DECIMAL_PRECISION)
+                    .expect("Dec creation failed");
+                let res = Dec::one() - to_compare / target;
+                res < tolerance
+            } else {
+                to_compare == target
+            }
+        };
 
         // NOTE: Want to manually set the block proposer and the vote
         // information in a FinalizeBlock object. In non-abcipp mode,
@@ -1553,7 +1550,7 @@ mod test_finalize_block {
         // Val1 was the proposer, so its reward should be larger than all
         // others, which should themselves all be equal
         let acc_sum = get_rewards_sum(&shell.wl_storage);
-        assert!(is_decimal_equal_enough(Decimal::ONE, acc_sum));
+        assert!(is_decimal_equal_enough(Dec::one(), acc_sum));
         let acc = get_rewards_acc(&shell.wl_storage);
         assert_eq!(acc.get(&val2.address), acc.get(&val3.address));
         assert_eq!(acc.get(&val2.address), acc.get(&val4.address));
@@ -1572,7 +1569,7 @@ mod test_finalize_block {
         // should be the same as val1 now. Val3 and val4 should be equal as
         // well.
         let acc_sum = get_rewards_sum(&shell.wl_storage);
-        assert!(is_decimal_equal_enough(Decimal::TWO, acc_sum));
+        assert!(is_decimal_equal_enough(Dec::two(), acc_sum));
         let acc = get_rewards_acc(&shell.wl_storage);
         assert_eq!(acc.get(&val1.address), acc.get(&val2.address));
         assert_eq!(acc.get(&val3.address), acc.get(&val4.address));
@@ -1684,7 +1681,7 @@ mod test_finalize_block {
         assert!(rp3 > rp4);
     }
 
-    fn get_rewards_acc<S>(storage: &S) -> HashMap<Address, Decimal>
+    fn get_rewards_acc<S>(storage: &S) -> HashMap<Address, Dec>
     where
         S: StorageRead,
     {
@@ -1692,18 +1689,18 @@ mod test_finalize_block {
             .iter(storage)
             .unwrap()
             .map(|elem| elem.unwrap())
-            .collect::<HashMap<Address, Decimal>>()
+            .collect::<HashMap<Address, Dec>>()
     }
 
-    fn get_rewards_sum<S>(storage: &S) -> Decimal
+    fn get_rewards_sum<S>(storage: &S) -> Dec
     where
         S: StorageRead,
     {
         let acc = get_rewards_acc(storage);
         if acc.is_empty() {
-            Decimal::ZERO
+            Dec::zero()
         } else {
-            acc.iter().fold(Decimal::default(), |sum, elm| sum + *elm.1)
+            acc.iter().fold(Dec::zero(), |sum, elm| sum + *elm.1)
         }
     }
 

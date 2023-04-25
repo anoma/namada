@@ -1,9 +1,9 @@
 //! PoS rewards distribution.
 
-use thiserror::Error;
-use namada_core::types::token::{Amount, DenominatedAmount};
+use namada_core::types::dec::Dec;
+use namada_core::types::token::Amount;
 use namada_core::types::uint::Uint;
-use crate::types::Dec;
+use thiserror::Error;
 
 /// This is equal to 0.01.
 const MIN_PROPOSER_REWARD: Dec = Dec(Uint([10000u64, 0u64, 0u64, 0u64]));
@@ -72,10 +72,10 @@ impl PosRewardsCalculator {
         }
 
         // Logic for determining the coefficients.
-        let proposer_coeff = Dec::from(proposer_reward
-            * (signing_stake - votes_needed))
-            / Dec::from(total_stake)
-            + MIN_PROPOSER_REWARD;
+        let proposer_coeff =
+            Dec::from(proposer_reward * (signing_stake - votes_needed))
+                / Dec::from(total_stake)
+                + MIN_PROPOSER_REWARD;
         let signer_coeff = signer_reward;
         let active_val_coeff = Dec::one() - proposer_coeff - signer_coeff;
 

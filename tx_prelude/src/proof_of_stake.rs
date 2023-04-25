@@ -1,5 +1,6 @@
 //! Proof of Stake system integration with functions for transactions
 
+use namada_core::types::dec::Dec;
 use namada_core::types::transaction::InitValidator;
 use namada_core::types::{key, token};
 pub use namada_proof_of_stake::parameters::PosParams;
@@ -8,7 +9,6 @@ use namada_proof_of_stake::{
     read_pos_params, unbond_tokens, withdraw_tokens,
 };
 pub use namada_proof_of_stake::{parameters, types};
-use rust_decimal::Decimal;
 
 use super::*;
 
@@ -55,7 +55,7 @@ impl Ctx {
     pub fn change_validator_commission_rate(
         &mut self,
         validator: &Address,
-        rate: &Decimal,
+        rate: &Dec,
     ) -> TxResult {
         let current_epoch = self.get_block_epoch()?;
         change_validator_commission_rate(self, validator, *rate, current_epoch)

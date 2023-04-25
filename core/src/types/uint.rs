@@ -2,7 +2,7 @@
 //! An unsigned 256 integer type. Used for, among other things,
 //! the backing type of token amounts.
 use std::cmp::Ordering;
-use std::ops::{Add, AddAssign, BitXor, Neg, Sub};
+use std::ops::{Add, AddAssign, BitXor, Div, Mul, Neg, Sub};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use impl_num_traits::impl_uint_num_traits;
@@ -90,6 +90,11 @@ impl I256 {
     /// than or equal to zero)
     pub fn non_negative(&self) -> bool {
         self.0.0[3].leading_zeros() > 0
+    }
+
+    /// Check if the amount is negative (less than zero)
+    pub fn is_negative(&self) -> bool {
+        !self.non_negative()
     }
 
     /// Get the absolute value
@@ -238,6 +243,29 @@ impl Sub for I256 {
     }
 }
 
+impl Mul<Uint> for I256 {
+    type Output = Self;
+
+    fn mul(self, rhs: Uint) -> Self::Output {
+        let is_neg = self.is_negative();
+        let prod = self.abs() * rhs;
+        if is_neg { -Self(prod) } else { Self(prod) }
+    }
+}
+
+impl Div<Uint> for I256 {
+    type Output = Self;
+
+    fn div(self, rhs: Uint) -> Self::Output {
+        let is_neg = self.is_negative();
+        let quot = self
+            .abs()
+            .fixed_precision_div(&rhs, 0u8)
+            .unwrap_or_default();
+        if is_neg { -Self(quot) } else { Self(quot) }
+    }
+}
+
 impl From<i128> for I256 {
     fn from(val: i128) -> Self {
         if val < 0 {
@@ -310,8 +338,7 @@ mod test_uint {
     /// value gives zero.
     #[test]
     fn test_max_signed_value() {
-        let signed =
-            I256::try_from(MAX_SIGNED_VALUE).expect("Test failed");
+        let signed = I256::try_from(MAX_SIGNED_VALUE).expect("Test failed");
         let one = I256::try_from(Uint::from(1u64)).expect("Test failed");
         let overflow = signed + one;
         assert_eq!(

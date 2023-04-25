@@ -5,7 +5,7 @@ mod rev_order;
 use core::fmt::Debug;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
-use std::fmt::{Display, Formatter, Write};
+use std::fmt::Display;
 use std::hash::Hash;
 use std::ops::Sub;
 
@@ -16,14 +16,17 @@ use namada_core::ledger::storage_api::collections::{
 };
 use namada_core::ledger::storage_api::{self, StorageRead};
 use namada_core::types::address::Address;
+use namada_core::types::dec::Dec;
 use namada_core::types::key::common;
 use namada_core::types::storage::{Epoch, KeySeg};
 use namada_core::types::token;
-use namada_core::types::token::{Amount, NATIVE_MAX_DECIMAL_PLACES};
+use namada_core::types::token::Amount;
 pub use rev_order::ReverseOrdTokenAmount;
-use namada_core::types::uint::Uint;
 
 use crate::parameters::PosParams;
+
+// TODO: replace `POS_MAX_DECIMAL_PLACES` with
+// core::types::token::NATIVE_MAX_DECIMAL_PLACES??
 
 // const U64_MAX: u64 = u64::MAX;
 
@@ -466,137 +469,6 @@ impl Display for SlashType {
 
 // --------------------------------------------------------------------------------------------
 
-/// The numbrer of Dec places for PoS rational calculations
-pub const POS_DECIMAL_PRECISION: u8 = 6;
-
-/// A 256 bit number with [`POS_DECIMAL_PRECISION`] number of Dec places.
-///
-/// To be precise, an instance X of this type should be interpeted as the Dec
-/// X * 10 ^ (-[`POS_DECIMAL_PRECISION`])
-#[derive(
-    Clone,
-    Copy,
-    Default,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Debug,
-    Hash,
-)]
-pub struct Dec(pub Uint);
-
-impl std::ops::Deref for Dec {
-    type Target = Uint;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl std::ops::DerefMut for Dec {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl Dec {
-    pub fn trunc_div(&self, rhs: &Self) -> Option<Self> {
-        self.0.fixed_precision_div(rhs, POS_DECIMAL_PRECISION)
-            .map(Self)
-    }
-
-    pub fn zero() -> Self {
-        Self(Uint::zero())
-    }
-
-    pub fn one() -> Self {
-        Self(Uint::one())
-    }
-
-    pub fn new(matissa: u64, scale: u8) -> Option<Self> {
-        if scale > POS_DECIMAL_PRECISION {
-            None
-        } else {
-            Uint::exp10((POS_DECIMAL_PRECISION - scale) as usize)
-                .checked_mul(Uint::from(matissa))
-                .map(Self)
-        }
-    }
-}
-
-impl From<Amount> for Dec {
-    fn from(amt: Amount) -> Self {
-        Self(amt.into())
-    }
-}
-
-impl std::ops::Add<Dec> for Dec {
-    type Output = Self;
-
-    fn add(self, rhs: Dec) -> Self::Output {
-        Self(self.0 + rhs.0)
-    }
-}
-
-impl std::ops::Add<u64> for Dec {
-    type Output = Self;
-
-    fn add(self, rhs: u64) -> Self::Output {
-        Self(self.0 + Uint::from(rhs))
-    }
-}
-
-impl std::ops::Sub<Dec> for Dec {
-    type Output = Self;
-
-    fn sub(self, rhs: Dec) -> Self::Output {
-        Self(self.0 - rhs.0)
-    }
-}
-
-impl std::ops::Mul<u128> for Dec {
-    type Output = Dec;
-
-    fn mul(self, rhs: u128) -> Self::Output {
-        Self(self.0 * Uint::from(rhs))
-    }
-}
-
-impl std::ops::Mul<Amount> for Dec {
-    type Output = Amount;
-
-    fn mul(self, rhs: Amount) -> Self::Output {
-        self.0 * rhs
-    }
-}
-
-impl std::ops::Mul<Dec> for Dec {
-    type Output = Self;
-
-    fn mul(self, rhs: Dec) -> Self::Output {
-        Self(self.0 * rhs.0)
-    }
-}
-
-impl std::ops::Div<Dec> for Dec {
-    type Output = Self;
-
-    fn div(self, rhs: Dec) -> Self::Output {
-        Self(self.0 / rhs.0)
-    }
-}
-
-impl Display for Dec {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let string = self.0.to_string();
-        f.write_str(&string)
-    }
-}
-
 // --------------------------------------------------------------------------------------------
 
 // /// Multiply a value of type Dec with one of type u64 and then return the
@@ -638,11 +510,9 @@ impl Display for Dec {
 
 /// Calculate voting power in the tendermint context (which is stored as i64)
 /// from the number of tokens
-pub fn into_tm_voting_power(
-    votes_per_token: Dec,
-    tokens: Amount,
-) -> i64 {
-    let pow = votes_per_token * u128::try_from(tokens).expect("Voting power out of bounds");
+pub fn into_tm_voting_power(votes_per_token: Dec, tokens: Amount) -> i64 {
+    let pow = votes_per_token
+        * u128::try_from(tokens).expect("Voting power out of bounds");
     i64::try_from(pow.0).expect("Invalid voting power")
 }
 

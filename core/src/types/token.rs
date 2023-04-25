@@ -14,9 +14,10 @@ use thiserror::Error;
 use crate::ledger::storage_api::token::read_denom;
 use crate::ledger::storage_api::StorageRead;
 use crate::types::address::{masp, Address, DecodeError as AddressError};
+use crate::types::dec::Dec;
 use crate::types::storage;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
-use crate::types::uint::{self, I256, Uint};
+use crate::types::uint::{self, Uint, I256};
 
 /// Amount in micro units. For different granularity another representation
 /// might be more appropriate.
@@ -207,7 +208,7 @@ impl Amount {
     pub fn to_string_native(&self) -> String {
         DenominatedAmount {
             amount: *self,
-            denom:NATIVE_MAX_DECIMAL_PLACES.into(),
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
         }
         .to_string_precise()
     }
@@ -492,6 +493,12 @@ impl From<DenominatedAmount> for Amount {
     }
 }
 
+impl From<Dec> for Amount {
+    fn from(dec: Dec) -> Amount {
+        Amount { raw: dec.0 }
+    }
+}
+
 impl TryFrom<Amount> for u128 {
     type Error = std::io::Error;
 
@@ -522,7 +529,9 @@ impl Add<u64> for Amount {
     type Output = Self;
 
     fn add(self, rhs: u64) -> Self::Output {
-        Self { raw: self.raw + Uint::from(rhs)}
+        Self {
+            raw: self.raw + Uint::from(rhs),
+        }
     }
 }
 

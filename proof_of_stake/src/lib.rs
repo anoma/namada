@@ -39,12 +39,12 @@ use namada_core::ledger::storage_api::{
     self, OptionExt, ResultExt, StorageRead, StorageWrite,
 };
 use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::dec::Dec;
 use namada_core::types::key::{
     common, tm_consensus_key_raw_hash, PublicKeyTmRawHash,
 };
 pub use namada_core::types::storage::Epoch;
 use namada_core::types::token;
-use namada_core::types::token::{Amount, DenominatedAmount};
 use once_cell::unsync::Lazy;
 use parameters::PosParams;
 use rewards::PosRewardsCalculator;
@@ -53,13 +53,12 @@ use storage::{
     get_validator_address_from_bond, into_tm_voting_power, is_bond_key,
     is_unbond_key, is_validator_slashes_key, last_block_proposer_key,
     num_consensus_validators_key, params_key, slashes_prefix,
-    unbonds_for_source_prefix, unbonds_prefix,
-    validator_address_raw_hash_key, validator_max_commission_rate_change_key,
-    BondDetails, BondsAndUnbondsDetail, BondsAndUnbondsDetails,
-    ReverseOrdTokenAmount, RewardsAccumulator, UnbondDetails,
+    unbonds_for_source_prefix, unbonds_prefix, validator_address_raw_hash_key,
+    validator_max_commission_rate_change_key, BondDetails,
+    BondsAndUnbondsDetail, BondsAndUnbondsDetails, ReverseOrdTokenAmount,
+    RewardsAccumulator, UnbondDetails,
 };
 use thiserror::Error;
-use namada_core::types::uint::Uint;
 use types::{
     BelowCapacityValidatorSet, BelowCapacityValidatorSets, BondId, Bonds,
     CommissionRates, ConsensusValidator, ConsensusValidatorSet,
@@ -69,8 +68,6 @@ use types::{
     ValidatorSetUpdate, ValidatorState, ValidatorStates, VoteInfo,
     WeightedValidator,
 };
-
-use crate::types::Dec;
 
 /// Address of the PoS account implemented as a native VP
 pub const ADDRESS: Address = Address::Internal(InternalAddress::PoS);
@@ -168,9 +165,9 @@ pub enum SlashError {
 #[derive(Error, Debug)]
 pub enum CommissionRateChangeError {
     #[error("Unexpected negative commission rate {0} for validator {1}")]
-    NegativeRate(DenominatedAmount, Address),
+    NegativeRate(Dec, Address),
     #[error("Rate change of {0} is too large for validator {1}")]
-    RateChangeTooLarge(DenominatedAmount, Address),
+    RateChangeTooLarge(Dec, Address),
     #[error(
         "There is no maximum rate change written in storage for validator {0}"
     )]
@@ -477,7 +474,7 @@ where
 pub fn read_validator_max_commission_rate_change<S>(
     storage: &S,
     validator: &Address,
-) -> storage_api::Result<Option<DenominatedAmount>>
+) -> storage_api::Result<Option<Dec>>
 where
     S: StorageRead,
 {
@@ -489,7 +486,7 @@ where
 pub fn write_validator_max_commission_rate_change<S>(
     storage: &mut S,
     validator: &Address,
-    change: DenominatedAmount,
+    change: Dec,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -1585,8 +1582,8 @@ pub fn become_validator<S>(
     address: &Address,
     consensus_key: &common::PublicKey,
     current_epoch: Epoch,
-    commission_rate: DenominatedAmount,
-    max_commission_rate_change: DenominatedAmount,
+    commission_rate: Dec,
+    max_commission_rate_change: Dec,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -1692,14 +1689,7 @@ where
                         .unwrap_or_default()
             {
                 let slash_rate = slash_type.get_slash_rate(&params);
-                let to_slash = token::Amount::from_uint(
-                    decimal_mult_u128(
-                        slash_rate,
-                        u128::try_from(amount).expect("Amount out of bounds"),
-                    ),
-                    0,
-                )
-                .expect("Amount out of bounds");
+                let to_slash = slash_rate * amount;
                 slashed += to_slash;
             }
         }
@@ -1739,7 +1729,7 @@ where
 pub fn change_validator_commission_rate<S>(
     storage: &mut S,
     validator: &Address,
-    new_rate: DenominatedAmount,
+    new_rate: Dec,
     current_epoch: Epoch,
 ) -> storage_api::Result<()>
 where
@@ -1775,8 +1765,16 @@ where
     let rate_before_pipeline = commission_handle
         .get(storage, pipeline_epoch - 1, &params)?
         .expect("Could not find a rate in given epoch");
-    let change_from_prev = new_rate - rate_before_pipeline;
-    if change_from_prev.abs() > max_change.unwrap() {
+
+    // TODO: change this back if we use `Dec` type with a signed integer
+    // let change_from_prev = new_rate - rate_before_pipeline;
+    // if change_from_prev.abs() > max_change.unwrap() {
+    let change_from_prev = if new_rate > rate_before_pipeline {
+        new_rate - rate_before_pipeline
+    } else {
+        rate_before_pipeline - new_rate
+    };
+    if change_from_prev > max_change.unwrap() {
         return Err(CommissionRateChangeError::RateChangeTooLarge(
             change_from_prev,
             validator.clone(),
@@ -1810,14 +1808,7 @@ where
     let current_stake =
         read_validator_stake(storage, params, validator, current_epoch)?
             .unwrap_or_default();
-    let slashed_amount = Amount::from_uint(
-        decimal_mult_u128(
-            rate,
-            u128::try_from(current_stake).expect("Amount out of bounds"),
-        ),
-        0,
-    )
-    .expect("Amount out of bounds");
+    let slashed_amount = rate * current_stake;
     let token_change = -token::Change::from(slashed_amount);
 
     // Update validator sets and deltas at the pipeline length
@@ -1958,9 +1949,7 @@ where
             if slash_epoch > &bond_epoch {
                 continue;
             }
-            let current_slashed =
-                mult_change_to_amount(slash_type.get_slash_rate(params), delta)
-                    .change();
+            let current_slashed = slash_type.get_slash_rate(params) * delta;
             let delta = token::Amount::from_change(delta - current_slashed);
             total += delta;
             if bond_epoch <= epoch {
@@ -2024,17 +2013,11 @@ where
                             .unwrap_or_default();
                     into_tm_voting_power(
                         params.tm_votes_per_token,
-                        u128::try_from(prev_validator_stake)
-                            .expect("Amount out of bounds")
-                            as u64,
+                        prev_validator_stake,
                     )
                 });
                 let cur_tm_voting_power = Lazy::new(|| {
-                    into_tm_voting_power(
-                        params.tm_votes_per_token,
-                        u128::try_from(cur_stake).expect("Amount out of bounds")
-                            as u64,
-                    )
+                    into_tm_voting_power(params.tm_votes_per_token, cur_stake)
                 });
 
                 // If it was in `Consensus` before and voting power has not
@@ -2104,8 +2087,7 @@ where
                 .unwrap_or_default();
             let prev_tm_voting_power = into_tm_voting_power(
                 params.tm_votes_per_token,
-                u128::try_from(prev_validator_stake)
-                    .expect("Amount out of bounds") as u64,
+                prev_validator_stake,
             );
 
             // If the validator previously had no voting power, it wasn't in
@@ -2544,10 +2526,8 @@ fn make_bond_details<S>(
                     }
                     return Some(
                         acc.unwrap_or_default()
-                            + mult_change_to_amount(
-                                slash.r#type.get_slash_rate(params),
-                                change,
-                            ),
+                            + slash.r#type.get_slash_rate(params)
+                                * token::Amount::from_change(change),
                     );
                 }
                 None
@@ -2585,10 +2565,7 @@ fn make_unbond_details<S>(
                     }
                     return Some(
                         acc.unwrap_or_default()
-                            + mult_amount(
-                                slash.r#type.get_slash_rate(params),
-                                amount,
-                            ),
+                            + slash.r#type.get_slash_rate(params) * amount,
                     );
                 }
                 None
@@ -2655,7 +2632,7 @@ where
             debug_assert_eq!(
                 into_tm_voting_power(
                     params.tm_votes_per_token,
-                    u128::try_from(stake_from_deltas).unwrap() as u64,
+                    stake_from_deltas,
                 ),
                 i64::try_from(validator_vp).unwrap_or_default(),
             );
@@ -2670,8 +2647,8 @@ where
     let rewards_calculator = PosRewardsCalculator {
         proposer_reward: params.block_proposer_reward,
         signer_reward: params.block_vote_reward,
-        signing_stake: u128::try_from(total_signing_stake).unwrap() as u64,
-        total_stake: u128::try_from(total_consensus_stake).unwrap() as u64,
+        signing_stake: total_signing_stake,
+        total_stake: total_consensus_stake,
     };
     let coeffs = rewards_calculator
         .get_reward_coeffs()
@@ -2688,9 +2665,9 @@ where
 
     // Compute the fractional block rewards for each consensus validator and
     // update the reward accumulators
-    let consensus_stake_unscaled: Dec  = total_consensus_stake.into();
+    let consensus_stake_unscaled: Dec = total_consensus_stake.into();
     let signing_stake_unscaled: Dec = total_signing_stake.into();
-    let mut values: HashMap<Address, Dec>= HashMap::new();
+    let mut values: HashMap<Address, Dec> = HashMap::new();
     for validator in consensus_validators.iter(storage)? {
         let (
             NestedSubKey::Data {

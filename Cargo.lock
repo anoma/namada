@@ -4078,7 +4078,6 @@ dependencies = [
  "namada_macros",
  "namada_proof_of_stake",
  "namada_vm_env",
- "rust_decimal",
  "sha2 0.10.6",
  "thiserror",
 ]
