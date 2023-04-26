@@ -6,6 +6,7 @@ use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use async_std::io::prelude::WriteExt;
 use async_std::io::{self};
@@ -30,7 +31,8 @@ use masp_primitives::transaction::components::{Amount, OutPoint, TxOut};
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::prover::LocalTxProver;
-use namada::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
+use namada::ibc::applications::transfer::msgs::transfer::MsgTransfer;
+use namada::ibc::core::ics04_channel::timeout::TimeoutHeight;
 use namada::ibc::signer::Signer;
 use namada::ibc::timestamp::Timestamp as IbcTimestamp;
 use namada::ibc::tx_msg::Msg;
@@ -1776,22 +1778,24 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
         Some(sp) => sp.to_string().replace(RESERVED_ADDRESS_PREFIX, ""),
         None => token.to_string(),
     };
-    let token = Some(Coin {
+    let token = Coin {
         denom,
         amount: args.amount.to_string(),
-    });
+    };
 
     // this height should be that of the destination chain, not this chain
     let timeout_height = match args.timeout_height {
-        Some(h) => IbcHeight::new(0, h),
-        None => IbcHeight::zero(),
+        Some(h) => {
+            TimeoutHeight::At(IbcHeight::new(0, h).expect("invalid height"))
+        }
+        None => TimeoutHeight::Never,
     };
 
     let now: namada::tendermint::Time = DateTimeUtc::now().try_into().unwrap();
     let now: IbcTimestamp = now.into();
     let timeout_timestamp = if let Some(offset) = args.timeout_sec_offset {
         (now + Duration::new(offset, 0)).unwrap()
-    } else if timeout_height.is_zero() {
+    } else if timeout_height == TimeoutHeight::Never {
         // we cannot set 0 to both the height and the timestamp
         (now + Duration::new(3600, 0)).unwrap()
     } else {
@@ -1799,13 +1803,13 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
     };
 
     let msg = MsgTransfer {
-        source_port: args.port_id,
-        source_channel: args.channel_id,
+        port_id_on_a: args.port_id,
+        chan_id_on_a: args.channel_id,
         token,
-        sender: Signer::new(source.to_string()),
-        receiver: Signer::new(args.receiver),
-        timeout_height,
-        timeout_timestamp,
+        sender: Signer::from_str(&source.to_string()).expect("invalid signer"),
+        receiver: Signer::from_str(&args.receiver).expect("invalid signer"),
+        timeout_height_on_b: timeout_height,
+        timeout_timestamp_on_b: timeout_timestamp,
     };
     tracing::debug!("IBC transfer message {:?}", msg);
     let any_msg = msg.to_any();
