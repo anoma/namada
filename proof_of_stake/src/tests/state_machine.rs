@@ -6,7 +6,7 @@ use itertools::Itertools;
 use namada_core::ledger::storage::testing::TestWlStorage;
 use namada_core::ledger::storage_api::{token, StorageRead};
 use namada_core::types::address::{self, Address};
-use namada_core::types::key;
+use namada_core::types::key::{self, RefTo};
 use namada_core::types::key::common::PublicKey;
 use namada_core::types::storage::Epoch;
 use proptest::prelude::*;
@@ -143,14 +143,24 @@ impl StateMachineTest for ConcretePosState {
             } => {
                 let epoch = state.current_epoch();
 
-                super::become_validator(
-                    &mut state.s,
-                    &params,
-                    &address,
-                    &consensus_key,
-                    epoch,
+                let eth_hot_key = key::common::PublicKey::Secp256k1(
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>().ref_to(),
+                );
+                let eth_cold_key = key::common::PublicKey::Secp256k1(
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>().ref_to(),
+                );
+
+                super::become_validator(crate::BecomeValidator {
+                    storage: &mut state.s,
+                    params: &params,
+                    address: &address,
+                    consensus_key: &consensus_key,
+                    eth_cold_key: &eth_cold_key,
+                    eth_hot_key: &eth_hot_key,
+                    current_epoch: epoch,
                     commission_rate,
                     max_commission_rate_change,
+                }
                 )
                 .unwrap();
 
