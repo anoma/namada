@@ -78,6 +78,11 @@ impl Amount {
         }
     }
 
+    /// Get the raw [`Uint`] value, which represents namnam
+    pub fn raw_amount(&self) -> Uint {
+        self.raw
+    }
+
     /// Create a new amount with the maximum value
     pub fn max() -> Self {
         Self {

@@ -159,7 +159,7 @@ impl FromStr for Dec {
 
 impl From<Amount> for Dec {
     fn from(amt: Amount) -> Self {
-        Self(amt.into())
+        Self(amt.raw_amount())
     }
 }
 
@@ -246,11 +246,14 @@ impl Mul<Change> for Dec {
     }
 }
 
+// TODO: is some checked arithmetic needed here to prevent overflows?
+// Truncates down to the `POS_DECIMAL_PRECISION`th decimal place.
 impl Mul<Dec> for Dec {
     type Output = Self;
 
     fn mul(self, rhs: Dec) -> Self::Output {
-        Self(self.0 * rhs.0)
+        let prod = self.0 * rhs.0;
+        Self(prod / Uint::exp10(POS_DECIMAL_PRECISION as usize))
     }
 }
 
@@ -266,6 +269,14 @@ impl Div<Dec> for Dec {
     ///     overflows 256 bits
     fn div(self, rhs: Dec) -> Self::Output {
         self.trunc_div(&rhs).unwrap()
+    }
+}
+
+impl Div<u64> for Dec {
+    type Output = Self;
+
+    fn div(self, rhs: u64) -> Self::Output {
+        Self(self.0 / Uint::from(rhs))
     }
 }
 

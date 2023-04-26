@@ -957,8 +957,8 @@ pub fn genesis(num_validators: u64) -> Genesis {
         implicit_vp_sha256: Default::default(),
         epochs_per_year: 525_600, /* seconds in yr (60*60*24*365) div seconds
                                    * per epoch (60 = min_duration) */
-        pos_gain_p: Dec::new(1, 2).expect("This can't fail"),
-        pos_gain_d: Dec::new(1, 2).expect("This can't fail"),
+        pos_gain_p: Dec::new(1, 1).expect("This can't fail"),
+        pos_gain_d: Dec::new(1, 1).expect("This can't fail"),
         staked_ratio: Dec::zero(),
         pos_inflation_amount: token::Amount::zero(),
         wrapper_tx_fees: Some(token::Amount::native_whole(0)),

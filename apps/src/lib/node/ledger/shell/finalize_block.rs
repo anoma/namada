@@ -624,9 +624,9 @@ where
         let pos_last_staked_ratio: Dec = self
             .read_storage_key(&params_storage::get_staked_ratio_key())
             .expect("PoS staked ratio should exist in storage");
-        let pos_last_inflation_amount: u64 = self
+        let pos_last_inflation_amount: token::Amount = self
             .read_storage_key(&params_storage::get_pos_inflation_amount_key())
-            .expect("PoS inflation rate should exist in storage");
+            .expect("PoS inflation amount should exist in storage");
         // Read from PoS storage
         let total_tokens = self
             .read_storage_key(&total_supply_key(&staking_token_address(
@@ -654,11 +654,7 @@ where
             locked_ratio_target: pos_locked_ratio_target,
             locked_ratio_last: pos_last_staked_ratio,
             max_reward_rate: pos_max_inflation_rate,
-            last_inflation_amount: token::Amount::from_uint(
-                pos_last_inflation_amount,
-                0,
-            )
-            .expect("Amount out of bounds"),
+            last_inflation_amount: pos_last_inflation_amount,
             p_gain_nom: pos_p_gain_nom,
             d_gain_nom: pos_d_gain_nom,
             epochs_per_year,
@@ -709,7 +705,7 @@ where
             let (address, value) = acc?;
 
             // Get reward token amount for this validator
-            let fractional_claim = value / Dec::from(num_blocks_in_last_epoch);
+            let fractional_claim = value / num_blocks_in_last_epoch;
             let reward = fractional_claim * inflation;
 
             // Get validator data at the last epoch
@@ -1508,7 +1504,7 @@ mod test_finalize_block {
             // also return false if to_compare > target since this should
             // never happen for the use cases
             if to_compare < target {
-                let tolerance = Dec::new(1, POS_DECIMAL_PRECISION)
+                let tolerance = Dec::new(1, POS_DECIMAL_PRECISION / 2)
                     .expect("Dec creation failed");
                 let res = Dec::one() - to_compare / target;
                 res < tolerance
@@ -1624,7 +1620,7 @@ mod test_finalize_block {
         assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_4.is_empty(&shell.wl_storage).unwrap());
         let acc_sum = get_rewards_sum(&shell.wl_storage);
-        assert!(is_decimal_equal_enough(Dec(Uint::from(3)), acc_sum));
+        assert!(is_decimal_equal_enough(Dec::new(3, 0).unwrap(), acc_sum));
         let acc = get_rewards_acc(&shell.wl_storage);
         assert!(
             acc.get(&val1.address).cloned().unwrap()
@@ -1647,10 +1643,10 @@ mod test_finalize_block {
         assert_eq!(current_height, shell.wl_storage.storage.block.height.0);
 
         for _ in current_height..height_of_next_epoch.0 + 2 {
-            dbg!(
-                get_rewards_acc(&shell.wl_storage),
-                get_rewards_sum(&shell.wl_storage),
-            );
+            // dbg!(
+            //     get_rewards_acc(&shell.wl_storage),
+            //     get_rewards_sum(&shell.wl_storage),
+            // );
             next_block_for_inflation(&mut shell, pkh1.clone(), votes.clone());
         }
         assert!(
