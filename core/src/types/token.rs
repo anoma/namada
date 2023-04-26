@@ -233,17 +233,6 @@ impl Amount {
     pub fn from_string_precise(string: &str) -> Result<Self, AmountParseError> {
         DenominatedAmount::from_str(string).map(|den| den.amount)
     }
-
-    /// Convert the amount to [`Decimal`] ignoring its scale (i.e. as an integer
-    /// in micro units).
-    ///
-    /// # Panics
-    ///
-    /// Panics if the stored amount overflows either a u128 or the [`Decimal`]
-    /// type.
-    pub fn as_dec_unscaled(&self) -> Decimal {
-        Into::<Decimal>::into(u128::try_from(self.raw).unwrap())
-    }
 }
 
 /// Given a number represented as `M*B^D`, then

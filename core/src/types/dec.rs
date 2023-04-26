@@ -267,6 +267,17 @@ mod test_dec {
                 + Dec::new(3, 0).unwrap() / Dec::new(5, 0).unwrap(),
             Dec::new(16, 1).unwrap()
         );
+
+        // Fixed precision division is more thoroughly tested for the `Uint` type. These
+        // are sanity checks that the precision is correct.
+        assert_eq!(
+            Dec::new(1, 6).expect("Test failed") / Dec::new(1, 0).expect("Test failed"),
+            Dec::one(),
+        );
+        assert_eq!(
+            Dec::new(1, 6).expect("Test failed") / (Dec::new(1, 0).expect("Test failed") + Dec::one()),
+            Dec::zero(),
+        );
     }
 
     /// Test that parsing from string is correct.
