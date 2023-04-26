@@ -4950,6 +4950,7 @@ dependencies = [
  "eyre",
  "itertools",
  "namada_core",
+ "namada_macros",
  "namada_proof_of_stake",
  "rand 0.8.5",
  "rust_decimal",

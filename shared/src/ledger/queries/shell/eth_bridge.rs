@@ -27,9 +27,7 @@ use namada_core::types::voting_power::FractionalVotingPower;
 use namada_ethereum_bridge::parameters::UpgradeableContract;
 use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
 use namada_ethereum_bridge::storage::proof::{sort_sigs, EthereumProof};
-use namada_ethereum_bridge::storage::vote_tallies::{
-    eth_msgs_prefix, BODY_KEY_SEGMENT, VOTING_POWER_KEY_SEGMENT,
-};
+use namada_ethereum_bridge::storage::vote_tallies::{eth_msgs_prefix, Keys};
 use namada_ethereum_bridge::storage::{
     bridge_contract_key, governance_contract_key, native_erc20_key,
     vote_tallies,
@@ -386,7 +384,7 @@ where
             );
             match key.segments.last() {
                 Some(DbKeySeg::StringSeg(ref seg))
-                    if seg == BODY_KEY_SEGMENT =>
+                    if seg == Keys::segments().body =>
                 {
                     Some((key, v))
                 }
@@ -399,7 +397,7 @@ where
         {
             // We checked above that key is not empty
             *key.segments.last_mut().unwrap() =
-                DbKeySeg::StringSeg(VOTING_POWER_KEY_SEGMENT.into());
+                DbKeySeg::StringSeg(Keys::segments().voting_power.into());
             let voting_power = <(u64, u64)>::try_from_slice(
                 &ctx.wl_storage
                     .read_bytes(&key)

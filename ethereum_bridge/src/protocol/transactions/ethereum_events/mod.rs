@@ -338,7 +338,7 @@ mod tests {
                 eth_msg_keys.seen(),
                 eth_msg_keys.seen_by(),
                 eth_msg_keys.voting_power(),
-                eth_msg_keys.epoch(),
+                eth_msg_keys.voting_started_epoch(),
                 wrapped_erc20_keys.balance(&receiver),
                 wrapped_erc20_keys.supply(),
             ]),
@@ -365,7 +365,8 @@ mod tests {
         let voting_power_bytes = voting_power_bytes.unwrap();
         assert_eq!(<(u64, u64)>::try_from_slice(&voting_power_bytes)?, (1, 1));
 
-        let epoch_bytes = wl_storage.read_bytes(&eth_msg_keys.epoch())?;
+        let epoch_bytes =
+            wl_storage.read_bytes(&eth_msg_keys.voting_started_epoch())?;
         let epoch_bytes = epoch_bytes.unwrap();
         assert_eq!(Epoch::try_from_slice(&epoch_bytes)?, Epoch(0));
 
@@ -436,7 +437,7 @@ mod tests {
                 eth_msg_keys.seen(),
                 eth_msg_keys.seen_by(),
                 eth_msg_keys.voting_power(),
-                eth_msg_keys.epoch(),
+                eth_msg_keys.voting_started_epoch(),
                 dai_keys.balance(&receiver),
                 dai_keys.supply(),
             ])
@@ -493,7 +494,7 @@ mod tests {
                 eth_msg_keys.seen(),
                 eth_msg_keys.seen_by(),
                 eth_msg_keys.voting_power(),
-                eth_msg_keys.epoch(),
+                eth_msg_keys.voting_started_epoch(),
             ]),
             "The Ethereum event should have been recorded, but no minting \
              should have happened yet as it has only been seen by 1/2 the \
@@ -547,7 +548,7 @@ mod tests {
                 eth_msg_keys.seen(),
                 eth_msg_keys.seen_by(),
                 eth_msg_keys.voting_power(),
-                eth_msg_keys.epoch(),
+                eth_msg_keys.voting_started_epoch(),
             ]),
             "One vote for the Ethereum event should have been recorded",
         );
@@ -698,12 +699,12 @@ mod tests {
                 prev_keys.seen(),
                 prev_keys.seen_by(),
                 prev_keys.voting_power(),
-                prev_keys.epoch(),
+                prev_keys.voting_started_epoch(),
                 new_keys.body(),
                 new_keys.seen(),
                 new_keys.seen_by(),
                 new_keys.voting_power(),
-                new_keys.epoch(),
+                new_keys.voting_started_epoch(),
             ]),
             "New event should be inserted and the previous one should be \
              deleted",
@@ -737,7 +738,7 @@ mod tests {
         );
         assert(
             KeyKind::Epoch,
-            wl_storage.read_bytes(&keys.epoch()).unwrap(),
+            wl_storage.read_bytes(&keys.voting_started_epoch()).unwrap(),
         );
         assert_eq!(
             tx_result.changed_keys,
@@ -746,7 +747,7 @@ mod tests {
                 keys.seen(),
                 keys.seen_by(),
                 keys.voting_power(),
-                keys.epoch(),
+                keys.voting_started_epoch(),
             ]),
         );
     }

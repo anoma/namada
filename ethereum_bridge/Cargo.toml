@@ -33,6 +33,7 @@ testing = [
 
 [dependencies]
 namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign-verify", "ferveo-tpke", "ethers-derive"]}
+namada_macros = {path = "../macros"}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
 borsh = "0.9.0"
 ethers = "2.0.0"
