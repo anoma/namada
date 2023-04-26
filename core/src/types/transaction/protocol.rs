@@ -32,16 +32,22 @@ mod protocol_txs {
     use serde_json;
 
     use super::*;
-    use crate::proto::{Tx, Data, Code, Signature, Section, TxError};
+    use crate::proto::{Code, Data, Section, Signature, Tx, TxError};
     use crate::types::chain::ChainId;
     use crate::types::key::*;
-    use crate::types::transaction::{EllipticCurve, TxType};
-    use crate::types::hash::Hash;
-    use crate::types::transaction::{Digest, Sha256};
+    use crate::types::transaction::{Digest, EllipticCurve, Sha256, TxType};
 
     const TX_NEW_DKG_KP_WASM: &str = "tx_update_dkg_session_keypair.wasm";
 
-    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize)]
+    #[derive(
+        Clone,
+        Debug,
+        BorshSerialize,
+        BorshDeserialize,
+        BorshSchema,
+        Serialize,
+        Deserialize,
+    )]
     /// Txs sent by validators as part of internal protocols
     pub struct ProtocolTx {
         /// we require ProtocolTxs be signed
@@ -68,7 +74,9 @@ mod protocol_txs {
 
         /// Produce a SHA-256 hash of this section
         pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-            hasher.update(self.try_to_vec().expect("unable to serialize protocol"));
+            hasher.update(
+                self.try_to_vec().expect("unable to serialize protocol"),
+            );
             hasher
         }
     }
@@ -77,7 +85,15 @@ mod protocol_txs {
     #[derive(Clone, Debug, Serialize, Deserialize)]
     pub struct DkgMessage(pub Message<EllipticCurve>);
 
-    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize)]
+    #[derive(
+        Clone,
+        Debug,
+        BorshSerialize,
+        BorshDeserialize,
+        BorshSchema,
+        Serialize,
+        Deserialize,
+    )]
     #[allow(clippy::large_enum_variant)]
     /// Types of protocol messages to be sent
     pub enum ProtocolTxType {
@@ -112,10 +128,12 @@ mod protocol_txs {
                 pk: signing_key.ref_to(),
                 tx: Self::NewDkgKeypair,
             }));
+            outer_tx.header.chain_id = chain_id;
             outer_tx.set_code(Code::new(code));
             outer_tx.set_data(Data::new(
-                data.try_to_vec().expect("Serializing request should not fail"))
-            );
+                data.try_to_vec()
+                    .expect("Serializing request should not fail"),
+            ));
             outer_tx.add_section(Section::Signature(Signature::new(
                 &outer_tx.header_hash(),
                 signing_key,

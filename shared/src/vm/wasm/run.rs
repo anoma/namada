@@ -13,9 +13,9 @@ use super::TxCache;
 use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, Storage, StorageHasher};
-use crate::proto::{Tx, Code, Data, Section, CodeHash};
+use crate::proto::{CodeHash, Section, Tx};
 use crate::types::address::Address;
-use crate::types::hash::{Error as TxHashError, Hash, HASH_LENGTH};
+use crate::types::hash::{Error as TxHashError, Hash};
 use crate::types::internal::HostEnvResult;
 use crate::types::storage::{Key, TxIndex};
 use crate::vm::host_env::{TxVmEnv, VpCtx, VpEvaluator, VpVmEnv};
@@ -95,12 +95,14 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    let tx_code = tx.get_section(tx.code_sechash())
+    let tx_code = tx
+        .get_section(tx.code_sechash())
         .and_then(Section::code_sec)
         .ok_or(Error::MissingCode)?;
     let (module, store) = match tx_code.code {
-        CodeHash::Hash(code_hash) =>
-            fetch_or_compile(tx_wasm_cache, &code_hash, write_log, storage)?,
+        CodeHash::Hash(code_hash) => {
+            fetch_or_compile(tx_wasm_cache, &code_hash, write_log, storage)?
+        }
         CodeHash::Code(tx_code) => {
             match tx_wasm_cache.compile_or_fetch(tx_code)? {
                 Some((module, store)) => (module, store),
@@ -119,7 +121,7 @@ where
         write_log,
         &mut iterators,
         gas_meter,
-        &tx,
+        tx,
         tx_index,
         &mut verifiers,
         &mut result_buffer,
@@ -144,7 +146,7 @@ where
     let memory::TxCallInput {
         tx_data_ptr,
         tx_data_len,
-    } = memory::write_tx_inputs(memory, &tx).map_err(Error::MemoryError)?;
+    } = memory::write_tx_inputs(memory, tx).map_err(Error::MemoryError)?;
     // Get the module's entrypoint to be called
     let apply_tx = instance
         .exports
@@ -209,7 +211,7 @@ where
         storage,
         write_log,
         gas_meter,
-        &tx,
+        tx,
         tx_index,
         &mut iterators,
         verifiers,
@@ -225,14 +227,7 @@ where
         memory::prepare_vp_memory(&store).map_err(Error::MemoryError)?;
     let imports = vp_imports(&store, initial_memory, env);
 
-    run_vp(
-        module,
-        imports,
-        tx,
-        address,
-        keys_changed,
-        verifiers,
-    )
+    run_vp(module, imports, tx, address, keys_changed, verifiers)
 }
 
 fn run_vp(
@@ -407,10 +402,10 @@ pub fn prepare_wasm_code<T: AsRef<[u8]>>(code: T) -> Result<Vec<u8>> {
         .map_err(Error::DeserializationError)?;
     let module =
         pwasm_utils::inject_gas_counter(module, &get_gas_rules(), "env")
-        .map_err(|_original_module| Error::GasMeterInjection)?;
+            .map_err(|_original_module| Error::GasMeterInjection)?;
     let module =
         pwasm_utils::stack_height::inject_limiter(module, WASM_STACK_LIMIT)
-        .map_err(|_original_module| Error::StackLimiterInjection)?;
+            .map_err(|_original_module| Error::StackLimiterInjection)?;
     elements::serialize(module).map_err(Error::SerializationError)
 }
 
@@ -474,15 +469,15 @@ fn get_gas_rules() -> rules::Set {
 mod tests {
     use borsh::BorshSerialize;
     use itertools::Either;
-    use namada_core::types::chain::ChainId;
     use namada_test_utils::TestWasms;
     use test_log::test;
     use wasmer_vm::TrapCode;
-    use crate::types::transaction::TxType;
-    use crate::types::hash::Hash;
 
     use super::*;
     use crate::ledger::storage::testing::TestStorage;
+    use crate::proto::{Code, Data};
+    use crate::types::hash::Hash;
+    use crate::types::transaction::TxType;
     use crate::types::validity_predicate::EvalVp;
     use crate::vm::wasm;
 
@@ -554,7 +549,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
         let mut outer_tx = Tx::new(TxType::Raw);
         outer_tx.set_code(Code::new(tx_code.clone()));
-        outer_tx.set_data(Data::new(tx_data.clone()));
+        outer_tx.set_data(Data::new(tx_data));
         let result = tx(
             &storage,
             &mut write_log,
@@ -581,7 +576,7 @@ mod tests {
             &mut vp_cache,
             &mut tx_cache,
         )
-            .expect_err("Expected to run out of memory");
+        .expect_err("Expected to run out of memory");
 
         assert_stack_overflow(&error);
     }
@@ -622,7 +617,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(input));
         let eval_vp = EvalVp {
-            vp_code_hash: limit_code_hash.clone(),
+            vp_code_hash: limit_code_hash,
             input: tx,
         };
         let tx_data = eval_vp.try_to_vec().unwrap();
@@ -647,7 +642,7 @@ mod tests {
             #[cfg(not(feature = "mainnet"))]
             false,
         )
-            .unwrap();
+        .unwrap();
         assert!(passed);
 
         // Allocating `2^24` (16 MiB) should be above the memory limit and
@@ -682,7 +677,7 @@ mod tests {
             #[cfg(not(feature = "mainnet"))]
             false,
         )
-            .unwrap();
+        .unwrap();
 
         assert!(!passed);
     }
@@ -753,7 +748,7 @@ mod tests {
             #[cfg(not(feature = "mainnet"))]
             false,
         )
-            .expect_err("Expected to run out of memory");
+        .expect_err("Expected to run out of memory");
 
         assert_stack_overflow(&error);
     }
@@ -924,7 +919,7 @@ mod tests {
             &mut vp_cache,
             &mut tx_cache,
         )
-            .expect_err("Expected to run out of memory");
+        .expect_err("Expected to run out of memory");
 
         assert_stack_overflow(&error);
     }
@@ -979,7 +974,7 @@ mod tests {
             #[cfg(not(feature = "mainnet"))]
             false,
         )
-            .expect_err("Expected to run out of memory");
+        .expect_err("Expected to run out of memory");
 
         assert_stack_overflow(&error);
     }
@@ -1050,7 +1045,7 @@ mod tests {
             #[cfg(not(feature = "mainnet"))]
             false,
         )
-            .unwrap();
+        .unwrap();
         assert!(!passed);
     }
 
@@ -1084,10 +1079,10 @@ mod tests {
             "#,
                 loops
             )
-                .as_bytes(),
+            .as_bytes(),
         )
-            .expect("unexpected error converting wat2wasm")
-            .into_owned();
+        .expect("unexpected error converting wat2wasm")
+        .into_owned();
 
         let tx_data = vec![];
         let tx_index = TxIndex::default();
@@ -1098,7 +1093,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
         let (mut tx_cache, _) =
             wasm::compilation_cache::common::testing::cache();
-        
+
         // store the tx code
         let code_hash = Hash::sha256(&tx_code);
         let key = Key::wasm_code(&code_hash);
@@ -1107,7 +1102,7 @@ mod tests {
         let mut outer_tx = Tx::new(TxType::Raw);
         outer_tx.set_code(Code::from_hash(code_hash));
         outer_tx.set_data(Data::new(tx_data));
-        
+
         tx(
             &storage,
             &mut write_log,
@@ -1148,7 +1143,7 @@ mod tests {
         )
             .expect("unexpected error converting wat2wasm").into_owned();
 
-        let mut outer_tx = Tx::new(TxType::Raw);
+        let outer_tx = Tx::new(TxType::Raw);
         let tx_index = TxIndex::default();
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");

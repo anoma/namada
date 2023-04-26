@@ -13,7 +13,7 @@ use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use crate::ledger::ibc::storage as ibc_storage;
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
-use crate::proto::{Tx};
+use crate::proto::Tx;
 use crate::types::address::{
     Address, DecodeError as AddressError, InternalAddress,
 };
@@ -138,7 +138,8 @@ where
         }
 
         // Check the message
-        let ibc_msg = IbcMessage::decode(&tx_data).map_err(Error::IbcMessage)?;
+        let ibc_msg =
+            IbcMessage::decode(&tx_data).map_err(Error::IbcMessage)?;
         match &ibc_msg.0 {
             Ics26Envelope::Ics20Msg(msg) => self.validate_sending_token(msg),
             Ics26Envelope::Ics4PacketMsg(PacketMsg::RecvPacket(msg)) => {

@@ -11,13 +11,14 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         .wrap_err("failed to decode InitAccount")?;
     debug_log!("apply_tx called to init a new established account");
 
-    let vp_code = signed.get_section(&tx_data.vp_code_hash)
+    let vp_code = signed
+        .get_section(&tx_data.vp_code_hash)
         .ok_or_err_msg("vp code section not found")?
         .extra_data_sec()
         .ok_or_err_msg("vp code section must be tagged as extra")?
         .code
         .hash();
-    let address = ctx.init_account(&vp_code)?;
+    let address = ctx.init_account(vp_code)?;
     let pk_key = key::pk_key(&address);
     ctx.write(&pk_key, &tx_data.public_key)?;
     Ok(())

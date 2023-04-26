@@ -43,7 +43,7 @@ use crate::types::hash::{Error as HashError, Hash};
 use crate::types::internal::TxQueue;
 use crate::types::storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, Header, Key, KeySeg,
-    BLOCK_HASH_LENGTH, TxIndex,
+    TxIndex, BLOCK_HASH_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
 use crate::types::token;

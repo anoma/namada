@@ -113,12 +113,12 @@ fn token_checks(
 mod tests {
     // Use this as `#[test]` annotation to enable logging
     use namada::core::ledger::storage_api::token;
+    use namada::proto::{Data};
+    use namada::types::transaction::TxType;
     use namada_tests::log::test;
     use namada_tests::tx::{self, TestTxEnv};
     use namada_tests::vp::*;
     use namada_vp_prelude::storage_api::StorageWrite;
-    use namada::types::transaction::{TxType};
-    use namada::proto::{Code, Signature, Data};
 
     use super::*;
 

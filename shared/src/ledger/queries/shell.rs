@@ -72,9 +72,8 @@ where
     use crate::ledger::gas::BlockGasMeter;
     use crate::ledger::protocol;
     use crate::ledger::storage::write_log::WriteLog;
-    use crate::proto::{Tx, Code, Data};
+    use crate::proto::Tx;
     use crate::types::storage::TxIndex;
-    use crate::types::transaction::{DecryptedTx, TxType};
 
     let mut gas_meter = BlockGasMeter::default();
     let mut write_log = WriteLog::default();
@@ -344,12 +343,12 @@ mod test {
     use crate::ledger::queries::testing::TestClient;
     use crate::ledger::queries::RPC;
     use crate::ledger::storage_api::{self, StorageWrite};
-    use crate::proto::{Tx, Code, Data};
+    use crate::proto::{Code, Data, Tx};
     use crate::types::hash::Hash;
     use crate::types::storage::Key;
-    use crate::types::{address, token};
-    use crate::types::transaction::TxType;
     use crate::types::transaction::decrypted::DecryptedTx;
+    use crate::types::transaction::TxType;
+    use crate::types::{address, token};
 
     #[test]
     fn test_shell_queries_router_paths() {

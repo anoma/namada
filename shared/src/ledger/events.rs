@@ -10,13 +10,11 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
 use crate::ledger::native_vp::governance::utils::ProposalEvent;
+use crate::proto::Tx;
 use crate::tendermint_proto::abci::EventAttribute;
 use crate::types::ibc::IbcEvent;
 #[cfg(feature = "ferveo-tpke")]
-use crate::types::transaction::{hash_tx, TxType};
-use crate::types::hash::Hash;
-use crate::proto::Tx;
-use sha2::{Digest, Sha256};
+use crate::types::transaction::TxType;
 
 /// Indicates if an event is emitted do to
 /// an individual Tx or the nature of a finalized block
@@ -72,17 +70,16 @@ impl Event {
     #[cfg(feature = "ferveo-tpke")]
     pub fn new_tx_event(tx: &Tx, height: u64) -> Self {
         let mut event = match tx.header().tx_type {
-            TxType::Wrapper(wrapper) => {
+            TxType::Wrapper(_) => {
                 let mut event = Event {
                     event_type: EventType::Accepted,
                     level: EventLevel::Tx,
                     attributes: HashMap::new(),
                 };
-                event["hash"] = tx.header_hash()
-                .to_string();
+                event["hash"] = tx.header_hash().to_string();
                 event
             }
-            TxType::Decrypted(decrypted) => {
+            TxType::Decrypted(_) => {
                 let mut event = Event {
                     event_type: EventType::Applied,
                     level: EventLevel::Tx,

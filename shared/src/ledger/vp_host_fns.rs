@@ -3,7 +3,7 @@
 use std::num::TryFromIntError;
 
 use namada_core::types::address::Address;
-use namada_core::types::hash::{Hash, HASH_LENGTH};
+use namada_core::types::hash::Hash;
 use namada_core::types::storage::{
     BlockHash, BlockHeight, Epoch, Key, TxIndex,
 };
@@ -14,8 +14,7 @@ use crate::ledger::gas;
 use crate::ledger::gas::VpGasMeter;
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, write_log, Storage, StorageHasher};
-use crate::proto::{Tx, Section};
-use crate::types::transaction::hash_tx;
+use crate::proto::{Section, Tx};
 
 /// These runtime errors will abort VP execution immediately
 #[allow(missing_docs)]
@@ -271,7 +270,8 @@ pub fn get_tx_code_hash(
     gas_meter: &mut VpGasMeter,
     tx: &Tx,
 ) -> EnvResult<Option<Hash>> {
-    let hash = tx.get_section(tx.code_sechash())
+    let hash = tx
+        .get_section(tx.code_sechash())
         .and_then(Section::code_sec)
         .map(|x| x.code.hash());
     add_gas(gas_meter, MIN_STORAGE_GAS)?;

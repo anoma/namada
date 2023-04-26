@@ -3,9 +3,9 @@
 use std::collections::BTreeSet;
 
 use namada_core::ledger::storage;
+use namada_core::proto::Tx;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::Key;
-use namada_core::proto::{Tx};
 use thiserror::Error;
 
 use super::governance;
@@ -51,7 +51,11 @@ where
     ) -> Result<bool> {
         let result = keys_changed.iter().all(|key| {
             let key_type: KeyType = key.into();
-            let data = if let Some(data) = tx_data.data() { data } else { return false; };
+            let data = if let Some(data) = tx_data.data() {
+                data
+            } else {
+                return false;
+            };
             match key_type {
                 KeyType::PARAMETER => governance::utils::is_proposal_accepted(
                     &self.ctx.pre(),

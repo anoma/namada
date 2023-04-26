@@ -65,14 +65,12 @@ fn validate_tx(
     );
 
     let valid_sig = Lazy::new(|| {
-        {
-            let pk = key::get(ctx, &addr);
-            match pk {
-                Ok(Some(pk)) => {
-                    tx_data.verify_signature(&pk, &tx_data.data_sechash()).is_ok()
-                }
-                _ => false,
-            }
+        let pk = key::get(ctx, &addr);
+        match pk {
+            Ok(Some(pk)) => tx_data
+                .verify_signature(&pk, tx_data.data_sechash())
+                .is_ok(),
+            _ => false,
         }
     });
 
@@ -186,7 +184,9 @@ fn validate_tx(
 mod tests {
     use address::testing::arb_non_internal_address;
     use namada::ledger::pos::{GenesisValidator, PosParams};
+    use namada::proto::{Code, Data, Signature};
     use namada::types::storage::Epoch;
+    use namada::types::transaction::TxType;
     use namada_test_utils::TestWasms;
     // Use this as `#[test]` annotation to enable logging
     use namada_tests::log::test;
@@ -198,8 +198,6 @@ mod tests {
     use namada_vp_prelude::key::RefTo;
     use proptest::prelude::*;
     use storage::testing::arb_account_storage_key_no_vp;
-    use namada::types::transaction::{TxType};
-    use namada::proto::{Signature, Code, Data};
 
     use super::*;
 
@@ -358,7 +356,10 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
-        tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &keypair)));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &keypair,
+        )));
         let signed_tx = tx.clone();
         vp_env.tx = signed_tx.clone();
         let keys_changed: BTreeSet<storage::Key> =
@@ -493,7 +494,10 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
-        tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &secret_key)));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &secret_key,
+        )));
         let signed_tx = tx.clone();
         vp_env.tx = signed_tx.clone();
         let keys_changed: BTreeSet<storage::Key> =
@@ -501,8 +505,14 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            validate_tx(&CTX, signed_tx.clone(), vp_owner, keys_changed, verifiers)
-                .unwrap()
+            validate_tx(
+                &CTX,
+                signed_tx,
+                vp_owner,
+                keys_changed,
+                verifiers
+            )
+            .unwrap()
         );
     }
 
@@ -645,7 +655,7 @@ mod tests {
             let mut vp_env = vp_host_env::take();
             let mut tx = vp_env.tx.clone();
             tx.set_data(Data::new(vec![]));
-            tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &keypair)));
+            tx.add_section(Section::Signature(Signature::new(tx.data_sechash(), &keypair)));
             let signed_tx = tx.clone();
             vp_env.tx = signed_tx.clone();
             let keys_changed: BTreeSet<storage::Key> =
@@ -676,7 +686,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_hash)
+                .update_validity_predicate(address, vp_hash)
                 .unwrap();
         });
 
@@ -718,14 +728,17 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_hash)
+                .update_validity_predicate(address, vp_hash)
                 .unwrap();
         });
 
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
-        tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &keypair)));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &keypair,
+        )));
         let signed_tx = tx.clone();
         vp_env.tx = signed_tx.clone();
         let keys_changed: BTreeSet<storage::Key> =
@@ -762,14 +775,17 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_hash)
+                .update_validity_predicate(address, vp_hash)
                 .unwrap();
         });
 
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
-        tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &keypair)));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &keypair,
+        )));
         let signed_tx = tx.clone();
         vp_env.tx = signed_tx.clone();
         let keys_changed: BTreeSet<storage::Key> =
@@ -807,14 +823,17 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_hash)
+                .update_validity_predicate(address, vp_hash)
                 .unwrap();
         });
 
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
-        tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &keypair)));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &keypair,
+        )));
         let signed_tx = tx.clone();
         vp_env.tx = signed_tx.clone();
         let keys_changed: BTreeSet<storage::Key> =
@@ -856,14 +875,17 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_hash)
+                .update_validity_predicate(address, vp_hash)
                 .unwrap();
         });
 
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
-        tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &keypair)));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &keypair,
+        )));
         let signed_tx = tx.clone();
         vp_env.tx = signed_tx.clone();
         let keys_changed: BTreeSet<storage::Key> =
@@ -890,7 +912,7 @@ mod tests {
         tx_env.store_wasm_code(vp_code);
 
         // hardcoded hash of VP_ALWAYS_TRUE_WASM
-        tx_env.init_parameters(None, None, Some(vec!["4C421F984EBF8A746A85882608B4375DBA4EC9FAD06DD9D1175D260F5294134D".to_string()]));
+        tx_env.init_parameters(None, None, Some(vec!["DB98D830B2D9EA8C900DB5724B8B7FDE5A66325B219B0223F585EECC55D9E78B".to_string()]));
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
@@ -901,7 +923,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_hash)
+                .update_validity_predicate(address, vp_hash)
                 .unwrap();
         });
 
@@ -909,7 +931,10 @@ mod tests {
         let mut tx = vp_env.tx.clone();
         tx.set_code(Code::from_hash(vp_hash));
         tx.set_data(Data::new(vec![]));
-        tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &keypair)));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &keypair,
+        )));
         let signed_tx = tx.clone();
         vp_env.tx = signed_tx.clone();
         let keys_changed: BTreeSet<storage::Key> =

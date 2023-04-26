@@ -20,13 +20,24 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         key,
         shielded: shielded_hash,
     } = transfer;
-    let shielded = shielded_hash.as_ref().map(|hash| {
-        signed
-            .get_section(&hash)
-            .and_then(Section::masp_tx)
-            .ok_or_err_msg("unable to find shielded section")
-    }).transpose()?;
+    let shielded = shielded_hash
+        .as_ref()
+        .map(|hash| {
+            signed
+                .get_section(hash)
+                .and_then(Section::masp_tx)
+                .ok_or_err_msg("unable to find shielded section")
+        })
+        .transpose()?;
     token::transfer(
-        ctx, &source, &target, &token, sub_prefix, amount, &key, &shielded_hash, &shielded,
+        ctx,
+        &source,
+        &target,
+        &token,
+        sub_prefix,
+        amount,
+        &key,
+        &shielded_hash,
+        &shielded,
     )
 }

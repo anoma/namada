@@ -61,7 +61,7 @@ use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::Sha256Hasher;
 use namada::ledger::tx_env::TxEnv;
-use namada::proto::{Tx};
+use namada::proto::Tx;
 use namada::tendermint_proto::Protobuf;
 use namada::types::address::{self, Address, InternalAddress};
 use namada::types::hash::Hash;
@@ -133,7 +133,7 @@ pub fn validate_ibc_vp_from_tx<'a>(
         &ADDRESS,
         &tx_env.wl_storage.storage,
         &tx_env.wl_storage.write_log,
-        &tx,
+        tx,
         &TxIndex(0),
         VpGasMeter::new(0),
         &keys_changed,
@@ -169,7 +169,7 @@ pub fn validate_token_vp_from_tx<'a>(
         &ADDRESS,
         &tx_env.wl_storage.storage,
         &tx_env.wl_storage.write_log,
-        &tx,
+        tx,
         &TxIndex(0),
         VpGasMeter::new(0),
         &keys_changed,
@@ -205,7 +205,7 @@ pub fn init_storage() -> (Address, Address) {
     });
 
     // initialize a token
-    let token = tx::ctx().init_account(code_hash.clone()).unwrap();
+    let token = tx::ctx().init_account(code_hash).unwrap();
 
     // initialize an account
     let account = tx::ctx().init_account(code_hash).unwrap();

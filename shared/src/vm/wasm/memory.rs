@@ -14,8 +14,8 @@ use wasmer::{
 use wasmer_vm::{
     MemoryStyle, TableStyle, VMMemoryDefinition, VMTableDefinition,
 };
-use crate::proto::{Tx};
 
+use crate::proto::Tx;
 use crate::vm::memory::VmMemory;
 use crate::vm::types::VpInput;
 
@@ -131,8 +131,7 @@ pub fn write_vp_inputs(
     let addr_bytes = addr.try_to_vec().map_err(Error::EncodingError)?;
     let addr_len = addr_bytes.len() as _;
 
-    let data_bytes =
-        data.try_to_vec().map_err(Error::EncodingError)?;
+    let data_bytes = data.try_to_vec().map_err(Error::EncodingError)?;
     let data_ptr = addr_ptr + addr_len;
     let data_len = data_bytes.len() as _;
 

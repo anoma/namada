@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
 
 use masp_primitives::asset_type::AssetType;
-use masp_primitives::transaction::TransparentAddress;
 use masp_primitives::transaction::components::{Amount, TxOut};
 /// Multi-asset shielded pool VP.
 use namada_vp_prelude::address::masp;
@@ -86,17 +85,19 @@ fn validate_tx(
     );
 
     let signed = tx_data;
-    // Also get the data as bytes for the VM.
-    let data = signed.data().as_ref().unwrap().clone();
     let transfer =
         token::Transfer::try_from_slice(&signed.data().unwrap()[..]).unwrap();
 
-    let shielded = transfer.shielded.as_ref().map(|hash| {
-        signed
-            .get_section(&hash)
-            .and_then(Section::masp_tx)
-            .ok_or_err_msg("unable to find shielded section")
-    }).transpose()?;
+    let shielded = transfer
+        .shielded
+        .as_ref()
+        .map(|hash| {
+            signed
+                .get_section(hash)
+                .and_then(Section::masp_tx)
+                .ok_or_err_msg("unable to find shielded section")
+        })
+        .transpose()?;
     if let Some(shielded_tx) = shielded {
         let mut transparent_tx_pool = Amount::zero();
         // The Sapling value balance adds to the transparent tx pool
@@ -125,8 +126,8 @@ fn validate_tx(
             if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
                 if !transp_bundle.vin.is_empty() {
                     debug_log!(
-                        "Transparent input to a transaction from the masp must be \
-                         0 but is {}",
+                        "Transparent input to a transaction from the masp \
+                         must be 0 but is {}",
                         transp_bundle.vin.len()
                     );
                     return reject();
@@ -144,13 +145,14 @@ fn validate_tx(
             // 4. Public key must be the hash of the target
 
             // Satisfies 1.
-            let transp_bundle = shielded_tx
-                .transparent_bundle()
-                .ok_or_err_msg("Expected transparent outputs in unshielding transaction")?;
+            let transp_bundle =
+                shielded_tx.transparent_bundle().ok_or_err_msg(
+                    "Expected transparent outputs in unshielding transaction",
+                )?;
             if transp_bundle.vout.len() != 1 {
                 debug_log!(
-                    "Transparent output to a transaction from the masp must be \
-                     1 but is {}",
+                    "Transparent output to a transaction from the masp must \
+                     be 1 but is {}",
                     transp_bundle.vin.len()
                 );
                 return reject();
@@ -166,7 +168,10 @@ fn validate_tx(
 
             // Satisfies 2. and 3.
             if !(valid_asset_type(&expected_asset_type, &out.asset_type)
-                && valid_transfer_amount(out.value as u64, u64::from(transfer.amount)))
+                && valid_transfer_amount(
+                    out.value as u64,
+                    u64::from(transfer.amount),
+                ))
             {
                 return reject();
             }
@@ -190,8 +195,8 @@ fn validate_tx(
 
             if <[u8; 20]>::from(hash) != out.address.0 {
                 debug_log!(
-                    "the public key of the output account does not \
-                     match the transfer target"
+                    "the public key of the output account does not match the \
+                     transfer target"
                 );
                 return reject();
             }
@@ -203,8 +208,8 @@ fn validate_tx(
             if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
                 if !transp_bundle.vout.is_empty() {
                     debug_log!(
-                        "Transparent output to a transaction from the masp must \
-                         be 0 but is {}",
+                        "Transparent output to a transaction from the masp \
+                         must be 0 but is {}",
                         transp_bundle.vin.len()
                     );
                     return reject();

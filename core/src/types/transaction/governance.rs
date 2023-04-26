@@ -8,7 +8,6 @@ use crate::types::governance::{
     self, Proposal, ProposalError, ProposalVote, VoteType,
 };
 use crate::types::storage::Epoch;
-use crate::types::hash::Hash;
 
 /// The type of a Proposal
 #[derive(

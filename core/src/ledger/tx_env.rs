@@ -7,7 +7,6 @@ use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::address::Address;
 use crate::types::ibc::IbcEvent;
 use crate::types::storage;
-use crate::types::storage::TxIndex;
 use crate::types::time::Rfc3339String;
 
 /// Transaction host functions

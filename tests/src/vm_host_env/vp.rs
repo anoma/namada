@@ -4,17 +4,16 @@ use namada::ledger::gas::VpGasMeter;
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::testing::TestStorage;
 use namada::ledger::storage::write_log::WriteLog;
-use namada::proto::{Tx};
-use namada::types::transaction::{TxType};
 use namada::ledger::storage::{Sha256Hasher, WlStorage};
+use namada::proto::Tx;
 use namada::types::address::{self, Address};
 use namada::types::storage::{self, Key, TxIndex};
+use namada::types::transaction::TxType;
 use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::{self, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
 use namada_vp_prelude::Ctx;
 use tempfile::TempDir;
-use namada::types::hash::Hash;
 
 use crate::tx::{tx_host_env, TestTxEnv};
 

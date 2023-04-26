@@ -5,12 +5,11 @@ use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::proof_of_stake::pos_queries::PosQueries;
 use namada::proto::Tx;
 use namada::types::internal::TxInQueue;
-use namada::types::transaction::TxType;
 use namada::types::time::DateTimeUtc;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
-use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
-use namada::types::hash::Hash;
-use sha2::{Digest, Sha256};
+use namada::types::transaction::{
+    AffineCurve, DecryptedTx, EllipticCurve, TxType,
+};
 
 use super::super::*;
 #[allow(unused_imports)]
@@ -21,22 +20,13 @@ use super::block_space_alloc::states::{
 };
 use super::block_space_alloc::{AllocFailure, BlockSpaceAllocator};
 #[cfg(feature = "abcipp")]
-use crate::facade::tendermint_proto::abci::{tx_record::TxAction, TxRecord};
-use crate::node::ledger::shell::{ShellMode};
-use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
-
-// TODO: remove this hard-coded value; Tendermint, and thus
-// Namada uses 20 MiB max block sizes by default; 5 MiB leaves
-// plenty of room for header data, evidence and protobuf serialization
-// overhead
-const MAX_PROPOSAL_SIZE: usize = 5 << 20;
-const HALF_MAX_PROPOSAL_SIZE: usize = MAX_PROPOSAL_SIZE / 2;
-
-#[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
+#[cfg(feature = "abcipp")]
+use crate::facade::tendermint_proto::abci::{tx_record::TxAction, TxRecord};
 use crate::facade::tendermint_proto::google::protobuf::Timestamp;
-use crate::node::ledger::shims::abcipp_shim_types::shim::{response};
+use crate::node::ledger::shell::ShellMode;
+use crate::node::ledger::shims::abcipp_shim_types::shim::{response, TxBytes};
 
 impl<D, H> Shell<D, H>
 where
@@ -293,8 +283,8 @@ mod test_prepare_proposal {
 
     use borsh::BorshSerialize;
     use namada::proof_of_stake::Epoch;
+    use namada::proto::{Code, Data, Header, Section, Signature};
     use namada::types::transaction::{Fee, WrapperTx};
-    use namada::proto::{Header, Code, Data, Section, Signature};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{self, gen_keypair};
@@ -302,20 +292,20 @@ mod test_prepare_proposal {
     /// Test that if a tx from the mempool is not a
     /// WrapperTx type, it is not included in the
     /// proposed block.
-    /*#[test]
-    fn test_prepare_proposal_rejects_non_wrapper_tx() {
-        let (shell, _) = test_utils::setup(1);
-        let tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some(SignedOuterTxData {data: Some("transaction_data".as_bytes().to_owned()), sig: None}),
-);
-    tx.header.chain_id = shell.chain_id.clone();
-        let req = RequestPrepareProposal {
-            txs: vec![tx.to_bytes()],
-            ..Default::default()
-        };
-        assert!(shell.prepare_proposal(req).txs.is_empty());
-    }*/
+    // #[test]
+    // fn test_prepare_proposal_rejects_non_wrapper_tx() {
+    // let (shell, _) = test_utils::setup(1);
+    // let tx = Tx::new(
+    // "wasm_code".as_bytes().to_owned(),
+    // Some(SignedOuterTxData {data:
+    // Some("transaction_data".as_bytes().to_owned()), sig: None}), );
+    // tx.header.chain_id = shell.chain_id.clone();
+    // let req = RequestPrepareProposal {
+    // txs: vec![tx.to_bytes()],
+    // ..Default::default()
+    // };
+    // assert!(shell.prepare_proposal(req).txs.is_empty());
+    // }
 
     /// Test that if an error is encountered while
     /// trying to process a tx from the mempool,
@@ -325,19 +315,17 @@ mod test_prepare_proposal {
         let (shell, _) = test_utils::setup(1);
         let keypair = gen_keypair();
         // an unsigned wrapper will cause an error in processing
-        let mut wrapper = Tx::new(
-            TxType::Wrapper(WrapperTx::new(
-                Fee {
-                    amount: 0.into(),
-                    token: shell.wl_storage.storage.native_token.clone(),
-                },
-                &keypair,
-                Epoch(0),
-                0.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
-            ))
-        );
+        let mut wrapper = Tx::new(TxType::Wrapper(WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        )));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction_data".as_bytes().to_owned()));
@@ -381,10 +369,15 @@ mod test_prepare_proposal {
             )));
             tx.header.chain_id = shell.chain_id.clone();
             tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-            tx.set_data(Data::new(format!("transaction data: {}", i).as_bytes().to_owned()));
-            tx.add_section(Section::Signature(Signature::new(&tx.header_hash(), &keypair)));
+            tx.set_data(Data::new(
+                format!("transaction data: {}", i).as_bytes().to_owned(),
+            ));
+            tx.add_section(Section::Signature(Signature::new(
+                &tx.header_hash(),
+                &keypair,
+            )));
             tx.encrypt(&Default::default());
-            
+
             shell.enqueue_tx(tx.clone());
             expected_wrapper.push(tx.clone());
             req.txs.push(tx.to_bytes());
@@ -400,7 +393,7 @@ mod test_prepare_proposal {
         let expected_txs: Vec<Header> = expected_wrapper
             .into_iter()
             .chain(expected_decrypted.into_iter())
-            .map(|tx| tx.header.clone())
+            .map(|tx| tx.header)
             .collect();
         let received: Vec<Header> = shell
             .prepare_proposal(req)
@@ -414,8 +407,14 @@ mod test_prepare_proposal {
             .collect();
         // check that the order of the txs is correct
         assert_eq!(
-            received.iter().map(|x| x.try_to_vec().unwrap()).collect::<Vec<_>>(),
-            expected_txs.iter().map(|x| x.try_to_vec().unwrap()).collect::<Vec<_>>(),
+            received
+                .iter()
+                .map(|x| x.try_to_vec().unwrap())
+                .collect::<Vec<_>>(),
+            expected_txs
+                .iter()
+                .map(|x| x.try_to_vec().unwrap())
+                .collect::<Vec<_>>(),
         );
     }
 
@@ -439,7 +438,8 @@ mod test_prepare_proposal {
         wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.header.expiration = Some(tx_time);
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx
+            .set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper_tx.add_section(Section::Signature(Signature::new(
             &wrapper_tx.header_hash(),
             &keypair,

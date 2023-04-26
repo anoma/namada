@@ -23,10 +23,9 @@ mod tests {
         bond_handle, read_consensus_validator_set_addresses_with_stake,
         read_total_stake, read_validator_stake, unbond_handle,
     };
-    use namada::proto::{Tx, Code, Data, Signature};
-    use namada::types::transaction::{TxType};
-    use namada::types::chain::ChainId;
+    use namada::proto::{Code, Data, Signature, Tx};
     use namada::types::storage::Epoch;
+    use namada::types::transaction::TxType;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
@@ -125,10 +124,15 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_data(Data::new(tx_data));
         tx.set_code(Code::new(tx_code));
-        tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &key)));
-        tx.add_section(Section::Signature(Signature::new(&tx.code_sechash(), &key)));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key,
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key,
+        )));
         let signed_tx = tx.clone();
-        let tx_data = signed_tx.data().unwrap();
 
         let unbond_src = unbond
             .source

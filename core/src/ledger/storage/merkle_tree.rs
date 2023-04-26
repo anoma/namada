@@ -715,7 +715,7 @@ mod test {
         let stores_write = tree.stores();
         let mut stores_read = MerkleTreeStoresRead::default();
         for st in StoreType::iter() {
-            stores_read.set_root(st, stores_write.root(st).clone());
+            stores_read.set_root(st, *stores_write.root(st));
             stores_read.set_store(stores_write.store(st).to_owned());
         }
         let restored_tree =

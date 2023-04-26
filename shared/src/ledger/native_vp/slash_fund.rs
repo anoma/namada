@@ -10,11 +10,11 @@ use thiserror::Error;
 use crate::ledger::native_vp::{self, governance, Ctx, NativeVp};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::ledger::storage_api::StorageRead;
+use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::token;
 use crate::vm::WasmCacheAccess;
-use crate::proto::{Tx};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]

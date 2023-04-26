@@ -464,7 +464,7 @@ pub fn is_proposal_accepted<S>(
 where
     S: storage_api::StorageRead,
 {
-    let proposal_id = u64::try_from_slice(&tx_data).ok();
+    let proposal_id = u64::try_from_slice(tx_data).ok();
     match proposal_id {
         Some(id) => {
             let proposal_execution_key =

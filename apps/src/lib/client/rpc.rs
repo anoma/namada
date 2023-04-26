@@ -16,8 +16,7 @@ use data_encoding::HEXLOWER;
 use eyre::{eyre, Context as EyreContext};
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
-use masp_primitives::sapling::ViewingKey;
-use masp_primitives::sapling::Node;
+use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::transaction::components::Amount;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 #[cfg(not(feature = "mainnet"))]
@@ -33,7 +32,7 @@ use namada::ledger::pos::{
 };
 use namada::ledger::queries::{self, RPC};
 use namada::ledger::storage::ConversionState;
-use namada::proto::{Tx};
+use namada::proto::Tx;
 use namada::types::address::{masp, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalVote, VotePower, VoteType,
@@ -46,8 +45,7 @@ use namada::types::storage::{
 };
 use namada::types::token::{balance_key, Transfer};
 use namada::types::transaction::{
-    AffineCurve, DecryptedTx, EllipticCurve, PairingEngine, TxType,
-    WrapperTx,
+    AffineCurve, EllipticCurve, PairingEngine, WrapperTx,
 };
 use namada::types::{storage, token};
 use tokio::time::{Duration, Instant};
@@ -381,14 +379,12 @@ fn extract_payload(
     wrapper: &mut Option<WrapperTx>,
     transfer: &mut Option<Transfer>,
 ) {
-    let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-    tx.decrypt(privkey);
-    if let TxType::Wrapper(w) = tx.header().tx_type {
-        *wrapper = Some(w);
-    }
+    let privkey =
+        <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+    tx.decrypt(privkey).expect("unable to decrypt transaction");
+    *wrapper = tx.header.wrapper();
     let _ = tx.data().map(|signed| {
-        Transfer::try_from_slice(&signed[..])
-            .map(|tfer| *transfer = Some(tfer))
+        Transfer::try_from_slice(&signed[..]).map(|tfer| *transfer = Some(tfer))
     });
 }
 

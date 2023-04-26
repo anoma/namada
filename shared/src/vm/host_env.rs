@@ -17,18 +17,16 @@ use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter, MIN_STORAGE_GAS};
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::ledger::vp_host_fns;
-use crate::proto::{Tx};
+use crate::proto::Tx;
 use crate::types::address::{self, Address};
 use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
 use crate::types::internal::HostEnvResult;
-use crate::types::key::*;
 use crate::types::storage::{Key, TxIndex};
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use crate::vm::{HostRef, MutHostRef};
 
-const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
 const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
 
 /// These runtime errors will abort tx WASM execution immediately
@@ -1703,16 +1701,13 @@ where
     let mut result_bytes = vec![];
     if let Some(hash) = hash {
         result_bytes.push(1);
-        result_bytes.extend(&hash.0);
+        result_bytes.extend(hash.0);
     } else {
         result_bytes.push(0);
     };
     let gas = env
         .memory
-        .write_bytes(
-            result_ptr,
-            result_bytes,
-        )
+        .write_bytes(result_ptr, result_bytes)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     vp_host_fns::add_gas(gas_meter, gas)
 }
@@ -1762,10 +1757,10 @@ where
         BorshDeserialize::try_from_slice(tx_bytes.as_slice())
             .map_err(vp_host_fns::RuntimeError::EncodingError)?;
 
-    Ok(HostEnvResult::from(
-        crate::ledger::masp::verify_shielded_tx(&shielded),
+    Ok(
+        HostEnvResult::from(crate::ledger::masp::verify_shielded_tx(&shielded))
+            .to_i64(),
     )
-       .to_i64())
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
@@ -1838,10 +1833,10 @@ where
     EVAL: VpEvaluator<Db = DB, H = H, Eval = EVAL, CA = CA>,
     CA: WasmCacheAccess,
 {
-    let (vp_code_hash, gas) =
-        env.memory
-            .read_bytes(vp_code_ptr, vp_code_len as _)
-            .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+    let (vp_code_hash, gas) = env
+        .memory
+        .read_bytes(vp_code_ptr, vp_code_len as _)
+        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_host_fns::add_gas(gas_meter, gas)?;
 
@@ -1852,18 +1847,12 @@ where
     vp_host_fns::add_gas(gas_meter, gas)?;
     let input_data: Tx = BorshDeserialize::try_from_slice(&input_data)
         .map_err(vp_host_fns::RuntimeError::EncodingError)?;
-    let vp_code_hash = Hash(
-        vp_code_hash
-            .try_into()
-            .map_err(|e| {
-                vp_host_fns::RuntimeError::EncodingError(
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!("Not a valid hash: {:?}", e),
-                    )
-                )
-            })?
-    );
+    let vp_code_hash = Hash(vp_code_hash.try_into().map_err(|e| {
+        vp_host_fns::RuntimeError::EncodingError(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Not a valid hash: {:?}", e),
+        ))
+    })?);
 
     let eval_runner = unsafe { env.ctx.eval_runner.get() };
     Ok(eval_runner

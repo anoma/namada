@@ -7,14 +7,20 @@ pub mod decrypted_tx {
     #[cfg(feature = "ferveo-tpke")]
     use ark_ec::PairingEngine;
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+    use sha2::{Digest, Sha256};
 
     use super::EllipticCurve;
     use crate::proto::Tx;
-    use crate::types::transaction::{Hash, TxType, WrapperTx};
-    use sha2::{Digest, Sha256};
-    use crate::types::chain::ChainId;
 
-    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, serde::Serialize, serde::Deserialize)]
+    #[derive(
+        Clone,
+        Debug,
+        BorshSerialize,
+        BorshDeserialize,
+        BorshSchema,
+        serde::Serialize,
+        serde::Deserialize,
+    )]
     #[allow(clippy::large_enum_variant)]
     /// Holds the result of attempting to decrypt
     /// a transaction and the data necessary for
@@ -39,7 +45,9 @@ pub mod decrypted_tx {
     impl DecryptedTx {
         /// Produce a SHA-256 hash of this header
         pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-            hasher.update(self.try_to_vec().expect("unable to serialize decrypted tx"));
+            hasher.update(
+                self.try_to_vec().expect("unable to serialize decrypted tx"),
+            );
             hasher
         }
     }

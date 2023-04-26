@@ -175,7 +175,7 @@ impl AbcippShim {
                     let mut end_block_request: FinalizeBlock =
                         begin_block_request.into();
                     let hash = self.get_hash();
-                    end_block_request.hash = BlockHash::from(hash.clone());
+                    end_block_request.hash = BlockHash::from(hash);
                     end_block_request.txs = txs;
                     self.service
                         .call(Request::FinalizeBlock(end_block_request))

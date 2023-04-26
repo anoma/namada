@@ -64,8 +64,7 @@ pub mod main {
     use borsh::BorshDeserialize;
     use namada_test_utils::tx_data::TxWriteData;
     use namada_tx_prelude::{
-        log_string, transaction, Ctx, ResultExt, StorageRead,
-        StorageWrite, TxResult, Tx,
+        log_string, transaction, Ctx, StorageRead, StorageWrite, TxResult, Tx,
     };
 
     const TX_NAME: &str = "tx_write";

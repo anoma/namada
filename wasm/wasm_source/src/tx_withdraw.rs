@@ -23,8 +23,8 @@ mod tests {
     use namada::ledger::pos::{GenesisValidator, PosParams, PosVP};
     use namada::proof_of_stake::unbond_handle;
     use namada::proto::{Code, Data, Signature, Tx};
-    use namada::types::chain::ChainId;
     use namada::types::storage::Epoch;
+    use namada::types::transaction::TxType;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
@@ -37,7 +37,6 @@ mod tests {
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use proptest::prelude::*;
-    use namada::types::transaction::{TxType};
 
     use super::*;
 
@@ -158,10 +157,15 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(tx_code));
         tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &key)));
-        tx.add_section(Section::Signature(Signature::new(&tx.code_sechash(), &key)));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key,
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key,
+        )));
         let signed_tx = tx.clone();
-        let tx_data = signed_tx.data().unwrap();
 
         // Read data before we apply tx:
         let pos_balance_key = token::balance_key(

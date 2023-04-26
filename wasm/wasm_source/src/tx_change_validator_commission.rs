@@ -21,9 +21,9 @@ mod tests {
 
     use namada::ledger::pos::{PosParams, PosVP};
     use namada::proof_of_stake::validator_commission_rate_handle;
-    use namada::proto::{Data, Code, Signature, Tx};
-    use namada::types::chain::ChainId;
+    use namada::proto::{Code, Data, Signature, Tx};
     use namada::types::storage::Epoch;
+    use namada::types::transaction::TxType;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
@@ -37,7 +37,6 @@ mod tests {
     use proptest::prelude::*;
     use rust_decimal::prelude::ToPrimitive;
     use rust_decimal::Decimal;
-    use namada::types::transaction::{TxType};
 
     use super::*;
 
@@ -82,10 +81,15 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_data(Data::new(tx_data));
         tx.set_code(Code::new(tx_code));
-        tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &key)));
-        tx.add_section(Section::Signature(Signature::new(&tx.code_sechash(), &key)));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key,
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key,
+        )));
         let signed_tx = tx.clone();
-        let tx_data = signed_tx.data().unwrap();
 
         // Read the data before the tx is executed
         let commission_rate_handle =

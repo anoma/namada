@@ -13,33 +13,33 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER_PERMISSIVE;
 use itertools::Either::*;
 use masp_primitives::asset_type::AssetType;
-use masp_primitives::consensus::{BranchId, TestNetwork};
+use masp_primitives::consensus::TestNetwork;
 use masp_primitives::convert::AllowedConversion;
 use masp_primitives::ff::PrimeField;
-use masp_primitives::group::cofactor::CofactorGroup;
-use masp_primitives::sapling::keys::FullViewingKey;
-use masp_primitives::sapling::Nullifier;
-use masp_primitives::transaction::TransparentAddress;
+use masp_primitives::memo::MemoBytes;
 use masp_primitives::merkle_tree::{
     CommitmentTree, IncrementalWitness, MerklePath,
 };
-use masp_primitives::transaction::components::sapling::fees::InputView as SaplingInputView;
-use masp_primitives::transaction::components::sapling::fees::OutputView as SaplingOutputView;
-use masp_primitives::transaction::components::transparent::fees::InputView as TransparentInputView;
-use masp_primitives::transaction::components::transparent::fees::OutputView as TransparentOutputView;
-use masp_primitives::transaction::components::sapling::fees::ConvertView;
-use masp_primitives::transaction::fees::fixed::FeeRule;
-use masp_primitives::transaction::Authorization;
-use masp_primitives::transaction::Authorized;
-use masp_primitives::transaction::components::OutputDescription;
-use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
-use masp_primitives::memo::MemoBytes;
+use masp_primitives::sapling::keys::FullViewingKey;
 use masp_primitives::sapling::note_encryption::*;
-use masp_primitives::sapling::{Diversifier, Note, ViewingKey};
-use masp_primitives::sapling::Node;
+use masp_primitives::sapling::{
+    Diversifier, Node, Note, Nullifier, ViewingKey,
+};
 use masp_primitives::transaction::builder::{self, *};
-use masp_primitives::transaction::components::{Amount, TxOut};
-use masp_primitives::transaction::Transaction;
+use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
+use masp_primitives::transaction::components::sapling::fees::{
+    ConvertView, InputView as SaplingInputView, OutputView as SaplingOutputView,
+};
+use masp_primitives::transaction::components::transparent::fees::{
+    InputView as TransparentInputView, OutputView as TransparentOutputView,
+};
+use masp_primitives::transaction::components::{
+    Amount, OutputDescription, TxOut,
+};
+use masp_primitives::transaction::fees::fixed::FeeRule;
+use masp_primitives::transaction::{
+    Authorization, Authorized, Transaction, TransparentAddress,
+};
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::prover::LocalTxProver;
 use namada::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
@@ -50,14 +50,13 @@ use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::cosmos::base::v1beta1::Coin;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::masp;
-use namada::ledger::pos::{BondId, Bonds, CommissionRates, Unbonds};
-use namada::proto::{Data, Code, Signature, Tx, Section, MaspBuilder};
-use namada::types::transaction::{TxType};
 use namada::ledger::pos::{CommissionPair, PosParams};
+use namada::proto::{Code, Data, MaspBuilder, Section, Signature, Tx};
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
+use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::masp::{PaymentAddress, TransferTarget};
 use namada::types::storage::{
@@ -67,16 +66,18 @@ use namada::types::time::DateTimeUtc;
 use namada::types::token::{
     Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
+use namada::types::transaction::decrypted::DecryptedTx;
 use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
 };
-use namada::types::transaction::decrypted::DecryptedTx;
-use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
+use namada::types::transaction::{
+    pos, InitAccount, InitValidator, TxType, UpdateVp,
+};
 use namada::types::{storage, token};
 use rand_core::{CryptoRng, OsRng, RngCore};
-use rust_decimal::Decimal;
-use sha2::{Sha256, Digest as Sha2Digest};
 use ripemd::Digest as RipemdDigest;
+use rust_decimal::Decimal;
+use sha2::{Digest as Sha2Digest, Sha256};
 use tokio::time::{Duration, Instant};
 
 use super::rpc;
@@ -92,7 +93,6 @@ use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
 use crate::facade::tendermint_rpc::{Client, HttpClient};
 use crate::node::ledger::tendermint_node;
-use namada::types::hash::Hash;
 
 pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 pub const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
@@ -106,7 +106,8 @@ pub const VP_USER_WASM: &str = "vp_user.wasm";
 pub const TX_BOND_WASM: &str = "tx_bond.wasm";
 pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
-pub const TX_CHANGE_COMMISSION_WASM: &str = "tx_change_validator_commission.wasm";
+pub const TX_CHANGE_COMMISSION_WASM: &str =
+    "tx_change_validator_commission.wasm";
 
 /// Timeout for requests to the `/accepted` and `/applied`
 /// ABCI query endpoints.
@@ -127,8 +128,8 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let code_path = args.code_path.file_name().unwrap().to_str().unwrap();
     let tx_code_hash =
         query_wasm_code_hash(code_path, args.tx.ledger_address.clone())
-        .await
-        .unwrap();
+            .await
+            .unwrap();
     let data = args.data_path.map(|data_path| {
         std::fs::read(data_path).expect("Expected a file at given data path")
     });
@@ -137,7 +138,7 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     tx.header.expiration = args.tx.expiration;
     data.map(|data| tx.set_data(Data::new(data)));
     tx.set_code(Code::from_hash(tx_code_hash));
-    
+
     let (ctx, result) = process_tx(
         ctx,
         &args.tx,
@@ -146,7 +147,7 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-        .await;
+    .await;
     save_initialized_accounts(ctx, &args.tx, result.initialized_accounts())
         .await;
 }
@@ -204,13 +205,18 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
     let mut tx = Tx::new(TxType::Raw);
     tx.header.chain_id = ctx.config.ledger.chain_id.clone();
     tx.header.expiration = args.tx.expiration;
-    let extra = tx.add_section(Section::ExtraData(Code::from_hash(vp_code_hash)));
-    let extra_hash = Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
-    let data = UpdateVp { addr, vp_code_hash: extra_hash };
+    let extra =
+        tx.add_section(Section::ExtraData(Code::from_hash(vp_code_hash)));
+    let extra_hash =
+        Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
+    let data = UpdateVp {
+        addr,
+        vp_code_hash: extra_hash,
+    };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
     tx.set_data(Data::new(data));
     tx.set_code(Code::from_hash(tx_code_hash));
-        
+
     process_tx(
         ctx,
         &args.tx,
@@ -230,21 +236,26 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
     };
     let vp_code_hash =
         query_wasm_code_hash(vp_code_path, args.tx.ledger_address.clone())
-        .await
-        .unwrap();
+            .await
+            .unwrap();
     let tx_code_hash = query_wasm_code_hash(
         TX_INIT_ACCOUNT_WASM,
         args.tx.ledger_address.clone(),
     )
-        .await
-        .unwrap();
+    .await
+    .unwrap();
 
     let mut tx = Tx::new(TxType::Raw);
     tx.header.chain_id = ctx.config.ledger.chain_id.clone();
     tx.header.expiration = args.tx.expiration;
-    let extra = tx.add_section(Section::ExtraData(Code::from_hash(vp_code_hash)));
-    let extra_hash = Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
-    let data = InitAccount { public_key, vp_code_hash: extra_hash };
+    let extra =
+        tx.add_section(Section::ExtraData(Code::from_hash(vp_code_hash)));
+    let extra_hash =
+        Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
+    let data = InitAccount {
+        public_key,
+        vp_code_hash: extra_hash,
+    };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
     tx.set_data(Data::new(data));
     tx.set_code(Code::from_hash(tx_code_hash));
@@ -256,7 +267,7 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-        .await;
+    .await;
     save_initialized_accounts(ctx, &args.tx, result.initialized_accounts())
         .await;
 }
@@ -372,8 +383,11 @@ pub async fn submit_init_validator(
     .unwrap();
 
     let mut tx = Tx::new(TxType::Raw);
-    let extra = tx.add_section(Section::ExtraData(Code::from_hash(validator_vp_code_hash)));
-    let extra_hash = Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
+    let extra = tx.add_section(Section::ExtraData(Code::from_hash(
+        validator_vp_code_hash,
+    )));
+    let extra_hash =
+        Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
     let data = InitValidator {
         account_key,
         consensus_key: consensus_key.ref_to(),
@@ -388,7 +402,7 @@ pub async fn submit_init_validator(
     tx.header.expiration = tx_args.expiration;
     tx.set_data(Data::new(data));
     tx.set_code(Code::from_hash(tx_code_hash));
-    
+
     let (mut ctx, result) = process_tx(
         ctx,
         &tx_args,
@@ -705,7 +719,8 @@ impl ShieldedContext {
             }
             // Update this unknown shielded context until it is level with self
             while tx_ctx.last_txidx != self.last_txidx {
-                if let Some(((height, idx), (epoch, tx, stx))) = tx_iter.next() {
+                if let Some(((height, idx), (epoch, tx, stx))) = tx_iter.next()
+                {
                     tx_ctx.scan_tx(*height, *idx, *epoch, tx, stx);
                 } else {
                     break;
@@ -782,14 +797,20 @@ impl ShieldedContext {
                 .expect("Cannot obtain a storage key");
             // Obtain the current transaction
             let (tx_epoch, tx_height, tx_index, current_tx, current_stx) =
-                query_storage_value::<(Epoch, BlockHeight, TxIndex, Transfer, Transaction)>(
-                    &client,
-                    &current_tx_key,
-                )
+                query_storage_value::<(
+                    Epoch,
+                    BlockHeight,
+                    TxIndex,
+                    Transfer,
+                    Transaction,
+                )>(&client, &current_tx_key)
                 .await
                 .unwrap();
             // Collect the current transaction
-            shielded_txs.insert((tx_height, tx_index), (tx_epoch, current_tx, current_stx));
+            shielded_txs.insert(
+                (tx_height, tx_index),
+                (tx_epoch, current_tx, current_stx),
+            );
         }
         shielded_txs
     }
@@ -813,7 +834,10 @@ impl ShieldedContext {
         // For tracking the account changes caused by this Transaction
         let mut transaction_delta = TransactionDelta::new();
         // Listen for notes sent to our viewing keys
-        for so in shielded.sapling_bundle().map_or(&vec![], |x| &x.shielded_outputs) {
+        for so in shielded
+            .sapling_bundle()
+            .map_or(&vec![], |x| &x.shielded_outputs)
+        {
             // Create merkle tree leaf node from note commitment
             let node = Node::new(so.cmu.to_repr());
             // Update each merkle tree in the witness map with the latest
@@ -836,7 +860,7 @@ impl ShieldedContext {
                     &NETWORK,
                     1.into(),
                     &PreparedIncomingViewingKey::new(&vk.ivk()),
-                    &so,
+                    so,
                 );
                 // So this current viewing key does decrypt this current note...
                 if let Some((note, pa, memo)) = decres {
@@ -866,7 +890,10 @@ impl ShieldedContext {
             }
         }
         // Cancel out those of our notes that have been spent
-        for ss in shielded.sapling_bundle().map_or(&vec![], |x| &x.shielded_spends) {
+        for ss in shielded
+            .sapling_bundle()
+            .map_or(&vec![], |x| &x.shielded_spends)
+        {
             // If the shielded spend's nullifier is in our map, then target note
             // is rendered unusable
             if let Some(note_pos) = self.nf_map.get(&ss.nullifier) {
@@ -1228,21 +1255,28 @@ impl ShieldedContext {
             .push(&(TX_KEY_PREFIX.to_owned() + &txidx.to_string()))
             .expect("Cannot obtain a storage key");
         // Obtain the pointed to transaction
-        let (tx_epoch, _tx_height, _tx_index, tx, shielded) =
-            query_storage_value::<(Epoch, BlockHeight, TxIndex, Transfer, Transaction)>(
-                &client, &tx_key,
-            )
+        let (tx_epoch, _tx_height, _tx_index, _tx, shielded) =
+            query_storage_value::<(
+                Epoch,
+                BlockHeight,
+                TxIndex,
+                Transfer,
+                Transaction,
+            )>(&client, &tx_key)
             .await
             .expect("Ill-formed epoch, transaction pair");
         // Accumulate the combined output note value into this Amount
         let mut val_acc = Amount::zero();
-        for so in shielded.sapling_bundle().map_or(&vec![], |x| &x.shielded_outputs) {
+        for so in shielded
+            .sapling_bundle()
+            .map_or(&vec![], |x| &x.shielded_outputs)
+        {
             // Let's try to see if our viewing key can decrypt current note
             let decres = try_sapling_note_decryption::<_, OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>>(
                 &NETWORK,
                 1.into(),
                 &PreparedIncomingViewingKey::new(&viewing_key.ivk()),
-                &so,
+                so,
             );
             match decres {
                 // So the given viewing key does decrypt this current note...
@@ -1359,16 +1393,36 @@ fn convert_amount(
 /// the format used by hardware wallets to validate a MASP Transaction.
 struct WalletMap;
 
-impl<P1> masp_primitives::transaction::components::sapling::builder::MapBuilder<P1, ExtendedSpendingKey, (), ExtendedFullViewingKey> for WalletMap {
-    fn map_params(&self, s: P1) -> () {}
+impl<P1>
+    masp_primitives::transaction::components::sapling::builder::MapBuilder<
+        P1,
+        ExtendedSpendingKey,
+        (),
+        ExtendedFullViewingKey,
+    > for WalletMap
+{
+    fn map_params(&self, _s: P1) {}
+
     fn map_key(&self, s: ExtendedSpendingKey) -> ExtendedFullViewingKey {
         s.to_extended_full_viewing_key()
     }
 }
 
-impl<P1, R1, N1> MapBuilder<P1, R1, ExtendedSpendingKey, N1, (), (), ExtendedFullViewingKey, ()> for WalletMap {
-    fn map_rng(&self, s: R1) -> () {}
-    fn map_notifier(&self, s: N1) -> () {}
+impl<P1, R1, N1>
+    MapBuilder<
+        P1,
+        R1,
+        ExtendedSpendingKey,
+        N1,
+        (),
+        (),
+        ExtendedFullViewingKey,
+        (),
+    > for WalletMap
+{
+    fn map_rng(&self, _s: R1) {}
+
+    fn map_notifier(&self, _s: N1) {}
 }
 
 /// Make shielded components to embed within a Transfer object. If no shielded
@@ -1383,7 +1437,15 @@ async fn gen_shielded_transfer(
     client: &HttpClient,
     args: &args::TxTransfer,
     shielded_gas: bool,
-) -> Result<Option<(Builder<(), (), ExtendedFullViewingKey, ()>, Transaction, SaplingMetadata, Epoch)>, builder::Error<std::convert::Infallible>> {
+) -> Result<
+    Option<(
+        Builder<(), (), ExtendedFullViewingKey, ()>,
+        Transaction,
+        SaplingMetadata,
+        Epoch,
+    )>,
+    builder::Error<std::convert::Infallible>,
+> {
     // No shielded components are needed when neither source nor destination
     // are shielded
     let source = ctx.get_cached(&args.source);
@@ -1409,14 +1471,14 @@ async fn gen_shielded_transfer(
     // Determine epoch in which to submit potential shielded transaction
     let epoch = query_epoch(client).await;
     // Context required for storing which notes are in the source's possesion
-    let consensus_branch_id = BranchId::MASP;
     let amt: u64 = args.amount.into();
     let memo = MemoBytes::empty();
 
     // Now we build up the transaction within this object
     let mut builder = Builder::<_, OsRng>::new(NETWORK, 1.into());
     // Convert transaction amount into MASP types
-    let (asset_type, amount) = convert_amount(epoch, &ctx.get(&args.token), args.amount);
+    let (asset_type, amount) =
+        convert_amount(epoch, &ctx.get(&args.token), args.amount);
     // The fee to be paid for the transaction
     let tx_fee;
 
@@ -1424,8 +1486,11 @@ async fn gen_shielded_transfer(
     if let Some(sk) = spending_key {
         // Transaction fees need to match the amount in the wrapper Transfer
         // when MASP source is used
-        let (_, fee) =
-            convert_amount(epoch, &ctx.get(&args.tx.fee_token), args.tx.fee_amount);
+        let (_, fee) = convert_amount(
+            epoch,
+            &ctx.get(&args.tx.fee_token),
+            args.tx.fee_amount,
+        );
         tx_fee = fee.clone();
         // If the gas is coming from the shielded pool, then our shielded inputs
         // must also cover the gas fee
@@ -1442,17 +1507,20 @@ async fn gen_shielded_transfer(
             .await;
         // Commit the notes found to our transaction
         for (diversifier, note, merkle_path) in unspent_notes {
-            builder.add_sapling_spend(sk, diversifier, note, merkle_path)
+            builder
+                .add_sapling_spend(sk, diversifier, note, merkle_path)
                 .map_err(builder::Error::SaplingBuild)?;
         }
         // Commit the conversion notes used during summation
         for (conv, wit, value) in used_convs.values() {
             if *value > 0 {
-                builder.add_sapling_convert(
-                    conv.clone(),
-                    *value as u64,
-                    wit.clone(),
-                ).map_err(builder::Error::SaplingBuild)?;
+                builder
+                    .add_sapling_convert(
+                        conv.clone(),
+                        *value as u64,
+                        wit.clone(),
+                    )
+                    .map_err(builder::Error::SaplingBuild)?;
             }
         }
     } else {
@@ -1466,28 +1534,31 @@ async fn gen_shielded_transfer(
             .expect("source address should be transparent")
             .try_to_vec()
             .expect("source address encoding");
-        let hash =
-            ripemd::Ripemd160::digest(&sha2::Sha256::digest(source_enc.as_ref()));
+        let hash = ripemd::Ripemd160::digest(sha2::Sha256::digest(
+            source_enc.as_ref(),
+        ));
         let script = TransparentAddress(hash.into());
-        builder.add_transparent_input(
-            TxOut {
+        builder
+            .add_transparent_input(TxOut {
                 asset_type,
                 value: amt.try_into().expect("supplied amount too large"),
                 address: script,
-            },
-        ).map_err(builder::Error::TransparentBuild)?;
+            })
+            .map_err(builder::Error::TransparentBuild)?;
     }
     // Now handle the outputs of this transaction
     // If there is a shielded output
     if let Some(pa) = payment_address {
         let ovk_opt = spending_key.map(|x| x.expsk.ovk);
-        builder.add_sapling_output(
-            ovk_opt,
-            pa.into(),
-            asset_type,
-            amt,
-            memo.clone(),
-        ).map_err(builder::Error::SaplingBuild)?;
+        builder
+            .add_sapling_output(
+                ovk_opt,
+                pa.into(),
+                asset_type,
+                amt,
+                memo.clone(),
+            )
+            .map_err(builder::Error::SaplingBuild)?;
     } else {
         // Embed the transparent target address into the shielded transaction so
         // that it can be signed
@@ -1497,14 +1568,16 @@ async fn gen_shielded_transfer(
             .expect("target address should be transparent")
             .try_to_vec()
             .expect("target address encoding");
-        let hash = ripemd::Ripemd160::digest(&sha2::Sha256::digest(
+        let hash = ripemd::Ripemd160::digest(sha2::Sha256::digest(
             target_enc.as_ref(),
         ));
-        builder.add_transparent_output(
-            &TransparentAddress(hash.into()),
-            asset_type,
-            amt.try_into().expect("supplied amount too large"),
-        ).map_err(builder::Error::TransparentBuild)?;
+        builder
+            .add_transparent_output(
+                &TransparentAddress(hash.into()),
+                asset_type,
+                amt.try_into().expect("supplied amount too large"),
+            )
+            .map_err(builder::Error::TransparentBuild)?;
     }
 
     // Now add outputs representing the change from this payment
@@ -1512,21 +1585,26 @@ async fn gen_shielded_transfer(
         // Represents the amount of inputs we are short by
         let mut additional = Amount::zero();
         // The change left over from this transaction
-        let value_balance = builder.value_balance()
-            .expect("unable to compute value balance") - tx_fee.clone();
+        let value_balance = builder
+            .value_balance()
+            .expect("unable to compute value balance")
+            - tx_fee.clone();
         for (asset_type, amt) in value_balance.components() {
             if *amt >= 0 {
                 // Send the change in this asset type back to the sender
-                builder.add_sapling_output(
-                    Some(sk.expsk.ovk),
-                    sk.default_address().1,
-                    asset_type.clone(),
-                    *amt as u64,
-                    memo.clone(),
-                ).map_err(builder::Error::SaplingBuild)?;
+                builder
+                    .add_sapling_output(
+                        Some(sk.expsk.ovk),
+                        sk.default_address().1,
+                        *asset_type,
+                        *amt as u64,
+                        memo.clone(),
+                    )
+                    .map_err(builder::Error::SaplingBuild)?;
             } else {
                 // Record how much of the current asset type we are short by
-                additional += Amount::from_nonnegative(asset_type.clone(), -*amt).unwrap();
+                additional +=
+                    Amount::from_nonnegative(*asset_type, -*amt).unwrap();
             }
         }
         // If we are short by a non-zero amount, then we have insufficient funds
@@ -1534,7 +1612,7 @@ async fn gen_shielded_transfer(
             return Err(builder::Error::InsufficientFunds(additional));
         }
     }
-    
+
     let prover = if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR)
     {
         let params_dir = PathBuf::from(params_dir);
@@ -1547,8 +1625,12 @@ async fn gen_shielded_transfer(
             .expect("unable to load MASP Parameters")
     };
     // Build and return the constructed transaction
-        builder.clone().build(&prover, &FeeRule::non_standard(tx_fee))
-        .map(|(tx, metadata)| Some((builder.map_builder(WalletMap), tx, metadata, epoch)))
+    builder
+        .clone()
+        .build(&prover, &FeeRule::non_standard(tx_fee))
+        .map(|(tx, metadata)| {
+            Some((builder.map_builder(WalletMap), tx, metadata, epoch))
+        })
 }
 
 /// Try to decode the given asset type and add its decoding to the supplied set.
@@ -1582,36 +1664,38 @@ async fn used_asset_types<P, R, K, N>(
     let mut asset_types = HashSet::new();
     // Collect all the asset types used in the Sapling inputs
     for input in builder.sapling_inputs() {
-        add_asset_type(&mut asset_types, ctx, &client, input.asset_type()).await;
+        add_asset_type(&mut asset_types, ctx, &client, input.asset_type())
+            .await;
     }
     // Collect all the asset types used in the transparent inputs
     for input in builder.transparent_inputs() {
-        add_asset_type(&mut asset_types, ctx, &client, input.coin().asset_type()).await;
+        add_asset_type(
+            &mut asset_types,
+            ctx,
+            &client,
+            input.coin().asset_type(),
+        )
+        .await;
     }
     // Collect all the asset types used in the Sapling outputs
     for output in builder.sapling_outputs() {
-        add_asset_type(&mut asset_types, ctx, &client, output.asset_type()).await;
+        add_asset_type(&mut asset_types, ctx, &client, output.asset_type())
+            .await;
     }
     // Collect all the asset types used in the transparent outputs
     for output in builder.transparent_outputs() {
-        add_asset_type(&mut asset_types, ctx, &client, output.asset_type()).await;
+        add_asset_type(&mut asset_types, ctx, &client, output.asset_type())
+            .await;
     }
     // Collect all the asset types used in the Sapling converts
     for output in builder.sapling_converts() {
-        for (asset_type, _) in Amount::from(output.conversion().clone()).components() {
-            add_asset_type(&mut asset_types, ctx, &client, asset_type.clone()).await;
+        for (asset_type, _) in
+            Amount::from(output.conversion().clone()).components()
+        {
+            add_asset_type(&mut asset_types, ctx, &client, *asset_type).await;
         }
     }
     Ok(asset_types)
-}
-
-/// Unzip an option of a pair into a pair of options
-/// TODO: use `Option::unzip` stabilized in Rust 1.66.0
-fn unzip_option<T, U>(opt: Option<(T, U)>) -> (Option<T>, Option<U>) {
-    match opt {
-        Some((a, b)) => (Some(a), Some(b)),
-        None => (None, None),
-    }
 }
 
 pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
@@ -1619,7 +1703,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     let target = ctx.get(&args.target).effective_address();
     let token = ctx.get(&args.token);
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-    
+
     if !args.tx.unchecked {
         // Check that the source address exists on chain
         let source_exists =
@@ -1638,18 +1722,12 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
             if !args.tx.force {
                 safe_exit(1)
             }
-        }    
+        }
         // Check that the token address exists on chain
-        let token_exists = rpc::known_address(
-            &token,
-            args.tx.ledger_address.clone(),
-        )
-        .await;
+        let token_exists =
+            rpc::known_address(&token, args.tx.ledger_address.clone()).await;
         if !token_exists {
-            eprintln!(
-                "The token address {} doesn't exist on chain.",
-                token
-            );
+            eprintln!("The token address {} doesn't exist on chain.", token);
             if !args.tx.force {
                 safe_exit(1)
             }
@@ -1737,12 +1815,12 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     #[cfg(not(feature = "mainnet"))]
     let is_source_faucet = !args.tx.unchecked
         && rpc::is_faucet_account(&source, args.tx.ledger_address.clone())
-        .await;
+            .await;
 
     let tx_code_hash =
         query_wasm_code_hash(TX_TRANSFER_WASM, args.tx.ledger_address.clone())
-        .await
-        .unwrap();
+            .await
+            .unwrap();
 
     // Loop twice in case the first submission attempt fails
     for _ in 0..2 {
@@ -1776,14 +1854,17 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
             // Add a MASP Transaction section to the Tx
             let masp_tx = tx.add_section(Section::MaspTx(shielded.1));
             // Get the hash of the MASP Transaction section
-            let masp_hash = Hash(masp_tx.hash(&mut Sha256::new()).finalize_reset().into());
-            // Get the decoded asset types used in the transaction to give offline
-            // wallet users more information
+            let masp_hash =
+                Hash(masp_tx.hash(&mut Sha256::new()).finalize_reset().into());
+            // Get the decoded asset types used in the transaction to give
+            // offline wallet users more information
             let asset_types = used_asset_types(
                 &mut ctx,
                 &args.tx.ledger_address,
                 &shielded.0,
-            ).await.unwrap_or_default();
+            )
+            .await
+            .unwrap_or_default();
             // Add the MASP Transaction's Builder to the Tx
             tx.add_section(Section::MaspBuilder(MaspBuilder {
                 asset_types,
@@ -1828,7 +1909,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
             #[cfg(not(feature = "mainnet"))]
             is_source_faucet,
         )
-            .await;
+        .await;
         ctx = new_ctx;
 
         // Query the epoch in which the transaction was probably submitted
@@ -1976,7 +2057,7 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
     tx.header.expiration = args.tx.expiration;
     tx.set_data(Data::new(data));
     tx.set_code(Code::from_hash(tx_code_hash));
-    
+
     process_tx(
         ctx,
         &args.tx,
@@ -1985,7 +2066,7 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-        .await;
+    .await;
 }
 
 pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
@@ -2003,7 +2084,7 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             rpc::query_and_print_epoch(args::Query {
                 ledger_address: args.tx.ledger_address.clone(),
             })
-                .await
+            .await
         }
     };
 
@@ -2095,8 +2176,7 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             }
         }
     } else {
-        let tx_data: Result<InitProposalData, _> =
-            proposal.clone().try_into();
+        let tx_data: Result<InitProposalData, _> = proposal.clone().try_into();
         let init_proposal_data = if let Ok(data) = tx_data {
             data
         } else {
@@ -2131,7 +2211,6 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             }
         }
 
-        let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
         let mut tx = Tx::new(TxType::Raw);
         let data = init_proposal_data
             .try_to_vec()
@@ -2287,7 +2366,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                 rpc::query_and_print_epoch(args::Query {
                     ledger_address: args.tx.ledger_address.clone(),
                 })
-                    .await
+                .await
             }
         };
 
@@ -2406,8 +2485,8 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     TX_VOTE_PROPOSAL,
                     args.tx.ledger_address.clone(),
                 )
-                    .await
-                    .unwrap();
+                .await
+                .unwrap();
                 let mut tx = Tx::new(TxType::Raw);
                 tx.header.chain_id = ctx.config.ledger.chain_id.clone();
                 tx.header.expiration = args.tx.expiration;
@@ -2487,8 +2566,8 @@ pub async fn submit_reveal_pk_aux(
         .expect("Encoding a public key shouldn't fail");
     let tx_code_hash =
         query_wasm_code_hash(TX_REVEAL_PK, args.ledger_address.clone())
-        .await
-        .unwrap();
+            .await
+            .unwrap();
     let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
         #[cfg(not(feature = "mainnet"))]
         // To be able to dry-run testnet faucet withdrawal, pretend 
@@ -2510,15 +2589,21 @@ pub async fn submit_reveal_pk_aux(
     } else {
         find_keypair(&mut ctx.wallet, &addr, args.ledger_address.clone()).await
     };
-    tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &keypair)));
-    tx.add_section(Section::Signature(Signature::new(&tx.code_sechash(), &keypair)));
+    tx.add_section(Section::Signature(Signature::new(
+        tx.data_sechash(),
+        &keypair,
+    )));
+    tx.add_section(Section::Signature(Signature::new(
+        tx.code_sechash(),
+        &keypair,
+    )));
     let epoch = match args.epoch {
         Some(epoch) if args.unchecked => epoch,
         _ => {
             rpc::query_and_print_epoch(args::Query {
                 ledger_address: args.ledger_address.clone(),
             })
-                .await
+            .await
         }
     };
     let to_broadcast = if args.dry_run {
@@ -2652,8 +2737,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     let source = ctx.get_opt(&args.source);
     if !args.tx.unchecked {
         // Check that the validator address exists on chain
-        let is_validator =
-            rpc::is_validator(&client,  &validator).await;
+        let is_validator = rpc::is_validator(&client, &validator).await;
         if !is_validator {
             eprintln!(
                 "The address {} doesn't belong to any known validator account.",
@@ -2667,7 +2751,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
         if let Some(source) = &source {
             let source_exists =
                 rpc::known_address(source, args.tx.ledger_address.clone())
-                .await;
+                    .await;
             if !source_exists {
                 eprintln!(
                     "The source address {} doesn't exist on chain.",
@@ -2677,7 +2761,8 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
                     safe_exit(1)
                 }
             }
-            if source != &validator && rpc::is_validator(&client, source).await {
+            if source != &validator && rpc::is_validator(&client, source).await
+            {
                 eprintln!(
                     "Cannot bond from a validator account {source} to another \
                      validator {validator}."
@@ -2694,28 +2779,29 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     let balance_key = token::balance_key(&ctx.native_token, bond_source);
 
     if !args.tx.unchecked {
-        match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
+        match rpc::query_storage_value::<token::Amount>(&client, &balance_key)
+            .await
         {
             Some(balance) => {
                 println!("Found source balance {}", balance);
                 if balance < args.amount {
                     eprintln!(
-                        "The balance of the source {} is lower than the amount to \
-                         be transferred. Amount to transfer is {} and the balance \
-                         is {}.",
+                        "The balance of the source {} is lower than the \
+                         amount to be transferred. Amount to transfer is {} \
+                         and the balance is {}.",
                         bond_source, args.amount, balance
                     );
                     if !args.tx.force {
                         safe_exit(1)
                     }
                 }
-            },
+            }
             None => {
                 eprintln!("No balance found for the source {}", bond_source);
                 if !args.tx.force {
                     safe_exit(1)
                 }
-            },
+            }
         }
     }
     let tx_code_hash =
@@ -2729,9 +2815,9 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     };
     let data = bond.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.chain_id = ctx.config.ledger.chain_id.clone();
-        tx.header.expiration = args.tx.expiration;
+    let mut tx = Tx::new(TxType::Raw);
+    tx.header.chain_id = ctx.config.ledger.chain_id.clone();
+    tx.header.expiration = args.tx.expiration;
     tx.set_data(Data::new(data));
     tx.set_code(Code::from_hash(tx_code_hash));
     let default_signer = args.source.unwrap_or(args.validator);
@@ -2746,82 +2832,83 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     .await;
 }
 
-            pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
-                let validator = ctx.get(&args.validator);
-                let source = ctx.get_opt(&args.source);
-                let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
+    let validator = ctx.get(&args.validator);
+    let source = ctx.get_opt(&args.source);
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
-                if !args.tx.unchecked {
-                    // Check that the validator address exists on chain
-                    let is_validator = rpc::is_validator(&client, &validator).await;
-                    if !is_validator {
-                        eprintln!(
-                            "The address {} doesn't belong to any known validator account.",
-                            validator
-                        );
-                        if !args.tx.force {
-                            safe_exit(1)
-                        }
-                    }
-                }
+    if !args.tx.unchecked {
+        // Check that the validator address exists on chain
+        let is_validator = rpc::is_validator(&client, &validator).await;
+        if !is_validator {
+            eprintln!(
+                "The address {} doesn't belong to any known validator account.",
+                validator
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
 
-                // Check the source's current bond amount
-                let bond_source = source.clone().unwrap_or_else(|| validator.clone());
-                if !args.tx.unchecked {
-                    let bond_amount =
-                        rpc::query_bond(&client, &bond_source, &validator, None).await;
-                    println!("Bond amount available for unbonding: {} NAM", bond_amount);
+    // Check the source's current bond amount
+    let bond_source = source.clone().unwrap_or_else(|| validator.clone());
+    if !args.tx.unchecked {
+        let bond_amount =
+            rpc::query_bond(&client, &bond_source, &validator, None).await;
+        println!("Bond amount available for unbonding: {} NAM", bond_amount);
 
-                    if args.amount > bond_amount {
-                        eprintln!(
-                            "The total bonds of the source {} is lower than the amount to be \
-                             unbonded. Amount to unbond is {} and the total bonds is {}.",
-                            bond_source, args.amount, bond_amount
-                        );
-                        if !args.tx.force {
-                            safe_exit(1)
-                        }
-                    }
-                }
+        if args.amount > bond_amount {
+            eprintln!(
+                "The total bonds of the source {} is lower than the amount to \
+                 be unbonded. Amount to unbond is {} and the total bonds is \
+                 {}.",
+                bond_source, args.amount, bond_amount
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
 
-                // Query the unbonds before submitting the tx
-                let unbonds =
-                    rpc::query_unbond_with_slashing(&client, &bond_source, &validator)
-                    .await;
-                let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
-                for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
-                    let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();
-                    *to_withdraw += amount;
-                }
-                let latest_withdrawal_pre = withdrawable.into_iter().last();
+    // Query the unbonds before submitting the tx
+    let unbonds =
+        rpc::query_unbond_with_slashing(&client, &bond_source, &validator)
+            .await;
+    let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
+    for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
+        let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();
+        *to_withdraw += amount;
+    }
+    let latest_withdrawal_pre = withdrawable.into_iter().last();
 
-                let data = pos::Unbond {
-                    validator: validator.clone(),
-                    amount: args.amount,
-                    source: Some(bond_source.clone()),
-                };
-                let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+    let data = pos::Unbond {
+        validator: validator.clone(),
+        amount: args.amount,
+        source: Some(bond_source.clone()),
+    };
+    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-                let tx_code_hash =
-                    query_wasm_code_hash(TX_UNBOND_WASM, args.tx.ledger_address.clone())
-                    .await
-                    .unwrap();
-                let mut tx = Tx::new(TxType::Raw);
-                tx.header.chain_id = ctx.config.ledger.chain_id.clone();
-                tx.header.expiration = args.tx.expiration;
-                tx.set_data(Data::new(data));
-                tx.set_code(Code::from_hash(tx_code_hash));
-                
-                let default_signer = args.source.unwrap_or(args.validator);
-                let (_ctx, _) = process_tx(
-                    ctx,
-                    &args.tx,
-                    tx,
-                    TxSigningKey::WalletAddress(default_signer),
-                    #[cfg(not(feature = "mainnet"))]
-                    false,
-                )
-                    .await;
+    let tx_code_hash =
+        query_wasm_code_hash(TX_UNBOND_WASM, args.tx.ledger_address.clone())
+            .await
+            .unwrap();
+    let mut tx = Tx::new(TxType::Raw);
+    tx.header.chain_id = ctx.config.ledger.chain_id.clone();
+    tx.header.expiration = args.tx.expiration;
+    tx.set_data(Data::new(data));
+    tx.set_code(Code::from_hash(tx_code_hash));
+
+    let default_signer = args.source.unwrap_or(args.validator);
+    let (_ctx, _) = process_tx(
+        ctx,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(default_signer),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await;
 
     // Query the unbonds post-tx
     let unbonds =
@@ -2879,7 +2966,7 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
             rpc::query_and_print_epoch(args::Query {
                 ledger_address: args.tx.ledger_address.clone(),
             })
-                .await
+            .await
         }
     };
 
@@ -2898,21 +2985,22 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
         }
         // Check the source's current unbond amount
         let bond_source = source.clone().unwrap_or_else(|| validator.clone());
-        
+
         let tokens = rpc::query_withdrawable_tokens(
             &client,
             &bond_source,
             &validator,
             Some(epoch),
         )
-            .await;
+        .await;
         if tokens == 0.into() {
             eprintln!(
                 "There are no unbonded bonds ready to withdraw in the current \
                  epoch {}.",
                 epoch
             );
-            rpc::query_and_print_unbonds(&client, &bond_source, &validator).await;
+            rpc::query_and_print_unbonds(&client, &bond_source, &validator)
+                .await;
             if !args.tx.force {
                 safe_exit(1)
             }
@@ -2927,8 +3015,8 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
 
     let tx_code_hash =
         query_wasm_code_hash(TX_WITHDRAW_WASM, args.tx.ledger_address.clone())
-        .await
-        .unwrap();
+            .await
+            .unwrap();
     let mut tx = Tx::new(TxType::Raw);
     tx.header.chain_id = ctx.config.ledger.chain_id.clone();
     tx.header.expiration = args.tx.expiration;
@@ -2944,7 +3032,7 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-        .await;
+    .await;
 }
 
 pub async fn submit_validator_commission_change(
@@ -2957,7 +3045,7 @@ pub async fn submit_validator_commission_change(
             rpc::query_and_print_epoch(args::Query {
                 ledger_address: args.tx.ledger_address.clone(),
             })
-                .await
+            .await
         }
     };
 
@@ -2965,8 +3053,8 @@ pub async fn submit_validator_commission_change(
         TX_CHANGE_COMMISSION_WASM,
         args.tx.ledger_address.clone(),
     )
-        .await
-        .unwrap();
+    .await
+    .unwrap();
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
     // TODO: put following two let statements in its own function
@@ -2996,7 +3084,7 @@ pub async fn submit_validator_commission_change(
                 &validator,
                 Some(pipeline_epoch_minus_one),
             )
-                .await
+            .await
             {
                 Some(CommissionPair {
                     commission_rate,
@@ -3006,9 +3094,9 @@ pub async fn submit_validator_commission_change(
                         > max_commission_change_per_epoch
                     {
                         eprintln!(
-                            "New rate is too large of a change with respect to \
-                             the predecessor epoch in which the rate will take \
-                             effect."
+                            "New rate is too large of a change with respect \
+                             to the predecessor epoch in which the rate will \
+                             take effect."
                         );
 
                         if !args.tx.force {
@@ -3032,12 +3120,12 @@ pub async fn submit_validator_commission_change(
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-      let mut tx = Tx::new(TxType::Raw);
-      tx.header.chain_id = ctx.config.ledger.chain_id.clone();
-      tx.header.expiration = args.tx.expiration;
-      tx.set_data(Data::new(data));
-      tx.set_code(Code::from_hash(tx_code_hash));
-      
+    let mut tx = Tx::new(TxType::Raw);
+    tx.header.chain_id = ctx.config.ledger.chain_id.clone();
+    tx.header.expiration = args.tx.expiration;
+    tx.set_data(Data::new(data));
+    tx.set_code(Code::from_hash(tx_code_hash));
+
     let default_signer = args.validator;
     process_tx(
         ctx,

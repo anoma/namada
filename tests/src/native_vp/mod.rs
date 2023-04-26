@@ -60,6 +60,10 @@ impl TestNativeVpEnv {
         };
         let native_vp = init_native_vp(ctx);
 
-        native_vp.validate_tx(&self.tx_env.tx, &self.keys_changed, &self.verifiers)
+        native_vp.validate_tx(
+            &self.tx_env.tx,
+            &self.keys_changed,
+            &self.verifiers,
+        )
     }
 }

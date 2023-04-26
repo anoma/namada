@@ -1,7 +1,7 @@
 //! Proof of Stake system integration with functions for transactions
 
-use namada_core::types::transaction::InitValidator;
 use namada_core::types::hash::Hash;
+use namada_core::types::transaction::InitValidator;
 use namada_core::types::{key, token};
 pub use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::{
@@ -79,7 +79,7 @@ impl Ctx {
     ) -> EnvResult<Address> {
         let current_epoch = self.get_block_epoch()?;
         // Init validator account
-        let validator_address = self.init_account(&validator_vp_code_hash)?;
+        let validator_address = self.init_account(validator_vp_code_hash)?;
         let pk_key = key::pk_key(&validator_address);
         self.write(&pk_key, &account_key)?;
         let protocol_pk_key = key::protocol_pk_key(&validator_address);

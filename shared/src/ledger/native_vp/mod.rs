@@ -17,7 +17,7 @@ use crate::ledger::gas::VpGasMeter;
 use crate::ledger::storage;
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{Storage, StorageHasher};
-use crate::proto::{Tx};
+use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
 use crate::types::storage::{BlockHash, BlockHeight, Epoch, Key, TxIndex};

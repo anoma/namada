@@ -23,9 +23,8 @@ mod tests {
         read_total_stake, read_validator_stake,
     };
     use namada::proto::{Code, Data, Signature, Tx};
-    use namada::types::transaction::{TxType};
-    use namada::types::chain::ChainId;
     use namada::types::storage::Epoch;
+    use namada::types::transaction::TxType;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
@@ -102,10 +101,15 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(tx_code));
         tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &key)));
-        tx.add_section(Section::Signature(Signature::new(&tx.code_sechash(), &key)));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key,
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key,
+        )));
         let signed_tx = tx.clone();
-        let tx_data = signed_tx.data().unwrap();
 
         // Ensure that the initial stake of the sole validator is equal to the
         // PoS account balance

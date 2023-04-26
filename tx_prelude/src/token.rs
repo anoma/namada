@@ -1,9 +1,9 @@
 use masp_primitives::transaction::Transaction;
 use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::hash::Hash;
 use namada_core::types::storage::KeySeg;
 use namada_core::types::token;
 pub use namada_core::types::token::*;
-use namada_core::types::hash::Hash;
 
 use super::*;
 
@@ -110,7 +110,7 @@ pub fn transfer(
             sub_prefix: None,
             amount,
             key: key.clone(),
-            shielded: shielded_hash.clone(),
+            shielded: *shielded_hash,
         };
         let record: (Epoch, BlockHeight, TxIndex, Transfer, Transaction) = (
             ctx.get_block_epoch()?,
@@ -119,10 +119,7 @@ pub fn transfer(
             transfer,
             shielded.clone(),
         );
-        ctx.write(
-            &current_tx_key,
-            record,
-        )?;
+        ctx.write(&current_tx_key, record)?;
         ctx.write(&head_tx_key, current_tx_idx + 1)?;
         // If storage key has been supplied, then pin this transaction to it
         if let Some(key) = key {

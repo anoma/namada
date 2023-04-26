@@ -5,10 +5,10 @@ use std::collections::BTreeSet;
 use namada_core::ledger::storage;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::Key;
-use crate::proto::{Tx};
 use thiserror::Error;
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
+use crate::proto::Tx;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]

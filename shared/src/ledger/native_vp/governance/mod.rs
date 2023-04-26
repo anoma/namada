@@ -15,11 +15,11 @@ use utils::is_valid_validator_voting_period;
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::storage_api::StorageRead;
 use crate::ledger::{native_vp, pos};
+use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Epoch, Key};
 use crate::types::token;
 use crate::vm::WasmCacheAccess;
-use crate::proto::{Tx};
 
 /// for handling Governance NativeVP errors
 pub type Result<T> = std::result::Result<T, Error>;
@@ -106,7 +106,7 @@ where
                         data
                     } else {
                         return false;
-                    }
+                    },
                 ),
                 (KeyType::BALANCE, _) => self.is_valid_balance(&native_token),
                 (KeyType::UNKNOWN_GOVERNANCE, _) => Ok(false),

@@ -2,26 +2,18 @@
 /// to enable encrypted txs inside of normal txs.
 /// *Not wasm compatible*
 pub mod wrapper_tx {
-    use std::convert::TryFrom;
-
     pub use ark_bls12_381::Bls12_381 as EllipticCurve;
     #[cfg(feature = "ferveo-tpke")]
     pub use ark_ec::{AffineCurve, PairingEngine};
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
     use serde::{Deserialize, Serialize};
+    use sha2::{Digest, Sha256};
     use thiserror::Error;
 
-    use crate::proto::{Tx, Code, Data, Signature, Section, TxError};
     use crate::types::address::Address;
-    use crate::types::chain::ChainId;
     use crate::types::key::*;
     use crate::types::storage::Epoch;
-    use crate::types::time::DateTimeUtc;
     use crate::types::token::Amount;
-    use crate::types::transaction::{Hash, TxType};
-    use sha2::{Digest, Sha256};
-    #[cfg(feature = "ferveo-tpke")]
-    use crate::types::transaction::{EncryptionKey};
 
     /// Minimum fee amount in micro NAMs
     pub const MIN_FEE: u64 = 100;
@@ -214,7 +206,9 @@ pub mod wrapper_tx {
 
         /// Produce a SHA-256 hash of this section
         pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-            hasher.update(self.try_to_vec().expect("unable to serialize wrapper"));
+            hasher.update(
+                self.try_to_vec().expect("unable to serialize wrapper"),
+            );
             hasher
         }
     }
@@ -284,8 +278,9 @@ pub mod wrapper_tx {
     #[cfg(test)]
     mod test_wrapper_tx {
         use super::*;
+        use crate::proto::{Code, Data, Section, Signature, Tx, TxError};
         use crate::types::address::nam;
-        use crate::types::transaction::EncryptionKey;
+        use crate::types::transaction::{Hash, TxType};
 
         fn gen_keypair() -> common::SecretKey {
             use rand::prelude::ThreadRng;
@@ -312,8 +307,12 @@ pub mod wrapper_tx {
                 None,
             )));
             wrapper.set_code(Code::new("wasm code".as_bytes().to_owned()));
-            wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-            wrapper.add_section(Section::Signature(Signature::new(&wrapper.header_hash(), &keypair)));
+            wrapper
+                .set_data(Data::new("transaction data".as_bytes().to_owned()));
+            wrapper.add_section(Section::Signature(Signature::new(
+                &wrapper.header_hash(),
+                &keypair,
+            )));
             let mut encrypted_tx = wrapper.clone();
             encrypted_tx.encrypt(&Default::default());
             assert!(encrypted_tx.validate_ciphertext());
@@ -340,17 +339,19 @@ pub mod wrapper_tx {
                 None,
             )));
             wrapper.set_code(Code::new("wasm code".as_bytes().to_owned()));
-            wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
+            wrapper
+                .set_data(Data::new("transaction data".as_bytes().to_owned()));
             // give a incorrect commitment to the decrypted contents of the tx
             wrapper.set_code_sechash(Hash([0u8; 32]));
             wrapper.set_data_sechash(Hash([0u8; 32]));
-            wrapper.add_section(Section::Signature(Signature::new(&wrapper.header_hash(), &keypair)));
+            wrapper.add_section(Section::Signature(Signature::new(
+                &wrapper.header_hash(),
+                &keypair,
+            )));
             wrapper.encrypt(&Default::default());
             assert!(wrapper.validate_ciphertext());
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-            let err = wrapper
-                .decrypt(privkey)
-                .expect_err("Test failed");
+            let err = wrapper.decrypt(privkey).expect_err("Test failed");
             assert_matches!(err, WrapperTxErr::DecryptedHash);
         }
 
@@ -359,7 +360,6 @@ pub mod wrapper_tx {
         /// via the signature.
         #[test]
         fn test_malleability_attack_detection() {
-            let pubkey = <EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator();
             let keypair = gen_keypair();
             // the signed tx
             let mut tx = Tx::new(TxType::Wrapper(WrapperTx::new(
@@ -376,7 +376,10 @@ pub mod wrapper_tx {
 
             tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
             tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-            tx.add_section(Section::Signature(Signature::new(&tx.header_hash(), &keypair)));
+            tx.add_section(Section::Signature(Signature::new(
+                &tx.header_hash(),
+                &keypair,
+            )));
 
             // we now try to alter the inner tx maliciously
             // malicious transaction
@@ -399,8 +402,7 @@ pub mod wrapper_tx {
             tx.verify_signature(&keypair.ref_to(), &tx.header_hash())
                 .expect_err("Test failed");
             // check that the try from method also fails
-            let err = tx.validate_header()
-                .expect_err("Test failed");
+            let err = tx.validate_header().expect_err("Test failed");
             assert_matches!(err, TxError::SigError(_));
         }
     }

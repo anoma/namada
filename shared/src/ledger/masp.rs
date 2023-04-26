@@ -5,30 +5,22 @@ use std::fs::File;
 use std::ops::Deref;
 use std::path::PathBuf;
 
-use masp_proofs::bellman::groth16::{prepare_verifying_key, PreparedVerifyingKey};
-use masp_proofs::bls12_381::Bls12;
-use masp_primitives::asset_type::AssetType;
-use masp_primitives::transaction::components::{
-    ConvertDescription, OutputDescription, SpendDescription,
-};
-use masp_primitives::transaction::{
-    Transaction, TransactionData,
-};
-use masp_proofs::sapling::SaplingVerificationContext;
-use masp_primitives::transaction::Authorization;
-use masp_primitives::transaction::Authorized;
-use masp_primitives::transaction::components::Amount;
 use masp_primitives::group::GroupEncoding;
-use masp_primitives::transaction::txid::TxIdDigester;
-use masp_primitives::transaction::sighash::{SignableInput, signature_hash};
-use masp_primitives::transaction::components::transparent::Bundle;
-use masp_primitives::transaction::Unauthorized;
-use masp_primitives::transaction::components::transparent::builder::TransparentBuilder;
-use masp_primitives::transaction::components::TxOut;
-use masp_primitives::transaction::TransparentAddress;
 use masp_primitives::sapling::redjubjub::PublicKey;
-use sha2::Digest as Sha2Digest;
-use ripemd::Digest as RipemdDigest;
+use masp_primitives::transaction::components::transparent::builder::TransparentBuilder;
+use masp_primitives::transaction::components::{
+    Amount, ConvertDescription, OutputDescription, SpendDescription, TxOut,
+};
+use masp_primitives::transaction::sighash::{signature_hash, SignableInput};
+use masp_primitives::transaction::txid::TxIdDigester;
+use masp_primitives::transaction::{
+    Authorization, Authorized, Transaction, TransactionData, Unauthorized,
+};
+use masp_proofs::bellman::groth16::{
+    prepare_verifying_key, PreparedVerifyingKey,
+};
+use masp_proofs::bls12_381::Bls12;
+use masp_proofs::sapling::SaplingVerificationContext;
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -57,7 +49,9 @@ pub fn load_spend_params() -> (
         panic!("MASP parameters not present or downloadable");
     }
     let param_f = File::open(spend_path).unwrap();
-    let params = masp_proofs::bellman::groth16::Parameters::read(&param_f, false).unwrap();
+    let params =
+        masp_proofs::bellman::groth16::Parameters::read(&param_f, false)
+            .unwrap();
     let vk = prepare_verifying_key(&params.vk);
     (params, vk)
 }
@@ -77,7 +71,9 @@ pub fn load_convert_params() -> (
         panic!("MASP parameters not present or downloadable");
     }
     let param_f = File::open(spend_path).unwrap();
-    let params = masp_proofs::bellman::groth16::Parameters::read(&param_f, false).unwrap();
+    let params =
+        masp_proofs::bellman::groth16::Parameters::read(&param_f, false)
+            .unwrap();
     let vk = prepare_verifying_key(&params.vk);
     (params, vk)
 }
@@ -97,7 +93,9 @@ pub fn load_output_params() -> (
         panic!("MASP parameters not present or downloadable");
     }
     let param_f = File::open(output_path).unwrap();
-    let params = masp_proofs::bellman::groth16::Parameters::read(&param_f, false).unwrap();
+    let params =
+        masp_proofs::bellman::groth16::Parameters::read(&param_f, false)
+            .unwrap();
     let vk = prepare_verifying_key(&params.vk);
     (params, vk)
 }
@@ -139,18 +137,13 @@ pub fn check_output(
         Ok(zkproof) => zkproof,
         _ => return false,
     };
-    let epk = masp_proofs::jubjub::ExtendedPoint::from_bytes(&output.ephemeral_key.0);
+    let epk =
+        masp_proofs::jubjub::ExtendedPoint::from_bytes(&output.ephemeral_key.0);
     let epk = match epk.into() {
         Some(p) => p,
         None => return false,
     };
-    ctx.check_output(
-        output.cv,
-        output.cmu,
-        epk,
-        zkproof,
-        parameters,
-    )
+    ctx.check_output(output.cv, output.cmu, epk, zkproof, parameters)
 }
 
 /// check convert wrapper
@@ -173,13 +166,13 @@ pub fn check_convert(
 pub struct PartialAuthorized;
 
 impl Authorization for PartialAuthorized {
-    type TransparentAuth = <Unauthorized as Authorization>::TransparentAuth;
     type SaplingAuth = <Authorized as Authorization>::SaplingAuth;
+    type TransparentAuth = <Unauthorized as Authorization>::TransparentAuth;
 }
 
 /// Partially deauthorize the transparent bundle
 fn partial_deauthorize(
-    tx_data: &TransactionData<Authorized>
+    tx_data: &TransactionData<Authorized>,
 ) -> Option<TransactionData<PartialAuthorized>> {
     let transp = tx_data.transparent_bundle().and_then(|x| {
         let mut tb = TransparentBuilder::empty();
@@ -188,10 +181,12 @@ fn partial_deauthorize(
                 asset_type: vin.asset_type,
                 value: vin.value,
                 address: vin.address,
-            }).ok()?;
+            })
+            .ok()?;
         }
         for vout in &x.vout {
-            tb.add_output(&vout.address, vout.asset_type, vout.value).ok()?;
+            tb.add_output(&vout.address, vout.asset_type, vout.value)
+                .ok()?;
         }
         tb.build()
     });
@@ -239,10 +234,9 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
     let (_, output_pvk) = load_output_params();
 
     let mut ctx = SaplingVerificationContext::new(true);
-    let spends_valid = sapling_bundle
-        .shielded_spends
-        .iter()
-        .all(|spend| check_spend(spend, &sighash.as_ref(), &mut ctx, &spend_pvk));
+    let spends_valid = sapling_bundle.shielded_spends.iter().all(|spend| {
+        check_spend(spend, sighash.as_ref(), &mut ctx, &spend_pvk)
+    });
     let converts_valid = sapling_bundle
         .shielded_converts
         .iter()
@@ -260,11 +254,14 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
 
     let assets_and_values: Amount = sapling_bundle.value_balance.clone();
 
-    tracing::info!("accumulated {} assets/values", assets_and_values.components().len());
+    tracing::info!(
+        "accumulated {} assets/values",
+        assets_and_values.components().len()
+    );
 
     let result = ctx.final_check(
         assets_and_values,
-        &sighash.as_ref(),
+        sighash.as_ref(),
         sapling_bundle.authorization.binding_sig,
     );
     tracing::info!("final check result {result}");

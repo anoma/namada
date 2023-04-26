@@ -5,10 +5,10 @@ use std::collections::BTreeSet;
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::storage as ledger_storage;
 use crate::ledger::storage::StorageHasher;
+use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
-use crate::proto::{Tx};
 
 /// Internal address for the Ethereum bridge VP
 pub const ADDRESS: Address = Address::Internal(InternalAddress::EthBridge);

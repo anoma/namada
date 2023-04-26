@@ -35,7 +35,7 @@ use namada::ledger::storage::{
 use namada::ledger::storage_api::{self, StorageRead};
 use namada::ledger::{ibc, pos, protocol, replay_protection};
 use namada::proof_of_stake::{self, read_pos_params, slash};
-use namada::proto::{self, Tx, Section};
+use namada::proto::{self, Section, Tx};
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::chain::ChainId;
 use namada::types::internal::TxInQueue;
@@ -152,12 +152,12 @@ impl ErrorCodes {
         // to catch potential bugs when adding new codes
         match self {
             Ok
-                | InvalidDecryptedChainId
-                | ExpiredDecryptedTx
-                | WasmRuntimeError => true,
+            | InvalidDecryptedChainId
+            | ExpiredDecryptedTx
+            | WasmRuntimeError => true,
             InvalidTx | InvalidSig | InvalidOrder | ExtraTxs
-                | Undecryptable | AllocationError | ReplayTx | InvalidChainId
-                | ExpiredTx => false,
+            | Undecryptable | AllocationError | ReplayTx | InvalidChainId
+            | ExpiredTx => false,
         }
     }
 }
@@ -194,7 +194,7 @@ pub fn rollback(config: config::Ledger) -> Result<()> {
     tracing::info!("Rollback Tendermint state");
     let tendermint_block_height =
         tendermint_node::rollback(config.tendermint_dir())
-        .map_err(Error::Tendermint)?;
+            .map_err(Error::Tendermint)?;
 
     // Rollback Namada state
     let db_path = config.shell.db_dir(&config.chain_id);
@@ -336,7 +336,7 @@ where
                         genesis::genesis_config::open_genesis_config(
                             genesis_path,
                         )
-                            .unwrap(),
+                        .unwrap(),
                     );
                     wallet
                         .take_validator_data()
@@ -571,17 +571,17 @@ where
                         &validator_raw_hash,
                     )
                     .expect("Must be able to read storage")
-                {
-                    Some(validator) => validator,
-                    None => {
-                        tracing::error!(
-                            "Cannot find validator's address from raw \
-                             hash {}",
-                            validator_raw_hash
-                        );
-                        continue;
-                    }
-                };
+                    {
+                        Some(validator) => validator,
+                        None => {
+                            tracing::error!(
+                                "Cannot find validator's address from raw \
+                                 hash {}",
+                                validator_raw_hash
+                            );
+                            continue;
+                        }
+                    };
                 tracing::info!(
                     "Slashing {} for {} in epoch {}, block height {}",
                     validator,
@@ -710,10 +710,11 @@ where
         // Tx type check
         if let TxType::Wrapper(wrapper) = tx_type.tx_type {
             // Replay protection check
-            let inner_tx_hash = &tx.clone()
-                    .update_header(TxType::Raw)
-                    .header_hash();
-            let inner_hash_key = replay_protection::get_tx_hash_key(inner_tx_hash);
+            let mut inner_tx = tx;
+            inner_tx.update_header(TxType::Raw);
+            let inner_tx_hash = &inner_tx.header_hash();
+            let inner_hash_key =
+                replay_protection::get_tx_hash_key(inner_tx_hash);
             if self
                 .wl_storage
                 .storage
@@ -806,7 +807,7 @@ where
                     &mut vp_wasm_cache,
                     &mut tx_wasm_cache,
                 )
-                    .map_err(Error::TxApply)
+                .map_err(Error::TxApply)
                 {
                     Ok(result) => response.info = result.to_string(),
                     Err(error) => {
@@ -885,7 +886,7 @@ where
         let fees = namada::ledger::parameters::read_wrapper_tx_fees_parameter(
             &self.wl_storage,
         )
-            .expect("Must be able to read wrapper tx fees parameter");
+        .expect("Must be able to read wrapper tx fees parameter");
         fees.unwrap_or(token::Amount::whole(MIN_FEE))
     }
 
@@ -926,6 +927,7 @@ mod test_utils {
 
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::{update_allowed_conversions, Sha256Hasher};
+    use namada::proto::{Code, Data};
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
@@ -933,7 +935,6 @@ mod test_utils {
     use namada::types::transaction::{Fee, WrapperTx};
     use tempfile::tempdir;
     use tokio::sync::mpsc::UnboundedReceiver;
-    use namada::proto::{Code, Data};
 
     use super::*;
     use crate::facade::tendermint_proto::abci::{
@@ -1083,10 +1084,7 @@ mod test_utils {
         /// Add a wrapper tx to the queue of txs to be decrypted
         /// in the current block proposal
         #[cfg(test)]
-        pub fn enqueue_tx(
-            &mut self,
-            tx: Tx,
-        ) {
+        pub fn enqueue_tx(&mut self, tx: Tx) {
             self.shell.wl_storage.storage.tx_queue.push(TxInQueue {
                 tx,
                 #[cfg(not(feature = "mainnet"))]
@@ -1180,7 +1178,7 @@ mod test_utils {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.encrypt(&Default::default());
-        
+
         shell.wl_storage.storage.tx_queue.push(TxInQueue {
             tx: wrapper,
             #[cfg(not(feature = "mainnet"))]
@@ -1219,8 +1217,8 @@ mod test_utils {
 #[cfg(test)]
 mod test_mempool_validate {
     use namada::proof_of_stake::Epoch;
+    use namada::proto::{Code, Data, Section, Signature, Tx};
     use namada::types::transaction::{Fee, WrapperTx};
-    use namada::proto::{Tx, Code, Data, Section, Signature, TxError};
 
     use super::test_utils::TestShell;
     use super::{MempoolTxType, *};
@@ -1245,7 +1243,8 @@ mod test_mempool_validate {
         )));
         unsigned_wrapper.header.chain_id = shell.chain_id.clone();
         unsigned_wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        unsigned_wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        unsigned_wrapper
+            .set_data(Data::new("transaction data".as_bytes().to_owned()));
         unsigned_wrapper.encrypt(&Default::default());
 
         let mut result = shell.mempool_validate(
@@ -1280,12 +1279,17 @@ mod test_mempool_validate {
         )));
         invalid_wrapper.header.chain_id = shell.chain_id.clone();
         invalid_wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        invalid_wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        invalid_wrapper.add_section(Section::Signature(Signature::new(&invalid_wrapper.header_hash(), &keypair)));
+        invalid_wrapper
+            .set_data(Data::new("transaction data".as_bytes().to_owned()));
+        invalid_wrapper.add_section(Section::Signature(Signature::new(
+            &invalid_wrapper.header_hash(),
+            &keypair,
+        )));
         invalid_wrapper.encrypt(&Default::default());
 
         // we mount a malleability attack to try and remove the fee
-        let mut new_wrapper = invalid_wrapper.header().wrapper().expect("Test failed");
+        let mut new_wrapper =
+            invalid_wrapper.header().wrapper().expect("Test failed");
         new_wrapper.fee.amount = 0.into();
         invalid_wrapper.update_header(TxType::Wrapper(new_wrapper));
 
@@ -1341,9 +1345,11 @@ mod test_mempool_validate {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(&wrapper.header_hash(), &keypair)));
+        wrapper.add_section(Section::Signature(Signature::new(
+            &wrapper.header_hash(),
+            &keypair,
+        )));
         wrapper.encrypt(&Default::default());
-        let tx_type = wrapper.header();
 
         // Write wrapper hash to storage
         let wrapper_hash = wrapper.header_hash();
@@ -1352,7 +1358,7 @@ mod test_mempool_validate {
         shell
             .wl_storage
             .storage
-            .write(&wrapper_hash_key, &wrapper_hash)
+            .write(&wrapper_hash_key, wrapper_hash)
             .expect("Test failed");
 
         // Try wrapper tx replay attack
@@ -1384,15 +1390,14 @@ mod test_mempool_validate {
             )
         );
 
-        let inner_tx_hash = wrapper.clone()
-            .update_header(TxType::Raw)
-            .header_hash();
+        let inner_tx_hash =
+            wrapper.clone().update_header(TxType::Raw).header_hash();
         // Write inner hash in storage
         let inner_hash_key = replay_protection::get_tx_hash_key(&inner_tx_hash);
         shell
             .wl_storage
             .storage
-            .write(&inner_hash_key, &inner_tx_hash)
+            .write(&inner_hash_key, inner_tx_hash)
             .expect("Test failed");
 
         // Try inner tx replay attack
@@ -1435,7 +1440,10 @@ mod test_mempool_validate {
         tx.header.chain_id = wrong_chain_id.clone();
         tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        tx.add_section(Section::Signature(Signature::new(&tx.header_hash(), &keypair)));
+        tx.add_section(Section::Signature(Signature::new(
+            &tx.header_hash(),
+            &keypair,
+        )));
 
         let result = shell.mempool_validate(
             tx.to_bytes().as_ref(),
@@ -1463,7 +1471,10 @@ mod test_mempool_validate {
         tx.header.chain_id = shell.chain_id.clone();
         tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        tx.add_section(Section::Signature(Signature::new(&tx.header_hash(), &keypair)));
+        tx.add_section(Section::Signature(Signature::new(
+            &tx.header_hash(),
+            &keypair,
+        )));
 
         let result = shell.mempool_validate(
             tx.to_bytes().as_ref(),

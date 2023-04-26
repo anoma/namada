@@ -12,11 +12,10 @@ use namada::ledger::storage::types::encode;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::ledger::storage_api::{token, StorageWrite};
 use namada::proof_of_stake::read_total_stake;
+use namada::proto::{Code, Data};
 use namada::types::address::Address;
 use namada::types::governance::{Council, Tally, TallyResult, VotePower};
 use namada::types::storage::Epoch;
-use namada::proto::{Data, Code};
-use namada::types::hash::Hash;
 
 use super::*;
 
@@ -156,7 +155,6 @@ where
             tx.header.chain_id = shell.chain_id.clone();
             tx.set_data(Data::new(encode(&id)));
             tx.set_code(Code::new(proposal_code));
-            let tx_type = tx.header();
             let pending_execution_key =
                 gov_storage::get_proposal_execution_key(id);
             shell

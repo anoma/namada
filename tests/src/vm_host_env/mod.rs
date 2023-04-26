@@ -20,7 +20,6 @@ mod tests {
 
     use std::panic;
 
-    use namada::types::hash::Hash;
     use itertools::Itertools;
     use namada::core::ledger::ibc::actions::IbcActions;
     use namada::ibc::tx_msg::Msg;
@@ -29,24 +28,23 @@ mod tests {
         get_dummy_header as tm_dummy_header, Error as IbcError,
     };
     use namada::ledger::tx_env::TxEnv;
-    use namada::proto::{Tx};
+    use namada::proto::{Code, Data, Section, Signature, Tx};
     use namada::tendermint_proto::Protobuf;
     use namada::types::chain::ChainId;
+    use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
     use namada::types::time::DateTimeUtc;
     use namada::types::token::{self, Amount};
+    use namada::types::transaction::TxType;
     use namada::types::{address, key};
     use namada_test_utils::TestWasms;
     use namada_tx_prelude::{
         BorshDeserialize, BorshSerialize, StorageRead, StorageWrite,
     };
-    use namada::types::transaction::TxType;
     use namada_vp_prelude::VpEnv;
     use prost::Message;
     use test_log::test;
-
-    use namada::proto::{Code, Section, Data, Signature};
 
     use super::{ibc, tx, vp};
     use crate::tx::{tx_host_env, TestTxEnv};
@@ -1440,7 +1438,7 @@ mod tests {
         let msg = ibc::msg_packet_ack(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        
+
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
@@ -1498,7 +1496,7 @@ mod tests {
             ibc::msg_transfer(port_id.clone(), channel_id, denom, &sender);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        
+
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
@@ -1572,7 +1570,7 @@ mod tests {
         let msg = ibc::msg_packet_recv(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        
+
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
@@ -1810,7 +1808,7 @@ mod tests {
         let msg = ibc::msg_packet_recv(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        
+
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
