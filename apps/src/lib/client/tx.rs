@@ -1374,7 +1374,7 @@ fn convert_amount(
                     .expect("invalid value for amount");
             asset_type
         })
-        .collect()
+        .collect::<Vec<AssetType>>()
         .try_into()
         .expect("This can't fail");
     (asset_types, amount)

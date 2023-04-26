@@ -3931,6 +3931,7 @@ dependencies = [
  "derivative",
  "ed25519-consensus",
  "ethabi",
+ "eyre",
  "ferveo",
  "ferveo-common",
  "group-threshold-cryptography",

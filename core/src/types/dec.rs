@@ -1,13 +1,12 @@
 //! A non-negative fixed precision decimal type for computation primarily in the
 //! PoS module.
-use core::fmt::{Debug, Formatter};
-use std::fmt::Display;
+use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Add, AddAssign, Div, Mul, Sub};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use eyre::eyre;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
 use crate::types::token::{Amount, Change};
 use crate::types::uint::Uint;
@@ -15,12 +14,13 @@ use crate::types::uint::Uint;
 /// The number of Dec places for PoS rational calculations
 pub const POS_DECIMAL_PRECISION: u8 = 6;
 
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("{error}")]
-    First { error: String },
-}
+#[derive(thiserror::Error, Debug)]
+#[error(transparent)]
+/// Generic error [`Dec`] operations can return
+pub struct Error(#[from] eyre::Error);
+
+/// Generic result type for fallible [`Dec`] operations
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// A 256 bit number with [`POS_DECIMAL_PRECISION`] number of Dec places.
 ///
@@ -59,7 +59,7 @@ impl std::ops::DerefMut for Dec {
 }
 
 impl Dec {
-    /// Division with truncation (TDO: better description)
+    /// Division with truncation (TODO: better description)
     pub fn trunc_div(&self, rhs: &Self) -> Option<Self> {
         self.0
             .fixed_precision_div(rhs, POS_DECIMAL_PRECISION)
@@ -102,58 +102,50 @@ impl Dec {
     }
 }
 
-// TODO: improve (actualyl do) error handling!
 impl FromStr for Dec {
-    type Err = self::Error;
+    type Err = Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self> {
         if s.starts_with('-') {
-            return Err(self::Error::First {
-                error: "Dec cannot be negative".to_string(),
-            });
+            return Err(eyre!("Dec cannot be negative").into());
         }
-        if let Some((large, mut small)) = s.split_once('.') {
-            let num_large =
-                u64::from_str(large).map_err(|_| self::Error::First {
-                    error: "Error".to_string(),
-                })?;
-            let mut num_small =
-                u64::from_str(small).map_err(|_| self::Error::First {
-                    error: "Error".to_string(),
-                })?;
 
-            if num_small == 0u64 {
-                return Ok(Dec(Uint::from(num_large)));
-            }
+        let (large, small) = s.split_once('.').unwrap_or((s, "0"));
+        let num_large = Uint::from_str_radix(large, 10).map_err(|e| {
+            eyre!("Could not parse {} as an integer: {}", large, e)
+        })?;
 
-            small = small.trim_end_matches('0');
-            let mut num_dec_places = small.len();
-            if num_dec_places > POS_DECIMAL_PRECISION as usize {
-                // truncate to the first `POS_DECIMAL_PRECISION` places
-                num_dec_places = POS_DECIMAL_PRECISION as usize;
-                small = &small[..POS_DECIMAL_PRECISION as usize];
-                num_small =
-                    u64::from_str(small).map_err(|_| self::Error::First {
-                        error: "Error".to_string(),
-                    })?;
-            }
-            if num_large == 0u64 {
-                return Ok(Dec::new(num_small, num_dec_places as u8)
-                    .expect("Dec creation failed"));
-            }
-            let tot_num = format!("{}{}", num_large, num_small);
-            let tot_num = u64::from_str(tot_num.as_str()).map_err(|_| {
-                self::Error::First {
-                    error: "Error".to_string(),
-                }
-            })?;
-            Ok(Dec::new(tot_num, num_dec_places as u8)
-                .expect("Dec creation failed"))
+        // In theory we could allow this, but it is aesthetically offensive.
+        // Thus we don't.
+        if small.is_empty() {
+            return Err(eyre!(
+                "Failed to parse Dec from string as there were no numbers \
+                 following the decimal point."
+            )
+            .into());
+        }
+
+        let trimmed = small
+            .trim_end_matches('0')
+            .chars()
+            .take(POS_DECIMAL_PRECISION as usize)
+            .collect::<String>();
+        let decimal_part = if trimmed.is_empty() {
+            Uint::zero()
         } else {
-            Err(self::Error::First {
-                error: "Error".to_string(),
-            })
-        }
+            Uint::from_str_radix(&trimmed, 10).map_err(|e| {
+                eyre!("Could not parse .{} as decimals: {}", small, e)
+            })? * Uint::exp10(POS_DECIMAL_PRECISION as usize - trimmed.len())
+        };
+        let int_part = Uint::exp10(POS_DECIMAL_PRECISION as usize)
+            .checked_mul(num_large)
+            .ok_or_else(|| {
+                eyre!(
+                    "The number {} is too large to fit in the Dec type.",
+                    num_large
+                )
+            })?;
+        Ok(Dec(int_part + decimal_part))
     }
 }
 
@@ -244,8 +236,15 @@ impl Mul<Dec> for Dec {
 impl Div<Dec> for Dec {
     type Output = Self;
 
+    /// Unchecked fixed precision division.
+    ///
+    /// # Panics:
+    ///
+    ///   * Denominator is zero
+    ///   * Scaling the left hand side by 10^([`POS_DECIMAL_PRECISION`])
+    ///     overflows 256 bits
     fn div(self, rhs: Dec) -> Self::Output {
-        Self(self.0 / rhs.0)
+        self.trunc_div(&rhs).unwrap()
     }
 }
 
@@ -264,8 +263,60 @@ mod test_dec {
     #[test]
     fn test_basic() {
         assert_eq!(
-            Dec::one() + Dec::new(3, 0).unwrap() / Dec::new(5, 0).unwrap(),
+            Dec::new(1, 0).unwrap()
+                + Dec::new(3, 0).unwrap() / Dec::new(5, 0).unwrap(),
             Dec::new(16, 1).unwrap()
         );
+    }
+
+    /// Test that parsing from string is correct.
+    #[test]
+    fn test_from_string() {
+        // Fewer than six decimal places and non-zero integer part
+        assert_eq!(
+            Dec::from_str("3.14").expect("Test failed"),
+            Dec::new(314, 2).expect("Test failed"),
+        );
+
+        // more than six decimal places and zero integer part
+        assert_eq!(
+            Dec::from_str("0.1234567").expect("Test failed"),
+            Dec::new(123456, 6).expect("Test failed"),
+        );
+
+        // No zero before the decimal
+        assert_eq!(
+            Dec::from_str(".333333").expect("Test failed"),
+            Dec::new(333333, 6).expect("Test failed"),
+        );
+
+        // No decimal places
+        assert_eq!(
+            Dec::from_str("50").expect("Test failed"),
+            Dec::new(50, 0).expect("Test failed"),
+        );
+
+        // Test zero representations
+        assert_eq!(Dec::from_str("0").expect("Test failed"), Dec::zero());
+        assert_eq!(Dec::from_str("0.0").expect("Test failed"), Dec::zero());
+        assert_eq!(Dec::from_str(".0").expect("Test failed"), Dec::zero());
+
+        // Error conditions
+
+        // Test that a decimal point must be followed by numbers
+        assert!(Dec::from_str("0.").is_err());
+        // Test that multiple decimal points get caught
+        assert!(Dec::from_str("1.2.3").is_err());
+        // Test that negative numbers are rejected
+        assert!(Dec::from_str("-1").is_err());
+        // Test that non-numerics are caught
+        assert!(Dec::from_str("DEADBEEF.12").is_err());
+        assert!(Dec::from_str("23.DEADBEEF").is_err());
+        // Test that we catch strings overflowing 256 bits
+        let mut yuge = String::from("1");
+        for _ in 0..80 {
+            yuge.push('0');
+        }
+        assert!(Dec::from_str(&yuge).is_err());
     }
 }

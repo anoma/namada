@@ -12,11 +12,11 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use namada::types::address;
 use namada::types::chain::ChainId;
+use namada::types::dec::Dec;
 use namada::types::key::*;
 use prost::bytes::Bytes;
 use rand::prelude::ThreadRng;
 use rand::thread_rng;
-use rust_decimal::Decimal;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
@@ -897,16 +897,11 @@ pub fn init_genesis_validator(
     }: args::InitGenesisValidator,
 ) {
     // Validate the commission rate data
-    if commission_rate > Decimal::ONE || commission_rate < Decimal::ZERO {
-        eprintln!(
-            "The validator commission rate must not exceed 1.0 or 100%, and \
-             it must be 0 or positive"
-        );
+    if commission_rate > Dec::one() {
+        eprintln!("The validator commission rate must not exceed 1.0 or 100%");
         cli::safe_exit(1)
     }
-    if max_commission_rate_change > Decimal::ONE
-        || max_commission_rate_change < Decimal::ZERO
-    {
+    if max_commission_rate_change > Dec::one() {
         eprintln!(
             "The validator maximum change in commission rate per epoch must \
              not exceed 1.0 or 100%"

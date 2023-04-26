@@ -10,7 +10,7 @@ use derivative::Derivative;
 use namada::core::ledger::testnet_pow;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::EpochDuration;
-use namada::ledger::pos::{GenesisValidator, PosParams};
+use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
 use namada::types::address::Address;
 #[cfg(not(feature = "dev"))]
 use namada::types::chain::ChainId;
@@ -20,7 +20,6 @@ use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
 use namada::types::token::Denomination;
 use namada::types::{storage, token};
-use rust_decimal::Decimal;
 
 /// Genesis configuration file format
 pub mod genesis_config {
@@ -36,7 +35,7 @@ pub mod genesis_config {
     use namada::core::ledger::testnet_pow;
     use namada::ledger::governance::parameters::GovParams;
     use namada::ledger::parameters::EpochDuration;
-    use namada::ledger::pos::{GenesisValidator, PosParams};
+    use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
     use namada::types::address::Address;
     use namada::types::chain::ProposalBytes;
     use namada::types::key::dkg_session_keys::DkgPublicKey;
@@ -193,9 +192,9 @@ pub mod genesis_config {
         pub non_staked_balance: Option<u64>,
         /// Commission rate charged on rewards for delegators (bounded inside
         /// 0-1)
-        pub commission_rate: Option<Decimal>,
+        pub commission_rate: Option<Dec>,
         /// Maximum change in commission rate permitted per epoch
-        pub max_commission_rate_change: Option<Decimal>,
+        pub max_commission_rate_change: Option<Dec>,
         // Filename of validator VP. (default: default validator VP)
         pub validator_vp: Option<String>,
         // IP:port of the validator. (used in generation only)
@@ -289,26 +288,26 @@ pub mod genesis_config {
         pub unbonding_len: u64,
         // Votes per token.
         // XXX: u64 doesn't work with toml-rs!
-        pub tm_votes_per_token: Decimal,
+        pub tm_votes_per_token: Dec,
         // Reward for proposing a block.
         // XXX: u64 doesn't work with toml-rs!
-        pub block_proposer_reward: Decimal,
+        pub block_proposer_reward: Dec,
         // Reward for voting on a block.
         // XXX: u64 doesn't work with toml-rs!
-        pub block_vote_reward: Decimal,
+        pub block_vote_reward: Dec,
         // Maximum staking APY
         // XXX: u64 doesn't work with toml-rs!
-        pub max_inflation_rate: Decimal,
+        pub max_inflation_rate: Dec,
         // Target ratio of staked NAM tokens to total NAM tokens
-        pub target_staked_ratio: Decimal,
+        pub target_staked_ratio: Dec,
         // Portion of a validator's stake that should be slashed on a
         // duplicate vote.
         // XXX: u64 doesn't work with toml-rs!
-        pub duplicate_vote_min_slash_rate: Decimal,
+        pub duplicate_vote_min_slash_rate: Dec,
         // Portion of a validator's stake that should be slashed on a
         // light client attack.
         // XXX: u64 doesn't work with toml-rs!
-        pub light_client_attack_min_slash_rate: Decimal,
+        pub light_client_attack_min_slash_rate: Dec,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -340,21 +339,13 @@ pub mod genesis_config {
                 commission_rate: config
                     .commission_rate
                     .and_then(|rate| {
-                        if rate >= Decimal::ZERO && rate <= Decimal::ONE {
-                            Some(rate)
-                        } else {
-                            None
-                        }
+                        if rate <= Dec::one() { Some(rate) } else { None }
                     })
                     .expect("Commission rate must be between 0.0 and 1.0"),
                 max_commission_rate_change: config
                     .max_commission_rate_change
                     .and_then(|rate| {
-                        if rate >= Decimal::ZERO && rate <= Decimal::ONE {
-                            Some(rate)
-                        } else {
-                            None
-                        }
+                        if rate <= Dec::one() { Some(rate) } else { None }
                     })
                     .expect(
                         "Max commission rate change must be between 0.0 and \
@@ -864,11 +855,11 @@ pub struct Parameters {
     /// Expected number of epochs per year (read only)
     pub epochs_per_year: u64,
     /// PoS gain p (read only)
-    pub pos_gain_p: Decimal,
+    pub pos_gain_p: Dec,
     /// PoS gain d (read only)
-    pub pos_gain_d: Decimal,
+    pub pos_gain_d: Dec,
     /// PoS staked ratio (read + write for every epoch)
-    pub staked_ratio: Decimal,
+    pub staked_ratio: Dec,
     /// PoS inflation amount from the last epoch (read + write for every epoch)
     pub pos_inflation_amount: u64,
     /// Fixed Wrapper tx fees
@@ -888,7 +879,6 @@ pub fn genesis(num_validators: u64) -> Genesis {
     use namada::types::address::{
         self, apfel, btc, dot, eth, kartoffel, nam, schnitzel,
     };
-    use rust_decimal_macros::dec;
 
     use crate::wallet;
 
@@ -911,8 +901,9 @@ pub fn genesis(num_validators: u64) -> Genesis {
             address,
             tokens: token::Amount::native_whole(200_000),
             consensus_key: consensus_keypair.ref_to(),
-            commission_rate: dec!(0.05),
-            max_commission_rate_change: dec!(0.01),
+            commission_rate: Dec::new(5, 2).expect("This can't fail"),
+            max_commission_rate_change: Dec::new(1, 2)
+                .expect("This can't fail"),
         },
         account_key: account_keypair.ref_to(),
         protocol_key: protocol_keypair.ref_to(),
@@ -939,8 +930,9 @@ pub fn genesis(num_validators: u64) -> Genesis {
                 address,
                 tokens: token::Amount::native_whole(200_000),
                 consensus_key: consensus_keypair.ref_to(),
-                commission_rate: dec!(0.05),
-                max_commission_rate_change: dec!(0.01),
+                commission_rate: Dec::new(5, 2).expect("This can't fail"),
+                max_commission_rate_change: Dec::new(1, 2)
+                    .expect("This can't fail"),
             },
             account_key: account_keypair.ref_to(),
             protocol_key: protocol_keypair.ref_to(),
@@ -966,9 +958,9 @@ pub fn genesis(num_validators: u64) -> Genesis {
         implicit_vp_sha256: Default::default(),
         epochs_per_year: 525_600, /* seconds in yr (60*60*24*365) div seconds
                                    * per epoch (60 = min_duration) */
-        pos_gain_p: dec!(0.1),
-        pos_gain_d: dec!(0.1),
-        staked_ratio: dec!(0.0),
+        pos_gain_p: Dec::new(1, 2).expect("This can't fail"),
+        pos_gain_d: Dec::new(1, 2).expect("This can't fail"),
+        staked_ratio: Dec::zero(),
         pos_inflation_amount: 0,
         wrapper_tx_fees: Some(token::Amount::native_whole(0)),
     };

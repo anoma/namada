@@ -467,10 +467,6 @@ impl Display for SlashType {
     }
 }
 
-// --------------------------------------------------------------------------------------------
-
-// --------------------------------------------------------------------------------------------
-
 // /// Multiply a value of type Dec with one of type u64 and then return the
 // /// truncated u64
 // pub fn decimal_mult_u128(dec: Dec, int: u128) -> u128 {
