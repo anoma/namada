@@ -120,7 +120,7 @@ impl WriteLog {
                     }
                     StorageModification::Delete => key.len(),
                     StorageModification::InitAccount { ref vp_code_hash } => {
-                        key.len() + vp_code_hash.len()
+                        key.len() + vp_code_hash.0.len()
                     }
                     StorageModification::Temp { ref value } => {
                         key.len() + value.len()
@@ -148,7 +148,7 @@ impl WriteLog {
                     }
                     StorageModification::Delete => key.len(),
                     StorageModification::InitAccount { ref vp_code_hash } => {
-                        key.len() + vp_code_hash.len()
+                        key.len() + vp_code_hash.0.len()
                     }
                     StorageModification::Temp { ref value } => {
                         key.len() + value.len()
@@ -324,7 +324,7 @@ impl WriteLog {
         let addr =
             address_gen.generate_address("TODO more randomness".as_bytes());
         let key = storage::Key::validity_predicate(&addr);
-        let gas = (key.len() + vp_code_hash.len()) as _;
+        let gas = (key.len() + vp_code_hash.0.len()) as _;
         self.tx_write_log
             .insert(key, StorageModification::InitAccount { vp_code_hash });
         (addr, gas)

@@ -827,7 +827,7 @@ pub mod testing {
             Just(InternalAddress::Governance),
             Just(InternalAddress::SlashFund),
             Just(InternalAddress::EthBridge),
-            Just(InternalAddress::ReplayProtection)
+            Just(InternalAddress::ReplayProtection),
             Just(InternalAddress::EthBridgePool),
         ]
     }

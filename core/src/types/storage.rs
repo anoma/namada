@@ -913,24 +913,6 @@ impl_int_key_seg!(u32, i32, 4);
 impl_int_key_seg!(u64, i64, 8);
 impl_int_key_seg!(u128, i128, 16);
 
-impl KeySeg for Epoch {
-    fn parse(string: String) -> Result<Self>
-    where
-        Self: Sized,
-    {
-        let raw = u64::parse(string)?;
-        Ok(Epoch(raw))
-    }
-
-    fn raw(&self) -> String {
-        self.to_string()
-    }
-
-    fn to_db_key(&self) -> DbKeySeg {
-        self.0.to_db_key()
-    }
-}
-
 impl KeySeg for common::PublicKey {
     fn parse(string: String) -> Result<Self>
     where
@@ -1228,13 +1210,6 @@ impl Epochs {
             }
         }
         None
-    }
-
-    /// Return all starting block heights for each successive Epoch.
-    ///
-    /// __INVARIANT:__ The returned values are sorted in ascending order.
-    pub fn first_block_heights(&self) -> &[BlockHeight] {
-        &self.first_block_heights
     }
 
     /// Return all starting block heights for each successive Epoch.
