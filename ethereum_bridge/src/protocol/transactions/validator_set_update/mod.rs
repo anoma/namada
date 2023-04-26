@@ -5,13 +5,12 @@ use std::collections::{HashMap, HashSet};
 use eyre::Result;
 use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::types::address::Address;
-use namada_core::types::storage::BlockHeight;
+use namada_core::types::storage::{BlockHeight, Epoch};
 #[allow(unused_imports)]
 use namada_core::types::transaction::protocol::ProtocolTxType;
 use namada_core::types::transaction::TxResult;
 use namada_core::types::vote_extensions::validator_set_update;
 use namada_core::types::voting_power::FractionalVotingPower;
-use namada_proof_of_stake::pos_queries::PosQueries;
 
 use super::ChangedKeys;
 use crate::protocol::transactions::utils;
@@ -21,15 +20,12 @@ use crate::storage::eth_bridge_queries::EthBridgeQueries;
 use crate::storage::proof::EthereumProof;
 use crate::storage::vote_tallies;
 
-impl utils::GetVoters for validator_set_update::VextDigest {
+impl utils::GetVoters for (&validator_set_update::VextDigest, BlockHeight) {
     #[inline]
-    fn get_voters(
-        &self,
-        epoch_start_height: BlockHeight,
-    ) -> HashSet<(Address, BlockHeight)> {
-        // votes were cast the the 2nd block height of the current epoch
-        let epoch_2nd_height = epoch_start_height + 1;
-        self.signatures
+    fn get_voters(self) -> HashSet<(Address, BlockHeight)> {
+        // votes were cast at the 2nd block height of the ext's signing epoch
+        let (ext, epoch_2nd_height) = self;
+        ext.signatures
             .keys()
             .cloned()
             .zip(std::iter::repeat(epoch_2nd_height))
@@ -40,6 +36,7 @@ impl utils::GetVoters for validator_set_update::VextDigest {
 pub fn aggregate_votes<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     ext: validator_set_update::VextDigest,
+    signing_epoch: Epoch,
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -55,8 +52,22 @@ where
         "Aggregating new votes for validator set update"
     );
 
-    let voting_powers = utils::get_voting_powers(wl_storage, &ext)?;
-    let changed_keys = apply_update(wl_storage, ext, voting_powers)?;
+    let epoch_2nd_height = wl_storage
+        .storage
+        .block
+        .pred_epochs
+        .get_height(signing_epoch)
+        .expect("The first block height of the signing epoch should be known")
+        + 1;
+    let voting_powers =
+        utils::get_voting_powers(wl_storage, (&ext, epoch_2nd_height))?;
+    let changed_keys = apply_update(
+        wl_storage,
+        ext,
+        signing_epoch,
+        epoch_2nd_height,
+        voting_powers,
+    )?;
 
     Ok(TxResult {
         changed_keys,
@@ -67,21 +78,20 @@ where
 fn apply_update<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     ext: validator_set_update::VextDigest,
+    signing_epoch: Epoch,
+    epoch_2nd_height: BlockHeight,
     voting_powers: HashMap<(Address, BlockHeight), FractionalVotingPower>,
 ) -> Result<ChangedKeys>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let current_epoch = wl_storage.storage.get_current_epoch().0;
     let next_epoch = {
         // proofs should be written to the sub-key space of the next epoch.
         // this way, we do, for instance, an RPC call to `E=2` to query a
         // validator set proof for epoch 2 signed by validators of epoch 1.
-        current_epoch.next()
+        signing_epoch.next()
     };
-    let epoch_2nd_height =
-        wl_storage.pos_queries().get_epoch_start_height() + 1;
     let valset_upd_keys = vote_tallies::Keys::from(&next_epoch);
     let maybe_proof = 'check_storage: {
         let Some(seen) = votes::storage::maybe_read_seen(wl_storage, &valset_upd_keys)? else {
@@ -126,7 +136,7 @@ where
                     (
                         wl_storage
                             .ethbridge_queries()
-                            .get_eth_addr_book(&addr, Some(current_epoch))
+                            .get_eth_addr_book(&addr, Some(signing_epoch))
                             .expect("All validators should have eth keys"),
                         sig,
                     )
@@ -146,7 +156,7 @@ where
                     (
                         wl_storage
                             .ethbridge_queries()
-                            .get_eth_addr_book(&addr, Some(current_epoch))
+                            .get_eth_addr_book(&addr, Some(signing_epoch))
                             .expect("All validators should have eth keys"),
                         sig,
                     )
@@ -185,6 +195,7 @@ mod test_valset_upd_state_changes {
     use namada_core::types::address;
     use namada_core::types::vote_extensions::validator_set_update::VotingPowersMap;
     use namada_core::types::voting_power::FractionalVotingPower;
+    use namada_proof_of_stake::pos_queries::PosQueries;
 
     use super::*;
     use crate::test_utils;
@@ -216,6 +227,7 @@ mod test_valset_upd_state_changes {
                         .eth_bridge,
                 ),
             ),
+            signing_epoch,
         )
         .expect("Test failed");
 
@@ -315,6 +327,7 @@ mod test_valset_upd_state_changes {
                         .eth_bridge,
                 ),
             ),
+            signing_epoch,
         )
         .expect("Test failed");
 
