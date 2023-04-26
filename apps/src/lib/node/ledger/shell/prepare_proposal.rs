@@ -216,29 +216,26 @@ where
             .map(
                 |TxInQueue {
                      tx,
-                     inner_tx,
                      #[cfg(not(feature = "mainnet"))]
                      has_valid_pow,
                 }| {
-                    let mut inner_tx = inner_tx.clone();
-                    match inner_tx.decrypt(privkey).ok()
+                    let mut tx = tx.clone();
+                    match tx.decrypt(privkey).ok()
                     {
                         Some(()) => {
-                            let mut inner_tx = inner_tx.clone();
-                            inner_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
+                            tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
                                 #[cfg(not(feature = "mainnet"))]
                                 has_valid_pow: *has_valid_pow,
                             }));
-                            inner_tx
+                            tx
                         },
                         // An absent or undecryptable inner_tx are both
                         // treated as undecryptable
                         None => {
-                            let mut inner_tx = inner_tx.clone();
-                            inner_tx.update_header(TxType::Decrypted(
+                            tx.update_header(TxType::Decrypted(
                                 DecryptedTx::Undecryptable
                             ));
-                            inner_tx
+                            tx
                         },
                     }.to_bytes()
                 },
@@ -388,7 +385,7 @@ mod test_prepare_proposal {
             tx.add_section(Section::Signature(Signature::new(&tx.header_hash(), &keypair)));
             tx.encrypt(&Default::default());
             
-            shell.enqueue_tx(tx.header().wrapper().expect("expected wrapper"), tx.clone());
+            shell.enqueue_tx(tx.clone());
             expected_wrapper.push(tx.clone());
             req.txs.push(tx.to_bytes());
             tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {

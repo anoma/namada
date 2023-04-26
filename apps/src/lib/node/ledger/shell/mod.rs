@@ -1085,12 +1085,10 @@ mod test_utils {
         #[cfg(test)]
         pub fn enqueue_tx(
             &mut self,
-            wrapper: WrapperTx,
-            inner_tx: Tx,
+            tx: Tx,
         ) {
             self.shell.wl_storage.storage.tx_queue.push(TxInQueue {
-                tx: wrapper,
-                inner_tx,
+                tx,
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: false,
             });
@@ -1184,8 +1182,7 @@ mod test_utils {
         wrapper.encrypt(&Default::default());
         
         shell.wl_storage.storage.tx_queue.push(TxInQueue {
-            tx: wrapper.header().wrapper().expect("expected wrapper"),
-            inner_tx: wrapper,
+            tx: wrapper,
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
         });

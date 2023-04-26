@@ -181,7 +181,7 @@ where
                         .tx_queue
                         .pop()
                         .expect("Missing wrapper tx in queue")
-                        .inner_tx
+                        .tx
                         .clone()
                         .update_header(TxType::Raw)
                         .header_hash();
@@ -276,8 +276,7 @@ where
                     }
 
                     self.wl_storage.storage.tx_queue.push(TxInQueue {
-                        tx: wrapper.clone(),
-                        inner_tx: processed_tx.clone(),
+                        tx: processed_tx.clone(),
                         #[cfg(not(feature = "mainnet"))]
                         has_valid_pow,
                     });
@@ -291,7 +290,7 @@ where
                         .tx_queue
                         .pop()
                         .expect("Missing wrapper tx in queue")
-                        .inner_tx
+                        .tx
                         .clone()
                         .update_header(TxType::Raw)
                         .header_hash();
@@ -971,10 +970,7 @@ mod test_finalize_block {
                     },
                 });
             } else {
-                shell.enqueue_tx(
-                    wrapper.header().wrapper().expect("expected wrapper"),
-                    wrapper.clone(),
-                );
+                shell.enqueue_tx(wrapper.clone());
             }
 
             if i != 3 {
@@ -1004,11 +1000,11 @@ mod test_finalize_block {
             // so we check the hashes of the inner txs for equality
             let valid_tx = valid_tx.next().expect("Test failed");
             assert_eq!(
-                wrapper.inner_tx.header.code_hash,
+                wrapper.tx.header.code_hash,
                 *valid_tx.code_sechash()
             );
             assert_eq!(
-                wrapper.inner_tx.header.data_hash,
+                wrapper.tx.header.data_hash,
                 *valid_tx.data_sechash()
             );
             counter += 1;
@@ -1039,7 +1035,7 @@ mod test_finalize_block {
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new(String::from("transaction data").as_bytes().to_owned()));
         outer_tx.encrypt(&Default::default());
-        shell.enqueue_tx(outer_tx.header().wrapper().expect("expected wrapper"), outer_tx.clone());
+        shell.enqueue_tx(outer_tx.clone());
 
         outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]
@@ -1167,7 +1163,7 @@ mod test_finalize_block {
                     .to_owned())
             );
             outer_tx.encrypt(&Default::default());
-            shell.enqueue_tx(outer_tx.header().wrapper().expect("expected wrapper"), outer_tx.clone());
+            shell.enqueue_tx(outer_tx.clone());
             outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: false,
@@ -1254,8 +1250,8 @@ mod test_finalize_block {
         let mut counter = 0;
         for wrapper in shell.iter_tx_queue() {
             let next = txs.next().expect("Test failed");
-            assert_eq!(wrapper.inner_tx.header.code_hash, *next.code_sechash());
-            assert_eq!(wrapper.inner_tx.header.data_hash, *next.data_sechash());
+            assert_eq!(wrapper.tx.header.code_hash, *next.code_sechash());
+            assert_eq!(wrapper.tx.header.data_hash, *next.data_sechash());
             counter += 1;
         }
         assert_eq!(counter, 2);
@@ -1729,7 +1725,7 @@ mod test_finalize_block {
                 info: "".into(),
             },
         };
-        shell.enqueue_tx(wrapper_tx.header().wrapper().expect("Test failed"), wrapper_tx);
+        shell.enqueue_tx(wrapper_tx);
 
         let _event = &shell
             .finalize_block(FinalizeBlock {

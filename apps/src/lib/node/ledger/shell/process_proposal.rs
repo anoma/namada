@@ -297,7 +297,7 @@ where
                 metadata.has_decrypted_txs = true;
                 match tx_queue_iter.next() {
                     Some(wrapper) => {
-                        if wrapper.inner_tx.clone().update_header(TxType::Raw).header_hash() != tx.clone().update_header(TxType::Raw).header_hash() {
+                        if wrapper.tx.clone().update_header(TxType::Raw).header_hash() != tx.clone().update_header(TxType::Raw).header_hash() {
                             TxResult {
                                 code: ErrorCodes::InvalidOrder.into(),
                                 info: "Process proposal rejected a decrypted \
@@ -305,9 +305,9 @@ where
                                        determined in the previous block"
                                     .into(),
                             }
-                        } else if verify_decrypted_correctly(&tx_header, wrapper.inner_tx.clone(), privkey) {
+                        } else if verify_decrypted_correctly(&tx_header, wrapper.tx.clone(), privkey) {
                             // Tx chain id
-                            if wrapper.inner_tx.header.chain_id != self.chain_id {
+                            if wrapper.tx.header.chain_id != self.chain_id {
                                 return TxResult {
                                     code:
                                     ErrorCodes::InvalidDecryptedChainId
@@ -315,13 +315,13 @@ where
                                     info: format!(
                                         "Decrypted tx carries a wrong \
                                          chain id: expected {}, found {}",
-                                        self.chain_id, wrapper.inner_tx.header.chain_id
+                                        self.chain_id, wrapper.tx.header.chain_id
                                     ),
                                 };
                             }
 
                             // Tx expiration
-                            if let Some(exp) = wrapper.inner_tx.header.expiration {
+                            if let Some(exp) = wrapper.tx.header.expiration {
                                 if block_time > exp {
                                     return TxResult {
                                         code:
@@ -792,7 +792,7 @@ mod test_process_proposal {
             outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
             outer_tx.set_data(Data::new(format!("transaction data: {}", i).as_bytes().to_owned()));
             outer_tx.encrypt(&Default::default());
-            shell.enqueue_tx(outer_tx.header().wrapper().expect("expected wrapper"), outer_tx.clone());
+            shell.enqueue_tx(outer_tx.clone());
 
             outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
                 #[cfg(not(feature = "mainnet"))]
@@ -849,8 +849,7 @@ mod test_process_proposal {
         tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         tx.encrypt(&Default::default());
-        let wrapper = tx.header().wrapper().expect("expected wrapper");
-        shell.enqueue_tx(wrapper.clone(), tx.clone());
+        shell.enqueue_tx(tx.clone());
 
         tx.header.tx_type = TxType::Decrypted(DecryptedTx::Undecryptable);
         let request = ProcessProposal {
@@ -901,8 +900,7 @@ mod test_process_proposal {
         tx.set_data_sechash(Hash([0u8; 32]));
         tx.encrypt(&Default::default());
 
-        let wrapper = tx.header().wrapper().expect("expected wrapper");
-        shell.enqueue_tx(wrapper.clone(), tx.clone());
+        shell.enqueue_tx(tx.clone());
 
         tx.header.tx_type = TxType::Decrypted(DecryptedTx::Undecryptable);
         let request = ProcessProposal {
@@ -1403,8 +1401,7 @@ mod test_process_proposal {
             &keypair,
         )));
         let wrapper_in_queue = TxInQueue {
-            tx: wrapper.header().wrapper().expect("Test failed"),
-            inner_tx: wrapper,
+            tx: wrapper,
             has_valid_pow: false,
         };
         shell.wl_storage.storage.tx_queue.push(wrapper_in_queue);
@@ -1507,8 +1504,7 @@ mod test_process_proposal {
             &keypair,
         )));
         let wrapper_in_queue = TxInQueue {
-            tx: wrapper.header().wrapper().expect("Test failed"),
-            inner_tx: wrapper,
+            tx: wrapper,
             has_valid_pow: false,
         };
         shell.wl_storage.storage.tx_queue.push(wrapper_in_queue);

@@ -55,9 +55,7 @@ mod tx_queue {
     #[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
     pub struct TxInQueue {
         /// Wrapper tx
-        pub tx: crate::types::transaction::WrapperTx,
-        /// the encrypted payload
-        pub inner_tx: Tx,
+        pub tx: Tx,
         #[cfg(not(feature = "mainnet"))]
         /// A PoW solution can be used to allow zero-fee testnet
         /// transactions.
