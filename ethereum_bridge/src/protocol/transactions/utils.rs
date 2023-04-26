@@ -15,13 +15,8 @@ pub(super) trait GetVoters {
     /// Extract all the voters and the block heights at which they voted from
     /// the given proof.
     // TODO(feature = "abcipp"): we do not neet to return block heights
-    // anymore. votes will always be from `storage.last_height`. for the
-    // same reason, it is likely we won't need a `BlockHeight`
-    // param anymore.
-    fn get_voters(
-        &self,
-        epoch_start_height: BlockHeight,
-    ) -> HashSet<(Address, BlockHeight)>;
+    // anymore. votes will always be from `storage.last_height`.
+    fn get_voters(self) -> HashSet<(Address, BlockHeight)>;
 }
 
 /// Returns a map whose keys are addresses of validators and the block height at
@@ -29,15 +24,14 @@ pub(super) trait GetVoters {
 /// powers of these validators at the key's given block height.
 pub(super) fn get_voting_powers<D, H, P>(
     wl_storage: &WlStorage<D, H>,
-    proof: &P,
+    proof: P,
 ) -> eyre::Result<HashMap<(Address, BlockHeight), FractionalVotingPower>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
-    P: GetVoters + ?Sized,
+    P: GetVoters,
 {
-    let voters =
-        proof.get_voters(wl_storage.pos_queries().get_epoch_start_height());
+    let voters = proof.get_voters();
     tracing::debug!(?voters, "Got validators who voted on at least one event");
 
     let consensus_validators = get_consensus_validators(
