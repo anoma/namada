@@ -1947,7 +1947,7 @@ mod test_finalize_block {
             None,
             None,
         );
-        let fee_amount = wrapper_tx.get_tx_fee().unwrap();
+        let fee_amount = wrapper_tx.fee_amount().unwrap();
 
         let wrapper = wrapper_tx
             .sign(
@@ -2044,7 +2044,7 @@ mod test_finalize_block {
             None,
             None,
         );
-        let fee_amount = wrapper_tx.get_tx_fee().unwrap();
+        let fee_amount = wrapper_tx.fee_amount().unwrap();
 
         let wrapper = wrapper_tx
             .sign(
