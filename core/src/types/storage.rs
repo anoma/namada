@@ -1137,6 +1137,14 @@ impl Epochs {
         None
     }
 
+    /// Look-up the block height of a given epoch.
+    pub fn get_height(&self, epoch: Epoch) -> Option<BlockHeight> {
+        // the given epoch should be greater than or equal to the
+        // first known epoch
+        let index = epoch.0.checked_sub(self.first_known_epoch.0)? as usize;
+        self.first_block_heights.get(index).copied()
+    }
+
     /// Return all starting block heights for each successive Epoch.
     ///
     /// __INVARIANT:__ The returned values are sorted in ascending order.
