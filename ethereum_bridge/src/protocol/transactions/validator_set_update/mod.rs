@@ -57,6 +57,11 @@ where
         .block
         .pred_epochs
         .get_height(signing_epoch)
+        // NOTE: The only way this can fail is if validator set updates do not
+        // reach a `seen` state before the relevant epoch data is purged from
+        // Namada. In most scenarios, we should reach a complete proof before
+        // the end of an epoch, and even if we cross an epoch boundary without
+        // a complete proof, we should get one shortly after.
         .expect("The first block height of the signing epoch should be known")
         + 1;
     let voting_powers =
