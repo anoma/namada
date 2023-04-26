@@ -10,9 +10,9 @@ use namada::ledger::storage_api::token::{
     credit_tokens, read_balance, read_total_supply, write_denom,
 };
 use namada::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
+use namada::types::dec::Dec;
 use namada::types::hash::Hash as CodeHash;
 use namada::types::key::*;
-use rust_decimal::Decimal;
 
 use super::*;
 use crate::facade::tendermint_proto::abci;
@@ -407,8 +407,7 @@ where
         // Set the ratio of staked to total NAM tokens in the parameters storage
         parameters::update_staked_ratio_parameter(
             &mut self.wl_storage,
-            &(Decimal::try_from(total_staked_nam).unwrap()
-                / Decimal::try_from(total_nam).unwrap()),
+            &(Dec::from(total_staked_nam) / Dec::from(total_nam)),
         )
         .expect("unable to set staked ratio of NAM in storage");
 

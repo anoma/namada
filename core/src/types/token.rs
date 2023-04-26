@@ -11,6 +11,7 @@ use rust_decimal::prelude::Decimal;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use super::dec::POS_DECIMAL_PRECISION;
 use crate::ledger::storage_api::token::read_denom;
 use crate::ledger::storage_api::StorageRead;
 use crate::types::address::{masp, Address, DecodeError as AddressError};
@@ -482,9 +483,19 @@ impl From<DenominatedAmount> for Amount {
     }
 }
 
+impl From<u64> for Amount {
+    fn from(val: u64) -> Amount {
+        Amount {
+            raw: Uint::from(val),
+        }
+    }
+}
+
 impl From<Dec> for Amount {
     fn from(dec: Dec) -> Amount {
-        Amount { raw: dec.0 }
+        Amount {
+            raw: dec.0 / Uint::exp10(POS_DECIMAL_PRECISION as usize),
+        }
     }
 }
 

@@ -25,6 +25,7 @@ mod tests {
     use namada::proof_of_stake::unbond_handle;
     use namada::proto::Tx;
     use namada::types::chain::ChainId;
+    use namada::types::dec::Dec;
     use namada::types::storage::Epoch;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
@@ -73,8 +74,8 @@ mod tests {
         let is_delegation = matches!(
             &withdraw.source, Some(source) if *source != withdraw.validator);
         let consensus_key = key::testing::keypair_1().ref_to();
-        let commission_rate = rust_decimal::Decimal::new(5, 2);
-        let max_commission_rate_change = rust_decimal::Decimal::new(1, 2);
+        let commission_rate = Dec::new(5, 2).expect("Cannot fail");
+        let max_commission_rate_change = Dec::new(1, 2).expect("Cannot fail");
 
         let genesis_validators = [GenesisValidator {
             address: withdraw.validator.clone(),

@@ -200,7 +200,7 @@ pub struct ConsensusValidator {
     /// A public key used for signing validator's consensus actions
     pub consensus_key: common::PublicKey,
     /// Total bonded stake of the validator
-    pub bonded_stake: u64,
+    pub bonded_stake: token::Amount,
 }
 
 /// ID of a bond and/or an unbond.
@@ -509,7 +509,7 @@ impl Display for SlashType {
 pub fn into_tm_voting_power(votes_per_token: Dec, tokens: Amount) -> i64 {
     let pow = votes_per_token
         * u128::try_from(tokens).expect("Voting power out of bounds");
-    i64::try_from(pow.0).expect("Invalid voting power")
+    i64::try_from(pow.to_uint()).expect("Invalid voting power")
 }
 
 #[cfg(test)]

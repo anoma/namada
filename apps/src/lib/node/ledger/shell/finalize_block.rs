@@ -640,12 +640,12 @@ where
 
         // TODO: properly fetch these values (arbitrary for now)
         let masp_locked_supply: Amount = Amount::default();
-        let masp_locked_ratio_target = Dec::new(5, 1);
-        let masp_locked_ratio_last = Dec::new(5, 1);
-        let masp_max_inflation_rate = Dec::new(2, 1);
-        let masp_last_inflation_rate = Dec::new(12, 2);
-        let masp_p_gain = Dec::new(1, 1);
-        let masp_d_gain = Dec::new(1, 1);
+        let masp_locked_ratio_target = Dec::new(5, 1).expect("Cannot fail");
+        let masp_locked_ratio_last = Dec::new(5, 1).expect("Cannot fail");
+        let masp_max_inflation_rate = Dec::new(2, 1).expect("Cannot fail");
+        let masp_last_inflation_rate = Dec::new(12, 2).expect("Cannot fail");
+        let masp_p_gain = Dec::new(1, 1).expect("Cannot fail");
+        let masp_d_gain = Dec::new(1, 1).expect("Cannot fail");
 
         // Run rewards PD controller
         let pos_controller = inflation::RewardsController {
@@ -669,11 +669,9 @@ where
             locked_ratio_target: masp_locked_ratio_target,
             locked_ratio_last: masp_locked_ratio_last,
             max_reward_rate: masp_max_inflation_rate,
-            last_inflation_amount: token::Amount::from_decimal(
+            last_inflation_amount: token::Amount::from(
                 masp_last_inflation_rate,
-                token::NATIVE_MAX_DECIMAL_PLACES,
-            )
-            .expect("Amount out of bounds"),
+            ),
             p_gain_nom: masp_p_gain,
             d_gain_nom: masp_d_gain,
             epochs_per_year,
@@ -726,11 +724,11 @@ where
             let last_rewards_product =
                 validator_rewards_products_handle(&address)
                     .get(&self.wl_storage, &last_epoch)?
-                    .unwrap_or(Dec::one());
+                    .unwrap_or_else(Dec::one);
             let last_delegation_product =
                 delegator_rewards_products_handle(&address)
                     .get(&self.wl_storage, &last_epoch)?
-                    .unwrap_or(Dec::one());
+                    .unwrap_or_else(Dec::one);
             let commission_rate = validator_commission_rate_handle(&address)
                 .get(&self.wl_storage, last_epoch, &params)?
                 .expect("Should be able to find validator commission rate");
@@ -743,7 +741,7 @@ where
                         / stake);
             new_rewards_products
                 .insert(address, (new_product, new_delegation_product));
-            reward_tokens_remaining -= reward as u64;
+            reward_tokens_remaining -= reward;
         }
         for (
             address,
@@ -912,8 +910,8 @@ mod test_finalize_block {
         InitProposalData, ProposalType, VoteProposalData,
     };
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
+    use namada::types::uint::Uint;
     use namada_test_utils::TestWasms;
-    use rust_decimal_macros::dec;
     use test_log::test;
 
     use super::*;
@@ -1626,7 +1624,7 @@ mod test_finalize_block {
         assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_4.is_empty(&shell.wl_storage).unwrap());
         let acc_sum = get_rewards_sum(&shell.wl_storage);
-        assert!(is_decimal_equal_enough(dec!(3), acc_sum));
+        assert!(is_decimal_equal_enough(Dec(Uint::from(3)), acc_sum));
         let acc = get_rewards_acc(&shell.wl_storage);
         assert!(
             acc.get(&val1.address).cloned().unwrap()

@@ -1091,7 +1091,7 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk3,
-            bonded_stake: u128::try_from(stake3).unwrap() as u64,
+            bonded_stake: stake3,
         })
     );
 
@@ -1146,7 +1146,7 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk5,
-            bonded_stake: u128::try_from(stake5).unwrap() as u64,
+            bonded_stake: stake5,
         })
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk2));
@@ -1342,7 +1342,7 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk4.clone(),
-            bonded_stake: u128::try_from(stake4).unwrap() as u64,
+            bonded_stake: stake4,
         })
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk1));
@@ -1458,7 +1458,7 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk6,
-            bonded_stake: u128::try_from(stake6).unwrap() as u64,
+            bonded_stake: stake6,
         })
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk4));
@@ -1640,7 +1640,7 @@ fn test_validator_sets_swap() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk3,
-            bonded_stake: u128::try_from(stake3).unwrap() as u64,
+            bonded_stake: stake3,
         })
     );
 }

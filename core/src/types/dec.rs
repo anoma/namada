@@ -73,12 +73,15 @@ impl Dec {
 
     /// The representation of 1
     pub fn one() -> Self {
-        Self(Uint::one())
+        Self(Uint::one() * Uint::exp10(POS_DECIMAL_PRECISION as usize))
     }
 
     /// The representation of 2
     pub fn two() -> Self {
-        Self(Uint::one() + Uint::one())
+        Self(
+            (Uint::one() + Uint::one())
+                * Uint::exp10(POS_DECIMAL_PRECISION as usize),
+        )
     }
 
     /// Create a new [`Dec`] using a mantissa and a scale.
@@ -99,6 +102,11 @@ impl Dec {
         } else {
             *other - *self
         }
+    }
+
+    /// Convert the Dec type into a Uint with truncation
+    pub fn to_uint(&self) -> Uint {
+        self.0 / Uint::exp10(POS_DECIMAL_PRECISION as usize)
     }
 }
 
@@ -160,6 +168,19 @@ impl From<u64> for Dec {
         Self(Uint::from(num * 10u64.pow(POS_DECIMAL_PRECISION as u32)))
     }
 }
+
+// impl TryFrom<Dec> for u64 {
+//     type Error = Error;
+
+//     fn try_from(value: Dec) -> std::result::Result<Self, Self::Error> {
+//         let int = value.0 / Uint::exp10(POS_DECIMAL_PRECISION as usize);
+//         if int > Uint::from(u64::MAX) {
+//             Err(eyre!("Dec value is too large to fit in a u64").into())
+//         } else {
+//             Ok(int.into())
+//         }
+//     }
+// }
 
 impl Add<Dec> for Dec {
     type Output = Self;
@@ -250,7 +271,18 @@ impl Div<Dec> for Dec {
 
 impl Display for Dec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let string = self.0.to_string();
+        let mut string = self.0.to_string();
+        if string.len() > POS_DECIMAL_PRECISION as usize {
+            let idx = string.len() - POS_DECIMAL_PRECISION as usize;
+            string.insert(idx, '.');
+        } else {
+            let mut str_pre = "0.".to_string();
+            for _ in 0..(POS_DECIMAL_PRECISION as usize - string.len()) {
+                str_pre.push('0');
+            }
+            str_pre.push_str(string.as_str());
+            string = str_pre;
+        };
         f.write_str(&string)
     }
 }
@@ -258,31 +290,71 @@ impl Display for Dec {
 #[cfg(test)]
 mod test_dec {
     use super::*;
+    use crate::types::token::{Amount, Change};
 
     /// Fill in tests later
     #[test]
-    fn test_basic() {
+    fn test_dec_basics() {
         assert_eq!(
-            Dec::new(1, 0).unwrap()
-                + Dec::new(3, 0).unwrap() / Dec::new(5, 0).unwrap(),
+            Dec::one() + Dec::new(3, 0).unwrap() / Dec::new(5, 0).unwrap(),
             Dec::new(16, 1).unwrap()
         );
-
-        // Fixed precision division is more thoroughly tested for the `Uint` type. These
-        // are sanity checks that the precision is correct.
+        assert_eq!(Dec::new(1, 0).expect("Test failed"), Dec::one());
+        assert_eq!(Dec::new(2, 0).expect("Test failed"), Dec::two());
         assert_eq!(
-            Dec::new(1, 6).expect("Test failed") / Dec::new(1, 0).expect("Test failed"),
+            Dec(Uint::from(1653)),
+            Dec::new(1653, POS_DECIMAL_PRECISION).expect("Test failed")
+        );
+        assert_eq!(
+            Dec::new(123456789, 4).expect("Test failed").to_uint(),
+            Uint::from(12345)
+        );
+        assert_eq!(
+            Dec::new(123, 4).expect("Test failed").to_uint(),
+            Uint::zero()
+        );
+        assert_eq!(
+            Dec::from_str("4876.3855").expect("Test failed").to_uint(),
+            Uint::from(4876)
+        );
+
+        // Fixed precision division is more thoroughly tested for the `Uint`
+        // type. These are sanity checks that the precision is correct.
+        assert_eq!(
+            Dec::new(1, 6).expect("Test failed")
+                / Dec::new(1, 6).expect("Test failed"),
             Dec::one(),
         );
         assert_eq!(
-            Dec::new(1, 6).expect("Test failed") / (Dec::new(1, 0).expect("Test failed") + Dec::one()),
+            Dec::new(1, 6).expect("Test failed")
+                / (Dec::new(1, 0).expect("Test failed") + Dec::one()),
+            Dec::zero(),
+        );
+        assert_eq!(
+            Dec::new(1, 6).expect("Test failed") / Dec::two(),
             Dec::zero(),
         );
     }
 
+    /// Test the `Dec` and `Amount` interplay
+    #[test]
+    fn test_dec_and_amount() {
+        let amt = Amount::from(1018u64);
+        let dec = Dec::from_str("2.76").unwrap();
+
+        debug_assert_eq!(
+            Dec::from(amt),
+            Dec::new(1018, 0).expect("Test failed")
+        );
+        debug_assert_eq!(dec * amt, Amount::from(2809u64));
+
+        let chg = -amt.change();
+        debug_assert_eq!(dec * chg, Change::from(-2809i64));
+    }
+
     /// Test that parsing from string is correct.
     #[test]
-    fn test_from_string() {
+    fn test_dec_from_string() {
         // Fewer than six decimal places and non-zero integer part
         assert_eq!(
             Dec::from_str("3.14").expect("Test failed"),

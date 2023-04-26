@@ -2052,9 +2052,7 @@ where
             );
             Some(ValidatorSetUpdate::Consensus(ConsensusValidator {
                 consensus_key,
-                bonded_stake: u128::try_from(cur_stake)
-                    .expect("Amount out of bounds")
-                    as u64,
+                bonded_stake: cur_stake,
             }))
         });
     let cur_below_capacity_validators =

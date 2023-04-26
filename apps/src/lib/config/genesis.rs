@@ -43,7 +43,6 @@ pub mod genesis_config {
     use namada::types::time::Rfc3339String;
     use namada::types::token::Denomination;
     use namada::types::{storage, token};
-    use rust_decimal::Decimal;
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
 
@@ -267,9 +266,9 @@ pub mod genesis_config {
         /// Expected number of epochs per year
         pub epochs_per_year: u64,
         /// PoS gain p
-        pub pos_gain_p: Decimal,
+        pub pos_gain_p: Dec,
         /// PoS gain d
-        pub pos_gain_d: Decimal,
+        pub pos_gain_d: Dec,
         #[cfg(not(feature = "mainnet"))]
         /// Fix wrapper tx fees
         pub wrapper_tx_fees: Option<token::Amount>,
@@ -612,8 +611,8 @@ pub mod genesis_config {
             epochs_per_year: parameters.epochs_per_year,
             pos_gain_p: parameters.pos_gain_p,
             pos_gain_d: parameters.pos_gain_d,
-            staked_ratio: Decimal::ZERO,
-            pos_inflation_amount: 0,
+            staked_ratio: Dec::zero(),
+            pos_inflation_amount: token::Amount::zero(),
             wrapper_tx_fees: parameters.wrapper_tx_fees,
         };
 
@@ -861,7 +860,7 @@ pub struct Parameters {
     /// PoS staked ratio (read + write for every epoch)
     pub staked_ratio: Dec,
     /// PoS inflation amount from the last epoch (read + write for every epoch)
-    pub pos_inflation_amount: u64,
+    pub pos_inflation_amount: token::Amount,
     /// Fixed Wrapper tx fees
     #[cfg(not(feature = "mainnet"))]
     pub wrapper_tx_fees: Option<token::Amount>,
@@ -961,7 +960,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         pos_gain_p: Dec::new(1, 2).expect("This can't fail"),
         pos_gain_d: Dec::new(1, 2).expect("This can't fail"),
         staked_ratio: Dec::zero(),
-        pos_inflation_amount: 0,
+        pos_inflation_amount: token::Amount::zero(),
         wrapper_tx_fees: Some(token::Amount::native_whole(0)),
     };
     let albert = EstablishedAccount {

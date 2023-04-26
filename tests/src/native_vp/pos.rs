@@ -588,10 +588,10 @@ pub mod testing {
     use namada::types::key::RefTo;
     use namada::types::storage::Epoch;
     use namada::types::{address, key, token};
+    use namada_core::types::dec::Dec;
     use namada_core::types::token::{Amount, Change};
     use namada_tx_prelude::{Address, StorageRead, StorageWrite};
     use proptest::prelude::*;
-    use rust_decimal::Decimal;
 
     use crate::tx::{self, tx_host_env};
 
@@ -612,8 +612,8 @@ pub mod testing {
         InitValidator {
             address: Address,
             consensus_key: PublicKey,
-            commission_rate: Decimal,
-            max_commission_rate_change: Decimal,
+            commission_rate: Dec,
+            max_commission_rate_change: Dec,
         },
         Bond {
             amount: token::Amount,
@@ -700,11 +700,11 @@ pub mod testing {
         },
         ValidatorCommissionRate {
             address: Address,
-            rate: Decimal,
+            rate: Dec,
         },
         ValidatorMaxCommissionRateChange {
             address: Address,
-            change: Decimal,
+            change: Dec,
         },
     }
 

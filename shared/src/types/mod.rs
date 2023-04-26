@@ -5,5 +5,5 @@ pub mod key;
 
 pub use namada_core::types::{
     address, chain, dec, governance, hash, internal, masp, storage, time,
-    token, transaction, validity_predicate,
+    token, transaction, uint, validity_predicate,
 };

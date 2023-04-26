@@ -12,7 +12,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
         validator,
         new_rate,
     } = transaction::pos::CommissionChange::try_from_slice(&data[..])
-        .wrap_err("failed to decode Decimal value")?;
+        .wrap_err("failed to decode Dec value")?;
     ctx.change_validator_commission_rate(&validator, &new_rate)
 }
 
@@ -24,6 +24,7 @@ mod tests {
     use namada::proof_of_stake::validator_commission_rate_handle;
     use namada::proto::Tx;
     use namada::types::chain::ChainId;
+    use namada::types::dec::Dec;
     use namada::types::storage::Epoch;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
@@ -36,8 +37,6 @@ mod tests {
     use namada_tx_prelude::token;
     use namada_vp_prelude::proof_of_stake::GenesisValidator;
     use proptest::prelude::*;
-    use rust_decimal::prelude::ToPrimitive;
-    use rust_decimal::Decimal;
 
     use super::*;
 
@@ -61,8 +60,8 @@ mod tests {
 
     fn test_tx_change_validator_commission_aux(
         commission_change: transaction::pos::CommissionChange,
-        initial_rate: Decimal,
-        max_change: Decimal,
+        initial_rate: Dec,
+        max_change: Dec,
         key: key::common::SecretKey,
         pos_params: PosParams,
     ) -> TxResult {
@@ -87,7 +86,7 @@ mod tests {
         let commission_rate_handle =
             validator_commission_rate_handle(&commission_change.validator);
 
-        let mut commission_rates_pre = Vec::<Option<Decimal>>::new();
+        let mut commission_rates_pre = Vec::<Option<Dec>>::new();
         for epoch in Epoch::default().iter_range(pos_params.unbonding_len + 1) {
             commission_rates_pre.push(commission_rate_handle.get(
                 ctx(),
@@ -152,20 +151,20 @@ mod tests {
         Ok(())
     }
 
-    fn arb_rate(min: Decimal, max: Decimal) -> impl Strategy<Value = Decimal> {
-        let int_min: u64 = (min * Decimal::from(100_000_u64))
-            .to_u64()
-            .unwrap_or_default();
-        let int_max: u64 = (max * Decimal::from(100_000_u64)).to_u64().unwrap();
-        (int_min..=int_max)
-            .prop_map(|num| Decimal::from(num) / Decimal::from(100_000_u64))
+    fn arb_rate(min: Dec, max: Dec) -> impl Strategy<Value = Dec> {
+        let scale = Dec::new(100_000, 0).expect("Test failed");
+        let int_min = (min * scale).to_uint();
+        let int_min = u64::try_from(int_min).unwrap();
+        let int_max = (max * scale).to_uint();
+        let int_max = u64::try_from(int_max).unwrap();
+        (int_min..=int_max).prop_map(move |num| Dec::from(num) / scale)
     }
 
     fn arb_new_rate(
-        min: Decimal,
-        max: Decimal,
-        rate_pre: Decimal,
-    ) -> impl Strategy<Value = Decimal> {
+        min: Dec,
+        max: Dec,
+        rate_pre: Dec,
+    ) -> impl Strategy<Value = Dec> {
         arb_rate(min, max).prop_filter(
             "New rate must not be equal to the previous epoch's rate",
             move |v| v != &rate_pre,
@@ -173,11 +172,11 @@ mod tests {
     }
 
     fn arb_commission_change(
-        rate_pre: Decimal,
-        max_change: Decimal,
+        rate_pre: Dec,
+        max_change: Dec,
     ) -> impl Strategy<Value = transaction::pos::CommissionChange> {
-        let min = cmp::max(rate_pre - max_change, Decimal::ZERO);
-        let max = cmp::min(rate_pre + max_change, Decimal::ONE);
+        let min = cmp::max(rate_pre - max_change, Dec::zero());
+        let max = cmp::min(rate_pre + max_change, Dec::one());
         (arb_established_address(), arb_new_rate(min, max, rate_pre)).prop_map(
             |(validator, new_rate)| transaction::pos::CommissionChange {
                 validator: Address::Established(validator),
@@ -187,10 +186,10 @@ mod tests {
     }
 
     fn arb_commission_info()
-    -> impl Strategy<Value = (Decimal, Decimal, transaction::pos::CommissionChange)>
+    -> impl Strategy<Value = (Dec, Dec, transaction::pos::CommissionChange)>
     {
-        let min = Decimal::ZERO;
-        let max = Decimal::ONE;
+        let min = Dec::zero();
+        let max = Dec::one();
         (arb_rate(min, max), arb_rate(min, max)).prop_flat_map(
             |(rate, change)| {
                 (

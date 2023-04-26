@@ -1176,7 +1176,7 @@ pub async fn query_shielded_balance(
                 read_tokens
                     .entry(addr.clone())
                     .and_modify(|addr_vec| addr_vec.push(sub_prefix.clone()))
-                    .or_insert(vec![sub_prefix.clone()]);
+                    .or_insert_with(|| vec![sub_prefix.clone()]);
                 // Only assets with the current timestamp count
                 println!(
                     "Shielded Token {}{}:",

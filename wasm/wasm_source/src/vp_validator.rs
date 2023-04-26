@@ -220,6 +220,7 @@ fn validate_tx(
 mod tests {
     use address::testing::arb_non_internal_address;
     use namada::ledger::pos::{GenesisValidator, PosParams};
+    use namada::types::dec::Dec;
     use namada::types::storage::Epoch;
     use namada_test_utils::TestWasms;
     // Use this as `#[test]` annotation to enable logging
@@ -231,7 +232,6 @@ mod tests {
     use namada_tx_prelude::{StorageWrite, TxEnv};
     use namada_vp_prelude::key::RefTo;
     use proptest::prelude::*;
-    use rust_decimal::Decimal;
     use storage::testing::arb_account_storage_key_no_vp;
 
     use super::*;
@@ -442,8 +442,8 @@ mod tests {
         let validator = address::testing::established_address_3();
         let initial_stake = token::Amount::from_uint(10_098_123, 0).unwrap();
         let consensus_key = key::testing::keypair_2().ref_to();
-        let commission_rate = Decimal::new(5, 2);
-        let max_commission_rate_change = Decimal::new(1, 2);
+        let commission_rate = Dec::new(5, 2).unwrap();
+        let max_commission_rate_change = Dec::new(1, 2).unwrap();
 
         let genesis_validators = [GenesisValidator {
             address: validator.clone(),
@@ -494,7 +494,7 @@ mod tests {
             tx::ctx()
                 .change_validator_commission_rate(
                     &validator,
-                    &Decimal::new(6, 2),
+                    &Dec::new(6, 2).unwrap(),
                 )
                 .unwrap();
         });
@@ -520,8 +520,8 @@ mod tests {
         let validator = address::testing::established_address_3();
         let initial_stake = token::Amount::from_uint(10_098_123, 0).unwrap();
         let consensus_key = key::testing::keypair_2().ref_to();
-        let commission_rate = Decimal::new(5, 2);
-        let max_commission_rate_change = Decimal::new(1, 2);
+        let commission_rate = Dec::new(5, 2).unwrap();
+        let max_commission_rate_change = Dec::new(1, 2).unwrap();
 
         let genesis_validators = [GenesisValidator {
             address: validator.clone(),
@@ -574,7 +574,7 @@ mod tests {
             tx::ctx()
                 .change_validator_commission_rate(
                     &validator,
-                    &Decimal::new(6, 2),
+                    &Dec::new(6, 2).unwrap(),
                 )
                 .unwrap();
         });

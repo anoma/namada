@@ -225,6 +225,7 @@ fn validate_tx(
 mod tests {
     // Use this as `#[test]` annotation to enable logging
     use namada::ledger::pos::{GenesisValidator, PosParams};
+    use namada::types::dec::Dec;
     use namada::types::storage::Epoch;
     use namada_test_utils::TestWasms;
     use namada_tests::log::test;
@@ -416,8 +417,8 @@ mod tests {
         let validator = address::testing::established_address_3();
         let initial_stake = token::Amount::from_uint(10_098_123, 0).unwrap();
         let consensus_key = key::testing::keypair_2().ref_to();
-        let commission_rate = rust_decimal::Decimal::new(5, 2);
-        let max_commission_rate_change = rust_decimal::Decimal::new(1, 2);
+        let commission_rate = Dec::new(5, 2).unwrap();
+        let max_commission_rate_change = Dec::new(1, 2).unwrap();
 
         let genesis_validators = [GenesisValidator {
             address: validator.clone(),
@@ -487,8 +488,8 @@ mod tests {
         let validator = address::testing::established_address_3();
         let initial_stake = token::Amount::from_uint(10_098_123, 0).unwrap();
         let consensus_key = key::testing::keypair_2().ref_to();
-        let commission_rate = rust_decimal::Decimal::new(5, 2);
-        let max_commission_rate_change = rust_decimal::Decimal::new(1, 2);
+        let commission_rate = Dec::new(5, 2).unwrap();
+        let max_commission_rate_change = Dec::new(1, 2).unwrap();
 
         let genesis_validators = [GenesisValidator {
             address: validator.clone(),
