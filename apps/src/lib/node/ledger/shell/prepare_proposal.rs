@@ -367,7 +367,7 @@ mod test_prepare_proposal {
 
     use borsh::BorshSerialize;
     use namada::proof_of_stake::Epoch;
-    use namada::types::address::Address;
+    use namada::types::address::{self, Address};
     use namada::types::key::RefTo;
     use namada::types::token;
     use namada::types::token::Amount;
@@ -648,6 +648,182 @@ mod test_prepare_proposal {
             None,
         )
         .sign(&keypair, shell.chain_id.clone(), None)
+        .expect("Wrapper signing failed");
+
+        let req = RequestPrepareProposal {
+            txs: vec![wrapper.to_bytes()],
+            max_tx_bytes: 0,
+            time: None,
+            ..Default::default()
+        };
+        let result = shell.prepare_proposal(req);
+        eprintln!("Proposal: {:?}", result.txs);
+        assert!(result.txs.is_empty());
+    }
+
+    // Check that a wrapper using a non-whitelisted token for fee payment is not included in the block
+    #[test]
+    fn test_fee_non_whitelisted_token() {
+        let (shell, _) = test_utils::setup(1);
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 100.into(),
+                token: address::btc(),
+            },
+            &crate::wallet::defaults::albert_keypair(),
+            Epoch(0),
+            200.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        )
+        .sign(
+            &crate::wallet::defaults::albert_keypair(),
+            shell.chain_id.clone(),
+            None,
+        )
+        .expect("Wrapper signing failed");
+
+        let req = RequestPrepareProposal {
+            txs: vec![wrapper.to_bytes()],
+            max_tx_bytes: 0,
+            time: None,
+            ..Default::default()
+        };
+        let result = shell.prepare_proposal(req);
+        eprintln!("Proposal: {:?}", result.txs);
+        assert!(result.txs.is_empty());
+    }
+
+    // Check that a wrapper setting a fee amount lower than the minimum required is not included in the block
+    #[test]
+    fn test_fee_wrong_minimum_amount() {
+        let (shell, _) = test_utils::setup(1);
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &crate::wallet::defaults::albert_keypair(),
+            Epoch(0),
+            200.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        )
+        .sign(
+            &crate::wallet::defaults::albert_keypair(),
+            shell.chain_id.clone(),
+            None,
+        )
+        .expect("Wrapper signing failed");
+
+        let req = RequestPrepareProposal {
+            txs: vec![wrapper.to_bytes()],
+            max_tx_bytes: 0,
+            time: None,
+            ..Default::default()
+        };
+        let result = shell.prepare_proposal(req);
+        eprintln!("Proposal: {:?}", result.txs);
+        assert!(result.txs.is_empty());
+    }
+
+    // Check that a wrapper transactions whose fees cannot be paid is rejected
+    #[test]
+    fn test_insufficient_balance_for_fee() {
+        let (shell, _) = test_utils::setup(1);
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 1_000_000.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &crate::wallet::defaults::albert_keypair(),
+            Epoch(0),
+            200.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        )
+        .sign(
+            &crate::wallet::defaults::albert_keypair(),
+            shell.chain_id.clone(),
+            None,
+        )
+        .expect("Wrapper signing failed");
+
+        let req = RequestPrepareProposal {
+            txs: vec![wrapper.to_bytes()],
+            max_tx_bytes: 0,
+            time: None,
+            ..Default::default()
+        };
+        let result = shell.prepare_proposal(req);
+        eprintln!("Proposal: {:?}", result.txs);
+        assert!(result.txs.is_empty());
+    }
+
+    // Check that a fee overflow in the wrapper transaction is rejected
+    #[test]
+    fn test_wrapper_fee_overflow() {
+        let (shell, _) = test_utils::setup(1);
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: token::Amount::max(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &crate::wallet::defaults::albert_keypair(),
+            Epoch(0),
+            200.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        )
+        .sign(
+            &crate::wallet::defaults::albert_keypair(),
+            shell.chain_id.clone(),
+            None,
+        )
         .expect("Wrapper signing failed");
 
         let req = RequestPrepareProposal {

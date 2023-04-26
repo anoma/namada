@@ -120,7 +120,7 @@ where
         };
 
         if native_block_proposer_address.is_none() {
-            tracing::info!("Address of the block proposer was not found: fees will be burned in this block");
+            tracing::error!("Address of the block proposer was not found: fees will be burned in this block");
         }
 
         // Tracks the accepted transactions
@@ -1897,5 +1897,208 @@ mod test_finalize_block {
             .wl_storage
             .has_key(&inner_hash_key)
             .expect("Test failed"))
+    }
+
+    // Test that the fees collected from a block are withdrew from the wrapper signer and credited to the block proposer
+    #[test]
+    fn test_fee_payment_to_block_proposer() {
+        let (mut shell, _) = setup(1);
+
+        let validator = shell.mode.get_validator_address().unwrap().to_owned();
+        let pos_params =
+            namada_proof_of_stake::read_pos_params(&shell.wl_storage).unwrap();
+        let consensus_key =
+            namada_proof_of_stake::validator_consensus_key_handle(&validator)
+                .get(&shell.wl_storage, Epoch::default(), &pos_params)
+                .unwrap()
+                .unwrap();
+        let proposer_address = HEXUPPER
+            .decode(consensus_key.tm_raw_hash().as_bytes())
+            .unwrap();
+
+        let proposer_balance = storage_api::token::read_balance(
+            &shell.wl_storage,
+            &shell.wl_storage.storage.native_token,
+            &validator,
+        )
+        .unwrap();
+
+        let mut wasm_path = top_level_directory();
+        wasm_path.push("wasm_for_tests/tx_no_op.wasm");
+        let tx_code = std::fs::read(wasm_path)
+            .expect("Expected a file at given code path");
+        let raw_tx = Tx::new(
+            tx_code,
+            Some("Encrypted transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let wrapper_tx = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 1.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &crate::wallet::defaults::albert_keypair(),
+            Epoch(0),
+            200.into(),
+            raw_tx.clone(),
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        );
+        let fee_amount = wrapper_tx.get_tx_fee().unwrap();
+
+        let wrapper = wrapper_tx
+            .sign(
+                &crate::wallet::defaults::albert_keypair(),
+                shell.chain_id.clone(),
+                None,
+            )
+            .expect("Test failed");
+        let signer_balance = storage_api::token::read_balance(
+            &shell.wl_storage,
+            &shell.wl_storage.storage.native_token,
+            &wrapper_tx.fee_payer(),
+        )
+        .unwrap();
+
+        let processed_tx = ProcessedTx {
+            tx: wrapper.to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        };
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                proposer_address,
+                ..Default::default()
+            })
+            .expect("Test failed")[0];
+
+        // Check fee payment
+        assert_eq!(event.event_type.to_string(), String::from("accepted"));
+        let code = event.attributes.get("code").expect("Testfailed").as_str();
+        assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
+
+        let new_proposer_balance = storage_api::token::read_balance(
+            &shell.wl_storage,
+            &shell.wl_storage.storage.native_token,
+            &validator,
+        )
+        .unwrap();
+        assert_eq!(
+            new_proposer_balance,
+            proposer_balance.checked_add(fee_amount).unwrap()
+        );
+
+        let new_signer_balance = storage_api::token::read_balance(
+            &shell.wl_storage,
+            &shell.wl_storage.storage.native_token,
+            &wrapper_tx.fee_payer(),
+        )
+        .unwrap();
+        assert_eq!(
+            new_signer_balance,
+            signer_balance.checked_sub(fee_amount).unwrap()
+        )
+    }
+
+    // Test that the fees collected from a block are withdrew from the wrapper signer and burned when the block proposer is not found
+    #[test]
+    fn test_fee_payment_burn() {
+        let (mut shell, _) = setup(1);
+
+        let total_supply_key =
+            token::total_supply_key(&shell.wl_storage.storage.native_token);
+        let token_supply = shell
+            .wl_storage
+            .read::<Amount>(&total_supply_key)
+            .unwrap()
+            .unwrap();
+
+        let mut wasm_path = top_level_directory();
+        wasm_path.push("wasm_for_tests/tx_no_op.wasm");
+        let tx_code = std::fs::read(wasm_path)
+            .expect("Expected a file at given code path");
+        let raw_tx = Tx::new(
+            tx_code,
+            Some("Encrypted transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let wrapper_tx = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 1.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &crate::wallet::defaults::albert_keypair(),
+            Epoch(0),
+            200.into(),
+            raw_tx.clone(),
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        );
+        let fee_amount = wrapper_tx.get_tx_fee().unwrap();
+
+        let wrapper = wrapper_tx
+            .sign(
+                &crate::wallet::defaults::albert_keypair(),
+                shell.chain_id.clone(),
+                None,
+            )
+            .expect("Test failed");
+        let signer_balance = storage_api::token::read_balance(
+            &shell.wl_storage,
+            &shell.wl_storage.storage.native_token,
+            &wrapper_tx.fee_payer(),
+        )
+        .unwrap();
+
+        let processed_tx = ProcessedTx {
+            tx: wrapper.to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        };
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed")[0];
+
+        // Check fee burning
+        assert_eq!(event.event_type.to_string(), String::from("accepted"));
+        let code = event.attributes.get("code").expect("Testfailed").as_str();
+        assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
+
+        let new_token_supply = shell
+            .wl_storage
+            .read::<Amount>(&total_supply_key)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            new_token_supply,
+            token_supply.checked_sub(fee_amount).unwrap()
+        );
+
+        let new_signer_balance = storage_api::token::read_balance(
+            &shell.wl_storage,
+            &shell.wl_storage.storage.native_token,
+            &wrapper_tx.fee_payer(),
+        )
+        .unwrap();
+        assert_eq!(
+            new_signer_balance,
+            signer_balance.checked_sub(fee_amount).unwrap()
+        )
     }
 }

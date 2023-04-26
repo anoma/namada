@@ -689,7 +689,7 @@ mod test_process_proposal {
     /// by [`process_proposal`].
     #[test]
     fn test_unsigned_wrapper_rejected() {
-        let (mut shell, _) = test_utils::setup(1);
+        let (shell, _) = test_utils::setup(1);
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -742,7 +742,7 @@ mod test_process_proposal {
     /// rejected
     #[test]
     fn test_wrapper_bad_signature_rejected() {
-        let (mut shell, _) = test_utils::setup(1);
+        let (shell, _) = test_utils::setup(1);
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -1201,7 +1201,7 @@ mod test_process_proposal {
     /// [`process_proposal`] than expected, they are rejected
     #[test]
     fn test_too_many_decrypted_txs() {
-        let (mut shell, _) = test_utils::setup(1);
+        let (shell, _) = test_utils::setup(1);
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -1241,7 +1241,7 @@ mod test_process_proposal {
     /// Process Proposal should reject a block containing a RawTx, but not panic
     #[test]
     fn test_raw_tx_rejected() {
-        let (mut shell, _) = test_utils::setup(1);
+        let (shell, _) = test_utils::setup(1);
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -1573,7 +1573,7 @@ mod test_process_proposal {
     /// causes the entire block to be rejected
     #[test]
     fn test_wong_chain_id() {
-        let (mut shell, _) = test_utils::setup(1);
+        let (shell, _) = test_utils::setup(1);
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let tx = Tx::new(
@@ -1706,7 +1706,7 @@ mod test_process_proposal {
     /// Test that an expired wrapper transaction causes a block rejection
     #[test]
     fn test_expired_wrapper() {
-        let (mut shell, _) = test_utils::setup(1);
+        let (shell, _) = test_utils::setup(1);
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let tx = Tx::new(
@@ -1869,7 +1869,7 @@ mod test_process_proposal {
     /// rejection
     #[test]
     fn test_exceeding_max_block_gas_tx() {
-        let (mut shell, _) = test_utils::setup(1);
+        let (shell, _) = test_utils::setup(1);
 
         let block_gas_limit: u64 = shell
             .wl_storage
@@ -1921,7 +1921,7 @@ mod test_process_proposal {
     // rejection
     #[test]
     fn test_exceeding_gas_limit_wrapper() {
-        let (mut shell, _) = test_utils::setup(1);
+        let (shell, _) = test_utils::setup(1);
         let keypair = super::test_utils::gen_keypair();
 
         let tx = Tx::new(
@@ -1958,6 +1958,198 @@ mod test_process_proposal {
                 assert_eq!(
                     response[0].result.code,
                     u32::from(ErrorCodes::TxGasLimit)
+                );
+            }
+        }
+    }
+
+    // Check that a wrapper using a non-whitelisted token for fee payment causes a block rejection
+    #[test]
+    fn test_fee_non_whitelisted_token() {
+        let (shell, _) = test_utils::setup(1);
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 100.into(),
+                token: address::btc(),
+            },
+            &crate::wallet::defaults::albert_keypair(),
+            Epoch(0),
+            200.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        )
+        .sign(
+            &crate::wallet::defaults::albert_keypair(),
+            shell.chain_id.clone(),
+            None,
+        )
+        .expect("Wrapper signing failed");
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![wrapper.to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::FeeError)
+                );
+            }
+        }
+    }
+
+    // Check that a wrapper setting a fee amount lower than the minimum required causes a block rejection
+    #[test]
+    fn test_fee_wrong_minimum_amount() {
+        let (shell, _) = test_utils::setup(1);
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &crate::wallet::defaults::albert_keypair(),
+            Epoch(0),
+            200.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        )
+        .sign(
+            &crate::wallet::defaults::albert_keypair(),
+            shell.chain_id.clone(),
+            None,
+        )
+        .expect("Wrapper signing failed");
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![wrapper.to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::FeeError)
+                );
+            }
+        }
+    }
+
+    // Check that a wrapper transactions whose fees cannot be paid causes a block rejection
+    #[test]
+    fn test_insufficient_balance_for_fee() {
+        let (shell, _) = test_utils::setup(1);
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 1_000_000.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &crate::wallet::defaults::albert_keypair(),
+            Epoch(0),
+            200.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        )
+        .sign(
+            &crate::wallet::defaults::albert_keypair(),
+            shell.chain_id.clone(),
+            None,
+        )
+        .expect("Wrapper signing failed");
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![wrapper.to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::FeeError)
+                );
+            }
+        }
+    }
+
+    // Check that a fee overflow in the wrapper transaction causes a block rejection
+    #[test]
+    fn test_wrapper_fee_overflow() {
+        let (shell, _) = test_utils::setup(1);
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: token::Amount::max(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &crate::wallet::defaults::albert_keypair(),
+            Epoch(0),
+            200.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        )
+        .sign(
+            &crate::wallet::defaults::albert_keypair(),
+            shell.chain_id.clone(),
+            None,
+        )
+        .expect("Wrapper signing failed");
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![wrapper.to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::FeeError)
                 );
             }
         }

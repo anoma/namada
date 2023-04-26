@@ -23,7 +23,6 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada::core::ledger::slash_fund;
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::{BlockGasMeter, TxGasMeter};
@@ -1094,12 +1093,12 @@ pub fn transfer_fee<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    let balance_key =
-        token::balance_key(&wrapper.fee.token, &wrapper.fee_payer());
-    let balance: token::Amount = wl_storage
-        .read(&balance_key)
-        .expect("Must be able to read storage")
-        .unwrap_or_default();
+    let balance = namada::ledger::storage_api::token::read_balance(
+        wl_storage,
+        &wrapper.fee.token,
+        &wrapper.fee_payer(),
+    )
+    .unwrap();
 
     match wrapper.get_tx_fee() {
         Ok(fees) => {
@@ -1313,7 +1312,7 @@ mod test_utils {
         /// Forward a ProcessProposal request and extract the relevant
         /// response data to return
         pub fn process_proposal(
-            &mut self,
+            &self,
             req: ProcessProposal,
         ) -> std::result::Result<Vec<ProcessedTx>, TestError> {
             let resp = self.shell.process_proposal(RequestProcessProposal {
@@ -1911,5 +1910,165 @@ mod test_mempool_validate {
             MempoolTxType::NewTransaction,
         );
         assert_eq!(result.code, u32::from(ErrorCodes::TxGasLimit));
+    }
+
+    // Check that a wrapper using a non-whitelisted token for fee payment is rejected
+    #[test]
+    fn test_fee_non_whitelisted_token() {
+        let (shell, _) = test_utils::setup(1);
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 100.into(),
+                token: address::btc(),
+            },
+            &crate::wallet::defaults::albert_keypair(),
+            Epoch(0),
+            200.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        )
+        .sign(
+            &crate::wallet::defaults::albert_keypair(),
+            shell.chain_id.clone(),
+            None,
+        )
+        .expect("Wrapper signing failed");
+
+        let result = shell.mempool_validate(
+            wrapper.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::FeeError));
+    }
+
+    // Check that a wrapper setting a fee amount lower than the minimum required is rejected
+    #[test]
+    fn test_fee_wrong_minimum_amount() {
+        let (shell, _) = test_utils::setup(1);
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &crate::wallet::defaults::albert_keypair(),
+            Epoch(0),
+            200.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        )
+        .sign(
+            &crate::wallet::defaults::albert_keypair(),
+            shell.chain_id.clone(),
+            None,
+        )
+        .expect("Wrapper signing failed");
+
+        let result = shell.mempool_validate(
+            wrapper.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::FeeError));
+    }
+
+    // Check that a wrapper transactions whose fees cannot be paid is rejected
+    #[test]
+    fn test_insufficient_balance_for_fee() {
+        let (shell, _) = test_utils::setup(1);
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 1_000_000.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &crate::wallet::defaults::albert_keypair(),
+            Epoch(0),
+            200.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        )
+        .sign(
+            &crate::wallet::defaults::albert_keypair(),
+            shell.chain_id.clone(),
+            None,
+        )
+        .expect("Wrapper signing failed");
+
+        let result = shell.mempool_validate(
+            wrapper.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::FeeError));
+    }
+
+    // Check that a fee overflow in the wrapper transaction is rejected
+    #[test]
+    fn test_wrapper_fee_overflow() {
+        let (shell, _) = test_utils::setup(1);
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: token::Amount::max(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &crate::wallet::defaults::albert_keypair(),
+            Epoch(0),
+            200.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        )
+        .sign(
+            &crate::wallet::defaults::albert_keypair(),
+            shell.chain_id.clone(),
+            None,
+        )
+        .expect("Wrapper signing failed");
+
+        let result = shell.mempool_validate(
+            wrapper.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::FeeError));
     }
 }
