@@ -119,6 +119,10 @@ where
                 .unwrap()
         };
 
+        if native_block_proposer_address.is_none() {
+            tracing::info!("Address of the block proposer was not found: fees will be burned in this block");
+        }
+
         // Tracks the accepted transactions
         self.wl_storage.storage.block.results = BlockResults::default();
         for (tx_index, processed_tx) in req.txs.iter().enumerate() {

@@ -1084,7 +1084,7 @@ where
     }
 }
 
-/// Perform the actual transfer of fess from the fee payer to the block proposer. If the block proposer is not provided, fees will be moved to the slash fund internal address
+/// Perform the actual transfer of fess from the fee payer to the block proposer. If the block proposer is not provided, fees will be be burned and the total supply reduced accordingly
 pub fn transfer_fee<S>(
     wl_storage: &mut S,
     block_proposer: Option<&Address>,
@@ -1092,7 +1092,7 @@ pub fn transfer_fee<S>(
     wrapper: &WrapperTx,
 ) -> std::result::Result<(), String>
 where
-    S: StorageWrite + StorageRead,
+    S: StorageRead + StorageWrite,
 {
     let balance_key =
         token::balance_key(&wrapper.fee.token, &wrapper.fee_payer());
@@ -1100,19 +1100,12 @@ where
         .read(&balance_key)
         .expect("Must be able to read storage")
         .unwrap_or_default();
-    let block_proposer = block_proposer.unwrap_or(&slash_fund::ADDRESS);
 
     match wrapper.get_tx_fee() {
         Ok(fees) => {
             if balance.checked_sub(fees).is_some() {
-                storage_api::token::transfer(
-                    wl_storage,
-                    &wrapper.fee.token,
-                    &wrapper.fee_payer(),
-                    block_proposer,
-                    fees,
-                )
-                .map_err(|e| e.to_string())
+                dispatch_fee_action(wl_storage, wrapper, block_proposer, fees)
+                    .map_err(|e| e.to_string())
             } else {
                 // Balance was insufficient for fee payment
                 #[cfg(not(feature = "mainnet"))]
@@ -1124,10 +1117,9 @@ where
                     #[cfg(not(feature = "abcipp"))]
                     {
                         // Move all the available funds in the transparent balance of the fee payer
-                        storage_api::token::transfer(
+                        dispatch_fee_action(
                             wl_storage,
-                            &wrapper.fee.token,
-                            &wrapper.fee_payer(),
+                            wrapper,
                             block_proposer,
                             balance,
                         )
@@ -1149,10 +1141,9 @@ where
             #[cfg(not(feature = "abcipp"))]
             {
                 // Move all the available funds in the transparent balance of the fee payer
-                storage_api::token::transfer(
+                dispatch_fee_action(
                     wl_storage,
-                    &wrapper.fee.token,
-                    &wrapper.fee_payer(),
+                    wrapper,
                     block_proposer,
                     balance,
                 )
@@ -1169,7 +1160,33 @@ where
     }
 }
 
-/// Helper functions and types for writing unit tests
+/// Decides whether to transfer the fees to the block proposer or burn them
+fn dispatch_fee_action<S>(
+    wl_storage: &mut S,
+    wrapper: &WrapperTx,
+    block_proposer: Option<&Address>,
+    amount: token::Amount,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    match block_proposer {
+        Some(block_proposer) => storage_api::token::transfer(
+            wl_storage,
+            &wrapper.fee.token,
+            &wrapper.fee_payer(),
+            block_proposer,
+            amount,
+        ),
+        None => storage_api::token::burn_tokens(
+            wl_storage,
+            &wrapper.fee.token,
+            &wrapper.fee_payer(),
+            amount,
+        ),
+    }
+}
+
 /// for the shell
 #[cfg(test)]
 mod test_utils {

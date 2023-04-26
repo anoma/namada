@@ -102,3 +102,31 @@ where
     storage.write(&balance_key, new_balance)?;
     storage.write(&total_supply_key, new_supply)
 }
+
+/// Burn the given amount of tokens from the source address. The total supply is adjusted accordingly. This function is intented to be used only in protocol.
+pub fn burn_tokens<S>(
+    storage: &mut S,
+    token: &Address,
+    source: &Address,
+    amount: token::Amount,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let balance_key = token::balance_key(token, source);
+    let cur_balance = read_balance(storage, token, source)?;
+    let new_balance = cur_balance.checked_sub(amount).ok_or_else(|| {
+        storage_api::Error::new_const("Token balance underflow")
+    })?;
+
+    let total_supply_key = token::total_supply_key(token);
+    let cur_supply = storage
+        .read::<Amount>(&total_supply_key)?
+        .unwrap_or_default();
+    let new_supply = cur_supply.checked_sub(amount).ok_or_else(|| {
+        storage_api::Error::new_const("Token total supply underflow")
+    })?;
+
+    storage.write(&balance_key, new_balance)?;
+    storage.write(&total_supply_key, new_supply)
+}
