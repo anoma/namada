@@ -2,6 +2,7 @@
 
 pub mod gas;
 pub mod governance;
+pub mod pgf;
 #[cfg(any(feature = "abciplus", feature = "abcipp"))]
 pub mod ibc;
 pub mod parameters;

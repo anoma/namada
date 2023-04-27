@@ -6,7 +6,8 @@ pub use dev::{
     christel_address, christel_keypair, daewon_address, daewon_keypair, keys,
     validator_address, validator_keypair, validator_keys,
 };
-use namada::core::ledger::governance::ADDRESS as gov_address;
+use namada::ledger::governance::ADDRESS as gov_address;
+use namada::ledger::pgf::ADDRESS as pgf_address;
 use namada::ledger::{eth_bridge, pos};
 use namada::types::address::Address;
 use namada::types::key::*;
@@ -21,6 +22,7 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
         ("pos".into(), pos::ADDRESS),
         ("pos_slash_pool".into(), pos::SLASH_POOL_ADDRESS),
         ("governance".into(), gov_address),
+        ("pgf".into(), pgf_address),
         ("eth_bridge".into(), eth_bridge::vp::ADDRESS),
     ];
     // Genesis validators
@@ -72,7 +74,8 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
 #[cfg(feature = "dev")]
 mod dev {
     use borsh::BorshDeserialize;
-    use namada::core::ledger::governance::ADDRESS as gov_address;
+    use namada::ledger::governance::ADDRESS as gov_address;
+    use namada::ledger::pgf::ADDRESS as pgf_address;
     use namada::ledger::pos;
     use namada::types::address::{self, Address};
     use namada::types::key::dkg_session_keys::DkgKeypair;
@@ -116,6 +119,7 @@ mod dev {
             ("pos".into(), pos::ADDRESS),
             ("pos_slash_pool".into(), pos::SLASH_POOL_ADDRESS),
             ("governance".into(), gov_address),
+            ("pgf".into(), pgf_address),
             ("validator".into(), validator_address()),
             ("albert".into(), albert_address()),
             ("bertha".into(), bertha_address()),

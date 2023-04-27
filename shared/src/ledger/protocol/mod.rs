@@ -22,6 +22,8 @@ use crate::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
 use crate::vm::wasm::{TxCache, VpCache};
 use crate::vm::{self, wasm, WasmCacheAccess};
 
+use super::pgf::PgfVp;
+
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
@@ -51,6 +53,8 @@ pub enum Error {
     IbcTokenNativeVpError(crate::ledger::ibc::vp::IbcTokenError),
     #[error("Governance native VP error: {0}")]
     GovernanceNativeVpError(crate::ledger::governance::Error),
+    #[error("Pgf native VP error: {0}")]
+    PgfNativeVpError(crate::ledger::pgf::Error),
     #[error("Ethereum bridge native VP error: {0}")]
     EthBridgeNativeVpError(crate::ledger::eth_bridge::vp::Error),
     #[error("Access to an internal address {0} is forbidden")]
@@ -356,6 +360,14 @@ where
                                 .validate_tx(tx_data, &keys_changed, &verifiers)
                                 .map_err(Error::GovernanceNativeVpError);
                             gas_meter = governance.ctx.gas_meter.into_inner();
+                            result
+                        }
+                        InternalAddress::Pgf => {
+                            let pgf = PgfVp { ctx };
+                            let result = pgf
+                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .map_err(Error::PgfNativeVpError);
+                            gas_meter = pgf.ctx.gas_meter.into_inner();
                             result
                         }
                         InternalAddress::IbcToken(_)

@@ -3,6 +3,7 @@
 pub mod eth_bridge;
 pub mod events;
 pub mod governance;
+pub mod pgf;
 pub mod ibc;
 pub mod masp;
 pub mod native_vp;
