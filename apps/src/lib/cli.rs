@@ -181,6 +181,7 @@ pub mod cmds {
                 .subcommand(QueryRawBytes::def().display_order(3))
                 .subcommand(QueryProposal::def().display_order(3))
                 .subcommand(QueryProposalResult::def().display_order(3))
+                .subcommand(QueryPgf::def().display_order(3))
                 .subcommand(QueryProtocolParameters::def().display_order(3))
                 // Commands
                 .subcommand(SignTx::def().display_order(4))
@@ -223,6 +224,7 @@ pub mod cmds {
             let query_proposal = Self::parse_with_ctx(matches, QueryProposal);
             let query_proposal_result =
                 Self::parse_with_ctx(matches, QueryProposalResult);
+            let query_pgf = Self::parse_with_ctx(matches, QueryPgf);
             let query_protocol_parameters =
                 Self::parse_with_ctx(matches, QueryProtocolParameters);
             let query_account = Self::parse_with_ctx(matches, QueryAccount);
@@ -254,6 +256,7 @@ pub mod cmds {
                 .or(query_proposal)
                 .or(query_proposal_result)
                 .or(query_protocol_parameters)
+                .or(query_pgf)
                 .or(query_account)
                 .or(sign_tx)
                 .or(utils)
@@ -318,6 +321,7 @@ pub mod cmds {
         QueryRawBytes(QueryRawBytes),
         QueryProposal(QueryProposal),
         QueryProposalResult(QueryProposalResult),
+        QueryPgf(QueryPgf),
         QueryAccount(QueryAccount),
         QueryProtocolParameters(QueryProtocolParameters),
         SignTx(SignTx),
@@ -1008,6 +1012,28 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Query proposals result.")
                 .add_args::<args::QueryProposalResult>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryPgf(pub args::QueryPgf);
+
+    impl SubCmd for QueryPgf {
+        const CMD: &'static str = "query-pgf";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| QueryPgf(args::QueryPgf::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query pgf stewards and continous funding.")
+                .add_args::<args::QueryPgf>()
         }
     }
 
@@ -2787,6 +2813,24 @@ pub mod args {
                         .conflicts_with(PROPOSAL_ID.name)
                         .requires(PROPOSAL_OFFLINE.name),
                 )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryPgf {
+        /// Common query args
+        pub query: Query,
+    }
+
+    impl Args for QueryPgf {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+
+            Self { query }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
         }
     }
 

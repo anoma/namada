@@ -88,35 +88,35 @@ impl ProposalEvent {
     }
 
     /// Create a new proposal event for pgf stewards proposal
-    pub fn pgf_steward_proposal_event(proposal_id: u64) -> Self {
+    pub fn pgf_steward_proposal_event(proposal_id: u64, result: bool) -> Self {
         ProposalEvent::new(
             EventType::Proposal.to_string(),
             TallyResult::Passed,
             proposal_id,
             false,
-            false,
+            result,
         )
     }
 
     /// Create a new proposal event for pgf payments proposal
-    pub fn pgf_payments_proposal_event(proposal_id: u64) -> Self {
+    pub fn pgf_payments_proposal_event(proposal_id: u64, result: bool) -> Self {
         ProposalEvent::new(
             EventType::Proposal.to_string(),
             TallyResult::Passed,
             proposal_id,
             false,
-            false,
+            result,
         )
     }
 
     /// Create a new proposal event for eth proposal
-    pub fn eth_proposal_event(proposal_id: u64) -> Self {
+    pub fn eth_proposal_event(proposal_id: u64, result: bool) -> Self {
         ProposalEvent::new(
             EventType::Proposal.to_string(),
             TallyResult::Passed,
             proposal_id,
             false,
-            false,
+            result,
         )
     }
 }
