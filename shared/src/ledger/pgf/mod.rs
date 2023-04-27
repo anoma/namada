@@ -2,13 +2,13 @@
 
 use std::collections::BTreeSet;
 
-use namada_core::ledger::pgf::storage as pgf_storage;
+use namada_core::ledger::pgf::storage::keys as pgf_storage;
 use namada_core::ledger::storage;
 use namada_core::ledger::storage_api::governance::is_proposal_accepted;
 use thiserror::Error;
 
+use crate::ledger::native_vp;
 use crate::ledger::native_vp::{Ctx, NativeVp};
-use crate::ledger::{native_vp};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
@@ -59,7 +59,9 @@ where
             let result = match key_type {
                 KeyType::STEWARDS => Ok(false),
                 KeyType::PAYMENTS => Ok(false),
-                KeyType::INFLATION_RATE => self.is_valid_parameter(tx_data),
+                KeyType::INFLATION_RATE => {
+                    self.is_valid_parameter_change(tx_data)
+                }
                 KeyType::UNKNOWN_PGF => Ok(false),
                 KeyType::UNKNOWN => Ok(true),
             };
@@ -76,7 +78,7 @@ where
     CA: 'static + WasmCacheAccess,
 {
     /// Validate a governance parameter
-    pub fn is_valid_parameter(&self, tx_data: &[u8]) -> Result<bool> {
+    pub fn is_valid_parameter_change(&self, tx_data: &[u8]) -> Result<bool> {
         is_proposal_accepted(&self.ctx.pre(), tx_data)
             .map_err(Error::NativeVpError)
     }

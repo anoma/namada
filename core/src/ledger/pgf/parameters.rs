@@ -4,7 +4,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
-use super::storage as pgf_storage;
+use super::storage::keys as pgf_storage;
 use crate::ledger::storage::types::encode;
 use crate::ledger::storage::{self, Storage};
 use crate::types::address::Address;
