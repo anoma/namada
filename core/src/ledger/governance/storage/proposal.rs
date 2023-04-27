@@ -49,10 +49,15 @@ pub enum AddRemove<T> {
     BorshDeserialize,
     Serialize,
     Deserialize,
+    Ord,
+    Eq,
+    PartialOrd,
 )]
 pub struct PGFTarget {
-    target: Address,
-    amount: Amount,
+    /// The target address
+    pub target: Address,
+    /// The amount of token to fund the target address
+    pub amount: Amount,
 }
 
 /// The actions that a PGF Steward can propose to execute
