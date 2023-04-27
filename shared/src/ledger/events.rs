@@ -9,7 +9,8 @@ use std::ops::{Index, IndexMut};
 use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
-use crate::ledger::governance::utils::ProposalEvent;
+use crate::ledger::governance::utils::ProposalEvent as GoverananceProposalEvent;
+use crate::ledger::pgf::utils::ProposalEvent as PgfProposalEvent;
 use crate::tendermint_proto::abci::EventAttribute;
 use crate::types::ibc::IbcEvent;
 #[cfg(feature = "ferveo-tpke")]
@@ -49,6 +50,8 @@ pub enum EventType {
     Ibc(String),
     /// The proposal that has been executed
     Proposal,
+    /// The pgf payment
+    PgfPayment
 }
 
 impl Display for EventType {
@@ -58,6 +61,7 @@ impl Display for EventType {
             EventType::Applied => write!(f, "applied"),
             EventType::Ibc(t) => write!(f, "{}", t),
             EventType::Proposal => write!(f, "proposal"),
+            EventType::PgfPayment => write!(f, "pgf payment"),
         }?;
         Ok(())
     }
@@ -151,10 +155,20 @@ impl From<IbcEvent> for Event {
     }
 }
 
-impl From<ProposalEvent> for Event {
-    fn from(proposal_event: ProposalEvent) -> Self {
+impl From<GoverananceProposalEvent> for Event {
+    fn from(proposal_event: GoverananceProposalEvent) -> Self {
         Self {
             event_type: EventType::Proposal,
+            level: EventLevel::Block,
+            attributes: proposal_event.attributes,
+        }
+    }
+}
+
+impl From<PgfProposalEvent> for Event {
+    fn from(proposal_event: PgfProposalEvent) -> Self {
+        Self {
+            event_type: EventType::PgfPayment,
             level: EventLevel::Block,
             attributes: proposal_event.attributes,
         }

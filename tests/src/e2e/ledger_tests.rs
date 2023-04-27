@@ -27,7 +27,6 @@ use namada_apps::client::tx::ShieldedContext;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
-use namada_test_utils::TestWasms;
 use serde::Serialize;
 use serde_json::json;
 use setup::constants::*;
@@ -2724,7 +2723,7 @@ fn proposal_submission() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    let mut client = run!(test, Bin::Client, proposal_query_args, Some(40))?;
+    let mut client = run!(test, Bin::Client, proposal_query_args.clone(), Some(40))?;
     client.exp_string("Proposal Id: 0")?;
     client.assert_success();
 
