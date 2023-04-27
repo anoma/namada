@@ -78,6 +78,11 @@ where
                     ProposalType::Default(code) => {
                         let result =
                             execute_default_proposal(shell, id, code.clone())?;
+                        tracing::info!(
+                            "Governance proposal (default) {} has been \
+                             executed and passed",
+                            id
+                        );
 
                         ProposalEvent::default_proposal_event(
                             id,
@@ -91,6 +96,12 @@ where
                             &mut shell.wl_storage,
                             stewards,
                         )?;
+                        tracing::info!(
+                            "Governance proposal (pgf stewards){} has been \
+                             executed and passed",
+                            id
+                        );
+
                         ProposalEvent::pgf_steward_proposal_event(id, result)
                             .into()
                     }
@@ -102,11 +113,23 @@ where
                             native_token,
                             payments,
                         )?;
+                        tracing::info!(
+                            "Governance proposal (pgs payments) {} has been \
+                             executed and passed",
+                            id
+                        );
+
                         ProposalEvent::pgf_payments_proposal_event(id, result)
                             .into()
                     }
                     ProposalType::ETHBridge(_data) => {
                         let result = execute_eth_proposal(id)?;
+                        tracing::info!(
+                            "Governance proposal (eth) {} has been executed \
+                             and passed",
+                            id
+                        );
+
                         ProposalEvent::eth_proposal_event(id, result).into()
                     }
                 };
@@ -121,6 +144,12 @@ where
                     ProposalEvent::rejected_proposal_event(id).into();
                 response.events.push(proposal_event);
                 proposals_result.rejected.push(id);
+
+                tracing::info!(
+                    "Governance proposal {} has been executed \
+                     and rejected",
+                    id
+                );
 
                 None
             }
