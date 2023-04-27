@@ -8,6 +8,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 use namada::core::ledger::governance::parameters::GovParams;
 use namada::core::ledger::parameters::EpochDuration;
+use namada::core::ledger::pgf::parameters::PgfParams;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
 use namada::ledger::pos::{GenesisValidator, PosParams};
@@ -24,7 +25,7 @@ use rust_decimal::Decimal;
 /// Genesis configuration file format
 pub mod genesis_config {
     use std::array::TryFromSliceError;
-    use std::collections::HashMap;
+    use std::collections::{BTreeSet, HashMap};
     use std::convert::TryInto;
     use std::path::Path;
     use std::str::FromStr;
@@ -33,6 +34,7 @@ pub mod genesis_config {
     use eyre::Context;
     use namada::core::ledger::governance::parameters::GovParams;
     use namada::core::ledger::parameters::EpochDuration;
+    use namada::core::ledger::pgf::parameters::PgfParams;
     #[cfg(not(feature = "mainnet"))]
     use namada::core::ledger::testnet_pow;
     use namada::ledger::pos::{GenesisValidator, PosParams};
@@ -135,6 +137,8 @@ pub mod genesis_config {
         pub pos_params: PosParamsConfig,
         // Governance parameters
         pub gov_params: GovernanceParamsConfig,
+        // Pgf parameters
+        pub pgf_params: PgfParamsConfig,
         // Wasm definitions
         pub wasm: HashMap<String, WasmConfig>,
     }
@@ -159,6 +163,16 @@ pub mod genesis_config {
         // Minimum number of epoch between end and grace epoch
         // XXX: u64 doesn't work with toml-rs!
         pub min_proposal_grace_epochs: u64,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct PgfParamsConfig {
+        /// The set of stewards
+        pub stewards: BTreeSet<Address>,
+        /// The set of continous payments
+        pub payments: BTreeSet<u64>,
+        /// The pgf inflation rate
+        pub inflation_rate: Decimal,
     }
 
     /// Validator pre-genesis configuration can be created with client utils
@@ -537,6 +551,7 @@ pub mod genesis_config {
             pos_params,
             gov_params,
             wasm,
+            pgf_params,
         } = config;
 
         let native_token = Address::decode(
@@ -640,6 +655,17 @@ pub mod genesis_config {
             max_proposal_period,
         };
 
+        let PgfParamsConfig {
+            stewards,
+            payments,
+            inflation_rate,
+        } = pgf_params;
+        let pgf_params = PgfParams {
+            stewards,
+            payments,
+            inflation_rate,
+        };
+
         let PosParamsConfig {
             max_validator_slots,
             pipeline_len,
@@ -679,6 +705,7 @@ pub mod genesis_config {
             parameters,
             pos_params,
             gov_params,
+            pgf_params,
         };
         genesis.init();
         genesis
@@ -731,6 +758,7 @@ pub struct Genesis {
     pub parameters: Parameters,
     pub pos_params: PosParams,
     pub gov_params: GovParams,
+    pub pgf_params: PgfParams,
 }
 
 impl Genesis {
@@ -1008,6 +1036,7 @@ pub fn genesis() -> Genesis {
         parameters,
         pos_params: PosParams::default(),
         gov_params: GovParams::default(),
+        pgf_params: PgfParams::default(),
         native_token: address::nam(),
         #[cfg(not(feature = "mainnet"))]
         faucet_pow_difficulty: None,

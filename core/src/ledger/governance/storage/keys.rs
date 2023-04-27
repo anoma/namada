@@ -4,7 +4,7 @@ use crate::ledger::governance::ADDRESS;
 use crate::types::address::Address;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
-/// Storage keys for ledger parameters.
+/// Storage keys for governance internal address.
 #[derive(StorageKeys)]
 struct Keys {
     proposal: &'static str,
