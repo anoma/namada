@@ -211,3 +211,14 @@ max_proposal_period = 27
 max_proposal_content_size = 10000
 # minimum epochs between end and grace epoch
 min_proposal_grace_epochs = 6
+
+# Pgf parameters.
+[pgf_params]
+# Pgf stewards addresses
+stewards = []
+# Pgf payments
+payments = []
+# Pgf inflation rate
+pgf_inflation_rate = 0.05
+# Steward inflation rate
+steward_inflation_rate = 0.01

@@ -1,7 +1,7 @@
 //! Client RPC queries
 
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::TryInto;
 use std::fs::{read_dir, File};
 use std::io::{self, Write};
@@ -24,7 +24,9 @@ use namada::core::ledger::governance::cli::offline::{
 };
 use namada::core::ledger::governance::parameters::GovParams;
 use namada::core::ledger::governance::storage::keys as gov_storage;
-use namada::core::ledger::governance::storage::proposal::StorageProposal;
+use namada::core::ledger::governance::storage::proposal::{
+    PGFTarget, StorageProposal,
+};
 use namada::core::ledger::governance::utils::{
     compute_proposal_result, ProposalStatus, ProposalVotes, TallyType,
     TallyVote, Vote, VotePower,
@@ -32,6 +34,7 @@ use namada::core::ledger::governance::utils::{
 use namada::core::ledger::parameters::{
     storage as param_storage, EpochDuration,
 };
+use namada::core::ledger::pgf;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
 use namada::core::types::key;
@@ -53,6 +56,7 @@ use namada::types::transaction::{
     WrapperTx,
 };
 use namada::types::{storage, token};
+use rust_decimal::Decimal;
 use tokio::time::{Duration, Instant};
 
 use super::signing::{tx_signers, OfflineSignature};
@@ -1322,6 +1326,45 @@ pub async fn query_proposal_result(
     }
 }
 
+pub async fn query_pgf(
+    _ctx: Context,
+    args::QueryPgf { query }: args::QueryPgf,
+) {
+    let client = HttpClient::new(query.ledger_address.clone()).unwrap();
+
+    let stewards = query_pgf_stewards(&client).await;
+    let fundings = query_pgf_fundings(&client).await;
+
+    match stewards.len() {
+        0 => println!("Pgf stewards: no stewards are currectly set."),
+        _ => {
+            println!("Pgf stewards:");
+            for steward in stewards {
+                println!("{:4}- {}", "", steward);
+            }
+        }
+    }
+
+    match fundings.len() {
+        0 => println!("Pgf fundings: no fundings are currently set."),
+        _ => {
+            println!("Pgf fundings:");
+            for payment in fundings {
+                println!("{:4}- {}", "", payment.target);
+                println!("{:6}{}", "", payment.amount);
+            }
+        }
+    }
+}
+
+pub async fn query_pgf_stewards(client: &HttpClient) -> BTreeSet<Address> {
+    unwrap_client_response(RPC.vp().pgf().stewards(client).await)
+}
+
+pub async fn query_pgf_fundings(client: &HttpClient) -> BTreeSet<PGFTarget> {
+    unwrap_client_response(RPC.vp().pgf().funding(client).await)
+}
+
 pub async fn query_protocol_parameters(
     _ctx: Context,
     args: args::QueryProtocolParameters,
@@ -1329,7 +1372,31 @@ pub async fn query_protocol_parameters(
     let client = HttpClient::new(args.query.ledger_address).unwrap();
 
     let gov_parameters = get_governance_parameters(&client).await;
-    println!("Governance Parameters\n {:4}", gov_parameters);
+    println!("Governance parameters");
+    println!(
+        "{:4}Min. proposal fund: {}",
+        "", gov_parameters.min_proposal_fund
+    );
+    println!(
+        "{:4}Max. proposal code size: {}",
+        "", gov_parameters.max_proposal_code_size
+    );
+    println!(
+        "{:4}Min. proposal period: {}",
+        "", gov_parameters.min_proposal_period
+    );
+    println!(
+        "{:4}Max. proposal period: {}",
+        "", gov_parameters.max_proposal_period
+    );
+    println!(
+        "{:4}Max. proposal content size: {}",
+        "", gov_parameters.max_proposal_content_size
+    );
+    println!(
+        "{:4}Min. proposal grace epochs: {}",
+        "", gov_parameters.min_proposal_grace_epochs
+    );
 
     println!("Protocol parameters");
     let key = param_storage::get_epoch_duration_storage_key();
@@ -1391,6 +1458,18 @@ pub async fn query_protocol_parameters(
     println!("{:4}Pipeline length: {}", "", pos_params.pipeline_len);
     println!("{:4}Unbonding length: {}", "", pos_params.unbonding_len);
     println!("{:4}Votes per token: {}", "", pos_params.tm_votes_per_token);
+
+    println!("Pgf parameters");
+    let key = pgf::storage::keys::get_pgf_inflation_rate_key();
+    let pgf_inflation = query_storage_value::<Decimal>(&client, &key)
+        .await
+        .expect("Parameter should be defined.");
+    let key = pgf::storage::keys::get_steward_inflation_rate_key();
+    let stewards_inflation = query_storage_value::<Decimal>(&client, &key)
+        .await
+        .expect("Parameter should be defined.");
+    println!("{:4}Pgf inflation: {:?}", "", pgf_inflation);
+    println!("{:4}Steward inflation: {:?}", "", stewards_inflation);
 }
 
 pub async fn query_bond(

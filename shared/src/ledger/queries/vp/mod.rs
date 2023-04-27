@@ -5,11 +5,15 @@ mod pos;
 pub use governance::Gov;
 use governance::GOV;
 mod governance;
+pub use pgf::Pgf;
+use pgf::PGF;
+mod pgf;
 
 // Validity predicate queries
 router! {VP,
     ( "pos" ) = (sub POS),
     ( "governance" ) = (sub GOV),
+    ( "pgf" ) = (sub PGF),
 }
 
 #[cfg(any(test, feature = "async-client"))]

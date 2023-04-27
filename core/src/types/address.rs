@@ -46,6 +46,8 @@ pub const POS_SLASH_POOL: Address =
     Address::Internal(InternalAddress::PosSlashPool);
 /// Internal Governance address
 pub const GOV: Address = Address::Internal(InternalAddress::Governance);
+/// Internal Pgf address
+pub const PGF: Address = Address::Internal(InternalAddress::Pgf);
 
 /// Raw strings used to produce internal addresses. All the strings must begin
 /// with `PREFIX_INTERNAL` and be `FIXED_LEN_STRING_BYTES` characters long.
@@ -59,6 +61,8 @@ mod internal {
         "ano::Protocol Parameters                     ";
     pub const GOVERNANCE: &str =
         "ano::Governance                              ";
+    pub const PGF: &str =
+        "ano::Public good fundings                    ";
     pub const IBC: &str =
         "ibc::Inter-Blockchain Communication          ";
     pub const IBC_ESCROW: &str =
@@ -192,6 +196,7 @@ impl Address {
                     InternalAddress::Governance => {
                         internal::GOVERNANCE.to_string()
                     }
+                    InternalAddress::Pgf => internal::PGF.to_string(),
                     InternalAddress::Ibc => internal::IBC.to_string(),
                     InternalAddress::IbcToken(hash) => {
                         format!("{}::{}", PREFIX_IBC, hash)
@@ -254,6 +259,7 @@ impl Address {
                 internal::GOVERNANCE => {
                     Ok(Address::Internal(InternalAddress::Governance))
                 }
+                internal::PGF => Ok(Address::Internal(InternalAddress::Pgf)),
                 internal::ETH_BRIDGE => {
                     Ok(Address::Internal(InternalAddress::EthBridge))
                 }
@@ -471,6 +477,8 @@ pub enum InternalAddress {
     IbcMint,
     /// Governance address
     Governance,
+    /// Pgf address
+    Pgf,
     /// Bridge to Ethereum
     EthBridge,
     /// Replay protection contains transactions' hash
@@ -502,6 +510,7 @@ impl Display for InternalAddress {
                 Self::PosSlashPool => "PosSlashPool".to_string(),
                 Self::Parameters => "Parameters".to_string(),
                 Self::Governance => "Governance".to_string(),
+                Self::Pgf => "Pgf".to_string(),
                 Self::Ibc => "IBC".to_string(),
                 Self::IbcToken(hash) => format!("IbcToken: {}", hash),
                 Self::IbcEscrow => "IbcEscrow".to_string(),
@@ -769,6 +778,7 @@ pub mod testing {
             InternalAddress::PoS => {}
             InternalAddress::PosSlashPool => {}
             InternalAddress::Governance => {}
+            InternalAddress::Pgf => {}
             InternalAddress::Parameters => {}
             InternalAddress::Ibc => {}
             InternalAddress::IbcToken(_) => {}
@@ -791,6 +801,7 @@ pub mod testing {
             Just(InternalAddress::IbcBurn),
             Just(InternalAddress::IbcMint),
             Just(InternalAddress::Governance),
+            Just(InternalAddress::Pgf),
             Just(InternalAddress::EthBridge),
             Just(InternalAddress::ReplayProtection)
         ]

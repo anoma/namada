@@ -1,14 +1,16 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use namada::core::ledger::governance::storage::keys as gov_storage;
 use namada::core::ledger::governance::storage::proposal::{
-    AddRemove, PGFAction, ProposalType,
+    AddRemove, PGFAction, PGFTarget, ProposalType,
 };
 use namada::core::ledger::governance::utils::{
     compute_proposal_result, ProposalVotes, TallyResult, TallyType, TallyVote,
     VotePower,
 };
 use namada::core::ledger::governance::ADDRESS as gov_address;
+use namada::core::ledger::pgf::storage::keys as pgf_storage;
+use namada::core::ledger::pgf::ADDRESS;
 use namada::core::ledger::storage_api::governance as gov_api;
 use namada::ledger::governance::utils::ProposalEvent;
 use namada::ledger::pos::BondId;
@@ -24,6 +26,7 @@ use namada::types::address::Address;
 use namada::types::storage::Epoch;
 
 use super::*;
+use super::utils::force_read;
 
 #[derive(Default)]
 pub struct ProposalsResult {
@@ -76,6 +79,11 @@ where
                     ProposalType::Default(code) => {
                         let result =
                             execute_default_proposal(shell, id, code.clone())?;
+                        tracing::info!(
+                            "Governance proposal (default) {} has been \
+                             executed and passed",
+                            id
+                        );
 
                         ProposalEvent::default_proposal_event(
                             id,
@@ -85,18 +93,45 @@ where
                         .into()
                     }
                     ProposalType::PGFSteward(stewards) => {
-                        let _result =
-                            execute_pgf_steward_proposal(id, stewards);
-                        ProposalEvent::pgf_steward_proposal_event(id).into()
+                        let result = execute_pgf_steward_proposal(
+                            &mut shell.wl_storage,
+                            stewards,
+                        )?;
+                        tracing::info!(
+                            "Governance proposal (pgf stewards){} has been \
+                             executed and passed",
+                            id
+                        );
+
+                        ProposalEvent::pgf_steward_proposal_event(id, result)
+                            .into()
                     }
                     ProposalType::PGFPayment(payments) => {
-                        let _result =
-                            execute_pgf_payment_proposal(id, payments);
-                        ProposalEvent::pgf_payments_proposal_event(id).into()
+                        let native_token =
+                            &shell.wl_storage.get_native_token()?;
+                        let result = execute_pgf_payment_proposal(
+                            &mut shell.wl_storage,
+                            native_token,
+                            payments,
+                        )?;
+                        tracing::info!(
+                            "Governance proposal (pgs payments) {} has been \
+                             executed and passed",
+                            id
+                        );
+
+                        ProposalEvent::pgf_payments_proposal_event(id, result)
+                            .into()
                     }
                     ProposalType::ETHBridge(_data) => {
-                        let _result = execute_eth_proposal(id);
-                        ProposalEvent::eth_proposal_event(id).into()
+                        let result = execute_eth_proposal(id)?;
+                        tracing::info!(
+                            "Governance proposal (eth) {} has been executed \
+                             and passed",
+                            id
+                        );
+
+                        ProposalEvent::eth_proposal_event(id, result).into()
                     }
                 };
                 response.events.push(proposal_event);
@@ -110,6 +145,11 @@ where
                     ProposalEvent::rejected_proposal_event(id).into();
                 response.events.push(proposal_event);
                 proposals_result.rejected.push(id);
+
+                tracing::info!(
+                    "Governance proposal {} has been executed and rejected",
+                    id
+                );
 
                 None
             }
@@ -135,17 +175,6 @@ where
     }
 
     Ok(proposals_result)
-}
-
-pub fn force_read<S, T>(storage: &S, key: &Key) -> storage_api::Result<T>
-where
-    S: StorageRead,
-    T: BorshDeserialize,
-{
-    storage
-        .read::<T>(key)
-        .transpose()
-        .expect("Storage key must be present.")
 }
 
 fn compute_proposal_votes<S>(
@@ -294,17 +323,67 @@ where
     }
 }
 
-fn execute_pgf_steward_proposal(
-    _id: u64,
-    _stewards: HashSet<AddRemove<Address>>,
-) -> bool {
-    true
+fn execute_pgf_steward_proposal<S>(
+    storage: &mut S,
+    stewards: HashSet<AddRemove<Address>>,
+) -> Result<bool>
+where
+    S: StorageRead + StorageWrite,
+{
+    let stewards_key = pgf_storage::get_stewards_key();
+    let mut storage_stewards: BTreeSet<Address> =
+        storage.read(&stewards_key)?.unwrap_or_default();
+
+    for action in stewards {
+        match action {
+            AddRemove::Add(steward) => storage_stewards.insert(steward),
+            AddRemove::Remove(steward) => storage_stewards.remove(&steward),
+        };
+    }
+
+    let write_result = storage.write(&stewards_key, storage_stewards);
+    Ok(write_result.is_ok())
 }
 
-fn execute_pgf_payment_proposal(_id: u64, _actions: Vec<PGFAction>) -> bool {
-    true
+fn execute_pgf_payment_proposal<S>(
+    storage: &mut S,
+    token: &Address,
+    payments: Vec<PGFAction>,
+) -> Result<bool>
+where
+    S: StorageRead + StorageWrite,
+{
+    let continous_payments_key = pgf_storage::get_payments_key();
+    let mut continous_payments: BTreeSet<PGFTarget> =
+        storage.read(&continous_payments_key)?.unwrap_or_default();
+
+    for payment in payments {
+        match payment {
+            PGFAction::Continuous(action) => match action {
+                AddRemove::Add(target) => {
+                    continous_payments.insert(target);
+                }
+                AddRemove::Remove(target) => {
+                    continous_payments.remove(&target);
+                }
+            },
+            PGFAction::Retro(target) => {
+                token::transfer(
+                    storage,
+                    token,
+                    &ADDRESS,
+                    &target.target,
+                    target.amount,
+                )?;
+            }
+        }
+    }
+
+    let write_result =
+        storage.write(&continous_payments_key, continous_payments);
+    Ok(write_result.is_ok())
 }
 
-fn execute_eth_proposal(_id: u64) -> bool {
-    true
+fn execute_eth_proposal(_id: u64) -> Result<bool> {
+    Ok(false)
 }
