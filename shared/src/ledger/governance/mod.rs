@@ -9,9 +9,9 @@ use namada_core::ledger::governance::storage::keys as gov_storage;
 use namada_core::ledger::governance::storage::proposal::ProposalType;
 use namada_core::ledger::governance::storage::vote::StorageProposalVote;
 use namada_core::ledger::governance::utils::is_valid_validator_voting_period;
-use namada_core::ledger::storage;
 use namada_core::ledger::storage_api::governance::is_proposal_accepted;
 use namada_core::ledger::vp_env::VpEnv;
+use namada_core::ledger::{pgf, storage};
 use namada_proof_of_stake::is_validator;
 use thiserror::Error;
 
@@ -298,7 +298,21 @@ where
                 Ok(stewards.len() < MAX_PGF_ACTIONS)
             }
             ProposalType::PGFPayment(payments) => {
-                Ok(payments.len() < MAX_PGF_ACTIONS)
+                if payments.len() < MAX_PGF_ACTIONS {
+                    return Ok(true);
+                }
+                let stewards_key = pgf::storage::keys::get_stewards_key();
+                let author_key = gov_storage::get_author_key(proposal_id);
+
+                let author: Option<Address> =
+                    self.ctx.pre().read(&author_key)?;
+                let stewards: BTreeSet<Address> =
+                    self.force_read(&stewards_key, ReadType::Pre)?;
+
+                match author {
+                    Some(address) => Ok(stewards.contains(&address)),
+                    None => Ok(false),
+                }
             }
             ProposalType::ETHBridge(data) => {
                 let max_code_size_parameter_key =
