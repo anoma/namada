@@ -3,11 +3,11 @@
 pub mod eth_bridge;
 pub mod events;
 pub mod governance;
-pub mod pgf;
 pub mod ibc;
 pub mod masp;
 pub mod native_vp;
 pub mod parameter;
+pub mod pgf;
 pub mod pos;
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 pub mod protocol;

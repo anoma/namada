@@ -245,9 +245,7 @@ impl Address {
                 internal::GOVERNANCE => {
                     Ok(Address::Internal(InternalAddress::Governance))
                 }
-                internal::PGF => {
-                    Ok(Address::Internal(InternalAddress::Pgf))
-                }
+                internal::PGF => Ok(Address::Internal(InternalAddress::Pgf)),
                 internal::ETH_BRIDGE => {
                     Ok(Address::Internal(InternalAddress::EthBridge))
                 }

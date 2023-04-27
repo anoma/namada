@@ -5,6 +5,7 @@ use std::panic;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
+use super::pgf::PgfVp;
 use crate::ledger::eth_bridge::vp::EthBridge;
 use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter};
 use crate::ledger::governance::GovernanceVp;
@@ -21,8 +22,6 @@ use crate::types::storage::TxIndex;
 use crate::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
 use crate::vm::wasm::{TxCache, VpCache};
 use crate::vm::{self, wasm, WasmCacheAccess};
-
-use super::pgf::PgfVp;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
