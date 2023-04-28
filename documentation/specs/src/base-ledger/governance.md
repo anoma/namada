@@ -1,12 +1,26 @@
 # Governance
 
-Before describing Namada governance, it is useful to define the concepts of validators, delegators, and NAM:
+Before describing Namada governance, it is useful to define the concepts of NAM, validators, delegators, and delegates:
 
+*Cryptoeconomic terminiology*
 - Namada's economic model is based around a single native token, NAM, which is controlled by the protocol.
-- A Namada _validator_ is an account with a public consensus key, which may participate in producing blocks and governance activities. A validator may not also be a delegator.
-- A Namada _delegator_ is an account that delegates some tokens to a validator. A delegator may not also be a validator.
 
-Namada introduces a governance mechanism to propose and apply protocol changes without the need for a hard fork, and to signal stakeholder approval for potential hard forks. Anyone holding some `NAM` will be able to propose some changes in a proposal for which delegators and validators will cast their `yay` or `nay` votes; in addition it will also be possible to attach some payloads to proposals, in specific cases, to embed additional information. Governance on Namada supports both `signaling` and `voting` mechanisms. The signaling mechanism is used for changes which require a hard fork, while the voting mechanism is used for changes which merely alter state. In cases where the chain is not able to produce blocks anymore, Namada relies on [off chain signaling](#off-chain-protocol) to agree on a common move.
+*Consensus terminology*
+- A Namada _validator_ is an account with a public consensus key, which may participate in producing blocks and governance activities. A validator may not also be a delegator.
+
+Non-validator addresses on Namada are able to bond their tokens to a validator. When doing so, the validator's voting-power is proportional to the sum of its self-bonded tokens and all the bonded tokens from other addesses to their own address. Proof of stake rewards are split between the bonding addresses and the validator itself in a pre-determined way.
+
+When an address bonds tokens to a validator, the validator becomes the default *delegate* (explained below) of that address.
+
+*Governance terminology*
+With the above definitions in mind, we can now define the following terms:
+
+- A Namada _delegator_ is an account that delegates some tokens to a _delegate_ for voting purposes. Any address is either a delegator or a delegate, but not both.
+- A Namada _delegate_ is an account that has been given the right to vote on the behalf of a delegator. A delegate may not also be a delegator.
+
+Namada introduces a governance mechanism to propose and apply protocol changes without the need for a hard fork, and to signal stakeholder approval for potential hard forks. Anyone holding some `NAM` will be able to propose some changes in a proposal for which delegators and validators will cast their `yay` or `nay` votes. It will also be possible to attach some payloads to proposals, in specific cases, to embed additional information. 
+
+Governance on Namada supports both `signaling` and `voting` mechanisms. The signaling mechanism is used for changes which require a hard fork, while the voting mechanism is used for changes which merely alter state. In cases where the chain is not able to produce blocks anymore, Namada relies on [off chain signaling](#off-chain-protocol) to agree on a common move.
 
 Further information about delegators, validators, and NAM can be found in the [economics section](../economics.md).
 
@@ -14,14 +28,12 @@ Further information about delegators, validators, and NAM can be found in the [e
 
 ### Governance Address
 
-Governance adds 2 internal addresses:
+Governance adds 1 internal address:
 
 - `GovernanceAddress`
-- `SlashFundAddress`
 
-The first internal address contains all the proposals under its address space.
-The second internal address holds the funds of rejected proposals.
-
+This address contains all the proposals under its address space.
+=======
 ### Governance storage
 
 Each proposal will be stored in a sub-key under the internal proposal address. The storage keys involved are:
