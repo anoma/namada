@@ -49,8 +49,12 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    let mut changed_keys = timeout_events(wl_storage)?;
     if events.is_empty() {
-        return Ok(TxResult::default());
+        return Ok(TxResult {
+            changed_keys,
+            ..Default::default()
+        });
     }
     tracing::info!(
         ethereum_events = events.len(),
@@ -62,9 +66,11 @@ where
 
     let voting_powers = utils::get_voting_powers(wl_storage, &updates)?;
 
-    let mut changed_keys = apply_updates(wl_storage, updates, voting_powers)?;
-
-    changed_keys.append(&mut timeout_events(wl_storage)?);
+    changed_keys.append(&mut apply_updates(
+        wl_storage,
+        updates,
+        voting_powers,
+    )?);
 
     Ok(TxResult {
         changed_keys,
