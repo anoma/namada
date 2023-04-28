@@ -172,7 +172,7 @@ pub trait IbcCommonContext: IbcStorageContext {
     }
 
     /// Calculate the hash
-    fn hash(&self, value: &[u8]) -> Vec<u8> {
+    fn hash(value: &[u8]) -> Vec<u8> {
         sha2::Sha256::digest(value).to_vec()
     }
 
@@ -194,10 +194,10 @@ pub trait IbcCommonContext: IbcStorageContext {
             timeout_height.commitment_revision_height().to_be_bytes();
         hash_input.append(&mut revision_height.to_vec());
 
-        let packet_data_hash = self.hash(packet_data);
+        let packet_data_hash = Self::hash(packet_data);
         hash_input.append(&mut packet_data_hash.to_vec());
 
-        self.hash(&hash_input).into()
+        Self::hash(&hash_input).into()
     }
 
     /// Decode ClientState from Any

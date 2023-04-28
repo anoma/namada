@@ -25,7 +25,7 @@ impl std::cmp::PartialOrd for IbcEvent {
 impl std::cmp::Ord for IbcEvent {
     fn cmp(&self, other: &Self) -> Ordering {
         // should not compare the same event type
-        self.partial_cmp(other).unwrap()
+        self.event_type.cmp(&other.event_type)
     }
 }
 
