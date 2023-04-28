@@ -62,6 +62,8 @@ jobs:
         run: curl https://i.jpillora.com/${{ matrix.make.version }}! | bash
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: ${{ matrix.make.name }}
         working-directory: ./.github/workflows/scripts
         run: |
