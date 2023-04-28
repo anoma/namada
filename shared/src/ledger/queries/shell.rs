@@ -78,29 +78,76 @@ where
     use crate::ledger::storage::write_log::WriteLog;
     use crate::proto::Tx;
     use crate::types::storage::TxIndex;
-    use crate::types::transaction::{DecryptedTx, TxType};
-
+    use crate::types::transaction::wrapper::wrapper_tx::PairingEngine;
+    use crate::types::transaction::{
+        AffineCurve, DecryptedTx, EllipticCurve, TxType,
+    };
     let gas_table: BTreeMap<String, u64> = ctx
         .wl_storage
         .read(&parameters::storage::get_gas_table_storage_key())
         .expect("Error while reading storage")
         .expect("Missing gas table in storage");
 
-    let mut tx_gas_meter = TxGasMeter::new(
-        ctx.wl_storage
-            .read(&parameters::storage::get_max_block_gas_key())
-            .expect("Error while reading storage key")
-            .expect("Missing parameter in storage"),
-    );
+    let mut tx: TxType = Tx::try_from(&request.data[..])
+        .into_storage_result()?
+        .try_into()
+        .unwrap();
+
     let mut write_log = WriteLog::default();
-    let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
-    let tx = TxType::Decrypted(DecryptedTx::Decrypted {
-        tx,
-        #[cfg(not(feature = "mainnet"))]
-        has_valid_pow: true,
-    });
+
+    // Wrapper dry run to allow estimating the gas cost of a transaction
+    let mut tx_gas_meter = if let TxType::Wrapper(wrapper) = &tx {
+        let mut tx_gas_meter =
+            TxGasMeter::new(wrapper.gas_limit.to_owned().into());
+        protocol::apply_tx(
+            tx.to_owned(),
+            &request.data,
+            TxIndex::default(),
+            &mut tx_gas_meter,
+            &gas_table,
+            &mut write_log,
+            &ctx.wl_storage.storage,
+            &mut ctx.vp_wasm_cache,
+            &mut ctx.tx_wasm_cache,
+            None,
+            #[cfg(not(feature = "mainnet"))]
+            false,
+        )
+        .into_storage_result()?;
+
+        write_log.commit_tx();
+
+        // NOTE: the encryption key for a dry-run should always be an hardcoded, dummy one
+        let privkey =
+            <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+        tx = TxType::Decrypted(DecryptedTx::Decrypted {
+            tx: wrapper
+                .decrypt(privkey)
+                .expect("Could not decrypt the inner tx"),
+                    #[cfg(not(feature = "mainnet"))]
+                    // To be able to dry-run testnet faucet withdrawal, pretend 
+                    // that we got a valid PoW
+                    has_valid_pow: true,
+        });
+        TxGasMeter::new(
+            tx_gas_meter
+                .tx_gas_limit
+                .checked_sub(tx_gas_meter.get_current_transaction_gas())
+                .unwrap_or_default(),
+        )
+    } else {
+        // If dry run only the inner tx, use the max block gas as the gas limit
+        TxGasMeter::new(
+            ctx.wl_storage
+                .read(&parameters::storage::get_max_block_gas_key())
+                .expect("Error while reading storage key")
+                .expect("Missing parameter in storage"),
+        )
+    };
+
     let data = protocol::apply_tx(
         tx,
+        &vec![],
         TxIndex(0),
         &mut tx_gas_meter,
         &gas_table,
@@ -108,8 +155,12 @@ where
         &ctx.wl_storage.storage,
         &mut ctx.vp_wasm_cache,
         &mut ctx.tx_wasm_cache,
+        None,
+        #[cfg(not(feature = "mainnet"))]
+        false,
     )
     .into_storage_result()?;
+    // NOTE: the keys changed by the wrapper transaction (if any) are not returned from this function
     let data = data.try_to_vec().into_storage_result()?;
     Ok(EncodedResponseQuery {
         data,

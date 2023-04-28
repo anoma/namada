@@ -34,7 +34,6 @@ use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, TempWlStorage, WlStorage, DB,
 };
-use namada::ledger::storage_api::StorageWrite;
 use namada::ledger::storage_api::{self, StorageRead};
 use namada::ledger::{ibc, parameters, pos, protocol, replay_protection};
 use namada::proof_of_stake::{self, read_pos_params, slash};
@@ -811,50 +810,102 @@ where
             .read(&parameters::storage::get_gas_table_storage_key())
             .expect("Error while reading from storage")
             .expect("Missing gas table in storage");
-        let mut gas_meter = TxGasMeter::new(
-            self.wl_storage
-                .read(&parameters::storage::get_max_block_gas_key())
-                .expect("Error while reading from storage")
-                .expect("Missing max_block_gas parameter in storage"),
-        );
         let mut write_log = WriteLog::default();
         let mut vp_wasm_cache = self.vp_wasm_cache.read_only();
         let mut tx_wasm_cache = self.tx_wasm_cache.read_only();
-        match Tx::try_from(tx_bytes) {
-            Ok(tx) => {
-                let tx = TxType::Decrypted(DecryptedTx::Decrypted {
-                    tx,
+        let raw_tx = match Tx::try_from(tx_bytes) {
+            Ok(tx) => tx,
+            Err(err) => {
+                response.code = 1;
+                response.log = format!("{}", Error::TxDecoding(err));
+                return response;
+            }
+        };
+        let mut tx: TxType = match raw_tx.try_into() {
+            Ok(tx_type) => tx_type,
+            Err(err) => {
+                response.code = 1;
+                response.log = format!("{}", err);
+                return response;
+            }
+        };
+
+        // Wrapper dry run to allow estimating the gas cost of a transaction
+        let mut tx_gas_meter = if let TxType::Wrapper(wrapper) = &tx {
+            let mut tx_gas_meter =
+                TxGasMeter::new(wrapper.gas_limit.to_owned().into());
+            if let Err(e) = protocol::apply_tx(
+                tx.clone(),
+                tx_bytes,
+                TxIndex::default(),
+                &mut tx_gas_meter,
+                &gas_table,
+                &mut write_log,
+                &self.wl_storage.storage,
+                &mut self.vp_wasm_cache.clone(),
+                &mut self.tx_wasm_cache.clone(),
+                None,
+                #[cfg(not(feature = "mainnet"))]
+                false,
+            ) {
+                response.code = 1;
+                response.log = format!("{}", e);
+                return response;
+            };
+
+            write_log.commit_tx();
+
+            // NOTE: the encryption key for a dry-run should always be an hardcoded, dummy one
+            let privkey =
+            <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+            tx = TxType::Decrypted(DecryptedTx::Decrypted {
+            tx: wrapper
+                .decrypt(privkey)
+                .expect("Could not decrypt the inner tx"),
                     #[cfg(not(feature = "mainnet"))]
                     // To be able to dry-run testnet faucet withdrawal, pretend 
                     // that we got a valid PoW
                     has_valid_pow: true,
-                });
-                match protocol::apply_tx(
-                    tx,
-                    TxIndex::default(),
-                    &mut gas_meter,
-                    &gas_table,
-                    &mut write_log,
-                    &self.wl_storage.storage,
-                    &mut vp_wasm_cache,
-                    &mut tx_wasm_cache,
-                )
-                .map_err(Error::TxApply)
-                {
-                    Ok(result) => response.info = result.to_string(),
-                    Err(error) => {
-                        response.code = 1;
-                        response.log = format!("{}", error);
-                    }
-                }
-                response
-            }
-            Err(err) => {
+        });
+            TxGasMeter::new(
+                tx_gas_meter
+                    .tx_gas_limit
+                    .checked_sub(tx_gas_meter.get_current_transaction_gas())
+                    .unwrap_or_default(),
+            )
+        } else {
+            // If dry run only the inner tx, use the max block gas as the gas limit
+            TxGasMeter::new(
+                self.wl_storage
+                    .read(&parameters::storage::get_max_block_gas_key())
+                    .expect("Error while reading storage key")
+                    .expect("Missing parameter in storage"),
+            )
+        };
+
+        match protocol::apply_tx(
+            tx,
+            &vec![],
+            TxIndex::default(),
+            &mut tx_gas_meter,
+            &gas_table,
+            &mut write_log,
+            &self.wl_storage.storage,
+            &mut vp_wasm_cache,
+            &mut tx_wasm_cache,
+            None,
+            #[cfg(not(feature = "mainnet"))]
+            false,
+        )
+        .map_err(Error::TxApply)
+        {
+            Ok(result) => response.info = result.to_string(),
+            Err(error) => {
                 response.code = 1;
-                response.log = format!("{}", Error::TxDecoding(err));
-                response
+                response.log = format!("{}", error);
             }
         }
+        response
     }
 
     /// Lookup a validator's keypair for their established account from their
@@ -1045,6 +1096,7 @@ where
                     #[cfg(not(feature = "mainnet"))]
                     has_valid_pow: false,
                 }),
+                &vec![],
                 TxIndex::default(),
                 &mut TxGasMeter::new(fee_unshielding_gas_limit),
                 &gas_table,
@@ -1052,6 +1104,9 @@ where
                 temp_wl_storage.storage,
                 vp_wasm_cache,
                 tx_wasm_cache,
+                None,
+                #[cfg(not(feature = "mainnet"))]
+                false,
             ) {
                 Ok(result) => {
                     if !result.is_accepted() {
@@ -1074,115 +1129,12 @@ where
             }
         }
 
-        transfer_fee(
+        protocol::transfer_fee(
             wl_storage,
             block_proposer,
             self.has_valid_pow_solution(&wrapper),
             &wrapper,
         )
-    }
-}
-
-/// Perform the actual transfer of fess from the fee payer to the block proposer. If the block proposer is not provided, fees will be be burned and the total supply reduced accordingly
-pub fn transfer_fee<S>(
-    wl_storage: &mut S,
-    block_proposer: Option<&Address>,
-    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
-    wrapper: &WrapperTx,
-) -> std::result::Result<(), String>
-where
-    S: StorageRead + StorageWrite,
-{
-    let balance = namada::ledger::storage_api::token::read_balance(
-        wl_storage,
-        &wrapper.fee.token,
-        &wrapper.fee_payer(),
-    )
-    .unwrap();
-
-    match wrapper.fee_amount() {
-        Ok(fees) => {
-            if balance.checked_sub(fees).is_some() {
-                dispatch_fee_action(wl_storage, wrapper, block_proposer, fees)
-                    .map_err(|e| e.to_string())
-            } else {
-                // Balance was insufficient for fee payment
-                #[cfg(not(feature = "mainnet"))]
-                let reject = !has_valid_pow;
-                #[cfg(feature = "mainnet")]
-                let reject = true;
-
-                if reject {
-                    #[cfg(not(feature = "abcipp"))]
-                    {
-                        // Move all the available funds in the transparent balance of the fee payer
-                        dispatch_fee_action(
-                            wl_storage,
-                            wrapper,
-                            block_proposer,
-                            balance,
-                        )
-                        .map_err(|e| e.to_string())?;
-
-                        return Err("Transparent balance of wrapper's signer was insufficient to pay fee. All the available transparent funds have been moved to the block proposer".to_string());
-                    }
-                    #[cfg(feature = "abcipp")]
-                    return Err("Insufficient transparent balance to pay fees"
-                        .to_string());
-                } else {
-                    tracing::debug!("Balance was insufficient for fee payment but a valid PoW was provided");
-                    Ok(())
-                }
-            }
-        }
-        Err(e) => {
-            // Fee overflow
-            #[cfg(not(feature = "abcipp"))]
-            {
-                // Move all the available funds in the transparent balance of the fee payer
-                dispatch_fee_action(
-                    wl_storage,
-                    wrapper,
-                    block_proposer,
-                    balance,
-                )
-                .map_err(|e| e.to_string())?;
-
-                return Err(
-                    format!("{}. All the available transparent funds have been moved to the block proposer", e
-                ));
-            }
-
-            #[cfg(feature = "abcipp")]
-            return Err(e.to_string());
-        }
-    }
-}
-
-/// Decides whether to transfer the fees to the block proposer or burn them
-fn dispatch_fee_action<S>(
-    wl_storage: &mut S,
-    wrapper: &WrapperTx,
-    block_proposer: Option<&Address>,
-    amount: token::Amount,
-) -> storage_api::Result<()>
-where
-    S: StorageRead + StorageWrite,
-{
-    match block_proposer {
-        Some(block_proposer) => storage_api::token::transfer(
-            wl_storage,
-            &wrapper.fee.token,
-            &wrapper.fee_payer(),
-            block_proposer,
-            amount,
-        ),
-        None => storage_api::token::burn_tokens(
-            wl_storage,
-            &wrapper.fee.token,
-            &wrapper.fee_payer(),
-            amount,
-        ),
     }
 }
 

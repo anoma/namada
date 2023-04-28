@@ -172,6 +172,7 @@ where
                 .expect("Should be able to write to storage.");
             let tx_result = protocol::apply_tx(
                 tx_type,
+                &vec![],
                 TxIndex::default(),
                 &mut TxGasMeter::new(u64::MAX), /* No gas limit for
                                                  * governance proposals */
@@ -180,6 +181,9 @@ where
                 &shell.wl_storage.storage,
                 &mut shell.vp_wasm_cache,
                 &mut shell.tx_wasm_cache,
+                None,
+                #[cfg(not(feature = "mainnet"))]
+                false,
             );
             shell
                 .wl_storage

@@ -186,10 +186,10 @@ pub async fn sign_tx(
         .await
     };
 
-    if args.dump_tx && !args.dry_run {
+    if args.dump_tx && !(args.dry_run || args.dry_run_wrapper) {
         let (wrapper_tx, wrapper_hash) = match broadcast_data {
             TxBroadcastData::DryRun(_) => panic!(
-                "somehow created a dry run transaction without --dry-run"
+                "somehow created a dry run transaction without --dry-run or --dry-run-wrapper"
             ),
             TxBroadcastData::Wrapper {
                 ref tx,
@@ -430,7 +430,7 @@ pub async fn sign_wrapper(
             epoch,
             args.gas_limit.clone(),
             tx,
-            // TODO: Actually use the fetched encryption key
+            // TODO: Actually use the fetched encryption key but use the default if dry-running the wrapper
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             pow_solution,
@@ -438,23 +438,22 @@ pub async fn sign_wrapper(
         )
     };
 
-    // We use this to determine when the wrapper tx makes it on-chain
-    let wrapper_hash = hash_tx(&tx.try_to_vec().unwrap()).to_string();
-    // We use this to determine when the decrypted inner tx makes it
-    // on-chain
-    let decrypted_hash = tx.tx_hash.to_string();
-    (
+    let signed_wrapper = tx
+        .sign(keypair, ctx.config.ledger.chain_id.clone(), args.expiration)
+        .expect("Wrapper tx signing keypair should be correct");
+    let to_broadcast = if args.dry_run_wrapper {
+        TxBroadcastData::DryRun(signed_wrapper)
+    } else {
+        // We use this to determine when the wrapper tx makes it on-chain
+        let wrapper_hash = hash_tx(&tx.try_to_vec().unwrap()).to_string();
+        // We use this to determine when the decrypted inner tx makes it
+        // on-chain
+        let decrypted_hash = tx.tx_hash.to_string();
         TxBroadcastData::Wrapper {
-            tx: tx
-                .sign(
-                    keypair,
-                    ctx.config.ledger.chain_id.clone(),
-                    args.expiration,
-                )
-                .expect("Wrapper tx signing keypair should be correct"),
+            tx: signed_wrapper,
             wrapper_hash,
             decrypted_hash,
-        },
-        unshielding_epoch,
-    )
+        }
+    };
+    (to_broadcast, unshielding_epoch)
 }

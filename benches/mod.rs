@@ -559,6 +559,7 @@ impl BenchShieldedCtx {
     ) -> Tx {
         let mock_args = TxArgs {
             dry_run: false,
+            dry_run_wrapper: false,
             dump_tx: false,
             force: false,
             broadcast_only: false,

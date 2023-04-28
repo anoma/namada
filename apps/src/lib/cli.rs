@@ -1697,6 +1697,7 @@ pub mod args {
     const DECRYPT: ArgFlag = flag("decrypt");
     const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
+    const DRY_RUN_WRAPPER_TX: ArgFlag = flag("dry-run-wrapper");
     const DUMP_TX: ArgFlag = flag("dump-tx");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
     const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
@@ -3014,6 +3015,8 @@ pub mod args {
     pub struct Tx {
         /// Simulate applying the transaction
         pub dry_run: bool,
+        /// Simulate applying both the wrapper and inner transactions
+        pub dry_run_wrapper: bool,
         /// Dump the transaction bytes
         pub dump_tx: bool,
         /// Submit the transaction even if it doesn't pass client checks
@@ -3046,8 +3049,9 @@ pub mod args {
             app.arg(
                 DRY_RUN_TX
                     .def()
-                    .about("Simulate the transaction application."),
+                    .about("Simulate the transaction application.").conflicts_with(DRY_RUN_WRAPPER_TX.name),
             )
+                .arg(DRY_RUN_WRAPPER_TX.def().about("Simulate the complete transaction application. This estimates the gas cost of the transaction.").conflicts_with(DRY_RUN_TX.name))
             .arg(DUMP_TX.def().about("Dump transaction bytes to a file."))
             .arg(FORCE.def().about(
                 "Submit the transaction even if it doesn't pass client checks.",
@@ -3111,6 +3115,7 @@ pub mod args {
 
         fn parse(matches: &ArgMatches) -> Self {
             let dry_run = DRY_RUN_TX.parse(matches);
+            let dry_run_wrapper = DRY_RUN_WRAPPER_TX.parse(matches);
             let dump_tx = DUMP_TX.parse(matches);
             let force = FORCE.parse(matches);
             let broadcast_only = BROADCAST_ONLY.parse(matches);
@@ -3126,6 +3131,7 @@ pub mod args {
             let signer = SIGNER.parse(matches);
             Self {
                 dry_run,
+                dry_run_wrapper,
                 dump_tx,
                 force,
                 broadcast_only,

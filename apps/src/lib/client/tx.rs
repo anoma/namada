@@ -2351,14 +2351,11 @@ pub async fn submit_reveal_pk_aux(
         .await
     };
 
-    if args.dry_run {
+    if args.dry_run || args.dry_run_wrapper {
         if let TxBroadcastData::DryRun(tx) = to_broadcast {
             rpc::dry_run_tx(&args.ledger_address, tx.to_bytes()).await;
         } else {
-            panic!(
-                "Expected a dry-run transaction, received a wrapper \
-                 transaction instead"
-            );
+            panic!("Expected a dry-run transaction");
         }
     } else {
         // Either broadcast or submit transaction and collect result into
@@ -2889,15 +2886,12 @@ async fn process_tx(
         // let request_body = request.into_json();
         // println!("HTTP request body: {}", request_body);
 
-        if args.dry_run {
+        if args.dry_run || args.dry_run_wrapper {
             if let TxBroadcastData::DryRun(tx) = to_broadcast {
                 rpc::dry_run_tx(&args.ledger_address, tx.to_bytes()).await;
                 return (ctx, ProcessTxResponse::DryRun);
             } else {
-                panic!(
-                    "Expected a dry-run transaction, received a wrapper \
-                     transaction instead"
-                );
+                panic!("Expected a dry-run transaction");
             }
         } else {
             // Either broadcast or submit transaction and collect result into
