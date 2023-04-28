@@ -702,4 +702,12 @@ mod tests {
         assert!(wl_storage.read_bytes(&prev_keys.body()).unwrap().is_none());
         assert!(wl_storage.read_bytes(&new_keys.body()).unwrap().is_some());
     }
+
+    /// Test that we time out events before we do any state update
+    /// on them. This should prevent double voting from rebonded
+    /// validators.
+    #[test]
+    fn test_timeout_events_before_state_upds() {
+        todo!()
+    }
 }
