@@ -116,27 +116,10 @@ instead, the balance is not enough to cover fees, then the proposed block is
 considered invalid and rejected, the WAL is discarded and a new Tendermint round
 is initiated.
 
-To support the in-protocol fee payment mechanism we need to update the `Header`
-struct to carry the `ProposerAddress`:
-
-```rust
-/// The data from Tendermint header
-/// relevant for Anoma storage
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-pub struct Header {
-  /// Merkle root hash of block
-  pub hash: Hash,
-  /// Timestamp associated to block
-  pub time: DateTimeUtc,
-  /// Hash of the addresses of the next validator set
-  pub next_validators_hash: Hash,
-  /// Address of the block proposer
-  pub proposer_address: Address
-}
-```
-
-From this address, it is then possible to derive the relative Namada address for
-the payment.
+From the consensus block proposer's address (included in the Tendermint
+request), it is possible to derive the relative Namada address for the payment:
+should, for any reason, the proposer's address be missing in the incoming
+request, fees for that block will be burned.
 
 The `Fee` field of `WrapperTx` is defined as follows:
 
@@ -176,7 +159,7 @@ track any changes in these parameters and act accordingly.
 To provide improved privay, Namada allows the signer of the wrapper transaction
 to unshield some funds on the go to cover the cost of the fee. This also
 addresses a possible locked-out problem in which a user doesn't have enough
-funds to pay fees (preventing any sort of operation on the chaind). The
+funds to pay fees (preventing any sort of operation on the chain). The
 `WrapperTx` struct must be extended as follows:
 
 ```rust
