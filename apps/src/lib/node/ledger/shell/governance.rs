@@ -146,8 +146,7 @@ where
                 proposals_result.rejected.push(id);
 
                 tracing::info!(
-                    "Governance proposal {} has been executed \
-                     and rejected",
+                    "Governance proposal {} has been executed and rejected",
                     id
                 );
 
