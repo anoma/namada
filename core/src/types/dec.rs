@@ -1,5 +1,8 @@
 //! A non-negative fixed precision decimal type for computation primarily in the
-//! PoS module.
+//! PoS module. For rounding, any computation that exceeds the specified
+//! precision is truncated down to the closest value with the specified
+//! precision.
+
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Add, AddAssign, Div, Mul, Sub};
 use std::str::FromStr;
@@ -8,11 +11,12 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::eyre;
 use serde::{Deserialize, Serialize};
 
+use super::token::NATIVE_MAX_DECIMAL_PLACES;
 use crate::types::token::{Amount, Change};
 use crate::types::uint::Uint;
 
 /// The number of Dec places for PoS rational calculations
-pub const POS_DECIMAL_PRECISION: u8 = 6;
+pub const POS_DECIMAL_PRECISION: u8 = 12;
 
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
@@ -159,7 +163,13 @@ impl FromStr for Dec {
 
 impl From<Amount> for Dec {
     fn from(amt: Amount) -> Self {
-        Self(amt.raw_amount())
+        Self(
+            amt.raw_amount()
+                * Uint::exp10(
+                    (POS_DECIMAL_PRECISION - NATIVE_MAX_DECIMAL_PLACES)
+                        as usize,
+                ),
+        )
     }
 }
 
@@ -169,18 +179,12 @@ impl From<u64> for Dec {
     }
 }
 
-// impl TryFrom<Dec> for u64 {
-//     type Error = Error;
-
-//     fn try_from(value: Dec) -> std::result::Result<Self, Self::Error> {
-//         let int = value.0 / Uint::exp10(POS_DECIMAL_PRECISION as usize);
-//         if int > Uint::from(u64::MAX) {
-//             Err(eyre!("Dec value is too large to fit in a u64").into())
-//         } else {
-//             Ok(int.into())
-//         }
-//     }
-// }
+// Is error handling needed for this?
+impl From<Uint> for Dec {
+    fn from(num: Uint) -> Self {
+        Self(num * Uint::exp10(POS_DECIMAL_PRECISION as usize))
+    }
+}
 
 impl Add<Dec> for Dec {
     type Output = Self;
@@ -216,7 +220,7 @@ impl Mul<Uint> for Dec {
     type Output = Uint;
 
     fn mul(self, rhs: Uint) -> Self::Output {
-        self.0 * rhs
+        self.0 * rhs / Uint::exp10(POS_DECIMAL_PRECISION as usize)
     }
 }
 
@@ -247,7 +251,6 @@ impl Mul<Change> for Dec {
 }
 
 // TODO: is some checked arithmetic needed here to prevent overflows?
-// Truncates down to the `POS_DECIMAL_PRECISION`th decimal place.
 impl Mul<Dec> for Dec {
     type Output = Self;
 
@@ -332,19 +335,29 @@ mod test_dec {
         // Fixed precision division is more thoroughly tested for the `Uint`
         // type. These are sanity checks that the precision is correct.
         assert_eq!(
-            Dec::new(1, 6).expect("Test failed")
-                / Dec::new(1, 6).expect("Test failed"),
+            Dec::new(1, POS_DECIMAL_PRECISION).expect("Test failed")
+                / Dec::new(1, POS_DECIMAL_PRECISION).expect("Test failed"),
             Dec::one(),
         );
         assert_eq!(
-            Dec::new(1, 6).expect("Test failed")
+            Dec::new(1, POS_DECIMAL_PRECISION).expect("Test failed")
                 / (Dec::new(1, 0).expect("Test failed") + Dec::one()),
             Dec::zero(),
         );
         assert_eq!(
-            Dec::new(1, 6).expect("Test failed") / Dec::two(),
+            Dec::new(1, POS_DECIMAL_PRECISION).expect("Test failed")
+                / Dec::two(),
             Dec::zero(),
         );
+
+        // Test Dec * Dec multiplication
+        assert!(Dec::new(32353, POS_DECIMAL_PRECISION + 1u8).is_none());
+        let dec1 = Dec::new(12345654321, 12).expect("Test failed");
+        let dec2 = Dec::new(9876789, 12).expect("Test failed");
+        let exp_prod = Dec::new(121935, 12).expect("Test failed");
+        let exp_quot = Dec::new(1249966393025101, 12).expect("Test failed");
+        assert_eq!(dec1 * dec2, exp_prod);
+        assert_eq!(dec1 / dec2, exp_quot);
     }
 
     /// Test the `Dec` and `Amount` interplay
@@ -355,7 +368,7 @@ mod test_dec {
 
         debug_assert_eq!(
             Dec::from(amt),
-            Dec::new(1018, 0).expect("Test failed")
+            Dec::new(1018, 6).expect("Test failed")
         );
         debug_assert_eq!(dec * amt, Amount::from(2809u64));
 
@@ -372,10 +385,10 @@ mod test_dec {
             Dec::new(314, 2).expect("Test failed"),
         );
 
-        // more than six decimal places and zero integer part
+        // more than 12 decimal places and zero integer part
         assert_eq!(
-            Dec::from_str("0.1234567").expect("Test failed"),
-            Dec::new(123456, 6).expect("Test failed"),
+            Dec::from_str("0.1234567654321").expect("Test failed"),
+            Dec::new(123456765432, 12).expect("Test failed"),
         );
 
         // No zero before the decimal

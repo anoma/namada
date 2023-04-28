@@ -488,6 +488,7 @@ impl From<DenominatedAmount> for Amount {
     }
 }
 
+// Treats the u64 as a value of the raw amount (namnam)
 impl From<u64> for Amount {
     fn from(val: u64) -> Amount {
         Amount {

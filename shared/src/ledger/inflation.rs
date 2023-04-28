@@ -61,8 +61,10 @@ impl RewardsController {
             epochs_per_year,
         } = self;
 
-        let locked = Dec::from(locked_tokens);
-        let total = Dec::from(total_tokens);
+        // Token amounts must be expressed in terms of the raw amount (namnam)
+        // to properly run the PD controller
+        let locked = Dec::from(locked_tokens.raw_amount());
+        let total = Dec::from(total_tokens.raw_amount());
         let epochs_py: Dec = epochs_per_year.into();
 
         let locked_ratio = locked / total;
