@@ -44,6 +44,8 @@ jobs:
           aws-region: eu-west-1
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install sccache (ubuntu-20.04)
         if: matrix.os == 'ubuntu-20.04'
         env:
