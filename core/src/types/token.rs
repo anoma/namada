@@ -7,7 +7,6 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
 use masp_primitives::transaction::Transaction;
-use rust_decimal::prelude::Decimal;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -143,27 +142,6 @@ impl Amount {
         Self { raw: change.abs() }
     }
 
-    /// Attempt to convert a `Decimal` to an `DenominatedAmount` with the
-    /// specified precision.
-    pub fn from_decimal(
-        decimal: Decimal,
-        denom: impl Into<u8>,
-    ) -> Result<Self, AmountParseError> {
-        let denom = denom.into();
-        if (denom as u32) < decimal.scale() {
-            Err(AmountParseError::ScaleTooLarge(decimal.scale(), denom))
-        } else {
-            let value = Uint::from(decimal.mantissa().unsigned_abs());
-            match Uint::from(10)
-                .checked_pow(Uint::from((denom as u32) - decimal.scale()))
-                .and_then(|scaling| scaling.checked_mul(value))
-            {
-                Some(amount) => Ok(Self { raw: amount }),
-                None => Err(AmountParseError::ConvertToDecimal),
-            }
-        }
-    }
-
     /// Given a string and a denomination, parse an amount from string.
     pub fn from_str(
         string: impl AsRef<str>,
@@ -172,18 +150,6 @@ impl Amount {
         DenominatedAmount::from_str(string.as_ref())?
             .increase_precision(denom.into().into())
             .map(Into::into)
-    }
-
-    /// Attempt to convert a float to an `Amount` with the specified
-    /// precision.
-    pub fn from_float(
-        float: impl Into<f64>,
-        denom: impl Into<u8>,
-    ) -> Result<Self, AmountParseError> {
-        match Decimal::try_from(float.into()) {
-            Err(e) => Err(AmountParseError::InvalidDecimal(e)),
-            Ok(decimal) => Self::from_decimal(decimal, denom),
-        }
     }
 
     /// Attempt to convert an unsigned integer to an `Amount` with the
@@ -463,19 +429,6 @@ impl<'de> serde::Deserialize<'de> for DenominatedAmount {
     }
 }
 
-impl TryFrom<Amount> for Decimal {
-    type Error = AmountParseError;
-
-    fn try_from(amount: Amount) -> Result<Self, AmountParseError> {
-        if amount.raw > Uint([u64::MAX, u64::MAX, 0, 0]) {
-            Err(AmountParseError::ConvertToDecimal)
-        } else {
-            Ok(Into::<Decimal>::into(amount.raw.as_u128())
-                / Into::<Decimal>::into(NATIVE_SCALE))
-        }
-    }
-}
-
 impl<'a> From<&'a DenominatedAmount> for &'a Amount {
     fn from(denom: &'a DenominatedAmount) -> Self {
         &denom.amount
@@ -649,8 +602,6 @@ impl KeySeg for Amount {
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum AmountParseError {
-    #[error("Error decoding token amount: {0}")]
-    InvalidDecimal(rust_decimal::Error),
     #[error(
         "Error decoding token amount, too many decimal places: {0}. Maximum \
          {1}"
@@ -982,23 +933,7 @@ impl TryFrom<crate::ledger::ibc::data::FungibleTokenPacketData> for Transfer {
 
 #[cfg(test)]
 mod tests {
-    use proptest::prelude::*;
-    use rust_decimal_macros::dec;
-
     use super::*;
-
-    proptest! {
-            /// The upper limit is set to `2^51`, because then the float is
-            /// starting to lose precision.
-            #[test]
-            fn test_token_amount_decimal_conversion(raw_amount in 0..2_u64.pow(51)) {
-                let amount = Amount::from_uint(raw_amount, NATIVE_MAX_DECIMAL_PLACES).expect("Test failed");
-                // A round-trip conversion to and from Decimal should be an identity
-                let decimal = Decimal::from(raw_amount);
-                let identity = Amount::from_decimal(decimal, NATIVE_MAX_DECIMAL_PLACES).expect("Test failed");
-                assert_eq!(amount, identity);
-        }
-    }
 
     #[test]
     fn test_token_display() {
@@ -1093,14 +1028,6 @@ mod tests {
         assert_eq!(max_signed.checked_add(zero), Some(max_signed));
         assert_eq!(max_signed.checked_add(one), Some(max_signed + one));
         assert_eq!(max_signed.checked_signed_add(max_signed), None);
-    }
-
-    #[test]
-    fn test_amount_from_decimal() {
-        assert!(Amount::from_decimal(dec!(1.12), 1).is_err());
-        assert!(Amount::from_decimal(dec!(1.12), 80).is_err());
-        let amount = Amount::from_decimal(dec!(1.12), 3).expect("Test failed");
-        assert_eq!(amount, Amount::from_uint(1120, 0).expect("Test failed"));
     }
 
     #[test]

@@ -906,7 +906,6 @@ mod test_finalize_block {
         InitProposalData, ProposalType, VoteProposalData,
     };
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
-    use namada::types::uint::Uint;
     use namada_test_utils::TestWasms;
     use test_log::test;
 

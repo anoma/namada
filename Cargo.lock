@@ -3954,8 +3954,6 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rayon",
- "rust_decimal",
- "rust_decimal_macros",
  "serde 1.0.145",
  "serde_json",
  "sha2 0.9.9",
@@ -4005,8 +4003,6 @@ dependencies = [
  "namada_core",
  "once_cell",
  "proptest",
- "rust_decimal",
- "rust_decimal_macros",
  "test-log",
  "thiserror",
  "tracing 0.1.37",
@@ -5557,7 +5553,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee9164faf726e4f3ece4978b25ca877ddc6802fa77f38cdccb32c7f805ecd70c"
 dependencies = [
  "arrayvec 0.7.2",
- "borsh",
  "num-traits 0.2.15",
  "serde 1.0.145",
 ]
