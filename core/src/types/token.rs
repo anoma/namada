@@ -1,6 +1,6 @@
 //! A basic fungible token
 
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
@@ -689,6 +689,16 @@ impl MaspDenom {
         let amount = amount.into();
         amount.raw.0[*self as usize]
     }
+
+    /// Get the corresponding u64 word from the input uint256.
+    pub fn denominate_i64(&self, amount: &Change) -> i64 {
+        let val = amount.abs().0[*self as usize] as i64;
+        if Change::is_negative(amount) {
+            -val
+        } else {
+            val
+        }
+    }
 }
 
 /// Key segment for a balance key
@@ -704,6 +714,54 @@ pub const CONVERSION_KEY_PREFIX: &str = "conv";
 /// Key segment prefix for pinned shielded transactions
 pub const PIN_KEY_PREFIX: &str = "pin-";
 const TOTAL_SUPPLY_STORAGE_KEY: &str = "total_supply";
+
+/// A fully qualified (multi-) token address.
+#[derive(
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Debug,
+    Hash,
+    BorshSerialize,
+    BorshDeserialize,
+)]
+pub struct TokenAddress {
+    /// The address of the (multi-) token
+    pub address: Address,
+    /// If it is a mutli-token, this indicates the sub-token.
+    pub sub_prefix: Option<Key>,
+}
+
+impl TokenAddress {
+    /// A function for displaying a [`TokenAddress`]. Takes a
+    /// human readable name of the token as input.
+    pub fn format_with_alias(&self, alias: &str) -> String {
+        format!(
+            "{}{}",
+            alias,
+            self.sub_prefix
+                .as_ref()
+                .map(|k| format!("/{}", k))
+                .unwrap_or_default()
+        )
+    }
+}
+
+impl Display for TokenAddress {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let formatted = format!(
+            "{}{}",
+            self.address,
+            self.sub_prefix
+                .as_ref()
+                .map(|k| format!("/{}", k))
+                .unwrap_or_default()
+        );
+        f.write_str(&formatted)
+    }
+}
 
 /// Obtain a storage key for user's balance.
 pub fn balance_key(token_addr: &Address, owner: &Address) -> Key {

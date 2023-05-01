@@ -2,7 +2,7 @@
 //! An unsigned 256 integer type. Used for, among other things,
 //! the backing type of token amounts.
 use std::cmp::Ordering;
-use std::ops::{Add, AddAssign, BitXor, Div, Mul, Neg, Sub};
+use std::ops::{Add, AddAssign, BitXor, Div, Mul, Neg, Sub, SubAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use impl_num_traits::impl_uint_num_traits;
@@ -109,6 +109,11 @@ impl I256 {
     /// Check if this value is zero
     pub fn is_zero(&self) -> bool {
         self.0 == Uint::zero()
+    }
+
+    /// Gives the zero value of an I256
+    pub fn zero() -> I256 {
+        Self(Uint::zero())
     }
 
     /// Get a string representation of `self` as a
@@ -243,6 +248,12 @@ impl Sub for I256 {
     }
 }
 
+impl SubAssign for I256 {
+    fn sub_assign(&mut self, rhs: Self) {
+        *self = *self - rhs;
+    }
+}
+
 impl Mul<Uint> for I256 {
     type Output = Self;
 
@@ -286,6 +297,12 @@ impl From<i64> for I256 {
 impl From<i32> for I256 {
     fn from(val: i32) -> Self {
         Self::from(val as i128)
+    }
+}
+
+impl std::iter::Sum for I256 {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(I256::zero(), |acc, amt| acc + amt)
     }
 }
 
