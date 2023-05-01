@@ -271,21 +271,16 @@ where
             .map_err(Error::ProtocolTxError)
         }
         ProtocolTxType::ValSetUpdateVext(ext) => {
-            // NOTE(feature = "abcipp"): we will not need to apply any
-            // storage changes when we rollback to ABCI++; this is because
-            // the decided vote extension digest should have >2/3 of the
-            // voting power already, which is the whole reason why we
-            // have to apply state updates with `abciplus` - we need
-            // to aggregate votes consisting of >2/3 of the voting power
-            // on a validator set update.
-            //
-            // we could, however, emit some kind of event, notifying a
-            // relayer process of a newly available validator set update;
-            // for this, we need to receive a mutable reference to the
-            // event log, in `apply_protocol_tx()`
+            // NOTE(feature = "abcipp"): with ABCI++, we can write the
+            // complete proof to storage in one go. the decided vote extension
+            // digest must already have >2/3 of the voting power behind it.
+            // with ABCI+, multiple vote extension protocol txs may be needed
+            // to reach a complete proof.
+            let signing_epoch = ext.data.signing_epoch;
             transactions::validator_set_update::aggregate_votes(
                 storage,
                 validator_set_update::VextDigest::singleton(ext),
+                signing_epoch,
             )
             .map_err(Error::ProtocolTxError)
         }

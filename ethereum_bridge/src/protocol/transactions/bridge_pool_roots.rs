@@ -81,8 +81,8 @@ where
     })
 }
 
-impl GetVoters for MultiSignedVext {
-    fn get_voters(&self, _: BlockHeight) -> HashSet<(Address, BlockHeight)> {
+impl GetVoters for &MultiSignedVext {
+    fn get_voters(self) -> HashSet<(Address, BlockHeight)> {
         self.iter()
             .map(|signed| {
                 (signed.data.validator_addr.clone(), signed.data.block_height)

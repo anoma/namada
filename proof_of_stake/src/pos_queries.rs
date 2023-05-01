@@ -288,9 +288,21 @@ where
     }
 
     /// Given some [`BlockHeight`], return the corresponding [`Epoch`].
+    ///
+    /// This method may return [`None`] if the corresponding data has
+    /// been purged from Namada, or if it is not available yet.
     #[inline]
     pub fn get_epoch(self, height: BlockHeight) -> Option<Epoch> {
         self.wl_storage.storage.block.pred_epochs.get_epoch(height)
+    }
+
+    /// Given some [`Epoch`], return the corresponding [`BlockHeight`].
+    ///
+    /// This method may return [`None`] if the corresponding data has
+    /// been purged from Namada, or if it is not available yet.
+    #[inline]
+    pub fn get_height(self, epoch: Epoch) -> Option<BlockHeight> {
+        self.wl_storage.storage.block.pred_epochs.get_height(epoch)
     }
 
     /// Retrieves the [`BlockHeight`] that is currently being decided.

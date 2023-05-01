@@ -676,6 +676,7 @@ mod test_ethbridge_router {
         let tx_result = aggregate_votes(
             &mut client.wl_storage,
             validator_set_update::VextDigest::singleton(vext.clone()),
+            0.into(),
         )
         .expect("Test failed");
         assert!(!tx_result.changed_keys.is_empty());
