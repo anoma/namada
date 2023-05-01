@@ -8,9 +8,9 @@ Before describing Namada governance, it is useful to define the concepts of NAM,
 *Consensus terminology*
 - A Namada _validator_ is an account with a public consensus key, which may participate in producing blocks and governance activities. A validator may not also be a delegator.
 
-Non-validator addresses on Namada are able to bond their tokens to a validator. When doing so, the validator's voting-power is proportional to the sum of its self-bonded tokens and all the bonded tokens from other addesses to their own address. Proof of stake rewards are split between the bonding addresses and the validator itself in a pre-determined way.
+Non-validator addresses on Namada are able to bond their tokens to a validator. When doing so, the validator's voting-power is proportional to the sum of its self-bonded tokens and all the bonded tokens from other addesses to their own address.
 
-When an address bonds tokens to a validator, the validator becomes the default *delegate* (explained below) of that address.
+When an address bonds tokens to a validator, the validator becomes the default *delegate* (explained below) of that address. Similarly, a delegate's `voting-power` (now in terms of voting on Governance proposals, not blocks) is proportional to the sum of its self-bonded tokens and all the bonded tokens from other addresses to their own address.
 
 *Governance terminology*
 With the above definitions in mind, we can now define the following terms:
@@ -28,7 +28,7 @@ Further information about delegators, validators, and NAM can be found in the [e
 
 ### Governance Address
 
-Governance adds 1 internal address:
+Governance adds the internal address:
 
 - `GovernanceAddress`
 
@@ -254,7 +254,10 @@ It is possible to check the actual implementation [here](https://github.com/anom
 
 ### Refund and Proposal Execution mechanism
 
-Together with tallying, in the first block at the beginning of each epoch, in the `finalize_block` function, the protocol will manage the execution of accepted proposals and refunding. For each ended proposal with a positive outcome, it will refund the locked funds from `GovernanceAddress` to the proposal author address (specified in the proposal `author` field). For each proposal that has been rejected, instead, the locked funds will be moved to the `SlashFundAddress`. Moreover, if the proposal had a positive outcome and `proposal_code` is defined, these changes will be executed right away.
+Together with tallying, in the first block at the beginning of each epoch, in the `finalize_block` function, the protocol will manage the execution of accepted proposals and refunding. For each ended proposal with a positive outcome, it will refund the locked funds from `GovernanceAddress` to the proposal author address (specified in the proposal `author` field).  Moreover, if the proposal had a positive outcome and `proposal_code` is defined, these changes will be executed immidiately.
+
+For each proposal that has been rejected, instead, the locked funds will burnt (removed from total supply).
+
 To summarize the execution of governance in the `finalize_block` function:
 
 If the proposal outcome is positive and current epoch is equal to the proposal `grace_epoch`, in the `finalize_block` function:
@@ -262,31 +265,10 @@ If the proposal outcome is positive and current epoch is equal to the proposal `
 - execute any changes specified by `proposal_code`
 
 In case the proposal was rejected or if any error, in the `finalize_block` function:
-- transfer the locked funds to `SlashFundAddress`
+- Burn the locked funds
 
 The result is then signaled by creating and inserting a [`Tendermint Event`](https://github.com/tendermint/tendermint/blob/ab0835463f1f89dcadf83f9492e98d85583b0e71/docs/spec/abci/abci.md#events.
 
-## SlashFundAddress
-
-Funds locked in `SlashFundAddress` address should be spendable only by proposals.
-
-### SlashFundAddress storage
-
-```
-/\$SlashFundAddress/?: Vec<u8>
-```
-
-The funds will be stored under:
-
-```
-/\$NAMAddress/balance/\$SlashFundAddress: u64
-```
-
-### SlashFundAddress VP
-
-The slash_fund validity predicate will approve a transfer only if the transfer has been made by the protocol (by checking the existence of `/\$GovernanceAddress/pending/\$proposal_id` storage key)
-
-It is possible to check the actual implementation [here](https://github.com/anoma/namada/blob/main/shared/src/ledger/slash_fund/mod.rs#L70).
 
 ## Off-chain protocol
 
