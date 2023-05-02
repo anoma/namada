@@ -62,7 +62,9 @@ pub enum Error {
     #[error("SlashFund native VP error: {0}")]
     SlashFundNativeVpError(crate::ledger::native_vp::slash_fund::Error),
     #[error("Ethereum bridge native VP error: {0}")]
-    EthBridgeNativeVpError(crate::ledger::eth_bridge::vp::Error),
+    EthBridgeNativeVpError(
+        crate::ledger::native_vp::ethereum_bridge::vp::Error,
+    ),
     #[error("Replay protection native VP error: {0}")]
     ReplayProtectionNativeVpError(
         crate::ledger::native_vp::replay_protection::Error,
@@ -440,7 +442,7 @@ where
                         .map_err(Error::StorageError)?;
                     gas_meter.add(gas).map_err(Error::GasError)?;
                     let vp_code_hash = match vp_hash {
-                        Some(v) => Hash::try_from(&v[..])
+                        Some(v) => Hash::try_from(&v.0[..])
                             .map_err(|_| Error::MissingAddress(addr.clone()))?,
                         None => {
                             return Err(Error::MissingAddress(addr.clone()));

@@ -622,11 +622,11 @@ where
         }) => {
             // read the VP of a new account
             let len: i64 = vp_code_hash
-                .len()
+                .0.len()
                 .try_into()
                 .map_err(TxRuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
-            result_buffer.replace(vp_code_hash.to_vec());
+            result_buffer.replace(vp_code_hash.0.to_vec());
             len
         }
         Some(&write_log::StorageModification::Temp { ref value }) => {

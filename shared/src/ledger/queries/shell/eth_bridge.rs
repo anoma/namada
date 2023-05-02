@@ -201,7 +201,7 @@ where
 {
     // get the backing store of the merkle tree corresponding
     // at the specified height.
-    let stores = ctx
+    let (_height, stores) = ctx
         .wl_storage
         .storage
         .db
@@ -261,8 +261,9 @@ where
                 .expect(
                     "Every signed root should correspond to an existing block \
                      height",
-                ),
-        );
+                )
+                .1,
+        ).map_err(|e| storage_api::Error::new(e))?;
         // from the hashes of the transfers, get the actual values.
         let mut missing_hashes = vec![];
         let (keys, values): (Vec<_>, Vec<_>) = transfer_hashes
@@ -313,7 +314,7 @@ where
                         &signed_root.signatures,
                     ),
                     transfers,
-                    pool_root: signed_root.data.0.0,
+                    pool_root: signed_root.data.0 .0,
                     proof: proof.proof.into_iter().map(|hash| hash.0).collect(),
                     proof_flags: proof.flags,
                     batch_nonce: signed_root.data.1.into(),
@@ -618,11 +619,10 @@ mod test_ethbridge_router {
             panic!("Test failed");
         };
 
-        assert!(
-            err.to_string()
-                .split_once("but the last installed epoch is still")
-                .is_some()
-        );
+        assert!(err
+            .to_string()
+            .split_once("but the last installed epoch is still")
+            .is_some());
     }
 
     /// Test that reading a validator set proof works.
@@ -711,11 +711,10 @@ mod test_ethbridge_router {
             panic!("Test failed");
         };
 
-        assert!(
-            err.to_string()
-                .split_once("but the last installed epoch is still")
-                .is_some()
-        );
+        assert!(err
+            .to_string()
+            .split_once("but the last installed epoch is still")
+            .is_some());
     }
 
     /// Test that reading the bridge pool works
@@ -917,7 +916,7 @@ mod test_ethbridge_router {
             validator_set_args: validator_args.into(),
             signatures: sort_sigs(&voting_powers, &signed_root.signatures),
             transfers: vec![transfer.into()],
-            pool_root: signed_root.data.0.0,
+            pool_root: signed_root.data.0 .0,
             proof: proof.proof.into_iter().map(|hash| hash.0).collect(),
             proof_flags: proof.flags,
             batch_nonce: Default::default(),

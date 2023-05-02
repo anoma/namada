@@ -267,8 +267,8 @@ impl<'view> VpEnv<'view> for Ctx {
     fn eval(&self, vp_code: Hash, input_data: Vec<u8>) -> Result<bool, Error> {
         let result = unsafe {
             namada_vp_eval(
-                vp_code.as_ptr() as _,
-                vp_code.len() as _,
+                vp_code.0.as_ptr() as _,
+                vp_code.0.len() as _,
                 input_data.as_ptr() as _,
                 input_data.len() as _,
             )

@@ -6,8 +6,8 @@ use itertools::Itertools;
 use namada_core::ledger::storage::testing::TestWlStorage;
 use namada_core::ledger::storage_api::{token, StorageRead};
 use namada_core::types::address::{self, Address};
-use namada_core::types::key::{self, RefTo};
 use namada_core::types::key::common::PublicKey;
+use namada_core::types::key::{self, RefTo};
 use namada_core::types::storage::Epoch;
 use proptest::prelude::*;
 use proptest::prop_state_machine;
@@ -144,10 +144,12 @@ impl StateMachineTest for ConcretePosState {
                 let epoch = state.current_epoch();
 
                 let eth_hot_key = key::common::PublicKey::Secp256k1(
-                    key::testing::gen_keypair::<key::secp256k1::SigScheme>().ref_to(),
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                        .ref_to(),
                 );
                 let eth_cold_key = key::common::PublicKey::Secp256k1(
-                    key::testing::gen_keypair::<key::secp256k1::SigScheme>().ref_to(),
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                        .ref_to(),
                 );
 
                 super::become_validator(crate::BecomeValidator {
@@ -160,8 +162,7 @@ impl StateMachineTest for ConcretePosState {
                     current_epoch: epoch,
                     commission_rate,
                     max_commission_rate_change,
-                }
-                )
+                })
                 .unwrap();
 
                 state.check_init_validator_post_conditions(
@@ -612,11 +613,9 @@ impl ConcretePosState {
         // Post-condition: the validator should not be in the validator set
         // until the pipeline epoch
         for epoch in submit_epoch.iter_range(params.pipeline_len) {
-            assert!(
-                !crate::read_all_validator_addresses(&self.s, epoch)
-                    .unwrap()
-                    .contains(address)
-            );
+            assert!(!crate::read_all_validator_addresses(&self.s, epoch)
+                .unwrap()
+                .contains(address));
         }
         let weighted = WeightedValidator {
             bonded_stake: Default::default(),
@@ -666,6 +665,8 @@ impl AbstractStateMachine for AbstractPosState {
                     address,
                     tokens,
                     consensus_key: _,
+                    eth_cold_key: _,
+                    eth_hot_key: _,
                     commission_rate: _,
                     max_commission_rate_change: _,
                 } in state.genesis_validators.clone()

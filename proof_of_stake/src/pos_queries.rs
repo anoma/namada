@@ -1,6 +1,6 @@
 //! Storage API for querying data about Proof-of-stake related
 //! data. This includes validator and epoch related data.
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ferveo_common::TendermintValidator;
 use namada_core::ledger::parameters::storage::get_max_proposal_bytes_key;
 use namada_core::ledger::parameters::EpochDuration;
@@ -19,9 +19,8 @@ use thiserror::Error;
 
 use crate::types::{ConsensusValidatorSet, WeightedValidator};
 use crate::{
-    consensus_validator_set_handle, find_validator_by_raw_hash,
-    read_pos_params, validator_eth_cold_key_handle,
-    validator_eth_hot_key_handle, ConsensusValidatorSet, PosParams,
+    consensus_validator_set_handle, validator_eth_cold_key_handle,
+    validator_eth_hot_key_handle, PosParams, read_pos_params,
 };
 
 /// Errors returned by [`PosQueries`] operations.
@@ -185,7 +184,7 @@ where
             .expect("Serializing public key should not fail");
         let epoch = epoch
             .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
-        self.get_active_validators(Some(epoch))
+        self.get_consensus_validators(Some(epoch))
             .iter()
             .find(|validator| {
                 let pk_key = key::protocol_pk_key(&validator.address);
@@ -358,7 +357,7 @@ where
     ) -> Option<key::common::PublicKey> {
         let epoch = epoch
             .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
-        let params = self.get_pos_params();
+        let params = read_pos_params(self.wl_storage).ok()?;
         validator_eth_hot_key_handle(validator)
             .get(self.wl_storage, epoch, &params)
             .ok()
@@ -374,7 +373,7 @@ where
     ) -> Option<key::common::PublicKey> {
         let epoch = epoch
             .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
-        let params = self.get_pos_params();
+        let params = read_pos_params(self.wl_storage).ok()?;
         validator_eth_cold_key_handle(validator)
             .get(self.wl_storage, epoch, &params)
             .ok()

@@ -1663,19 +1663,19 @@ where
         current_epoch,
         params.pipeline_len,
     )?;
-    validator_eth_hot_key_handle(address).init(
+    validator_eth_hot_key_handle(address).set(
         storage,
         eth_hot_key.clone(),
         current_epoch,
         params.pipeline_len,
     )?;
-    validator_eth_cold_key_handle(address).init(
+    validator_eth_cold_key_handle(address).set(
         storage,
         eth_cold_key.clone(),
         current_epoch,
         params.pipeline_len,
     )?;
-    validator_commission_rate_handle(address).init(
+    validator_commission_rate_handle(address).set(
         storage,
         commission_rate,
         current_epoch,
