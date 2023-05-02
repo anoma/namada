@@ -136,6 +136,14 @@ where
                 .unwrap_or_default(),
         )
     } else {
+        // Cast to decrypted if needed
+        if let TxType::Raw(raw_tx) = tx {
+            tx = TxType::Decrypted(DecryptedTx::Decrypted {
+                tx: raw_tx,
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: true,
+            });
+        }
         // If dry run only the inner tx, use the max block gas as the gas limit
         TxGasMeter::new(
             ctx.wl_storage
