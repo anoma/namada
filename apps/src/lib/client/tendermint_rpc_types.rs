@@ -16,7 +16,7 @@ use crate::cli::safe_exit;
 #[derive(Debug, Clone)]
 pub enum TxBroadcastData {
     DryRun(Tx),
-    Wrapper {
+    Live {
         tx: Tx,
         wrapper_hash: String,
         decrypted_hash: String,

@@ -3028,7 +3028,7 @@ pub async fn broadcast_tx(
     to_broadcast: &TxBroadcastData,
 ) -> Result<Response, RpcError> {
     let (tx, wrapper_tx_hash, decrypted_tx_hash) = match to_broadcast {
-        TxBroadcastData::Wrapper {
+        TxBroadcastData::Live {
             tx,
             wrapper_hash,
             decrypted_hash,
@@ -3075,7 +3075,7 @@ pub async fn submit_tx(
     to_broadcast: TxBroadcastData,
 ) -> Result<TxResponse, RpcError> {
     let (_, wrapper_hash, decrypted_hash) = match &to_broadcast {
-        TxBroadcastData::Wrapper {
+        TxBroadcastData::Live {
             tx,
             wrapper_hash,
             decrypted_hash,

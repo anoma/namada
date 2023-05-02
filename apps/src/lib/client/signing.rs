@@ -191,7 +191,7 @@ pub async fn sign_tx(
             TxBroadcastData::DryRun(_) => panic!(
                 "somehow created a dry run transaction without --dry-run or --dry-run-wrapper"
             ),
-            TxBroadcastData::Wrapper {
+            TxBroadcastData::Live {
                 ref tx,
                 ref wrapper_hash,
                 decrypted_hash: _,
@@ -449,7 +449,7 @@ pub async fn sign_wrapper(
         // We use this to determine when the decrypted inner tx makes it
         // on-chain
         let decrypted_hash = tx.tx_hash.to_string();
-        TxBroadcastData::Wrapper {
+        TxBroadcastData::Live {
             tx: signed_wrapper,
             wrapper_hash,
             decrypted_hash,
