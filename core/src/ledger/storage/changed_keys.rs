@@ -57,3 +57,31 @@ where
         self.storage.delete(key)
     }
 }
+
+#[cfg(test)]
+mod test_changed_keys {
+    use super::*;
+    use crate::ledger::storage::testing::TestWlStorage;
+    use crate::types::storage::DbKeySeg;
+
+    #[test]
+    fn test_get_changed_keys() {
+        let key_1 = DbKeySeg::StringSeg("one".into()).into();
+        let key_2 = DbKeySeg::StringSeg("two".into()).into();
+        let key_3 = DbKeySeg::StringSeg("three".into()).into();
+
+        let mut wl_storage = TestWlStorage::default();
+
+        wl_storage.write(&key_1, 1u32).expect("Test failed");
+
+        let mut scoped_storage = ScopedChangedKeys::new(&mut wl_storage);
+
+        scoped_storage.write(&key_2, 2u32).expect("Test failed");
+        scoped_storage.write(&key_3, 3u32).expect("Test failed");
+
+        let changed_keys = scoped_storage.into_changed_keys();
+        let expected_keys = BTreeSet::from([key_2, key_3]);
+
+        assert_eq!(changed_keys, expected_keys);
+    }
+}
