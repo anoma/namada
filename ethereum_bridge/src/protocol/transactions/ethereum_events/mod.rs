@@ -725,16 +725,6 @@ mod tests {
             Ok(tx_result) => tx_result,
             Err(err) => panic!("unexpected error: {:#?}", err),
         };
-        assert_eq!(
-            tx_result.changed_keys,
-            BTreeSet::from_iter([
-                keys.body(),
-                keys.seen(),
-                keys.seen_by(),
-                keys.voting_power(),
-                keys.epoch(),
-            ]),
-        );
         assert(KeyKind::Body, wl_storage.read_bytes(&keys.body()).unwrap());
         assert(KeyKind::Seen, wl_storage.read_bytes(&keys.seen()).unwrap());
         assert(
@@ -748,6 +738,16 @@ mod tests {
         assert(
             KeyKind::Epoch,
             wl_storage.read_bytes(&keys.epoch()).unwrap(),
+        );
+        assert_eq!(
+            tx_result.changed_keys,
+            BTreeSet::from_iter([
+                keys.body(),
+                keys.seen(),
+                keys.seen_by(),
+                keys.voting_power(),
+                keys.epoch(),
+            ]),
         );
     }
 
