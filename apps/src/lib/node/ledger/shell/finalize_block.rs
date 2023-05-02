@@ -1880,7 +1880,7 @@ mod test_finalize_block {
 
         // Check fee payment
         assert_eq!(event.event_type.to_string(), String::from("accepted"));
-        let code = event.attributes.get("code").expect("Testfailed").as_str();
+        let code = event.attributes.get("code").expect("Test failed").as_str();
         assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
 
         let new_proposer_balance = storage_api::token::read_balance(
@@ -1976,7 +1976,7 @@ mod test_finalize_block {
 
         // Check fee burning
         assert_eq!(event.event_type.to_string(), String::from("accepted"));
-        let code = event.attributes.get("code").expect("Testfailed").as_str();
+        let code = event.attributes.get("code").expect("Test failed").as_str();
         assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
 
         let new_token_supply = shell

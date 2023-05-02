@@ -201,7 +201,7 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    // Writes both txs hash to storage (changes must be persisted even in case of failure)
+    // Writes both txs hash to block write log (changes must be persisted even in case of failure)
     let tx: Tx = tx_bytes.try_into().unwrap();
     let wrapper_tx_hash_key =
         replay_protection::get_tx_hash_key(&hash::Hash(tx.unsigned_hash()));
@@ -282,7 +282,6 @@ where
         // If it fails, do not return early
         // from this function but try to take the funds from the unshielded
         // balance
-        // NOTE: A clean write log must be provided to this call
         match wrapper.generate_fee_unshielding(
             transparent_balance,
             // By this time we've already validated the chain id and
@@ -292,6 +291,7 @@ where
             self.load_transfer_code_from_storage(),
         ) {
             Ok(Some(fee_unshielding_tx)) => {
+                // NOTE: A clean write log must be provided to this call for a correct vp validation
                 match apply_tx(
                     TxType::Decrypted(DecryptedTx::Decrypted {
                         tx: fee_unshielding_tx,
@@ -336,12 +336,13 @@ where
 
     // Charge fee
     let mut wl_storage = TempWlStorage::new(storage);
-    wl_storage.write_log = write_log.clone();
+    wl_storage.write_log = std::mem::take(write_log);
 
     transfer_fee(&mut wl_storage, block_proposer, has_valid_pow, &wrapper)
         .map_err(Error::FeeError)?;
 
-    write_log.merge_tx_write_log(wl_storage.write_log);
+    // Rejoin the updated write log
+    *write_log = wl_storage.write_log;
     changed_keys.append(&mut write_log.get_keys());
 
     Ok(())
@@ -423,7 +424,7 @@ where
     }
 }
 
-/// Decides whether to transfer the fees to the block proposer or burn them
+/// Decides whether to transfer the fees to the block proposer or burn them. Operations are done on the block write log.
 fn dispatch_fee_action<S>(
     wl_storage: &mut S,
     wrapper: &WrapperTx,
