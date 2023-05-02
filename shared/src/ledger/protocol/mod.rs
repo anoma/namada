@@ -90,7 +90,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[allow(clippy::too_many_arguments)]
 pub fn apply_tx<D, H, CA>(
     tx: TxType,
-    tx_bytes: &[u8], //FIXME: inside WrapperTx
+    tx_bytes: &[u8],
     tx_index: TxIndex,
     tx_gas_meter: &mut TxGasMeter,
     gas_table: &BTreeMap<String, u64>,
@@ -99,7 +99,7 @@ pub fn apply_tx<D, H, CA>(
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
     block_proposer: Option<&Address>,
-    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool, //FIXME: inside WrapperTx
+    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -164,6 +164,7 @@ where
                 block_proposer,
                 vp_wasm_cache,
                 tx_wasm_cache,
+                #[cfg(not(feature = "mainnet"))]
                 has_valid_pow,
             )?;
             Ok(TxResult {
