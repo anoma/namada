@@ -18,6 +18,7 @@ use namada_core::types::transaction::TxResult;
 use namada_core::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada_core::types::voting_power::FractionalVotingPower;
 use namada_proof_of_stake::pos_queries::PosQueries;
+use namada_proof_of_stake::read_pos_params;
 
 use super::ChangedKeys;
 use crate::protocol::transactions::utils;
@@ -204,7 +205,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let unbonding_len = wl_storage.pos_queries().get_pos_params().unbonding_len;
+    let pos_params = read_pos_params(wl_storage)?;
+    let unbonding_len = pos_params.unbonding_len;
     let current_epoch = wl_storage.storage.last_epoch;
     if current_epoch.0 <= unbonding_len {
         return Ok(Vec::new());

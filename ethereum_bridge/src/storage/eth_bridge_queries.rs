@@ -17,9 +17,11 @@ use namada_core::types::vote_extensions::validator_set_update::{
 use namada_core::types::voting_power::{
     EthBridgeVotingPower, FractionalVotingPower,
 };
-use namada_proof_of_stake::pos_queries::{ActiveValidators, PosQueries};
+use namada_proof_of_stake::pos_queries::{PosQueries, ConsensusValidators};
+use namada_proof_of_stake::types::ConsensusValidatorSet;
 use namada_proof_of_stake::{
-    validator_eth_cold_key_handle, validator_eth_hot_key_handle,
+    read_pos_params, validator_eth_cold_key_handle,
+    validator_eth_hot_key_handle,
 };
 
 use crate::storage::proof::BridgePoolRootProof;
@@ -99,8 +101,8 @@ impl<'db, DB> Copy for EthBridgeQueriesHook<'db, DB> {}
 
 impl<'db, D, H> EthBridgeQueriesHook<'db, WlStorage<D, H>>
 where
-    D: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + storage::StorageHasher,
 {
     /// Return a handle to the inner [`WlStorage`].
     #[inline]
@@ -221,6 +223,7 @@ where
             .read_merkle_tree_stores(height)
             .expect("We should always be able to read the database")
             .expect("Every root should correspond to an existing block height")
+            .1
             .get_root(StoreType::BridgePool)
             .into()
     }
@@ -270,7 +273,7 @@ where
     ) -> Option<EthAddress> {
         let epoch = epoch
             .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
-        let params = self.wl_storage.pos_queries().get_pos_params();
+        let params = read_pos_params(self.wl_storage).ok()?;
         validator_eth_hot_key_handle(validator)
             .get(self.wl_storage, epoch, &params)
             .expect("Should be able to read eth hot key from storage")
@@ -287,7 +290,7 @@ where
     ) -> Option<EthAddress> {
         let epoch = epoch
             .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
-        let params = self.wl_storage.pos_queries().get_pos_params();
+        let params = read_pos_params(self.wl_storage).ok()?;
         validator_eth_cold_key_handle(validator)
             .get(self.wl_storage, epoch, &params)
             .expect("Should be able to read eth cold key from storage")
@@ -322,7 +325,7 @@ where
         let active_validators = self
             .wl_storage
             .pos_queries()
-            .get_active_validators(Some(epoch));
+            .get_consensus_validators(Some(epoch));
         ActiveEthAddresses {
             wl_storage: self.wl_storage,
             active_validators,
@@ -382,13 +385,13 @@ where
 {
     epoch: Epoch,
     wl_storage: &'db WlStorage<D, H>,
-    active_validators: ActiveValidators<'db, D, H>,
+    active_validators: ConsensusValidators<'db, D, H>,
 }
 
 impl<'db, D, H> ActiveEthAddresses<'db, D, H>
 where
-    D: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + storage::StorageHasher,
 {
     /// Iterate over the Ethereum addresses of the set of active validators
     /// in Namada, at some given epoch.

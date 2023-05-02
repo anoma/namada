@@ -192,8 +192,8 @@ impl EthereumBridgeConfig {
     /// corrupt.
     pub fn read<DB, H>(wl_storage: &WlStorage<DB, H>) -> Option<Self>
     where
-        DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: storage::traits::StorageHasher,
+        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+        H: 'static + storage::traits::StorageHasher,
     {
         let min_confirmations_key = bridge_storage::min_confirmations_key();
         let native_erc20_key = bridge_storage::native_erc20_key();
@@ -255,8 +255,8 @@ fn must_read_key<DB, H, T: BorshDeserialize>(
     key: &Key,
 ) -> T
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::traits::StorageHasher,
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + storage::traits::StorageHasher,
 {
     StorageRead::read::<T>(wl_storage, key).map_or_else(
         |err| panic!("Could not read {key}: {err:?}"),

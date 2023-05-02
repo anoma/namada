@@ -282,8 +282,8 @@ where
     }
 
     // TODO the timeout height is min_num_blocks of an epoch for now
-    let (epoch_duration, _) =
-        read_epoch_duration_parameter(&wl_storage.storage)?;
+    let epoch_duration =
+        read_epoch_duration_parameter(wl_storage)?;
     let timeout_offset = epoch_duration.min_num_of_blocks;
 
     // Check time out and refund
@@ -429,7 +429,7 @@ mod tests {
             min_num_of_blocks: timeout_offset,
             min_duration: DurationSecs(5),
         };
-        update_epoch_parameter(&mut wl_storage.storage, &epoch_duration)
+        update_epoch_parameter(wl_storage, &epoch_duration)
             .expect("Test failed");
         // set native ERC20 token
         let native_erc20_key = bridge_storage::native_erc20_key();

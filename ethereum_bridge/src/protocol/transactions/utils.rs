@@ -78,7 +78,7 @@ where
             height,
             wl_storage
                 .pos_queries()
-                .get_active_validators(Some(epoch))
+                .get_consensus_validators(Some(epoch))
                 .iter()
                 .collect(),
         );
