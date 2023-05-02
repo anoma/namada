@@ -1,5 +1,6 @@
 //! Ledger's state storage with key-value backed store and a merkle tree
 
+pub mod changed_keys;
 pub mod ics23_specs;
 mod masp_conversions;
 pub mod merkle_tree;
