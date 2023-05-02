@@ -49,8 +49,12 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    let mut changed_keys = timeout_events(wl_storage)?;
     if events.is_empty() {
-        return Ok(TxResult::default());
+        return Ok(TxResult {
+            changed_keys,
+            ..Default::default()
+        });
     }
     tracing::info!(
         ethereum_events = events.len(),
@@ -62,9 +66,11 @@ where
 
     let voting_powers = utils::get_voting_powers(wl_storage, &updates)?;
 
-    let mut changed_keys = apply_updates(wl_storage, updates, voting_powers)?;
-
-    changed_keys.append(&mut timeout_events(wl_storage)?);
+    changed_keys.append(&mut apply_updates(
+        wl_storage,
+        updates,
+        voting_powers,
+    )?);
 
     Ok(TxResult {
         changed_keys,
@@ -282,6 +288,15 @@ mod tests {
     use crate::protocol::transactions::utils::GetVoters;
     use crate::protocol::transactions::votes::Votes;
     use crate::test_utils;
+
+    /// All kinds of [`Keys`].
+    enum KeyKind {
+        Body,
+        Seen,
+        SeenBy,
+        VotingPower,
+        Epoch,
+    }
 
     #[test]
     /// Test applying a `TransfersToNamada` batch containing a single transfer
@@ -695,5 +710,120 @@ mod tests {
         );
         assert!(wl_storage.read_bytes(&prev_keys.body()).unwrap().is_none());
         assert!(wl_storage.read_bytes(&new_keys.body()).unwrap().is_some());
+    }
+
+    /// Helper fn to [`test_timeout_events_before_state_upds`].
+    fn check_event_keys<T, F>(
+        keys: &Keys<T>,
+        wl_storage: &TestWlStorage,
+        result: Result<TxResult>,
+        mut assert: F,
+    ) where
+        F: FnMut(KeyKind, Option<Vec<u8>>),
+    {
+        let tx_result = match result {
+            Ok(tx_result) => tx_result,
+            Err(err) => panic!("unexpected error: {:#?}", err),
+        };
+        assert(KeyKind::Body, wl_storage.read_bytes(&keys.body()).unwrap());
+        assert(KeyKind::Seen, wl_storage.read_bytes(&keys.seen()).unwrap());
+        assert(
+            KeyKind::SeenBy,
+            wl_storage.read_bytes(&keys.seen_by()).unwrap(),
+        );
+        assert(
+            KeyKind::VotingPower,
+            wl_storage.read_bytes(&keys.voting_power()).unwrap(),
+        );
+        assert(
+            KeyKind::Epoch,
+            wl_storage.read_bytes(&keys.epoch()).unwrap(),
+        );
+        assert_eq!(
+            tx_result.changed_keys,
+            BTreeSet::from_iter([
+                keys.body(),
+                keys.seen(),
+                keys.seen_by(),
+                keys.voting_power(),
+                keys.epoch(),
+            ]),
+        );
+    }
+
+    /// Test that we time out events before we do any state update
+    /// on them. This should prevent double voting from rebonded
+    /// validators.
+    #[test]
+    fn test_timeout_events_before_state_upds() {
+        let validator_a = address::testing::established_address_2();
+        let validator_b = address::testing::established_address_3();
+        let (mut wl_storage, _) = test_utils::setup_storage_with_validators(
+            HashMap::from_iter(vec![
+                (validator_a.clone(), 100_u64.into()),
+                (validator_b.clone(), 100_u64.into()),
+            ]),
+        );
+        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
+
+        let receiver = address::testing::established_address_1();
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 0.into(),
+            valid_transfers_map: vec![true],
+            transfers: vec![TransferToNamada {
+                amount: Amount::from(100),
+                asset: DAI_ERC20_ETH_ADDRESS,
+                receiver,
+            }],
+        };
+        let keys = vote_tallies::Keys::from(&event);
+
+        let result = apply_derived_tx(
+            &mut wl_storage,
+            vec![MultiSignedEthEvent {
+                event: event.clone(),
+                signers: BTreeSet::from([(validator_a, BlockHeight(100))]),
+            }],
+        );
+        check_event_keys(&keys, &wl_storage, result, |key_kind, value| match (
+            key_kind, value,
+        ) {
+            (_, None) => panic!("Test failed"),
+            (KeyKind::VotingPower, Some(power)) => {
+                let power = FractionalVotingPower::try_from_slice(&power)
+                    .expect("Test failed");
+                assert_eq!(power, FractionalVotingPower::new(1, 2).unwrap());
+            }
+            (_, Some(_)) => {}
+        });
+
+        // commit then update the epoch
+        wl_storage.storage.commit_block().unwrap();
+        let unbonding_len = namada_proof_of_stake::read_pos_params(&wl_storage)
+            .expect("Test failed")
+            .unbonding_len
+            + 1;
+        wl_storage.storage.last_epoch =
+            wl_storage.storage.last_epoch + unbonding_len;
+        wl_storage.storage.block.epoch = wl_storage.storage.last_epoch + 1_u64;
+
+        let result = apply_derived_tx(
+            &mut wl_storage,
+            vec![MultiSignedEthEvent {
+                event,
+                signers: BTreeSet::from([(validator_b, BlockHeight(100))]),
+            }],
+        );
+        check_event_keys(&keys, &wl_storage, result, |key_kind, value| match (
+            key_kind, value,
+        ) {
+            (_, None) => panic!("Test failed"),
+            (KeyKind::VotingPower, Some(power)) => {
+                let power = FractionalVotingPower::try_from_slice(&power)
+                    .expect("Test failed");
+                assert_eq!(power, FractionalVotingPower::new(1, 2).unwrap());
+            }
+            (_, Some(_)) => {}
+        });
     }
 }
