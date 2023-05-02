@@ -172,7 +172,9 @@ pub mod genesis_config {
         /// The set of continous payments
         pub payments: BTreeSet<u64>,
         /// The pgf inflation rate
-        pub inflation_rate: Decimal,
+        pub pgf_inflation_rate: Decimal,
+        /// The stewards inflation rate
+        pub stewards_inflation_rate: Decimal,
     }
 
     /// Validator pre-genesis configuration can be created with client utils
@@ -658,12 +660,14 @@ pub mod genesis_config {
         let PgfParamsConfig {
             stewards,
             payments,
-            inflation_rate,
+            pgf_inflation_rate,
+            stewards_inflation_rate
         } = pgf_params;
         let pgf_params = PgfParams {
             stewards,
             payments,
-            inflation_rate,
+            pgf_inflation_rate,
+            stewards_inflation_rate
         };
 
         let PosParamsConfig {

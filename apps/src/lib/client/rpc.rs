@@ -1485,11 +1485,16 @@ pub async fn query_protocol_parameters(
     println!("{:4}Votes per token: {}", "", pos_params.tm_votes_per_token);
 
     println!("Pgf parameters");
-    let key = pgf::storage::keys::get_inflation_rate_key();
+    let key = pgf::storage::keys::get_pgf_inflation_rate_key();
     let pgf_inflation = query_storage_value::<Decimal>(&client, &key)
         .await
         .expect("Parameter should be defined.");
+    let key = pgf::storage::keys::get_steward_inflation_rate_key();
+    let stewards_inflation = query_storage_value::<Decimal>(&client, &key)
+        .await
+        .expect("Parameter should be defined.");
     println!("{:4}Pgf inflation: {:?}", "", pgf_inflation);
+    println!("{:4}Steward inflation: {:?}", "", stewards_inflation);
 }
 
 pub async fn query_bond(

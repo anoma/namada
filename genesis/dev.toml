@@ -199,3 +199,5 @@ stewards = []
 payments = []
 # Pgf inflation rate
 inflation_rate = 0.05
+# Steward inflation rate
+steward_inflation_rate = 0.01

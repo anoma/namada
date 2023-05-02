@@ -62,7 +62,7 @@ where
             let result = match key_type {
                 KeyType::STEWARDS => Ok(false),
                 KeyType::PAYMENTS => Ok(false),
-                KeyType::INFLATION_RATE => {
+                KeyType::PGF_INFLATION_RATE |  KeyType::STEWARD_INFLATION_RATE => {
                     self.is_valid_parameter_change(tx_data)
                 }
                 KeyType::UNKNOWN_PGF => Ok(false),
@@ -95,7 +95,9 @@ enum KeyType {
     #[allow(non_camel_case_types)]
     PAYMENTS,
     #[allow(non_camel_case_types)]
-    INFLATION_RATE,
+    PGF_INFLATION_RATE,
+    #[allow(non_camel_case_types)]
+    STEWARD_INFLATION_RATE,
     #[allow(non_camel_case_types)]
     UNKNOWN_PGF,
     #[allow(non_camel_case_types)]
@@ -108,8 +110,10 @@ impl From<&Key> for KeyType {
             Self::STEWARDS
         } else if pgf_storage::is_payments_key(key) {
             KeyType::PAYMENTS
-        } else if pgf_storage::is_inflation_rate_key(key) {
-            Self::INFLATION_RATE
+        } else if pgf_storage::is_pgf_inflation_rate_key(key) {
+            Self::PGF_INFLATION_RATE
+        } else if pgf_storage::is_steward_inflation_rate_key(key) {
+            Self::STEWARD_INFLATION_RATE
         } else if pgf_storage::is_pgf_key(key) {
             KeyType::UNKNOWN_PGF
         } else {

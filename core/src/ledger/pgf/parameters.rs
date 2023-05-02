@@ -26,8 +26,10 @@ pub struct PgfParams {
     pub stewards: BTreeSet<Address>,
     /// The set of continous payments
     pub payments: BTreeSet<u64>,
-    /// The pgf inflation rate
-    pub inflation_rate: Decimal,
+    /// The pgf funding inflation rate
+    pub pgf_inflation_rate: Decimal,
+    /// The pgf stewards inflation rate
+    pub stewards_inflation_rate: Decimal,
 }
 
 impl Default for PgfParams {
@@ -35,7 +37,8 @@ impl Default for PgfParams {
         Self {
             stewards: BTreeSet::default(),
             payments: BTreeSet::default(),
-            inflation_rate: dec!(0.05),
+            pgf_inflation_rate: dec!(0.05),
+            stewards_inflation_rate: dec!(0.01)
         }
     }
 }
@@ -50,7 +53,8 @@ impl PgfParams {
         let Self {
             stewards,
             payments,
-            inflation_rate,
+            pgf_inflation_rate,
+            stewards_inflation_rate
         } = self;
 
         let stewards_key = pgf_storage::get_stewards_key();
@@ -63,9 +67,14 @@ impl PgfParams {
             .write(&payments_key, encode(&payments))
             .expect("Should be able to write to storage.");
 
-        let inflation_rate_key = pgf_storage::get_inflation_rate_key();
+        let pgf_inflation_rate_key = pgf_storage::get_pgf_inflation_rate_key();
         storage
-            .write(&inflation_rate_key, encode(&inflation_rate))
+            .write(&pgf_inflation_rate_key, encode(&pgf_inflation_rate))
+            .expect("Should be able to write to storage.");
+
+        let steward_inflation_rate_key = pgf_storage::get_steward_inflation_rate_key();
+        storage
+            .write(&steward_inflation_rate_key, encode(&stewards_inflation_rate))
             .expect("Should be able to write to storage.");
     }
 }
