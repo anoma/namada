@@ -1,5 +1,8 @@
 //! Pgf VP
 
+/// Pgf utility functions and structures
+pub mod utils;
+
 use std::collections::BTreeSet;
 
 use namada_core::ledger::pgf::storage::keys as pgf_storage;

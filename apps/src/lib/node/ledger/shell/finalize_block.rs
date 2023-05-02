@@ -8,6 +8,7 @@ use namada::types::storage::{BlockHash, BlockResults, Header};
 use namada::types::token::Amount;
 
 use super::governance::execute_governance_proposals;
+use super::pgf::execute_pgf_payments;
 use super::*;
 use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
 use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
@@ -57,8 +58,8 @@ where
                 &mut self.wl_storage,
             )?;
 
-            let _proposals_result =
-                execute_governance_proposals(self, &mut response)?;
+            execute_governance_proposals(self, &mut response)?;
+            execute_pgf_payments(self, &mut response)?;
 
             // Copy the new_epoch + pipeline_len - 1 validator set into
             // new_epoch + pipeline_len

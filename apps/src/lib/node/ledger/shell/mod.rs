@@ -7,11 +7,13 @@
 //! More info in <https://github.com/anoma/namada/issues/362>.
 mod finalize_block;
 mod governance;
+mod pgf;
 mod init_chain;
 mod prepare_proposal;
 mod process_proposal;
 mod queries;
 mod stats;
+mod utils;
 
 use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};

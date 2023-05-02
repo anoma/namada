@@ -26,6 +26,7 @@ use namada::types::address::Address;
 use namada::types::storage::Epoch;
 
 use super::*;
+use super::utils::force_read;
 
 #[derive(Default)]
 pub struct ProposalsResult {
@@ -174,17 +175,6 @@ where
     }
 
     Ok(proposals_result)
-}
-
-pub fn force_read<S, T>(storage: &S, key: &Key) -> storage_api::Result<T>
-where
-    S: StorageRead,
-    T: BorshDeserialize,
-{
-    storage
-        .read::<T>(key)
-        .transpose()
-        .expect("Storage key must be present.")
 }
 
 fn compute_proposal_votes<S>(
