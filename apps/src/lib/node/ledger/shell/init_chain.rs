@@ -147,6 +147,10 @@ where
             .gov_params
             .init_storage(&mut self.wl_storage.storage);
 
+        genesis
+            .pgf_params
+            .init_storage(&mut self.wl_storage.storage);
+
         // Depends on parameters being initialized
         self.wl_storage
             .storage

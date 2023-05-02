@@ -98,6 +98,9 @@ pub async fn main() -> Result<()> {
                 Sub::QueryAccount(QueryAccount(args)) => {
                     rpc::query_account(ctx, args).await;
                 }
+                Sub::QueryPgf(QueryPgf(args)) => {
+                    rpc::query_pgf(ctx, args).await;
+                }
                 Sub::SignTx(SignTx(args)) => rpc::sign_tx(ctx, args).await,
             }
         }
