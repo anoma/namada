@@ -177,7 +177,7 @@ pos_gain_p = 0.1
 pos_gain_d = 0.1
 
 [parameters.gas_cost]
-"atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5" = "1"
+"atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5" = "0.000001"
 
 # Proof of stake parameters.
 [pos_params]
