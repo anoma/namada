@@ -155,7 +155,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let mut voting_power_post = tally.voting_power;
+    // TODO(namada#1305): remove the clone here
+    let mut voting_power_post = tally.voting_power.clone();
     let mut seen_by_post = tally.seen_by.clone();
     for (validator, vote_height, voting_power) in vote_info {
         if let Some(already_voted_height) =
