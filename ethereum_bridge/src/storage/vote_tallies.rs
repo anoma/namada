@@ -71,7 +71,7 @@ impl<T> Keys<T> {
             .expect("should always be able to construct this key")
     }
 
-    /// Get the `seen` key - there should be a [`bool`] stored here.
+    /// Get the `seen` key - there should be a `bool` stored here.
     pub fn seen(&self) -> Key {
         self.prefix
             .push(&KeysSegments::VALUES.seen.to_owned())
@@ -86,8 +86,8 @@ impl<T> Keys<T> {
             .expect("should always be able to construct this key")
     }
 
-    /// Get the `voting_power` key - there should be a `(u64, u64)` stored
-    /// here.
+    /// Get the `voting_power` key - there should be an `EpochedVotingPower`
+    /// stored here.
     pub fn voting_power(&self) -> Key {
         self.prefix
             .push(&KeysSegments::VALUES.voting_power.to_owned())
