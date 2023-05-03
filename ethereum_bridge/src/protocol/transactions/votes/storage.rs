@@ -5,9 +5,8 @@ use namada_core::ledger::storage::{
 };
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::storage::Key;
-use namada_core::types::voting_power::FractionalVotingPower;
 
-use super::{Tally, Votes};
+use super::{EpochedVotingPower, Tally, Votes};
 use crate::storage::vote_tallies;
 
 pub fn write<D, H, T>(
@@ -64,7 +63,7 @@ where
 {
     let seen: bool = super::read::value(wl_storage, &keys.seen())?;
     let seen_by: Votes = super::read::value(wl_storage, &keys.seen_by())?;
-    let voting_power: FractionalVotingPower =
+    let voting_power: EpochedVotingPower =
         super::read::value(wl_storage, &keys.voting_power())?;
 
     Ok(Tally {
@@ -134,7 +133,10 @@ mod tests {
         };
         let keys = vote_tallies::Keys::from(&event);
         let tally = Tally {
-            voting_power: FractionalVotingPower::new(1, 3).unwrap(),
+            voting_power: EpochedVotingPower::from([(
+                0.into(),
+                FractionalVotingPower::ONE_THIRD,
+            )]),
             seen_by: BTreeMap::from([(
                 address::testing::established_address_1(),
                 10.into(),
@@ -181,7 +183,10 @@ mod tests {
         };
         let keys = vote_tallies::Keys::from(&event);
         let tally = Tally {
-            voting_power: FractionalVotingPower::new(1, 3).unwrap(),
+            voting_power: EpochedVotingPower::from([(
+                0.into(),
+                FractionalVotingPower::ONE_THIRD,
+            )]),
             seen_by: BTreeMap::from([(
                 address::testing::established_address_1(),
                 10.into(),
