@@ -120,7 +120,7 @@ Now, at the beginning of each new epoch, if there are slashes enqueued for this 
 1. Compute the cubic slash rate for slashes in this epoch.
 For each validator that has enqueued slashes,
 2. Compute the rate for each of the validator slashes. The total rate by which this validator is slashed is the sum of these rates, capped at `1.0`. Slash the validator voting powers with the total rate, enforcing that the slashed voting power be 0 if it would otherwise become negative.
-3. Send the slashed token amount from the proof-of-stake address to the slash pool address. These can ultimately be used by governance to refund validators from wrongful slashes (among other things?).
+3. Send the slashed token amount from the proof-of-stake address to the slash pool address. These tokens could ultimately be used by governance to refund validators for slashes that are determined to have been accidental, or they can be burned.
 
 Once a jailed validator is no longer frozen and all of its slashes have been processed, it can submit a transaction to unjail themselves. When the transaction is accepted and applied, the validator is inserted back into the validator set (depending on its new voting power) starting at the pipeline offset relative to the epoch of transaction submission.
 
