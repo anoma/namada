@@ -2,7 +2,7 @@
 
 use std::fmt::{Display, Formatter};
 use std::iter::Sum;
-use std::ops::{Add, AddAssign};
+use std::ops::{Add, AddAssign, Mul};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::ethereum_types as ethereum;
@@ -120,6 +120,22 @@ impl From<&FractionalVotingPower> for (u64, u64) {
 impl Sum for FractionalVotingPower {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.fold(Self::default(), Add::add)
+    }
+}
+
+impl Mul<FractionalVotingPower> for FractionalVotingPower {
+    type Output = Self;
+
+    fn mul(self, rhs: FractionalVotingPower) -> Self::Output {
+        self * &rhs
+    }
+}
+
+impl Mul<&FractionalVotingPower> for FractionalVotingPower {
+    type Output = Self;
+
+    fn mul(self, rhs: &FractionalVotingPower) -> Self::Output {
+        Self(self.0 * rhs.0)
     }
 }
 
