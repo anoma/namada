@@ -155,7 +155,8 @@ where
     let (vote_tracking, changed, confirmed, already_present) =
         if !exists_in_storage {
             tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
-            let vote_tracking = calculate_new(update.seen_by, voting_powers)?;
+            let vote_tracking =
+                calculate_new(wl_storage, update.seen_by, voting_powers)?;
             let changed = eth_msg_keys.into_iter().collect();
             let confirmed = vote_tracking.seen;
             (vote_tracking, changed, confirmed, false)

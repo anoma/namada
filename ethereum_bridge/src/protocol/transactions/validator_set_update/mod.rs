@@ -154,7 +154,8 @@ where
                 ?ext.voting_powers,
                 "New validator set update vote aggregation started"
             );
-            let tally = votes::calculate_new(seen_by, &voting_powers)?;
+            let tally =
+                votes::calculate_new(wl_storage, seen_by, &voting_powers)?;
             let mut proof = EthereumProof::new(ext.voting_powers);
             proof.attach_signature_batch(ext.signatures.into_iter().map(
                 |(addr, sig)| {

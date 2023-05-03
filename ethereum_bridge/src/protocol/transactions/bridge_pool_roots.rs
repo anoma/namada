@@ -166,7 +166,7 @@ where
         (vote_tracking, changed, confirmed, true)
     } else {
         tracing::debug!(%bp_key.prefix, "No validator has signed this bridge pool update before.");
-        let vote_tracking = calculate_new(seen_by, voting_powers)?;
+        let vote_tracking = calculate_new(wl_storage, seen_by, voting_powers)?;
         let changed = bp_key.into_iter().collect();
         let confirmed = vote_tracking.seen;
         (vote_tracking, changed, confirmed, false)
