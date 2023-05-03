@@ -80,7 +80,7 @@ impl EpochedVotingPowerExt for EpochedVotingPower {
             .values()
             .fold(token::Amount::from(0u64), |accum, &stake| accum + stake);
 
-        // the average voting power of all epochs a tally was held in
+        // the weighted average voting power of all epochs a tally was held in
         let average_voting_power =
             self.iter().map(|(&epoch, &power)| (epoch, power)).fold(
                 FractionalVotingPower::NULL,
