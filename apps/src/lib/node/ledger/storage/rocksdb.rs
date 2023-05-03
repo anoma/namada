@@ -259,9 +259,12 @@ impl RocksDB {
         historic: bool,
     ) {
         // Find the last block height
+        let state_cf = self
+            .get_column_family(STATE_CF)
+            .expect("State column family should exist");
         let height: BlockHeight = types::decode(
             self.0
-                .get("height")
+                .get_cf(state_cf, "height")
                 .expect("Unable to read DB")
                 .expect("No block height found"),
         )
@@ -292,21 +295,21 @@ impl RocksDB {
             // Diffs
             let cf = self
                 .get_column_family(DIFFS_CF)
-                .expect("ColumnFamily should exist");
+                .expect("Diffs column family should exist");
             let prefix = height.raw();
             self.dump_it(cf, Some(prefix.clone()), &mut file);
 
             // Block
             let cf = self
                 .get_column_family(BLOCK_CF)
-                .expect("ColumnFamily should exist");
+                .expect("Block column family should exist");
             self.dump_it(cf, Some(prefix), &mut file);
         }
 
         // subspace
         let cf = self
             .get_column_family(SUBSPACE_CF)
-            .expect("ColumnFamily should exist");
+            .expect("Subspace column family should exist");
         self.dump_it(cf, None, &mut file);
 
         println!("Done writing to {}", full_path.to_string_lossy());
