@@ -75,9 +75,18 @@ impl From<EthBridgeVotingPower> for u64 {
 pub struct FractionalVotingPower(Ratio<u64>);
 
 impl FractionalVotingPower {
+    /// Null voting power.
+    pub const NULL: FractionalVotingPower =
+        FractionalVotingPower(Ratio::new_raw(0, 1));
+    /// One third of the voting power.
+    pub const ONE_THIRD: FractionalVotingPower =
+        FractionalVotingPower(Ratio::new_raw(1, 3));
     /// Two thirds of the voting power.
     pub const TWO_THIRDS: FractionalVotingPower =
         FractionalVotingPower(Ratio::new_raw(2, 3));
+    /// 100% of the voting power.
+    pub const WHOLE: FractionalVotingPower =
+        FractionalVotingPower(Ratio::new_raw(1, 1));
 
     /// Create a new FractionalVotingPower. It must be between zero and one
     /// inclusive.
@@ -96,8 +105,9 @@ impl FractionalVotingPower {
 }
 
 impl Default for FractionalVotingPower {
+    #[inline(always)]
     fn default() -> Self {
-        Self::new(0, 1).unwrap()
+        Self::NULL
     }
 }
 
@@ -117,11 +127,7 @@ impl Add<FractionalVotingPower> for FractionalVotingPower {
     type Output = Self;
 
     fn add(self, rhs: FractionalVotingPower) -> Self::Output {
-        Self(
-            self.0
-                .checked_add(&rhs.0)
-                .unwrap_or_else(|| Ratio::new(u64::MAX, 1)),
-        )
+        self + &rhs
     }
 }
 
@@ -129,11 +135,14 @@ impl Add<&FractionalVotingPower> for FractionalVotingPower {
     type Output = Self;
 
     fn add(self, rhs: &FractionalVotingPower) -> Self::Output {
-        Self(
-            self.0
-                .checked_add(&rhs.0)
-                .unwrap_or_else(|| Ratio::new(u64::MAX, 1)),
-        )
+        self.0
+            .checked_add(&rhs.0)
+            .map(Self)
+            // cap fractional voting power to 1/1
+            .and_then(|power| {
+                (power <= FractionalVotingPower::WHOLE).then_some(power)
+            })
+            .unwrap_or(FractionalVotingPower::WHOLE)
     }
 }
 
