@@ -26,7 +26,7 @@ pub(super) mod update;
 pub type Votes = BTreeMap<Address, BlockHeight>;
 
 /// The voting power behind a tally aggregated over multiple epochs.
-pub type EpochedVotingPower = BTreeMap<Epoch, token::Amount>;
+pub type EpochedVotingPower = BTreeMap<Epoch, FractionalVotingPower>;
 
 /// Extension methods for [`EpochedVotingPower`] instances.
 pub trait EpochedVotingPowerExt {
@@ -45,31 +45,7 @@ pub trait EpochedVotingPowerExt {
     fn has_majority_quorum<D, H>(&self, wl_storage: &WlStorage<D, H>) -> bool
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-        H: 'static + StorageHasher + Sync,
-    {
-        let epoch_voting_powers = self.get_epoch_voting_powers(wl_storage);
-        let total_voting_power = epoch_voting_powers
-            .values()
-            .fold(token::Amount::from(0u64), |accum, stake| accum + stake);
-
-        // the average voting power of all epochs a tally was held in
-        let average_voting_power = self.iter().copied().fold(
-            FractionalVotingPower::NULL,
-            |average, (epoch, aggregated_voting_power)| {
-                let epoch_voting_power = epoch_voting_powers
-                    .get(&epoch)
-                    .expect("This value should be in the map");
-                let weight = FractionalVotingPower::new(
-                    epoch_voting_power.into(),
-                    total_voting_power.into(),
-                )
-                .unwrap();
-                average + weight * aggregated_voting_power
-            },
-        );
-
-        average_voting_power > FractionalVotingPower::TWO_THIRDS
-    }
+        H: 'static + StorageHasher + Sync;
 }
 
 impl EpochedVotingPowerExt for EpochedVotingPower {
@@ -92,6 +68,37 @@ impl EpochedVotingPowerExt for EpochedVotingPower {
                 )
             })
             .collect()
+    }
+
+    fn has_majority_quorum<D, H>(&self, wl_storage: &WlStorage<D, H>) -> bool
+    where
+        D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+        H: 'static + StorageHasher + Sync,
+    {
+        let epoch_voting_powers = self.get_epoch_voting_powers(wl_storage);
+        let total_voting_power = epoch_voting_powers
+            .values()
+            .fold(token::Amount::from(0u64), |accum, &stake| accum + stake);
+
+        // the average voting power of all epochs a tally was held in
+        let average_voting_power =
+            self.iter().map(|(&epoch, &power)| (epoch, power)).fold(
+                FractionalVotingPower::NULL,
+                |average, (epoch, aggregated_voting_power)| {
+                    let epoch_voting_power = epoch_voting_powers
+                        .get(&epoch)
+                        .copied()
+                        .expect("This value should be in the map");
+                    let weight = FractionalVotingPower::new(
+                        epoch_voting_power.into(),
+                        total_voting_power.into(),
+                    )
+                    .unwrap();
+                    average + weight * aggregated_voting_power
+                },
+            );
+
+        average_voting_power > FractionalVotingPower::TWO_THIRDS
     }
 }
 
@@ -129,7 +136,16 @@ where
         match voting_powers
             .get(&(validator.to_owned(), block_height.to_owned()))
         {
-            Some(voting_power) => seen_by_voting_power += voting_power,
+            Some(voting_power) => {
+                let epoch = wl_storage
+                    .pos_queries()
+                    .get_epoch(*block_height)
+                    .expect("The queried epoch should be known");
+                let aggregated = seen_by_voting_power
+                    .entry(epoch)
+                    .or_insert(FractionalVotingPower::NULL);
+                *aggregated += voting_power;
+            }
             None => {
                 return Err(eyre!(
                     "voting power was not provided for validator {}",
@@ -139,8 +155,7 @@ where
         };
     }
 
-    let newly_confirmed =
-        seen_by_voting_power > FractionalVotingPower::TWO_THIRDS;
+    let newly_confirmed = seen_by_voting_power.has_majority_quorum(wl_storage);
     Ok(Tally {
         voting_power: seen_by_voting_power,
         seen_by,
