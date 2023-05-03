@@ -32,10 +32,10 @@ pub type EpochedVotingPower = BTreeMap<Epoch, token::Amount>;
 pub trait EpochedVotingPowerExt {
     /// Get the total voting power staked across all epochs
     /// in this [`EpochedVotingPower`].
-    fn get_epoch_voting_power<D, H>(
+    fn get_epoch_voting_powers<D, H>(
         &self,
         wl_storage: &WlStorage<D, H>,
-    ) -> token::Amount
+    ) -> HashMap<Epoch, token::Amount>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync;
@@ -47,15 +47,18 @@ pub trait EpochedVotingPowerExt {
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
     {
-        let total_voting_power = self.get_epoch_voting_power(wl_storage);
+        let epoch_voting_powers = self.get_epoch_voting_powers(wl_storage);
+        let total_voting_power = epoch_voting_powers
+            .values()
+            .fold(token::Amount::from(0u64), |accum, stake| accum + stake);
 
         // the average voting power of all epochs a tally was held in
         let average_voting_power = self.iter().copied().fold(
             FractionalVotingPower::NULL,
             |average, (epoch, aggregated_voting_power)| {
-                let epoch_voting_power = wl_storage
-                    .pos_queries()
-                    .get_total_voting_power(Some(epoch));
+                let epoch_voting_power = epoch_voting_powers
+                    .get(&epoch)
+                    .expect("This value should be in the map");
                 let weight = FractionalVotingPower::new(
                     epoch_voting_power.into(),
                     total_voting_power.into(),
@@ -70,10 +73,10 @@ pub trait EpochedVotingPowerExt {
 }
 
 impl EpochedVotingPowerExt for EpochedVotingPower {
-    fn get_epoch_voting_power<D, H>(
+    fn get_epoch_voting_powers<D, H>(
         &self,
         wl_storage: &WlStorage<D, H>,
-    ) -> token::Amount
+    ) -> HashMap<Epoch, token::Amount>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
@@ -81,9 +84,14 @@ impl EpochedVotingPowerExt for EpochedVotingPower {
         self.keys()
             .copied()
             .map(|epoch| {
-                wl_storage.pos_queries().get_total_voting_power(Some(epoch))
+                (
+                    epoch,
+                    wl_storage
+                        .pos_queries()
+                        .get_total_voting_power(Some(epoch)),
+                )
             })
-            .fold(token::Amount::from(0u64), |accum, stake| accum + stake);
+            .collect()
     }
 }
 
