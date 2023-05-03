@@ -6,8 +6,9 @@ use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::types::address::Address;
 use namada_core::types::storage::BlockHeight;
 use namada_core::types::voting_power::FractionalVotingPower;
+use namada_proof_of_stake::pos_queries::PosQueries;
 
-use super::{ChangedKeys, Tally, Votes};
+use super::{ChangedKeys, EpochedVotingPowerExt, Tally, Votes};
 use crate::storage::vote_tallies;
 
 /// Wraps all the information about new votes to be applied to some existing
@@ -117,7 +118,7 @@ where
             "Ignoring duplicate voter"
         );
     }
-    let tally_post = apply(&tally_pre, vote_info)
+    let tally_post = apply(wl_storage, &tally_pre, vote_info)
         .expect("We deduplicated voters already, so this should never error");
 
     let changed_keys = keys_changed(keys, &tally_pre, &tally_post);
@@ -145,7 +146,15 @@ where
 /// Takes an existing [`Tally`] and calculates the new [`Tally`] based on new
 /// voters from `vote_info`. An error is returned if any validator which
 /// previously voted is present in `vote_info`.
-fn apply(tally: &Tally, vote_info: NewVotes) -> Result<Tally> {
+fn apply<D, H>(
+    wl_storage: &WlStorage<D, H>,
+    tally: &Tally,
+    vote_info: NewVotes,
+) -> Result<Tally>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
     let mut voting_power_post = tally.voting_power;
     let mut seen_by_post = tally.seen_by.clone();
     for (validator, vote_height, voting_power) in vote_info {
@@ -157,10 +166,17 @@ fn apply(tally: &Tally, vote_info: NewVotes) -> Result<Tally> {
                  {already_voted_height}",
             ));
         };
-        voting_power_post += voting_power;
+        let epoch = wl_storage
+            .pos_queries()
+            .get_epoch(vote_height)
+            .expect("The queried epoch should be known");
+        let aggregated = voting_power_post
+            .entry(epoch)
+            .or_insert(FractionalVotingPower::NULL);
+        *aggregated += voting_power;
     }
 
-    let seen_post = voting_power_post > FractionalVotingPower::TWO_THIRDS;
+    let seen_post = voting_power_post.has_majority_quorum(wl_storage);
 
     Ok(Tally {
         voting_power: voting_power_post,
@@ -197,10 +213,10 @@ mod tests {
     use namada_core::types::ethereum_events::EthereumEvent;
 
     use super::*;
-    use crate::protocol::transactions::votes;
     use crate::protocol::transactions::votes::update::tests::helpers::{
         arbitrary_event, setup_tally,
     };
+    use crate::protocol::transactions::votes::{self, EpochedVotingPower};
 
     mod helpers {
         use super::*;
@@ -225,7 +241,7 @@ mod tests {
             let voting_power: FractionalVotingPower =
                 votes.iter().cloned().map(|(_, _, v)| v).sum();
             let tally = Tally {
-                voting_power: voting_power.to_owned(),
+                voting_power: get_epoched_voting_power(voting_power.to_owned()),
                 seen_by: votes.into_iter().map(|(a, h, _)| (a, h)).collect(),
                 seen: voting_power > FractionalVotingPower::TWO_THIRDS,
             };
@@ -323,7 +339,7 @@ mod tests {
         )]);
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
-        let result = apply(&tally_pre, vote_info);
+        let result = apply(&wl_storage, &tally_pre, vote_info);
 
         assert!(result.is_err());
         Ok(())
@@ -422,7 +438,9 @@ mod tests {
         assert_eq!(
             tally_post,
             Tally {
-                voting_power: FractionalVotingPower::new(2, 3)?,
+                voting_power: get_epoched_voting_power(
+                    FractionalVotingPower::new(2, 3)?,
+                ),
                 seen_by: BTreeMap::from([
                     (address::testing::established_address_1(), 10.into()),
                     vote,
@@ -470,7 +488,9 @@ mod tests {
         assert_eq!(
             tally_post,
             Tally {
-                voting_power: FractionalVotingPower::new(1, 1)?,
+                voting_power: get_epoched_voting_power(
+                    FractionalVotingPower::WHOLE
+                ),
                 seen_by: BTreeMap::from([
                     (address::testing::established_address_1(), 10.into()),
                     vote,
@@ -487,8 +507,8 @@ mod tests {
 
     #[test]
     fn test_keys_changed_all() -> Result<()> {
-        let voting_power_a = FractionalVotingPower::new(1, 3)?;
-        let voting_power_b = FractionalVotingPower::new(2, 3)?;
+        let voting_power_a = FractionalVotingPower::ONE_THIRD;
+        let voting_power_b = FractionalVotingPower::TWO_THIRDS;
 
         let seen_a = false;
         let seen_b = true;
@@ -505,12 +525,12 @@ mod tests {
         let event = arbitrary_event();
         let keys = vote_tallies::Keys::from(&event);
         let pre = Tally {
-            voting_power: voting_power_a,
+            voting_power: get_epoched_voting_power(voting_power_a),
             seen: seen_a,
             seen_by: seen_by_a,
         };
         let post = Tally {
-            voting_power: voting_power_b,
+            voting_power: get_epoched_voting_power(voting_power_b),
             seen: seen_b,
             seen_by: seen_by_b,
         };
@@ -525,7 +545,6 @@ mod tests {
 
     #[test]
     fn test_keys_changed_none() -> Result<()> {
-        let voting_power = FractionalVotingPower::new(1, 3)?;
         let seen = false;
         let seen_by = BTreeMap::from([(
             address::testing::established_address_1(),
@@ -535,7 +554,9 @@ mod tests {
         let event = arbitrary_event();
         let keys = vote_tallies::Keys::from(&event);
         let pre = Tally {
-            voting_power,
+            voting_power: get_epoched_voting_power(
+                FractionalVotingPower::ONE_THIRD,
+            ),
             seen,
             seen_by,
         };
@@ -544,5 +565,11 @@ mod tests {
 
         assert!(changed_keys.is_empty());
         Ok(())
+    }
+
+    fn get_epoched_voting_power(
+        fraction: FractionalVotingPower,
+    ) -> EpochedVotingPower {
+        EpochedVotingPower::from([(0.into(), fraction)])
     }
 }
