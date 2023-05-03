@@ -50,8 +50,7 @@ use namada::types::time::DateTimeUtc;
 use rayon::prelude::*;
 use rocksdb::{
     BlockBasedOptions, ColumnFamily, ColumnFamilyDescriptor, Direction,
-    FlushOptions, IteratorMode, Options, ReadOptions, SliceTransform,
-    WriteBatch,
+    FlushOptions, IteratorMode, Options, ReadOptions, WriteBatch,
 };
 
 use crate::config::utils::num_of_threads;
@@ -102,10 +101,14 @@ pub fn open(
     db_opts.set_bytes_per_sync(1048576);
     set_max_open_files(&mut db_opts);
 
-    db_opts.set_compression_type(rocksdb::DBCompressionType::Zstd);
-    db_opts.set_compression_options(0, 0, 0, 1024 * 1024);
     // TODO the recommended default `options.compaction_pri =
     // kMinOverlappingRatio` doesn't seem to be available in Rust
+
+    db_opts.create_missing_column_families(true);
+    db_opts.create_if_missing(true);
+    db_opts.set_atomic_flush(true);
+
+    let mut cfs = Vec::new();
     let mut table_opts = BlockBasedOptions::default();
     table_opts.set_block_size(16 * 1024);
     table_opts.set_cache_index_and_filter_blocks(true);
@@ -115,39 +118,39 @@ pub fn open(
     }
     // latest format versions https://github.com/facebook/rocksdb/blob/d1c510baecc1aef758f91f786c4fbee3bc847a63/include/rocksdb/table.h#L394
     table_opts.set_format_version(5);
-    db_opts.set_block_based_table_factory(&table_opts);
-
-    db_opts.create_missing_column_families(true);
-    db_opts.create_if_missing(true);
-    db_opts.set_atomic_flush(true);
-
-    let extractor = SliceTransform::create_fixed_prefix(20);
-    db_opts.set_prefix_extractor(extractor);
-
-    let mut cfs = Vec::new();
 
     // for subspace (read/update-intensive)
     let mut subspace_cf_opts = Options::default();
+    subspace_cf_opts.set_compression_type(rocksdb::DBCompressionType::Zstd);
+    subspace_cf_opts.set_compression_options(0, 0, 0, 1024 * 1024);
     // ! recommended initial setup https://github.com/facebook/rocksdb/wiki/Setup-Options-and-Basic-Tuning#other-general-options
     subspace_cf_opts.set_level_compaction_dynamic_level_bytes(true);
     subspace_cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
+    subspace_cf_opts.set_block_based_table_factory(&table_opts);
     cfs.push(ColumnFamilyDescriptor::new(SUBSPACE_CF, subspace_cf_opts));
 
     // for diffs (insert-intensive)
     let mut diffs_cf_opts = Options::default();
+    diffs_cf_opts.set_compression_type(rocksdb::DBCompressionType::Zstd);
+    diffs_cf_opts.set_compression_options(0, 0, 0, 1024 * 1024);
     diffs_cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Universal);
+    diffs_cf_opts.set_block_based_table_factory(&table_opts);
     cfs.push(ColumnFamilyDescriptor::new(DIFFS_CF, diffs_cf_opts));
 
     // for the ledger state (update-intensive)
     let mut state_cf_opts = Options::default();
-    // ! recommended initial setup https://github.com/facebook/rocksdb/wiki/Setup-Options-and-Basic-Tuning#other-general-options
+    // No compression since the size of the state is small
     state_cf_opts.set_level_compaction_dynamic_level_bytes(true);
     state_cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
+    state_cf_opts.set_block_based_table_factory(&table_opts);
     cfs.push(ColumnFamilyDescriptor::new(STATE_CF, state_cf_opts));
 
     // for blocks (insert-intensive)
     let mut block_cf_opts = Options::default();
+    block_cf_opts.set_compression_type(rocksdb::DBCompressionType::Zstd);
+    block_cf_opts.set_compression_options(0, 0, 0, 1024 * 1024);
     block_cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Universal);
+    block_cf_opts.set_block_based_table_factory(&table_opts);
     cfs.push(ColumnFamilyDescriptor::new(BLOCK_CF, block_cf_opts));
 
     rocksdb::DB::open_cf_descriptors(&db_opts, path, cfs)
