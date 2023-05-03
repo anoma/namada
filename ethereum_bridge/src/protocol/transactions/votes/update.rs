@@ -146,7 +146,7 @@ where
 /// voters from `vote_info`. An error is returned if any validator which
 /// previously voted is present in `vote_info`.
 fn apply(tally: &Tally, vote_info: NewVotes) -> Result<Tally> {
-    let mut voting_power_post = tally.voting_power.clone();
+    let mut voting_power_post = tally.voting_power;
     let mut seen_by_post = tally.seen_by.clone();
     for (validator, vote_height, voting_power) in vote_info {
         if let Some(already_voted_height) =
@@ -252,7 +252,7 @@ mod tests {
         let voting_power = FractionalVotingPower::new(1, 3)?;
         let vote = (validator.clone(), vote_height);
         let votes = Votes::from([vote.clone()]);
-        let voting_powers = HashMap::from([(vote, voting_power.clone())]);
+        let voting_powers = HashMap::from([(vote, voting_power)]);
 
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 

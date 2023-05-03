@@ -415,7 +415,7 @@ where
                          fail.",
                     );
             for transfer in transfers {
-                pending_events.insert(transfer, voting_power.clone());
+                pending_events.insert(transfer, voting_power);
             }
         }
     }
