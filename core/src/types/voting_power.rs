@@ -71,7 +71,7 @@ impl From<EthBridgeVotingPower> for u64 {
 
 /// A fraction of the total voting power. This should always be a reduced
 /// fraction that is between zero and one inclusive.
-#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
+#[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
 pub struct FractionalVotingPower(Ratio<u64>);
 
 impl FractionalVotingPower {
@@ -164,13 +164,13 @@ impl Add<&FractionalVotingPower> for FractionalVotingPower {
 
 impl AddAssign<FractionalVotingPower> for FractionalVotingPower {
     fn add_assign(&mut self, rhs: FractionalVotingPower) {
-        *self = self.clone() + rhs
+        *self = *self + rhs
     }
 }
 
 impl AddAssign<&FractionalVotingPower> for FractionalVotingPower {
     fn add_assign(&mut self, rhs: &FractionalVotingPower) {
-        *self = self.clone() + rhs
+        *self = *self + rhs
     }
 }
 
@@ -282,6 +282,19 @@ impl<'de> Deserialize<'de> for FractionalVotingPower {
 mod tests {
     use super::*;
 
+    /// Test that adding fractional voting powers together saturates
+    /// on the value of `1/1`.
+    #[test]
+    fn test_fractional_voting_power_saturates() {
+        let mut power = FractionalVotingPower::NULL;
+        power += FractionalVotingPower::ONE_THIRD;
+        power += FractionalVotingPower::ONE_THIRD;
+        power += FractionalVotingPower::ONE_THIRD;
+        assert_eq!(power, FractionalVotingPower::WHOLE);
+        power += FractionalVotingPower::ONE_THIRD;
+        assert_eq!(power, FractionalVotingPower::WHOLE);
+    }
+
     /// This test is ultimately just exercising the underlying
     /// library we use for fractions, we want to make sure
     /// operators work as expected with our FractionalVotingPower
@@ -293,11 +306,11 @@ mod tests {
                 > FractionalVotingPower::new(1, 4).unwrap()
         );
         assert!(
-            FractionalVotingPower::new(1, 3).unwrap()
+            FractionalVotingPower::ONE_THIRD
                 > FractionalVotingPower::new(1, 4).unwrap()
         );
         assert!(
-            FractionalVotingPower::new(1, 3).unwrap()
+            FractionalVotingPower::ONE_THIRD
                 == FractionalVotingPower::new(2, 6).unwrap()
         );
     }
