@@ -5,9 +5,12 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
+use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::types::address::Address;
-use namada_core::types::storage::BlockHeight;
+use namada_core::types::storage::{BlockHeight, Epoch};
+use namada_core::types::token;
 use namada_core::types::voting_power::FractionalVotingPower;
+use namada_proof_of_stake::pos_queries::PosQueries;
 
 use super::{read, ChangedKeys};
 
@@ -22,31 +25,98 @@ pub(super) mod update;
 /// something has enough voting power behind it or not.
 pub type Votes = BTreeMap<Address, BlockHeight>;
 
+/// The voting power behind a tally aggregated over multiple epochs.
+pub type EpochedVotingPower = BTreeMap<Epoch, token::Amount>;
+
+/// Extension methods for [`EpochedVotingPower`] instances.
+pub trait EpochedVotingPowerExt {
+    /// Get the total voting power staked across all epochs
+    /// in this [`EpochedVotingPower`].
+    fn get_epoch_voting_power<D, H>(
+        &self,
+        wl_storage: &WlStorage<D, H>,
+    ) -> token::Amount
+    where
+        D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+        H: 'static + StorageHasher + Sync;
+
+    /// Check if the [`Tally`] associated with this [`EpochedVotingPower`]
+    /// can be considered `seen`.
+    fn has_majority_quorum<D, H>(&self, wl_storage: &WlStorage<D, H>) -> bool
+    where
+        D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+        H: 'static + StorageHasher + Sync,
+    {
+        let total_voting_power = self.get_epoch_voting_power(wl_storage);
+
+        // the average voting power of all epochs a tally was held in
+        let average_voting_power = self.iter().copied().fold(
+            FractionalVotingPower::NULL,
+            |average, (epoch, aggregated_voting_power)| {
+                let epoch_voting_power = wl_storage
+                    .pos_queries()
+                    .get_total_voting_power(Some(epoch));
+                let weight = FractionalVotingPower::new(
+                    epoch_voting_power.into(),
+                    total_voting_power.into(),
+                )
+                .unwrap();
+                average + weight * aggregated_voting_power
+            },
+        );
+
+        average_voting_power > FractionalVotingPower::TWO_THIRDS
+    }
+}
+
+impl EpochedVotingPowerExt for EpochedVotingPower {
+    fn get_epoch_voting_power<D, H>(
+        &self,
+        wl_storage: &WlStorage<D, H>,
+    ) -> token::Amount
+    where
+        D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+        H: 'static + StorageHasher + Sync,
+    {
+        self.keys()
+            .copied()
+            .map(|epoch| {
+                wl_storage.pos_queries().get_total_voting_power(Some(epoch))
+            })
+            .fold(token::Amount::from(0u64), |accum, stake| accum + stake);
+    }
+}
+
 #[derive(
     Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 /// Represents all the information needed to tally a piece of data that may be
 /// voted for over multiple epochs
 pub struct Tally {
-    /// The total voting power that's voted for this event across all epochs
-    pub voting_power: FractionalVotingPower,
+    /// The total voting power that's voted for this event across all epochs.
+    pub voting_power: EpochedVotingPower,
     /// The votes which have been counted towards `voting_power`. Note that
     /// validators may submit multiple votes at different block heights for
     /// the same thing, but ultimately only one vote per validator will be
     /// used when tallying voting power.
     pub seen_by: Votes,
     /// Whether this event has been acted on or not - this should only ever
-    /// transition from `false` to `true`, once there is enough voting power
+    /// transition from `false` to `true`, once there is enough voting power.
     pub seen: bool,
 }
 
 /// Calculate a new [`Tally`] based on some validators' fractional voting powers
 /// as specific block heights
-pub fn calculate_new(
+pub fn calculate_new<D, H>(
+    wl_storage: &WlStorage<D, H>,
     seen_by: Votes,
     voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-) -> Result<Tally> {
-    let mut seen_by_voting_power = FractionalVotingPower::default();
+) -> Result<Tally>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let mut seen_by_voting_power = EpochedVotingPower::new();
     for (validator, block_height) in seen_by.iter() {
         match voting_powers
             .get(&(validator.to_owned(), block_height.to_owned()))
