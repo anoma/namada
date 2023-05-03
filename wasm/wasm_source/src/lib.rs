@@ -6,6 +6,8 @@ pub mod tx_change_validator_commission;
 pub mod tx_ibc;
 #[cfg(feature = "tx_init_account")]
 pub mod tx_init_account;
+#[cfg(feature = "tx_init_delegate")]
+pub mod tx_init_delegate;
 #[cfg(feature = "tx_init_proposal")]
 pub mod tx_init_proposal;
 #[cfg(feature = "tx_init_validator")]
@@ -18,6 +20,8 @@ pub mod tx_transfer;
 pub mod tx_unbond;
 #[cfg(feature = "tx_update_account")]
 pub mod tx_update_account;
+#[cfg(feature = "tx_update_delegate")]
+pub mod tx_update_delegate;
 #[cfg(feature = "tx_vote_proposal")]
 pub mod tx_vote_proposal;
 #[cfg(feature = "tx_withdraw")]

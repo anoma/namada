@@ -175,3 +175,87 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
         })
     }
 }
+
+/// A tx data type to create a new delegatee
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
+pub struct InitDelegate {
+    // The address of the delegate
+    pub address: Address,
+}
+
+impl InitDelegate {
+    pub fn new(address: Address) -> Self {
+        Self { address }
+    }
+}
+
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
+pub enum UpdateDelegateAction {
+    Add,
+    Remove,
+}
+
+/// A tx data type to create a new delegatee
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
+pub struct UpdateDelegate {
+    // The address of the delegate
+    pub delegate: Address,
+    // The address of the delegator
+    pub delegator: Address,
+    // The action to take
+    pub action: UpdateDelegateAction,
+}
+
+impl UpdateDelegate {
+    pub fn new(
+        delegate: Address,
+        delegator: Address,
+        action: UpdateDelegateAction,
+    ) -> Self {
+        Self {
+            delegate,
+            delegator,
+            action,
+        }
+    }
+
+    pub fn remove(delegate: Address, delegator: Address) -> Self {
+        Self {
+            delegate,
+            delegator,
+            action: UpdateDelegateAction::Remove,
+        }
+    }
+
+    pub fn add(delegate: Address, delegator: Address) -> Self {
+        Self {
+            delegate,
+            delegator,
+            action: UpdateDelegateAction::Add,
+        }
+    }
+}

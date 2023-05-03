@@ -15,7 +15,7 @@ use namada_core::ledger::{pgf, storage};
 use namada_proof_of_stake::is_validator;
 use thiserror::Error;
 
-use self::utils::ReadType;
+use self::utils::{ActionType, ReadType};
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::storage_api::StorageRead;
 use crate::ledger::{native_vp, pos};
@@ -84,44 +84,58 @@ where
             let proposal_id = gov_storage::get_proposal_id(key);
             let key_type = KeyType::from_key(key, &native_token);
 
-            let result = match (key_type, proposal_id) {
-                (KeyType::VOTE, Some(proposal_id)) => {
-                    self.is_valid_vote_key(proposal_id, key, verifiers)
-                }
-                (KeyType::CONTENT, Some(proposal_id)) => {
-                    self.is_valid_content_key(proposal_id)
-                }
-                (KeyType::TYPE, Some(proposal_id)) => {
-                    self.is_valid_proposal_type(proposal_id)
-                }
-                (KeyType::PROPOSAL_CODE, Some(proposal_id)) => {
-                    self.is_valid_proposal_code(proposal_id)
-                }
-                (KeyType::GRACE_EPOCH, Some(proposal_id)) => {
-                    self.is_valid_grace_epoch(proposal_id)
-                }
-                (KeyType::START_EPOCH, Some(proposal_id)) => {
-                    self.is_valid_start_epoch(proposal_id)
-                }
-                (KeyType::END_EPOCH, Some(proposal_id)) => {
-                    self.is_valid_end_epoch(proposal_id)
-                }
-                (KeyType::FUNDS, Some(proposal_id)) => {
-                    self.is_valid_funds(proposal_id, &native_token)
-                }
-                (KeyType::AUTHOR, Some(proposal_id)) => {
-                    self.is_valid_author(proposal_id, verifiers)
-                }
-                (KeyType::COUNTER, _) => self.is_valid_counter(set_count),
-                (KeyType::PROPOSAL_COMMIT, _) => {
-                    self.is_valid_proposal_commit()
-                }
-                (KeyType::PARAMETER, _) => self.is_valid_parameter(tx_data),
-                (KeyType::BALANCE, _) => self.is_valid_balance(&native_token),
-                (KeyType::UNKNOWN_GOVERNANCE, _) => Ok(false),
-                (KeyType::UNKNOWN, _) => Ok(true),
-                _ => Ok(false),
-            };
+            println!("KEY: {:?}", key_type);
+
+            let result: std::result::Result<bool, Error> =
+                match (key_type, proposal_id) {
+                    (KeyType::VOTE, Some(proposal_id)) => {
+                        self.is_valid_vote_key(proposal_id, key, verifiers)
+                    }
+                    (KeyType::CONTENT, Some(proposal_id)) => {
+                        self.is_valid_content_key(proposal_id)
+                    }
+                    (KeyType::TYPE, Some(proposal_id)) => {
+                        self.is_valid_proposal_type(proposal_id)
+                    }
+                    (KeyType::PROPOSAL_CODE, Some(proposal_id)) => {
+                        self.is_valid_proposal_code(proposal_id)
+                    }
+                    (KeyType::GRACE_EPOCH, Some(proposal_id)) => {
+                        self.is_valid_grace_epoch(proposal_id)
+                    }
+                    (KeyType::START_EPOCH, Some(proposal_id)) => {
+                        self.is_valid_start_epoch(proposal_id)
+                    }
+                    (KeyType::END_EPOCH, Some(proposal_id)) => {
+                        self.is_valid_end_epoch(proposal_id)
+                    }
+                    (KeyType::FUNDS, Some(proposal_id)) => {
+                        self.is_valid_funds(proposal_id, &native_token)
+                    }
+                    (KeyType::AUTHOR, Some(proposal_id)) => {
+                        self.is_valid_author(proposal_id, verifiers)
+                    }
+                    (KeyType::COUNTER, _) => self.is_valid_counter(set_count),
+                    (KeyType::PROPOSAL_COMMIT, _) => {
+                        self.is_valid_proposal_commit()
+                    }
+                    (KeyType::DELEGATE_KEY, _) => {
+                        self.is_valid_delegate(key, verifiers)
+                    }
+                    (KeyType::DELEGATION_KEY, _) => {
+                        self.is_valid_delegation(key, verifiers)
+                    }
+                    (KeyType::INV_DELEGATION_KEY, _) => {
+                        self.is_valid_inv_delegation(key, verifiers)
+                    }
+                    (KeyType::PARAMETER, _) => self.is_valid_parameter(tx_data),
+                    (KeyType::BALANCE, _) => {
+                        self.is_valid_balance(&native_token)
+                    }
+                    (KeyType::UNKNOWN_GOVERNANCE, _) => Ok(false),
+                    (KeyType::UNKNOWN, _) => Ok(true),
+                    _ => Ok(false),
+                };
 
             result.unwrap_or(false)
         });
@@ -552,6 +566,164 @@ where
         Ok(pre_counter < post_counter)
     }
 
+    /// Validate governance delegate key
+    pub fn is_valid_delegate(
+        &self,
+        key: &Key,
+        verifiers: &BTreeSet<Address>,
+    ) -> Result<bool> {
+        let action_type = self.action_type(&key)?;
+
+        match action_type {
+            ActionType::Delete => {
+                // this is safe to unwrap as we have already matched over the
+                // key to end up in this state
+                let delegate_address = if let Some(address) =
+                    gov_storage::get_delegate_address(key)
+                {
+                    address
+                } else {
+                    return Ok(false);
+                };
+
+                let delegations_prefix_key =
+                    gov_storage::get_delegations_by_delegate_prefix_key(
+                        &delegate_address,
+                    );
+                let pre_ctx = self.ctx.pre();
+                let mut pre_delegations_iter =
+                    pre_ctx.iter_prefix(&delegations_prefix_key)?;
+                let post_ctx = self.ctx.post();
+                let post_delegations_iter =
+                    post_ctx.iter_prefix(&delegations_prefix_key)?;
+
+                let inv_delegations_exists =
+                    pre_delegations_iter.any(|(key, _, _)| {
+                        let key = Key::parse(key);
+                        if let Ok(key) = key {
+                            let delegator_address =
+                            gov_storage::get_delegator_address_from_delegation(
+                                &key,
+                            )
+                            .unwrap();
+                            let inv_delegation_key =
+                                gov_storage::get_inverse_delegation(
+                                    &delegator_address,
+                                );
+                            self.ctx
+                                .has_key_post(&inv_delegation_key)
+                                .unwrap_or(false)
+                        } else {
+                            false
+                        }
+                    });
+
+                Ok(post_delegations_iter.count() == 0
+                    && !inv_delegations_exists)
+            }
+            ActionType::Add => {
+                let is_already_delegate = self.ctx.has_key_pre(key)?;
+
+                if is_already_delegate {
+                    return Ok(false);
+                }
+
+                // this is safe to unwrap as we have already matched over the
+                // key to end up in this state
+                let delegate_address = if let Some(address) =
+                    gov_storage::get_delegate_address(key)
+                {
+                    address
+                } else {
+                    return Ok(false);
+                };
+
+                match delegate_address {
+                    Address::Established(_) => {
+                        let address_exist_key =
+                            Key::validity_predicate(&delegate_address);
+                        let address_exist =
+                            self.ctx.has_key_post(&address_exist_key)?;
+
+                        Ok(address_exist
+                            && verifiers.contains(&delegate_address))
+                    }
+                    Address::Implicit(_) => {
+                        Ok(verifiers.contains(&delegate_address))
+                    }
+                    Address::Internal(_) => Ok(false),
+                }
+            }
+            ActionType::Change | ActionType::Unknown => Ok(false),
+        }
+    }
+
+    /// Validate governance delegate key
+    pub fn is_valid_delegation(
+        &self,
+        key: &Key,
+        verifiers: &BTreeSet<Address>,
+    ) -> Result<bool> {
+        let delegator_address =
+            gov_storage::get_delegator_address_from_delegation(key);
+        let delegate_address = gov_storage::get_delegate_address(key);
+        match (delegate_address, delegator_address) {
+            (Some(delegate_address), Some(delegator_address)) => {
+                let inv_delegation_key =
+                    gov_storage::get_inverse_delegation(delegator_address);
+                let is_valid_inv_delegation =
+                    self.ctx.has_key_post(&inv_delegation_key)?;
+                let delegate_key =
+                    gov_storage::get_delegate_key(&delegate_address);
+                let is_valid_delegate = self.ctx.has_key_pre(&delegate_key)?;
+
+                println!("{}", is_valid_inv_delegation);
+                println!("{}", is_valid_delegate);
+                println!("{}", verifiers.contains(delegator_address));
+
+                Ok(is_valid_inv_delegation
+                    && is_valid_delegate
+                    && verifiers.contains(delegator_address))
+            }
+            _ => Ok(false),
+        }
+    }
+
+    /// Validate governance inverse delegate key (opposite of
+    /// is_valid_delegation)
+    pub fn is_valid_inv_delegation(
+        &self,
+        key: &Key,
+        verifiers: &BTreeSet<Address>,
+    ) -> Result<bool> {
+        let delegate_address: Option<Address> = self.ctx.read_post(&key)?;
+        let delegator_address =
+            gov_storage::get_delegator_address_from_inv_delegation(&key);
+        match (delegate_address, delegator_address) {
+            (Some(delegate_address), Some(delegator_address)) => {
+                let delegation_key = gov_storage::get_delegation_key(
+                    &delegate_address,
+                    delegator_address,
+                );
+                let is_valid_delegation =
+                    self.ctx.has_key_post(&delegation_key)?;
+
+                let delegate_key =
+                    gov_storage::get_delegate_key(&delegate_address);
+                let is_delegate = self.ctx.has_key_pre(&delegate_key)?;
+                
+                println!("{}", is_valid_delegation);
+                println!("{}", is_delegate);
+                println!("{}", verifiers.contains(delegator_address));
+
+                Ok(is_valid_delegation
+                    && is_delegate
+                    && verifiers.contains(delegator_address))
+            }
+            _ => Ok(false),
+        }
+    }
+
     /// Validate a governance parameter
     pub fn is_valid_parameter(&self, tx_data: &[u8]) -> Result<bool> {
         is_proposal_accepted(&self.ctx.pre(), tx_data)
@@ -580,6 +752,18 @@ where
             is_validator(&self.ctx.pre(), address, &pos_params, epoch)?;
 
         Ok(is_validator && verifiers.contains(address))
+    }
+
+    /// Private method used to compute which case we are dealing with.
+    fn action_type(&self, key: &Key) -> Result<ActionType> {
+        let is_pre = self.ctx.has_key_pre(key)?;
+        let is_post = self.ctx.has_key_post(key)?;
+        match (is_pre, is_post) {
+            (true, true) => Ok(ActionType::Change),
+            (true, false) => Ok(ActionType::Delete),
+            (false, true) => Ok(ActionType::Add),
+            (false, false) => Ok(ActionType::Unknown),
+        }
     }
 
     /// Private method to read from storage data that are 100% in storage.
@@ -671,6 +855,12 @@ enum KeyType {
     #[allow(non_camel_case_types)]
     PARAMETER,
     #[allow(non_camel_case_types)]
+    DELEGATE_KEY,
+    #[allow(non_camel_case_types)]
+    DELEGATION_KEY,
+    #[allow(non_camel_case_types)]
+    INV_DELEGATION_KEY,
+    #[allow(non_camel_case_types)]
     UNKNOWN_GOVERNANCE,
     #[allow(non_camel_case_types)]
     UNKNOWN,
@@ -687,27 +877,33 @@ impl KeyType {
         } else if gov_storage::is_proposal_code_key(key) {
             Self::PROPOSAL_CODE
         } else if gov_storage::is_grace_epoch_key(key) {
-            KeyType::GRACE_EPOCH
+            Self::GRACE_EPOCH
         } else if gov_storage::is_start_epoch_key(key) {
-            KeyType::START_EPOCH
+            Self::START_EPOCH
         } else if gov_storage::is_commit_proposal_key(key) {
-            KeyType::PROPOSAL_COMMIT
+            Self::PROPOSAL_COMMIT
         } else if gov_storage::is_end_epoch_key(key) {
-            KeyType::END_EPOCH
+            Self::END_EPOCH
         } else if gov_storage::is_balance_key(key) {
-            KeyType::FUNDS
+            Self::FUNDS
         } else if gov_storage::is_author_key(key) {
-            KeyType::AUTHOR
+            Self::AUTHOR
         } else if gov_storage::is_counter_key(key) {
-            KeyType::COUNTER
+            Self::COUNTER
         } else if gov_storage::is_parameter_key(key) {
-            KeyType::PARAMETER
+            Self::PARAMETER
+        } else if gov_storage::is_delegate_key(key) {
+            Self::DELEGATE_KEY
+        } else if gov_storage::is_delegation_key(key) {
+            Self::DELEGATION_KEY
+        } else if gov_storage::is_inv_delegation_key(key) {
+            Self::INV_DELEGATION_KEY
         } else if token::is_balance_key(native_token, key).is_some() {
-            KeyType::BALANCE
+            Self::BALANCE
         } else if gov_storage::is_governance_key(key) {
-            KeyType::UNKNOWN_GOVERNANCE
+            Self::UNKNOWN_GOVERNANCE
         } else {
-            KeyType::UNKNOWN
+            Self::UNKNOWN
         }
     }
 }

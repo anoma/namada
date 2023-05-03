@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::ops::Add;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use rust_decimal::Decimal;
@@ -9,7 +10,7 @@ use super::storage::proposal::ProposalType;
 use super::storage::vote::StorageProposalVote;
 use crate::types::address::Address;
 use crate::types::storage::Epoch;
-use crate::types::token::SCALE;
+use crate::types::token::{self, SCALE};
 
 /// Proposal status
 pub enum ProposalStatus {
@@ -31,8 +32,17 @@ impl Display for ProposalStatus {
     }
 }
 
-/// Alias to comulate voting power
+/// Alias to compute voting power
 pub type VotePower = u128;
+
+// Add amount as voting power. Can overflow
+impl Add<token::Amount> for VotePower {
+    type Output = VotePower;
+
+    fn add(self, rhs: token::Amount) -> Self::Output {
+        self + u128::from(rhs)
+    }
+}
 
 /// Structure rappresenting a proposal vote
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]

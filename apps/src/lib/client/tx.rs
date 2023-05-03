@@ -60,7 +60,7 @@ use namada::types::token::{
     Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
 use namada::types::transaction::governance::{
-    InitProposalData, VoteProposalData,
+    InitDelegate, InitProposalData, UpdateDelegate, VoteProposalData,
 };
 use namada::types::transaction::{
     pos, InitAccount, InitValidator, UpdateAccount,
@@ -89,7 +89,9 @@ use crate::node::ledger::tendermint_node;
 const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
+const TX_INIT_DELEGATEE: &str = "tx_init_delegate.wasm";
 const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
+const TX_UPDATE_DELEGATE: &str = "tx_update_delegate.wasm";
 const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
 const TX_UPDATE_ACCOUNT_WASM: &str = "tx_update_account.wasm";
 const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
@@ -2337,6 +2339,115 @@ pub async fn submit_reveal_pk(mut ctx: Context, args: args::RevealPk) {
         let addr: Address = (&public_key).into();
         println!("PK for {addr} is already revealed, nothing to do.");
     }
+}
+
+pub async fn submit_init_delegate(
+    mut ctx: Context,
+    args::InitDelegate {
+        tx: tx_args,
+        delegate,
+    }: args::InitDelegate,
+) {
+    let ledger_address = tx_args.ledger_address.clone();
+    let client = HttpClient::new(ledger_address.clone()).unwrap();
+
+    let delegate_address = ctx.get(&delegate);
+
+    let is_already_delegate =
+        rpc::is_delegate(&client, &delegate_address).await;
+    if is_already_delegate {
+        eprintln!(
+            "The address {} is already part of the delegatee set.",
+            delegate_address
+        );
+        safe_exit(1)
+    }
+
+    let tx_data = InitDelegate::new(delegate_address.clone());
+    let tx = ctx
+        .build_tx(
+            tx_data.clone(),
+            TX_INIT_DELEGATEE,
+            tx_args.ledger_address.clone(),
+            tx_args.expiration,
+        )
+        .await
+        .unwrap();
+    let pks_map = rpc::get_address_pks_map(&client, &delegate_address).await;
+    let default_signers = ctx.default_signing_keys(Some(delegate));
+
+    process_tx(
+        ctx,
+        &tx_args,
+        tx,
+        pks_map,
+        default_signers,
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await;
+}
+
+pub async fn submit_update_delegate(
+    mut ctx: Context,
+    args::UpdateDelegate {
+        tx: tx_args,
+        delegate,
+        delegator,
+        add,
+        remove: _remove,
+    }: args::UpdateDelegate,
+) {
+    let ledger_address = tx_args.ledger_address.clone();
+    let client = HttpClient::new(ledger_address.clone()).unwrap();
+
+    let delegate_address = ctx.get(&delegate);
+    let delegator_address = ctx.get(&delegator);
+
+    let is_valid_delegate = rpc::is_delegate(&client, &delegate_address).await;
+    if !is_valid_delegate {
+        eprintln!("The address {} is not a delegatee.", delegate_address);
+        safe_exit(1)
+    }
+
+    let is_validator = rpc::is_validator(&client, &delegator_address).await;
+    let is_delegator = rpc::is_delegator(&client, &delegator_address).await;
+    if !is_delegator && !is_validator {
+        eprintln!(
+            "The delegator address {} is not part of consensus.",
+            delegator_address
+        );
+        safe_exit(1)
+    }
+
+    let tx_data = if add {
+        UpdateDelegate::add(delegate_address, delegator_address.clone())
+    } else {
+        UpdateDelegate::remove(delegate_address, delegator_address.clone())
+    };
+
+    let tx = ctx
+        .build_tx(
+            tx_data.clone(),
+            TX_UPDATE_DELEGATE,
+            tx_args.ledger_address.clone(),
+            tx_args.expiration,
+        )
+        .await
+        .unwrap();
+    let pks_map = rpc::get_address_pks_map(&client, &delegator_address).await;
+    let default_signers = ctx.default_signing_keys(Some(delegator));
+
+    process_tx(
+        ctx,
+        &tx_args,
+        tx,
+        pks_map,
+        default_signers,
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await;
 }
 
 pub async fn reveal_pk_if_needed(

@@ -42,6 +42,7 @@ use namada::ledger::events::Event;
 use namada::ledger::pos::{self, CommissionPair, PosParams, Slash};
 use namada::ledger::queries::{self, RPC};
 use namada::ledger::storage::ConversionState;
+use namada::ledger::storage_api::governance::delegations;
 use namada::proto::{SignedTxData, SigningTx, Tx};
 use namada::types::address::{masp, Address};
 use namada::types::hash::Hash;
@@ -1046,6 +1047,28 @@ pub async fn query_proposal_by_id(
     )
 }
 
+pub async fn query_delegatee_set(client: &HttpClient) -> BTreeSet<Address> {
+    unwrap_client_response(RPC.vp().gov().delegate_set(client).await)
+}
+
+pub async fn get_delegate_delegations(
+    client: &HttpClient,
+    delegate: &Address,
+) -> BTreeMap<Address, VotePower> {
+    unwrap_client_response(RPC.vp().gov().delegations(client, delegate).await)
+}
+
+pub async fn get_delegate_for(
+    client: &HttpClient,
+    delegator: &Address,
+) -> Option<Address> {
+    unwrap_client_response(RPC.vp().gov().delegate_for(client, delegator).await)
+}
+
+pub async fn is_delegate(client: &HttpClient, delegate: &Address) -> bool {
+    unwrap_client_response(RPC.vp().gov().is_delegate(client, delegate).await)
+}
+
 pub async fn query_proposal_votes(
     client: &HttpClient,
     proposal_id: u64,
@@ -1060,51 +1083,7 @@ pub async fn compute_proposal_votes(
     proposal_id: u64,
     epoch: Epoch,
 ) -> ProposalVotes {
-    let votes = query_proposal_votes(client, proposal_id).await;
-
-    let mut validators_vote: HashMap<Address, TallyVote> = HashMap::default();
-    let mut validator_voting_power: HashMap<Address, VotePower> =
-        HashMap::default();
-    let mut delegators_vote: HashMap<Address, TallyVote> = HashMap::default();
-    let mut delegator_voting_power: HashMap<
-        Address,
-        HashMap<Address, VotePower>,
-    > = HashMap::default();
-
-    for vote in votes {
-        if vote.is_validator() {
-            let validator_stake =
-                get_validator_stake(client, epoch, &vote.validator.clone())
-                    .await
-                    .unwrap_or_default();
-
-            validators_vote.insert(vote.validator.clone(), vote.data.into());
-            validator_voting_power
-                .insert(vote.validator, validator_stake.into());
-        } else {
-            let delegator_stake = get_bond_amount_at(
-                client,
-                &vote.delegator,
-                &vote.validator,
-                epoch,
-            )
-            .await
-            .unwrap_or_default();
-
-            delegators_vote.insert(vote.delegator.clone(), vote.data.into());
-            delegator_voting_power
-                .entry(vote.delegator.clone())
-                .or_default()
-                .insert(vote.validator, delegator_stake.into());
-        }
-    }
-
-    ProposalVotes {
-        validators_vote,
-        validator_voting_power,
-        delegators_vote,
-        delegator_voting_power,
-    }
+    todo!()
 }
 
 pub async fn compute_offline_proposal_votes(
@@ -1598,6 +1577,64 @@ pub async fn query_account(ctx: Context, args: args::QueryAccount) {
     }
 }
 
+pub async fn query_delegate(
+    ctx: Context,
+    args::QueryDelegate {
+        query: args,
+        delegate,
+        delegator,
+    }: args::QueryDelegate,
+) {
+    let client = HttpClient::new(args.ledger_address).unwrap();
+
+    let delegate_address = ctx.get_opt(&delegate);
+    let delegator_address = ctx.get_opt(&delegator);
+
+    match (delegate_address, delegator_address) {
+        (None, None) => {
+            println!("Governance delegate set:");
+            let delegate_set = delegatee_set(&client).await;
+            for address in delegate_set {
+                println!("{:4}- {}", "", address);
+            }
+        }
+        (Some(delegate_address), None) => {
+            let delegate_set =
+                get_delegate_delegations(&client, &delegate_address).await;
+            let mut total_voting_power = 0;
+
+            println!(
+                "Governance delegations for {}:",
+                delegate_address.clone()
+            );
+
+            for (address, voting_power) in delegate_set {
+                println!(
+                    "{:4}- {} with {} voting power.",
+                    "", address, voting_power
+                );
+                total_voting_power += voting_power;
+            }
+            println!("Total voting power: {}", total_voting_power);
+        }
+        (None, Some(delegator_address)) => {
+            let delegate = get_delegate_for(&client, &delegator_address).await;
+            match delegate {
+                Some(delegate_address) => {
+                    println!(
+                        "The delegate of {} is {}",
+                        delegator_address, delegate_address
+                    );
+                }
+                None => {
+                    println!("No delegate is set for {}", delegator_address);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
 pub async fn query_and_print_unbonds(
     client: &HttpClient,
     source: &Address,
@@ -1974,7 +2011,28 @@ pub async fn get_public_key(
     query_storage_value(&client, &key).await
 }
 
-/// Check if the given address is a known validator.
+/// Get the delegate set
+pub async fn delegatee_set(client: &HttpClient) -> BTreeSet<Address> {
+    unwrap_client_response(RPC.vp().gov().delegate_set(client).await)
+}
+
+/// Get governance delegations for address
+pub async fn delegate_delegations(
+    client: &HttpClient,
+    delegator: Address,
+) -> BTreeMap<Address, VotePower> {
+    unwrap_client_response(RPC.vp().gov().delegations(client, &delegator).await)
+}
+
+/// Compute the voting power of a delegatee
+pub async fn compute_delegatee_voting_power(
+    client: &HttpClient,
+    delegatee: &Address,
+) -> VotePower {
+    todo!()
+}
+
+/// Check if the given address is a known validator
 pub async fn is_validator(client: &HttpClient, address: &Address) -> bool {
     unwrap_client_response(RPC.vp().pos().is_validator(client, address).await)
 }

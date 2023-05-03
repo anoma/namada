@@ -161,6 +161,8 @@ pub mod cmds {
                 // Proposal transactions
                 .subcommand(TxInitProposal::def().display_order(1))
                 .subcommand(TxVoteProposal::def().display_order(1))
+                .subcommand(TxInitDelegate::def().display_order(1))
+                .subcommand(TxUpdateDelegate::def().display_order(1))
                 // PoS transactions
                 .subcommand(TxInitValidator::def().display_order(2))
                 .subcommand(Bond::def().display_order(2))
@@ -177,6 +179,7 @@ pub mod cmds {
                 .subcommand(QuerySlashes::def().display_order(3))
                 .subcommand(QueryDelegations::def().display_order(3))
                 .subcommand(QueryAccount::def().display_order(4))
+                .subcommand(QueryDelegate::def().display_order(4))
                 .subcommand(QueryResult::def().display_order(3))
                 .subcommand(QueryRawBytes::def().display_order(3))
                 .subcommand(QueryProposal::def().display_order(3))
@@ -202,6 +205,10 @@ pub mod cmds {
             let tx_reveal_pk = Self::parse_with_ctx(matches, TxRevealPk);
             let tx_init_proposal =
                 Self::parse_with_ctx(matches, TxInitProposal);
+            let tx_init_delegatee =
+                Self::parse_with_ctx(matches, TxInitDelegate);
+            let tx_set_delegatee =
+                Self::parse_with_ctx(matches, TxUpdateDelegate);
             let tx_vote_proposal =
                 Self::parse_with_ctx(matches, TxVoteProposal);
             let bond = Self::parse_with_ctx(matches, Bond);
@@ -228,6 +235,7 @@ pub mod cmds {
             let query_protocol_parameters =
                 Self::parse_with_ctx(matches, QueryProtocolParameters);
             let query_account = Self::parse_with_ctx(matches, QueryAccount);
+            let query_delegate = Self::parse_with_ctx(matches, QueryDelegate);
             let sign_tx = Self::parse_with_ctx(matches, SignTx);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
@@ -239,6 +247,8 @@ pub mod cmds {
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
                 .or(tx_init_validator)
+                .or(tx_init_delegatee)
+                .or(tx_set_delegatee)
                 .or(bond)
                 .or(unbond)
                 .or(withdraw)
@@ -258,6 +268,7 @@ pub mod cmds {
                 .or(query_protocol_parameters)
                 .or(query_pgf)
                 .or(query_account)
+                .or(query_delegate)
                 .or(sign_tx)
                 .or(utils)
         }
@@ -303,6 +314,8 @@ pub mod cmds {
         TxInitAccount(TxInitAccount),
         TxInitValidator(TxInitValidator),
         TxInitProposal(TxInitProposal),
+        TxInitDelegate(TxInitDelegate),
+        TxUpdateDelegate(TxUpdateDelegate),
         TxVoteProposal(TxVoteProposal),
         TxRevealPk(TxRevealPk),
         Bond(Bond),
@@ -323,6 +336,7 @@ pub mod cmds {
         QueryProposalResult(QueryProposalResult),
         QueryPgf(QueryPgf),
         QueryAccount(QueryAccount),
+        QueryDelegate(QueryDelegate),
         QueryProtocolParameters(QueryProtocolParameters),
         SignTx(SignTx),
     }
@@ -1479,6 +1493,50 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct TxInitDelegate(pub args::InitDelegate);
+
+    impl SubCmd for TxInitDelegate {
+        const CMD: &'static str = "init-delegate";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxInitDelegate(args::InitDelegate::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Create a new delegate.")
+                .add_args::<args::InitDelegate>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TxUpdateDelegate(pub args::UpdateDelegate);
+
+    impl SubCmd for TxUpdateDelegate {
+        const CMD: &'static str = "update-delegate";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxUpdateDelegate(args::UpdateDelegate::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Update a delegate for a delegator/validator address.")
+                .add_args::<args::UpdateDelegate>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct TxVoteProposal(pub args::VoteProposal);
 
     impl SubCmd for TxVoteProposal {
@@ -1549,6 +1607,28 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Query data associated with an enstablished address..")
                 .add_args::<args::QueryAccount>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryDelegate(pub args::QueryDelegate);
+
+    impl SubCmd for QueryDelegate {
+        const CMD: &'static str = "query-delegate";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryDelegate(args::QueryDelegate::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query the delegate list or filter by delegator.")
+                .add_args::<args::QueryDelegate>()
         }
     }
 
@@ -1747,6 +1827,13 @@ pub mod args {
     );
     const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     const DATA_PATH: Arg<PathBuf> = arg("data-path");
+    const DELEGATE_ADDRESS: Arg<WalletAddress> = arg("delegate");
+    const DELEGATE_ADDRESS_OPT: ArgOpt<WalletAddress> = DELEGATE_ADDRESS.opt();
+    const ADD: ArgFlag = flag("add");
+    const REMOVE: ArgFlag = flag("remove");
+    const DELEGATOR_ADDRESS: Arg<WalletAddress> = arg("delegator");
+    const DELEGATOR_ADDRESS_OPT: ArgOpt<WalletAddress> =
+        DELEGATOR_ADDRESS.opt();
     const DECRYPT: ArgFlag = flag("decrypt");
     const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
     const DUMP_TX: ArgFlag = flag("dump-tx");
@@ -2622,6 +2709,90 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
+    pub struct InitDelegate {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// The delegate address
+        pub delegate: WalletAddress,
+    }
+
+    impl Args for InitDelegate {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let delegate = DELEGATE_ADDRESS.parse(matches);
+
+            Self { tx, delegate }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
+                .arg(DELEGATE_ADDRESS.def().about("The delegate address."))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct UpdateDelegate {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// The delegatee address
+        pub delegate: WalletAddress,
+        /// The delegator address
+        pub delegator: WalletAddress,
+        /// Action to remove the delegate
+        pub remove: bool,
+        /// Action to set the delegate
+        pub add: bool,
+    }
+
+    impl Args for UpdateDelegate {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let delegate = DELEGATE_ADDRESS.parse(matches);
+            let delegator = DELEGATOR_ADDRESS.parse(matches);
+            let add = ADD.parse(matches);
+            let remove = REMOVE.parse(matches);
+
+            Self {
+                tx,
+                delegate,
+                delegator,
+                remove,
+                add,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
+                .arg(
+                    DELEGATE_ADDRESS
+                        .def()
+                        .about(
+                            "The delegate address. If empty, it will remove \
+                             the the delegate association.",
+                        )
+                        .requires(DELEGATOR_ADDRESS.name),
+                )
+                .arg(DELEGATOR_ADDRESS.def().about("The delegator address."))
+                .arg(
+                    ADD.def()
+                        .about(
+                            "Set delegate address for the delegator address.",
+                        )
+                        .required_unless_present(REMOVE.name),
+                )
+                .arg(
+                    REMOVE
+                        .def()
+                        .about(
+                            "Remove delegate address for the delegator \
+                             address.",
+                        )
+                        .required_unless_present(ADD.name),
+                )
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct VoteProposal {
         /// Common tx arguments
         pub tx: Tx,
@@ -2739,6 +2910,46 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Query>()
                 .arg(ADDRESS.def().about("The address of the account to query"))
+        }
+    }
+
+    /// Query governance delegate
+    #[derive(Clone, Debug)]
+    pub struct QueryDelegate {
+        /// Common query args
+        pub query: Query,
+        /// Address of the delegate
+        pub delegate: Option<WalletAddress>,
+        /// Address of the delegator
+        pub delegator: Option<WalletAddress>,
+    }
+
+    impl Args for QueryDelegate {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let delegate = DELEGATE_ADDRESS_OPT.parse(matches);
+            let delegator = DELEGATOR_ADDRESS_OPT.parse(matches);
+            Self {
+                query,
+                delegate,
+                delegator,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(
+                    DELEGATE_ADDRESS_OPT
+                        .def()
+                        .about("The address of the delegate.")
+                        .conflicts_with(DELEGATOR_ADDRESS_OPT.name),
+                )
+                .arg(
+                    DELEGATOR_ADDRESS_OPT
+                        .def()
+                        .about("The address of the delegator.")
+                        .conflicts_with(DELEGATE_ADDRESS_OPT.name),
+                )
         }
     }
 

@@ -65,6 +65,14 @@ pub async fn main() -> Result<()> {
                     wait_until_node_is_synched(&args.tx.ledger_address).await;
                     tx::submit_withdraw(ctx, args).await;
                 }
+                Sub::TxInitDelegate(TxInitDelegate(args)) => {
+                    wait_until_node_is_synched(&args.tx.ledger_address).await;
+                    tx::submit_init_delegate(ctx, args).await;
+                }
+                Sub::TxUpdateDelegate(TxUpdateDelegate(args)) => {
+                    wait_until_node_is_synched(&args.tx.ledger_address).await;
+                    tx::submit_update_delegate(ctx, args).await;
+                }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(args)) => {
                     wait_until_node_is_synched(&args.ledger_address).await;
@@ -141,12 +149,24 @@ pub async fn main() -> Result<()> {
                     rpc::query_protocol_parameters(ctx, args).await;
                 }
                 Sub::QueryAccount(QueryAccount(args)) => {
+                    wait_until_node_is_synched(&args.query.ledger_address)
+                        .await;
                     rpc::query_account(ctx, args).await;
                 }
+                Sub::QueryDelegate(QueryDelegate(args)) => {
+                    wait_until_node_is_synched(&args.query.ledger_address)
+                        .await;
+                    rpc::query_delegate(ctx, args).await;
+                }
                 Sub::QueryPgf(QueryPgf(args)) => {
+                    wait_until_node_is_synched(&args.query.ledger_address)
+                        .await;
                     rpc::query_pgf(ctx, args).await;
                 }
-                Sub::SignTx(SignTx(args)) => rpc::sign_tx(ctx, args).await,
+                Sub::SignTx(SignTx(args)) => {
+                    wait_until_node_is_synched(&args.tx.ledger_address).await;
+                    rpc::sign_tx(ctx, args).await
+                }
             }
         }
         cli::NamadaClient::WithoutContext(cmd, global_args) => match cmd {

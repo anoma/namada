@@ -26,6 +26,9 @@ struct Keys {
     min_grace_epoch: &'static str,
     counter: &'static str,
     pending: &'static str,
+    delegate: &'static str,
+    delegations: &'static str,
+    inv_delegations: &'static str,
 }
 
 /// Check if key is inside governance address space
@@ -193,6 +196,43 @@ pub fn is_proposal_type_key(key: &Key) -> bool {
         {
             id.parse::<u64>().is_ok()
         }
+        _ => false,
+    }
+}
+
+/// Check if key is delegate key
+pub fn is_delegate_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::AddressSeg(_delegate),
+        ] if addr == &ADDRESS && prefix == Keys::VALUES.delegate => true,
+        _ => false,
+    }
+}
+
+/// Check if key is delegations key
+pub fn is_delegation_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::AddressSeg(_delegate),
+            DbKeySeg::AddressSeg(_delegator),
+        ] if addr == &ADDRESS && prefix == Keys::VALUES.delegations => true,
+        _ => false,
+    }
+}
+
+/// Check if key is delegate key
+pub fn is_inv_delegation_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::AddressSeg(_delegator),
+        ] if addr == &ADDRESS && prefix == Keys::VALUES.inv_delegations => true,
         _ => false,
     }
 }
@@ -505,6 +545,96 @@ pub fn get_vote_delegation_address(key: &Key) -> Option<&Address> {
 /// Get voter address from vote key
 pub fn get_voter_address(key: &Key) -> Option<&Address> {
     match key.get_at(5) {
+        Some(addr) => match addr {
+            DbKeySeg::AddressSeg(res) => Some(res),
+            DbKeySeg::StringSeg(_) => None,
+        },
+        None => None,
+    }
+}
+
+// Governance voting power delegation
+
+/// Get the delegate key
+pub fn get_delegate_key(delegate: &Address) -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&Keys::VALUES.delegate.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&delegate.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get the delegate prefix key
+pub fn get_delegate_prefix_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&Keys::VALUES.delegate.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get the delegate address from key
+pub fn get_delegate_address(key: &Key) -> Option<&Address> {
+    match key.get_at(2) {
+        Some(addr) => match addr {
+            DbKeySeg::AddressSeg(res) => Some(res),
+            DbKeySeg::StringSeg(_) => None,
+        },
+        None => None,
+    }
+}
+
+/// Get the delegation key
+pub fn get_delegation_key(delegate: &Address, delegator: &Address) -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&Keys::VALUES.delegations.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&delegate.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&delegator.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get the delegation prefix key
+pub fn get_delegations_by_delegate_prefix_key(delegate: &Address) -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&Keys::VALUES.delegations.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&delegate.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get the delegation key
+/// This is used only to make some query efficiently
+pub fn get_inverse_delegation(delegator: &Address) -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&Keys::VALUES.inv_delegations.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&delegator.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get the delegation prefix key
+pub fn get_all_delegations_prefix_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&Keys::VALUES.delegations.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get the delegator address from delegation key
+pub fn get_delegator_address_from_delegation(key: &Key) -> Option<&Address> {
+    match key.get_at(3) {
+        Some(addr) => match addr {
+            DbKeySeg::AddressSeg(res) => Some(res),
+            DbKeySeg::StringSeg(_) => None,
+        },
+        None => None,
+    }
+}
+
+/// Get the delegator address from inv delegation key
+pub fn get_delegator_address_from_inv_delegation(
+    key: &Key,
+) -> Option<&Address> {
+    match key.get_at(2) {
         Some(addr) => match addr {
             DbKeySeg::AddressSeg(res) => Some(res),
             DbKeySeg::StringSeg(_) => None,

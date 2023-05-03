@@ -1,6 +1,6 @@
 //! Governance
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use borsh::BorshDeserialize;
 
@@ -16,7 +16,8 @@ use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::address::Address;
 use crate::types::storage::Epoch;
 use crate::types::transaction::governance::{
-    InitProposalData, VoteProposalData,
+    InitDelegate, InitProposalData, UpdateDelegate, UpdateDelegateAction,
+    VoteProposalData,
 };
 
 /// A proposal creation transaction.
@@ -189,6 +190,121 @@ where
         .collect::<Vec<Vote>>();
 
     Ok(votes)
+}
+
+/// Init a new delegatee account
+pub fn init_delegate<S>(
+    storage: &mut S,
+    data: InitDelegate,
+) -> storage_api::Result<()>
+where
+    S: storage_api::StorageRead + storage_api::StorageWrite,
+{
+    let delegatee_key = governance_keys::get_delegate_key(&data.address);
+    storage.write(&delegatee_key, ())
+}
+
+/// Update a delegate for a governance delegator
+pub fn update_delegate_for<S>(
+    storage: &mut S,
+    data: UpdateDelegate,
+) -> storage_api::Result<()>
+where
+    S: storage_api::StorageRead + storage_api::StorageWrite,
+{
+    let delegation_key =
+        governance_keys::get_delegation_key(&data.delegate, &data.delegator);
+    let inverse_deleagation_key =
+        governance_keys::get_inverse_delegation(&data.delegator);
+
+    match data.action {
+        UpdateDelegateAction::Add => {
+            storage.write(&delegation_key, ())?;
+            storage.write(&inverse_deleagation_key, data.delegate)
+        }
+        UpdateDelegateAction::Remove => {
+            storage.delete(&delegation_key)?;
+            storage.delete(&inverse_deleagation_key)
+        }
+    }
+}
+
+/// Fetch the current delegate set
+pub fn get_delegate_set<S>(
+    storage: &S,
+) -> storage_api::Result<BTreeSet<Address>>
+where
+    S: storage_api::StorageRead,
+{
+    let delegate_prefix_key = governance_keys::get_delegate_prefix_key();
+    let delegate_iter =
+        storage_api::iter_prefix::<()>(storage, &delegate_prefix_key)?;
+
+    let delegate_set = delegate_iter
+        .filter_map(|delegate_result| {
+            if let Ok((delegate_key, _)) = delegate_result {
+                governance_keys::get_delegate_address(&delegate_key).cloned()
+            } else {
+                None
+            }
+        })
+        .collect::<BTreeSet<Address>>();
+
+    Ok(delegate_set)
+}
+
+/// Check if an address is a delegate
+pub fn is_delegate<S>(
+    storage: &S,
+    address: Address,
+) -> storage_api::Result<bool>
+where
+    S: storage_api::StorageRead,
+{
+    let delegatee_key = governance_keys::get_delegate_key(&address);
+    storage.has_key(&delegatee_key)
+}
+
+/// Get all the delegation for a specific delegate
+pub fn delegations<S>(
+    storage: &S,
+    delegate: Address,
+) -> storage_api::Result<BTreeSet<Address>>
+where
+    S: storage_api::StorageRead,
+{
+    let delegations_prefix_key =
+        governance_keys::get_delegations_by_delegate_prefix_key(&delegate);
+    let delegations_iter =
+        storage_api::iter_prefix::<()>(storage, &delegations_prefix_key)?;
+
+    let delegations = delegations_iter
+        .filter_map(|delegate_result| {
+            if let Ok((delegation_key, _)) = delegate_result {
+                governance_keys::get_delegator_address_from_delegation(
+                    &delegation_key,
+                )
+                .cloned()
+            } else {
+                None
+            }
+        })
+        .collect::<BTreeSet<Address>>();
+
+    Ok(delegations)
+}
+
+/// Get the delegate for a specific delagator
+pub fn delegate_for<S>(
+    storage: &S,
+    delegator: Address,
+) -> storage_api::Result<Option<Address>>
+where
+    S: storage_api::StorageRead,
+{
+    let inverse_delegation_key =
+        governance_keys::get_inverse_delegation(&delegator);
+    storage.read(&inverse_delegation_key)
 }
 
 /// Check if an accepted proposal is being executed

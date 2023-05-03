@@ -12,6 +12,13 @@ pub(super) enum ReadType {
     Post,
 }
 
+pub(super) enum ActionType {
+    Delete,
+    Add,
+    Change,
+    Unknown,
+}
+
 /// Proposal errors
 #[derive(Error, Debug)]
 pub enum Error {
