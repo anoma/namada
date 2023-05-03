@@ -334,17 +334,7 @@ pub trait DBIter<'iter> {
 }
 
 /// Atomic batch write.
-pub trait DBWriteBatch {
-    /// Insert a value into the database under the given key.
-    fn put<K, V>(&mut self, key: K, value: V)
-    where
-        K: AsRef<[u8]>,
-        V: AsRef<[u8]>;
-
-    /// Removes the database entry for key. Does nothing if the key was not
-    /// found.
-    fn delete<K: AsRef<[u8]>>(&mut self, key: K);
-}
+pub trait DBWriteBatch {}
 
 impl<D, H> Storage<D, H>
 where

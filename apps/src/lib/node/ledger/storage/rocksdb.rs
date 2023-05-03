@@ -51,7 +51,7 @@ use rayon::prelude::*;
 use rocksdb::{
     BlockBasedOptions, ColumnFamily, ColumnFamilyDescriptor, Direction,
     FlushOptions, IteratorMode, Options, ReadOptions, SliceTransform,
-    WriteBatch, WriteOptions,
+    WriteBatch,
 };
 
 use crate::config::utils::num_of_threads;
@@ -246,9 +246,8 @@ impl RocksDB {
     }
 
     fn exec_batch(&mut self, batch: WriteBatch) -> Result<()> {
-        let write_opts = WriteOptions::default();
         self.0
-            .write_opt(batch, &write_opts)
+            .write(batch)
             .map_err(|e| Error::DBError(e.into_string()))
     }
 
@@ -392,7 +391,7 @@ impl RocksDB {
             let previous_key = format!("pred/{}", metadata_key);
             let previous_value = self
                 .0
-                .get(previous_key.as_bytes())
+                .get_cf(state_cf, previous_key.as_bytes())
                 .map_err(|e| Error::DBError(e.to_string()))?
                 .ok_or(Error::UnknownKey { key: previous_key })?;
 
@@ -404,8 +403,9 @@ impl RocksDB {
         }
 
         // Delete block results for the last block
+        let block_cf = self.get_column_family(BLOCK_CF)?;
         tracing::info!("Removing last block results");
-        batch.delete_cf(state_cf, format!("results/{}", last_block.height));
+        batch.delete_cf(block_cf, format!("results/{}", last_block.height));
 
         // Execute next step in parallel
         let batch = Mutex::new(batch);
@@ -454,7 +454,6 @@ impl RocksDB {
         let diffs_cf = self.get_column_family(DIFFS_CF)?;
         delete_keys(diffs_cf);
         // Delete any height-prepended key in the block
-        let block_cf = self.get_column_family(BLOCK_CF)?;
         delete_keys(block_cf);
 
         // Write the batch and persist changes to disk
@@ -1312,19 +1311,7 @@ fn make_iter_read_opts(prefix: Option<String>) -> ReadOptions {
     read_opts
 }
 
-impl DBWriteBatch for RocksDBWriteBatch {
-    fn put<K, V>(&mut self, key: K, value: V)
-    where
-        K: AsRef<[u8]>,
-        V: AsRef<[u8]>,
-    {
-        self.0.put(key, value)
-    }
-
-    fn delete<K: AsRef<[u8]>>(&mut self, key: K) {
-        self.0.delete(key)
-    }
-}
+impl DBWriteBatch for RocksDBWriteBatch {}
 
 fn unknown_key_error(key: &str) -> Result<()> {
     Err(Error::UnknownKey {
