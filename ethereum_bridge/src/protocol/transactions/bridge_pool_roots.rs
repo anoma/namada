@@ -200,6 +200,9 @@ mod test_apply_bp_roots_to_storage {
     use namada_core::types::vote_extensions::bridge_pool_roots;
 
     use super::*;
+    use crate::protocol::transactions::votes::{
+        EpochedVotingPower, EpochedVotingPowerExt,
+    };
     use crate::{bridge_pool_vp, test_utils};
 
     /// The data needed to run a test.
@@ -419,15 +422,12 @@ mod test_apply_bp_roots_to_storage {
         .sign(&keys[&validators[0]].protocol);
         _ = apply_derived_tx(&mut wl_storage, vext.into())
             .expect("Test failed");
-        let voting_power = <(u64, u64)>::try_from_slice(
-            wl_storage
-                .read_bytes(&bp_root_key.voting_power())
-                .expect("Test failed")
-                .expect("Test failed")
-                .as_slice(),
-        )
-        .expect("Test failed");
-        assert_eq!(voting_power, (5, 12));
+        let voting_power = wl_storage
+            .read::<EpochedVotingPower>(&bp_root_key.voting_power())
+            .expect("Test failed")
+            .expect("Test failed")
+            .average_voting_power(&wl_storage);
+        assert_eq!(voting_power, FractionalVotingPower::new(5, 12).unwrap());
 
         let hot_key = &keys[&validators[1]].eth_bridge;
         let vext = bridge_pool_roots::Vext {
@@ -438,15 +438,12 @@ mod test_apply_bp_roots_to_storage {
         .sign(&keys[&validators[1]].protocol);
         _ = apply_derived_tx(&mut wl_storage, vext.into())
             .expect("Test failed");
-        let voting_power = <(u64, u64)>::try_from_slice(
-            wl_storage
-                .read_bytes(&bp_root_key.voting_power())
-                .expect("Test failed")
-                .expect("Test failed")
-                .as_slice(),
-        )
-        .expect("Test failed");
-        assert_eq!(voting_power, (5, 6));
+        let voting_power = wl_storage
+            .read::<EpochedVotingPower>(&bp_root_key.voting_power())
+            .expect("Test failed")
+            .expect("Test failed")
+            .average_voting_power(&wl_storage);
+        assert_eq!(voting_power, FractionalVotingPower::new(5, 6).unwrap());
     }
 
     #[test]

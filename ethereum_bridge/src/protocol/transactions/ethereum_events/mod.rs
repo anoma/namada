@@ -287,7 +287,9 @@ mod tests {
 
     use super::*;
     use crate::protocol::transactions::utils::GetVoters;
-    use crate::protocol::transactions::votes::Votes;
+    use crate::protocol::transactions::votes::{
+        EpochedVotingPower, EpochedVotingPowerExt, Votes,
+    };
     use crate::test_utils;
 
     /// All kinds of [`Keys`].
@@ -361,10 +363,11 @@ mod tests {
             Votes::from([(sole_validator, BlockHeight(100))])
         );
 
-        let voting_power_bytes =
-            wl_storage.read_bytes(&eth_msg_keys.voting_power())?;
-        let voting_power_bytes = voting_power_bytes.unwrap();
-        assert_eq!(<(u64, u64)>::try_from_slice(&voting_power_bytes)?, (1, 1));
+        let voting_power = wl_storage
+            .read::<EpochedVotingPower>(&eth_msg_keys.voting_power())?
+            .expect("Test failed")
+            .average_voting_power(&wl_storage);
+        assert_eq!(voting_power, FractionalVotingPower::WHOLE);
 
         let epoch_bytes =
             wl_storage.read_bytes(&eth_msg_keys.voting_started_epoch())?;
@@ -561,10 +564,11 @@ mod tests {
             Votes::from([(validator_a, BlockHeight(100))])
         );
 
-        let voting_power_bytes =
-            wl_storage.read_bytes(&eth_msg_keys.voting_power())?;
-        let voting_power_bytes = voting_power_bytes.unwrap();
-        assert_eq!(<(u64, u64)>::try_from_slice(&voting_power_bytes)?, (1, 2));
+        let voting_power = wl_storage
+            .read::<EpochedVotingPower>(&eth_msg_keys.voting_power())?
+            .expect("Test failed")
+            .average_voting_power(&wl_storage);
+        assert_eq!(voting_power, FractionalVotingPower::new(1, 2).unwrap());
 
         Ok(())
     }
@@ -792,8 +796,9 @@ mod tests {
         ) {
             (_, None) => panic!("Test failed"),
             (KeyKind::VotingPower, Some(power)) => {
-                let power = FractionalVotingPower::try_from_slice(&power)
-                    .expect("Test failed");
+                let power = EpochedVotingPower::try_from_slice(&power)
+                    .expect("Test failed")
+                    .average_voting_power(&wl_storage);
                 assert_eq!(power, FractionalVotingPower::new(1, 2).unwrap());
             }
             (_, Some(_)) => {}
@@ -821,8 +826,9 @@ mod tests {
         ) {
             (_, None) => panic!("Test failed"),
             (KeyKind::VotingPower, Some(power)) => {
-                let power = FractionalVotingPower::try_from_slice(&power)
-                    .expect("Test failed");
+                let power = EpochedVotingPower::try_from_slice(&power)
+                    .expect("Test failed")
+                    .average_voting_power(&wl_storage);
                 assert_eq!(power, FractionalVotingPower::new(1, 2).unwrap());
             }
             (_, Some(_)) => {}
