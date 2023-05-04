@@ -31,9 +31,7 @@ impl DerivationPath {
     }
 
     pub fn is_compatible(&self, scheme: SchemeType) -> bool {
-        let mut it = self.0.into_iter();
-        let _ = it.next();
-        if let Some(coin_type) = it.next() {
+        if let Some(coin_type) = self.0.as_ref().get(1) {
             let coin_type = coin_type.to_u32();
             match scheme {
                 SchemeType::Ed25519 => coin_type == NAMADA_COIN_TYPE,
