@@ -118,6 +118,7 @@ impl EpochedVotingPowerExt for EpochedVotingPower {
                     .get(&epoch)
                     .copied()
                     .expect("This value should be in the map");
+                debug_assert!(epoch_voting_power > 0.into());
                 let weight = FractionalVotingPower::new(
                     epoch_voting_power.into(),
                     total_voting_power.into(),
@@ -201,6 +202,7 @@ pub fn dedupe(signers: BTreeSet<(Address, BlockHeight)>) -> Votes {
 mod tests {
     use std::collections::BTreeSet;
 
+    use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::types::address;
     use namada_core::types::key::RefTo;
     use namada_core::types::storage::BlockHeight;
@@ -295,6 +297,21 @@ mod tests {
         assert_eq!(
             deduped,
             Votes::from([validator_1_earliest_vote, validator_2_earliest_vote])
+        );
+    }
+
+    /// Test that voting on a tally during a single epoch does
+    /// not require any storage reads, and goes through the
+    /// fast path of the algorithm.
+    #[test]
+    fn test_tally_vote_single_epoch() {
+        let dummy_storage = TestWlStorage::default();
+
+        let aggregated =
+            EpochedVotingPower::from([(0.into(), FractionalVotingPower::HALF)]);
+        assert_eq!(
+            aggregated.average_voting_power(&dummy_storage),
+            FractionalVotingPower::HALF
         );
     }
 
