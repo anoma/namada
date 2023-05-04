@@ -25,6 +25,9 @@ use namada_core::types::vote_extensions::validator_set_update::{
 };
 use namada_core::types::voting_power::FractionalVotingPower;
 use namada_ethereum_bridge::parameters::UpgradeableContract;
+use namada_ethereum_bridge::protocol::transactions::votes::{
+    EpochedVotingPower, EpochedVotingPowerExt,
+};
 use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
 use namada_ethereum_bridge::storage::proof::{sort_sigs, EthereumProof};
 use namada_ethereum_bridge::storage::vote_tallies::{eth_msgs_prefix, Keys};
@@ -398,22 +401,15 @@ where
             // We checked above that key is not empty
             *key.segments.last_mut().unwrap() =
                 DbKeySeg::StringSeg(Keys::segments().voting_power.into());
-            let voting_power = <(u64, u64)>::try_from_slice(
-                &ctx.wl_storage
-                    .read_bytes(&key)
-                    .into_storage_result()?
-                    .expect(
-                        "Iterating over storage should not yield keys without \
-                         values.",
-                    ),
-            )
-            .unwrap();
-            let voting_power =
-                FractionalVotingPower::new(voting_power.0, voting_power.1)
-                    .expect(
-                        "Deserializing voting power from storage shouldn't \
-                         fail.",
-                    );
+            let voting_power = ctx
+                .wl_storage
+                .read::<EpochedVotingPower>(&key)
+                .into_storage_result()?
+                .expect(
+                    "Iterating over storage should not yield keys without \
+                     values.",
+                )
+                .average_voting_power(ctx.wl_storage);
             for transfer in transfers {
                 pending_events.insert(transfer, voting_power);
             }
