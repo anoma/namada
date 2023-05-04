@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
+use namada_core::hints;
 use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::types::address::Address;
 use namada_core::types::storage::{BlockHeight, Epoch};
@@ -93,6 +94,18 @@ impl EpochedVotingPowerExt for EpochedVotingPower {
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
     {
+        // if we only voted across a single epoch, we can avoid doing
+        // expensive I/O operations
+        if hints::likely(self.len() == 1) {
+            // TODO: switch to [`BTreeMap::first_entry`] when we start
+            // using Rust >= 1.66
+            let Some(&power) = self.values().next() else {
+                hints::cold();
+                unreachable!("The map has one value");
+            };
+            return power;
+        }
+
         let epoch_voting_powers = self.get_epoch_voting_powers(wl_storage);
         let total_voting_power = epoch_voting_powers
             .values()
