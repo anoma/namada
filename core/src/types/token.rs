@@ -681,7 +681,7 @@ impl From<u8> for MaspDenom {
 impl MaspDenom {
     /// Iterator over the possible denominations
     pub fn iter() -> impl Iterator<Item = MaspDenom> {
-        (0u8..3).into_iter().map(Self::from)
+        (0u8..3).map(Self::from)
     }
 
     /// Get the corresponding u64 word from the input uint256.

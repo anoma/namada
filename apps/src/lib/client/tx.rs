@@ -499,7 +499,7 @@ fn cloned_pair<T: Clone, U: Clone>((a, b): (&T, &U)) -> (T, U) {
 }
 
 /// Errors that can occur when trying to retrieve pinned transaction
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub enum PinnedBalanceError {
     /// No transaction has yet been pinned to the given payment address
     NoTransactionPinned,
@@ -519,7 +519,9 @@ pub struct MaspChange {
     pub change: token::Change,
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Debug, Clone, Default)]
+#[derive(
+    BorshSerialize, BorshDeserialize, Debug, Clone, Default, PartialEq, Eq,
+)]
 pub struct MaspAmount(HashMap<(Epoch, TokenAddress), token::Change>);
 
 impl std::ops::Deref for MaspAmount {
@@ -1017,7 +1019,11 @@ impl ShieldedContext {
     /// Compute the total unspent notes associated with the viewing key in the
     /// context. If the key is not in the context, then we do not know the
     /// balance and hence we return None.
-    pub fn compute_shielded_balance(&self, vk: &ViewingKey) -> Option<Amount> {
+    pub async fn compute_shielded_balance(
+        &mut self,
+        client: &HttpClient,
+        vk: &ViewingKey,
+    ) -> Option<MaspAmount> {
         // Cannot query the balance of a key that's not in the map
         if !self.pos_map.contains_key(vk) {
             return None;
@@ -1038,7 +1044,7 @@ impl ShieldedContext {
                         .expect("found note with invalid value or asset type");
             }
         }
-        Some(val_acc)
+        Some(self.decode_all_amounts(client, val_acc).await)
     }
 
     /// Query the ledger for the decoding of the given asset type and cache it
@@ -1107,21 +1113,21 @@ impl ShieldedContext {
         client: HttpClient,
         vk: &ViewingKey,
         target_epoch: Epoch,
-    ) -> Option<Amount> {
+    ) -> Option<MaspAmount> {
         // First get the unexchanged balance
-        if let Some(balance) = self.compute_shielded_balance(vk) {
-            let balance = self.decode_all_amounts(&client, balance).await;
-            // And then exchange balance into current asset types
-            Some(
-                self.compute_exchanged_amount(
-                    client,
+        if let Some(balance) = self.compute_shielded_balance(&client, vk).await
+        {
+            let exchanged_amount = self
+                .compute_exchanged_amount(
+                    client.clone(),
                     balance,
                     target_epoch,
                     HashMap::new(),
                 )
                 .await
-                .0,
-            )
+                .0;
+            // And then exchange balance into current asset types
+            Some(self.decode_all_amounts(&client, exchanged_amount).await)
         } else {
             None
         }
@@ -1432,7 +1438,7 @@ impl ShieldedContext {
         ledger_address: &TendermintAddress,
         owner: PaymentAddress,
         viewing_key: &ViewingKey,
-    ) -> Result<(Amount, Epoch), PinnedBalanceError> {
+    ) -> Result<(MaspAmount, Epoch), PinnedBalanceError> {
         // Obtain the balance that will be exchanged
         let (amt, ep) =
             Self::compute_pinned_balance(ledger_address, owner, viewing_key)
@@ -1441,12 +1447,16 @@ impl ShieldedContext {
         let client = HttpClient::new(ledger_address.clone()).unwrap();
         let amount = self.decode_all_amounts(&client, amt).await;
         // Finally, exchange the balance to the transaction's epoch
-        Ok((
-            self.compute_exchanged_amount(client, amount, ep, HashMap::new())
-                .await
-                .0,
-            ep,
-        ))
+        let computed_amount = self
+            .compute_exchanged_amount(
+                client.clone(),
+                amount,
+                ep,
+                HashMap::new(),
+            )
+            .await
+            .0;
+        Ok((self.decode_all_amounts(&client, computed_amount).await, ep))
     }
 
     /// Convert an amount whose units are AssetTypes to one whose units are

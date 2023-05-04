@@ -18,7 +18,6 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::primitives::ViewingKey;
 use masp_primitives::sapling::Node;
-use masp_primitives::transaction::components::Amount;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
@@ -340,7 +339,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
                 };
                 tfer_delta.values().cloned().any(
                     |MaspChange { ref asset, change }| {
-                        check((asset, &token::Amount::from(change)))
+                        check((asset, &change.into()))
                     },
                 ) || shielded_accounts
                     .values()
@@ -367,12 +366,8 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
                 print!(
                     " {}{} {}",
                     sign,
-                    format_denominated_amount(
-                        &client,
-                        asset,
-                        token::Amount::from(change),
-                    )
-                    .await,
+                    format_denominated_amount(&client, asset, change.into(),)
+                        .await,
                     asset.format_with_alias(&token_alias)
                 );
             }
@@ -611,8 +606,9 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
     // Establish connection with which to do exchange rate queries
     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
     // Print the token balances by payment address
+    let pinned_error = Err(PinnedBalanceError::InvalidViewingKey);
     for owner in owners {
-        let mut balance = Err(PinnedBalanceError::InvalidViewingKey);
+        let mut balance = pinned_error.clone();
         // Find the viewing key that can recognize payments the current payment
         // address
         for vk in &viewing_keys {
@@ -624,12 +620,12 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
                     vk,
                 )
                 .await;
-            if balance != Err(PinnedBalanceError::InvalidViewingKey) {
+            if balance != pinned_error {
                 break;
             }
         }
         // If a suitable viewing key was not found, then demand it from the user
-        if balance == Err(PinnedBalanceError::InvalidViewingKey) {
+        if balance == pinned_error {
             print!("Enter the viewing key for {}: ", owner);
             io::stdout().flush().unwrap();
             let mut vk_str = String::new();
@@ -664,43 +660,28 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
             (Ok((balance, epoch)), Some(token), sub_prefix) => {
                 let token = ctx.get(token);
                 let token_alias = lookup_alias(ctx, &token);
-                let mut total_balance = token::Amount::default();
-                for denom in MaspDenom::iter() {
-                    // Extract and print only the specified token from the total
-                    let (_asset_type, value) = value_by_address(
-                        &balance,
-                        token.clone(),
-                        sub_prefix,
-                        denom,
-                        epoch,
-                    );
-                    total_balance += token::Amount::from_masp_denominated(
-                        value as u64,
-                        denom,
-                    );
-                }
+
+                let token_address = TokenAddress {
+                    address: token.clone(),
+                    sub_prefix: sub_prefix
+                        .map(|string| Key::parse(string).unwrap()),
+                };
+
+                let total_balance = balance[&(epoch, token_address.clone())];
+
                 if total_balance.is_zero() {
                     println!(
                         "Payment address {} was consumed during epoch {}. \
-                         Received no shielded {}{}",
+                         Received no shielded {}",
                         owner,
                         epoch,
-                        token_alias,
-                        sub_prefix
-                            .map(|k| format!("/{}", k))
-                            .unwrap_or_default()
+                        token_address.format_with_alias(&token_alias)
                     );
                 } else {
-                    let token_addr = TokenAddress {
-                        address: token,
-                        sub_prefix: sub_prefix
-                            .as_ref()
-                            .map(|k| Key::parse(k).unwrap()),
-                    };
                     let formatted = format_denominated_amount(
                         &client,
-                        &token_addr,
-                        total_balance,
+                        &token_address,
+                        total_balance.into(),
                     )
                     .await;
                     println!(
@@ -709,18 +690,17 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
                         owner,
                         epoch,
                         formatted,
-                        token_addr.format_with_alias(&token_alias),
+                        token_address.format_with_alias(&token_alias),
                     );
                 }
             }
             (Ok((balance, epoch)), None, _) => {
                 let mut found_any = false;
-                // Print balances by human-readable token names
-                let balance = ctx
-                    .shielded
-                    .decode_amount(client.clone(), balance, epoch)
-                    .await;
-                for (token_addr, value) in balance.iter() {
+
+                for ((_, token_addr), value) in balance
+                    .iter()
+                    .filter(|((token_epoch, _), _)| *token_epoch == epoch)
+                {
                     if !found_any {
                         println!(
                             "Payment address {} was consumed during epoch {}. \
@@ -729,9 +709,12 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
                         );
                         found_any = true;
                     }
-                    let formatted =
-                        format_denominated_amount(&client, token_addr, *value)
-                            .await;
+                    let formatted = format_denominated_amount(
+                        &client,
+                        token_addr,
+                        (*value).into(),
+                    )
+                    .await;
                     let token_alias = tokens
                         .get(&token_addr.address)
                         .map(|a| a.to_string())
@@ -961,19 +944,6 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
     }
 }
 
-/// Get the component of the given amount corresponding to the given token
-pub fn value_by_address(
-    amt: &masp_primitives::transaction::components::Amount,
-    token: Address,
-    sub_prefix: Option<&String>,
-    denom: MaspDenom,
-    epoch: Epoch,
-) -> (AssetType, i64) {
-    // Compute the unique asset identifier from the token address
-    let asset_type = make_asset_type(Some(epoch), &token, &sub_prefix, denom);
-    (asset_type, amt[&asset_type])
-}
-
 /// Query token shielded balance(s)
 pub async fn query_shielded_balance(
     ctx: &mut Context,
@@ -1012,61 +982,48 @@ pub async fn query_shielded_balance(
     match (args.token, owner.is_some()) {
         // Here the user wants to know the balance for a specific token
         (Some(token), true) => {
-            let mut total_balance = token::Amount::zero();
             let token = ctx.get(&token);
-            for denom in MaspDenom::iter() {
-                // Query the multi-asset balance at the given spending key
-                let viewing_key =
-                    ExtendedFullViewingKey::from(viewing_keys[0]).fvk.vk;
-                let balance: Amount<AssetType> = if no_conversions {
-                    ctx.shielded
-                        .compute_shielded_balance(&viewing_key)
-                        .expect("context should contain viewing key")
-                } else {
-                    ctx.shielded
-                        .compute_exchanged_balance(
-                            client.clone(),
-                            &viewing_key,
-                            epoch,
-                        )
-                        .await
-                        .expect("context should contain viewing key")
-                };
-                // Compute the unique asset identifier from the token address
-                let asset_type = make_asset_type(
-                    Some(epoch),
-                    &token,
-                    &args.sub_prefix,
-                    denom,
-                );
-                total_balance += token::Amount::from_masp_denominated(
-                    balance[&asset_type] as u64,
-                    denom,
-                );
-            }
+
+            // Query the multi-asset balance at the given spending key
+            let viewing_key =
+                ExtendedFullViewingKey::from(viewing_keys[0]).fvk.vk;
+            let balance: MaspAmount = if no_conversions {
+                ctx.shielded
+                    .compute_shielded_balance(&client, &viewing_key)
+                    .await
+                    .expect("context should contain viewing key")
+            } else {
+                ctx.shielded
+                    .compute_exchanged_balance(
+                        client.clone(),
+                        &viewing_key,
+                        epoch,
+                    )
+                    .await
+                    .expect("context should contain viewing key")
+            };
 
             let token_alias = lookup_alias(ctx, &token);
+
+            let token_address = TokenAddress {
+                address: token,
+                sub_prefix: args.sub_prefix.map(|k| Key::parse(k).unwrap()),
+            };
+
+            let total_balance = balance[&(epoch, token_address.clone())];
             if total_balance.is_zero() {
                 println!(
-                    "No shielded {}{} balance found for given key",
-                    token_alias,
-                    args.sub_prefix
-                        .as_ref()
-                        .map(|k| format!("/{}", k))
-                        .unwrap_or_default(),
+                    "No shielded {} balance found for given key",
+                    token_address.format_with_alias(&token_alias)
                 );
             } else {
-                let token_address = TokenAddress {
-                    address: token,
-                    sub_prefix: args.sub_prefix.map(|k| Key::parse(k).unwrap()),
-                };
                 println!(
                     "{}: {}",
                     token_address.format_with_alias(&token_alias),
                     format_denominated_amount(
                         &client,
                         &token_address,
-                        total_balance
+                        token::Amount::from(total_balance)
                     )
                     .await
                 );
@@ -1081,7 +1038,8 @@ pub async fn query_shielded_balance(
                 let viewing_key = ExtendedFullViewingKey::from(fvk).fvk.vk;
                 let balance = if no_conversions {
                     ctx.shielded
-                        .compute_shielded_balance(&viewing_key)
+                        .compute_shielded_balance(&client, &viewing_key)
+                        .await
                         .expect("context should contain viewing key")
                 } else {
                     ctx.shielded
@@ -1093,11 +1051,11 @@ pub async fn query_shielded_balance(
                         .await
                         .expect("context should contain viewing key")
                 };
-                for (asset_type, value) in balance.components() {
-                    if !balances.contains_key(asset_type) {
-                        balances.insert(*asset_type, Vec::new());
+                for (key, value) in balance.iter() {
+                    if !balances.contains_key(key) {
+                        balances.insert(key.clone(), Vec::new());
                     }
-                    balances.get_mut(asset_type).unwrap().push((fvk, *value));
+                    balances.get_mut(key).unwrap().push((fvk, *value));
                 }
             }
 
@@ -1108,42 +1066,32 @@ pub async fn query_shielded_balance(
             // TODO Implement a function for this
 
             let mut balance_map = HashMap::new();
-            for (asset_type, balances) in balances {
-                let decoded = ctx
-                    .shielded
-                    .decode_asset_type(client.clone(), asset_type)
-                    .await;
-
-                match decoded {
-                    Some((addr, sub_prefix, denom, asset_epoch))
-                        if asset_epoch == epoch =>
-                    {
-                        // remove this from here, should not be making the
-                        // hashtable creation any uglier
-                        if balances.is_empty() {
-                            println!(
-                                "No shielded {} balance found for any wallet \
-                                 key",
-                                asset_type
-                            );
-                        }
-                        let asset_type = (addr, sub_prefix);
-                        for (fvk, value) in balances {
-                            let token_value =
-                                token::Amount::from_masp_denominated(
-                                    value as u64,
-                                    denom,
-                                );
-                            balance_map
-                                .entry((fvk, asset_type.clone()))
-                                .and_modify(|value_2| *value_2 += token_value)
-                                .or_insert(token_value);
-                        }
+            for ((asset_epoch, token_addr), balances) in balances {
+                if asset_epoch == epoch {
+                    // remove this from here, should not be making the
+                    // hashtable creation any uglier
+                    if balances.is_empty() {
+                        println!(
+                            "No shielded {} balance found for any wallet key",
+                            &token_addr
+                        );
                     }
-                    _ => {}
-                };
+                    for (fvk, value) in balances {
+                        balance_map.insert((fvk, token_addr.clone()), value);
+                    }
+                }
             }
-            for ((fvk, (addr, sub_prefix)), token_balance) in balance_map {
+            for (
+                (
+                    fvk,
+                    TokenAddress {
+                        address: addr,
+                        sub_prefix,
+                    },
+                ),
+                token_balance,
+            ) in balance_map
+            {
                 read_tokens
                     .entry(addr.clone())
                     .and_modify(|addr_vec| addr_vec.push(sub_prefix.clone()))
@@ -1164,7 +1112,7 @@ pub async fn query_shielded_balance(
                 let formatted = format_denominated_amount(
                     &client,
                     &token_address,
-                    token_balance,
+                    token_balance.into(),
                 )
                 .await;
                 println!("  {}, owned by {}", formatted, fvk);
@@ -1219,42 +1167,36 @@ pub async fn query_shielded_balance(
                 token_address.format_with_alias(&token_alias),
             );
             for fvk in viewing_keys {
-                let mut balance = token::Amount::default();
-                for denom in MaspDenom::iter() {
-                    let asset_type = make_asset_type(
-                        Some(epoch),
-                        &token,
-                        &args.sub_prefix,
-                        denom,
-                    );
-                    // Query the multi-asset balance at the given spending key
-                    let viewing_key = ExtendedFullViewingKey::from(fvk).fvk.vk;
-                    let denom_balance = if no_conversions {
-                        ctx.shielded
-                            .compute_shielded_balance(&viewing_key)
-                            .expect("context should contain viewing key")
-                    } else {
-                        ctx.shielded
-                            .compute_exchanged_balance(
-                                client.clone(),
-                                &viewing_key,
-                                epoch,
-                            )
-                            .await
-                            .expect("context should contain viewing key")
-                    };
-                    if denom_balance[&asset_type] != 0 {
-                        balance += token::Amount::from_masp_denominated(
-                            denom_balance[&asset_type] as u64,
-                            denom,
-                        );
+                // Query the multi-asset balance at the given spending key
+                let viewing_key = ExtendedFullViewingKey::from(fvk).fvk.vk;
+                let balance = if no_conversions {
+                    ctx.shielded
+                        .compute_shielded_balance(&client, &viewing_key)
+                        .await
+                        .expect("context should contain viewing key")
+                } else {
+                    ctx.shielded
+                        .compute_exchanged_balance(
+                            client.clone(),
+                            &viewing_key,
+                            epoch,
+                        )
+                        .await
+                        .expect("context should contain viewing key")
+                };
+
+                for ((_, address), val) in balance.iter() {
+                    if !val.is_zero() {
                         found_any = true;
                     }
+                    let formatted = format_denominated_amount(
+                        &client,
+                        address,
+                        (*val).into(),
+                    )
+                    .await;
+                    println!("  {}, owned by {}", formatted, fvk);
                 }
-                let formatted =
-                    format_denominated_amount(&client, &token_address, balance)
-                        .await;
-                println!("  {}, owned by {}", formatted, fvk);
             }
             if !found_any {
                 println!(
@@ -1268,19 +1210,16 @@ pub async fn query_shielded_balance(
             // Query the multi-asset balance at the given spending key
             let viewing_key =
                 ExtendedFullViewingKey::from(viewing_keys[0]).fvk.vk;
-            let balance;
             if no_conversions {
-                balance = ctx
+                let balance = ctx
                     .shielded
-                    .compute_shielded_balance(&viewing_key)
+                    .compute_shielded_balance(&client, &viewing_key)
+                    .await
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
-                let decoded_balance =
-                    ctx.shielded.decode_all_amounts(&client, balance).await;
-                print_decoded_balance_with_epoch(ctx, &client, decoded_balance)
-                    .await;
+                print_decoded_balance_with_epoch(ctx, &client, balance).await;
             } else {
-                balance = ctx
+                let balance = ctx
                     .shielded
                     .compute_exchanged_balance(
                         client.clone(),
@@ -1290,11 +1229,7 @@ pub async fn query_shielded_balance(
                     .await
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
-                let decoded_balance = ctx
-                    .shielded
-                    .decode_amount(client.clone(), balance, epoch)
-                    .await;
-                print_decoded_balance(ctx, &client, decoded_balance).await;
+                print_decoded_balance(ctx, &client, balance, epoch).await;
             }
         }
     }
@@ -1303,17 +1238,22 @@ pub async fn query_shielded_balance(
 pub async fn print_decoded_balance(
     ctx: &mut Context,
     client: &HttpClient,
-    decoded_balance: HashMap<TokenAddress, token::Amount>,
+    decoded_balance: MaspAmount,
+    epoch: Epoch,
 ) {
     if decoded_balance.is_empty() {
         println!("No shielded balance found for given key");
     } else {
-        for (token_addr, amount) in decoded_balance {
+        for ((_, token_addr), amount) in decoded_balance
+            .iter()
+            .filter(|((token_epoch, _), _)| *token_epoch == epoch)
+        {
             println!(
                 "{} : {}",
                 token_addr
                     .format_with_alias(&lookup_alias(ctx, &token_addr.address)),
-                format_denominated_amount(client, &token_addr, amount).await,
+                format_denominated_amount(client, token_addr, (*amount).into())
+                    .await,
             );
         }
     }
@@ -1329,7 +1269,7 @@ pub async fn print_decoded_balance_with_epoch(
         println!("No shielded balance found for given key");
     }
     for ((epoch, token_addr), value) in decoded_balance.iter() {
-        let asset_value = token::Amount::from(*value);
+        let asset_value = (*value).into();
         let alias = tokens
             .get(&token_addr.address)
             .map(|a| a.to_string())
