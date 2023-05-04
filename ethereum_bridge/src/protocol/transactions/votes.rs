@@ -40,12 +40,27 @@ pub trait EpochedVotingPowerExt {
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync;
 
-    /// Check if the [`Tally`] associated with this [`EpochedVotingPower`]
-    /// can be considered `seen`.
-    fn has_majority_quorum<D, H>(&self, wl_storage: &WlStorage<D, H>) -> bool
+    /// Get the weighted average of some tally's voting powers pertaining to all
+    /// epochs it was held in.
+    fn average_voting_power<D, H>(
+        &self,
+        wl_storage: &WlStorage<D, H>,
+    ) -> FractionalVotingPower
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync;
+
+    /// Check if the [`Tally`] associated with this [`EpochedVotingPower`]
+    /// can be considered `seen`.
+    #[inline]
+    fn has_majority_quorum<D, H>(&self, wl_storage: &WlStorage<D, H>) -> bool
+    where
+        D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+        H: 'static + StorageHasher + Sync,
+    {
+        self.average_voting_power(wl_storage)
+            > FractionalVotingPower::TWO_THIRDS
+    }
 }
 
 impl EpochedVotingPowerExt for EpochedVotingPower {
@@ -70,7 +85,10 @@ impl EpochedVotingPowerExt for EpochedVotingPower {
             .collect()
     }
 
-    fn has_majority_quorum<D, H>(&self, wl_storage: &WlStorage<D, H>) -> bool
+    fn average_voting_power<D, H>(
+        &self,
+        wl_storage: &WlStorage<D, H>,
+    ) -> FractionalVotingPower
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
@@ -80,25 +98,21 @@ impl EpochedVotingPowerExt for EpochedVotingPower {
             .values()
             .fold(token::Amount::from(0u64), |accum, &stake| accum + stake);
 
-        // the weighted average voting power of all epochs a tally was held in
-        let average_voting_power =
-            self.iter().map(|(&epoch, &power)| (epoch, power)).fold(
-                FractionalVotingPower::NULL,
-                |average, (epoch, aggregated_voting_power)| {
-                    let epoch_voting_power = epoch_voting_powers
-                        .get(&epoch)
-                        .copied()
-                        .expect("This value should be in the map");
-                    let weight = FractionalVotingPower::new(
-                        epoch_voting_power.into(),
-                        total_voting_power.into(),
-                    )
-                    .unwrap();
-                    average + weight * aggregated_voting_power
-                },
-            );
-
-        average_voting_power > FractionalVotingPower::TWO_THIRDS
+        self.iter().map(|(&epoch, &power)| (epoch, power)).fold(
+            FractionalVotingPower::NULL,
+            |average, (epoch, aggregated_voting_power)| {
+                let epoch_voting_power = epoch_voting_powers
+                    .get(&epoch)
+                    .copied()
+                    .expect("This value should be in the map");
+                let weight = FractionalVotingPower::new(
+                    epoch_voting_power.into(),
+                    total_voting_power.into(),
+                )
+                .unwrap();
+                average + weight * aggregated_voting_power
+            },
+        )
     }
 }
 
