@@ -88,7 +88,7 @@ impl FractionalVotingPower {
     pub const WHOLE: FractionalVotingPower =
         FractionalVotingPower(Ratio::new_raw(1, 1));
 
-    /// Create a new FractionalVotingPower. It must be between zero and one
+    /// Create a new [`FractionalVotingPower`]. It must be between zero and one
     /// inclusive.
     pub fn new(numer: u64, denom: u64) -> Result<Self> {
         if denom == 0 {
