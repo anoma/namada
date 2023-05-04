@@ -1168,7 +1168,9 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &eth_msg_key.voting_power(),
-                voting_power.try_to_vec().expect("Test failed"),
+                EpochedVotingPower::from([(0.into(), voting_power)])
+                    .try_to_vec()
+                    .expect("Test failed"),
             )
             .expect("Test failed");
         // commit the changes and increase block height
