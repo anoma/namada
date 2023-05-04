@@ -325,7 +325,7 @@ mod tests {
         let updates = HashSet::from_iter(vec![update]);
         let voting_powers = HashMap::from_iter(vec![(
             (sole_validator.clone(), BlockHeight(100)),
-            FractionalVotingPower::new(1, 1).unwrap(),
+            FractionalVotingPower::WHOLE,
         )]);
         let mut wl_storage = TestWlStorage::default();
         test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
@@ -568,7 +568,7 @@ mod tests {
             .read::<EpochedVotingPower>(&eth_msg_keys.voting_power())?
             .expect("Test failed")
             .average_voting_power(&wl_storage);
-        assert_eq!(voting_power, FractionalVotingPower::new(1, 2).unwrap());
+        assert_eq!(voting_power, FractionalVotingPower::HALF);
 
         Ok(())
     }
@@ -799,7 +799,7 @@ mod tests {
                 let power = EpochedVotingPower::try_from_slice(&power)
                     .expect("Test failed")
                     .average_voting_power(&wl_storage);
-                assert_eq!(power, FractionalVotingPower::new(1, 2).unwrap());
+                assert_eq!(power, FractionalVotingPower::HALF);
             }
             (_, Some(_)) => {}
         });
@@ -829,7 +829,7 @@ mod tests {
                 let power = EpochedVotingPower::try_from_slice(&power)
                     .expect("Test failed")
                     .average_voting_power(&wl_storage);
-                assert_eq!(power, FractionalVotingPower::new(1, 2).unwrap());
+                assert_eq!(power, FractionalVotingPower::HALF);
             }
             (_, Some(_)) => {}
         });

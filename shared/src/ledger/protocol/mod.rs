@@ -710,10 +710,8 @@ mod tests {
         // the vote should have only be applied once
         let voting_power: EpochedVotingPower =
             wl_storage.read(&eth_msg_keys.voting_power())?.unwrap();
-        let expected = EpochedVotingPower::from([(
-            0.into(),
-            FractionalVotingPower::new(1, 2).unwrap(),
-        )]);
+        let expected =
+            EpochedVotingPower::from([(0.into(), FractionalVotingPower::HALF)]);
         assert_eq!(voting_power, expected);
 
         Ok(())
@@ -768,10 +766,8 @@ mod tests {
         // the vote should have only be applied once
         let voting_power: EpochedVotingPower =
             wl_storage.read(&bp_root_keys.voting_power())?.unwrap();
-        let expected = EpochedVotingPower::from([(
-            0.into(),
-            FractionalVotingPower::new(1, 2).unwrap(),
-        )]);
+        let expected =
+            EpochedVotingPower::from([(0.into(), FractionalVotingPower::HALF)]);
         assert_eq!(voting_power, expected);
 
         Ok(())

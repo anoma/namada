@@ -75,6 +75,9 @@ impl From<EthBridgeVotingPower> for u64 {
 pub struct FractionalVotingPower(Ratio<u64>);
 
 impl FractionalVotingPower {
+    /// Half of the voting power.
+    pub const HALF: FractionalVotingPower =
+        FractionalVotingPower(Ratio::new_raw(1, 2));
     /// Null voting power.
     pub const NULL: FractionalVotingPower =
         FractionalVotingPower(Ratio::new_raw(0, 1));

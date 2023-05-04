@@ -1156,7 +1156,7 @@ mod test_ethbridge_router {
             relayer: bertha_address(),
         };
         let eth_msg_key = vote_tallies::Keys::from(&eth_event);
-        let voting_power = FractionalVotingPower::new(1, 2).unwrap();
+        let voting_power = FractionalVotingPower::HALF;
         client
             .wl_storage
             .write_bytes(

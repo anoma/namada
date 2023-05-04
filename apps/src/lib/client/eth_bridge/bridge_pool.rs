@@ -454,7 +454,7 @@ mod recommendations {
             .sum::<u64>();
 
         // Find the total number of signature checks Ethereum will make
-        let mut power = FractionalVotingPower::new(0, 1).unwrap();
+        let mut power = FractionalVotingPower::NULL;
         voting_powers
             .iter()
             .filter_map(|(a, p)| sigs.get(a).map(|_| (a, p)))

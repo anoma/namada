@@ -266,7 +266,7 @@ mod tests {
     fn test_vote_info_new_single_voter() -> Result<()> {
         let validator = address::testing::established_address_1();
         let vote_height = BlockHeight(100);
-        let voting_power = FractionalVotingPower::new(1, 3)?;
+        let voting_power = FractionalVotingPower::ONE_THIRD;
         let vote = (validator.clone(), vote_height);
         let votes = Votes::from([vote.clone()]);
         let voting_powers = HashMap::from([(vote, voting_power)]);
@@ -300,7 +300,7 @@ mod tests {
     fn test_vote_info_without_voters() -> Result<()> {
         let validator = address::testing::established_address_1();
         let vote_height = BlockHeight(100);
-        let voting_power = FractionalVotingPower::new(1, 3)?;
+        let voting_power = FractionalVotingPower::ONE_THIRD;
         let vote = (validator.clone(), vote_height);
         let votes = Votes::from([vote.clone()]);
         let voting_powers = HashMap::from([(vote, voting_power)]);
@@ -329,14 +329,14 @@ mod tests {
             HashSet::from([(
                 validator.clone(),
                 already_voted_height,
-                FractionalVotingPower::new(1, 3)?,
+                FractionalVotingPower::ONE_THIRD,
             )]),
         )?;
 
         let votes = Votes::from([(validator.clone(), BlockHeight(1000))]);
         let voting_powers = HashMap::from([(
             (validator, BlockHeight(1000)),
-            FractionalVotingPower::new(1, 3)?,
+            FractionalVotingPower::ONE_THIRD,
         )]);
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
@@ -366,7 +366,7 @@ mod tests {
 
         let validator = address::testing::established_address_2();
         let vote_height = BlockHeight(100);
-        let voting_power = FractionalVotingPower::new(1, 3)?;
+        let voting_power = FractionalVotingPower::ONE_THIRD;
         let vote = (validator, vote_height);
         let votes = Votes::from([vote.clone()]);
         let voting_powers = HashMap::from([(vote, voting_power)]);
@@ -393,7 +393,7 @@ mod tests {
             HashSet::from([(
                 address::testing::established_address_1(),
                 BlockHeight(10),
-                FractionalVotingPower::new(1, 3)?,
+                FractionalVotingPower::ONE_THIRD,
             )]),
         )?;
         let vote_info = NewVotes::new(Votes::default(), &HashMap::default())?;
@@ -421,13 +421,13 @@ mod tests {
             HashSet::from([(
                 address::testing::established_address_1(),
                 BlockHeight(10),
-                FractionalVotingPower::new(1, 3)?,
+                FractionalVotingPower::ONE_THIRD,
             )]),
         )?;
 
         let validator = address::testing::established_address_2();
         let vote_height = BlockHeight(100);
-        let voting_power = FractionalVotingPower::new(1, 3)?;
+        let voting_power = FractionalVotingPower::ONE_THIRD;
         let vote = (validator, vote_height);
         let votes = Votes::from([vote.clone()]);
         let voting_powers = HashMap::from([(vote.clone(), voting_power)]);
@@ -440,7 +440,7 @@ mod tests {
             tally_post,
             Tally {
                 voting_power: get_epoched_voting_power(
-                    FractionalVotingPower::new(2, 3)?,
+                    FractionalVotingPower::TWO_THIRDS,
                 ),
                 seen_by: BTreeMap::from([
                     (address::testing::established_address_1(), 10.into()),
@@ -471,13 +471,13 @@ mod tests {
             HashSet::from([(
                 address::testing::established_address_1(),
                 BlockHeight(10),
-                FractionalVotingPower::new(1, 3)?,
+                FractionalVotingPower::ONE_THIRD,
             )]),
         )?;
 
         let validator = address::testing::established_address_2();
         let vote_height = BlockHeight(100);
-        let voting_power = FractionalVotingPower::new(2, 3)?;
+        let voting_power = FractionalVotingPower::TWO_THIRDS;
         let vote = (validator, vote_height);
         let votes = Votes::from([vote.clone()]);
         let voting_powers = HashMap::from([(vote.clone(), voting_power)]);
