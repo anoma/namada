@@ -202,9 +202,16 @@ mod tests {
     use std::collections::BTreeSet;
 
     use namada_core::types::address;
+    use namada_core::types::key::RefTo;
     use namada_core::types::storage::BlockHeight;
+    use namada_proof_of_stake::parameters::PosParams;
+    use namada_proof_of_stake::{
+        become_validator, bond_tokens, write_pos_params, BecomeValidator,
+    };
+    use rust_decimal_macros::dec;
 
     use super::*;
+    use crate::test_utils;
 
     #[test]
     fn test_dedupe_empty() {
@@ -288,6 +295,100 @@ mod tests {
         assert_eq!(
             deduped,
             Votes::from([validator_1_earliest_vote, validator_2_earliest_vote])
+        );
+    }
+
+    /// Test that voting on a tally across epoch boundaries accounts
+    /// for the average voting power attained along those epochs.
+    #[test]
+    fn test_voting_across_epoch_boundaries() {
+        // the validators that will vote in the tally
+        let validator_1 = address::testing::established_address_1();
+        let validator_1_stake = 100u64;
+
+        let validator_2 = address::testing::established_address_2();
+        let validator_2_stake = 100u64;
+
+        let validator_3 = address::testing::established_address_3();
+        let validator_3_stake = 100u64;
+
+        // start epoch 0 with validator 1
+        let (mut wl_storage, _) = test_utils::setup_storage_with_validators(
+            HashMap::from([(validator_1.clone(), validator_1_stake.into())]),
+        );
+
+        // update the pos params
+        let params = PosParams {
+            pipeline_len: 1,
+            ..Default::default()
+        };
+        write_pos_params(&mut wl_storage, params.clone()).expect("Test failed");
+
+        // insert validators 2 and 3 at epoch 1
+        for (validator, stake) in [
+            (&validator_2, validator_2_stake),
+            (&validator_3, validator_3_stake),
+        ] {
+            let keys = test_utils::TestValidatorKeys::generate();
+            let consensus_key = &keys.consensus.ref_to();
+            let eth_cold_key = &keys.eth_gov.ref_to();
+            let eth_hot_key = &keys.eth_bridge.ref_to();
+            become_validator(BecomeValidator {
+                storage: &mut wl_storage,
+                params: &params,
+                address: validator,
+                consensus_key,
+                eth_cold_key,
+                eth_hot_key,
+                current_epoch: 0.into(),
+                commission_rate: dec!(0.05),
+                max_commission_rate_change: dec!(0.01),
+            })
+            .expect("Test failed");
+            bond_tokens(
+                &mut wl_storage,
+                None,
+                validator,
+                stake.into(),
+                0.into(),
+            )
+            .expect("Test failed");
+        }
+
+        // query validators to make sure they were inserted correctly
+        let query_validators = |epoch: u64| {
+            wl_storage
+                .pos_queries()
+                .get_consensus_validators(Some(epoch.into()))
+                .iter()
+                .map(|validator| {
+                    (validator.address, validator.bonded_stake.into())
+                })
+                .collect::<HashMap<_, _>>()
+        };
+        let epoch_0_validators = query_validators(0);
+        let epoch_1_validators = query_validators(1);
+        assert_eq!(
+            epoch_0_validators,
+            HashMap::from([(validator_1.clone(), validator_1_stake)])
+        );
+        assert_eq!(
+            epoch_1_validators,
+            HashMap::from([
+                (validator_1, validator_1_stake),
+                (validator_2, validator_2_stake),
+                (validator_3, validator_3_stake),
+            ])
+        );
+
+        // check that voting works as expected
+        let aggregated = EpochedVotingPower::from([
+            (0.into(), FractionalVotingPower::ONE_THIRD),
+            (1.into(), FractionalVotingPower::ONE_THIRD),
+        ]);
+        assert_eq!(
+            aggregated.average_voting_power(&wl_storage),
+            FractionalVotingPower::ONE_THIRD
         );
     }
 }
