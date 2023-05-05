@@ -4,8 +4,6 @@
 //! - `state`: the latest ledger state
 //!   - `height`: the last committed block height
 //!   - `tx_queue`: txs to be decrypted in the next block
-//!   - `pred`: predecessor values of the top-level keys of the same name
-//!     - `tx_queue`
 //!   - `next_epoch_min_start_height`: minimum block height from which the next
 //!     epoch can start
 //!   - `next_epoch_min_start_time`: minimum block time from which the next
@@ -19,7 +17,7 @@
 //!   - `new/{dyn}`: value set in block height `h`
 //!   - `old/{dyn}`: value from predecessor block height
 //! - `block`: block state
-//!   - `results/{dyn}`: block results at height `h`
+//!   - `results/{h}`: block results at height `h`
 //!   - `h`: for each block at height `h`:
 //!     - `tree`: merkle tree
 //!       - `root`: root hash

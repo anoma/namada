@@ -448,8 +448,7 @@ where
     }
 
     /// Persist the current block's state to the database
-    pub fn commit_block(&mut self, batch: D::WriteBatch) -> Result<()> {
-        let mut batch = batch;
+    pub fn commit_block(&mut self, mut batch: D::WriteBatch) -> Result<()> {
         // All states are written only when the first height or a new epoch
         let is_full_commit =
             self.block.height.0 == 1 || self.last_epoch != self.block.epoch;
