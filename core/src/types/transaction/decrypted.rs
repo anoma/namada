@@ -9,9 +9,6 @@ pub mod decrypted_tx {
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
     use sha2::{Digest, Sha256};
 
-    use super::EllipticCurve;
-    use crate::proto::Tx;
-
     #[derive(
         Clone,
         Debug,
@@ -58,8 +55,8 @@ pub mod decrypted_tx {
     #[cfg(feature = "ferveo-tpke")]
     pub fn verify_decrypted_correctly(
         decrypted: &DecryptedTx,
-        mut otx: Tx,
-        privkey: <EllipticCurve as PairingEngine>::G2Affine,
+        mut otx: crate::proto::Tx,
+        privkey: <super::EllipticCurve as PairingEngine>::G2Affine,
     ) -> bool {
         match decrypted {
             DecryptedTx::Decrypted { .. } => true,

@@ -19,8 +19,8 @@ mod tests {
         // The environment must be initialized first
         tx_host_env::init();
 
-        let tx_data = vec![];
-        apply_tx(ctx(), tx_data).unwrap();
+        let tx = Tx::new(TxType::Raw);
+        apply_tx(ctx(), tx).unwrap();
 
         let env = tx_host_env::take();
         assert!(env.all_touched_storage_keys().is_empty());

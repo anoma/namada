@@ -32,9 +32,9 @@ use crate::types::transaction::protocol::ProtocolTx;
 use crate::types::transaction::EllipticCurve;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::EncryptionKey;
-use crate::types::transaction::{
-    hash_tx, DecryptedTx, TxType, WrapperTx, WrapperTxErr,
-};
+#[cfg(feature = "ferveo-tpke")]
+use crate::types::transaction::WrapperTxErr;
+use crate::types::transaction::{hash_tx, DecryptedTx, TxType, WrapperTx};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -1067,26 +1067,6 @@ impl Tx {
     }
 }
 
-#[cfg(feature = "ABCI")]
-fn encode_str(x: &str) -> Vec<u8> {
-    x.as_bytes().to_vec()
-}
-
-#[cfg(feature = "ABCI")]
-fn encode_string(x: String) -> Vec<u8> {
-    x.into_bytes()
-}
-
-#[cfg(not(feature = "ABCI"))]
-fn encode_str(x: &str) -> String {
-    x.to_string()
-}
-
-#[cfg(not(feature = "ABCI"))]
-fn encode_string(x: String) -> String {
-    x
-}
-
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 impl From<Tx> for ResponseDeliverTx {
     #[cfg(not(feature = "ferveo-tpke"))]
@@ -1117,23 +1097,23 @@ impl From<Tx> for ResponseDeliverTx {
             r#type: "transfer".to_string(),
             attributes: vec![
                 EventAttribute {
-                    key: encode_str("source"),
-                    value: encode_string(transfer.source.encode()),
+                    key: "source".to_string(),
+                    value: transfer.source.encode(),
                     index: true,
                 },
                 EventAttribute {
-                    key: encode_str("target"),
-                    value: encode_string(transfer.target.encode()),
+                    key: "target".to_string(),
+                    value: transfer.target.encode(),
                     index: true,
                 },
                 EventAttribute {
-                    key: encode_str("token"),
-                    value: encode_string(transfer.token.encode()),
+                    key: "token".to_string(),
+                    value: transfer.token.encode(),
                     index: true,
                 },
                 EventAttribute {
-                    key: encode_str("amount"),
-                    value: encode_string(transfer.amount.to_string()),
+                    key: "amount".to_string(),
+                    value: transfer.amount.to_string(),
                     index: true,
                 },
             ],

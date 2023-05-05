@@ -10,7 +10,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
 use crate::ledger::native_vp::governance::utils::ProposalEvent;
-use crate::proto::Tx;
 use crate::tendermint_proto::abci::EventAttribute;
 use crate::types::ibc::IbcEvent;
 #[cfg(feature = "ferveo-tpke")]
@@ -68,7 +67,7 @@ impl Event {
     /// Creates a new event with the hash and height of the transaction
     /// already filled in
     #[cfg(feature = "ferveo-tpke")]
-    pub fn new_tx_event(tx: &Tx, height: u64) -> Self {
+    pub fn new_tx_event(tx: &crate::proto::Tx, height: u64) -> Self {
         let mut event = match tx.header().tx_type {
             TxType::Wrapper(_) => {
                 let mut event = Event {

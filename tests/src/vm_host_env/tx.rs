@@ -12,7 +12,7 @@ use namada::types::address::Address;
 use namada::types::hash::Hash;
 use namada::types::storage::{Key, TxIndex};
 use namada::types::time::DurationSecs;
-use namada::types::transaction::TxType;
+pub use namada::types::transaction::TxType;
 use namada::types::{key, token};
 use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::run::Error;

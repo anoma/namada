@@ -30,7 +30,6 @@ mod tests {
     use namada::ledger::tx_env::TxEnv;
     use namada::proto::{Code, Data, Section, Signature, Tx};
     use namada::tendermint_proto::Protobuf;
-    use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
@@ -39,9 +38,7 @@ mod tests {
     use namada::types::transaction::TxType;
     use namada::types::{address, key};
     use namada_test_utils::TestWasms;
-    use namada_tx_prelude::{
-        BorshDeserialize, BorshSerialize, StorageRead, StorageWrite,
-    };
+    use namada_tx_prelude::{BorshSerialize, StorageRead, StorageWrite};
     use namada_vp_prelude::VpEnv;
     use prost::Message;
     use test_log::test;
@@ -472,9 +469,7 @@ mod tests {
                     &keypair,
                 )));
                 env.tx = tx;
-                let tx_data = env.tx.clone();
-
-                tx_data
+                env.tx.clone()
             });
             assert_eq!(signed_tx_data.data().as_ref(), Some(data));
             assert!(
@@ -485,12 +480,12 @@ mod tests {
 
             let other_keypair = key::testing::keypair_2();
             assert!(
-                !signed_tx_data
+                signed_tx_data
                     .verify_signature(
                         &other_keypair.ref_to(),
                         signed_tx_data.data_sechash()
                     )
-                    .is_ok()
+                    .is_err()
             );
         }
     }
