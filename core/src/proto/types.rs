@@ -540,7 +540,7 @@ pub enum Section {
     ExtraData(Code),
     /// Transaction code. Sending to hardware wallets optional
     Code(Code),
-    /// A transaction ssignature. Often produced by hardware wallets
+    /// A transaction signature. Often produced by hardware wallets
     Signature(Signature),
     /// Ciphertext obtained by encrypting arbitrary transaction sections
     Ciphertext(Ciphertext),
