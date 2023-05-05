@@ -56,20 +56,14 @@ impl DerivationPath {
 
     fn bip44(
         scheme: SchemeType,
-        account: Option<u32>,
-        change: Option<u32>,
-        address: Option<u32>,
+        account: u32,
+        change: u32,
+        address: u32,
     ) -> Self {
         let mut indexes = Self::bip44_base_indexes_for_scheme(scheme);
-        if let Some(account) = account {
-            indexes.push(ChildIndex::Hardened(account));
-            if let Some(change) = change {
-                indexes.push(ChildIndex::Normal(change));
-                if let Some(address) = address {
-                    indexes.push(ChildIndex::Normal(address));
-                }
-            }
-        }
+        indexes.push(ChildIndex::Hardened(account));
+        indexes.push(ChildIndex::Normal(change));
+        indexes.push(ChildIndex::Normal(address));
         Self::new(indexes)
     }
 
@@ -86,7 +80,7 @@ impl DerivationPath {
     }
 
     pub fn default_for_scheme(scheme: SchemeType) -> Self {
-        let path = Self::bip44(scheme, Some(0), Some(0), Some(0));
+        let path = Self::bip44(scheme, 0, 0, 0);
         path.hardened(scheme)
     }
 
