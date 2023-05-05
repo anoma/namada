@@ -88,10 +88,15 @@ where
         .expect("Error while reading storage")
         .expect("Missing gas table in storage");
 
-    let mut tx: TxType = Tx::try_from(&request.data[..])
-        .into_storage_result()?
-        .try_into()
-        .unwrap();
+    let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
+    let mut tx = TxType::try_from(tx.clone()).unwrap_or(
+        // If conversion to tx type fails default to decrypted
+        TxType::Decrypted(DecryptedTx::Decrypted {
+            tx,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: true,
+        }),
+    );
 
     let mut write_log = WriteLog::default();
 
