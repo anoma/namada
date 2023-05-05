@@ -139,7 +139,7 @@ impl CodeHash {
         }
     }
 
-    /// Return the cntained code if there is any
+    /// Return the contained code if there is any
     pub fn code(&self) -> Option<Vec<u8>> {
         if let Self::Code(code) = self {
             Some(code.clone())
