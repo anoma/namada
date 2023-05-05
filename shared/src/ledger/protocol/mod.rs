@@ -389,7 +389,7 @@ where
                         )
                         .map_err(|e| e.to_string())?;
 
-                        return Err("Transparent balance of wrapper's signer was insufficient to pay fee. All the available transparent funds have been moved to the block proposer".to_string());
+                        return Err("Transparent balance of wrapper's signer was insufficient to pay fee".to_string());
                     }
                     #[cfg(feature = "abcipp")]
                     return Err("Insufficient transparent balance to pay fees"
@@ -413,9 +413,7 @@ where
                 )
                 .map_err(|e| e.to_string())?;
 
-                return Err(
-                    format!("{}. All the available transparent funds have been moved to the block proposer", e
-                ));
+                return Err(e.to_string());
             }
 
             #[cfg(feature = "abcipp")]

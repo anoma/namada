@@ -943,7 +943,7 @@ mod test_process_proposal {
                 assert_eq!(
                     response[0].result.info,
                     "Error trying to apply a transaction: Insufficient \
-                                     balance to pay fee"
+                                                     balance to pay fee"
                         .to_string()
                 );
             }
