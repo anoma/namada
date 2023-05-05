@@ -477,6 +477,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5024ee8015f02155eee35c711107ddd9a9bf3cb689cf2a9089c97e79b6e1ae83"
 
 [[package]]
+name = "base58"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6107fe1be6682a68940da878d9e9f5e90ca5745b3dec9fd1bb393c8777d4f581"
+
+[[package]]
 name = "base64"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3777,6 +3783,7 @@ dependencies = [
  "assert_matches",
  "async-std",
  "async-trait",
+ "base58 0.2.0",
  "base64 0.13.0",
  "bech32",
  "bimap",
@@ -3799,6 +3806,7 @@ dependencies = [
  "flate2",
  "futures 0.3.25",
  "git2",
+ "hex",
  "itertools",
  "libc",
  "libloading",
@@ -3825,7 +3833,6 @@ dependencies = [
  "rpassword",
  "rust_decimal",
  "rust_decimal_macros",
- "secstr",
  "serde 1.0.145",
  "serde_bytes",
  "serde_json",
@@ -3860,6 +3867,7 @@ dependencies = [
  "tracing-subscriber 0.3.16",
  "websocket",
  "winapi 0.3.9",
+ "zeroize",
 ]
 
 [[package]]
@@ -5721,15 +5729,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "secstr"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e04f657244f605c4cf38f6de5993e8bd050c8a303f86aeabff142d5c7c113e12"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "security-framework"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6691,7 +6690,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "01b874a4992538d4b2f4fbbac11b9419d685f4b39bdc3fed95b04e07bfd76040"
 dependencies = [
- "base58",
+ "base58 0.1.0",
  "hmac 0.7.1",
  "libsecp256k1 0.3.5",
  "memzero",
