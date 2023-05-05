@@ -1,16 +1,18 @@
 # Transferring assets from Ethereum to Namada
 
-In order to facilitate transferring assets from Ethereum to Namada, There 
- will be two internal accounts with associated native validity predicates:
+In order to facilitate transferring assets from Ethereum to Namada, there
+will be two internal accounts with associated native validity predicates:
 
 - `#EthBridge` - Controls the `/eth_msgs/` [storage](ethereum_events_attestation.md#storage)
-- and ledgers of balances
-  for wrapped Ethereum assets (ERC20 tokens) structured in a
-  ["multitoken"](https://github.com/anoma/anoma/issues/1102) hierarchy
-- `#EthBridgeEscrow` which will hold in escrow wrapped Namada tokens which have
-  been sent to Ethereum.
+  and ledger of balances of minted wrapped Ethereum assets (ERC20 tokens) structured in a
+  ["multitoken"](../../base-ledger/fungible-token.html#multitoken) hierarchy.
+  Also contains in escrow Namada tokens which have been sent to Ethereum,
+  pertaining to pending wNAM transfers.
+- `#EthBridgePool` - Holds gas fees to be payed to relayers of transfers to Ethereum,
+  as well assets (other than wNAM) in escrow, pertaining to pending transfers to
+  Ethereum.
 
-#### Wrapped ERC20
+## Wrapped ERC20
 
 If an ERC20 token is transferred to Namada, once the associated 
 `TransferToNamada` Ethereum event is included into Namada, validators mint 
@@ -31,7 +33,7 @@ pub struct TransferToNamada {
 }
 ```
 
-##### Example
+### Example
 
 For 10 DAI i.e. ERC20([0x6b175474e89094c44da98b954eedeac495271d0f](https://etherscan.io/token/0x6b175474e89094c44da98b954eedeac495271d0f)) to `atest1v4ehgw36xue5xvf5xvuyzvpjx5un2v3k8qeyvd3cxdqns32p89rrxd6xx9zngvpegccnzs699rdnnt`
 ```
@@ -43,10 +45,20 @@ For 10 DAI i.e. ERC20([0x6b175474e89094c44da98b954eedeac495271d0f](https://ether
                 += 10
 ```
 
-#### Namada tokens
+## Namada tokens
 
 Any wrapped Namada tokens being redeemed from Ethereum must have an 
-equivalent amount of the native token held in escrow by `#EthBridgeEscrow`.
+equivalent amount of the native token held in escrow by `#EthBridge`.
 Once the associated`TransferToNamada` Ethereum event is included into 
-Namada, validators should simply make a transfer from `#EthBridgeEscrow` to 
+Namada, validators should simply make a transfer from `#EthBridge` to
 the `receiver` for the appropriate amount and asset.
+
+## Replay protection
+
+Transfer to Namada events are processed in order of their nonce, which
+is assumed to be a monotonically growing sequence number. While not
+strictly necessary, since these operations only increment the balance
+of some token owner in storage, and addition is governed by the
+commutative property, it is still important to process these events in
+order, such that we can discard older events, and not replay balance
+updates.
