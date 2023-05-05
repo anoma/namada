@@ -5,9 +5,8 @@ use namada_core::ledger::storage::{
 };
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::storage::Key;
-use namada_core::types::voting_power::FractionalVotingPower;
 
-use super::{Tally, Votes};
+use super::{EpochedVotingPower, Tally, Votes};
 use crate::storage::vote_tallies;
 
 pub fn write<D, H, T>(
@@ -30,7 +29,7 @@ where
     if !already_present {
         // add the current epoch for the inserted event
         wl_storage.write_bytes(
-            &keys.epoch(),
+            &keys.voting_started_epoch(),
             &wl_storage.storage.get_current_epoch().0.try_to_vec()?,
         )?;
     }
@@ -50,7 +49,7 @@ where
     wl_storage.delete(&keys.seen())?;
     wl_storage.delete(&keys.seen_by())?;
     wl_storage.delete(&keys.voting_power())?;
-    wl_storage.delete(&keys.epoch())?;
+    wl_storage.delete(&keys.voting_started_epoch())?;
     Ok(())
 }
 
@@ -64,7 +63,7 @@ where
 {
     let seen: bool = super::read::value(wl_storage, &keys.seen())?;
     let seen_by: Votes = super::read::value(wl_storage, &keys.seen_by())?;
-    let voting_power: FractionalVotingPower =
+    let voting_power: EpochedVotingPower =
         super::read::value(wl_storage, &keys.voting_power())?;
 
     Ok(Tally {
@@ -134,7 +133,10 @@ mod tests {
         };
         let keys = vote_tallies::Keys::from(&event);
         let tally = Tally {
-            voting_power: FractionalVotingPower::new(1, 3).unwrap(),
+            voting_power: EpochedVotingPower::from([(
+                0.into(),
+                FractionalVotingPower::ONE_THIRD,
+            )]),
             seen_by: BTreeMap::from([(
                 address::testing::established_address_1(),
                 10.into(),
@@ -156,7 +158,8 @@ mod tests {
             voting_power,
             Some(tally.voting_power.try_to_vec().unwrap())
         );
-        let epoch = wl_storage.read_bytes(&keys.epoch()).unwrap();
+        let epoch =
+            wl_storage.read_bytes(&keys.voting_started_epoch()).unwrap();
         assert_eq!(
             epoch,
             Some(
@@ -180,7 +183,10 @@ mod tests {
         };
         let keys = vote_tallies::Keys::from(&event);
         let tally = Tally {
-            voting_power: FractionalVotingPower::new(1, 3).unwrap(),
+            voting_power: EpochedVotingPower::from([(
+                0.into(),
+                FractionalVotingPower::ONE_THIRD,
+            )]),
             seen_by: BTreeMap::from([(
                 address::testing::established_address_1(),
                 10.into(),
@@ -204,7 +210,7 @@ mod tests {
             .unwrap();
         wl_storage
             .write_bytes(
-                &keys.epoch(),
+                &keys.voting_started_epoch(),
                 &wl_storage
                     .storage
                     .get_block_height()

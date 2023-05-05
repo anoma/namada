@@ -191,7 +191,7 @@ mod tests {
         assert_eq!(voting_powers.len(), 1);
         assert_matches!(
             voting_powers.get(&(sole_validator, BlockHeight(100))),
-            Some(v) if *v == FractionalVotingPower::new(1, 1).unwrap()
+            Some(v) if *v == FractionalVotingPower::WHOLE
         );
     }
 

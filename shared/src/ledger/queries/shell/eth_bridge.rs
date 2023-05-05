@@ -25,11 +25,12 @@ use namada_core::types::vote_extensions::validator_set_update::{
 };
 use namada_core::types::voting_power::FractionalVotingPower;
 use namada_ethereum_bridge::parameters::UpgradeableContract;
+use namada_ethereum_bridge::protocol::transactions::votes::{
+    EpochedVotingPower, EpochedVotingPowerExt,
+};
 use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
 use namada_ethereum_bridge::storage::proof::{sort_sigs, EthereumProof};
-use namada_ethereum_bridge::storage::vote_tallies::{
-    eth_msgs_prefix, BODY_KEY_SEGMENT, VOTING_POWER_KEY_SEGMENT,
-};
+use namada_ethereum_bridge::storage::vote_tallies::{eth_msgs_prefix, Keys};
 use namada_ethereum_bridge::storage::{
     bridge_contract_key, governance_contract_key, native_erc20_key,
     vote_tallies,
@@ -386,7 +387,7 @@ where
             );
             match key.segments.last() {
                 Some(DbKeySeg::StringSeg(ref seg))
-                    if seg == BODY_KEY_SEGMENT =>
+                    if seg == Keys::segments().body =>
                 {
                     Some((key, v))
                 }
@@ -399,25 +400,18 @@ where
         {
             // We checked above that key is not empty
             *key.segments.last_mut().unwrap() =
-                DbKeySeg::StringSeg(VOTING_POWER_KEY_SEGMENT.into());
-            let voting_power = <(u64, u64)>::try_from_slice(
-                &ctx.wl_storage
-                    .read_bytes(&key)
-                    .into_storage_result()?
-                    .expect(
-                        "Iterating over storage should not yield keys without \
-                         values.",
-                    ),
-            )
-            .unwrap();
-            let voting_power =
-                FractionalVotingPower::new(voting_power.0, voting_power.1)
-                    .expect(
-                        "Deserializing voting power from storage shouldn't \
-                         fail.",
-                    );
+                DbKeySeg::StringSeg(Keys::segments().voting_power.into());
+            let voting_power = ctx
+                .wl_storage
+                .read::<EpochedVotingPower>(&key)
+                .into_storage_result()?
+                .expect(
+                    "Iterating over storage should not yield keys without \
+                     values.",
+                )
+                .average_voting_power(ctx.wl_storage);
             for transfer in transfers {
-                pending_events.insert(transfer, voting_power.clone());
+                pending_events.insert(transfer, voting_power);
             }
         }
     }
@@ -1162,7 +1156,7 @@ mod test_ethbridge_router {
             relayer: bertha_address(),
         };
         let eth_msg_key = vote_tallies::Keys::from(&eth_event);
-        let voting_power = FractionalVotingPower::new(1, 2).unwrap();
+        let voting_power = FractionalVotingPower::HALF;
         client
             .wl_storage
             .write_bytes(
@@ -1174,7 +1168,9 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &eth_msg_key.voting_power(),
-                voting_power.try_to_vec().expect("Test failed"),
+                EpochedVotingPower::from([(0.into(), voting_power)])
+                    .try_to_vec()
+                    .expect("Test failed"),
             )
             .expect("Test failed");
         // commit the changes and increase block height

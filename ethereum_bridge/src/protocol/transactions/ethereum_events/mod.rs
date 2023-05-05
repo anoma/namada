@@ -155,7 +155,8 @@ where
     let (vote_tracking, changed, confirmed, already_present) =
         if !exists_in_storage {
             tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
-            let vote_tracking = calculate_new(update.seen_by, voting_powers)?;
+            let vote_tracking =
+                calculate_new(wl_storage, update.seen_by, voting_powers)?;
             let changed = eth_msg_keys.into_iter().collect();
             let confirmed = vote_tracking.seen;
             (vote_tracking, changed, confirmed, false)
@@ -286,7 +287,9 @@ mod tests {
 
     use super::*;
     use crate::protocol::transactions::utils::GetVoters;
-    use crate::protocol::transactions::votes::Votes;
+    use crate::protocol::transactions::votes::{
+        EpochedVotingPower, EpochedVotingPowerExt, Votes,
+    };
     use crate::test_utils;
 
     /// All kinds of [`Keys`].
@@ -322,7 +325,7 @@ mod tests {
         let updates = HashSet::from_iter(vec![update]);
         let voting_powers = HashMap::from_iter(vec![(
             (sole_validator.clone(), BlockHeight(100)),
-            FractionalVotingPower::new(1, 1).unwrap(),
+            FractionalVotingPower::WHOLE,
         )]);
         let mut wl_storage = TestWlStorage::default();
         test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
@@ -338,7 +341,7 @@ mod tests {
                 eth_msg_keys.seen(),
                 eth_msg_keys.seen_by(),
                 eth_msg_keys.voting_power(),
-                eth_msg_keys.epoch(),
+                eth_msg_keys.voting_started_epoch(),
                 wrapped_erc20_keys.balance(&receiver),
                 wrapped_erc20_keys.supply(),
             ]),
@@ -360,12 +363,14 @@ mod tests {
             Votes::from([(sole_validator, BlockHeight(100))])
         );
 
-        let voting_power_bytes =
-            wl_storage.read_bytes(&eth_msg_keys.voting_power())?;
-        let voting_power_bytes = voting_power_bytes.unwrap();
-        assert_eq!(<(u64, u64)>::try_from_slice(&voting_power_bytes)?, (1, 1));
+        let voting_power = wl_storage
+            .read::<EpochedVotingPower>(&eth_msg_keys.voting_power())?
+            .expect("Test failed")
+            .average_voting_power(&wl_storage);
+        assert_eq!(voting_power, FractionalVotingPower::WHOLE);
 
-        let epoch_bytes = wl_storage.read_bytes(&eth_msg_keys.epoch())?;
+        let epoch_bytes =
+            wl_storage.read_bytes(&eth_msg_keys.voting_started_epoch())?;
         let epoch_bytes = epoch_bytes.unwrap();
         assert_eq!(Epoch::try_from_slice(&epoch_bytes)?, Epoch(0));
 
@@ -436,7 +441,7 @@ mod tests {
                 eth_msg_keys.seen(),
                 eth_msg_keys.seen_by(),
                 eth_msg_keys.voting_power(),
-                eth_msg_keys.epoch(),
+                eth_msg_keys.voting_started_epoch(),
                 dai_keys.balance(&receiver),
                 dai_keys.supply(),
             ])
@@ -493,7 +498,7 @@ mod tests {
                 eth_msg_keys.seen(),
                 eth_msg_keys.seen_by(),
                 eth_msg_keys.voting_power(),
-                eth_msg_keys.epoch(),
+                eth_msg_keys.voting_started_epoch(),
             ]),
             "The Ethereum event should have been recorded, but no minting \
              should have happened yet as it has only been seen by 1/2 the \
@@ -547,7 +552,7 @@ mod tests {
                 eth_msg_keys.seen(),
                 eth_msg_keys.seen_by(),
                 eth_msg_keys.voting_power(),
-                eth_msg_keys.epoch(),
+                eth_msg_keys.voting_started_epoch(),
             ]),
             "One vote for the Ethereum event should have been recorded",
         );
@@ -559,10 +564,11 @@ mod tests {
             Votes::from([(validator_a, BlockHeight(100))])
         );
 
-        let voting_power_bytes =
-            wl_storage.read_bytes(&eth_msg_keys.voting_power())?;
-        let voting_power_bytes = voting_power_bytes.unwrap();
-        assert_eq!(<(u64, u64)>::try_from_slice(&voting_power_bytes)?, (1, 2));
+        let voting_power = wl_storage
+            .read::<EpochedVotingPower>(&eth_msg_keys.voting_power())?
+            .expect("Test failed")
+            .average_voting_power(&wl_storage);
+        assert_eq!(voting_power, FractionalVotingPower::HALF);
 
         Ok(())
     }
@@ -698,12 +704,12 @@ mod tests {
                 prev_keys.seen(),
                 prev_keys.seen_by(),
                 prev_keys.voting_power(),
-                prev_keys.epoch(),
+                prev_keys.voting_started_epoch(),
                 new_keys.body(),
                 new_keys.seen(),
                 new_keys.seen_by(),
                 new_keys.voting_power(),
-                new_keys.epoch(),
+                new_keys.voting_started_epoch(),
             ]),
             "New event should be inserted and the previous one should be \
              deleted",
@@ -737,7 +743,7 @@ mod tests {
         );
         assert(
             KeyKind::Epoch,
-            wl_storage.read_bytes(&keys.epoch()).unwrap(),
+            wl_storage.read_bytes(&keys.voting_started_epoch()).unwrap(),
         );
         assert_eq!(
             tx_result.changed_keys,
@@ -746,7 +752,7 @@ mod tests {
                 keys.seen(),
                 keys.seen_by(),
                 keys.voting_power(),
-                keys.epoch(),
+                keys.voting_started_epoch(),
             ]),
         );
     }
@@ -790,9 +796,10 @@ mod tests {
         ) {
             (_, None) => panic!("Test failed"),
             (KeyKind::VotingPower, Some(power)) => {
-                let power = FractionalVotingPower::try_from_slice(&power)
-                    .expect("Test failed");
-                assert_eq!(power, FractionalVotingPower::new(1, 2).unwrap());
+                let power = EpochedVotingPower::try_from_slice(&power)
+                    .expect("Test failed")
+                    .average_voting_power(&wl_storage);
+                assert_eq!(power, FractionalVotingPower::HALF);
             }
             (_, Some(_)) => {}
         });
@@ -819,9 +826,10 @@ mod tests {
         ) {
             (_, None) => panic!("Test failed"),
             (KeyKind::VotingPower, Some(power)) => {
-                let power = FractionalVotingPower::try_from_slice(&power)
-                    .expect("Test failed");
-                assert_eq!(power, FractionalVotingPower::new(1, 2).unwrap());
+                let power = EpochedVotingPower::try_from_slice(&power)
+                    .expect("Test failed")
+                    .average_voting_power(&wl_storage);
+                assert_eq!(power, FractionalVotingPower::HALF);
             }
             (_, Some(_)) => {}
         });

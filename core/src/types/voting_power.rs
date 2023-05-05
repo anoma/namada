@@ -2,7 +2,7 @@
 
 use std::fmt::{Display, Formatter};
 use std::iter::Sum;
-use std::ops::{Add, AddAssign};
+use std::ops::{Add, AddAssign, Mul};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::ethereum_types as ethereum;
@@ -71,15 +71,27 @@ impl From<EthBridgeVotingPower> for u64 {
 
 /// A fraction of the total voting power. This should always be a reduced
 /// fraction that is between zero and one inclusive.
-#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
+#[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
 pub struct FractionalVotingPower(Ratio<u64>);
 
 impl FractionalVotingPower {
+    /// Half of the voting power.
+    pub const HALF: FractionalVotingPower =
+        FractionalVotingPower(Ratio::new_raw(1, 2));
+    /// Null voting power.
+    pub const NULL: FractionalVotingPower =
+        FractionalVotingPower(Ratio::new_raw(0, 1));
+    /// One third of the voting power.
+    pub const ONE_THIRD: FractionalVotingPower =
+        FractionalVotingPower(Ratio::new_raw(1, 3));
     /// Two thirds of the voting power.
     pub const TWO_THIRDS: FractionalVotingPower =
         FractionalVotingPower(Ratio::new_raw(2, 3));
+    /// 100% of the voting power.
+    pub const WHOLE: FractionalVotingPower =
+        FractionalVotingPower(Ratio::new_raw(1, 1));
 
-    /// Create a new FractionalVotingPower. It must be between zero and one
+    /// Create a new [`FractionalVotingPower`]. It must be between zero and one
     /// inclusive.
     pub fn new(numer: u64, denom: u64) -> Result<Self> {
         if denom == 0 {
@@ -96,8 +108,9 @@ impl FractionalVotingPower {
 }
 
 impl Default for FractionalVotingPower {
+    #[inline(always)]
     fn default() -> Self {
-        Self::new(0, 1).unwrap()
+        Self::NULL
     }
 }
 
@@ -113,15 +126,27 @@ impl Sum for FractionalVotingPower {
     }
 }
 
+impl Mul<FractionalVotingPower> for FractionalVotingPower {
+    type Output = Self;
+
+    fn mul(self, rhs: FractionalVotingPower) -> Self::Output {
+        self * &rhs
+    }
+}
+
+impl Mul<&FractionalVotingPower> for FractionalVotingPower {
+    type Output = Self;
+
+    fn mul(self, rhs: &FractionalVotingPower) -> Self::Output {
+        Self(self.0 * rhs.0)
+    }
+}
+
 impl Add<FractionalVotingPower> for FractionalVotingPower {
     type Output = Self;
 
     fn add(self, rhs: FractionalVotingPower) -> Self::Output {
-        Self(
-            self.0
-                .checked_add(&rhs.0)
-                .unwrap_or_else(|| Ratio::new(u64::MAX, 1)),
-        )
+        self + &rhs
     }
 }
 
@@ -129,23 +154,26 @@ impl Add<&FractionalVotingPower> for FractionalVotingPower {
     type Output = Self;
 
     fn add(self, rhs: &FractionalVotingPower) -> Self::Output {
-        Self(
-            self.0
-                .checked_add(&rhs.0)
-                .unwrap_or_else(|| Ratio::new(u64::MAX, 1)),
-        )
+        self.0
+            .checked_add(&rhs.0)
+            .map(Self)
+            // cap fractional voting power to 1/1
+            .and_then(|power| {
+                (power <= FractionalVotingPower::WHOLE).then_some(power)
+            })
+            .unwrap_or(FractionalVotingPower::WHOLE)
     }
 }
 
 impl AddAssign<FractionalVotingPower> for FractionalVotingPower {
     fn add_assign(&mut self, rhs: FractionalVotingPower) {
-        *self = self.clone() + rhs
+        *self = *self + rhs
     }
 }
 
 impl AddAssign<&FractionalVotingPower> for FractionalVotingPower {
     fn add_assign(&mut self, rhs: &FractionalVotingPower) {
-        *self = self.clone() + rhs
+        *self = *self + rhs
     }
 }
 
@@ -257,6 +285,19 @@ impl<'de> Deserialize<'de> for FractionalVotingPower {
 mod tests {
     use super::*;
 
+    /// Test that adding fractional voting powers together saturates
+    /// on the value of `1/1`.
+    #[test]
+    fn test_fractional_voting_power_saturates() {
+        let mut power = FractionalVotingPower::NULL;
+        power += FractionalVotingPower::ONE_THIRD;
+        power += FractionalVotingPower::ONE_THIRD;
+        power += FractionalVotingPower::ONE_THIRD;
+        assert_eq!(power, FractionalVotingPower::WHOLE);
+        power += FractionalVotingPower::ONE_THIRD;
+        assert_eq!(power, FractionalVotingPower::WHOLE);
+    }
+
     /// This test is ultimately just exercising the underlying
     /// library we use for fractions, we want to make sure
     /// operators work as expected with our FractionalVotingPower
@@ -268,11 +309,11 @@ mod tests {
                 > FractionalVotingPower::new(1, 4).unwrap()
         );
         assert!(
-            FractionalVotingPower::new(1, 3).unwrap()
+            FractionalVotingPower::ONE_THIRD
                 > FractionalVotingPower::new(1, 4).unwrap()
         );
         assert!(
-            FractionalVotingPower::new(1, 3).unwrap()
+            FractionalVotingPower::ONE_THIRD
                 == FractionalVotingPower::new(2, 6).unwrap()
         );
     }

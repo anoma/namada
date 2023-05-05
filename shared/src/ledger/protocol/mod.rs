@@ -653,8 +653,11 @@ mod tests {
     use namada_core::types::token::Amount;
     use namada_core::types::vote_extensions::bridge_pool_roots::BridgePoolRootVext;
     use namada_core::types::vote_extensions::ethereum_events::EthereumEventsVext;
+    use namada_core::types::voting_power::FractionalVotingPower;
     use namada_core::types::{address, key};
-    use namada_ethereum_bridge::protocol::transactions::votes::Votes;
+    use namada_ethereum_bridge::protocol::transactions::votes::{
+        EpochedVotingPower, Votes,
+    };
     use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
     use namada_ethereum_bridge::storage::proof::EthereumProof;
     use namada_ethereum_bridge::storage::vote_tallies;
@@ -705,10 +708,11 @@ mod tests {
         );
 
         // the vote should have only be applied once
-        let voting_power_bytes =
-            wl_storage.read_bytes(&eth_msg_keys.voting_power())?;
-        let voting_power_bytes = voting_power_bytes.unwrap();
-        assert_eq!(<(u64, u64)>::try_from_slice(&voting_power_bytes)?, (1, 2));
+        let voting_power: EpochedVotingPower =
+            wl_storage.read(&eth_msg_keys.voting_power())?.unwrap();
+        let expected =
+            EpochedVotingPower::from([(0.into(), FractionalVotingPower::HALF)]);
+        assert_eq!(voting_power, expected);
 
         Ok(())
     }
@@ -760,14 +764,12 @@ mod tests {
             Votes::from([(validator_a, BlockHeight(100))])
         );
         // the vote should have only be applied once
-        let root_voting_power_bytes =
-            wl_storage.read_bytes(&bp_root_keys.voting_power())?;
-        assert_eq!(
-            <(u64, u64)>::try_from_slice(
-                root_voting_power_bytes.as_ref().unwrap()
-            )?,
-            (1, 2)
-        );
+        let voting_power: EpochedVotingPower =
+            wl_storage.read(&bp_root_keys.voting_power())?.unwrap();
+        let expected =
+            EpochedVotingPower::from([(0.into(), FractionalVotingPower::HALF)]);
+        assert_eq!(voting_power, expected);
+
         Ok(())
     }
 }
