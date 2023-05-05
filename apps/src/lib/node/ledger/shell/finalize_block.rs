@@ -1065,58 +1065,52 @@ mod test_finalize_block {
 
     /// Test that if a tx is undecryptable, it is applied
     /// but the tx result contains the appropriate error code.
-    // #[test]
-    // fn test_undecryptable_returns_error_code() {
-    // let (mut shell, _) = setup(1);
-    //
-    // let keypair = crate::wallet::defaults::daewon_keypair();
-    // let pubkey = EncryptionKey::default();
-    // not valid tx bytes
-    // let tx = "garbage data".as_bytes().to_owned();
-    // let inner_tx =
-    // tx.clone();
-    // let wrapper = WrapperTx {
-    // fee: Fee {
-    // amount: 0.into(),
-    // token: shell.wl_storage.storage.native_token.clone(),
-    // },
-    // pk: keypair.ref_to(),
-    // epoch: Epoch(0),
-    // gas_limit: 0.into(),
-    // tx_hash: hash_tx(&tx),
-    // #[cfg(not(feature = "mainnet"))]
-    // pow_solution: None,
-    // };
-    // let processed_tx = ProcessedTx {
-    // tx: Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
-    // wrapper.clone(),
-    // )))
-    // .to_bytes(),
-    // result: TxResult {
-    // code: ErrorCodes::Ok.into(),
-    // info: "".into(),
-    // },
-    // };
-    //
-    // shell.enqueue_tx(wrapper, Some(inner_tx));
-    //
-    // check that correct error message is returned
-    // for event in shell
-    // .finalize_block(FinalizeBlock {
-    // txs: vec![processed_tx],
-    // ..Default::default()
-    // })
-    // .expect("Test failed")
-    // {
-    // assert_eq!(event.event_type.to_string(), String::from("applied"));
-    // let code = event.attributes.get("code").expect("Test failed");
-    // assert_eq!(code, &String::from(ErrorCodes::Undecryptable));
-    // let log = event.attributes.get("log").expect("Test failed");
-    // assert!(log.contains("Transaction could not be decrypted."))
-    // }
-    // check that the corresponding wrapper tx was removed from the queue
-    // assert!(shell.wl_storage.storage.tx_queue.is_empty());
-    // }
+    #[test]
+    fn test_undecryptable_returns_error_code() {
+        let (mut shell, _) = setup(1);
+
+        let keypair = crate::wallet::defaults::daewon_keypair();
+        // not valid tx bytes
+        let wrapper = WrapperTx {
+            fee: Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            pk: keypair.ref_to(),
+            epoch: Epoch(0),
+            gas_limit: 0.into(),
+            #[cfg(not(feature = "mainnet"))]
+            pow_solution: None,
+        };
+        let processed_tx = ProcessedTx {
+            tx: Tx::new(TxType::Decrypted(DecryptedTx::Undecryptable))
+                .to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        };
+
+        let tx = Tx::new(TxType::Wrapper(wrapper));
+        shell.enqueue_tx(tx);
+
+        // check that correct error message is returned
+        for event in shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed")
+        {
+            assert_eq!(event.event_type.to_string(), String::from("applied"));
+            let code = event.attributes.get("code").expect("Test failed");
+            assert_eq!(code, &String::from(ErrorCodes::Undecryptable));
+            let log = event.attributes.get("log").expect("Test failed");
+            assert!(log.contains("Transaction could not be decrypted."))
+        }
+        // check that the corresponding wrapper tx was removed from the queue
+        assert!(shell.wl_storage.storage.tx_queue.is_empty());
+    }
 
     /// Test that the wrapper txs are queued in the order they
     /// are received from the block. Tests that the previously
