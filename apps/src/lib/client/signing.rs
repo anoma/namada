@@ -17,10 +17,7 @@ use namada::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use namada::ledger::parameters::storage as parameter_storage;
 use namada::proof_of_stake::Epoch;
 use namada::proto::{Section, Signature, Tx};
-use namada::types::address::{
-    apfel, btc, dot, eth, kartoffel, masp, nam, schnitzel, Address,
-    ImplicitAddress,
-};
+use namada::types::address::{masp, Address, ImplicitAddress};
 use namada::types::ibc::data::IbcMessage;
 use namada::types::key::*;
 use namada::types::masp::{ExtendedViewingKey, PaymentAddress};
@@ -420,31 +417,14 @@ struct LedgerVector {
     valid: bool,
 }
 
-/// The tokens that will be hardcoded into the wallet
-fn tokens() -> HashMap<Address, &'static str> {
-    vec![
-        (nam(), "NAM"),
-        (btc(), "BTC"),
-        (eth(), "ETH"),
-        (dot(), "DOT"),
-        (schnitzel(), "Schnitzel"),
-        (apfel(), "Apfel"),
-        (kartoffel(), "Kartoffel"),
-    ]
-    .into_iter()
-    .collect()
-}
-
 /// Adds a Ledger output line describing a given transaction amount and address
 fn make_ledger_amount_addr(
+    tokens: &HashMap<Address, String>,
     output: &mut Vec<String>,
     amount: Amount,
     token: &Address,
     prefix: &str,
 ) {
-    // To facilitate lookups of human-readable token names
-    let tokens = tokens();
-
     if let Some(token) = tokens.get(token) {
         output.push(format!("{}Amount: {} {}", prefix, token, amount));
     } else {
@@ -458,15 +438,13 @@ fn make_ledger_amount_addr(
 /// Adds a Ledger output line describing a given transaction amount and asset
 /// type
 fn make_ledger_amount_asset(
+    tokens: &HashMap<Address, String>,
     output: &mut Vec<String>,
     amount: u64,
     token: &AssetType,
     assets: &HashMap<AssetType, (Address, Epoch)>,
     prefix: &str,
 ) {
-    // To facilitate lookups of human-readable token names
-    let tokens = tokens();
-
     if let Some((token, _epoch)) = assets.get(token) {
         // If the AssetType can be decoded, then at least display Addressees
         if let Some(token) = tokens.get(token) {
@@ -574,7 +552,7 @@ fn to_ledger_vector(
     let user_hash = hash_tx(&ctx.read_wasm(VP_USER_WASM));
 
     // To facilitate lookups of human-readable token names
-    let tokens = tokens();
+    let tokens = ctx.tokens_with_aliases();
 
     let mut tv = LedgerVector {
         blob: HEXLOWER
@@ -834,6 +812,7 @@ fn to_ledger_vector(
             tv.output.push(format!("Sender : {}", transfer.source));
             if transfer.target == masp() {
                 make_ledger_amount_addr(
+                    &tokens,
                     &mut tv.output,
                     transfer.amount,
                     &transfer.token,
@@ -845,6 +824,7 @@ fn to_ledger_vector(
                 let vk = ExtendedViewingKey::from(*input.key());
                 tv.output.push(format!("Sender : {}", vk));
                 make_ledger_amount_asset(
+                    &tokens,
                     &mut tv.output,
                     input.value(),
                     &input.asset_type(),
@@ -857,6 +837,7 @@ fn to_ledger_vector(
             tv.output.push(format!("Destination : {}", transfer.target));
             if transfer.source == masp() {
                 make_ledger_amount_addr(
+                    &tokens,
                     &mut tv.output,
                     transfer.amount,
                     &transfer.token,
@@ -868,6 +849,7 @@ fn to_ledger_vector(
                 let pa = PaymentAddress::from(output.address());
                 tv.output.push(format!("Destination : {}", pa));
                 make_ledger_amount_asset(
+                    &tokens,
                     &mut tv.output,
                     output.value(),
                     &output.asset_type(),
@@ -878,6 +860,7 @@ fn to_ledger_vector(
         }
         if transfer.source != masp() && transfer.target != masp() {
             make_ledger_amount_addr(
+                &tokens,
                 &mut tv.output,
                 transfer.amount,
                 &transfer.token,

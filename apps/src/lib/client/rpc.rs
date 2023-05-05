@@ -332,7 +332,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
             if account != masp() {
                 print!("  {}:", account);
                 for (addr, val) in amt.components() {
-                    let token_alias = lookup_alias(&ctx, addr);
+                    let token_alias = ctx.lookup_alias(addr);
                     let sign = match val.cmp(&0) {
                         Ordering::Greater => "+",
                         Ordering::Less => "-",
@@ -354,7 +354,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
             if fvk_map.contains_key(&account) {
                 print!("  {}:", fvk_map[&account]);
                 for (addr, val) in amt.components() {
-                    let token_alias = lookup_alias(&ctx, addr);
+                    let token_alias = ctx.lookup_alias(addr);
                     let sign = match val.cmp(&0) {
                         Ordering::Greater => "+",
                         Ordering::Less => "-",
@@ -451,7 +451,7 @@ pub async fn query_transparent_balance(
                 }
                 None => token::balance_key(&token, &owner.address().unwrap()),
             };
-            let token_alias = lookup_alias(ctx, &token);
+            let token_alias = ctx.lookup_alias(&token);
             match query_storage_value::<token::Amount>(&client, &key).await {
                 Some(balance) => match &args.sub_prefix {
                     Some(sub_prefix) => {
@@ -589,7 +589,7 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
                 // Extract and print only the specified token from the total
                 let (_asset_type, balance) =
                     value_by_address(&balance, token.clone(), epoch);
-                let token_alias = lookup_alias(ctx, &token);
+                let token_alias = ctx.lookup_alias(&token);
                 if balance == 0 {
                     println!(
                         "Payment address {} was consumed during epoch {}. \
@@ -652,7 +652,7 @@ fn print_balances(
     let stdout = io::stdout();
     let mut w = stdout.lock();
 
-    let token_alias = lookup_alias(ctx, token);
+    let token_alias = ctx.lookup_alias(token);
     writeln!(w, "Token {}", token_alias).unwrap();
 
     let print_num = balances
@@ -664,7 +664,7 @@ fn print_balances(
                         "with {}: {}, owned by {}",
                         sub_prefix,
                         balance,
-                        lookup_alias(ctx, owner)
+                        ctx.lookup_alias(owner)
                     ),
                 )),
                 None => token::is_any_token_balance_key(&key).map(|owner| {
@@ -673,7 +673,7 @@ fn print_balances(
                         format!(
                             ": {}, owned by {}",
                             balance,
-                            lookup_alias(ctx, owner)
+                            ctx.lookup_alias(owner)
                         ),
                     )
                 }),
@@ -692,7 +692,7 @@ fn print_balances(
     if print_num == 0 {
         match target {
             Some(t) => {
-                writeln!(w, "No balances owned by {}", lookup_alias(ctx, t))
+                writeln!(w, "No balances owned by {}", ctx.lookup_alias(t))
                     .unwrap()
             }
             None => {
@@ -910,7 +910,7 @@ pub async fn query_shielded_balance(
                     .as_ref(),
             )
             .unwrap();
-            let token_alias = lookup_alias(ctx, &token);
+            let token_alias = ctx.lookup_alias(&token);
             if balance[&asset_type] == 0 {
                 println!(
                     "No shielded {} balance found for given key",
@@ -991,7 +991,7 @@ pub async fn query_shielded_balance(
             // Print zero balances for remaining assets
             for token in tokens {
                 if !read_tokens.contains(&token) {
-                    let token_alias = lookup_alias(ctx, &token);
+                    let token_alias = ctx.lookup_alias(&token);
                     println!("Shielded Token {}:", token_alias);
                     println!(
                         "No shielded {} balance found for any wallet key",
@@ -1012,7 +1012,7 @@ pub async fn query_shielded_balance(
                     .as_ref(),
             )
             .unwrap();
-            let token_alias = lookup_alias(ctx, &token);
+            let token_alias = ctx.lookup_alias(&token);
             println!("Shielded Token {}:", token_alias);
             let mut found_any = false;
             for fvk in viewing_keys {
@@ -1091,7 +1091,7 @@ pub fn print_decoded_balance(
     let mut found_any = false;
     for (addr, value) in decoded_balance.components() {
         let asset_value = token::Amount::from(*value as u64);
-        println!("{} : {}", lookup_alias(ctx, addr), asset_value);
+        println!("{} : {}", ctx.lookup_alias(addr), asset_value);
         found_any = true;
     }
     if !found_any {
@@ -1103,13 +1103,16 @@ pub fn print_decoded_balance_with_epoch(
     ctx: &mut Context,
     decoded_balance: Amount<(Address, Epoch)>,
 ) {
-    let tokens = ctx.tokens();
+    let tokens = ctx.tokens_with_aliases();
     let mut found_any = false;
     for ((addr, epoch), value) in decoded_balance.components() {
         let asset_value = token::Amount::from(*value as u64);
         println!(
             "{} | {} : {}",
-            tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
+            tokens
+                .get(addr)
+                .cloned()
+                .unwrap_or_else(|| addr.to_string()),
             epoch,
             asset_value
         );
@@ -1845,7 +1848,7 @@ pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
     // The chosen token type of the conversions
     let target_token = args.token.as_ref().map(|x| ctx.get(x));
     // To facilitate human readable token addresses
-    let tokens = ctx.tokens();
+    let tokens = ctx.tokens_with_aliases();
     let client = HttpClient::new(args.query.ledger_address).unwrap();
     let masp_addr = masp();
     let key_prefix: Key = masp_addr.to_db_key().into();
@@ -1873,7 +1876,10 @@ pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
         // Print the asset to which the conversion applies
         print!(
             "{}[{}]: ",
-            tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
+            tokens
+                .get(addr)
+                .cloned()
+                .unwrap_or_else(|| addr.to_string()),
             epoch,
         );
         // Now print out the components of the allowed conversion
@@ -1887,7 +1893,10 @@ pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
                 "{}{} {}[{}]",
                 prefix,
                 val,
-                tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
+                tokens
+                    .get(addr)
+                    .cloned()
+                    .unwrap_or_else(|| addr.to_string()),
                 epoch
             );
             // Future iterations need to be prefixed with +
@@ -2570,15 +2579,6 @@ pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {
         max_proposal_period,
         max_proposal_content_size,
         min_proposal_grace_epochs,
-    }
-}
-
-/// Try to find an alias for a given address from the wallet. If not found,
-/// formats the address into a string.
-fn lookup_alias(ctx: &Context, addr: &Address) -> String {
-    match ctx.wallet.find_alias(addr) {
-        Some(alias) => format!("{}", alias),
-        None => format!("{}", addr),
     }
 }
 
