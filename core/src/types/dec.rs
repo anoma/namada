@@ -185,7 +185,7 @@ impl From<Amount> for Dec {
 
 impl From<u64> for Dec {
     fn from(num: u64) -> Self {
-        Self(Uint::from(num * 10u64.pow(POS_DECIMAL_PRECISION as u32)))
+        Self(Uint::from(num) * Uint::exp10(POS_DECIMAL_PRECISION as usize))
     }
 }
 
@@ -408,6 +408,15 @@ mod test_dec {
 
         let chg = -amt.change();
         debug_assert_eq!(dec * chg, Change::from(-2809i64));
+    }
+
+    #[test]
+    fn test_into() {
+        assert_eq!(
+            Dec::from(u64::MAX),
+            Dec::from_str("18446744073709551615.000000000000")
+                .expect("only 104 bits")
+        )
     }
 
     /// Test that parsing from string is correct.
