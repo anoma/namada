@@ -46,8 +46,6 @@ pub fn init_multitoken_vp(test: &Test, rpc_addr: &str) -> Result<String> {
         &multitoken_vp_wasm_path,
         "--alias",
         multitoken_alias,
-        "--fee-amount",
-        "0",
         "--gas-limit",
         "100",
         "--fee-token",
