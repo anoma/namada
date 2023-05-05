@@ -2989,6 +2989,8 @@ pub mod args {
         pub dump_tx: bool,
         /// Submit the transaction even if it doesn't pass client checks
         pub force: bool,
+        /// Do not attempt client checks
+        pub unchecked: bool,
         /// Do not wait for the transaction to be added to the blockchain
         pub broadcast_only: bool,
         /// The address of the ledger node as host:port
@@ -3010,8 +3012,6 @@ pub mod args {
         pub signing_key: Option<WalletKeypair>,
         /// Sign the tx with the keypair of the public key of the given address
         pub signer: Option<WalletAddress>,
-        /// Do not attempt client checks
-        pub unchecked: bool,
     }
 
     impl Args for Tx {
@@ -3027,9 +3027,21 @@ pub mod args {
                     .about("The epoch in which to construct transaction."),
             )
             .arg(DUMP_TX.def().about("Dump transaction bytes to a file."))
-            .arg(FORCE.def().about(
-                "Submit the transaction even if it doesn't pass client checks.",
-            ))
+            .arg(
+                FORCE
+                    .def()
+                    .about(
+                        "Submit the transaction even if it doesn't pass \
+                         client checks.",
+                    )
+                    .conflicts_with(UNCHECKED.name),
+            )
+            .arg(
+                UNCHECKED
+                    .def()
+                    .about("Do not attempt client checks.")
+                    .conflicts_with(FORCE.name),
+            )
             .arg(BROADCAST_ONLY.def().about(
                 "Do not wait for the transaction to be applied. This will \
                  return once the transaction is added to the mempool.",
@@ -3081,18 +3093,13 @@ pub mod args {
                     )
                     .conflicts_with(SIGNING_KEY_OPT.name),
             )
-            .arg(
-                UNCHECKED
-                    .def()
-                    .about("Do not attempt client checks.")
-                    .conflicts_with(FORCE.name),
-            )
         }
 
         fn parse(matches: &ArgMatches) -> Self {
             let dry_run = DRY_RUN_TX.parse(matches);
             let dump_tx = DUMP_TX.parse(matches);
             let force = FORCE.parse(matches);
+            let unchecked = UNCHECKED.parse(matches);
             let broadcast_only = BROADCAST_ONLY.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
@@ -3104,11 +3111,11 @@ pub mod args {
 
             let signing_key = SIGNING_KEY_OPT.parse(matches);
             let signer = SIGNER.parse(matches);
-            let unchecked = UNCHECKED.parse(matches);
             Self {
                 dry_run,
                 dump_tx,
                 force,
+                unchecked,
                 broadcast_only,
                 ledger_address,
                 initialized_account_alias,
@@ -3119,7 +3126,6 @@ pub mod args {
                 expiration,
                 signing_key,
                 signer,
-                unchecked,
             }
         }
     }
