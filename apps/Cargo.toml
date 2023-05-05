@@ -117,7 +117,6 @@ reqwest = "0.11.4"
 rlimit = "0.5.4"
 rocksdb = {version = "0.20.1", features = ['zstd', 'jemalloc'], default-features = false}
 rpassword = "5.0.1"
-secstr = "0.5.1"
 serde = {version = "1.0.125", features = ["derive"]}
 serde_bytes = "0.11.5"
 serde_json = {version = "1.0.62", features = ["raw_value"]}
@@ -158,6 +157,7 @@ masp_proofs = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10
 bimap = {version = "0.6.2", features = ["serde"]}
 rust_decimal = "1.26.1"
 rust_decimal_macros = "1.26.1"
+zeroize = "1.5.5"
 
 [dev-dependencies]
 namada = {path = "../shared", default-features = false, features = ["testing", "wasm-runtime"]}
