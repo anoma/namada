@@ -1,8 +1,20 @@
 # Ethereum Events Attestation
 
 We want to store events from the smart contracts of our bridge onto Namada. We
-will include events that have been seen by at least one validator, but will not
-act on them until they have been seen by at least 2/3 of voting power.
+will include events that have been voted by at least one validator, but will not
+act on them until they have been `seen` by a weighted average of more than $\frac{2}{3}$
+of the voting power available across all epochs of the tally. Generally, we consider
+some tally $t$ `seen` if it satisfies the following inequation:
+
+$$\sum_{E \in \xi} (\frac{\sigma(E)}{\sum_{E' \in \xi} \sigma(E')} \cdot F_E)
+> \frac{2}{3}$$
+
+Where $\xi$ is the set of epochs when $t$ took place, $\sigma$ is a function
+mapping an epoch to its total voting power and $F_E$ is the total fractional
+voting power aggregated behind a tally at some epoch $E$ (for instance, at $E_0$,
+$F_{E_0} = \frac{\frac{1}{2} \cdot \sigma(E_0)}{\sigma(E_0)}$). The only way to
+break the security of $t$ is if a set of Byzantine validators control an average
+of $\frac{1}{3}$ of the voting power available across $\xi$.
 
 There will be multiple types of events emitted. Validators should
 ignore improperly formatted events. ABI encoded events from Ethereum
@@ -96,8 +108,9 @@ keys involved are:
 # all values are Borsh-serialized
 /eth_msgs/$msg_hash/body: EthereumEvent # the event to be voted on
 /eth_msgs/$msg_hash/seen_by: BTreeMap<Address, BlockHeight> # mapping from a validator to the Namada height at which the event was observed to be confirmed by said validator
-/eth_msgs/$msg_hash/voting_power: FractionalVotingPower  # reduced fraction < 1 e.g. (2, 3)
-/eth_msgs/$msg_hash/seen: bool # >= 2/3 voting power across all epochs it was voted on
+/eth_msgs/$msg_hash/voting_power: BTreeMap<Epoch, FractionalVotingPower> # map of epochs to aggregated voting powers, in the form of a reduced fraction < 1 e.g. (2, 3)
+/eth_msgs/$msg_hash/seen: bool # >= 2/3 average voting power across all epochs it was voted on
+/eth_msgs/$msg_hash/voting_started_epoch: Epoch # epoch when the tally started
 ```
 
 Where `$msg_hash` is the SHA256 digest of the Borsh serialization of
