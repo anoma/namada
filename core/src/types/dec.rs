@@ -313,7 +313,12 @@ impl Display for Dec {
             str_pre.push_str(string.as_str());
             string = str_pre;
         };
-        f.write_str(&string)
+        let stripped_string = string.trim_end_matches(['.', '0']);
+        if stripped_string.is_empty() {
+            f.write_str("0")
+        } else {
+            f.write_str(stripped_string)
+        }
     }
 }
 

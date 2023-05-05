@@ -324,12 +324,9 @@ impl DenominatedAmount {
 impl Display for DenominatedAmount {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let string = self.to_string_precise();
-        let string = string.trim_end_matches(&['0', '.']);
-        if string.is_empty() {
-            f.write_str("0")
-        } else {
-            f.write_str(string)
-        }
+        let string = string.trim_end_matches(&['0']);
+        let string = string.trim_end_matches(&['.']);
+        f.write_str(string)
     }
 }
 
@@ -704,7 +701,7 @@ impl MaspDenom {
 /// Key segment for a balance key
 pub const BALANCE_STORAGE_KEY: &str = "balance";
 /// Key segment for a denomination key
-pub const DENOM_STORAGE_KEY: &str = "balance";
+pub const DENOM_STORAGE_KEY: &str = "denom";
 /// Key segment for head shielded transaction pointer keys
 pub const HEAD_TX_KEY: &str = "head-tx";
 /// Key segment prefix for shielded transaction key
