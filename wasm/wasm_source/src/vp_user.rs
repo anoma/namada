@@ -505,14 +505,8 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            validate_tx(
-                &CTX,
-                signed_tx,
-                vp_owner,
-                keys_changed,
-                verifiers
-            )
-            .unwrap()
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
         );
     }
 

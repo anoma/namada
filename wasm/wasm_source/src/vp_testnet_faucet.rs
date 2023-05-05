@@ -109,7 +109,7 @@ mod tests {
     use namada_tests::vp::vp_host_env::storage::Key;
     use namada_tests::vp::*;
     use namada_tx_prelude::{StorageWrite, TxEnv};
-    use namada_vp_prelude::key::{RefTo};
+    use namada_vp_prelude::key::RefTo;
     use proptest::prelude::*;
     use storage::testing::arb_account_storage_key_no_vp;
 
