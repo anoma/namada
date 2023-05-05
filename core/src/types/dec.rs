@@ -36,16 +36,18 @@ pub type Result<T> = std::result::Result<T, Error>;
     Default,
     BorshSerialize,
     BorshDeserialize,
-    Serialize,
-    Deserialize,
     BorshSchema,
     PartialEq,
+    Serialize,
+    Deserialize,
     Eq,
     PartialOrd,
     Ord,
     Debug,
     Hash,
 )]
+#[serde(try_from = "String")]
+#[serde(into = "String")]
 pub struct Dec(pub Uint);
 
 impl std::ops::Deref for Dec {
@@ -161,6 +163,14 @@ impl FromStr for Dec {
     }
 }
 
+impl TryFrom<String> for Dec {
+    type Error = Error;
+
+    fn try_from(value: String) -> Result<Self> {
+        Self::from_str(&value)
+    }
+}
+
 impl From<Amount> for Dec {
     fn from(amt: Amount) -> Self {
         Self(
@@ -183,6 +193,12 @@ impl From<u64> for Dec {
 impl From<Uint> for Dec {
     fn from(num: Uint) -> Self {
         Self(num * Uint::exp10(POS_DECIMAL_PRECISION as usize))
+    }
+}
+
+impl From<Dec> for String {
+    fn from(value: Dec) -> String {
+        value.to_string()
     }
 }
 
@@ -306,6 +322,19 @@ mod test_dec {
     use super::*;
     use crate::types::token::{Amount, Change};
 
+    #[derive(Debug, Serialize, Deserialize)]
+    struct SerializerTest {
+        dec: Dec,
+    }
+
+    #[test]
+    fn dump_toml() {
+        let serializer = SerializerTest {
+            dec: Dec::new(3, 0).unwrap(),
+        };
+        println!("{:?}", toml::to_string(&serializer));
+    }
+
     /// Fill in tests later
     #[test]
     fn test_dec_basics() {
@@ -425,5 +454,21 @@ mod test_dec {
             yuge.push('0');
         }
         assert!(Dec::from_str(&yuge).is_err());
+    }
+
+    /// Test that parsing from string is correct.
+    #[test]
+    fn test_dec_from_serde() {
+        assert_eq!(
+            serde_json::from_str::<Dec>(r#""0.667""#).expect("all good"),
+            Dec::from_str("0.667").expect("should work")
+        );
+
+        let dec = Dec::from_str("0.667").unwrap();
+        assert_eq!(
+            dec,
+            serde_json::from_str::<Dec>(&serde_json::to_string(&dec).unwrap())
+                .unwrap()
+        );
     }
 }
