@@ -127,8 +127,9 @@ wasmer-engine-dylib = {version = "=2.2.0", optional = true}
 wasmer-engine-universal = {version = "=2.2.0", optional = true}
 wasmer-vm = {version = "2.2.0", optional = true}
 wasmparser = "0.83.0"
-masp_primitives = { git = "https://github.com/anoma/masp", branch = "murisi/namada-integration" }
-masp_proofs = { git = "https://github.com/anoma/masp", branch = "murisi/namada-integration" }
+# branch = "murisi/namada-integration"
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "1ed99e86d8795a363df170042089283ea9a43d93" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "1ed99e86d8795a363df170042089283ea9a43d93" }
 zeroize = "1.5.5"
 
 [dev-dependencies]

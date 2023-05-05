@@ -15,7 +15,8 @@ abciplus = [
 ]
 
 [dependencies]
-masp_primitives = { git = "https://github.com/anoma/masp", branch = "murisi/namada-integration" }
+# branch = "murisi/namada-integration"
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "1ed99e86d8795a363df170042089283ea9a43d93" }
 namada_core = {path = "../core", default-features = false}
 namada_macros = {path = "../macros"}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
