@@ -92,8 +92,8 @@ data-encoding = "2.3.2"
 derivative = "2.2.0"
 derivation-path = "0.2.0"
 ed25519-consensus = "1.2.0"
-ferveo = {git = "https://github.com/anoma/ferveo", branch = "bat/fix-thiserror"}
-ferveo-common = {git = "https://github.com/anoma/ferveo", branch = "bat/fix-thiserror"}
+ferveo = {git = "https://github.com/anoma/ferveo"}
+ferveo-common = {git = "https://github.com/anoma/ferveo"}
 eyre = "0.6.5"
 flate2 = "1.0.22"
 file-lock = "2.0.2"
@@ -136,7 +136,7 @@ tendermint-config = {version = "0.23.6", optional = true}
 tendermint-proto = {version = "0.23.6", optional = true}
 tendermint-rpc = {version = "0.23.6", features = ["http-client", "websocket-client"], optional = true}
 thiserror = "1.0.30"
-tiny-bip39 = "1.0.0"
+tiny-bip39 = "0.8.2"
 tiny-hderive = "0.3.0"
 tokio = {version = "1.8.2", features = ["full"]}
 toml = "0.5.8"
