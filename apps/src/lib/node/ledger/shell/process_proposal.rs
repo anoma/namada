@@ -942,46 +942,43 @@ mod test_process_proposal {
     /// Test that if a wrapper tx contains garbage bytes
     /// as its encrypted inner tx, it is correctly
     /// marked undecryptable and the errors handled correctly
-    // #[test]
-    // fn test_undecryptable() {
-    // let (mut shell, _) = test_utils::setup(1);
-    // let keypair = crate::wallet::defaults::daewon_keypair();
-    // let pubkey = EncryptionKey::default();
-    // not valid tx bytes
-    // let tx = "garbage data".as_bytes().to_owned();
-    // let inner_tx = tx.clone();
-    // let wrapper = WrapperTx {
-    // fee: Fee {
-    // amount: 0.into(),
-    // token: shell.wl_storage.storage.native_token.clone(),
-    // },
-    // pk: keypair.ref_to(),
-    // epoch: Epoch(0),
-    // gas_limit: 0.into(),
-    // tx_hash: hash_tx(&tx),
-    // #[cfg(not(feature = "mainnet"))]
-    // pow_solution: None,
-    // };
-    //
-    // shell.enqueue_tx(wrapper.clone(), Some(inner_tx));
-    // let signed = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
-    // #[allow(clippy::redundant_clone)]
-    // wrapper.clone(),
-    // )));
-    // let request = ProcessProposal {
-    // txs: vec![signed.to_bytes()],
-    // };
-    // let response = if let [resp] = shell
-    // .process_proposal(request)
-    // .expect("Test failed")
-    // .as_slice()
-    // {
-    // resp.clone()
-    // } else {
-    // panic!("Test failed")
-    // };
-    // assert_eq!(response.result.code, u32::from(ErrorCodes::Ok));
-    // }
+    #[test]
+    fn test_undecryptable() {
+        let (mut shell, _) = test_utils::setup(1);
+        let keypair = crate::wallet::defaults::daewon_keypair();
+        // not valid tx bytes
+        let wrapper = WrapperTx {
+            fee: Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            pk: keypair.ref_to(),
+            epoch: Epoch(0),
+            gas_limit: 0.into(),
+            #[cfg(not(feature = "mainnet"))]
+            pow_solution: None,
+        };
+
+        let tx = Tx::new(TxType::Wrapper(wrapper));
+        let mut decrypted = tx.clone();
+        decrypted.update_header(TxType::Decrypted(DecryptedTx::Undecryptable));
+
+        shell.enqueue_tx(tx);
+
+        let request = ProcessProposal {
+            txs: vec![decrypted.to_bytes()],
+        };
+        let response = if let [resp] = shell
+            .process_proposal(request)
+            .expect("Test failed")
+            .as_slice()
+        {
+            resp.clone()
+        } else {
+            panic!("Test failed")
+        };
+        assert_eq!(response.result.code, u32::from(ErrorCodes::Ok));
+    }
 
     /// Test that if more decrypted txs are submitted to
     /// [`process_proposal`] than expected, they are rejected

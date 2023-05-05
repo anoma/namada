@@ -1204,36 +1204,6 @@ impl Dkg {
 mod tests {
     use super::*;
 
-    // #[test]
-    // fn test_tx() {
-    // let code = "wasm code".as_bytes().to_owned();
-    // let data = "arbitrary data".as_bytes().to_owned();
-    // let tx = InnerTx::new(code.clone(), Some(SignedTxData {data:
-    // Some(data.clone()), sig: None}));
-    //
-    // let bytes = tx.to_bytes();
-    // let tx_from_bytes =
-    // InnerTx::try_from(bytes.as_ref()).expect("decoding failed");
-    // assert_eq!(tx_from_bytes, tx);
-    //
-    // let types_tx = types::Tx {
-    // outer_code: code,
-    // outer_data: Some(data),
-    // outer_timestamp: None,
-    // code: vec![],
-    // data: None,
-    // timestamp: None,
-    // extra: vec![],
-    // outer_extra: vec![],
-    // };
-    // let mut bytes = vec![];
-    // types_tx.encode(&mut bytes).expect("encoding failed");
-    // match Tx::try_from(bytes.as_ref()) {
-    // Err(Error::NoTimestampError) => {}
-    // _ => panic!("unexpected result"),
-    // }
-    // }
-
     #[test]
     fn test_dkg_gossip_message() {
         let data = "arbitrary string".to_owned();

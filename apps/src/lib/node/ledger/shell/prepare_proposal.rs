@@ -292,20 +292,19 @@ mod test_prepare_proposal {
     /// Test that if a tx from the mempool is not a
     /// WrapperTx type, it is not included in the
     /// proposed block.
-    // #[test]
-    // fn test_prepare_proposal_rejects_non_wrapper_tx() {
-    // let (shell, _) = test_utils::setup(1);
-    // let tx = Tx::new(
-    // "wasm_code".as_bytes().to_owned(),
-    // Some(SignedOuterTxData {data:
-    // Some("transaction_data".as_bytes().to_owned()), sig: None}), );
-    // tx.header.chain_id = shell.chain_id.clone();
-    // let req = RequestPrepareProposal {
-    // txs: vec![tx.to_bytes()],
-    // ..Default::default()
-    // };
-    // assert!(shell.prepare_proposal(req).txs.is_empty());
-    // }
+    #[test]
+    fn test_prepare_proposal_rejects_non_wrapper_tx() {
+        let (shell, _) = test_utils::setup(1);
+        let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
+            has_valid_pow: true,
+        }));
+        tx.header.chain_id = shell.chain_id.clone();
+        let req = RequestPrepareProposal {
+            txs: vec![tx.to_bytes()],
+            ..Default::default()
+        };
+        assert!(shell.prepare_proposal(req).txs.is_empty());
+    }
 
     /// Test that if an error is encountered while
     /// trying to process a tx from the mempool,
