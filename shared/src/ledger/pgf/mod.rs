@@ -62,7 +62,8 @@ where
             let result = match key_type {
                 KeyType::STEWARDS => Ok(false),
                 KeyType::PAYMENTS => Ok(false),
-                KeyType::PGF_INFLATION_RATE |  KeyType::STEWARD_INFLATION_RATE => {
+                KeyType::PGF_INFLATION_RATE
+                | KeyType::STEWARD_INFLATION_RATE => {
                     self.is_valid_parameter_change(tx_data)
                 }
                 KeyType::UNKNOWN_PGF => Ok(false),

@@ -1,17 +1,15 @@
 use std::collections::BTreeSet;
 
 use namada::core::ledger::governance::storage::proposal::PGFTarget;
-use namada::ledger::pgf::utils::ProposalEvent as PgfProposalEvent;
-use namada::ledger::storage::{DBIter, StorageHasher, DB};
-
-use crate::node::ledger::shims::abcipp_shim_types::shim;
 use namada::core::ledger::pgf::storage::keys as pgf_keys;
 use namada::core::ledger::pgf::ADDRESS as pgf_address;
+use namada::ledger::pgf::utils::ProposalEvent as PgfProposalEvent;
+use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::ledger::storage_api::token;
 
 use super::utils::force_read;
-use super::Shell;
-use super::*;
+use super::{Shell, *};
+use crate::node::ledger::shims::abcipp_shim_types::shim;
 
 pub fn execute_pgf_payments<D, H>(
     shell: &mut Shell<D, H>,
@@ -30,7 +28,7 @@ where
     for payment in pgf_payments {
         let success = token::transfer(
             &mut shell.wl_storage,
-            &native_token,
+            native_token,
             &pgf_address,
             &payment.target,
             payment.amount,
@@ -62,7 +60,7 @@ where
     for steward in pgf_stewards {
         let success = token::transfer(
             &mut shell.wl_storage,
-            &native_token,
+            native_token,
             &pgf_address,
             &steward,
             steward_payment_amount,

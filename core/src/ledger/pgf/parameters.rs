@@ -5,8 +5,8 @@ use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
 use super::storage::keys as pgf_storage;
-use crate::types::address::Address;
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
+use crate::types::address::Address;
 
 #[derive(
     Clone,
@@ -37,7 +37,7 @@ impl Default for PgfParams {
             stewards: BTreeSet::default(),
             payments: BTreeSet::default(),
             pgf_inflation_rate: dec!(0.05),
-            stewards_inflation_rate: dec!(0.01)
+            stewards_inflation_rate: dec!(0.01),
         }
     }
 }
@@ -46,28 +46,26 @@ impl PgfParams {
     /// Initialize governance parameters into storage
     pub fn init_storage<S>(&self, storage: &mut S) -> storage_api::Result<()>
     where
-S: StorageRead + StorageWrite    {
+        S: StorageRead + StorageWrite,
+    {
         let Self {
             stewards,
             payments,
             pgf_inflation_rate,
-            stewards_inflation_rate
+            stewards_inflation_rate,
         } = self;
 
         let stewards_key = pgf_storage::get_stewards_key();
-        storage
-            .write(&stewards_key, stewards)?;
+        storage.write(&stewards_key, stewards)?;
 
         let payments_key = pgf_storage::get_payments_key();
-        storage
-            .write(&payments_key, payments)?;
+        storage.write(&payments_key, payments)?;
 
         let pgf_inflation_rate_key = pgf_storage::get_pgf_inflation_rate_key();
-        storage
-            .write(&pgf_inflation_rate_key, pgf_inflation_rate)?;
+        storage.write(&pgf_inflation_rate_key, pgf_inflation_rate)?;
 
-        let steward_inflation_rate_key = pgf_storage::get_steward_inflation_rate_key();
-        storage
-            .write(&steward_inflation_rate_key, stewards_inflation_rate)
+        let steward_inflation_rate_key =
+            pgf_storage::get_steward_inflation_rate_key();
+        storage.write(&steward_inflation_rate_key, stewards_inflation_rate)
     }
 }

@@ -233,6 +233,7 @@ pub fn compute_proposal_result(
                     }
                 }
             } else if delegator_vote.is_yay() {
+                println!("{}", voting_power);
                 yay_voting_power += voting_power;
             } else {
                 nay_voting_power += voting_power;

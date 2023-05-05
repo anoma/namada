@@ -8,8 +8,8 @@
 mod block_space_alloc;
 mod finalize_block;
 mod governance;
-mod pgf;
 mod init_chain;
+mod pgf;
 mod prepare_proposal;
 mod process_proposal;
 mod queries;

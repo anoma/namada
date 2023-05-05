@@ -785,7 +785,7 @@ pub fn sleep(seconds: u64) {
 pub mod constants {
     use std::fs;
     use std::path::PathBuf;
-    
+
     // User addresses aliases
     pub const ALBERT: &str = "Albert";
     pub const ALBERT_KEY: &str = "Albert-key";
@@ -834,12 +834,13 @@ pub mod constants {
     pub const VP_USER_WASM: &str = "vp_user.wasm";
     pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
     pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
-pub const TX_PROPOSAL_CODE: &str = "wasm_for_tests/tx_proposal_code.wasm";
-/// Find the absolute path to one of the WASM files above
+    pub const TX_PROPOSAL_CODE: &str = "wasm_for_tests/tx_proposal_code.wasm";
+    /// Find the absolute path to one of the WASM files above
     pub fn wasm_abs_path(file_name: &str) -> PathBuf {
         let working_dir = fs::canonicalize("..").unwrap();
         working_dir.join(file_name)
-    }}
+    }
+}
 
 /// Copy WASM files from the `wasm` directory to every node's chain dir.
 pub fn copy_wasm_to_chain_dir<'a>(

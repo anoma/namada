@@ -25,8 +25,8 @@ use namada::proof_of_stake::{
 use namada::types::address::Address;
 use namada::types::storage::Epoch;
 
-use super::*;
 use super::utils::force_read;
+use super::*;
 
 #[derive(Default)]
 pub struct ProposalsResult {
