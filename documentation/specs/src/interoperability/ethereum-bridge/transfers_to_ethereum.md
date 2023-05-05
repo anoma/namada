@@ -147,7 +147,9 @@ and escrowed assets.
 Timeouts only happen after we process transfer to Ethereum events to guarantee
 the consistency of the shared state between Namada and Ethereum. Nonces from
 `TransferToEthereum` events will place a total order on these transfers and
-any future relay attempts.
+any future relay attempts. The obvious downside of this approach is that
+funds may be locked under escrow for prolonged periods of time, while gas
+prices on Ethereum are high.
 
 ## Flow of transfers to Ethereum
 
