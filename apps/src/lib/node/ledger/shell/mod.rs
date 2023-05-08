@@ -441,7 +441,7 @@ where
                         .unwrap(),
                     );
                     wallet
-                        .take_validator_data()
+                        .into_validator_data()
                         .map(|data| ShellMode::Validator {
                             data,
                             broadcast_sender,

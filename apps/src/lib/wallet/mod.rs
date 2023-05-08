@@ -231,7 +231,7 @@ impl Wallet {
     /// Returns the validator data, if it exists.
     /// [`Wallet::save`] cannot be called after using this
     /// method as it involves a partial move
-    pub fn take_validator_data(self) -> Option<ValidatorData> {
+    pub fn into_validator_data(self) -> Option<ValidatorData> {
         self.store.validator_data()
     }
 
