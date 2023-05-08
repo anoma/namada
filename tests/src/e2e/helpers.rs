@@ -337,7 +337,7 @@ pub fn generate_bin_command(bin_name: &str, manifest_path: &Path) -> Command {
     }
 }
 
-fn strip_trailing_newline(input: &str) -> &str {
+pub fn strip_trailing_newline(input: &str) -> &str {
     input
         .strip_suffix("\r\n")
         .or_else(|| input.strip_suffix('\n'))

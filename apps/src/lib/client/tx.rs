@@ -2024,7 +2024,14 @@ pub async fn submit_init_proposal(
             safe_exit(1)
         }
 
-        let _is_valid_offline_proposal = proposal.validate(current_epoch);
+        let is_valid_offline_proposal = proposal.validate(current_epoch);
+        if !is_valid_offline_proposal.ok() {
+            eprintln!(
+                "Invalid offline proposal: {}",
+                is_valid_offline_proposal
+            );
+            safe_exit(1)
+        }
         let signer = WalletAddress::new(proposal.author.to_string());
 
         let default_signers = ctx.default_signing_keys(Some(signer));

@@ -51,7 +51,7 @@ pub enum EventType {
     /// The proposal that has been executed
     Proposal,
     /// The pgf payment
-    PgfPayment
+    PgfPayment,
 }
 
 impl Display for EventType {
