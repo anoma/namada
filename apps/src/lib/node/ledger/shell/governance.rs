@@ -25,8 +25,8 @@ use namada::proof_of_stake::{
 use namada::types::address::Address;
 use namada::types::storage::Epoch;
 
-use super::*;
 use super::utils::force_read;
+use super::*;
 
 #[derive(Default)]
 pub struct ProposalsResult {
@@ -76,18 +76,26 @@ where
         let transfer_address = match proposal_result.result {
             TallyResult::Passed => {
                 let proposal_event = match proposal_type {
-                    ProposalType::Default(code) => {
-                        let result =
-                            execute_default_proposal(shell, id, code.clone())?;
+                    ProposalType::Default(_) => {
+                        let proposal_code_key =
+                            gov_storage::get_proposal_code_key(id);
+                        let proposal_code =
+                            shell.wl_storage.read_bytes(&proposal_code_key)?;
+                        let result = execute_default_proposal(
+                            shell,
+                            id,
+                            proposal_code.clone(),
+                        )?;
                         tracing::info!(
                             "Governance proposal (default) {} has been \
-                             executed and passed",
-                            id
+                             executed ({}) and passed.",
+                            id,
+                            result
                         );
 
                         ProposalEvent::default_proposal_event(
                             id,
-                            code.is_some(),
+                            proposal_code.is_some(),
                             result,
                         )
                         .into()
@@ -99,7 +107,7 @@ where
                         )?;
                         tracing::info!(
                             "Governance proposal (pgf stewards){} has been \
-                             executed and passed",
+                             executed and passed.",
                             id
                         );
 
@@ -116,7 +124,7 @@ where
                         )?;
                         tracing::info!(
                             "Governance proposal (pgs payments) {} has been \
-                             executed and passed",
+                             executed and passed.",
                             id
                         );
 
@@ -127,7 +135,7 @@ where
                         let result = execute_eth_proposal(id)?;
                         tracing::info!(
                             "Governance proposal (eth) {} has been executed \
-                             and passed",
+                             and passed.",
                             id
                         );
 
@@ -141,13 +149,39 @@ where
                 shell.wl_storage.read::<Address>(&proposal_author_key)?
             }
             TallyResult::Rejected => {
+                if let ProposalType::PGFPayment(_) = proposal_type {
+                    let two_third_nay = proposal_result.two_third_nay();
+                    if two_third_nay {
+                        let pgf_stewards_key = pgf_storage::get_stewards_key();
+                        let proposal_author = gov_storage::get_author_key(id);
+
+                        let mut pgf_stewards = shell
+                            .wl_storage
+                            .read::<BTreeSet<Address>>(&pgf_stewards_key)?
+                            .unwrap_or_default();
+                        let proposal_author: Address =
+                            force_read(&shell.wl_storage, &proposal_author)?;
+
+                        pgf_stewards.remove(&proposal_author);
+                        shell
+                            .wl_storage
+                            .write(&pgf_stewards_key, pgf_stewards)?;
+
+                        tracing::info!(
+                            "Governance proposal {} was rejected with 2/3 of \
+                             nay votes. Removing {} from stewards set.",
+                            id,
+                            proposal_author
+                        );
+                    }
+                }
                 let proposal_event =
                     ProposalEvent::rejected_proposal_event(id).into();
                 response.events.push(proposal_event);
                 proposals_result.rejected.push(id);
 
                 tracing::info!(
-                    "Governance proposal {} has been executed and rejected",
+                    "Governance proposal {} has been executed and rejected.",
                     id
                 );
 
@@ -319,6 +353,10 @@ where
             }
         }
     } else {
+        tracing::info!(
+            "Governance proposal {} doesn't have any associated proposal code.",
+            id
+        );
         Ok(true)
     }
 }

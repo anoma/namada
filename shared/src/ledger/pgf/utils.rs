@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use namada_core::types::{address::Address, token};
+use namada_core::types::address::Address;
+use namada_core::types::token;
 
 use crate::ledger::events::EventType;
 
@@ -19,13 +20,13 @@ impl ProposalEvent {
         target: Address,
         amount: token::Amount,
         is_steward: bool,
-        success: bool
+        success: bool,
     ) -> Self {
         let attributes = HashMap::from([
             ("target".to_string(), target.to_string()),
             ("amount".to_string(), amount.to_string()),
             ("is_steward".to_string(), is_steward.to_string()),
-            ("successed".to_string(), success.to_string())
+            ("successed".to_string(), success.to_string()),
         ]);
         Self {
             event_type,
@@ -33,33 +34,33 @@ impl ProposalEvent {
         }
     }
 
-     /// Create a new proposal event for pgf continous funding
+    /// Create a new proposal event for pgf continous funding
     pub fn pgf_funding_payment(
         target: Address,
         amount: token::Amount,
-        success: bool
+        success: bool,
     ) -> Self {
         ProposalEvent::new(
             EventType::PgfPayment.to_string(),
             target,
             amount,
             false,
-            success
+            success,
         )
     }
 
-     /// Create a new proposal event for steward payments
+    /// Create a new proposal event for steward payments
     pub fn pgf_steward_payment(
         target: Address,
         amount: token::Amount,
-        success: bool
+        success: bool,
     ) -> Self {
         ProposalEvent::new(
             EventType::PgfPayment.to_string(),
             target,
             amount,
             true,
-            success
+            success,
         )
     }
 }

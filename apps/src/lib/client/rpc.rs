@@ -1120,7 +1120,6 @@ pub async fn compute_offline_proposal_votes(
         Address,
         HashMap<Address, VotePower>,
     > = HashMap::default();
-
     for vote in votes {
         let is_validator = is_validator(client, &vote.address).await;
         let is_delegator = is_delegator(client, &vote.address).await;
@@ -1136,15 +1135,16 @@ pub async fn compute_offline_proposal_votes(
             validator_voting_power
                 .insert(vote.address.clone(), validator_stake.into());
         } else if is_delegator {
+            let validators = get_delegations_at(
+                client,
+                &vote.address.clone(),
+                Some(proposal.proposal.tally_epoch),
+            )
+            .await;
+
             for validator in vote.delegations.clone() {
-                let delegator_stake = get_bond_amount_at(
-                    client,
-                    &vote.address.clone(),
-                    &validator,
-                    proposal.proposal.tally_epoch,
-                )
-                .await
-                .unwrap_or_default();
+                let delegator_stake =
+                    validators.get(&validator).cloned().unwrap_or_default();
 
                 delegators_vote
                     .insert(vote.address.clone(), vote.clone().into());
@@ -1153,6 +1153,11 @@ pub async fn compute_offline_proposal_votes(
                     .or_default()
                     .insert(validator, delegator_stake.into());
             }
+        } else {
+            println!(
+                "Skipping vote, not a validator/delegator at epoch {}.",
+                proposal.proposal.tally_epoch
+            );
         }
     }
 
@@ -1307,7 +1312,8 @@ pub async fn query_proposal_result(
             .collect::<Vec<OfflineVote>>();
 
         let proposal_votes =
-            compute_offline_proposal_votes(&client, &proposal, votes).await;
+            compute_offline_proposal_votes(&client, &proposal, votes.clone())
+                .await;
         let total_voting_power =
             get_total_staked_tokens(&client, proposal.proposal.tally_epoch)
                 .await;
@@ -1319,6 +1325,7 @@ pub async fn query_proposal_result(
         );
 
         println!("Proposal offline: {}", proposal.proposal.hash());
+        println!("Parsed {} votes.", votes.len());
         println!("{:4}{}", "", proposal_result);
     } else {
         eprintln!("Either --proposal-id or --offline argument is required.");

@@ -221,4 +221,4 @@ payments = []
 # Pgf inflation rate
 pgf_inflation_rate = 0.05
 # Steward inflation rate
-steward_inflation_rate = 0.01
+stewards_inflation_rate = 0.01

@@ -144,6 +144,13 @@ impl Display for ProposalResult {
     }
 }
 
+impl ProposalResult {
+    /// Return true if two third of total voting power voted nay
+    pub fn two_third_nay(&self) -> bool {
+        self.total_nay_power >= (self.total_voting_power / 3) * 2
+    }
+}
+
 /// /// General rappresentation of a vote
 pub enum TallyVote {
     /// Rappresent a vote for a proposal onchain
@@ -233,6 +240,7 @@ pub fn compute_proposal_result(
                     }
                 }
             } else if delegator_vote.is_yay() {
+                println!("{}", voting_power);
                 yay_voting_power += voting_power;
             } else {
                 nay_voting_power += voting_power;

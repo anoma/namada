@@ -116,8 +116,21 @@ where
     let key = token::balance_key(token, source);
     let balance = read_balance(storage, token, source)?;
 
-    match balance.checked_sub(amount) {
-        Some(new_balance) => storage.write(&key, new_balance),
-        None => storage.write(&key, token::Amount::default()),
-    }
+    let amount_to_burn = match balance.checked_sub(amount) {
+        Some(new_balance) => {
+            storage.write(&key, new_balance)?;
+            amount
+        }
+        None => {
+            storage.write(&key, token::Amount::default())?;
+            balance
+        }
+    };
+
+    let total_supply = read_total_supply(&*storage, source)?;
+    let new_total_supply =
+        total_supply.checked_sub(amount_to_burn).unwrap_or_default();
+
+    let total_supply_key = token::total_supply_key(source);
+    storage.write(&total_supply_key, new_total_supply)
 }

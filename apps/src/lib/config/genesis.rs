@@ -661,13 +661,13 @@ pub mod genesis_config {
             stewards,
             payments,
             pgf_inflation_rate,
-            stewards_inflation_rate
+            stewards_inflation_rate,
         } = pgf_params;
         let pgf_params = PgfParams {
             stewards,
             payments,
             pgf_inflation_rate,
-            stewards_inflation_rate
+            stewards_inflation_rate,
         };
 
         let PosParamsConfig {
