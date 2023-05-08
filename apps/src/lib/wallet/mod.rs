@@ -223,14 +223,19 @@ impl Wallet {
         self.store.add_validator_data(address, keys);
     }
 
-    /// Returns the validator data, if it exists.
+    /// Returns a reference to the validator data, if it exists.
     pub fn get_validator_data(&self) -> Option<&ValidatorData> {
         self.store.get_validator_data()
     }
 
+    /// Take the validator data, if it exists.
+    pub fn take_validator_data(&mut self) -> Option<ValidatorData> {
+        self.store.validator_data.take()
+    }
+
     /// Returns the validator data, if it exists.
     /// [`Wallet::save`] cannot be called after using this
-    /// method as it involves a partial move
+    /// method as it involves a partial move.
     pub fn into_validator_data(self) -> Option<ValidatorData> {
         self.store.validator_data()
     }
