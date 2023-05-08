@@ -2364,25 +2364,22 @@ pub mod args {
     pub struct SubmitValidatorSetUpdate {
         /// The query parameters.
         pub query: Query,
-        /// The signing epoch of the validator set update.
-        pub signing_epoch: Option<Epoch>,
+        /// The epoch of the validator set to relay.
+        pub epoch: Option<Epoch>,
     }
 
     impl Args for SubmitValidatorSetUpdate {
         fn parse(matches: &ArgMatches) -> Self {
-            let signing_epoch = EPOCH.parse(matches);
+            let epoch = EPOCH.parse(matches);
             let query = Query::parse(matches);
-            Self {
-                signing_epoch,
-                query,
-            }
+            Self { epoch, query }
         }
 
         fn def(app: App) -> App {
             app.add_args::<Query>().arg(
                 EPOCH
                     .def()
-                    .about("The signing epoch of the validator set update."),
+                    .about("The epoch of the validator set to relay."),
             )
         }
     }

@@ -36,21 +36,29 @@ pub async fn submit_validator_set_update(
 
     let args::SubmitValidatorSetUpdate {
         query,
-        signing_epoch: maybe_epoch,
+        epoch: maybe_epoch,
     } = args;
 
     let client = HttpClient::new(query.ledger_address).unwrap();
 
-    let signing_epoch = if let Some(epoch) = maybe_epoch {
+    let epoch = if let Some(epoch) = maybe_epoch {
         epoch
     } else {
         RPC.shell().epoch(&client).await.unwrap().next()
     };
 
+    if epoch.0 == 0 {
+        println!(
+            "Validator set update proofs should only be requested from epoch \
+             1 onwards"
+        );
+        safe_exit(1);
+    }
+
     let voting_powers = match RPC
         .shell()
         .eth_bridge()
-        .voting_powers_at_epoch(&client, &signing_epoch.next())
+        .voting_powers_at_epoch(&client, &epoch)
         .await
     {
         Ok(voting_powers) => voting_powers,
@@ -62,7 +70,7 @@ pub async fn submit_validator_set_update(
     let protocol_tx = ProtocolTxType::ValSetUpdateVext(
         validator_set_update::Vext {
             voting_powers,
-            signing_epoch,
+            signing_epoch: epoch - 1,
             validator_addr: validator_data.address,
         }
         .sign(&validator_data.keys.eth_bridge_keypair),
