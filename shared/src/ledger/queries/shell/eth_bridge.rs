@@ -64,7 +64,8 @@ router! {ETH_BRIDGE,
     // Iterates over all ethereum events and returns the amount of
     // voting power backing each `TransferToEthereum` event.
     ( "pool" / "transfer_to_eth_progress" )
-        -> HashMap<TransferToEthereum, FractionalVotingPower> = transfer_to_ethereum_progress,
+        -> HashMap<TransferToEthereum, FractionalVotingPower>
+        = transfer_to_ethereum_progress,
 
     // Request a proof of a validator set signed off for
     // the given epoch.
@@ -95,11 +96,19 @@ router! {ETH_BRIDGE,
     ( "contracts" / "native_erc20" )
         -> EthAddress = read_native_erc20_contract,
 
-    // Read the voting powers map for the requested validator set.
-    ( "eth_voting_powers" / [height: BlockHeight]) -> VotingPowersMap = eth_voting_powers,
+    // Read the voting powers map for the requested validator set
+    // at the given block height.
+    ( "voting_powers" / "height" / [height: BlockHeight] )
+        -> VotingPowersMap = voting_powers_at_height,
+
+    // Read the voting powers map for the requested validator set
+    // at the given block height.
+    ( "voting_powers" / "epoch" / [epoch: Epoch] )
+        -> VotingPowersMap = voting_powers_at_epoch,
 
     // Read the total supply of some wrapped ERC20 token in Namada.
-    ( "erc20" / "supply" / [asset: EthAddress] ) -> Option<Amount> = read_erc20_supply,
+    ( "erc20" / "supply" / [asset: EthAddress] )
+        -> Option<Amount> = read_erc20_supply,
 }
 
 /// Read the total supply of some wrapped ERC20 token in Namada.
@@ -499,9 +508,9 @@ where
     }
 }
 
-/// The validator set in order with corresponding
-/// voting powers.
-fn eth_voting_powers<D, H>(
+/// Retrieve the consensus validator voting powers at the
+/// given [`BlockHeight`].
+fn voting_powers_at_height<D, H>(
     ctx: RequestCtx<'_, D, H>,
     height: BlockHeight,
 ) -> storage_api::Result<VotingPowersMap>
@@ -509,11 +518,35 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = ctx.wl_storage.pos_queries().get_epoch(height);
+    let maybe_epoch = ctx.wl_storage.pos_queries().get_epoch(height);
+    let Some(epoch) = maybe_epoch else {
+        return Err(storage_api::Error::SimpleMessage(
+            "The epoch of the requested height does not exist",
+        ));
+    };
+    voting_powers_at_epoch(ctx, epoch)
+}
+
+/// Retrieve the consensus validator voting powers at the
+/// given [`Epoch`].
+fn voting_powers_at_epoch<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    epoch: Epoch,
+) -> storage_api::Result<VotingPowersMap>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let current_epoch = ctx.wl_storage.storage.get_current_epoch().0;
+    if epoch > current_epoch + 1u64 {
+        return Err(storage_api::Error::SimpleMessage(
+            "The requested epoch cannot be queried",
+        ));
+    }
     let (_, voting_powers) = ctx
         .wl_storage
         .ethbridge_queries()
-        .get_validator_set_args(epoch);
+        .get_validator_set_args(Some(epoch));
     Ok(voting_powers)
 }
 

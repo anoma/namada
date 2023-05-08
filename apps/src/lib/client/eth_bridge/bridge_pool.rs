@@ -396,7 +396,7 @@ mod recommendations {
         let voting_powers = RPC
             .shell()
             .eth_bridge()
-            .eth_voting_powers(&client, &height)
+            .voting_powers_at_height(&client, &height)
             .await
             .unwrap();
         let valset_size = voting_powers.len() as u64;
