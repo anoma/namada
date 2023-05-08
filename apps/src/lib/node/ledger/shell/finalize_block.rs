@@ -1,9 +1,11 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use data_encoding::HEXUPPER;
 use namada::core::ledger::parameters::storage as params_storage;
+use namada::core::ledger::pgf::storage::keys as pgf_storage;
+use namada::core::ledger::pgf::ADDRESS as pgf_address;
 use namada::ledger::pos::types::{decimal_mult_u64, into_tm_voting_power};
 use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
@@ -87,7 +89,6 @@ where
             )?;
 
             execute_governance_proposals(self, &mut response)?;
-            execute_pgf_payments(self, &mut response)?;
 
             // Copy the new_epoch + pipeline_len - 1 validator set into
             // new_epoch + pipeline_len
@@ -485,6 +486,7 @@ where
 
         if new_epoch {
             self.apply_inflation(current_epoch)?;
+            execute_pgf_payments(self, &mut response)?;
         }
 
         if !req.proposer_address.is_empty() {
@@ -607,7 +609,9 @@ where
         //
         // MASP is included below just for some completeness.
 
-        let params = read_pos_params(&self.wl_storage)?;
+        let params: namada_proof_of_stake::parameters::PosParams =
+            read_pos_params(&self.wl_storage)?;
+        let staking_token = staking_token_address(&self.wl_storage);
 
         // Read from Parameters storage
         let epochs_per_year: u64 = self
@@ -680,6 +684,64 @@ where
             inflation,
         } = pos_controller.run();
         // let new_masp_vals = _masp_controller.run();
+
+        // Pgf inflation
+        let pgf_inflation_rate_key = pgf_storage::get_pgf_inflation_rate_key();
+        let pgf_inflation_rate: Decimal = self
+            .read_storage_key(&pgf_inflation_rate_key)
+            .unwrap_or_default();
+
+        let pgf_pd_rate = pgf_inflation_rate / Decimal::from(epochs_per_year);
+        let pgf_inflation = Decimal::from(total_tokens) * pgf_pd_rate;
+
+        credit_tokens(
+            &mut self.wl_storage,
+            &staking_token,
+            &pgf_address,
+            token::Amount::from(pgf_inflation),
+        )?;
+
+        tracing::info!(
+            "Minting tokens for PGF rewards distribution into the PGF \
+             account. Amount: {}",
+            token::Amount::from(pgf_inflation)
+        );
+
+        // Pgf steward inflation
+        let pgf_stewards_inflation_rate_key =
+            pgf_storage::get_steward_inflation_rate_key();
+        let pgf_stewards_inflation_rate: Decimal = self
+            .read_storage_key(&pgf_stewards_inflation_rate_key)
+            .unwrap_or_default();
+
+        let pgf_stewards_pd_rate =
+            pgf_stewards_inflation_rate / Decimal::from(epochs_per_year);
+        let pgf_steward_inflation =
+            Decimal::from(total_tokens) * pgf_stewards_pd_rate;
+
+        let pgf_stewards_key = pgf_storage::get_stewards_key();
+        let pgf_stewards: BTreeSet<Address> =
+            self.read_storage_key(&pgf_stewards_key).unwrap_or_default();
+
+        let pgf_steward_reward = match pgf_stewards.len() {
+            0 => Decimal::ZERO,
+            _ => pgf_steward_inflation / Decimal::from(pgf_stewards.len()),
+        };
+
+        for steward in pgf_stewards {
+            credit_tokens(
+                &mut self.wl_storage,
+                &staking_token,
+                &steward,
+                token::Amount::from(pgf_steward_reward),
+            )?;
+            tracing::info!(
+                "Minting tokens for PGF Steward rewards distribution into the \
+                 steward address {}. Amount: {}",
+                pgf_steward_reward,
+                steward,
+            );
+        }
 
         // Get the number of blocks in the last epoch
         let first_block_of_last_epoch = self
@@ -757,8 +819,6 @@ where
                 new_delegator_reward_product,
             )?;
         }
-
-        let staking_token = staking_token_address(&self.wl_storage);
 
         // Mint tokens to the PoS account for the last epoch's inflation
         let pos_reward_tokens =

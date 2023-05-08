@@ -79,7 +79,7 @@ impl GovParams {
         } = self;
 
         let min_proposal_fund_key = keys::get_min_proposal_fund_key();
-        storage.write(&min_proposal_fund_key, &min_proposal_fund)?;
+        storage.write(&min_proposal_fund_key, min_proposal_fund)?;
 
         let max_proposal_code_size_key = keys::get_max_proposal_code_size_key();
         storage.write(&max_proposal_code_size_key, max_proposal_code_size)?;
@@ -101,6 +101,6 @@ impl GovParams {
             .write(&min_proposal_grace_epoch_key, min_proposal_grace_epochs)?;
 
         let counter_key = keys::get_counter_key();
-        storage.write(&counter_key, &u64::MIN)
+        storage.write(&counter_key, u64::MIN)
     }
 }

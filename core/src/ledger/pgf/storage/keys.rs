@@ -9,7 +9,7 @@ struct Keys {
     stewards: &'static str,
     payments: &'static str,
     pgf_inflation_rate: &'static str,
-    steward_inflation_rate: &'static str
+    steward_inflation_rate: &'static str,
 }
 
 /// Check if key is inside governance address space
