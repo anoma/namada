@@ -1735,7 +1735,6 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Submit a validator set update protocol tx.")
-                .setting(AppSettings::ArgRequiredElseHelp)
                 .add_args::<args::SubmitValidatorSetUpdate>()
         }
     }
