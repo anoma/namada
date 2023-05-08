@@ -1724,7 +1724,7 @@ pub mod cmds {
     pub struct SubmitValidatorSetUpdate(pub args::SubmitValidatorSetUpdate);
 
     impl SubCmd for SubmitValidatorSetUpdate {
-        const CMD: &'static str = "submit-validator-set-update";
+        const CMD: &'static str = "validator-set-update";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
