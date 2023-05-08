@@ -2891,6 +2891,15 @@ fn proposal_submission() -> Result<()> {
     client.exp_regex(".*Min. proposal grace epochs: 9.*")?;
     client.assert_success();
 
+    // 14. Query parameters
+    let query_protocol_parameters =
+        vec!["query-protocol-parameters", "--node", &validator_one_rpc];
+
+    let mut client =
+        run!(test, Bin::Client, query_protocol_parameters, Some(30))?;
+    client.exp_regex(".*Min. proposal grace epochs: 9.*")?;
+    client.assert_success();
+
     Ok(())
 }
 
@@ -3123,7 +3132,6 @@ fn eth_governance_proposal() -> Result<()> {
 // Test submission and vote of a PGF proposal
 #[test]
 fn pgf_stewards_governance_proposal() -> Result<()> {
-    // FIXME:
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
@@ -3186,7 +3194,7 @@ fn pgf_stewards_governance_proposal() -> Result<()> {
     };
 
     let valid_proposal_json_path =
-        prepare_proposal_data(&test, albert, vec![pgf_stewards]);
+        prepare_proposal_data(&test, albert.clone(), vec![pgf_stewards]);
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     let submit_proposal_args = vec![

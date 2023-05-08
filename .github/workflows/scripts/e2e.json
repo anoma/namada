@@ -11,7 +11,7 @@
     "e2e::ledger_tests::pos_bonds": 19,
     "e2e::ledger_tests::pos_init_validator": 15,
     "e2e::ledger_tests::proposal_offline": 15,
-    "e2e::ledger_tests::pgf_governance_proposal": 35,
+    "e2e::ledger_tests::pgf_stewards_governance_proposal": 35,
     "e2e::ledger_tests::eth_governance_proposal": 35,
     "e2e::ledger_tests::proposal_submission": 35,
     "e2e::ledger_tests::run_ledger": 5,
