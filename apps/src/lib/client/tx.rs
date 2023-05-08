@@ -249,7 +249,7 @@ pub async fn submit_update_account(
     };
 
     let data = UpdateAccount {
-        addr: addr.clone(),
+        address: addr.clone(),
         vp_code_hash,
         public_keys,
         threshold: args.threshold,
