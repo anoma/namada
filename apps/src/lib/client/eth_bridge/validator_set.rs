@@ -1,21 +1,97 @@
 use std::cmp::Ordering;
 use std::sync::Arc;
 
+use borsh::BorshSerialize;
 use data_encoding::HEXLOWER;
 use ethbridge_governance_contract::Governance;
 use futures::future::FutureExt;
 use namada::core::types::storage::Epoch;
+use namada::core::types::vote_extensions::validator_set_update;
 use namada::eth_bridge::ethers::abi::{AbiDecode, AbiType, Tokenizable};
 use namada::eth_bridge::ethers::core::types::TransactionReceipt;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::eth_bridge::structs::{Signature, ValidatorSetArgs};
 use namada::ledger::queries::RPC;
+use namada::proto::Tx;
+use namada::types::key::RefTo;
+use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
+use namada::types::transaction::TxType;
 use tokio::time::{Duration, Instant};
 
+use super::super::signing::TxSigningKey;
+use super::super::tx::process_tx;
 use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit};
-use crate::cli::{args, safe_exit};
+use crate::cli::{args, safe_exit, Context};
 use crate::client::eth_bridge::BlockOnEthSync;
 use crate::facade::tendermint_rpc::HttpClient;
+
+/// Submit a validator set update protocol tx to the network.
+pub async fn submit_validator_set_update(
+    mut ctx: Context,
+    args: args::SubmitValidatorSetUpdate,
+) {
+    let maybe_validator_data = ctx.wallet.take_validator_data();
+    let Some(validator_data) = maybe_validator_data else {
+        println!("No validator keys found in the Namada directory.");
+        safe_exit(1);
+    };
+
+    let args::SubmitValidatorSetUpdate {
+        tx: ref tx_args,
+        query,
+        signing_epoch: maybe_epoch,
+    } = args;
+
+    let client = HttpClient::new(query.ledger_address).unwrap();
+
+    let signing_epoch = if let Some(epoch) = maybe_epoch {
+        epoch
+    } else {
+        RPC.shell().epoch(&client).await.unwrap().next()
+    };
+
+    let voting_powers = match RPC
+        .shell()
+        .eth_bridge()
+        .voting_powers_at_epoch(&client, &signing_epoch.next())
+        .await
+    {
+        Ok(voting_powers) => voting_powers,
+        Err(e) => {
+            println!("Failed to get voting powers: {e}");
+            safe_exit(1);
+        }
+    };
+    let protocol_tx = ProtocolTxType::ValSetUpdateVext(
+        validator_set_update::Vext {
+            voting_powers,
+            signing_epoch,
+            validator_addr: validator_data.address,
+        }
+        .sign(&validator_data.keys.eth_bridge_keypair),
+    );
+    let tx = Tx::new(
+        vec![],
+        Some(
+            TxType::Protocol(ProtocolTx {
+                pk: validator_data.keys.protocol_keypair.ref_to(),
+                tx: protocol_tx,
+            })
+            .try_to_vec()
+            .expect("Could not serialize ProtocolTx"),
+        ),
+    );
+
+    process_tx(
+        ctx,
+        tx_args,
+        tx,
+        TxSigningKey::SecretKey(validator_data.keys.protocol_keypair),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await;
+}
 
 /// Query an ABI encoding of the validator set to be installed
 /// at the given epoch, and its associated proof.
