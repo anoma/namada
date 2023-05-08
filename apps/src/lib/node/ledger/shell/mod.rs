@@ -821,14 +821,14 @@ where
                 return response;
             }
         };
-        let mut tx: TxType = raw_tx.clone().try_into().unwrap_or(
-            // If conversion to tx type fails default to decrypted
-            TxType::Decrypted(DecryptedTx::Decrypted {
-                tx: raw_tx,
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: true,
-            }),
-        );
+        let mut tx = match process_tx(raw_tx.clone()) {
+            Ok(tx_type) => tx_type,
+            Err(err) => {
+                response.code = 1;
+                response.log = format!("{}", Error::TxDecoding(err));
+                return response;
+            }
+        };
 
         // Wrapper dry run to allow estimating the gas cost of a transaction
         let mut tx_gas_meter = if let TxType::Wrapper(wrapper) = &tx {

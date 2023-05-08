@@ -73,6 +73,7 @@ where
 
     use namada_core::ledger::gas::TxGasMeter;
     use namada_core::ledger::parameters;
+    use namada_core::types::transaction::process_tx;
 
     use crate::ledger::protocol;
     use crate::ledger::storage::write_log::WriteLog;
@@ -89,14 +90,7 @@ where
         .expect("Missing gas table in storage");
 
     let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
-    let mut tx = TxType::try_from(tx.clone()).unwrap_or(
-        // If conversion to tx type fails default to decrypted
-        TxType::Decrypted(DecryptedTx::Decrypted {
-            tx,
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: true,
-        }),
-    );
+    let mut tx = process_tx(tx.clone()).into_storage_result()?;
 
     let mut write_log = WriteLog::default();
 
@@ -141,14 +135,6 @@ where
                 .unwrap_or_default(),
         )
     } else {
-        // Cast to decrypted if needed
-        if let TxType::Raw(raw_tx) = tx {
-            tx = TxType::Decrypted(DecryptedTx::Decrypted {
-                tx: raw_tx,
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: true,
-            });
-        }
         // If dry run only the inner tx, use the max block gas as the gas limit
         TxGasMeter::new(
             ctx.wl_storage

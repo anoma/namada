@@ -12,7 +12,9 @@ use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::token;
 use namada::types::token::Amount;
-use namada::types::transaction::{hash_tx, Fee, WrapperTx};
+use namada::types::transaction::{
+    hash_tx, DecryptedTx, Fee, TxType, WrapperTx,
+};
 
 use super::rpc;
 use super::tx::gen_shielded_transfer;
@@ -172,6 +174,11 @@ pub async fn sign_tx(
     })
     .await;
     let (broadcast_data, unshielding_epoch) = if args.dry_run {
+        let tx = Tx::from(DecryptedTx::Decrypted {
+            tx,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: true,
+        });
         (TxBroadcastData::DryRun(tx), None)
     } else {
         sign_wrapper(
