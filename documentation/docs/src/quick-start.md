@@ -103,7 +103,7 @@ namadac transfer \
   --target example-established \
   --token NAM \
   --amount 1000 \
-  --signer example-implicit
+  --signers example-implicit
 
 ➜ Jan 06 22:24:32.926  INFO namada_apps::cli::context: Chain ID: namada-testnet-1.2.bf0181d9f7e0
 ➜ Looking-up public key of atest1v4ehgw36ggmyzwp5g9prgsekgsu5y32z8ycnsvpeggcnys35gv65yvzxg3zrjwphgcu5gde4lvmstw from the ledger...
@@ -180,7 +180,8 @@ namadac transfer \
   --source example-established \
   --target example-validator \
   --token NAM \
-  --amount 1000
+  --amount 1000 \
+  --signers example-established
 ```
 
 ```shell

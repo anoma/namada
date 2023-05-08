@@ -40,7 +40,7 @@ namadac transfer \
     --amount 1000 \
     --source faucet \
     --target $VALIDATOR_ALIAS \
-    --signer $VALIDATOR_ALIAS
+    --signers $VALIDATOR_ALIAS
 ```
 Note: A maximum amount of 1000 NAM can be sourced from the faucet per transaction, so to get more, run this multiple times
 

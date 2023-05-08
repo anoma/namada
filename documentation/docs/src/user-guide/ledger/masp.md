@@ -51,7 +51,7 @@ namadac transfer \
     --amount 1000 \
     --source faucet \
     --target [your-established-account-alias] \
-    --signer [your-implicit-account-alias]
+    --signers [your-implicit-account-alias]
 ```
 
 Now that you have a transparent account with some tokens, you can generate a Spending Key to hold your shielded balances.
@@ -93,7 +93,8 @@ namadac transfer \
     --source [your-established-account-alias] \
     --target [your-payment-address-alias] \
     --token btc \
-    --amount 100
+    --amount 100 \
+    --signers  [your-implicit-account-alias]
 ```
 
 #### View your balance
@@ -116,7 +117,7 @@ namadac transfer \
     --target [some-payment-address] \
     --token btc \
     --amount 50 \
-    --signer [your-implicit-account-alias]
+    --signers [your-implicit-account-alias]
 ```
 
 ### Deshielding tranfers
@@ -167,7 +168,11 @@ In order to shield tokens from a transparent address, the user must first genera
 gas fee is charged to the source address that makes the transfer to the shielded payment address. Shielding tokens can be done as following:
 
 ```
-namadac transfer --source Bertha --amount 50 --token BTC --target my-pa
+namadac transfer \
+--source Bertha \
+--amount 50 \
+--token BTC \
+--target my-pa
 ```
 
 #### Unshielding Transactions
@@ -178,7 +183,11 @@ longer be able to spend the transferred amount. Below is an example of
 how an unshielding transaction is performed:
 
 ```
-namadac transfer --target Bertha --amount 45 --token BTC --source my-sk
+namadac transfer \
+--target Bertha \
+--amount 45 \
+--token BTC \
+--source my-sk
 ```
 
 #### Shielded Transactions
@@ -186,7 +195,11 @@ namadac transfer --target Bertha --amount 45 --token BTC --source my-sk
 Shielded transfers are made from one shielded account to another. From a user perspective, this is almost equivalent to a transparent-transparent token transfer, except the gas fee is paid by the signer of the transaction. The command for performing a shielded transfer is given below:
 
 ```
-namadac transfer --source my-sk --amount 5 --token BTC --target your-pa
+namadac transfer \
+--source my-sk \
+--amount 5 \
+--token BTC \
+--target your-pa
 ```
 
 ### Viewing Shielded Balances

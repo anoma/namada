@@ -14,7 +14,7 @@ namadac transfer \
     --amount 1000 \
     --source faucet \
     --target [your-established-account-alias] \
-    --signer [your-established-account-alias]
+    --signers [your-established-account-alias]
 ```
 ### **Q: Where can I see the available tokens on the Faucet?**
     
