@@ -2364,8 +2364,6 @@ pub mod args {
     pub struct SubmitValidatorSetUpdate {
         /// The query parameters.
         pub query: Query,
-        /// The transaction arguments.
-        pub tx: Tx,
         /// The signing epoch of the validator set update.
         pub signing_epoch: Option<Epoch>,
     }
@@ -2374,16 +2372,14 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let signing_epoch = EPOCH.parse(matches);
             let query = Query::parse(matches);
-            let tx = Tx::parse(matches);
             Self {
                 signing_epoch,
-                tx,
                 query,
             }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>().add_args::<Query>().arg(
+            app.add_args::<Query>().arg(
                 EPOCH
                     .def()
                     .about("The signing epoch of the validator set update."),

@@ -18,12 +18,10 @@ use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
 use namada::types::transaction::TxType;
 use tokio::time::{Duration, Instant};
 
-use super::super::signing::TxSigningKey;
-use super::super::tx::process_tx;
 use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit};
 use crate::cli::{args, safe_exit, Context};
 use crate::client::eth_bridge::BlockOnEthSync;
-use crate::facade::tendermint_rpc::HttpClient;
+use crate::facade::tendermint_rpc::{Client, HttpClient};
 
 /// Submit a validator set update protocol tx to the network.
 pub async fn submit_validator_set_update(
@@ -37,7 +35,6 @@ pub async fn submit_validator_set_update(
     };
 
     let args::SubmitValidatorSetUpdate {
-        tx: ref tx_args,
         query,
         signing_epoch: maybe_epoch,
     } = args;
@@ -80,17 +77,24 @@ pub async fn submit_validator_set_update(
             .try_to_vec()
             .expect("Could not serialize ProtocolTx"),
         ),
-    );
-
-    process_tx(
-        ctx,
-        tx_args,
-        tx,
-        TxSigningKey::SecretKey(validator_data.keys.protocol_keypair),
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
-    .await;
+    .sign(&validator_data.keys.protocol_keypair);
+
+    let response = match client.broadcast_tx_sync(tx.to_bytes().into()).await {
+        Ok(response) => response,
+        Err(e) => {
+            println!("Failed to broadcast protocol tx: {e}");
+            safe_exit(1);
+        }
+    };
+
+    if response.code == 0.into() {
+        println!("Transaction added to mempool: {:?}", response);
+    } else {
+        let err = serde_json::to_string(&response).unwrap();
+        eprintln!("Encountered error while broadcasting transaction: {err}");
+        safe_exit(1);
+    }
 }
 
 /// Query an ABI encoding of the validator set to be installed
