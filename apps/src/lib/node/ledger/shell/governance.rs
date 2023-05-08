@@ -81,7 +81,7 @@ where
                             execute_default_proposal(shell, id, code.clone())?;
                         tracing::info!(
                             "Governance proposal (default) {} has been \
-                             executed and passed",
+                             executed and passed.",
                             id
                         );
 
@@ -99,7 +99,7 @@ where
                         )?;
                         tracing::info!(
                             "Governance proposal (pgf stewards){} has been \
-                             executed and passed",
+                             executed and passed.",
                             id
                         );
 
@@ -116,7 +116,7 @@ where
                         )?;
                         tracing::info!(
                             "Governance proposal (pgs payments) {} has been \
-                             executed and passed",
+                             executed and passed.",
                             id
                         );
 
@@ -127,7 +127,7 @@ where
                         let result = execute_eth_proposal(id)?;
                         tracing::info!(
                             "Governance proposal (eth) {} has been executed \
-                             and passed",
+                             and passed.",
                             id
                         );
 
@@ -141,13 +141,39 @@ where
                 shell.wl_storage.read::<Address>(&proposal_author_key)?
             }
             TallyResult::Rejected => {
+                if let ProposalType::PGFPayment(_) = proposal_type {
+                    let two_third_nay = proposal_result.two_third_nay();
+                    if two_third_nay {
+                        let pgf_stewards_key = pgf_storage::get_stewards_key();
+                        let proposal_author = gov_storage::get_author_key(id);
+
+                        let mut pgf_stewards = shell
+                            .wl_storage
+                            .read::<BTreeSet<Address>>(&pgf_stewards_key)?
+                            .unwrap_or_default();
+                        let proposal_author: Address =
+                            force_read(&shell.wl_storage, &proposal_author)?;
+
+                        pgf_stewards.remove(&proposal_author);
+                        shell
+                            .wl_storage
+                            .write(&pgf_stewards_key, pgf_stewards)?;
+
+                        tracing::info!(
+                            "Governance proposal {} was rejected with 2/3 of \
+                             nay votes. Removing {} from stewards set.",
+                            id,
+                            proposal_author
+                        );
+                    }
+                }
                 let proposal_event =
                     ProposalEvent::rejected_proposal_event(id).into();
                 response.events.push(proposal_event);
                 proposals_result.rejected.push(id);
 
                 tracing::info!(
-                    "Governance proposal {} has been executed and rejected",
+                    "Governance proposal {} has been executed and rejected.",
                     id
                 );
 
