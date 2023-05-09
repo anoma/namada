@@ -11,7 +11,7 @@ namada client transfer \
   --target validator-1 \
   --token NAM \
   --amount 10 \
-  --signer my-key
+  --signing-keys my-key
 ```
 
 the account associated with `my-key` will be required to pay the fee. This means that even though `my-new-account` may have a positive NAM balance, `my-key` will need to have the associated NAM in order to pay the transaction fee.

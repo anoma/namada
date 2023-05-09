@@ -28,7 +28,8 @@ namada client transfer \
   --source my-new-acc \
   --target validator-1 \
   --token NAM \
-  --amount 10
+  --amount 10 \
+  --signers my-new-acc
 ```
 
 This command will attempt to find and use the key of the source address to sign the transaction.

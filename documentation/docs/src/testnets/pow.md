@@ -10,7 +10,7 @@ namada client transfer \
   --target my-key \
   --token NAM \
   --amount 1000 \
-  --signer my-key
+  --signing-keys my-key
 ```
 which will allow `my-key` to sign future transactions and pay for any further fees.
 
