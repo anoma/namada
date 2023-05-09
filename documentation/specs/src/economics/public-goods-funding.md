@@ -169,7 +169,7 @@ Once elected and instantiated, PGF Stewards will then unilaterally be able to si
 ### Proposing Funding
 In order to propose funding, any Steward will be able to propose a PGFProposal through governance. Only Stewards will be valid authors of these proposals. There will be a minimum voting period set specifically for these types of proposals and can be changed by Governance. 
 
-This governance proposal will be such that it passes by default **unless** the following conditions are met:
+This governance proposal will be such that it **passes** by default **unless** the following conditions are met:
 
 Conditions to veto a PGF proposal:
 1. Out of the votes that voted for the proposal, more than $50\%$ voted `Nay` on the proposal
@@ -200,6 +200,9 @@ impl addRecipient for cPgfRecipients
 impl remRecipient for cPgfRecipients
 ```
 
+## PGF stewards incentives
+
+Being a PGF steward is (should be) hard work. Stewards must invest their time in crafting proposals, being in touch with the opinions of the Namada community, and taking the risks associated with being voted out. In order to incentivise this effort, Namada allocates a set amount of NAM inflation that is directed towards the Stewards. This parameter is set by governance and is included in genesis by default. That allocation is then split equally between each PGF Steward.
 
 ## Addresses
 Governance adds 1 internal address:
