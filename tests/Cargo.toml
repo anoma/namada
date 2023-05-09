@@ -63,7 +63,7 @@ fs_extra = "1.2.0"
 itertools = "0.10.0"
 pretty_assertions = "0.7.2"
 # A fork with state machine testing
-proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
+proptest = {git = "https://github.com/heliaxdev/proptest", rev = "8f1b4abe7ebd35c0781bf9a00a4ee59833ffa2a1"}
 rand = "0.8"
 toml = "0.5.9"
 
