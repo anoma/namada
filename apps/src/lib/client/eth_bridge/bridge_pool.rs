@@ -309,9 +309,9 @@ pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
     if contract_nonce != bp_proof.batch_nonce {
         println!(
             "The Bridge pool nonce in the smart contract is {contract_nonce}, \
-             while the nonce in Namada is still {}. A relay for the given \
-             nonce has already happened, but a proof for the new nonce has \
-             not been generated yet, in Namada.",
+             while the nonce in Namada is still {}. A relay for the latter \
+             nonce has already happened, but a proof has not been generated \
+             yet, in Namada.",
             bp_proof.batch_nonce
         );
         safe_exit(1)
