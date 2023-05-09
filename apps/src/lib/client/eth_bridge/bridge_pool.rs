@@ -302,9 +302,19 @@ pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
         }
     };
 
-    // TODO: check the `transferToErc20Nonce` nonce in the
-    // Ethereum bridge smart contract. if its value is not
-    // the same as the nonce in `bp_proof`, cancel the relay
+    let contract_nonce =
+        bridge.transfer_to_erc_20_nonce().call().await.unwrap();
+
+    if contract_nonce != bp_proof.batch_nonce {
+        println!(
+            "The Bridge pool nonce in the smart contract is {contract_nonce}, \
+             while the nonce in Namada is still {}. A relay for the given \
+             nonce has already happened, but a proof for the new nonce has \
+             not been generated yet, in Namada.",
+            bp_proof.batch_nonce
+        );
+        safe_exit(1)
+    }
 
     let mut relay_op = bridge.transfer_to_erc(bp_proof);
     if let Some(gas) = args.gas {
