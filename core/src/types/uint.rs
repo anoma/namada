@@ -152,6 +152,11 @@ impl I256 {
     fn canonical(self) -> Self {
         Self(self.0.canonical())
     }
+
+    /// the maximum I256 value
+    pub fn maximum() -> Self {
+        Self(MAX_SIGNED_VALUE)
+    }
 }
 
 impl From<u64> for I256 {

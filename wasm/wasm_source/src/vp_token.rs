@@ -77,25 +77,33 @@ fn token_checks(
             }
             Some(owner) => {
                 // accumulate the change
-                let pre: token::Amount = match owner {
+                let pre: token::Change = match owner {
                     Address::Internal(InternalAddress::IbcMint) => {
-                        token::Amount::max()
+                        token::Change::maximum()
                     }
                     Address::Internal(InternalAddress::IbcBurn) => {
-                        token::Amount::default()
+                        token::Change::default()
                     }
-                    _ => ctx.read_pre(key)?.unwrap_or_default(),
+                    _ => ctx
+                        .read_pre::<token::Amount>(key)?
+                        .unwrap_or_default()
+                        .change(),
                 };
-                let post: token::Amount = match owner {
-                    Address::Internal(InternalAddress::IbcMint) => {
-                        ctx.read_temp(key)?.unwrap_or_else(token::Amount::max)
-                    }
-                    Address::Internal(InternalAddress::IbcBurn) => {
-                        ctx.read_temp(key)?.unwrap_or_default()
-                    }
-                    _ => ctx.read_post(key)?.unwrap_or_default(),
+                let post: token::Change = match owner {
+                    Address::Internal(InternalAddress::IbcMint) => ctx
+                        .read_temp::<token::Amount>(key)?
+                        .map(|x| x.change())
+                        .unwrap_or_else(token::Change::maximum),
+                    Address::Internal(InternalAddress::IbcBurn) => ctx
+                        .read_temp::<token::Amount>(key)?
+                        .unwrap_or_default()
+                        .change(),
+                    _ => ctx
+                        .read_post::<token::Amount>(key)?
+                        .unwrap_or_default()
+                        .change(),
                 };
-                let this_change = post.change() - pre.change();
+                let this_change = post - pre;
                 change += this_change;
                 // make sure that the spender approved the transaction
                 if !(this_change.non_negative()
