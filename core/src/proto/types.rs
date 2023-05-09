@@ -722,7 +722,7 @@ impl Header {
     /// Get the wrapper header if it is present
     pub fn wrapper(&self) -> Option<WrapperTx> {
         if let TxType::Wrapper(wrapper) = &self.tx_type {
-            Some(wrapper.clone())
+            Some(*wrapper.clone())
         } else {
             None
         }
@@ -741,7 +741,7 @@ impl Header {
     /// Get the protocol header if it is present
     pub fn protocol(&self) -> Option<ProtocolTx> {
         if let TxType::Protocol(protocol) = &self.tx_type {
-            Some(protocol.clone())
+            Some(*protocol.clone())
         } else {
             None
         }

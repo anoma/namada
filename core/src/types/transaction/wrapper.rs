@@ -295,17 +295,18 @@ pub mod wrapper_tx {
         #[test]
         fn test_encryption_round_trip() {
             let keypair = gen_keypair();
-            let mut wrapper = Tx::new(TxType::Wrapper(WrapperTx::new(
-                Fee {
-                    amount: 10.into(),
-                    token: nam(),
-                },
-                &keypair,
-                Epoch(0),
-                0.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
-            )));
+            let mut wrapper =
+                Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount: 10.into(),
+                        token: nam(),
+                    },
+                    &keypair,
+                    Epoch(0),
+                    0.into(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
+                ))));
             wrapper.set_code(Code::new("wasm code".as_bytes().to_owned()));
             wrapper
                 .set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -327,17 +328,18 @@ pub mod wrapper_tx {
         #[test]
         fn test_decryption_invalid_hash() {
             let keypair = gen_keypair();
-            let mut wrapper = Tx::new(TxType::Wrapper(WrapperTx::new(
-                Fee {
-                    amount: 10.into(),
-                    token: nam(),
-                },
-                &keypair,
-                Epoch(0),
-                0.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
-            )));
+            let mut wrapper =
+                Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount: 10.into(),
+                        token: nam(),
+                    },
+                    &keypair,
+                    Epoch(0),
+                    0.into(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
+                ))));
             wrapper.set_code(Code::new("wasm code".as_bytes().to_owned()));
             wrapper
                 .set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -362,7 +364,7 @@ pub mod wrapper_tx {
         fn test_malleability_attack_detection() {
             let keypair = gen_keypair();
             // the signed tx
-            let mut tx = Tx::new(TxType::Wrapper(WrapperTx::new(
+            let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount: 10.into(),
                     token: nam(),
@@ -372,7 +374,7 @@ pub mod wrapper_tx {
                 0.into(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
-            )));
+            ))));
 
             tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
             tx.set_data(Data::new("transaction data".as_bytes().to_owned()));

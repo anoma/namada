@@ -1163,7 +1163,7 @@ mod test_utils {
             .expect("begin_block failed");
         let keypair = gen_keypair();
         // enqueue a wrapper tx
-        let mut wrapper = Tx::new(TxType::Wrapper(WrapperTx::new(
+        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: 0.into(),
                 token: native_token,
@@ -1173,7 +1173,7 @@ mod test_utils {
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        )));
+        ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -1230,17 +1230,18 @@ mod test_mempool_validate {
 
         let keypair = super::test_utils::gen_keypair();
 
-        let mut unsigned_wrapper = Tx::new(TxType::Wrapper(WrapperTx::new(
-            Fee {
-                amount: 100.into(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            &keypair,
-            Epoch(0),
-            0.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        )));
+        let mut unsigned_wrapper =
+            Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: 100.into(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                &keypair,
+                Epoch(0),
+                0.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         unsigned_wrapper.header.chain_id = shell.chain_id.clone();
         unsigned_wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         unsigned_wrapper
@@ -1266,17 +1267,18 @@ mod test_mempool_validate {
 
         let keypair = super::test_utils::gen_keypair();
 
-        let mut invalid_wrapper = Tx::new(TxType::Wrapper(WrapperTx::new(
-            Fee {
-                amount: 100.into(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            &keypair,
-            Epoch(0),
-            0.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        )));
+        let mut invalid_wrapper =
+            Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: 100.into(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                &keypair,
+                Epoch(0),
+                0.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         invalid_wrapper.header.chain_id = shell.chain_id.clone();
         invalid_wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         invalid_wrapper
@@ -1291,7 +1293,7 @@ mod test_mempool_validate {
         let mut new_wrapper =
             invalid_wrapper.header().wrapper().expect("Test failed");
         new_wrapper.fee.amount = 0.into();
-        invalid_wrapper.update_header(TxType::Wrapper(new_wrapper));
+        invalid_wrapper.update_header(TxType::Wrapper(Box::new(new_wrapper)));
 
         let mut result = shell.mempool_validate(
             invalid_wrapper.to_bytes().as_ref(),
@@ -1331,7 +1333,7 @@ mod test_mempool_validate {
 
         let keypair = super::test_utils::gen_keypair();
 
-        let mut wrapper = Tx::new(TxType::Wrapper(WrapperTx::new(
+        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -1341,7 +1343,7 @@ mod test_mempool_validate {
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        )));
+        ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));

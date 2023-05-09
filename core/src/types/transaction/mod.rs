@@ -202,7 +202,6 @@ pub struct InitValidator {
 
 /// Struct that classifies that kind of Tx
 /// based on the contents of its data.
-#[allow(clippy::large_enum_variant)]
 #[derive(
     Clone,
     Debug,
@@ -216,12 +215,12 @@ pub enum TxType {
     /// An ordinary tx
     Raw,
     /// A Tx that contains an encrypted raw tx
-    Wrapper(WrapperTx),
+    Wrapper(Box<WrapperTx>),
     /// An attempted decryption of a wrapper tx
     Decrypted(DecryptedTx),
     /// Txs issued by validators as part of internal protocols
     #[cfg(feature = "ferveo-tpke")]
-    Protocol(ProtocolTx),
+    Protocol(Box<ProtocolTx>),
 }
 
 impl TxType {
@@ -356,7 +355,7 @@ mod test_process_tx {
     fn test_process_tx_wrapper_tx() {
         let keypair = gen_keypair();
         // the signed tx
-        let mut tx = Tx::new(TxType::Wrapper(WrapperTx::new(
+        let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: 10.into(),
                 token: nam(),
@@ -366,7 +365,7 @@ mod test_process_tx {
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        )));
+        ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         tx.add_section(Section::Signature(Signature::new(
@@ -392,7 +391,7 @@ mod test_process_tx {
     fn test_process_tx_wrapper_tx_unsigned() {
         let keypair = gen_keypair();
         // the signed tx
-        let mut tx = Tx::new(TxType::Wrapper(WrapperTx::new(
+        let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: 10.into(),
                 token: nam(),
@@ -402,7 +401,7 @@ mod test_process_tx {
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        )));
+        ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         tx.encrypt(&Default::default());

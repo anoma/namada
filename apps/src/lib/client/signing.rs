@@ -334,7 +334,7 @@ pub async fn sign_wrapper(
     };
 
     // This object governs how the payload will be processed
-    tx.update_header(TxType::Wrapper(WrapperTx::new(
+    tx.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
         Fee {
             amount: fee_amount,
             token: fee_token,
@@ -344,7 +344,7 @@ pub async fn sign_wrapper(
         args.gas_limit.clone(),
         #[cfg(not(feature = "mainnet"))]
         pow_solution,
-    )));
+    ))));
     tx.header.chain_id = ctx.config.ledger.chain_id.clone();
     tx.header.expiration = args.expiration;
     // Then sign over the bound wrapper

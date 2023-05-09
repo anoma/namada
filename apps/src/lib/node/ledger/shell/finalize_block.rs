@@ -941,17 +941,18 @@ mod test_finalize_block {
 
         // create some wrapper txs
         for i in 1u64..5 {
-            let mut wrapper = Tx::new(TxType::Wrapper(WrapperTx::new(
-                Fee {
-                    amount: MIN_FEE.into(),
-                    token: shell.wl_storage.storage.native_token.clone(),
-                },
-                &keypair,
-                Epoch(0),
-                0.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
-            )));
+            let mut wrapper =
+                Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount: MIN_FEE.into(),
+                        token: shell.wl_storage.storage.native_token.clone(),
+                    },
+                    &keypair,
+                    Epoch(0),
+                    0.into(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
+                ))));
             wrapper.header.chain_id = shell.chain_id.clone();
             wrapper.set_data(Data::new("wasm_code".as_bytes().to_owned()));
             wrapper.set_code(Code::new(
@@ -1016,7 +1017,7 @@ mod test_finalize_block {
     fn test_process_proposal_rejected_decrypted_tx() {
         let (mut shell, _) = setup(1);
         let keypair = gen_keypair();
-        let mut outer_tx = Tx::new(TxType::Wrapper(WrapperTx::new(
+        let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -1026,7 +1027,7 @@ mod test_finalize_block {
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        )));
+        ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new(
@@ -1091,7 +1092,7 @@ mod test_finalize_block {
             },
         };
 
-        let tx = Tx::new(TxType::Wrapper(wrapper));
+        let tx = Tx::new(TxType::Wrapper(Box::new(wrapper)));
         shell.enqueue_tx(tx);
 
         // check that correct error message is returned
@@ -1136,17 +1137,18 @@ mod test_finalize_block {
         // create two decrypted txs
         let tx_code = TestWasms::TxNoOp.read_bytes();
         for i in 0..2 {
-            let mut outer_tx = Tx::new(TxType::Wrapper(WrapperTx::new(
-                Fee {
-                    amount: MIN_FEE.into(),
-                    token: shell.wl_storage.storage.native_token.clone(),
-                },
-                &keypair,
-                Epoch(0),
-                0.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
-            )));
+            let mut outer_tx =
+                Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount: MIN_FEE.into(),
+                        token: shell.wl_storage.storage.native_token.clone(),
+                    },
+                    &keypair,
+                    Epoch(0),
+                    0.into(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
+                ))));
             outer_tx.header.chain_id = shell.chain_id.clone();
             outer_tx.set_code(Code::new(tx_code.clone()));
             outer_tx.set_data(Data::new(
@@ -1172,17 +1174,18 @@ mod test_finalize_block {
         }
         // create two wrapper txs
         for i in 0..2 {
-            let mut wrapper_tx = Tx::new(TxType::Wrapper(WrapperTx::new(
-                Fee {
-                    amount: MIN_FEE.into(),
-                    token: shell.wl_storage.storage.native_token.clone(),
-                },
-                &keypair,
-                Epoch(0),
-                0.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
-            )));
+            let mut wrapper_tx =
+                Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount: MIN_FEE.into(),
+                        token: shell.wl_storage.storage.native_token.clone(),
+                    },
+                    &keypair,
+                    Epoch(0),
+                    0.into(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
+                ))));
             wrapper_tx.header.chain_id = shell.chain_id.clone();
             wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
             wrapper_tx.set_data(Data::new(
@@ -1681,17 +1684,18 @@ mod test_finalize_block {
         wasm_path.push("wasm_for_tests/tx_no_op.wasm");
         let tx_code = std::fs::read(wasm_path)
             .expect("Expected a file at given code path");
-        let mut wrapper_tx = Tx::new(TxType::Wrapper(WrapperTx::new(
-            Fee {
-                amount: 0.into(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            &keypair,
-            Epoch(0),
-            0.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        )));
+        let mut wrapper_tx =
+            Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: 0.into(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                &keypair,
+                Epoch(0),
+                0.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.set_code(Code::new(tx_code));
         wrapper_tx.set_data(Data::new(

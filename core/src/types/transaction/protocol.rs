@@ -124,10 +124,11 @@ mod protocol_txs {
                     .expect("Converting path to string should not fail"),
                 TX_NEW_DKG_KP_WASM,
             );
-            let mut outer_tx = Tx::new(TxType::Protocol(ProtocolTx {
-                pk: signing_key.ref_to(),
-                tx: Self::NewDkgKeypair,
-            }));
+            let mut outer_tx =
+                Tx::new(TxType::Protocol(Box::new(ProtocolTx {
+                    pk: signing_key.ref_to(),
+                    tx: Self::NewDkgKeypair,
+                })));
             outer_tx.header.chain_id = chain_id;
             outer_tx.set_code(Code::new(code));
             outer_tx.set_data(Data::new(
