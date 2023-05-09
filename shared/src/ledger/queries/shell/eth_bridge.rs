@@ -365,8 +365,8 @@ where
                     ..Default::default()
                 })
             }
+            Ok(_) => unreachable!(),
             Err(e) => Err(storage_api::Error::new(e)),
-            _ => unreachable!(),
         }
     } else {
         Err(storage_api::Error::SimpleMessage(
