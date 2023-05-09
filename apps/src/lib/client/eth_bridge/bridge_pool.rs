@@ -16,6 +16,7 @@ use namada::types::eth_bridge_pool::{
 };
 use namada::types::keccak::KeccakHash;
 use namada::types::token::Amount;
+use namada::types::voting_power::FractionalVotingPower;
 use serde::{Deserialize, Serialize};
 use tokio::time::{Duration, Instant};
 
@@ -159,10 +160,14 @@ async fn construct_bridge_pool_proof(
         .unwrap();
 
     let warnings: Vec<_> = in_progress
-        .keys()
-        .filter_map(|k| {
-            let hash = PendingTransfer::from(k).keccak256();
-            transfers.contains(&hash).then_some(hash)
+        .into_iter()
+        .filter_map(|(ref transfer, voting_power)| {
+            if voting_power >= FractionalVotingPower::ONE_THIRD {
+                let hash = PendingTransfer::from(transfer).keccak256();
+                transfers.contains(&hash).then_some(hash)
+            } else {
+                None
+            }
         })
         .collect();
 
@@ -325,7 +330,6 @@ mod recommendations {
     use namada::types::vote_extensions::validator_set_update::{
         EthAddrBook, VotingPowersMap, VotingPowersMapExt,
     };
-    use namada::types::voting_power::FractionalVotingPower;
 
     use super::*;
     const TRANSFER_FEE: i64 = 37_500;
