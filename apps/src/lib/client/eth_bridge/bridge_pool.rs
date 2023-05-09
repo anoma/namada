@@ -302,6 +302,7 @@ pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
         }
     };
 
+    // NOTE: this operation costs no gas on Ethereum
     let contract_nonce =
         bridge.transfer_to_erc_20_nonce().call().await.unwrap();
 
