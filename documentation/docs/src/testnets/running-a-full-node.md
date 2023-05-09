@@ -11,11 +11,11 @@
   ```
 Optional: If you want more logs, you can instead run
 ```bash
-NAMADA_LOG=debug ANOMA_TM_STDOUT=true namada node ledger run
+NAMADA_LOG=debug NAMADA_TM_STDOUT=true namada node ledger run
 ```
 And if you want to save your logs to a file, you can instead run:
 ```bash
 TIMESTAMP=$(date +%s)
-ANOMA_LOG=debug NAMADA_TM_STDOUT=true namada node ledger run &> logs-${TIMESTAMP}.txt
+NAMADA_LOG=debug NAMADA_TM_STDOUT=true namada node ledger run &> logs-${TIMESTAMP}.txt
 tail -f -n 20 logs-${TIMESTAMP}.txt ## (in another shell)
 ```
