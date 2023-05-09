@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
     "tx_bond.wasm": "tx_bond.897fbd5ca027d93fc03edac3310297f8fc5baa5241082f60484dc589e7372b47.wasm",
     "tx_change_validator_commission.wasm": "tx_change_validator_commission.58c0eaf6593073d5d5a3e0f0ca287090b21c9b7b49d966006849e9805b05e5d7.wasm",
     "tx_ibc.wasm": "tx_ibc.4ac689d6bb4b8153e9c1e1aba1d6e985e0419ee2a62bbef2b24a34f3f0f90e8b.wasm",
@@ -17,4 +18,43 @@
     "vp_token.wasm": "vp_token.a0fc32265d1d663fed36336905e4758a6c58f95f51d72dcc1dd75c6321779031.wasm",
     "vp_user.wasm": "vp_user.b79c0a0a17f413e794a855594d24c2dd6e74a96fb724fe3d134eec14c3f188c4.wasm",
     "vp_validator.wasm": "vp_validator.8209c954cae7a8de8928fc21fad397d5c6cc3c506449127b0616e5eed35793a4.wasm"
+||||||| f6262aa208
+    "tx_bond.wasm": "tx_bond.be9c75f96b3b4880b7934d42ee218582b6304f6326a4588d1e6ac1ea4cc61c49.wasm",
+    "tx_change_validator_commission.wasm": "tx_change_validator_commission.cd861e0e82f4934be6d8382d6fff98286b4fadbc20ab826b9e817f6666021273.wasm",
+    "tx_ibc.wasm": "tx_ibc.13daeb0c88abba264d3052129eda0713bcf1a71f6f69bf37ec2494d0d9119f1f.wasm",
+    "tx_init_account.wasm": "tx_init_account.e21cfd7e96802f8e841613fb89f1571451401d002a159c5e9586855ac1374df5.wasm",
+    "tx_init_proposal.wasm": "tx_init_proposal.b9a77bc9e416f33f1e715f25696ae41582e1b379422f7a643549884e0c73e9de.wasm",
+    "tx_init_validator.wasm": "tx_init_validator.1e9732873861c625f239e74245f8c504a57359c06614ba40387a71811ca4a097.wasm",
+    "tx_reveal_pk.wasm": "tx_reveal_pk.47bc922a8be5571620a647ae442a1af7d03d05d29bef95f0b32cdfe00b11fee9.wasm",
+    "tx_transfer.wasm": "tx_transfer.bbd1ef5d9461c78f0288986de046baad77e10671addc5edaf3c68ea1ae4ecc99.wasm",
+    "tx_unbond.wasm": "tx_unbond.c0a690d0ad43a94294a6405bae3327f638a657446c74dc61dbb3a4d2ce488b5e.wasm",
+    "tx_update_vp.wasm": "tx_update_vp.ee2e9b882c4accadf4626e87d801c9ac8ea8c61ccea677e0532fc6c1ee7db6a2.wasm",
+    "tx_vote_proposal.wasm": "tx_vote_proposal.263fd9f4cb40f283756f394d86bdea3417e9ecd0568d6582c07a5b6bd14287d6.wasm",
+    "tx_withdraw.wasm": "tx_withdraw.6ce8faf6a32340178ddeaeb91a9b40e7f0433334e5c1f357964bf8e11d0077f1.wasm",
+    "vp_implicit.wasm": "vp_implicit.17f5c2af947ccfadce22d0fffecde1a1b4bc4ca3acd5dd8b459c3dce4afcb4e8.wasm",
+    "vp_masp.wasm": "vp_masp.5620cb6e555161641337d308851c760fbab4f9d3693cfd378703aa55e285249d.wasm",
+    "vp_testnet_faucet.wasm": "vp_testnet_faucet.362584b063cc4aaf8b72af0ed8af8d05a179ebefec596b6ab65e0ca255ec3c80.wasm",
+    "vp_token.wasm": "vp_token.a289723dd182fe0206e6c4cf1f426a6100787b20e2653d2fad6031e8106157f3.wasm",
+    "vp_user.wasm": "vp_user.b83b2d0616bb2244c8a92021665a0be749282a53fe1c493e98c330a6ed983833.wasm",
+    "vp_validator.wasm": "vp_validator.59e3e7729e14eeacc17d76b736d1760d59a1a6e9d6acbc9a870e1835438f524a.wasm"
+=======
+    "tx_bond.wasm": "tx_bond.fd0584036bed91278878e939ca75d1d1eea1356b08652d9802a33ae7d40e63a1.wasm",
+    "tx_change_validator_commission.wasm": "tx_change_validator_commission.7d8ebecc8001aa06b19bfb58852044ce5c928ba63ef0681532d329092b2c07d2.wasm",
+    "tx_ibc.wasm": "tx_ibc.621225d32e24f0a6a62d496d360398e0211b45d0b044e62ad776b667dae2e5b0.wasm",
+    "tx_init_account.wasm": "tx_init_account.05a2fd217ca9a8fca2a3b145b78fa4677cd6f236c7ef4090fe96803555923c68.wasm",
+    "tx_init_proposal.wasm": "tx_init_proposal.5f8d4e0956dd908eb9a5a93fa8705ce57a3f0375acb57993e1ed88efdd3be75a.wasm",
+    "tx_init_validator.wasm": "tx_init_validator.79e1d78674a1ec7fdaab5adee0965222401625892eb0e75b1ce4b1d83f521d8b.wasm",
+    "tx_reveal_pk.wasm": "tx_reveal_pk.0db1e35f022e3efbcc974409fcbe0ded8062a38fe015002b87c6da396688c28e.wasm",
+    "tx_transfer.wasm": "tx_transfer.047e3ab42ddeb3e045db4ca0e3c3896edaf392cf98563ac17e40ecd3d155c612.wasm",
+    "tx_unbond.wasm": "tx_unbond.e01b0032a40beaf212611a03240be463c855841a5d446425090b2438c71b2dc9.wasm",
+    "tx_update_vp.wasm": "tx_update_vp.e19d594ea1eced596b96b21ce4a8513be4f8859d807a80b3fbe57d4f67fe93fc.wasm",
+    "tx_vote_proposal.wasm": "tx_vote_proposal.fcd7372363098e5905f133e48b713b186234640f575cf25100154c9ce1218507.wasm",
+    "tx_withdraw.wasm": "tx_withdraw.0fbc63d71a67e5c6d6c3bc1e25e99f1ebcdf4b9335fadf73c555984e05190e39.wasm",
+    "vp_implicit.wasm": "vp_implicit.a5798a2500270bfd286552f43e52abc3ba3a2844966595b2aa46d20c6b4a32db.wasm",
+    "vp_masp.wasm": "vp_masp.a055ca419be1fb826c912b1f37dc01a70e75d6b7672924bcfc8fe4eb6730e7db.wasm",
+    "vp_testnet_faucet.wasm": "vp_testnet_faucet.0bbb333a4f6947d52c2c73b6d99abb4d482961e487a0dca72c6278bc1e883485.wasm",
+    "vp_token.wasm": "vp_token.9cd955a27b2bcc98849185faa35cdd3debe1573cdae08a841a04fddd86ef65c9.wasm",
+    "vp_user.wasm": "vp_user.27c17d97530284f1690273ef8affe1925153dedbf05d8556bfe9178be18ad866.wasm",
+    "vp_validator.wasm": "vp_validator.42db54ef509b4310cb984e04fa76ff1861775dfe54e6cb0187a072322d819df7.wasm"
+>>>>>>> mariari/shared-sdk-integration
 }
