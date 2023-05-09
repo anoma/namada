@@ -41,6 +41,8 @@ pub enum FindKeyError {
     KeyNotFound,
     #[error("{0}")]
     KeyDecryptionError(keys::DecryptionError),
+    #[error("Expected a Secp256k1 key, but found another key kind")]
+    NotSecp256k1Error,
 }
 
 impl Wallet {
@@ -168,6 +170,12 @@ impl Wallet {
         protocol_pk: Option<common::PublicKey>,
         protocol_key_scheme: SchemeType,
     ) -> Result<ValidatorKeys, FindKeyError> {
+        match &eth_bridge_pk {
+            Some(common::PublicKey::Secp256k1(_)) | None => {}
+            _ => {
+                return Err(FindKeyError::NotSecp256k1Error);
+            }
+        }
         let protocol_keypair = self
             .find_secret_key(protocol_pk, |data| data.keys.protocol_keypair)?;
         let eth_bridge_keypair = self
@@ -215,15 +223,20 @@ impl Wallet {
         self.store.add_validator_data(address, keys);
     }
 
-    /// Returns the validator data, if it exists.
+    /// Returns a reference to the validator data, if it exists.
     pub fn get_validator_data(&self) -> Option<&ValidatorData> {
         self.store.get_validator_data()
     }
 
+    /// Take the validator data, if it exists.
+    pub fn take_validator_data(&mut self) -> Option<ValidatorData> {
+        self.store.validator_data.take()
+    }
+
     /// Returns the validator data, if it exists.
     /// [`Wallet::save`] cannot be called after using this
-    /// method as it involves a partial move
-    pub fn take_validator_data(self) -> Option<ValidatorData> {
+    /// method as it involves a partial move.
+    pub fn into_validator_data(self) -> Option<ValidatorData> {
         self.store.validator_data()
     }
 
