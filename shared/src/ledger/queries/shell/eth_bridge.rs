@@ -1221,6 +1221,10 @@ mod test_ethbridge_router {
                     .expect("Test failed"),
             )
             .expect("Test failed");
+        client
+            .wl_storage
+            .write(&eth_msg_key.seen(), false)
+            .expect("Test failed");
         // commit the changes and increase block height
         client
             .wl_storage
