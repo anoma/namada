@@ -16,11 +16,13 @@ use namada::proto::Tx;
 use namada::types::key::RefTo;
 use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
 use namada::types::transaction::TxType;
+use tokio::sync::oneshot;
 use tokio::time::{Duration, Instant};
 
 use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit};
 use crate::cli::{args, safe_exit, Context};
 use crate::client::eth_bridge::BlockOnEthSync;
+use crate::client::utils::install_shutdown_signal;
 use crate::facade::tendermint_rpc::{Client, HttpClient};
 
 /// Get the status of a relay result.
@@ -278,6 +280,8 @@ pub async fn query_validator_set_args(args: args::ConsensusValidatorSet) {
 
 /// Relay a validator set update, signed off for a given epoch.
 pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
+    let mut signal_receiver = install_shutdown_signal();
+
     if args.sync {
         block_on_eth_sync(BlockOnEthSync {
             url: &args.eth_rpc_endpoint,
@@ -294,7 +298,12 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
         HttpClient::new(args.query.ledger_address.clone()).unwrap();
 
     if args.daemon {
-        relay_validator_set_update_daemon(args, nam_client).await;
+        relay_validator_set_update_daemon(
+            args,
+            nam_client,
+            &mut signal_receiver,
+        )
+        .await;
     } else {
         let result = relay_validator_set_update_once::<CheckNonce, _>(
             &args,
@@ -341,6 +350,7 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
 async fn relay_validator_set_update_daemon(
     mut args: args::ValidatorSetUpdateRelay,
     nam_client: HttpClient,
+    shutdown_receiver: &mut oneshot::Receiver<()>,
 ) {
     let eth_client =
         Arc::new(Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap());
@@ -356,6 +366,11 @@ async fn relay_validator_set_update_daemon(
     tracing::info!("The validator set update relayer daemon has started");
 
     loop {
+        if shutdown_receiver.try_recv().is_ok() {
+            tracing::info!("Shutdown signal received, halting...");
+            safe_exit(0);
+        }
+
         let sleep_for = if last_call_succeeded {
             success_duration
         } else {
