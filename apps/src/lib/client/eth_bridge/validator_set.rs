@@ -569,3 +569,54 @@ where
     let decoded: (D,) = AbiDecode::decode(data).unwrap();
     decoded.0
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test [`GetStatus`] on various values.
+    #[test]
+    fn test_relay_op_statuses() {
+        // failure cases
+        assert!(!Option::<TransactionReceipt>::None.is_successful());
+        assert!(
+            !Some(TransactionReceipt {
+                status: Some(0.into()),
+                ..Default::default()
+            })
+            .is_successful()
+        );
+        assert!(!RelayResult::GovernanceCallError("".into()).is_successful());
+        assert!(
+            !RelayResult::NonceError {
+                contract: 0.into(),
+                argument: 0.into(),
+            }
+            .is_successful()
+        );
+        assert!(!RelayResult::NoReceipt.is_successful());
+        assert!(
+            !TransactionReceipt {
+                status: Some(0.into()),
+                ..Default::default()
+            }
+            .is_successful()
+        );
+
+        // success cases
+        assert!(
+            Some(TransactionReceipt {
+                status: Some(1.into()),
+                ..Default::default()
+            })
+            .is_successful()
+        );
+        assert!(
+            TransactionReceipt {
+                status: Some(1.into()),
+                ..Default::default()
+            }
+            .is_successful()
+        );
+    }
+}
