@@ -253,6 +253,13 @@ pub async fn main() -> Result<()> {
                     rpc::query_delegations(&client, &mut ctx.wallet, args)
                         .await;
                 }
+                Sub::QueryFindValidator(QueryFindValidator(args)) => {
+                    let client =
+                        HttpClient::new(args.query.ledger_address.clone())
+                            .unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_find_validator(&client, args).await;
+                }
                 Sub::QueryResult(QueryResult(args)) => {
                     wait_until_node_is_synched(&args.query.ledger_address)
                         .await;

@@ -358,6 +358,15 @@ pub struct QueryDelegations<C: NamadaTypes = SdkTypes> {
     pub owner: C::Address,
 }
 
+/// Query PoS to find a validator
+#[derive(Clone, Debug)]
+pub struct QueryFindValidator<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+    /// Tendermint address
+    pub tm_addr: String,
+}
+
 /// Query the raw bytes of given storage key
 #[derive(Clone, Debug)]
 pub struct QueryRawBytes<C: NamadaTypes = SdkTypes> {
