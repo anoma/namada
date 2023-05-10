@@ -175,7 +175,7 @@ mod tests {
         rate_pre: Dec,
         max_change: Dec,
     ) -> impl Strategy<Value = transaction::pos::CommissionChange> {
-        let min = cmp::max(rate_pre - max_change, Dec::zero());
+        let min = rate_pre.checked_sub(&max_change).unwrap_or_default();
         let max = cmp::min(rate_pre + max_change, Dec::one());
         (arb_established_address(), arb_new_rate(min, max, rate_pre)).prop_map(
             |(validator, new_rate)| transaction::pos::CommissionChange {

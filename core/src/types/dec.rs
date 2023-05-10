@@ -114,6 +114,16 @@ impl Dec {
     pub fn to_uint(&self) -> Uint {
         self.0 / Uint::exp10(POS_DECIMAL_PRECISION as usize)
     }
+
+    /// Do subtraction of two [`Dec`]s If and only if the value is
+    /// greater
+    pub fn checked_sub(&self, other: &Self) -> Option<Self> {
+        if self > other {
+            Some(*self - *other)
+        } else {
+            None
+        }
+    }
 }
 
 impl FromStr for Dec {
