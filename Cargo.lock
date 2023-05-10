@@ -1499,7 +1499,7 @@ dependencies = [
  "eyre",
  "indenter",
  "once_cell",
- "owo-colors",
+ "owo-colors 1.3.0",
  "tracing-error",
 ]
 
@@ -1510,7 +1510,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6eee477a4a8a72f4addd4de416eb56d54bc307b284d6601bafdee1f4ea462d1"
 dependencies = [
  "once_cell",
- "owo-colors",
+ "owo-colors 1.3.0",
  "tracing-core 0.1.30",
  "tracing-error",
 ]
@@ -4815,6 +4815,7 @@ dependencies = [
  "num_cpus",
  "once_cell",
  "orion",
+ "owo-colors 3.5.0",
  "parse_duration",
  "proptest",
  "prost",
@@ -5581,6 +5582,12 @@ name = "owo-colors"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2386b4ebe91c2f7f51082d4cefa145d030e33a1842a96b12e4885cc3c01f7a55"
+
+[[package]]
+name = "owo-colors"
+version = "3.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1b04fb49957986fdce4d6ee7a65027d55d4b6d2265e5848bbb507b58ccfdb6f"
 
 [[package]]
 name = "pairing"
