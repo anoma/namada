@@ -75,6 +75,13 @@ pub trait LazyCollection {
         key: &storage::Key,
     ) -> storage_api::Result<Option<Self::SubKey>>;
 
+    /// Check if the given storage key is a valid data key.
+    ///
+    /// For most collections, this is the same as `is_valid_sub_key`, but for
+    /// example for `LazyVec`, which has an additional sub-key for length of the
+    /// vec, only the element data sub-keys would return `true`.
+    fn is_data_sub_key(&self, key: &storage::Key) -> bool;
+
     /// Try to read and decode the data for each change storage key in prior and
     /// posterior state. If there is no value in neither prior or posterior
     /// state (which is a possible state when transaction e.g. writes and then
