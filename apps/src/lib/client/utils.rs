@@ -883,6 +883,14 @@ fn init_established_account(
     }
 }
 
+pub fn pk_to_tm_address(
+    _global_args: args::Global,
+    args::PkToTmAddress { public_key }: args::PkToTmAddress,
+) {
+    let tm_addr = tm_consensus_key_raw_hash(&public_key);
+    println!("{tm_addr}");
+}
+
 /// Initialize genesis validator's address, consensus key and validator account
 /// key and use it in the ledger's node.
 pub fn init_genesis_validator(
