@@ -174,9 +174,10 @@ async fn construct_bridge_pool_proof(
     if !warnings.is_empty() {
         println!(
             "\x1b[93mWarning: The following hashes correspond to transfers \
-             \nthat have been relayed but do not yet have a quorum of \
-             \nvalidator signatures; thus they are still in the bridge \
-             pool:\n\x1b[0m{:?}",
+             that have surpassed the security threshold in Namada, therefore \
+             have likely been relayed, but do not yet have a quorum of \
+             validator signatures behind them; thus they are still in the \
+             Bridge pool:\n\x1b[0m{:?}",
             warnings
         );
         print!("\nDo you wish to proceed? (y/n): ");
@@ -309,9 +310,9 @@ pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
     if contract_nonce != bp_proof.batch_nonce {
         println!(
             "The Bridge pool nonce in the smart contract is {contract_nonce}, \
-             while the nonce in Namada is still {}. A relay for the latter \
-             nonce has already happened, but a proof has not been generated \
-             yet, in Namada.",
+             while the nonce in Namada is still {}. A relay of the former one \
+             has already happened, but a proof has yet to be crafted in \
+             Namada.",
             bp_proof.batch_nonce
         );
         safe_exit(1)
