@@ -474,11 +474,16 @@ impl Value for TreeBytes {
 impl Key {
     /// Parses string and returns a key
     pub fn parse(string: impl AsRef<str>) -> Result<Self> {
-        let mut segments = Vec::new();
-        for s in string.as_ref().split(KEY_SEGMENT_SEPARATOR) {
-            segments.push(DbKeySeg::parse(s.to_owned())?);
+        let string = string.as_ref();
+        if string.is_empty() {
+            Err(Error::ParseKeySeg(string.to_string()))
+        } else {
+            let mut segments = Vec::new();
+            for s in string.split(KEY_SEGMENT_SEPARATOR) {
+                segments.push(DbKeySeg::parse(s.to_owned())?);
+            }
+            Ok(Key { segments })
         }
-        Ok(Key { segments })
     }
 
     /// Returns a new key with segments of `Self` and the given segment
