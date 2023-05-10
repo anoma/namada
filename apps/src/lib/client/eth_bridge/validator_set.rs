@@ -307,7 +307,7 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
                     let whence = match argument.cmp(&contract) {
                         Ordering::Less => "behind",
                         Ordering::Equal => "identical to",
-                        Ordering::Greater => "ahead of",
+                        Ordering::Greater => "too far ahead of",
                     };
                     tracing::error!(
                         ?argument,
