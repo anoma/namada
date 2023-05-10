@@ -367,7 +367,6 @@ async fn relay_validator_set_update_daemon(
 
     loop {
         if shutdown_receiver.try_recv().is_ok() {
-            tracing::info!("Shutdown signal received, halting...");
             safe_exit(0);
         }
 
