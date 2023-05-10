@@ -365,8 +365,8 @@ where
                     ..Default::default()
                 })
             }
+            Ok(_) => unreachable!(),
             Err(e) => Err(storage_api::Error::new(e)),
-            _ => unreachable!(),
         }
     } else {
         Err(storage_api::Error::SimpleMessage(
@@ -404,10 +404,25 @@ where
             }
         })
     {
+        // we checked above that key is not empty, so this write is fine
+        *key.segments.last_mut().unwrap() =
+            DbKeySeg::StringSeg(Keys::segments().seen.into());
+        // check if the event has been seen
+        let is_seen = ctx
+            .wl_storage
+            .read::<bool>(&key)
+            .into_storage_result()?
+            .expect(
+                "Iterating over storage should not yield keys without values.",
+            );
+        if is_seen {
+            continue;
+        }
+
         if let Ok(EthereumEvent::TransfersToEthereum { transfers, .. }) =
             EthereumEvent::try_from_slice(&value)
         {
-            // We checked above that key is not empty
+            // read the voting power behind the event
             *key.segments.last_mut().unwrap() =
                 DbKeySeg::StringSeg(Keys::segments().voting_power.into());
             let voting_power = ctx
@@ -1205,6 +1220,10 @@ mod test_ethbridge_router {
                     .try_to_vec()
                     .expect("Test failed"),
             )
+            .expect("Test failed");
+        client
+            .wl_storage
+            .write(&eth_msg_key.seen(), false)
             .expect("Test failed");
         // commit the changes and increase block height
         client

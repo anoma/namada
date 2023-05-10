@@ -98,11 +98,11 @@ data-encoding = "2.3.2"
 derivative = "2.2.0"
 ed25519-consensus = "1.2.0"
 ethabi = "18.0.0"
-ethbridge-bridge-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.17.0"}
-ethbridge-bridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.17.0"}
-ethbridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.17.0"}
-ethbridge-governance-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.17.0"}
-ethbridge-governance-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.17.0"}
+ethbridge-bridge-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.18.0"}
+ethbridge-bridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.18.0"}
+ethbridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.18.0"}
+ethbridge-governance-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.18.0"}
+ethbridge-governance-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.18.0"}
 ferveo = {git = "https://github.com/anoma/ferveo", rev = "9e5e91c954158e7cff45c483fd06cd649a81553f"}
 ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "9e5e91c954158e7cff45c483fd06cd649a81553f"}
 eyre = "0.6.5"
@@ -120,6 +120,7 @@ num-traits = "0.2.14"
 num_cpus = "1.13.0"
 once_cell = "1.8.0"
 orion = "0.16.0"
+owo-colors = "3.5.0"
 parse_duration = "2.1.1"
 prost = "0.9.0"
 prost-types = "0.9.0"
