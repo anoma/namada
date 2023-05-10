@@ -17,6 +17,7 @@ use namada::types::eth_bridge_pool::{
 use namada::types::keccak::KeccakHash;
 use namada::types::token::Amount;
 use namada::types::voting_power::FractionalVotingPower;
+use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 use tokio::time::{Duration, Instant};
 
@@ -172,13 +173,15 @@ async fn construct_bridge_pool_proof(
         .collect();
 
     if !warnings.is_empty() {
+        let warning = "Warning".on_yellow();
+        let warning = warning.bold();
+        let warning = warning.blink();
         println!(
-            "\x1b[93mWarning: The following hashes correspond to transfers \
-             that have surpassed the security threshold in Namada, therefore \
-             have likely been relayed, but do not yet have a quorum of \
-             validator signatures behind them; thus they are still in the \
-             Bridge pool:\n\x1b[0m{:?}",
-            warnings
+            "{warning}: The following hashes correspond to transfers that \
+             have surpassed the security threshold in Namada, therefore have \
+             likely been relayed, but do not yet have a quorum of validator \
+             signatures behind them; thus they are still in the Bridge \
+             pool:\n{warnings:?}",
         );
         print!("\nDo you wish to proceed? (y/n): ");
         std::io::stdout().flush().unwrap();
@@ -284,12 +287,15 @@ pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
         .await
     {
         Ok(address) => Bridge::new(address.address, eth_client),
-        error => {
+        Err(err_msg) => {
+            let error = "Error".on_red();
+            let error = error.bold();
+            let error = error.blink();
             println!(
-                "Failed to retreive the Ethereum Bridge smart contract \
-                 address from storage with reason:\n{:?}\n\nPerhaps the \
-                 Ethereum bridge is not active.",
-                error
+                "{error}: Failed to retreive the Ethereum Bridge smart \
+                 contract address from storage with \
+                 reason:\n{err_msg}\n\nPerhaps the Ethereum bridge is not \
+                 active.",
             );
             safe_exit(1)
         }
@@ -308,11 +314,14 @@ pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
         bridge.transfer_to_erc_20_nonce().call().await.unwrap();
 
     if contract_nonce != bp_proof.batch_nonce {
+        let warning = "Warning".on_yellow();
+        let warning = warning.bold();
+        let warning = warning.blink();
         println!(
-            "The Bridge pool nonce in the smart contract is {contract_nonce}, \
-             while the nonce in Namada is still {}. A relay of the former one \
-             has already happened, but a proof has yet to be crafted in \
-             Namada.",
+            "{warning}: The Bridge pool nonce in the smart contract is \
+             {contract_nonce}, while the nonce in Namada is still {}. A relay \
+             of the former one has already happened, but a proof has yet to \
+             be crafted in Namada.",
             bp_proof.batch_nonce
         );
         safe_exit(1)
