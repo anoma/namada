@@ -43,6 +43,9 @@ namadac init-account \
 ```bash
 namadac init-account \
 --alias [my-multisig-alias] \
---source [my-key] \
---signers [my-key]
+--source [my-key1] \
+--signers [my-key1, my-key2]
 ```
+
+## Submitting a multisignature transaction
+
