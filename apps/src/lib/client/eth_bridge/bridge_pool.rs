@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::io::Write;
 use std::sync::Arc;
@@ -313,18 +314,33 @@ pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
     let contract_nonce =
         bridge.transfer_to_erc_20_nonce().call().await.unwrap();
 
-    if contract_nonce != bp_proof.batch_nonce {
-        let warning = "Warning".on_yellow();
-        let warning = warning.bold();
-        let warning = warning.blink();
-        println!(
-            "{warning}: The Bridge pool nonce in the smart contract is \
-             {contract_nonce}, while the nonce in Namada is still {}. A relay \
-             of the former one has already happened, but a proof has yet to \
-             be crafted in Namada.",
-            bp_proof.batch_nonce
-        );
-        safe_exit(1)
+    match bp_proof.batch_nonce.cmp(&contract_nonce) {
+        Ordering::Equal => {}
+        Ordering::Less => {
+            let error = "Error".on_red();
+            let error = error.bold();
+            let error = error.blink();
+            println!(
+                "{error}: The Bridge pool nonce in the smart contract is \
+                 {contract_nonce}, while the nonce in Namada is still {}. A \
+                 relay of the former one has already happened, but a proof \
+                 has yet to be crafted in Namada.",
+                bp_proof.batch_nonce
+            );
+            safe_exit(1);
+        }
+        Ordering::Greater => {
+            let error = "Error".on_red();
+            let error = error.bold();
+            let error = error.blink();
+            println!(
+                "{error}: The Bridge pool nonce in the smart contract is \
+                 {contract_nonce}, while the nonce in Namada is still {}. \
+                 Somehow, Namada's nonce is ahead of the contract's nonce!",
+                bp_proof.batch_nonce
+            );
+            safe_exit(1);
+        }
     }
 
     let mut relay_op = bridge.transfer_to_erc(bp_proof);
