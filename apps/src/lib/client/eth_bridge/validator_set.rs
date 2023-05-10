@@ -304,10 +304,15 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
                     tracing::error!(reason, "Calling Governance failed");
                 }
                 RelayResult::NonceError { argument, contract } => {
+                    let whence = match argument.cmp(&contract) {
+                        Ordering::Less => "behind",
+                        Ordering::Equal => "identical to",
+                        Ordering::Greater => "ahead of",
+                    };
                     tracing::error!(
                         ?argument,
                         ?contract,
-                        "Invalid argument nonce"
+                        "Argument nonce is {whence} contract nonce"
                     );
                 }
                 RelayResult::NoReceipt => {
