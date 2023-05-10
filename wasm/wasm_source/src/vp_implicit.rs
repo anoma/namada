@@ -143,15 +143,12 @@ fn validate_tx(
                     // debit has to signed, credit doesn't
                     let valid = change.non_negative() || *valid_sig;
                     let sign = if change.non_negative() { "" } else { "-" };
-                    let denom_amount = token::Amount::from_change(change)
-                        .denominated(token, sub_prefix.as_ref(), &ctx.pre())
-                        .unwrap();
                     debug_log!(
-                        "token key: {}, change: {}{}, valid_sig: {}, valid \
+                        "token key: {}, change: {}{:?}, valid_sig: {}, valid \
                          modification: {}",
                         key,
                         sign,
-                        denom_amount,
+                        change,
                         *valid_sig,
                         valid
                     );
