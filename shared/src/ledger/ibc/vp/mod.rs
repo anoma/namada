@@ -341,6 +341,7 @@ mod tests {
     use crate::ibc_proto::google::protobuf::Any;
     use crate::ibc_proto::ibc::core::connection::v1::MsgConnectionOpenTry as RawMsgConnectionOpenTry;
     use crate::ibc_proto::protobuf::Protobuf;
+    use crate::ledger::storage::mockdb::MockDBWriteBatch;
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::parameters::storage::{
         get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
@@ -467,6 +468,10 @@ mod tests {
             )
             .expect("write failed");
         wl_storage.write_log.commit_tx();
+    }
+
+    fn batch() -> MockDBWriteBatch {
+        TestStorage::batch()
     }
 
     fn get_connection_id() -> ConnectionId {
@@ -1101,6 +1106,178 @@ mod tests {
         };
 
         // insert an Init connection
+<<<<<<< HEAD
+||||||| 084afa0e7d
+        let conn_key = connection_key(&get_connection_id());
+        let conn = init_connection(&msg);
+        let bytes = conn.encode_vec().expect("encoding failed");
+        write_log.write(&conn_key, bytes).expect("write failed");
+
+        let tx_index = TxIndex::default();
+        let tx_code = vec![];
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx =
+            Tx::new(tx_code, Some(tx_data), storage.chain_id.clone(), None)
+                .sign(&keypair_1());
+        let gas_meter = VpGasMeter::new(0);
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let mut keys_changed = BTreeSet::new();
+        keys_changed.insert(conn_key);
+
+        let verifiers = BTreeSet::new();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            &tx_index,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+        let ibc = Ibc { ctx };
+        // this should fail because no client exists
+        let result = ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .unwrap_err();
+        assert_matches!(
+            result,
+            Error::ConnectionError(connection::Error::InvalidClient(_))
+        );
+    }
+
+    #[test]
+    fn test_try_connection() {
+        let mut wl_storage = insert_init_states();
+        wl_storage
+            .write_log
+            .commit_block(&mut wl_storage.storage)
+            .expect("commit failed");
+
+        // prepare data
+        let height = Height::new(0, 1);
+        let header = MockHeader {
+            height,
+            timestamp: Timestamp::now(),
+        };
+        let client_state = MockClientState::new(header).wrap_any();
+        let proof_conn = CommitmentProofBytes::try_from(vec![0]).unwrap();
+        let proof_client = CommitmentProofBytes::try_from(vec![0]).unwrap();
+        let proof_consensus = ConsensusProof::new(
+            CommitmentProofBytes::try_from(vec![0]).unwrap(),
+            height,
+        )
+        .unwrap();
+        let proofs = Proofs::new(
+            proof_conn,
+            Some(proof_client),
+            Some(proof_consensus),
+            None,
+            Height::new(0, 1),
+        )
+        .unwrap();
+        let msg = MsgConnectionOpenTry {
+            previous_connection_id: None,
+            client_id: get_client_id(),
+            client_state: Some(client_state),
+            counterparty: get_conn_counterparty(),
+            counterparty_versions: vec![ConnVersion::default()],
+            proofs,
+            delay_period: Duration::new(100, 0),
+            signer: Signer::new("account0"),
+        };
+
+        // insert a TryOpen connection
+=======
+        let conn_key = connection_key(&get_connection_id());
+        let conn = init_connection(&msg);
+        let bytes = conn.encode_vec().expect("encoding failed");
+        write_log.write(&conn_key, bytes).expect("write failed");
+
+        let tx_index = TxIndex::default();
+        let tx_code = vec![];
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx =
+            Tx::new(tx_code, Some(tx_data), storage.chain_id.clone(), None)
+                .sign(&keypair_1());
+        let gas_meter = VpGasMeter::new(0);
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let mut keys_changed = BTreeSet::new();
+        keys_changed.insert(conn_key);
+
+        let verifiers = BTreeSet::new();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            &tx_index,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+        let ibc = Ibc { ctx };
+        // this should fail because no client exists
+        let result = ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .unwrap_err();
+        assert_matches!(
+            result,
+            Error::ConnectionError(connection::Error::InvalidClient(_))
+        );
+    }
+
+    #[test]
+    fn test_try_connection() {
+        let mut wl_storage = insert_init_states();
+        wl_storage
+            .write_log
+            .commit_block(&mut wl_storage.storage, &mut batch())
+            .expect("commit failed");
+
+        // prepare data
+        let height = Height::new(0, 1);
+        let header = MockHeader {
+            height,
+            timestamp: Timestamp::now(),
+        };
+        let client_state = MockClientState::new(header).wrap_any();
+        let proof_conn = CommitmentProofBytes::try_from(vec![0]).unwrap();
+        let proof_client = CommitmentProofBytes::try_from(vec![0]).unwrap();
+        let proof_consensus = ConsensusProof::new(
+            CommitmentProofBytes::try_from(vec![0]).unwrap(),
+            height,
+        )
+        .unwrap();
+        let proofs = Proofs::new(
+            proof_conn,
+            Some(proof_client),
+            Some(proof_consensus),
+            None,
+            Height::new(0, 1),
+        )
+        .unwrap();
+        let msg = MsgConnectionOpenTry {
+            previous_connection_id: None,
+            client_id: get_client_id(),
+            client_state: Some(client_state),
+            counterparty: get_conn_counterparty(),
+            counterparty_versions: vec![ConnVersion::default()],
+            proofs,
+            delay_period: Duration::new(100, 0),
+            signer: Signer::new("account0"),
+        };
+
+        // insert a TryOpen connection
+>>>>>>> namada/yuji/enable_wal_batch
         let conn_id = get_connection_id();
         let conn_key = connection_key(&conn_id);
         let conn = ConnectionEnd::new(
@@ -1315,6 +1492,7 @@ mod tests {
         wl_storage.commit_block().expect("commit failed");
         // for next block
         wl_storage
+<<<<<<< HEAD
             .storage
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
@@ -1323,6 +1501,15 @@ mod tests {
             .begin_block(BlockHash::default(), BlockHeight(2))
             .unwrap();
 
+||||||| 084afa0e7d
+            .write_log
+            .commit_block(&mut wl_storage.storage)
+            .expect("commit failed");
+=======
+            .write_log
+            .commit_block(&mut wl_storage.storage, &mut batch())
+            .expect("commit failed");
+>>>>>>> namada/yuji/enable_wal_batch
         // update the connection to Open
         let conn = get_connection(ConnState::Open);
         let bytes = conn.encode_vec().expect("encoding failed");
@@ -2664,6 +2851,7 @@ mod tests {
         // delete the commitment
         wl_storage
             .write_log
+<<<<<<< HEAD
             .delete(&commitment_key)
             .expect("delete failed");
         keys_changed.insert(commitment_key);
@@ -2674,6 +2862,41 @@ mod tests {
             refund_receiver: data.sender,
             refund_denom: data.token.denom,
             refund_amount: data.token.amount,
+||||||| 084afa0e7d
+            .commit_block(&mut wl_storage.storage)
+            .expect("commit failed");
+
+        // make a packet and data
+        let counterparty = get_channel_counterparty();
+        let timeout_timestamp =
+            (Timestamp::now() + Duration::from_secs(100)).unwrap();
+        let packet = Packet {
+            sequence: Sequence::from(1),
+            source_port: counterparty.port_id().clone(),
+            source_channel: *counterparty.channel_id().unwrap(),
+            destination_port: get_port_id(),
+            destination_channel: get_channel_id(),
+            data: vec![0],
+            timeout_height: Height::new(0, 100),
+            timeout_timestamp,
+=======
+            .commit_block(&mut wl_storage.storage, &mut batch())
+            .expect("commit failed");
+
+        // make a packet and data
+        let counterparty = get_channel_counterparty();
+        let timeout_timestamp =
+            (Timestamp::now() + Duration::from_secs(100)).unwrap();
+        let packet = Packet {
+            sequence: Sequence::from(1),
+            source_port: counterparty.port_id().clone(),
+            source_channel: *counterparty.channel_id().unwrap(),
+            destination_port: get_port_id(),
+            destination_channel: get_channel_id(),
+            data: vec![0],
+            timeout_height: Height::new(0, 100),
+            timeout_timestamp,
+>>>>>>> namada/yuji/enable_wal_batch
         };
         let event = RawIbcEvent::AppModule(ModuleEvent::from(timeout_event));
         wl_storage
