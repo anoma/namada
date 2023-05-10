@@ -292,7 +292,7 @@ pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
             let error = error.bold();
             let error = error.blink();
             println!(
-                "{error}: Failed to retreive the Ethereum Bridge smart \
+                "{error}: Failed to retrieve the Ethereum Bridge smart \
                  contract address from storage with \
                  reason:\n{err_msg}\n\nPerhaps the Ethereum bridge is not \
                  active.",
