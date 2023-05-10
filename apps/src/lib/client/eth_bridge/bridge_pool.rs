@@ -162,7 +162,7 @@ async fn construct_bridge_pool_proof(
     let warnings: Vec<_> = in_progress
         .into_iter()
         .filter_map(|(ref transfer, voting_power)| {
-            if voting_power >= FractionalVotingPower::ONE_THIRD {
+            if voting_power > FractionalVotingPower::ONE_THIRD {
                 let hash = PendingTransfer::from(transfer).keccak256();
                 transfers.contains(&hash).then_some(hash)
             } else {
