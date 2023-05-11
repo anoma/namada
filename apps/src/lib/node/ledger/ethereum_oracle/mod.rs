@@ -26,7 +26,7 @@ use self::events::PendingEvent;
 #[cfg(test)]
 use self::test_tools::mock_web3_client::Web3;
 use super::abortable::AbortableSpawner;
-use crate::control_flow::timeouts::TimeoutStrategy;
+use crate::control_flow::timeouts::SleepStrategy;
 use crate::node::ledger::oracle::control::Command;
 
 /// The default amount of time the oracle will wait between processing blocks
@@ -103,7 +103,7 @@ pub async fn eth_syncing_status(
     backoff_duration: Duration,
     deadline: Instant,
 ) -> Result<SyncStatus, Error> {
-    TimeoutStrategy::Constant(backoff_duration)
+    SleepStrategy::Constant(backoff_duration)
         .timeout(deadline, || async {
             ControlFlow::Break(match client.eth_block_number().await {
                 Ok(height) if height == 0u64.into() => SyncStatus::Syncing,
@@ -282,7 +282,7 @@ async fn run_oracle_aux(mut oracle: Oracle) {
             "Checking Ethereum block for bridge events"
         );
         let deadline = Instant::now() + oracle.ceiling;
-        let res = TimeoutStrategy::Constant(oracle.backoff).run(|| async {
+        let res = SleepStrategy::Constant(oracle.backoff).run(|| async {
             tokio::select! {
                 result = process(&oracle, &config, next_block_to_process.clone()) => {
                     match result {

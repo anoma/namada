@@ -9,7 +9,7 @@ use tokio::time::{Duration, Instant};
 use web30::client::Web3;
 
 use crate::cli;
-use crate::control_flow::timeouts::TimeoutStrategy;
+use crate::control_flow::timeouts::SleepStrategy;
 use crate::node::ledger::ethereum_oracle::eth_syncing_status;
 
 /// Arguments to [`block_on_eth_sync`].
@@ -35,7 +35,7 @@ pub async fn block_on_eth_sync(args: BlockOnEthSync<'_>) {
     } = args;
     tracing::info!("Attempting to synchronize with the Ethereum network");
     let client = Web3::new(url, rpc_timeout);
-    TimeoutStrategy::LinearBackoff { delta: delta_sleep }
+    SleepStrategy::LinearBackoff { delta: delta_sleep }
         .timeout(deadline, || async {
             let local_set = LocalSet::new();
             let status_fut = local_set

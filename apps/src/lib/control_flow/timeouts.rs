@@ -8,7 +8,7 @@ use tokio::time::{Duration, Instant};
 
 /// A timeout strategy to
 #[derive(Debug, Clone)]
-pub enum TimeoutStrategy {
+pub enum SleepStrategy {
     /// A constant timeout strategy.
     Constant(Duration),
     /// A linear timeout strategy.
@@ -18,7 +18,7 @@ pub enum TimeoutStrategy {
     },
 }
 
-impl TimeoutStrategy {
+impl SleepStrategy {
     /// Sleep and update the `backoff` timeout, if necessary.
     async fn sleep_update(&self, backoff: &mut Duration) {
         match self {
@@ -35,7 +35,7 @@ impl TimeoutStrategy {
     /// Execute a fallible task.
     ///
     /// Different retries will result in a sleep operation,
-    /// with the current [`TimeoutStrategy`].
+    /// with the current [`SleepStrategy`].
     pub async fn run<T, F, G>(&self, mut future_gen: G) -> T
     where
         G: FnMut() -> F,
@@ -56,7 +56,7 @@ impl TimeoutStrategy {
     /// Run a time constrained task until the given deadline.
     ///
     /// Different retries will result in a sleep operation,
-    /// with the current [`TimeoutStrategy`].
+    /// with the current [`SleepStrategy`].
     pub async fn timeout<T, F, G>(
         &self,
         deadline: Instant,

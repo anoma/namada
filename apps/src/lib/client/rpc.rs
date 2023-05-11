@@ -59,7 +59,7 @@ use crate::client::tendermint_rpc_types::TxResponse;
 use crate::client::tx::{
     Conversions, PinnedBalanceError, TransactionDelta, TransferDelta,
 };
-use crate::control_flow::timeouts::TimeoutStrategy;
+use crate::control_flow::timeouts::SleepStrategy;
 use crate::facade::tendermint::merkle::proof::Proof;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::error::Error as TError;
@@ -78,7 +78,7 @@ pub async fn query_tx_status(
     deadline: Instant,
 ) -> Event {
     let client = HttpClient::new(address).unwrap();
-    TimeoutStrategy::LinearBackoff {
+    SleepStrategy::LinearBackoff {
         delta: Duration::from_secs(1),
     }
     .timeout(deadline, || async {
