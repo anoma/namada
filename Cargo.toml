@@ -60,3 +60,4 @@ funty = { git = "https://github.com/bitvecto-rs/funty/", rev = "7ef0d890fbcd8b3d
 lto = true
 opt-level = 3
 panic = "unwind"
+overflow-checks = true
