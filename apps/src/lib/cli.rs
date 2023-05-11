@@ -1660,8 +1660,7 @@ pub mod args {
     use super::context::*;
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
-    use crate::config;
-    use crate::config::{Action, ActionAtHeight, TendermintMode};
+    use crate::config::{self, Action, ActionAtHeight, TendermintMode};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
@@ -1676,7 +1675,7 @@ pub mod args {
         "base-dir",
         DefaultFn(|| match env::var("NAMADA_BASE_DIR") {
             Ok(dir) => dir.into(),
-            Err(_) => config::DEFAULT_BASE_DIR.into(),
+            Err(_) => config::get_default_namada_folder(),
         }),
     );
     const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
@@ -1818,7 +1817,9 @@ pub mod args {
                      configuration and state is stored. This value can also \
                      be set via `NAMADA_BASE_DIR` environment variable, but \
                      the argument takes precedence, if specified. Defaults to \
-                     `.namada`.",
+                     `$XDG_DATA_HOME/com.heliax.namada` or \
+                     `$HOME/.local/share/com.heliax.namada` depending on the \
+                     operating system (former is linux, latter is osx).",
                 ))
                 .arg(WASM_DIR.def().about(
                     "Directory with built WASM validity predicates, \

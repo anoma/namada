@@ -1,0 +1,2 @@
+- Changed the default base directory. On linux, the default path will be `$XDG_DATA_HOME/com.heliax.namada`, on OSX it will be `$HOME/.local/share/com.heliax.namada`.
+  ([#1138](https://github.com/anoma/namada/pull/1138))
