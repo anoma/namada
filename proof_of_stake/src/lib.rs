@@ -2583,8 +2583,6 @@ where
         let validator = bond_id.validator.clone();
         let (bonds, _unbonds) = bonds_and_unbonds.entry(bond_id).or_default();
         bonds.push(make_bond_details(
-            storage,
-            params,
             &validator,
             change,
             start,
@@ -2605,7 +2603,6 @@ where
         let validator = bond_id.validator.clone();
         let (_bonds, unbonds) = bonds_and_unbonds.entry(bond_id).or_default();
         unbonds.push(make_unbond_details(
-            storage,
             params,
             &validator,
             amount,
@@ -2649,8 +2646,6 @@ where
         .filter(|(_start, change)| *change > token::Change::default())
         .map(|(start, change)| {
             make_bond_details(
-                storage,
-                params,
                 &validator,
                 change,
                 start,
@@ -2664,7 +2659,6 @@ where
         .into_iter()
         .map(|(epoch_range, change)| {
             make_unbond_details(
-                storage,
                 params,
                 &validator,
                 change,
@@ -2684,32 +2678,20 @@ where
     Ok(HashMap::from_iter([(bond_id, details)]))
 }
 
-// TODO: update for cubic slashing
-fn make_bond_details<S>(
-    storage: &S,
-    params: &PosParams,
+// TODO: check carefully for validity
+fn make_bond_details(
     validator: &Address,
     change: token::Change,
     start: Epoch,
     slashes: &[Slash],
     applied_slashes: &mut HashMap<Address, HashSet<Slash>>,
-) -> BondDetails
-where
-    S: StorageRead,
-{
+) -> BondDetails {
     let amount = token::Amount::from_change(change);
     let slashed_amount =
         slashes
             .iter()
             .fold(None, |acc: Option<token::Amount>, slash| {
                 if slash.epoch >= start {
-                    let slash_rate = get_final_cubic_slash_rate(
-                        storage,
-                        params,
-                        slash.epoch,
-                        slash.r#type,
-                    )
-                    .unwrap();
                     let validator_slashes =
                         applied_slashes.entry(validator.clone()).or_default();
                     if !validator_slashes.contains(slash) {
@@ -2717,11 +2699,13 @@ where
                     }
                     return Some(
                         acc.unwrap_or_default()
-                            + mult_change_to_amount(slash_rate, change),
+                            + mult_change_to_amount(slash.rate, change),
                     );
                 }
                 None
             });
+    let slashed_amount =
+        slashed_amount.map(|slashed| cmp::min(amount, slashed));
     BondDetails {
         start,
         amount,
@@ -2729,19 +2713,16 @@ where
     }
 }
 
-// TODO: update for cubic slashing
-fn make_unbond_details<S>(
-    storage: &S,
+// TODO: check carefully for validity
+fn make_unbond_details(
     params: &PosParams,
     validator: &Address,
     amount: token::Amount,
     (start, withdraw): (Epoch, Epoch),
     slashes: &[Slash],
     applied_slashes: &mut HashMap<Address, HashSet<Slash>>,
-) -> UnbondDetails
-where
-    S: StorageRead,
-{
+) -> UnbondDetails {
+    // TODO: checks bounds for considering valid unbond with slash!
     let slashed_amount =
         slashes
             .iter()
@@ -2749,16 +2730,12 @@ where
                 if slash.epoch >= start
                     && slash.epoch
                         < withdraw
-                            .checked_sub(Epoch(params.unbonding_len))
+                            .checked_sub(Epoch(
+                                params.unbonding_len
+                                    + params.cubic_slashing_window_length,
+                            ))
                             .unwrap_or_default()
                 {
-                    let slash_rate = get_final_cubic_slash_rate(
-                        storage,
-                        params,
-                        slash.epoch,
-                        slash.r#type,
-                    )
-                    .unwrap();
                     let validator_slashes =
                         applied_slashes.entry(validator.clone()).or_default();
                     if !validator_slashes.contains(slash) {
@@ -2766,11 +2743,13 @@ where
                     }
                     return Some(
                         acc.unwrap_or_default()
-                            + decimal_mult_amount(slash_rate, amount),
+                            + decimal_mult_amount(slash.rate, amount),
                     );
                 }
                 None
             });
+    let slashed_amount =
+        slashed_amount.map(|slashed| cmp::min(amount, slashed));
     UnbondDetails {
         start,
         withdraw,
