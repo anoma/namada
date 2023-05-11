@@ -2499,10 +2499,14 @@ pub mod args {
         /// Synchronize with the network, or exit immediately,
         /// if the Ethereum node has fallen behind.
         pub sync: bool,
+        /// Safe mode overrides keyboard interrupt signals, to ensure
+        /// Ethereum transfers aren't canceled midway through.
+        pub safe_mode: bool,
     }
 
     impl Args for RelayBridgePoolProof {
         fn parse(matches: &ArgMatches) -> Self {
+            let safe_mode = SAFE_MODE.parse(matches);
             let query = Query::parse(matches);
             let hashes = HASH_LIST.parse(matches);
             let relayer = RELAYER.parse(matches);
@@ -2533,11 +2537,16 @@ pub mod args {
                 eth_rpc_endpoint,
                 eth_addr,
                 confirmations,
+                safe_mode,
             }
         }
 
         fn def(app: App) -> App {
             app.add_args::<Query>()
+                .arg(SAFE_MODE.def().about(
+                    "Safe mode overrides keyboard interrupt signals, to \
+                     ensure Ethereum transfers aren't canceled midway through.",
+                ))
                 .arg(HASH_LIST.def().about(
                     "List of Keccak hashes of transfers in the bridge pool.",
                 ))
