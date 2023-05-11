@@ -2,7 +2,7 @@
 
 Before describing Namada governance, it is useful to define the concepts of NAM, validators, delegators, and delegates:
 
-*Cryptoeconomic terminiology*
+*Cryptoeconomic terminology*
 - Namada's economic model is based around a single native token, NAM, which is controlled by the protocol.
 
 *Consensus terminology*
