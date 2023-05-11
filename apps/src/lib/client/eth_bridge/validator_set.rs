@@ -22,7 +22,7 @@ use tokio::time::{Duration, Instant};
 use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit};
 use crate::cli::{args, safe_exit, Context};
 use crate::client::eth_bridge::BlockOnEthSync;
-use crate::client::utils::install_shutdown_signal;
+use crate::control_flow::install_shutdown_signal;
 use crate::facade::tendermint_rpc::{Client, HttpClient};
 
 /// Get the status of a relay result.
