@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use clarity::Address;
 use ethbridge_events::{event_codecs, EventKind};
+use namada::core::hints;
 use namada::core::types::ethereum_structs;
 use namada::eth_bridge::oracle::config::Config;
 use namada::types::ethereum_events::EthereumEvent;
@@ -340,7 +341,7 @@ async fn run_oracle_aux(mut oracle: Oracle) {
         })
         .await;
 
-        if res.is_err() {
+        if hints::unlikely(res.is_err()) {
             break;
         }
 
