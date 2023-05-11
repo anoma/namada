@@ -16,12 +16,144 @@ use namada::proto::Tx;
 use namada::types::key::RefTo;
 use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
 use namada::types::transaction::TxType;
+use tokio::sync::oneshot;
 use tokio::time::{Duration, Instant};
 
 use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit};
 use crate::cli::{args, safe_exit, Context};
 use crate::client::eth_bridge::BlockOnEthSync;
+use crate::control_flow::install_shutdown_signal;
 use crate::facade::tendermint_rpc::{Client, HttpClient};
+
+/// Get the status of a relay result.
+trait GetStatus {
+    /// Return whether a relay result is successful or not.
+    fn is_successful(&self) -> bool;
+}
+
+impl GetStatus for TransactionReceipt {
+    fn is_successful(&self) -> bool {
+        self.status.map(|s| s.as_u64() == 1).unwrap_or(false)
+    }
+}
+
+impl GetStatus for Option<TransactionReceipt> {
+    fn is_successful(&self) -> bool {
+        self.as_ref()
+            .map(|receipt| receipt.is_successful())
+            .unwrap_or(false)
+    }
+}
+
+impl GetStatus for RelayResult {
+    fn is_successful(&self) -> bool {
+        use RelayResult::*;
+        match self {
+            GovernanceCallError(_) | NonceError { .. } | NoReceipt => false,
+            Receipt { receipt } => receipt.is_successful(),
+        }
+    }
+}
+
+/// Check the nonce of a relay.
+enum CheckNonce {}
+
+/// Do not check the nonce of a relay.
+enum DoNotCheckNonce {}
+
+/// Determine if the nonce in the Governance smart contract prompts
+/// a relay operation or not.
+trait ShouldRelay {
+    /// The result of a relay operation.
+    type RelayResult: GetStatus + From<Option<TransactionReceipt>>;
+
+    /// Returns [`Ok`] if the relay should happen.
+    fn should_relay(
+        _: Epoch,
+        _: &Governance<Provider<Http>>,
+    ) -> Result<(), Self::RelayResult>;
+}
+
+impl ShouldRelay for DoNotCheckNonce {
+    type RelayResult = Option<TransactionReceipt>;
+
+    #[inline]
+    fn should_relay(
+        _: Epoch,
+        _: &Governance<Provider<Http>>,
+    ) -> Result<(), Self::RelayResult> {
+        Ok(())
+    }
+}
+
+impl ShouldRelay for CheckNonce {
+    type RelayResult = RelayResult;
+
+    fn should_relay(
+        epoch: Epoch,
+        governance: &Governance<Provider<Http>>,
+    ) -> Result<(), Self::RelayResult> {
+        let task = async move {
+            let governance_epoch_prep_call = governance.validator_set_nonce();
+            let governance_epoch_fut =
+                governance_epoch_prep_call.call().map(|result| {
+                    result
+                        .map_err(|err| {
+                            RelayResult::GovernanceCallError(err.to_string())
+                        })
+                        .map(|e| Epoch(e.as_u64()))
+                });
+
+            let gov_current_epoch = governance_epoch_fut.await?;
+            if epoch == gov_current_epoch + 1u64 {
+                Ok(())
+            } else {
+                Err(RelayResult::NonceError {
+                    argument: epoch,
+                    contract: gov_current_epoch,
+                })
+            }
+        };
+        tokio::task::block_in_place(move || {
+            tokio::runtime::Handle::current().block_on(task)
+        })
+    }
+}
+
+/// Relay result for [`CheckNonce`].
+enum RelayResult {
+    /// The call to Governance failed.
+    GovernanceCallError(String),
+    /// Some nonce related error occurred.
+    ///
+    /// The following comparison must hold:
+    ///
+    ///     contract + 1 = argument
+    NonceError {
+        /// The value of the [`Epoch`] argument passed via CLI.
+        argument: Epoch,
+        /// The value of the [`Epoch`] in the Governance contract.
+        contract: Epoch,
+    },
+    /// No receipt was returned from the relay operation.
+    NoReceipt,
+    /// The relay operation returned a transfer receipt.
+    Receipt {
+        /// The receipt of the transaction.
+        receipt: TransactionReceipt,
+    },
+}
+
+impl From<Option<TransactionReceipt>> for RelayResult {
+    #[inline]
+    fn from(maybe_receipt: Option<TransactionReceipt>) -> Self {
+        if let Some(receipt) = maybe_receipt {
+            Self::Receipt { receipt }
+        } else {
+            Self::NoReceipt
+        }
+    }
+}
 
 /// Submit a validator set update protocol tx to the network.
 pub async fn submit_validator_set_update(
@@ -148,6 +280,8 @@ pub async fn query_validator_set_args(args: args::ConsensusValidatorSet) {
 
 /// Relay a validator set update, signed off for a given epoch.
 pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
+    let mut signal_receiver = args.safe_mode.then(install_shutdown_signal);
+
     if args.sync {
         block_on_eth_sync(BlockOnEthSync {
             url: &args.eth_rpc_endpoint,
@@ -164,28 +298,59 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
         HttpClient::new(args.query.ledger_address.clone()).unwrap();
 
     if args.daemon {
-        relay_validator_set_update_daemon(args, nam_client).await;
+        relay_validator_set_update_daemon(
+            args,
+            nam_client,
+            &mut signal_receiver,
+        )
+        .await;
     } else {
-        relay_validator_set_update_once(&args, &nam_client, |transf_result| {
-            let Some(receipt) = transf_result else {
-                tracing::warn!("No transfer receipt received from the Ethereum node");
-                return;
-            };
-            let success = receipt.status.map(|s| s.as_u64() == 1).unwrap_or(false);
-            if success {
-                tracing::info!(?receipt, "Ethereum transfer succeded");
-            } else {
-                tracing::error!(?receipt, "Ethereum transfer failed");
-            }
-        })
-        .await
-        .unwrap();
+        let result = relay_validator_set_update_once::<CheckNonce, _>(
+            &args,
+            &nam_client,
+            |relay_result| match relay_result {
+                RelayResult::GovernanceCallError(reason) => {
+                    tracing::error!(reason, "Calling Governance failed");
+                }
+                RelayResult::NonceError { argument, contract } => {
+                    let whence = match argument.cmp(&contract) {
+                        Ordering::Less => "behind",
+                        Ordering::Equal => "identical to",
+                        Ordering::Greater => "too far ahead of",
+                    };
+                    tracing::error!(
+                        ?argument,
+                        ?contract,
+                        "Argument nonce is {whence} contract nonce"
+                    );
+                }
+                RelayResult::NoReceipt => {
+                    tracing::warn!(
+                        "No transfer receipt received from the Ethereum node"
+                    );
+                }
+                RelayResult::Receipt { receipt } => {
+                    if receipt.is_successful() {
+                        tracing::info!(?receipt, "Ethereum transfer succeded");
+                    } else {
+                        tracing::error!(?receipt, "Ethereum transfer failed");
+                    }
+                }
+            },
+        )
+        .await;
+        if let Err(err) = result {
+            let err = err.as_ref().map(|s| s.as_ref()).unwrap_or("Unspecified");
+            tracing::error!(reason = err, "The relay failed");
+            safe_exit(1);
+        }
     }
 }
 
 async fn relay_validator_set_update_daemon(
     mut args: args::ValidatorSetUpdateRelay,
     nam_client: HttpClient,
+    shutdown_receiver: &mut Option<oneshot::Receiver<()>>,
 ) {
     let eth_client =
         Arc::new(Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap());
@@ -201,6 +366,15 @@ async fn relay_validator_set_update_daemon(
     tracing::info!("The validator set update relayer daemon has started");
 
     loop {
+        let should_exit = shutdown_receiver
+            .as_mut()
+            .map(|rx| rx.try_recv().is_ok())
+            .unwrap_or(false);
+
+        if should_exit {
+            safe_exit(0);
+        }
+
         let sleep_for = if last_call_succeeded {
             success_duration
         } else {
@@ -277,22 +451,27 @@ async fn relay_validator_set_update_daemon(
         let new_epoch = gov_current_epoch + 1u64;
         args.epoch = Some(new_epoch);
 
-        let result = relay_validator_set_update_once(&args, &nam_client, |transf_result| {
-            let Some(receipt) = transf_result else {
-                tracing::warn!("No transfer receipt received from the Ethereum node");
-                last_call_succeeded = false;
-                return;
-            };
-            last_call_succeeded = receipt.status.map(|s| s.as_u64() == 1).unwrap_or(false);
-            if last_call_succeeded {
-                tracing::info!(?receipt, "Ethereum transfer succeded");
-                tracing::info!(?new_epoch, "Updated the validator set");
-            } else {
-                tracing::error!(?receipt, "Ethereum transfer failed");
-            }
-        }).await;
+        let result = relay_validator_set_update_once::<DoNotCheckNonce, _>(
+            &args,
+            &nam_client,
+            |transf_result| {
+                let Some(receipt) = transf_result else {
+                    tracing::warn!("No transfer receipt received from the Ethereum node");
+                    last_call_succeeded = false;
+                    return;
+                };
+                last_call_succeeded = receipt.is_successful();
+                if last_call_succeeded {
+                    tracing::info!(?receipt, "Ethereum transfer succeded");
+                    tracing::info!(?new_epoch, "Updated the validator set");
+                } else {
+                    tracing::error!(?receipt, "Ethereum transfer failed");
+                }
+            },
+        ).await;
 
         if let Err(err) = result {
+            let err = err.as_ref().map(|s| s.as_ref()).unwrap_or("Unspecified");
             tracing::error!(err, "An error occurred during the relay");
             last_call_succeeded = false;
         }
@@ -312,13 +491,14 @@ async fn get_governance_contract(
     Governance::new(governance_contract.address, eth_client)
 }
 
-async fn relay_validator_set_update_once<F>(
+async fn relay_validator_set_update_once<R, F>(
     args: &args::ValidatorSetUpdateRelay,
     nam_client: &HttpClient,
     mut action: F,
-) -> Result<(), String>
+) -> Result<(), Option<String>>
 where
-    F: FnMut(Option<TransactionReceipt>),
+    R: ShouldRelay,
+    F: FnMut(R::RelayResult),
 {
     let epoch_to_relay = if let Some(epoch) = args.epoch {
         epoch
@@ -343,7 +523,7 @@ where
             encoded_validator_set_args_fut,
             governance_address_fut
         )
-        .map_err(|err| err.to_string())?;
+        .map_err(|err| Some(err.to_string()))?;
 
     let (bridge_hash, gov_hash, signatures): (
         [u8; 32],
@@ -356,6 +536,11 @@ where
     let eth_client =
         Arc::new(Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap());
     let governance = Governance::new(governance_contract.address, eth_client);
+
+    if let Err(result) = R::should_relay(epoch_to_relay, &governance) {
+        action(result);
+        return Err(None);
+    }
 
     let mut relay_op = governance.update_validators_set(
         consensus_set,
@@ -378,10 +563,17 @@ where
     let transf_result = pending_tx
         .confirmations(args.confirmations as usize)
         .await
-        .map_err(|err| err.to_string())?;
+        .map_err(|err| Some(err.to_string()))?;
+
+    let transf_result: R::RelayResult = transf_result.into();
+    let status = if transf_result.is_successful() {
+        Ok(())
+    } else {
+        Err(None)
+    };
 
     action(transf_result);
-    Ok(())
+    status
 }
 
 // NOTE: there's a bug (or feature?!) in ethers, where
@@ -395,4 +587,55 @@ where
 {
     let decoded: (D,) = AbiDecode::decode(data).unwrap();
     decoded.0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test [`GetStatus`] on various values.
+    #[test]
+    fn test_relay_op_statuses() {
+        // failure cases
+        assert!(!Option::<TransactionReceipt>::None.is_successful());
+        assert!(
+            !Some(TransactionReceipt {
+                status: Some(0.into()),
+                ..Default::default()
+            })
+            .is_successful()
+        );
+        assert!(!RelayResult::GovernanceCallError("".into()).is_successful());
+        assert!(
+            !RelayResult::NonceError {
+                contract: 0.into(),
+                argument: 0.into(),
+            }
+            .is_successful()
+        );
+        assert!(!RelayResult::NoReceipt.is_successful());
+        assert!(
+            !TransactionReceipt {
+                status: Some(0.into()),
+                ..Default::default()
+            }
+            .is_successful()
+        );
+
+        // success cases
+        assert!(
+            Some(TransactionReceipt {
+                status: Some(1.into()),
+                ..Default::default()
+            })
+            .is_successful()
+        );
+        assert!(
+            TransactionReceipt {
+                status: Some(1.into()),
+                ..Default::default()
+            }
+            .is_successful()
+        );
+    }
 }

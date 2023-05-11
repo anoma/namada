@@ -2118,6 +2118,7 @@ pub mod args {
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
     const RECEIVER: Arg<String> = arg("receiver");
     const RELAYER: Arg<Address> = arg("relayer");
+    const SAFE_MODE: ArgFlag = flag("safe-mode");
     const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
     const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
@@ -2647,10 +2648,14 @@ pub mod args {
         /// The amount of time to sleep between successful
         /// daemon mode relays.
         pub success_dur: Option<StdDuration>,
+        /// Safe mode overrides keyboard interrupt signals, to ensure
+        /// Ethereum transfers aren't canceled midway through.
+        pub safe_mode: bool,
     }
 
     impl Args for ValidatorSetUpdateRelay {
         fn parse(matches: &ArgMatches) -> Self {
+            let safe_mode = SAFE_MODE.parse(matches);
             let daemon = DAEMON_MODE.parse(matches);
             let query = Query::parse(matches);
             let epoch = EPOCH.parse(matches);
@@ -2676,11 +2681,16 @@ pub mod args {
                 eth_addr,
                 retry_dur,
                 success_dur,
+                safe_mode,
             }
         }
 
         fn def(app: App) -> App {
             app.add_args::<Query>()
+                .arg(SAFE_MODE.def().about(
+                    "Safe mode overrides keyboard interrupt signals, to \
+                     ensure Ethereum transfers aren't canceled midway through.",
+                ))
                 .arg(DAEMON_MODE.def().about(
                     "Run in daemon mode, which will continuously perform \
                      validator set updates.",
