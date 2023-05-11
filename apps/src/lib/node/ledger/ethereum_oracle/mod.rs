@@ -38,12 +38,6 @@ pub enum Error {
     #[error("Ethereum node has fallen out of sync")]
     FallenBehind,
     #[error(
-        "Couldn't get the latest synced Ethereum block height from the RPC \
-         endpoint: {0}"
-    )]
-    #[allow(dead_code)]
-    FetchHeight(String),
-    #[error(
         "Couldn't check for events ({0} from {1}) with the RPC endpoint: {2}"
     )]
     CheckEvents(String, Address, String),
@@ -53,6 +47,8 @@ pub enum Error {
         "Need more confirmations for oracle to continue processing blocks."
     )]
     MoreConfirmations,
+    #[error("The Ethereum oracle timed out")]
+    Timeout,
 }
 
 /// The result of querying an Ethereum nodes syncing status.
@@ -99,15 +95,25 @@ impl Deref for Oracle {
 }
 
 /// Fetch the sync status of an Ethereum node.
+///
+/// Queries to the Ethereum node are interspersed with constant backoff
+/// sleeps of `backoff_duration`, before ultimately timing out at `deadline`.
 pub async fn eth_syncing_status(
     client: &web30::client::Web3,
+    backoff_duration: Duration,
+    deadline: Instant,
 ) -> Result<SyncStatus, Error> {
-    match client.eth_block_number().await {
-        Ok(height) if height == 0u64.into() => Ok(SyncStatus::Syncing),
-        Ok(height) => Ok(SyncStatus::AtHeight(height)),
-        Err(Web3Error::SyncingNode(_)) => Ok(SyncStatus::Syncing),
-        Err(error) => Err(Error::FetchHeight(error.to_string())),
-    }
+    TimeoutStrategy::Constant(backoff_duration)
+        .timeout(deadline, || async {
+            ControlFlow::Break(match client.eth_block_number().await {
+                Ok(height) if height == 0u64.into() => SyncStatus::Syncing,
+                Ok(height) => SyncStatus::AtHeight(height),
+                Err(Web3Error::SyncingNode(_)) => SyncStatus::Syncing,
+                Err(_) => return ControlFlow::Continue(()),
+            })
+        })
+        .await
+        .map_or_else(|_| Err(Error::Timeout), |status| Ok(status))
 }
 
 impl Oracle {
@@ -140,7 +146,8 @@ impl Oracle {
     /// number is 0 or not.
     #[cfg(not(test))]
     async fn syncing(&self) -> Result<SyncStatus, Error> {
-        match eth_syncing_status(&self.client).await? {
+        let deadline = Instant::now() + self.ceiling;
+        match eth_syncing_status(&self.client, self.backoff, deadline).await? {
             s @ SyncStatus::Syncing => Ok(s),
             SyncStatus::AtHeight(height) => {
                 match &*self.last_processed_block.borrow() {
@@ -275,16 +282,32 @@ async fn run_oracle_aux(mut oracle: Oracle) {
             "Checking Ethereum block for bridge events"
         );
         let deadline = Instant::now() + oracle.ceiling;
-        let res = TimeoutStrategy::Constant(oracle.backoff).timeout(deadline, || async {
+        let res = TimeoutStrategy::Constant(oracle.backoff).run(|| async {
             tokio::select! {
                 result = process(&oracle, &config, next_block_to_process.clone()) => {
                     match result {
                         Ok(()) => {
                             ControlFlow::Break(Ok(()))
                         },
+                        Err(
+                            reason @ (
+                                Error::Timeout
+                                | Error::Channel(_, _)
+                                | Error::CheckEvents(_, _, _)
+                            )
+                        ) => {
+                            tracing::error!(
+                                reason,
+                                block = ?next_block_to_process,
+                                "The Ethereum oracle has disconnected"
+                            );
+                            ControlFlow::Break(Err(()))
+                        }
                         Err(error) => {
-                            tracing::warn!(
-                                ?error,
+                            // this is a recoverable error, hence the debug log,
+                            // to avoid spamming info logs
+                            tracing::debug!(
+                                error,
                                 block = ?next_block_to_process,
                                 "Error while trying to process Ethereum block"
                             );
@@ -297,25 +320,22 @@ async fn run_oracle_aux(mut oracle: Oracle) {
                         "Ethereum oracle can not send events to the ledger; the \
                         receiver has hung up. Shutting down"
                     );
-                    ControlFlow::Break(Err(eyre!("Shutting down.")))
+                    ControlFlow::Break(Err(()))
                 }
             }
-        })
-        .await
-        .expect("Oracle timed out while trying to communicate with the Ethereum fullnode.");
-
+        });
         if res.is_err() {
             break;
-        } else {
-            oracle
-                .last_processed_block
-                .send_replace(Some(next_block_to_process.clone()));
-            // check if a new config has been sent.
-            if let Some(new_config) = oracle.update_config() {
-                config = new_config;
-            }
-            next_block_to_process += 1.into();
         }
+
+        oracle
+            .last_processed_block
+            .send_replace(Some(next_block_to_process.clone()));
+        // check if a new config has been sent.
+        if let Some(new_config) = oracle.update_config() {
+            config = new_config;
+        }
+        next_block_to_process += 1.into();
     }
 }
 
