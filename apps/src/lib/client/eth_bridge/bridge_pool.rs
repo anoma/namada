@@ -27,6 +27,7 @@ use super::super::tx::process_tx;
 use super::{block_on_eth_sync, eth_sync_or_exit};
 use crate::cli::{args, safe_exit, Context};
 use crate::client::eth_bridge::BlockOnEthSync;
+use crate::control_flow::install_shutdown_signal;
 use crate::facade::tendermint_rpc::HttpClient;
 
 const ADD_TRANSFER_WASM: &str = "tx_bridge_pool.wasm";
@@ -263,6 +264,8 @@ pub async fn construct_proof(args: args::BridgePoolProof) {
 
 /// Relay a validator set update, signed off for a given epoch.
 pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
+    let _signal_receiver = args.safe_mode.then(install_shutdown_signal);
+
     if args.sync {
         block_on_eth_sync(BlockOnEthSync {
             url: &args.eth_rpc_endpoint,
