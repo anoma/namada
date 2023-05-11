@@ -50,8 +50,9 @@ async fn shutdown_send(tx: oneshot::Sender<()>) {
             }
         },
     };
-    tx.send(())
-        .expect("The oneshot receiver should still be alive");
+    if tx.send(()).is_err() {
+        tracing::debug!("Shutdown signal receiver was dropped");
+    }
 }
 
 #[cfg(windows)]
