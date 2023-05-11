@@ -8,7 +8,7 @@ Welcome to Namada's docs!
 
 Key innovations include:
 
-- ZCash-like transfers for any assets (fungible and non-fungible)
+- Zcash-like transfers for any assets (fungible and non-fungible)
 - Rewarded usage of privacy as a public good
 - Interoperability with Ethereum via a custom bridge with trust-minimisation
 - Vertically integrated user interfaces
