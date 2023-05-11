@@ -2093,53 +2093,52 @@ where
     handle.contains(storage, consensus_key)
 }
 
-/// Get the total bond amount, including slashes, for a given bond ID and epoch
+/// Get the total bond amount, including slashes, for a given bond ID and epoch.
+/// Returns a two-element tuple of the raw bond amount and the post-slashed bond
+/// amount, respectively.
+///
+/// TODO: does epoch of discovery need to be considered for precise accuracy?
 pub fn bond_amount<S>(
     storage: &S,
-    params: &PosParams,
     bond_id: &BondId,
     epoch: Epoch,
 ) -> storage_api::Result<(token::Amount, token::Amount)>
 where
     S: StorageRead,
 {
-    // TODO: review this logic carefully, do cubic slashing, apply rewards
+    // TODO: review this logic carefully, apply rewards
     let slashes = find_validator_slashes(storage, &bond_id.validator)?;
+    let slash_rates = slashes.into_iter().fold(
+        BTreeMap::<Epoch, Decimal>::new(),
+        |mut map, slash| {
+            let tot_rate = map.entry(slash.epoch).or_default();
+            *tot_rate = cmp::min(Decimal::ONE, *tot_rate + slash.rate);
+            map
+        },
+    );
+
     let bonds =
         bond_handle(&bond_id.source, &bond_id.validator).get_data_handler();
     let mut total = token::Amount::default();
     let mut total_active = token::Amount::default();
     for next in bonds.iter(storage)? {
         let (bond_epoch, delta) = next?;
-        // if bond_epoch > epoch {
-        //     break;
-        // }
+        if bond_epoch > epoch {
+            continue;
+        }
 
-        // TODO: do we need to consider the adjusted amounts of previous bonds
-        // and their slashes when iterating?
-        for slash in &slashes {
-            let Slash {
-                epoch: slash_epoch,
-                block_height: _,
-                r#type: slash_type,
-                rate: _,
-            } = slash;
+        total += token::Amount::from_change(delta);
+        total_active += token::Amount::from_change(delta);
+
+        for (slash_epoch, rate) in &slash_rates {
             if *slash_epoch < bond_epoch {
                 continue;
             }
-            // TODO: consider edge cases with the cubic slashing window
-            let cubic_rate = get_final_cubic_slash_rate(
-                storage,
-                params,
-                *slash_epoch,
-                *slash_type,
-            )?;
-            let current_slashed = decimal_mult_i128(cubic_rate, delta);
-            let delta = token::Amount::from_change(delta - current_slashed);
-            total += delta;
-            if bond_epoch <= epoch {
-                total_active += delta;
-            }
+            // TODO: think about truncation
+            let current_slashed = decimal_mult_i128(*rate, delta);
+            total_active
+                .checked_sub(token::Amount::from_change(current_slashed))
+                .unwrap_or_default();
         }
     }
     Ok((total, total_active))
