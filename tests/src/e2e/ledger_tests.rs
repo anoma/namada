@@ -1965,7 +1965,8 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Amount 5100 withdrawable starting from epoch ")?;
+    client
+        .exp_string("Amount 5100.000000 withdrawable starting from epoch ")?;
     client.assert_success();
 
     // 5. Submit an unbond of the delegation
@@ -1987,7 +1988,7 @@ fn pos_bonds() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    let expected = "Amount 3200 withdrawable starting from epoch ";
+    let expected = "Amount 3200.000000 withdrawable starting from epoch ";
     let (_unread, matched) = client.exp_regex(&format!("{expected}.*\n"))?;
     let epoch_raw = matched.trim().split_once(expected).unwrap().1;
     let delegation_withdrawable_epoch = Epoch::from_str(epoch_raw).unwrap();
