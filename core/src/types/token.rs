@@ -10,6 +10,7 @@ use rust_decimal::prelude::{Decimal, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::ibc::applications::transfer::Amount as IbcAmount;
 use crate::types::address::{masp, Address, DecodeError as AddressError};
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
@@ -309,6 +310,18 @@ impl From<Amount> for Change {
     }
 }
 
+impl TryFrom<IbcAmount> for Amount {
+    type Error = AmountParseError;
+
+    fn try_from(amount: IbcAmount) -> Result<Self, Self::Error> {
+        // TODO: https://github.com/anoma/namada/issues/1089
+        if amount > u64::MAX.into() {
+            return Err(AmountParseError::InvalidRange);
+        }
+        Self::from_str(&amount.to_string())
+    }
+}
+
 /// Key segment for a balance key
 pub const BALANCE_STORAGE_KEY: &str = "balance";
 /// Key segment for head shielded transaction pointer key
@@ -490,35 +503,6 @@ pub enum TransferError {
     Amount(AmountParseError),
     #[error("No token is specified")]
     NoToken,
-}
-
-#[cfg(any(feature = "abciplus", feature = "abcipp"))]
-impl TryFrom<crate::ledger::ibc::data::FungibleTokenPacketData> for Transfer {
-    type Error = TransferError;
-
-    fn try_from(
-        data: crate::ledger::ibc::data::FungibleTokenPacketData,
-    ) -> Result<Self, Self::Error> {
-        let source =
-            Address::decode(&data.sender).map_err(TransferError::Address)?;
-        let target =
-            Address::decode(&data.receiver).map_err(TransferError::Address)?;
-        let token_str =
-            data.denom.split('/').last().ok_or(TransferError::NoToken)?;
-        let token =
-            Address::decode(token_str).map_err(TransferError::Address)?;
-        let amount =
-            Amount::from_str(&data.amount).map_err(TransferError::Amount)?;
-        Ok(Self {
-            source,
-            target,
-            token,
-            sub_prefix: None,
-            amount,
-            key: None,
-            shielded: None,
-        })
-    }
 }
 
 #[cfg(test)]

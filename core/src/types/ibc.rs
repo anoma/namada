@@ -1,5 +1,6 @@
 //! IBC event without IBC-related data types
 
+use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -13,6 +14,19 @@ pub struct IbcEvent {
     pub event_type: String,
     /// The attributes of the IBC event
     pub attributes: HashMap<String, String>,
+}
+
+impl std::cmp::PartialOrd for IbcEvent {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.event_type.partial_cmp(&other.event_type)
+    }
+}
+
+impl std::cmp::Ord for IbcEvent {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // should not compare the same event type
+        self.event_type.cmp(&other.event_type)
+    }
 }
 
 impl std::fmt::Display for IbcEvent {
@@ -39,7 +53,7 @@ mod ibc_rs_conversion {
 
     use super::IbcEvent;
     use crate::ibc::events::{Error as IbcEventError, IbcEvent as RawIbcEvent};
-    use crate::tendermint::abci::Event as AbciEvent;
+    use crate::tendermint_proto::abci::Event as AbciEvent;
 
     #[allow(missing_docs)]
     #[derive(Error, Debug)]

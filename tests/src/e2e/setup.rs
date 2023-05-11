@@ -104,17 +104,6 @@ pub fn single_node_net() -> Result<Test> {
     network(|genesis| genesis, None)
 }
 
-/// Setup two networks with a single genesis validator node.
-pub fn two_single_node_nets() -> Result<(Test, Test)> {
-    Ok((
-        network(|genesis| genesis, None)?,
-        network(
-            |genesis| set_validators(1, genesis, |_| ANOTHER_CHAIN_PORT_OFFSET),
-            None,
-        )?,
-    ))
-}
-
 /// Setup a configurable network.
 pub fn network(
     mut update_genesis: impl FnMut(GenesisConfig) -> GenesisConfig,
