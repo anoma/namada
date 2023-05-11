@@ -32,6 +32,27 @@ impl TimeoutStrategy {
         }
     }
 
+    /// Execute a fallible task.
+    ///
+    /// Different retries will result in a sleep operation,
+    /// with the current [`TimeoutStrategy`].
+    pub async fn run<T, F, G>(&self, mut future_gen: G) -> T
+    where
+        G: FnMut() -> F,
+        F: Future<Output = ControlFlow<T>>,
+    {
+        let mut backoff = Duration::from_secs(0);
+        loop {
+            let fut = future_gen();
+            match fut.await {
+                ControlFlow::Continue(()) => {
+                    self.sleep_update(&mut backoff).await;
+                }
+                ControlFlow::Break(ret) => break ret,
+            }
+        }
+    }
+
     /// Run a time constrained task until the given deadline.
     ///
     /// Different retries will result in a sleep operation,
@@ -39,24 +60,16 @@ impl TimeoutStrategy {
     pub async fn timeout<T, F, G>(
         &self,
         deadline: Instant,
-        mut future_gen: G,
+        future_gen: G,
     ) -> Result<T, Elapsed>
     where
         G: FnMut() -> F,
         F: Future<Output = ControlFlow<T>>,
     {
-        tokio::time::timeout_at(deadline, async move {
-            let mut backoff = Duration::from_secs(0);
-            loop {
-                let fut = future_gen();
-                match fut.await {
-                    ControlFlow::Continue(()) => {
-                        self.sleep_update(&mut backoff).await;
-                    }
-                    ControlFlow::Break(ret) => break ret,
-                }
-            }
-        })
+        tokio::time::timeout_at(
+            deadline,
+            async move { self.run(future_gen).await },
+        )
         .await
     }
 }
