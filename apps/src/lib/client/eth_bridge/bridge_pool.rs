@@ -181,9 +181,9 @@ async fn construct_bridge_pool_proof(
         println!(
             "{warning}: The following hashes correspond to transfers that \
              have surpassed the security threshold in Namada, therefore have \
-             likely been relayed, but do not yet have a quorum of validator \
-             signatures behind them; thus they are still in the Bridge \
-             pool:\n{warnings:?}",
+             likely been relayed to Ethereum, but do not yet have a quorum of \
+             validator signatures behind them in Namada; thus they are still \
+             in the Bridge pool:\n{warnings:?}",
         );
         print!("\nDo you wish to proceed? (y/n): ");
         std::io::stdout().flush().unwrap();
