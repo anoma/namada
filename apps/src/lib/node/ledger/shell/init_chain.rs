@@ -129,6 +129,7 @@ where
                 || tx_whitelist.contains(&code_hash.to_string().to_lowercase())
                 || vp_whitelist.contains(&code_hash.to_string().to_lowercase())
             {
+                #[cfg(not(test))]
                 if name.starts_with("tx_") {
                     self.tx_wasm_cache.pre_compile(&code);
                 } else if name.starts_with("vp_") {

@@ -7,14 +7,13 @@ use thiserror::Error;
 
 use crate::ibc::core::ics02_client::height::Height;
 use crate::ibc::core::ics04_channel::packet::Sequence;
-use crate::ibc::core::ics05_port::capabilities::Capability;
 use crate::ibc::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
 };
 use crate::ibc::core::ics24_host::path::{
-    AcksPath, ChannelEndsPath, ClientConsensusStatePath, ClientStatePath,
-    ClientTypePath, CommitmentsPath, ConnectionsPath, PortsPath, ReceiptsPath,
-    SeqAcksPath, SeqRecvsPath, SeqSendsPath,
+    AckPath, ChannelEndPath, ClientConnectionPath, ClientConsensusStatePath,
+    ClientStatePath, ClientTypePath, CommitmentPath, ConnectionPath, PortPath,
+    ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
 use crate::ibc::core::ics24_host::Path;
 use crate::types::address::{Address, InternalAddress, HASH_LEN};
@@ -23,8 +22,6 @@ use crate::types::storage::{self, DbKeySeg, Key, KeySeg};
 const CLIENTS_COUNTER: &str = "clients/counter";
 const CONNECTIONS_COUNTER: &str = "connections/counter";
 const CHANNELS_COUNTER: &str = "channelEnds/counter";
-const CAPABILITIES_INDEX: &str = "capabilities/index";
-const CAPABILITIES: &str = "capabilities";
 const DENOM: &str = "denom";
 /// Key segment for a multitoken related to IBC
 pub const MULTITOKEN_STORAGE_KEY: &str = "ibc";
@@ -40,6 +37,8 @@ pub enum Error {
     InvalidPortCapability(String),
     #[error("Denom error: {0}")]
     Denom(String),
+    #[error("IBS signer error: {0}")]
+    IbcSigner(String),
 }
 
 /// IBC storage functions result
@@ -106,13 +105,8 @@ pub fn is_channel_counter_key(key: &Key) -> bool {
     *key == channel_counter_key()
 }
 
-/// Check if the given key is a key of the capability index
-pub fn is_capability_index_key(key: &Key) -> bool {
-    *key == capability_index_key()
-}
-
 /// Returns a key of the IBC-related data
-fn ibc_key(path: impl AsRef<str>) -> Result<Key> {
+pub fn ibc_key(path: impl AsRef<str>) -> Result<Key> {
     let path = Key::parse(path).map_err(Error::StorageKey)?;
     let addr = Address::Internal(InternalAddress::Ibc);
     let key = Key::from(addr.to_db_key());
@@ -139,13 +133,6 @@ pub fn channel_counter_key() -> Key {
         .expect("Creating a key for the channel counter shouldn't fail")
 }
 
-/// Returns a key of the IBC capability index
-pub fn capability_index_key() -> Key {
-    let path = CAPABILITIES_INDEX.to_owned();
-    ibc_key(path)
-        .expect("Creating a key for the capability index shouldn't fail")
-}
-
 /// Returns a key for the client type
 pub fn client_type_key(client_id: &ClientId) -> Key {
     let path = Path::ClientType(ClientTypePath(client_id.clone()));
@@ -164,8 +151,8 @@ pub fn client_state_key(client_id: &ClientId) -> Key {
 pub fn consensus_state_key(client_id: &ClientId, height: Height) -> Key {
     let path = Path::ClientConsensusState(ClientConsensusStatePath {
         client_id: client_id.clone(),
-        epoch: height.revision_number,
-        height: height.revision_height,
+        epoch: height.revision_number(),
+        height: height.revision_height(),
     });
     ibc_key(path.to_string())
         .expect("Creating a key for the consensus state shouldn't fail")
@@ -187,39 +174,40 @@ pub fn consensus_state_prefix(client_id: &ClientId) -> Key {
 
 /// Returns a key for the connection end
 pub fn connection_key(conn_id: &ConnectionId) -> Key {
-    let path = Path::Connections(ConnectionsPath(conn_id.clone()));
+    let path = Path::Connection(ConnectionPath(conn_id.clone()));
     ibc_key(path.to_string())
         .expect("Creating a key for the connection shouldn't fail")
 }
 
 /// Returns a key for the channel end
 pub fn channel_key(port_channel_id: &PortChannelId) -> Key {
-    let path = Path::ChannelEnds(ChannelEndsPath(
+    let path = Path::ChannelEnd(ChannelEndPath(
         port_channel_id.port_id.clone(),
-        port_channel_id.channel_id,
+        port_channel_id.channel_id.clone(),
     ));
+    ibc_key(path.to_string())
+        .expect("Creating a key for the channel shouldn't fail")
+}
+
+/// Returns a key for the connection list
+pub fn client_connections_key(client_id: &ClientId) -> Key {
+    let path = Path::ClientConnection(ClientConnectionPath(client_id.clone()));
     ibc_key(path.to_string())
         .expect("Creating a key for the channel shouldn't fail")
 }
 
 /// Returns a key for the port
 pub fn port_key(port_id: &PortId) -> Key {
-    let path = Path::Ports(PortsPath(port_id.clone()));
+    let path = Path::Ports(PortPath(port_id.clone()));
     ibc_key(path.to_string())
         .expect("Creating a key for the port shouldn't fail")
 }
 
-/// Returns a key of the reversed map for IBC capabilities
-pub fn capability_key(index: u64) -> Key {
-    let path = format!("{}/{}", CAPABILITIES, index);
-    ibc_key(path).expect("Creating a key for a capability shouldn't fail")
-}
-
 /// Returns a key for nextSequenceSend
 pub fn next_sequence_send_key(port_channel_id: &PortChannelId) -> Key {
-    let path = Path::SeqSends(SeqSendsPath(
+    let path = Path::SeqSend(SeqSendPath(
         port_channel_id.port_id.clone(),
-        port_channel_id.channel_id,
+        port_channel_id.channel_id.clone(),
     ));
     ibc_key(path.to_string())
         .expect("Creating a key for nextSequenceSend shouldn't fail")
@@ -227,9 +215,9 @@ pub fn next_sequence_send_key(port_channel_id: &PortChannelId) -> Key {
 
 /// Returns a key for nextSequenceRecv
 pub fn next_sequence_recv_key(port_channel_id: &PortChannelId) -> Key {
-    let path = Path::SeqRecvs(SeqRecvsPath(
+    let path = Path::SeqRecv(SeqRecvPath(
         port_channel_id.port_id.clone(),
-        port_channel_id.channel_id,
+        port_channel_id.channel_id.clone(),
     ));
     ibc_key(path.to_string())
         .expect("Creating a key for nextSequenceRecv shouldn't fail")
@@ -237,9 +225,9 @@ pub fn next_sequence_recv_key(port_channel_id: &PortChannelId) -> Key {
 
 /// Returns a key for nextSequenceAck
 pub fn next_sequence_ack_key(port_channel_id: &PortChannelId) -> Key {
-    let path = Path::SeqAcks(SeqAcksPath(
+    let path = Path::SeqAck(SeqAckPath(
         port_channel_id.port_id.clone(),
-        port_channel_id.channel_id,
+        port_channel_id.channel_id.clone(),
     ));
     ibc_key(path.to_string())
         .expect("Creating a key for nextSequenceAck shouldn't fail")
@@ -251,9 +239,9 @@ pub fn commitment_key(
     channel_id: &ChannelId,
     sequence: Sequence,
 ) -> Key {
-    let path = Path::Commitments(CommitmentsPath {
+    let path = Path::Commitment(CommitmentPath {
         port_id: port_id.clone(),
-        channel_id: *channel_id,
+        channel_id: channel_id.clone(),
         sequence,
     });
     ibc_key(path.to_string())
@@ -266,9 +254,9 @@ pub fn receipt_key(
     channel_id: &ChannelId,
     sequence: Sequence,
 ) -> Key {
-    let path = Path::Receipts(ReceiptsPath {
+    let path = Path::Receipt(ReceiptPath {
         port_id: port_id.clone(),
-        channel_id: *channel_id,
+        channel_id: channel_id.clone(),
         sequence,
     });
     ibc_key(path.to_string())
@@ -281,9 +269,9 @@ pub fn ack_key(
     channel_id: &ChannelId,
     sequence: Sequence,
 ) -> Key {
-    let path = Path::Acks(AcksPath {
+    let path = Path::Ack(AckPath {
         port_id: port_id.clone(),
-        channel_id: *channel_id,
+        channel_id: channel_id.clone(),
         sequence,
     });
     ibc_key(path.to_string())
@@ -464,52 +452,10 @@ pub fn port_id(key: &Key) -> Result<PortId> {
     }
 }
 
-/// Returns a capability from the given capability key
-/// `#IBC/capabilities/<index>`
-pub fn capability(key: &Key) -> Result<Capability> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(prefix),
-            DbKeySeg::StringSeg(index),
-            ..,
-        ] if addr == &Address::Internal(InternalAddress::Ibc)
-            && prefix == "capabilities" =>
-        {
-            let index: u64 = index.raw().parse().map_err(|e| {
-                Error::InvalidPortCapability(format!(
-                    "The key has a non-number index: Key {}, {}",
-                    key, e
-                ))
-            })?;
-            Ok(Capability::from(index))
-        }
-        _ => Err(Error::InvalidPortCapability(format!(
-            "The key doesn't have a capability index: Key {}",
-            key
-        ))),
-    }
-}
-
 /// The storage key to get the denom name from the hashed token
 pub fn ibc_denom_key(token_hash: impl AsRef<str>) -> Key {
     let path = format!("{}/{}", DENOM, token_hash.as_ref());
     ibc_key(path).expect("Creating a key for the denom key shouldn't fail")
-}
-
-/// Key's prefix for the escrow, burn, or mint account
-pub fn ibc_account_prefix(
-    port_id: &PortId,
-    channel_id: &ChannelId,
-    token: &Address,
-) -> Key {
-    Key::from(token.to_db_key())
-        .push(&MULTITOKEN_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-        .push(&port_id.to_string().to_db_key())
-        .expect("Cannot obtain a storage key")
-        .push(&channel_id.to_string().to_db_key())
-        .expect("Cannot obtain a storage key")
 }
 
 /// Token address from the denom string
@@ -570,8 +516,24 @@ pub fn ibc_token_prefix(denom: impl AsRef<str>) -> Result<Key> {
     Ok(prefix)
 }
 
+/// Returns true if the given key is for IBC
+pub fn is_ibc_key(key: &Key) -> bool {
+    matches!(&key.segments[0],
+             DbKeySeg::AddressSeg(addr) if *addr == Address::Internal(InternalAddress::Ibc))
+}
+
 /// Returns true if the sub prefix is for IBC
 pub fn is_ibc_sub_prefix(sub_prefix: &Key) -> bool {
     matches!(&sub_prefix.segments[0],
              DbKeySeg::StringSeg(s) if s == MULTITOKEN_STORAGE_KEY)
+}
+
+/// Returns true if the given key is the denom key
+pub fn is_ibc_denom_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), ..] => {
+            addr == &Address::Internal(InternalAddress::Ibc) && prefix == DENOM
+        }
+        _ => false,
+    }
 }
