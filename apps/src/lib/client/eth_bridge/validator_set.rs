@@ -280,7 +280,7 @@ pub async fn query_validator_set_args(args: args::ConsensusValidatorSet) {
 
 /// Relay a validator set update, signed off for a given epoch.
 pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
-    let mut signal_receiver = install_shutdown_signal();
+    let mut signal_receiver = args.safe_mode.then(install_shutdown_signal);
 
     if args.sync {
         block_on_eth_sync(BlockOnEthSync {
@@ -350,7 +350,7 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
 async fn relay_validator_set_update_daemon(
     mut args: args::ValidatorSetUpdateRelay,
     nam_client: HttpClient,
-    shutdown_receiver: &mut oneshot::Receiver<()>,
+    shutdown_receiver: &mut Option<oneshot::Receiver<()>>,
 ) {
     let eth_client =
         Arc::new(Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap());
@@ -366,7 +366,12 @@ async fn relay_validator_set_update_daemon(
     tracing::info!("The validator set update relayer daemon has started");
 
     loop {
-        if shutdown_receiver.try_recv().is_ok() {
+        let should_exit = shutdown_receiver
+            .as_mut()
+            .map(|rx| rx.try_recv().is_ok())
+            .unwrap_or(false);
+
+        if should_exit {
             safe_exit(0);
         }
 
