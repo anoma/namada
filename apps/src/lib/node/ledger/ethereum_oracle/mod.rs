@@ -8,7 +8,6 @@ use std::time::Duration;
 
 use clarity::Address;
 use ethbridge_events::{event_codecs, EventKind};
-use eyre::eyre;
 use namada::core::types::ethereum_structs;
 use namada::eth_bridge::oracle::config::Config;
 use namada::types::ethereum_events::EthereumEvent;
@@ -54,7 +53,6 @@ pub enum Error {
 /// The result of querying an Ethereum nodes syncing status.
 pub enum SyncStatus {
     /// The fullnode is syncing.
-    #[allow(dead_code)]
     Syncing,
     /// The fullnode is synced up to the given block height.
     AtHeight(Uint256),
@@ -81,6 +79,7 @@ pub struct Oracle {
     /// How long the oracle should wait between checking blocks
     backoff: Duration,
     /// How long the oracle should allow the fullnode to be unresponsive
+    #[cfg_attr(test, allow(dead_code))]
     ceiling: Duration,
     /// A channel for controlling and configuring the oracle.
     control: control::Receiver,
@@ -127,7 +126,7 @@ pub async fn eth_syncing_status_timeout(
             })
         })
         .await
-        .map_or_else(|_| Err(Error::Timeout), |status| Ok(status))
+        .map_or_else(|_| Err(Error::Timeout), Ok)
 }
 
 impl Oracle {
@@ -297,7 +296,6 @@ async fn run_oracle_aux(mut oracle: Oracle) {
             ?next_block_to_process,
             "Checking Ethereum block for bridge events"
         );
-        let deadline = Instant::now() + oracle.ceiling;
         let res = SleepStrategy::Constant(oracle.backoff).run(|| async {
             tokio::select! {
                 result = process(&oracle, &config, next_block_to_process.clone()) => {
@@ -313,7 +311,7 @@ async fn run_oracle_aux(mut oracle: Oracle) {
                             )
                         ) => {
                             tracing::error!(
-                                reason,
+                                %reason,
                                 block = ?next_block_to_process,
                                 "The Ethereum oracle has disconnected"
                             );
@@ -323,7 +321,7 @@ async fn run_oracle_aux(mut oracle: Oracle) {
                             // this is a recoverable error, hence the debug log,
                             // to avoid spamming info logs
                             tracing::debug!(
-                                error,
+                                %error,
                                 block = ?next_block_to_process,
                                 "Error while trying to process Ethereum block"
                             );
@@ -339,7 +337,9 @@ async fn run_oracle_aux(mut oracle: Oracle) {
                     ControlFlow::Break(Err(()))
                 }
             }
-        });
+        })
+        .await;
+
         if res.is_err() {
             break;
         }
