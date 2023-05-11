@@ -6,14 +6,14 @@ use std::ops::ControlFlow;
 use tokio::time::error::Elapsed;
 use tokio::time::{Duration, Instant};
 
-/// A timeout strategy to
+/// A sleep strategy to be applied to fallible runs of arbitrary tasks.
 #[derive(Debug, Clone)]
 pub enum SleepStrategy {
-    /// A constant timeout strategy.
+    /// Constant sleep.
     Constant(Duration),
-    /// A linear timeout strategy.
+    /// Linear backoff sleep.
     LinearBackoff {
-        /// The amount of time added to each consecutive timeout.
+        /// The amount of time added to each consecutive run.
         delta: Duration,
     },
 }
