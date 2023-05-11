@@ -95,10 +95,24 @@ impl Deref for Oracle {
 }
 
 /// Fetch the sync status of an Ethereum node.
+#[inline]
+pub async fn eth_syncing_status(
+    client: &web30::client::Web3,
+) -> Result<SyncStatus, Error> {
+    eth_syncing_status_timeout(
+        client,
+        DEFAULT_BACKOFF,
+        Instant::now() + DEFAULT_CEILING,
+    )
+    .await
+}
+
+/// Fetch the sync status of an Ethereum node, with a custom time
+/// out duration.
 ///
 /// Queries to the Ethereum node are interspersed with constant backoff
 /// sleeps of `backoff_duration`, before ultimately timing out at `deadline`.
-pub async fn eth_syncing_status(
+pub async fn eth_syncing_status_timeout(
     client: &web30::client::Web3,
     backoff_duration: Duration,
     deadline: Instant,
@@ -147,7 +161,9 @@ impl Oracle {
     #[cfg(not(test))]
     async fn syncing(&self) -> Result<SyncStatus, Error> {
         let deadline = Instant::now() + self.ceiling;
-        match eth_syncing_status(&self.client, self.backoff, deadline).await? {
+        match eth_syncing_status_timeout(&self.client, self.backoff, deadline)
+            .await?
+        {
             s @ SyncStatus::Syncing => Ok(s),
             SyncStatus::AtHeight(height) => {
                 match &*self.last_processed_block.borrow() {
