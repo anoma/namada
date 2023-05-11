@@ -59,6 +59,7 @@ use crate::client::tendermint_rpc_types::TxResponse;
 use crate::client::tx::{
     Conversions, PinnedBalanceError, TransactionDelta, TransferDelta,
 };
+use crate::control_flow::timeouts::TimeoutStrategy;
 use crate::facade::tendermint::merkle::proof::Proof;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::error::Error as TError;
@@ -66,7 +67,6 @@ use crate::facade::tendermint_rpc::query::Query;
 use crate::facade::tendermint_rpc::{
     Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
 };
-use crate::timeouts::TimeoutStrategy;
 
 /// Query the status of a given transaction.
 ///

@@ -9,8 +9,8 @@ use tokio::time::{Duration, Instant};
 use web30::client::Web3;
 
 use crate::cli;
+use crate::control_flow::timeouts::TimeoutStrategy;
 use crate::node::ledger::ethereum_oracle::eth_syncing_status;
-use crate::timeouts::TimeoutStrategy;
 
 /// Arguments to [`block_on_eth_sync`].
 pub struct BlockOnEthSync<'rpc_url> {
