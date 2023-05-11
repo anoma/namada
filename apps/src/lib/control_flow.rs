@@ -84,6 +84,7 @@ async fn shutdown_send(tx: oneshot::Sender<()>) {
             tracing::error!("Failed to listen for CTRL+C signal: {err}")
         }
     }
-    tx.send(())
-        .expect("The oneshot receiver should still be alive");
+    if tx.send(()).is_err() {
+        tracing::debug!("Shutdown signal receiver was dropped");
+    }
 }
