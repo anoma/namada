@@ -8,9 +8,9 @@ Before describing Namada governance, it is useful to define the concepts of NAM,
 *Consensus terminology*
 - A Namada _validator_ is an account with a public consensus key, which may participate in producing blocks and governance activities. A validator may not also be a delegator.
 
-Non-validator addresses on Namada are able to bond their tokens to a validator. When doing so, the validator's voting-power is proportional to the sum of its self-bonded tokens and all the bonded tokens from other addesses to their own address.
+Non-validator addresses on Namada are able to bond their tokens. When they do so, they specify a validator which is now responsible for voting on blocks on the bonder's behalf. When doing so, the validator's voting-power is proportional to the sum of its self-bonded tokens and all the bonded tokens from other addesses to their own address.
 
-When an address bonds tokens to a validator, the validator becomes the default *delegate* (explained below) of that address. Similarly, a delegate's `voting-power` (now in terms of voting on Governance proposals, not blocks) is proportional to the sum of its self-bonded tokens and all the bonded tokens from other addresses to their own address.
+When an address bonds tokens, the address is able to specify a *delegate*. The respective validator of that address becomes the default *delegate* (explained below) of that address. Similarly, a delegate's `voting-power` (now in terms of voting on Governance proposals, not blocks) is proportional to the sum of its self-bonded tokens and all the bonded tokens from other addresses to their own address.
 
 *Governance terminology*
 With the above definitions in mind, we can now define the following terms:

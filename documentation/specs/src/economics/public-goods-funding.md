@@ -32,13 +32,13 @@ _Meta public goods_ covers funding for any good that increases the production or
 - External public goods
   _External public goods_ covers funding for public goods explicitly external to the Namada and Namada ecosystem, including carbon sequestration, independent journalism, direct cash transfers, legal advocacy, etc. Possible funding forms could include direct purchase of tokenised assets such as carbon credits, direct cash transfers (e.g. GiveDirectly), institutional funding (e.g. Wikileaks), and similar.
 
-## The Public Goods Stewards
+## The public goods stewards
 
-The funding of public goods on Namada will be conducted through a structure we call "Public Goods Stewards".
+The funding of public goods on Namada will be conducted through a structure we call "public goods stewards".
 
-Each steward is elected by governance through separate governance proposals. Each steward will be responsible for covering a specific area of public goods, which they describe during their election. Stewards can then "propose" funding of various public goods, which will pass by default. However, Governance retains the power to veto any proposal, which would result in the Steward being removed from the set of Stewards.
+Each steward is elected by governance through separate governance proposals. Each steward will be responsible for covering a specific area of public goods, which they describe during their election. Stewards can then "propose" funding of various public goods, which will pass by default. However, Governance retains the power to veto any proposal, which would result in the Steward being removed from the set of stewards.
 
-## Voting for the Steward
+## Voting for the stewards
 
 ### What is a Steward (technically)?
 All valid PGF stewards will be established multisignature account addresses. These must be created by the intdended parties (which may very well be just one person, but could be more) that wish to represent the Steward entity. For example, if David Alice and Bob wish to represent the combined steward DAB, they may do so as a common entity. But likewise, Alice can create her own 1-out-of-1 multisig that to just represent herself.
@@ -51,9 +51,9 @@ In order to propose candidacy as a PGF Steward, the Steward must initiate a cust
 
 Proposing candidacy as a PGF Steward is something that is done at any time.
 
-### Losing Stewardship Status
+### Losing stewardship status
 
-There are 3 ways that a Steward be removed from the Steward Set:
+There are 3 ways that a Steward be removed from the steward set:
 
 1. Resign as a steward
 2. Have a failed funding proposal
@@ -61,17 +61,18 @@ There are 3 ways that a Steward be removed from the Steward Set:
 
 Resigning as a Steward is straight-forward. A simple CLI is implemented to allow for this so that the established account representing the Steward loses their priveleges as a PG Steward.
 
-If the Steward's PGF proposal receives a significant number of `Nay` votes ($\frac{2}{3}$ as a fraction of voting-power), they will be removed from the Steward set. It is likely that there would only be such wide-speread disagreement if the proposal was misaligned with the users the Stewards is attempting to cater to. This is described in more detail under [its section](#proposing-funding).
+If a steward's PGF proposal receives a significant number of `Nay` votes ($\frac{2}{3}$ as a fraction of voting-power), they will be removed from the steward set. It is likely that there would only be such wide-speread disagreement if the proposal was misaligned with the users the stewards is attempting to cater to. This is described in more detail under [its section](#proposing-funding).
 
-Finally, the Steward can be "voted-out" from its responsibility through a custom governance proposal similar to the one used to elect the Steward in the first place!
+Finally, the steward can be "voted-out" from its responsibility through a custom governance proposal similar to the one used to elect the steward in the first place!
 
 #### "Voting-out" the Steward
 
-In the same way that a Steward can be voted in by Namada governance through a custom proposal, the equal and opposite force exists. Hence, any governance member (validator or delegate), is able to initiate a vote (for the relevant cost) in order to remove an arbitrary number of current PGF Stewards. If this proposal passes, it signals that the Steward(s) has/have not fulfilled their duty to the public, which the Stewards are meant to serve (hence the name).
+In the same way that a steward can be voted in by Namada governance through a custom proposal, the equal and opposite force exists. Hence, any governance member (validator or delegate), is able to initiate a vote (for the relevant cost) in order to remove an arbitrary number of current PGF stewards. If this proposal passes, it signals that the Steward(s) has/have not fulfilled their duty to the public, which the stewards are meant to serve (hence the name).
 
 ### Initiating the vote
 
-Before a new PGF Steward can either be elected or removed, a governance proposal that specifies this objective must pass. The voting on this proposal is handled by the governance proposal type `StewardProposal`, which is a Custom Proposal type.
+Before a new PGF steward can either be elected or removed, a governance proposal that specifies this objective must pass. The voting on this proposal is handled by the governance proposal type `StewardProposal`, which is a custom proposal type.
+
 
 The struct of `StewardProposal` is constructed as follows, and is explained in more detail in the [governance specs](../base-ledger/governance.md)
 
@@ -87,14 +88,17 @@ struct StewardProposal{
 }
 ```
 
- In order for a new PGF Steward to be elected (or removed), $\frac{2}{3}$ of validating power must vote on the `StewardProposal` and more than half of the votes must be in favor. If more than half of the votes are against the proposal, the Steward set is kept the same, and the proposer of the proposal loses their escrowed funds.
+  In order for a new PGF steward to be elected (or removed), $\frac{2}{3}$ of validating power must vote on the `StewardProposal` and more than half of the votes must be in favor. If more than half of the votes are against the proposal, the steward set is kept the same, and the proposer of the proposal loses their escrowed funds.
+
 
 See the example below for more detail, as it may serve as the best medium for explaining the mechanism.
 
-### Voting on the Steward
-After the `StewardProposal` has been submitted, and once the Steward's address has been constructed and broadcasted, the Steward address can be voted on by governance particpants. All voting must occur between `votingStartEpoch` and `votingEndEpoch`.
+### Voting for stewards
+After the `StewardProposal` has been submitted, and once the steward's address has been constructed and broadcasted, the steward address can be voted on by governance participants. All voting must occur between `votingStartEpoch` and `votingEndEpoch`.
 
-The vote for a Steward addresses's membership will be constructed as follows:
+
+The vote for a new steward nomination will be constructed as follows:
+
 
 Each participant submits a vote through governance:
 ```rust
@@ -109,10 +113,10 @@ Where the proposalVote is simply an enum dictating whether the voter voted `Yay`
 
 
 #### Dealing with ties
-In the rare occurance of a tie, the Steward retains membership by default.
+In the rare occurance of a tie, the steward retains membership by default.
 
 
-### Electing the Steward
+### Electing stewards
 
 Once the decision has been made on whether to elect (or remove) the intended Steward, the established address corresponding to the multisig is added to (removed from) the `PGF` internal address.
 
@@ -123,7 +127,7 @@ The below example hopefully demonstrates the mechanism more clearly.
 ````admonish note
 The governance set consists of Alice, Bob, Charlie, Dave, and Elsa. Each member has 20% voting power.
 
-The current PGF Stewards are Dave and Elsa.
+The current PGF stewards are Dave and Elsa.
 
 - At epoch 42, Bob and Charlie decide to put themselves forward as a joint PGF Steward. They construct a multisig with address `0xBobCharlieMultisig`. 
 - At epoch 42, Bob proposes his and Charlie's candidacy through a `StewardProposal`:
@@ -164,10 +168,10 @@ Where the proposalVote is simply the enum `Yay` with an empty memo field.
 
 ## Mechanism
 
-Once elected and instantiated, PGF Stewards will then unilaterally be able to sign transactions that propose either RPGF or CPGF funding. The PGF Stewards as a whole will have an "allowance" to spend up to the `PGF` internal address's balance.
+Once elected and instantiated, PGF stewards will then unilaterally be able to sign transactions that propose either RPGF or CPGF funding. The PGF stewards as a whole will have an "allowance" to spend up to the `PGF` internal address's balance.
 
 ### Proposing Funding
-In order to propose funding, any Steward will be able to propose a PGFProposal through governance. Only Stewards will be valid authors of these proposals. There will be a minimum voting period set specifically for these types of proposals and can be changed by Governance. 
+In order to propose funding, any steward will be able to propose a PGFProposal through governance. Only stewards will be valid authors of these proposals. There will be a minimum voting period set specifically for these types of proposals and can be changed by Governance. 
 
 This governance proposal will be such that it **passes** by default **unless** the following conditions are met:
 
@@ -177,11 +181,11 @@ Conditions to veto a PGF proposal:
   - Further, if at least $\frac{2}{3}$ of voting power voted `Nay` on the proposal, and the proposal was rejected, the Steward is removed from the set of stewards.
 
 
-The PGF Stewards should be able to propose both retroactive and continuous public funding transactions. Retroactive public funding transactions are straightforward and implement no additional logic to a normal transfer.
+The PGF stewards should be able to propose both retroactive and continuous public funding transactions. Retroactive public funding transactions are straightforward and implement no additional logic to a normal transfer.
 
-However, for continuous PGF (cPGF), the Stewards should be able to submit a one time transaction which indicates the recipient addresses that should be eligble for receiveing cPGF. 
+However, for continuous PGF (cPGF), the stewards should be able to submit a one time transaction which indicates the recipient addresses that should be eligble for receiveing cPGF. 
 
-The following data is attached to the PGF transaction and will allow the Stewards to represent the projects they wish to be continously funded. Each tuple represent the address of the recipient and the respective amount of NAM that the recipient will receive every epoch.
+The following data is attached to the PGF transaction and will allow the stewards to represent the projects they wish to be continously funded. Each tuple represent the address of the recipient and the respective amount of NAM that the recipient will receive every epoch.
 
 ```rust
 struct cPgfRecipients {
@@ -202,22 +206,23 @@ impl remRecipient for cPgfRecipients
 
 ## PGF stewards incentives
 
-Being a PGF steward is (should be) hard work. Stewards must invest their time in crafting proposals, being in touch with the opinions of the Namada community, and taking the risks associated with being voted out. In order to incentivise this effort, Namada allocates a set amount of NAM inflation that is directed towards the Stewards. This parameter is set by governance and is included in genesis by default. That allocation is then split equally between each PGF Steward.
+Being a PGF steward is (should be) hard work. Stewards must invest their time in crafting proposals, being in touch with the opinions of the Namada community, and taking the risks associated with being voted out. In order to incentivise this effort, Namada allocates a set amount of NAM inflation that is directed towards the stewards. This parameter is set by governance and is included in genesis by default. That allocation is then allocated to each steward (more stewards = more total funding).
 
 ## Addresses
 Governance adds 1 internal address:
 
 `PGF` internal address
 
-The internal address VP will hold the allowance the 10% inflation of NAM. This funding will be allocated to the internal address at the start of each epoch. It is important to note that it is this internal address which holds the funds, rather than any of the Stewards' multisigs.
+The internal address VP will hold the allowance the 10% inflation of NAM. This funding will be allocated to the internal address at the start of each epoch. It is important to note that it is this internal address which holds the funds, rather than any of the stewards' multisigs.
 
-The Stewards should be able to propose the burning of funds, but this hopefully should not require additional functionality beyond what currently exists.
+
+The stewards should be able to propose the burning of funds, but this hopefully should not require additional functionality beyond what currently exists.
 
 ### VP checks
 
-The VP must check that the Stewards spending does not exceed the balance of the VP (in aggregate).
+The VP must check that the steward's spending does not exceed the balance of the VP (in aggregate).
 
-The VP must also check that the any spending is only done by a the active correctly elected PGF Stewards.
+The VP must also check that the any spending is only done by the active PGF stewards.
 
 ## Storage
 
