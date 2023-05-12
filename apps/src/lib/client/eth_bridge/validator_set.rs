@@ -26,25 +26,6 @@ use crate::client::eth_bridge::BlockOnEthSync;
 use crate::control_flow::install_shutdown_signal;
 use crate::facade::tendermint_rpc::{Client, HttpClient};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-#[repr(transparent)]
-struct ErrorPriority(u8);
-
-impl ErrorPriority {
-    /// Maximum priority.
-    const MAX: Self = Self(USER_MAX.0 + 1);
-    /// The maximum priority a user can configure
-    /// for errors to be displayed.
-    const USER_MAX: Self = Self(10);
-}
-
-impl From<u8> for ErrorPriority {
-    #[inline]
-    fn from(priority: ErrorPriority) -> Self {
-        Self(priority).clamp(Self(0), Self::USER_MAX);
-    }
-}
-
 /// Relayer related errors.
 #[derive(Debug, Default)]
 enum Error {
@@ -53,43 +34,62 @@ enum Error {
     /// This is usually because context was already
     /// provided in the form of `tracing!()` calls.
     NoContext,
-    /// An error message with a reason and a priority
-    /// to be displayed.
+    /// An error message with a reason and an associated
+    /// `tracing` log level.
     WithReason {
         /// The reason of the error.
         reason: Cow<'static, str>,
-        /// The priority of the error.
-        ///
-        /// Lower priority errors may not get displayed.
-        priority: ErrorPriority,
+        /// The log level where to display the error message.
+        level: tracing::Level,
+        /// If critical, exit the relayer.
+        critical: bool,
     },
 }
 
 impl Error {
     /// Create a new error message.
-    fn new<P, M>(priority: P, msg: M) -> Self
+    ///
+    /// The error is recoverable.
+    fn recoverable<M>(msg: M) -> Self
     where
-        P: Into<ErrorPriority>,
         M: Into<Cow<'static, str>>,
     {
         Error::WithReason {
+            level: tracing::Level::DEBUG,
             reason: msg.into(),
-            priority: priority.into(),
+            critical: false,
         }
     }
 
-    /// Optionally display an error message, depending on
-    /// its priority to be displayed.
-    fn maybe_display(&self, thres_priority: ErrorPriority) {
+    /// Create a new error message.
+    ///
+    /// The error is not recoverable.
+    fn critical<M>(msg: M) -> Self
+    where
+        M: Into<Cow<'static, str>>,
+    {
+        Error::WithReason {
+            level: tracing::Level::ERROR,
+            reason: msg.into(),
+            critical: true,
+        }
+    }
+
+    /// Display an error message and potentially exit
+    /// from the relayer process.
+    fn maybe_exit(&self) {
         match self {
-            Error::WithReason { reason, priority }
-                if priority >= thres_priority =>
-            {
-                tracing::error!(
+            Error::WithReason {
+                reason,
+                level,
+                critical,
+            } => {
+                tracing::event!(
+                    level,
                     %reason,
                     "An error occurred during the relay"
                 );
-                if priority > 0 {
+                if critical {
                     safe_exit(1);
                 }
             }
@@ -561,10 +561,8 @@ async fn get_governance_contract(
         .map_err(|err| {
             use namada::ledger::queries::tm::Error;
             match err {
-                Error::Tendermint(e) => {
-                    Error::new(ErrorPriority::MAX, e.to_string())
-                }
-                e => Error::new(0, e.to_string()),
+                Error::Tendermint(e) => Error::critical(e.to_string()),
+                e => Error::recoverable(e.to_string()),
             }
         })?;
     Ok(Governance::new(governance_contract.address, eth_client))
