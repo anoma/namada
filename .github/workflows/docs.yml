@@ -33,7 +33,7 @@ jobs:
         mdbook_linkcheck: [Michael-F-Bryan/mdbook-linkcheck@v0.7.6]
         mdbook_open_on_gh: [badboy/mdbook-open-on-gh@v2.2.0]
         mdbook_admonish: [tommilligan/mdbook-admonish@v1.7.0]
-        mdbook_katex: [lzanini/mdbook-katex@v0.3.4]
+        mdbook_katex: [lzanini/mdbook-katex@v0.4.0]
         make:
           - name: Build specs
             folder: documentation/specs
@@ -78,6 +78,10 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
           aws-region: eu-west-1
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install sccache (ubuntu-20.04)
         if: matrix.os == 'ubuntu-20.04'
         env:
@@ -168,6 +172,10 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
           aws-region: eu-west-1
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install sccache (ubuntu-20.04)
         if: matrix.os == 'ubuntu-20.04'
         env:

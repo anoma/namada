@@ -14,7 +14,7 @@ There's only a single account type. Each account is associated with:
 
 Similar to [Zcash Sapling protocol payment addresses and keys (section 3.1)](https://raw.githubusercontent.com/zcash/zips/master/protocol/protocol.pdf), users can generate spending keys for private payments. A shielded payment address, incoming viewing key and full viewing key are derived from a spending key. In a private payment, a shielded payment address is hashed with a diversifier into a diversified transmission key. When a different diversifier function is chosen for different transactions, it prevents the transmission key from being matched across the transactions.
 
-The encoding of the shielded addresses, spending and viewing keys is not yet decided, but for consistency we'll probably use a the same schema with different prefixes for anything that can use an identifier.
+The encoding of the shielded addresses, spending and viewing keys is not yet decided, but for consistency we'll probably use the same schema with different prefixes for anything that can use an identifier.
 
 - TODO consider using a schema similar to the [unified addresses proposed in Zcash](https://github.com/zcash/zips/issues/482), that are designed to unify the payment addresses across different versions by encoding a typecode and the length of the payment address together with it. This may be especially useful for the protocol upgrade system and fractal scaling system.
 
@@ -25,7 +25,7 @@ state may be comprised of keys of the built-in supported types and values of arb
 
 The dynamic storage sub-space could be a unix filesystem-like tree under the
 account's address key-space with `read, write, delete, has_key, iter_prefix`
-(and maybe a few other convenience functions for hash-maps, hash-sets, optional values, etc.) functions parameterized with the the account's address.
+(and maybe a few other convenience functions for hash-maps, hash-sets, optional values, etc.) functions parameterized with the account's address.
 
 In addition, the storage sub-space would provide:
 

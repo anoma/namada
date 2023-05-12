@@ -40,7 +40,7 @@ pub struct LazyMap<K, V, SON = super::Simple> {
 pub type NestedMap<K, V> = LazyMap<K, V, super::Nested>;
 
 /// Possible sub-keys of a [`LazyMap`]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SubKey<K> {
     /// Data sub-key, further sub-keyed by its literal map key
     Data(K),
@@ -81,7 +81,7 @@ pub enum NestedAction<K, A> {
 }
 
 /// Possible sub-keys of a nested [`LazyMap`]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum NestedSubKey<K, S> {
     /// Data sub-key
     Data {
@@ -141,30 +141,55 @@ where
             Some(Some(suffix)) => suffix,
         };
 
+        // A helper to validate the 2nd key segment
+        let validate_sub_key = |raw_sub_key| {
+            if let Ok(key_in_kv) = storage::KeySeg::parse(raw_sub_key) {
+                let nested = self.at(&key_in_kv).is_valid_sub_key(key)?;
+                match nested {
+                    Some(nested_sub_key) => Ok(Some(NestedSubKey::Data {
+                        key: key_in_kv,
+                        nested_sub_key,
+                    })),
+                    None => {
+                        Err(ValidationError::InvalidNestedSubKey(key.clone()))
+                            .into_storage_result()
+                    }
+                }
+            } else {
+                Err(ValidationError::InvalidSubKey(key.clone()))
+                    .into_storage_result()
+            }
+        };
+
         // Match the suffix against expected sub-keys
         match &suffix.segments[..2] {
             [DbKeySeg::StringSeg(sub_a), DbKeySeg::StringSeg(sub_b)]
                 if sub_a == DATA_SUBKEY =>
             {
-                if let Ok(key_in_kv) = storage::KeySeg::parse(sub_b.clone()) {
-                    let nested = self.at(&key_in_kv).is_valid_sub_key(key)?;
-                    match nested {
-                        Some(nested_sub_key) => Ok(Some(NestedSubKey::Data {
-                            key: key_in_kv,
-                            nested_sub_key,
-                        })),
-                        None => Err(ValidationError::InvalidNestedSubKey(
-                            key.clone(),
-                        ))
-                        .into_storage_result(),
-                    }
-                } else {
-                    Err(ValidationError::InvalidSubKey(key.clone()))
-                        .into_storage_result()
-                }
+                validate_sub_key(sub_b.clone())
+            }
+            [DbKeySeg::StringSeg(sub_a), DbKeySeg::AddressSeg(sub_b)]
+                if sub_a == DATA_SUBKEY =>
+            {
+                validate_sub_key(sub_b.raw())
             }
             _ => Err(ValidationError::InvalidSubKey(key.clone()))
                 .into_storage_result(),
+        }
+    }
+
+    fn is_data_sub_key(&self, key: &storage::Key) -> bool {
+        let sub_key = self.is_valid_sub_key(key);
+        match sub_key {
+            Ok(Some(NestedSubKey::Data {
+                key: parsed_key,
+                nested_sub_key: _,
+            })) => {
+                let sub = self.at(&parsed_key);
+                // Check in the nested collection
+                sub.is_data_sub_key(key)
+            }
+            _ => false,
         }
     }
 
@@ -266,21 +291,35 @@ where
             Some(Some(suffix)) => suffix,
         };
 
+        // A helper to validate the 2nd key segment
+        let validate_sub_key = |raw_sub_key| {
+            if let Ok(key_in_kv) = storage::KeySeg::parse(raw_sub_key) {
+                Ok(Some(SubKey::Data(key_in_kv)))
+            } else {
+                Err(ValidationError::InvalidSubKey(key.clone()))
+                    .into_storage_result()
+            }
+        };
+
         // Match the suffix against expected sub-keys
         match &suffix.segments[..] {
             [DbKeySeg::StringSeg(sub_a), DbKeySeg::StringSeg(sub_b)]
                 if sub_a == DATA_SUBKEY =>
             {
-                if let Ok(key_in_kv) = storage::KeySeg::parse(sub_b.clone()) {
-                    Ok(Some(SubKey::Data(key_in_kv)))
-                } else {
-                    Err(ValidationError::InvalidSubKey(key.clone()))
-                        .into_storage_result()
-                }
+                validate_sub_key(sub_b.clone())
+            }
+            [DbKeySeg::StringSeg(sub_a), DbKeySeg::AddressSeg(sub_b)]
+                if sub_a == DATA_SUBKEY =>
+            {
+                validate_sub_key(sub_b.raw())
             }
             _ => Err(ValidationError::InvalidSubKey(key.clone()))
                 .into_storage_result(),
         }
+    }
+
+    fn is_data_sub_key(&self, key: &storage::Key) -> bool {
+        matches!(self.is_valid_sub_key(key), Ok(Some(_)))
     }
 
     fn read_sub_key_data<ENV>(
@@ -372,7 +411,11 @@ where
             )>,
         > + 'iter,
     > {
-        let iter = storage_api::iter_prefix(storage, &self.get_data_prefix())?;
+        let iter = storage_api::iter_prefix_with_filter(
+            storage,
+            &self.get_data_prefix(),
+            |key| self.is_data_sub_key(key),
+        )?;
         Ok(iter.map(|key_val_res| {
             let (key, val) = key_val_res?;
             let sub_key = LazyCollection::is_valid_sub_key(self, &key)?
@@ -380,6 +423,16 @@ where
                 .into_storage_result()?;
             Ok((sub_key, val))
         }))
+    }
+
+    /// Returns whether the map contains no elements.
+    pub fn is_empty<S>(&self, storage: &S) -> Result<bool>
+    where
+        S: StorageRead,
+    {
+        let mut iter =
+            storage_api::iter_prefix_bytes(storage, &self.get_data_prefix())?;
+        Ok(iter.next().is_none())
     }
 }
 
@@ -512,18 +565,19 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::ledger::storage::testing::TestStorage;
+    use crate::ledger::storage::testing::TestWlStorage;
+    use crate::types::address::{self, Address};
 
     #[test]
     fn test_lazy_map_basics() -> storage_api::Result<()> {
-        let mut storage = TestStorage::default();
+        let mut storage = TestWlStorage::default();
 
         let key = storage::Key::parse("test").unwrap();
         let lazy_map = LazyMap::<u32, String>::open(key);
 
         // The map should be empty at first
         assert!(lazy_map.is_empty(&storage)?);
-        assert!(lazy_map.len(&storage)? == 0);
+        assert_eq!(lazy_map.len(&storage)?, 0);
         assert!(!lazy_map.contains(&storage, &0)?);
         assert!(!lazy_map.contains(&storage, &1)?);
         assert!(lazy_map.iter(&storage)?.next().is_none());
@@ -535,28 +589,154 @@ mod test {
         // Insert a new value and check that it's added
         let (key, val) = (123, "Test".to_string());
         lazy_map.insert(&mut storage, key, val.clone())?;
+
+        let (key2, val2) = (456, "Test2".to_string());
+        lazy_map.insert(&mut storage, key2, val2.clone())?;
+
         assert!(!lazy_map.contains(&storage, &0)?);
         assert!(lazy_map.contains(&storage, &key)?);
         assert!(!lazy_map.is_empty(&storage)?);
-        assert!(lazy_map.len(&storage)? == 1);
-        assert_eq!(
-            lazy_map.iter(&storage)?.next().unwrap()?,
-            (key, val.clone())
-        );
+        assert_eq!(lazy_map.len(&storage)?, 2);
+        let mut map_it = lazy_map.iter(&storage)?;
+        assert_eq!(map_it.next().unwrap()?, (key, val.clone()));
+        assert_eq!(map_it.next().unwrap()?, (key2, val2.clone()));
+        drop(map_it);
+
         assert!(lazy_map.get(&storage, &0)?.is_none());
         assert_eq!(lazy_map.get(&storage, &key)?.unwrap(), val);
+        assert_eq!(lazy_map.get(&storage, &key2)?.unwrap(), val2);
 
-        // Remove the last value and check that the map is empty again
+        // Remove the values and check the map contents
         let removed = lazy_map.remove(&mut storage, &key)?.unwrap();
         assert_eq!(removed, val);
-        assert!(lazy_map.is_empty(&storage)?);
-        assert!(lazy_map.len(&storage)? == 0);
+        assert!(!lazy_map.is_empty(&storage)?);
+        assert_eq!(lazy_map.len(&storage)?, 1);
         assert!(!lazy_map.contains(&storage, &0)?);
         assert!(!lazy_map.contains(&storage, &1)?);
+        assert!(!lazy_map.contains(&storage, &123)?);
+        assert!(lazy_map.contains(&storage, &456)?);
         assert!(lazy_map.get(&storage, &0)?.is_none());
         assert!(lazy_map.get(&storage, &key)?.is_none());
-        assert!(lazy_map.iter(&storage)?.next().is_none());
+        assert!(lazy_map.get(&storage, &key2)?.is_some());
+        assert!(lazy_map.iter(&storage)?.next().is_some());
         assert!(lazy_map.remove(&mut storage, &key)?.is_none());
+        let removed = lazy_map.remove(&mut storage, &key2)?.unwrap();
+        assert_eq!(removed, val2);
+        assert!(lazy_map.is_empty(&storage)?);
+        assert_eq!(lazy_map.len(&storage)?, 0);
+
+        let storage_key = lazy_map.get_data_key(&key);
+        assert_eq!(
+            lazy_map.is_valid_sub_key(&storage_key).unwrap(),
+            Some(SubKey::Data(key))
+        );
+
+        let storage_key2 = lazy_map.get_data_key(&key2);
+        assert_eq!(
+            lazy_map.is_valid_sub_key(&storage_key2).unwrap(),
+            Some(SubKey::Data(key2))
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_lazy_map_with_addr_key() -> storage_api::Result<()> {
+        let mut storage = TestWlStorage::default();
+
+        let key = storage::Key::parse("test").unwrap();
+        let lazy_map = LazyMap::<Address, String>::open(key);
+
+        // Insert a new value and check that it's added
+        let (key, val) = (
+            address::testing::established_address_1(),
+            "Test".to_string(),
+        );
+        lazy_map.insert(&mut storage, key.clone(), val.clone())?;
+
+        assert_eq!(lazy_map.len(&storage)?, 1);
+        let mut map_it = lazy_map.iter(&storage)?;
+        assert_eq!(map_it.next().unwrap()?, (key.clone(), val.clone()));
+        drop(map_it);
+
+        let (key2, val2) = (
+            address::testing::established_address_2(),
+            "Test2".to_string(),
+        );
+        lazy_map.insert(&mut storage, key2.clone(), val2.clone())?;
+
+        assert_eq!(lazy_map.len(&storage)?, 2);
+        let mut map_it = lazy_map.iter(&storage)?;
+        assert!(key < key2, "sanity check - this influences the iter order");
+        assert_eq!(map_it.next().unwrap()?, (key.clone(), val));
+        assert_eq!(map_it.next().unwrap()?, (key2.clone(), val2));
+        assert!(map_it.next().is_none());
+        drop(map_it);
+
+        let storage_key = lazy_map.get_data_key(&key);
+        assert_eq!(
+            lazy_map.is_valid_sub_key(&storage_key).unwrap(),
+            Some(SubKey::Data(key))
+        );
+
+        let storage_key2 = lazy_map.get_data_key(&key2);
+        assert_eq!(
+            lazy_map.is_valid_sub_key(&storage_key2).unwrap(),
+            Some(SubKey::Data(key2))
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_nested_lazy_map_with_addr_key() -> storage_api::Result<()> {
+        let mut storage = TestWlStorage::default();
+
+        let key = storage::Key::parse("test").unwrap();
+        let lazy_map = NestedMap::<Address, LazyMap<u64, String>>::open(key);
+
+        // Insert a new value and check that it's added
+        let (key, sub_key, val) = (
+            address::testing::established_address_1(),
+            1_u64,
+            "Test".to_string(),
+        );
+        lazy_map
+            .at(&key)
+            .insert(&mut storage, sub_key, val.clone())?;
+
+        assert_eq!(lazy_map.at(&key).len(&storage)?, 1);
+        let mut map_it = lazy_map.iter(&storage)?;
+        let expected_key = NestedSubKey::Data {
+            key: key.clone(),
+            nested_sub_key: SubKey::Data(sub_key),
+        };
+        assert_eq!(
+            map_it.next().unwrap()?,
+            (expected_key.clone(), val.clone())
+        );
+        drop(map_it);
+
+        let (key2, sub_key2, val2) = (
+            address::testing::established_address_2(),
+            2_u64,
+            "Test2".to_string(),
+        );
+        lazy_map
+            .at(&key2)
+            .insert(&mut storage, sub_key2, val2.clone())?;
+
+        assert_eq!(lazy_map.at(&key2).len(&storage)?, 1);
+        let mut map_it = lazy_map.iter(&storage)?;
+        assert!(key < key2, "sanity check - this influences the iter order");
+        let expected_key2 = NestedSubKey::Data {
+            key: key2,
+            nested_sub_key: SubKey::Data(sub_key2),
+        };
+        assert_eq!(map_it.next().unwrap()?, (expected_key, val));
+        assert_eq!(map_it.next().unwrap()?, (expected_key2, val2));
+        assert!(map_it.next().is_none());
+        drop(map_it);
 
         Ok(())
     }

@@ -21,9 +21,9 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use crate::cli::context::ENV_VAR_WASM_DIR;
-use crate::cli::{self, args};
+use crate::cli::{self, args, safe_exit};
 use crate::config::genesis::genesis_config::{
-    self, HexString, ValidatorPreGenesisConfig,
+    self, GenesisConfig, HexString, ValidatorPreGenesisConfig,
 };
 use crate::config::global::GlobalConfig;
 use crate::config::{self, Config, TendermintMode};
@@ -260,10 +260,22 @@ pub async fn join_network(
 
         let genesis_file_path =
             base_dir.join(format!("{}.toml", chain_id.as_str()));
-        let mut wallet = Wallet::load_or_new_from_genesis(
-            &chain_dir,
-            genesis_config::open_genesis_config(genesis_file_path).unwrap(),
-        );
+        let genesis_config =
+            genesis_config::open_genesis_config(genesis_file_path).unwrap();
+
+        if !is_valid_validator_for_current_chain(
+            &tendermint_node_key.ref_to(),
+            &genesis_config,
+        ) {
+            eprintln!(
+                "The current validator is not valid for chain {}.",
+                chain_id.as_str()
+            );
+            safe_exit(1)
+        }
+
+        let mut wallet =
+            Wallet::load_or_new_from_genesis(&chain_dir, genesis_config);
 
         let address = wallet
             .find_address(&validator_alias)
@@ -871,6 +883,14 @@ fn init_established_account(
     }
 }
 
+pub fn pk_to_tm_address(
+    _global_args: args::Global,
+    args::PkToTmAddress { public_key }: args::PkToTmAddress,
+) {
+    let tm_addr = tm_consensus_key_raw_hash(&public_key);
+    println!("{tm_addr}");
+}
+
 /// Initialize genesis validator's address, consensus key and validator account
 /// key and use it in the ledger's node.
 pub fn init_genesis_validator(
@@ -1057,4 +1077,17 @@ pub fn validator_pre_genesis_file(pre_genesis_path: &Path) -> PathBuf {
 /// The default validator pre-genesis directory
 pub fn validator_pre_genesis_dir(base_dir: &Path, alias: &str) -> PathBuf {
     base_dir.join(PRE_GENESIS_DIR).join(alias)
+}
+
+fn is_valid_validator_for_current_chain(
+    tendermint_node_pk: &common::PublicKey,
+    genesis_config: &GenesisConfig,
+) -> bool {
+    genesis_config.validator.iter().any(|(_alias, config)| {
+        if let Some(tm_node_key) = &config.tendermint_node_key {
+            tm_node_key.0.eq(&tendermint_node_pk.to_string())
+        } else {
+            false
+        }
+    })
 }

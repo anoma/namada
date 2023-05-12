@@ -151,7 +151,7 @@ max_proposal_bytes = 22020096
 
 # Proof of stake parameters.
 [pos_params]
-# Maximum number of active validators.
+# Maximum number of consensus validators.
 max_validator_slots = 128
 # Pipeline length (in epochs). Any change in the validator set made in
 # epoch 'n' will become active in epoch 'n + pipeline_len'.

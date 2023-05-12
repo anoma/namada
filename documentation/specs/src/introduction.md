@@ -2,7 +2,7 @@
 
 Welcome to the Namada specification!
 
-## What is Namada? 
+## What is Namada?
 
 Namada is a sovereign proof-of-stake blockchain, using Tendermint BFT consensus,
 which enables multi-asset private transfers for any native or non-native asset
@@ -12,20 +12,20 @@ a stake-weighted governance signalling mechanism, and a dual proactive/retroacti
 Users of shielded transfers are rewarded for their contributions to the privacy set in the form of native protocol tokens.
 A multi-asset shielded transfer wallet is provided in order to facilitate safe and private user interaction with the protocol.
 
-You can learn more about Namada [here](https://medium.com/namadanetwork/introducing-namada-shielded-transfers-with-any-assets-dce2e579384c).
+You can learn more about Namada [here](https://blog.namada.net/introducing-namada-interchain-asset-agnostic-privacy/).
 
 ### What is Anoma?
 
-The Anoma protocol is designed to facilitate the operation of networked fractal instances, which intercommunicate but can utilise varied state machines and security models. 
+The Anoma protocol is designed to facilitate the operation of networked fractal instances, which intercommunicate but can utilise varied state machines and security models.
 A fractal instance is an instance of the Anoma consensus and execution protocols operated by a set of networked validators.
 Anoma’s fractal instance architecture is an attempt to build a platform which is architecturally homogeneous but with a heterogeneous security model.
 Thus, different fractal instances may specialise in different tasks and serve different communities.
 
-### How does Namada relate to Anoma? 
+### How does Namada relate to Anoma?
 
 The Namada instance is the first such fractal instance, focused exclusively on the use-case of private asset transfers.
 Namada is also a helpful stepping stone to finalise, test, and launch a protocol version that is simpler than the full
-Anoma protocol but still encapsulates a unified and useful set of features. 
+Anoma protocol but still encapsulates a unified and useful set of features.
 
 ### Raison d'être
 
@@ -41,7 +41,7 @@ and fungible or non-fungible assets (such as ERC20 tokens) sent over a custom Et
 reduces transfer costs and streamlines UX as much as possible. Once assets are on Namada,
 shielded transfers are cheap and all assets contribute to the same anonymity set.
 
-Users on Namada can earn rewards, retain privacy of assets, and contribute to shared privacy. 
+Users on Namada can earn rewards, retain privacy of assets, and contribute to shared privacy.
 
 ### Layout of this specification
 

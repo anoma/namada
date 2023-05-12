@@ -9,6 +9,10 @@ WORKDIR /__w/namada/namada
 RUN rustup toolchain install 1.65.0 --profile minimal
 RUN rustup target add wasm32-unknown-unknown
 
+RUN apt-get update && apt-get install -y \
+    protobuf-compiler \
+    && apt-get clean
+
 # Download binaryen and extract wasm-opt
 ADD https://github.com/WebAssembly/binaryen/releases/download/version_110/binaryen-version_110-x86_64-linux.tar.gz /tmp/binaryen.tar.gz
 RUN tar -xf /tmp/binaryen.tar.gz

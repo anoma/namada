@@ -19,15 +19,14 @@ use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::ledger::vp_host_fns;
 use crate::proto::Tx;
 use crate::types::address::{self, Address};
+use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
 use crate::types::internal::HostEnvResult;
 use crate::types::key::*;
-use crate::types::storage::{Key, TxIndex};
+use crate::types::storage::{BlockHeight, Key, TxIndex};
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
-use crate::vm::{
-    validate_untrusted_wasm, HostRef, MutHostRef, WasmValidationError,
-};
+use crate::vm::{HostRef, MutHostRef};
 
 const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
 const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
@@ -40,8 +39,10 @@ pub enum TxRuntimeError {
     OutOfGas(gas::Error),
     #[error("Trying to modify storage for an address that doesn't exit {0}")]
     UnknownAddressStorageModification(Address),
-    #[error("Trying to use a validity predicate with an invalid WASM {0}")]
-    InvalidVpCode(WasmValidationError),
+    #[error(
+        "Trying to use a validity predicate with an invalid WASM code hash {0}"
+    )]
+    InvalidVpCodeHash(String),
     #[error("A validity predicate of an account cannot be deleted")]
     CannotDeleteVp,
     #[error("Storage modification error: {0}")]
@@ -617,15 +618,15 @@ where
             HostEnvResult::Fail.to_i64()
         }
         Some(&write_log::StorageModification::InitAccount {
-            ref vp, ..
+            ref vp_code_hash,
         }) => {
             // read the VP of a new account
-            let len: i64 = vp
+            let len: i64 = vp_code_hash
                 .len()
                 .try_into()
                 .map_err(TxRuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
-            result_buffer.replace(vp.clone());
+            result_buffer.replace(vp_code_hash.to_vec());
             len
         }
         Some(&write_log::StorageModification::Temp { ref value }) => {
@@ -696,7 +697,7 @@ pub fn tx_iter_prefix<MEM, DB, H, CA>(
 ) -> TxResult<u64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -706,15 +707,17 @@ where
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_add_gas(env, gas)?;
 
-    tracing::debug!("tx_iter_prefix {}, prefix {}", prefix, prefix_ptr);
+    tracing::debug!("tx_iter_prefix {}", prefix);
 
     let prefix =
         Key::parse(prefix).map_err(TxRuntimeError::StorageDataError)?;
 
+    let write_log = unsafe { env.ctx.write_log.get() };
     let storage = unsafe { env.ctx.storage.get() };
-    let iterators = unsafe { env.ctx.iterators.get() };
-    let (iter, gas) = storage.iter_prefix(&prefix);
+    let (iter, gas) = storage::iter_prefix_post(write_log, storage, &prefix);
     tx_add_gas(env, gas)?;
+
+    let iterators = unsafe { env.ctx.iterators.get() };
     Ok(iterators.insert(iter).id())
 }
 
@@ -831,7 +834,7 @@ where
 
     let key = Key::parse(key).map_err(TxRuntimeError::StorageDataError)?;
     if key.is_validity_predicate().is_some() {
-        tx_validate_vp_code(env, &value)?;
+        tx_validate_vp_code_hash(env, &value)?;
     }
 
     check_address_existence(env, &key)?;
@@ -982,7 +985,7 @@ where
     let event: IbcEvent = BorshDeserialize::try_from_slice(&event)
         .map_err(TxRuntimeError::EncodingError)?;
     let write_log = unsafe { env.ctx.write_log.get() };
-    let gas = write_log.set_ibc_event(event);
+    let gas = write_log.emit_ibc_event(event);
     tx_add_gas(env, gas)
 }
 
@@ -1183,7 +1186,9 @@ where
     let key =
         Key::parse(key).map_err(vp_host_fns::RuntimeError::StorageDataError)?;
     let storage = unsafe { env.ctx.storage.get() };
-    let present = vp_host_fns::has_key_pre(gas_meter, storage, &key)?;
+    let write_log = unsafe { env.ctx.write_log.get() };
+    let present =
+        vp_host_fns::has_key_pre(gas_meter, storage, write_log, &key)?;
     Ok(HostEnvResult::from(present).to_i64())
 }
 
@@ -1220,17 +1225,18 @@ where
     Ok(HostEnvResult::from(present).to_i64())
 }
 
-/// Storage prefix iterator function exposed to the wasm VM VP environment.
-/// It will try to get an iterator from the storage and return the corresponding
-/// ID of the iterator, ordered by storage keys.
-pub fn vp_iter_prefix<MEM, DB, H, EVAL, CA>(
+/// Storage prefix iterator function for prior state (before tx execution)
+/// exposed to the wasm VM VP environment. It will try to get an iterator from
+/// the storage and return the corresponding ID of the iterator, ordered by
+/// storage keys.
+pub fn vp_iter_prefix_pre<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> vp_host_fns::EnvResult<u64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1242,63 +1248,63 @@ where
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_host_fns::add_gas(gas_meter, gas)?;
 
+    tracing::debug!("vp_iter_prefix_pre {}", prefix);
+
     let prefix = Key::parse(prefix)
         .map_err(vp_host_fns::RuntimeError::StorageDataError)?;
-    tracing::debug!("vp_iter_prefix {}", prefix);
 
+    let write_log = unsafe { env.ctx.write_log.get() };
     let storage = unsafe { env.ctx.storage.get() };
-    let iter = vp_host_fns::iter_prefix(gas_meter, storage, &prefix)?;
+    let iter =
+        vp_host_fns::iter_prefix_pre(gas_meter, write_log, storage, &prefix)?;
+
     let iterators = unsafe { env.ctx.iterators.get() };
     Ok(iterators.insert(iter).id())
 }
 
-/// Storage prefix iterator for prior state (before tx execution) function
-/// exposed to the wasm VM VP environment. It will try to read from the storage.
-///
-/// Returns `-1` when the key is not present, or the length of the data when
-/// the key is present (the length may be `0`).
-pub fn vp_iter_pre_next<MEM, DB, H, EVAL, CA>(
+/// Storage prefix iterator function for posterior state (after tx execution)
+/// exposed to the wasm VM VP environment. It will try to get an iterator from
+/// the storage and return the corresponding ID of the iterator, ordered by
+/// storage keys.
+pub fn vp_iter_prefix_post<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
-    iter_id: u64,
-) -> vp_host_fns::EnvResult<i64>
+    prefix_ptr: u64,
+    prefix_len: u64,
+) -> vp_host_fns::EnvResult<u64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
-    tracing::debug!("vp_iter_pre_next iter_id {}", iter_id);
+    let (prefix, gas) = env
+        .memory
+        .read_string(prefix_ptr, prefix_len as _)
+        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
+    vp_host_fns::add_gas(gas_meter, gas)?;
+
+    tracing::debug!("vp_iter_prefix_post {}", prefix);
+
+    let prefix = Key::parse(prefix)
+        .map_err(vp_host_fns::RuntimeError::StorageDataError)?;
+
+    let write_log = unsafe { env.ctx.write_log.get() };
+    let storage = unsafe { env.ctx.storage.get() };
+    let iter =
+        vp_host_fns::iter_prefix_post(gas_meter, write_log, storage, &prefix)?;
 
     let iterators = unsafe { env.ctx.iterators.get() };
-    let iter_id = PrefixIteratorId::new(iter_id);
-    if let Some(iter) = iterators.get_mut(iter_id) {
-        let gas_meter = unsafe { env.ctx.gas_meter.get() };
-        if let Some((key, val)) =
-            vp_host_fns::iter_pre_next::<DB>(gas_meter, iter)?
-        {
-            let key_val = KeyVal { key, val }
-                .try_to_vec()
-                .map_err(vp_host_fns::RuntimeError::EncodingError)?;
-            let len: i64 = key_val
-                .len()
-                .try_into()
-                .map_err(vp_host_fns::RuntimeError::NumConversionError)?;
-            let result_buffer = unsafe { env.ctx.result_buffer.get() };
-            result_buffer.replace(key_val);
-            return Ok(len);
-        }
-    }
-    Ok(HostEnvResult::Fail.to_i64())
+    Ok(iterators.insert(iter).id())
 }
 
-/// Storage prefix iterator next for posterior state (after tx execution)
-/// function exposed to the wasm VM VP environment. It will try to read from the
-/// write log first and if no entry found then from the storage.
+/// Storage prefix iterator for prior or posterior state function
+/// exposed to the wasm VM VP environment.
 ///
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
-pub fn vp_iter_post_next<MEM, DB, H, EVAL, CA>(
+pub fn vp_iter_next<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
     iter_id: u64,
 ) -> vp_host_fns::EnvResult<i64>
@@ -1309,16 +1315,13 @@ where
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
-    tracing::debug!("vp_iter_post_next iter_id {}", iter_id);
+    tracing::debug!("vp_iter_next iter_id {}", iter_id);
 
     let iterators = unsafe { env.ctx.iterators.get() };
     let iter_id = PrefixIteratorId::new(iter_id);
     if let Some(iter) = iterators.get_mut(iter_id) {
         let gas_meter = unsafe { env.ctx.gas_meter.get() };
-        let write_log = unsafe { env.ctx.write_log.get() };
-        if let Some((key, val)) =
-            vp_host_fns::iter_post_next::<DB>(gas_meter, write_log, iter)?
-        {
+        if let Some((key, val)) = vp_host_fns::iter_next(gas_meter, iter)? {
             let key_val = KeyVal { key, val }
                 .try_to_vec()
                 .map_err(vp_host_fns::RuntimeError::EncodingError)?;
@@ -1366,8 +1369,8 @@ pub fn tx_update_validity_predicate<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
     addr_ptr: u64,
     addr_len: u64,
-    code_ptr: u64,
-    code_len: u64,
+    code_hash_ptr: u64,
+    code_hash_len: u64,
 ) -> TxResult<()>
 where
     MEM: VmMemory,
@@ -1385,17 +1388,17 @@ where
     tracing::debug!("tx_update_validity_predicate for addr {}", addr);
 
     let key = Key::validity_predicate(&addr);
-    let (code, gas) = env
+    let (code_hash, gas) = env
         .memory
-        .read_bytes(code_ptr, code_len as _)
+        .read_bytes(code_hash_ptr, code_hash_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_add_gas(env, gas)?;
 
-    tx_validate_vp_code(env, &code)?;
+    tx_validate_vp_code_hash(env, &code_hash)?;
 
     let write_log = unsafe { env.ctx.write_log.get() };
     let (gas, _size_diff) = write_log
-        .write(&key, code)
+        .write(&key, code_hash)
         .map_err(TxRuntimeError::StorageModificationError)?;
     tx_add_gas(env, gas)
     // TODO: charge the size diff
@@ -1404,8 +1407,8 @@ where
 /// Initialize a new account established address.
 pub fn tx_init_account<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
-    code_ptr: u64,
-    code_len: u64,
+    code_hash_ptr: u64,
+    code_hash_len: u64,
     result_ptr: u64,
 ) -> TxResult<()>
 where
@@ -1414,24 +1417,21 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
-    let (code, gas) = env
+    let (code_hash, gas) = env
         .memory
-        .read_bytes(code_ptr, code_len as _)
+        .read_bytes(code_hash_ptr, code_hash_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_add_gas(env, gas)?;
 
-    tx_validate_vp_code(env, &code)?;
-    #[cfg(feature = "wasm-runtime")]
-    {
-        let vp_wasm_cache = unsafe { env.ctx.vp_wasm_cache.get() };
-        vp_wasm_cache.pre_compile(&code);
-    }
+    tx_validate_vp_code_hash(env, &code_hash)?;
 
     tracing::debug!("tx_init_account");
 
     let storage = unsafe { env.ctx.storage.get() };
     let write_log = unsafe { env.ctx.write_log.get() };
-    let (addr, gas) = write_log.init_account(&storage.address_gen, code);
+    let code_hash = Hash::try_from(&code_hash[..])
+        .map_err(|e| TxRuntimeError::InvalidVpCodeHash(e.to_string()))?;
+    let (addr, gas) = write_log.init_account(&storage.address_gen, code_hash);
     let addr_bytes =
         addr.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
     tx_add_gas(env, gas)?;
@@ -1579,6 +1579,38 @@ where
     tx_add_gas(env, gas)
 }
 
+/// Getting the block header function exposed to the wasm VM Tx environment.
+pub fn tx_get_block_header<MEM, DB, H, CA>(
+    env: &TxVmEnv<MEM, DB, H, CA>,
+    height: u64,
+) -> TxResult<i64>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let storage = unsafe { env.ctx.storage.get() };
+    let (header, gas) = storage
+        .get_block_header(Some(BlockHeight(height)))
+        .map_err(TxRuntimeError::StorageError)?;
+    Ok(match header {
+        Some(h) => {
+            let value =
+                h.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
+            let len: i64 = value
+                .len()
+                .try_into()
+                .map_err(TxRuntimeError::NumConversionError)?;
+            let result_buffer = unsafe { env.ctx.result_buffer.get() };
+            result_buffer.replace(value);
+            tx_add_gas(env, gas)?;
+            len
+        }
+        None => HostEnvResult::Fail.to_i64(),
+    })
+}
+
 /// Getting the chain ID function exposed to the wasm VM VP environment.
 pub fn vp_get_chain_id<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
@@ -1620,36 +1652,35 @@ where
     Ok(height.0)
 }
 
-/// Getting the block time function exposed to the wasm VM Tx
-/// environment. The time is that of the block header to which the current
-/// transaction is being applied.
-pub fn tx_get_block_time<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
-) -> TxResult<i64>
+/// Getting the block header function exposed to the wasm VM VP environment.
+pub fn vp_get_block_header<MEM, DB, H, EVAL, CA>(
+    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    height: u64,
+) -> vp_host_fns::EnvResult<i64>
 where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let storage = unsafe { env.ctx.storage.get() };
     let (header, gas) = storage
-        .get_block_header(None)
-        .map_err(TxRuntimeError::StorageError)?;
+        .get_block_header(Some(BlockHeight(height)))
+        .map_err(vp_host_fns::RuntimeError::StorageError)?;
+    vp_host_fns::add_gas(gas_meter, gas)?;
     Ok(match header {
         Some(h) => {
-            let time = h
-                .time
-                .to_rfc3339()
+            let value = h
                 .try_to_vec()
-                .map_err(TxRuntimeError::EncodingError)?;
-            let len: i64 = time
+                .map_err(vp_host_fns::RuntimeError::EncodingError)?;
+            let len: i64 = value
                 .len()
                 .try_into()
-                .map_err(TxRuntimeError::NumConversionError)?;
+                .map_err(vp_host_fns::RuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
-            result_buffer.replace(time);
-            tx_add_gas(env, gas)?;
+            result_buffer.replace(value);
             len
         }
         None => HostEnvResult::Fail.to_i64(),
@@ -1814,10 +1845,10 @@ where
     Ok(())
 }
 
-/// Validate a VP WASM code in a tx environment.
-fn tx_validate_vp_code<MEM, DB, H, CA>(
+/// Validate a VP WASM code hash in a tx environment.
+fn tx_validate_vp_code_hash<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
-    code: &[u8],
+    code_hash: &[u8],
 ) -> TxResult<()>
 where
     MEM: VmMemory,
@@ -1825,8 +1856,26 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_add_gas(env, code.len() as u64 * WASM_VALIDATION_GAS_PER_BYTE)?;
-    validate_untrusted_wasm(code).map_err(TxRuntimeError::InvalidVpCode)
+    tx_add_gas(env, code_hash.len() as u64 * WASM_VALIDATION_GAS_PER_BYTE)?;
+    let hash = Hash::try_from(code_hash)
+        .map_err(|e| TxRuntimeError::InvalidVpCodeHash(e.to_string()))?;
+    let key = Key::wasm_code(&hash);
+    let write_log = unsafe { env.ctx.write_log.get() };
+    let (result, gas) = write_log.read(&key);
+    tx_add_gas(env, gas)?;
+    if result.is_none() {
+        let storage = unsafe { env.ctx.storage.get() };
+        let (is_present, gas) = storage
+            .has_key(&key)
+            .map_err(TxRuntimeError::StorageError)?;
+        tx_add_gas(env, gas)?;
+        if !is_present {
+            return Err(TxRuntimeError::InvalidVpCodeHash(
+                "The corresponding VP code doesn't exist".to_string(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Evaluate a validity predicate with the given input data.

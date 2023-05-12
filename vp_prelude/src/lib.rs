@@ -7,7 +7,6 @@
 #![deny(rustdoc::private_intra_doc_links)]
 
 pub mod key;
-pub mod token;
 
 // used in the VP input
 use core::convert::AsRef;
@@ -31,7 +30,7 @@ use namada_core::types::hash::{Hash, HASH_LENGTH};
 use namada_core::types::internal::HostEnvResult;
 use namada_core::types::key::*;
 use namada_core::types::storage::{
-    BlockHash, BlockHeight, Epoch, TxIndex, BLOCK_HASH_LENGTH,
+    BlockHash, BlockHeight, Epoch, Header, TxIndex, BLOCK_HASH_LENGTH,
 };
 pub use namada_core::types::*;
 pub use namada_macros::validity_predicate;
@@ -54,8 +53,8 @@ pub fn is_tx_whitelisted(ctx: &Ctx) -> VpResult {
         || whitelist.contains(&tx_hash.to_string().to_lowercase()))
 }
 
-pub fn is_vp_whitelisted(ctx: &Ctx, vp_bytes: &[u8]) -> VpResult {
-    let vp_hash = sha256(vp_bytes);
+pub fn is_vp_whitelisted(ctx: &Ctx, vp_hash: &[u8]) -> VpResult {
+    let vp_hash = Hash::try_from(vp_hash).unwrap();
     let key = parameters::storage::get_vp_whitelist_storage_key();
     let whitelist: Vec<String> = ctx.read_pre(&key)?.unwrap_or_default();
     // if whitelist is empty, allow any transaction
@@ -239,6 +238,14 @@ impl<'view> VpEnv<'view> for Ctx {
         get_block_height()
     }
 
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, Error> {
+        // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
+        get_block_header(height)
+    }
+
     fn get_block_hash(&self) -> Result<BlockHash, Error> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_block_hash()
@@ -262,15 +269,10 @@ impl<'view> VpEnv<'view> for Ctx {
         &'iter self,
         prefix: &storage::Key,
     ) -> Result<Self::PrefixIter<'iter>, Error> {
-        // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
-        iter_prefix_impl(prefix)
+        iter_prefix_pre_impl(prefix)
     }
 
-    fn eval(
-        &self,
-        vp_code: Vec<u8>,
-        input_data: Vec<u8>,
-    ) -> Result<bool, Error> {
+    fn eval(&self, vp_code: Hash, input_data: Vec<u8>) -> Result<bool, Error> {
         let result = unsafe {
             namada_vp_eval(
                 vp_code.as_ptr() as _,
@@ -334,24 +336,24 @@ impl StorageRead for CtxPreStorageRead<'_> {
         Ok(HostEnvResult::is_success(found))
     }
 
-    fn iter_next<'iter>(
-        &'iter self,
-        iter: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, Error> {
-        let read_result = unsafe { namada_vp_iter_pre_next(iter.0) };
-        Ok(read_key_val_bytes_from_buffer(
-            read_result,
-            namada_vp_result_buffer,
-        ))
-    }
-
-    // ---- Methods below share the same implementation in `pre/post` ----
-
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &storage::Key,
     ) -> Result<Self::PrefixIter<'iter>, Error> {
-        iter_prefix_impl(prefix)
+        iter_prefix_pre_impl(prefix)
+    }
+
+    // ---- Methods below share the same implementation in `pre/post` ----
+
+    fn iter_next<'iter>(
+        &'iter self,
+        iter: &mut Self::PrefixIter<'iter>,
+    ) -> Result<Option<(String, Vec<u8>)>, Error> {
+        let read_result = unsafe { namada_vp_iter_next(iter.0) };
+        Ok(read_key_val_bytes_from_buffer(
+            read_result,
+            namada_vp_result_buffer,
+        ))
     }
 
     fn get_chain_id(&self) -> Result<String, Error> {
@@ -360,6 +362,13 @@ impl StorageRead for CtxPreStorageRead<'_> {
 
     fn get_block_height(&self) -> Result<BlockHeight, Error> {
         get_block_height()
+    }
+
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, Error> {
+        get_block_header(height)
     }
 
     fn get_block_hash(&self) -> Result<BlockHash, Error> {
@@ -397,24 +406,24 @@ impl StorageRead for CtxPostStorageRead<'_> {
         Ok(HostEnvResult::is_success(found))
     }
 
-    fn iter_next<'iter>(
-        &'iter self,
-        iter: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, Error> {
-        let read_result = unsafe { namada_vp_iter_post_next(iter.0) };
-        Ok(read_key_val_bytes_from_buffer(
-            read_result,
-            namada_vp_result_buffer,
-        ))
-    }
-
-    // ---- Methods below share the same implementation in `pre/post` ----
-
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &storage::Key,
     ) -> Result<Self::PrefixIter<'iter>, Error> {
-        iter_prefix_impl(prefix)
+        iter_prefix_post_impl(prefix)
+    }
+
+    // ---- Methods below share the same implementation in `pre/post` ----
+
+    fn iter_next<'iter>(
+        &'iter self,
+        iter: &mut Self::PrefixIter<'iter>,
+    ) -> Result<Option<(String, Vec<u8>)>, Error> {
+        let read_result = unsafe { namada_vp_iter_next(iter.0) };
+        Ok(read_key_val_bytes_from_buffer(
+            read_result,
+            namada_vp_result_buffer,
+        ))
     }
 
     fn get_chain_id(&self) -> Result<String, Error> {
@@ -423,6 +432,13 @@ impl StorageRead for CtxPostStorageRead<'_> {
 
     fn get_block_height(&self) -> Result<BlockHeight, Error> {
         get_block_height()
+    }
+
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, Error> {
+        get_block_header(height)
     }
 
     fn get_block_hash(&self) -> Result<BlockHash, Error> {
@@ -442,12 +458,22 @@ impl StorageRead for CtxPostStorageRead<'_> {
     }
 }
 
-fn iter_prefix_impl(
+fn iter_prefix_pre_impl(
     prefix: &storage::Key,
 ) -> Result<KeyValIterator<(String, Vec<u8>)>, Error> {
     let prefix = prefix.to_string();
     let iter_id = unsafe {
-        namada_vp_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
+        namada_vp_iter_prefix_pre(prefix.as_ptr() as _, prefix.len() as _)
+    };
+    Ok(KeyValIterator(iter_id, PhantomData))
+}
+
+fn iter_prefix_post_impl(
+    prefix: &storage::Key,
+) -> Result<KeyValIterator<(String, Vec<u8>)>, Error> {
+    let prefix = prefix.to_string();
+    let iter_id = unsafe {
+        namada_vp_iter_prefix_post(prefix.as_ptr() as _, prefix.len() as _)
     };
     Ok(KeyValIterator(iter_id, PhantomData))
 }
@@ -467,6 +493,17 @@ fn get_chain_id() -> Result<String, Error> {
 
 fn get_block_height() -> Result<BlockHeight, Error> {
     Ok(BlockHeight(unsafe { namada_vp_get_block_height() }))
+}
+
+fn get_block_header(height: BlockHeight) -> Result<Option<Header>, Error> {
+    let read_result = unsafe { namada_vp_get_block_header(height.0) };
+    match read_from_buffer(read_result, namada_vp_result_buffer) {
+        Some(value) => Ok(Some(
+            Header::try_from_slice(&value[..])
+                .expect("The conversion shouldn't fail"),
+        )),
+        None => Ok(None),
+    }
 }
 
 fn get_block_hash() -> Result<BlockHash, Error> {

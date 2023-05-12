@@ -597,7 +597,7 @@ macro_rules! pattern_and_handler_to_method {
     ) => {
         pattern_and_handler_to_method!(
             ( $( $param: $param_ty, )* $name: std::option::Option<$type> )
-            [ $( { $prefix }, )* { $name.map(|arg| std::borrow::Cow::from(arg.to_string())) } ]
+            [ $( { $prefix }, )* { $name.as_ref().map(|arg| std::borrow::Cow::from(arg.to_string())) } ]
             $( $return_type )?, $handle, ( $( $tail )/ * )
         );
     };
@@ -1007,7 +1007,7 @@ mod test {
         };
         let ctx = RequestCtx {
             event_log: &client.event_log,
-            storage: &client.storage,
+            wl_storage: &client.wl_storage,
             vp_wasm_cache: client.vp_wasm_cache.clone(),
             tx_wasm_cache: client.tx_wasm_cache.clone(),
             storage_read_past_height_limit: None,

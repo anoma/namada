@@ -1,50 +1,73 @@
 //! IBC lower-level functions for transactions.
 
-pub use namada_core::ledger::ibc::actions::{Error, IbcActions, Result};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+pub use namada_core::ledger::ibc::{
+    Error, IbcActions, IbcCommonContext, IbcStorageContext, ProofSpec,
+    TransferModule,
+};
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::ledger::tx_env::TxEnv;
 pub use namada_core::types::ibc::IbcEvent;
-use namada_core::types::storage::{BlockHeight, Key};
-use namada_core::types::time::Rfc3339String;
+use namada_core::types::storage::{BlockHeight, Header, Key};
 use namada_core::types::token::Amount;
 
 use crate::token::transfer_with_keys;
-use crate::Ctx;
+use crate::{Ctx, KeyValIterator};
 
-impl IbcActions for Ctx {
+/// IBC actions to handle an IBC message
+pub fn ibc_actions(ctx: &mut Ctx) -> IbcActions<Ctx> {
+    let ctx = Rc::new(RefCell::new(ctx.clone()));
+    let mut actions = IbcActions::new(ctx.clone());
+    let module = TransferModule::new(ctx);
+    actions.add_transfer_route(module.module_id(), module);
+    actions
+}
+
+impl IbcStorageContext for Ctx {
     type Error = crate::Error;
+    type PrefixIter<'iter> = KeyValIterator<(String, Vec<u8>)>;
 
-    fn read_ibc_data(
+    fn read(
         &self,
         key: &Key,
     ) -> std::result::Result<Option<Vec<u8>>, Self::Error> {
-        let data = self.read_bytes(key)?;
-        Ok(data)
+        self.read_bytes(key)
     }
 
-    fn write_ibc_data(
+    fn write(
         &mut self,
         key: &Key,
-        data: impl AsRef<[u8]>,
+        data: Vec<u8>,
     ) -> std::result::Result<(), Self::Error> {
         self.write_bytes(key, data)?;
         Ok(())
     }
 
-    fn delete_ibc_data(
-        &mut self,
-        key: &Key,
-    ) -> std::result::Result<(), Self::Error> {
-        self.delete(key)?;
-        Ok(())
+    fn iter_prefix<'iter>(
+        &'iter self,
+        prefix: &Key,
+    ) -> Result<Self::PrefixIter<'iter>, Self::Error> {
+        StorageRead::iter_prefix(self, prefix)
+    }
+
+    fn iter_next<'iter>(
+        &'iter self,
+        iter: &mut Self::PrefixIter<'iter>,
+    ) -> Result<Option<(String, Vec<u8>)>, Self::Error> {
+        StorageRead::iter_next(self, iter)
+    }
+
+    fn delete(&mut self, key: &Key) -> std::result::Result<(), Self::Error> {
+        StorageWrite::delete(self, key)
     }
 
     fn emit_ibc_event(
         &mut self,
         event: IbcEvent,
     ) -> std::result::Result<(), Self::Error> {
-        <Ctx as TxEnv>::emit_ibc_event(self, &event)?;
-        Ok(())
+        <Ctx as TxEnv>::emit_ibc_event(self, &event)
     }
 
     fn transfer_token(
@@ -53,19 +76,23 @@ impl IbcActions for Ctx {
         dest: &Key,
         amount: Amount,
     ) -> std::result::Result<(), Self::Error> {
-        transfer_with_keys(self, src, dest, amount)?;
-        Ok(())
+        transfer_with_keys(self, src, dest, amount)
     }
 
     fn get_height(&self) -> std::result::Result<BlockHeight, Self::Error> {
-        let val = self.get_block_height()?;
-        Ok(val)
+        self.get_block_height()
     }
 
-    fn get_header_time(
+    fn get_header(
         &self,
-    ) -> std::result::Result<Rfc3339String, Self::Error> {
-        let val = self.get_block_time()?;
-        Ok(val)
+        height: BlockHeight,
+    ) -> std::result::Result<Option<Header>, Self::Error> {
+        self.get_block_header(height)
+    }
+
+    fn log_string(&self, message: String) {
+        super::log_string(message);
     }
 }
+
+impl IbcCommonContext for Ctx {}

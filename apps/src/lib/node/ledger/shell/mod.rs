@@ -5,6 +5,7 @@
 //! and [`Shell::process_proposal`] must be also reverted
 //! (unless we can simply overwrite them in the next block).
 //! More info in <https://github.com/anoma/namada/issues/362>.
+mod block_space_alloc;
 mod finalize_block;
 mod governance;
 mod init_chain;
@@ -25,16 +26,16 @@ use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::BlockGasMeter;
 use namada::ledger::pos::namada_proof_of_stake::types::{
-    ActiveValidator, ValidatorSetUpdate,
+    ConsensusValidator, ValidatorSetUpdate,
 };
-use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
-    DBIter, Sha256Hasher, Storage, StorageHasher, DB,
+    DBIter, Sha256Hasher, Storage, StorageHasher, WlStorage, DB,
 };
-use namada::ledger::{ibc, pos, protocol};
+use namada::ledger::storage_api::{self, StorageRead};
+use namada::ledger::{ibc, pos, protocol, replay_protection};
+use namada::proof_of_stake::{self, read_pos_params, slash};
 use namada::proto::{self, Tx};
-use namada::types::address;
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::chain::ChainId;
 use namada::types::internal::WrapperTxInQueue;
@@ -42,10 +43,13 @@ use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::token::{self};
+#[cfg(not(feature = "mainnet"))]
+use namada::types::transaction::MIN_FEE;
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
-    EllipticCurve, PairingEngine, TxType, MIN_FEE,
+    EllipticCurve, PairingEngine, TxType,
 };
+use namada::types::{address, hash};
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheRwAccess;
 use num_derive::{FromPrimitive, ToPrimitive};
@@ -60,6 +64,7 @@ use crate::facade::tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
 };
 use crate::facade::tendermint_proto::crypto::public_key;
+use crate::facade::tendermint_proto::google::protobuf::Timestamp;
 use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
@@ -103,6 +108,10 @@ pub enum Error {
     BadProposal(u64, String),
     #[error("Error reading wasm: {0}")]
     ReadingWasm(#[from] eyre::Error),
+    #[error("Error loading wasm: {0}")]
+    LoadingWasm(String),
+    #[error("Error reading from or writing to storage: {0}")]
+    StorageApi(#[from] storage_api::Error),
 }
 
 impl From<Error> for TxResult {
@@ -117,15 +126,40 @@ impl From<Error> for TxResult {
 /// The different error codes that the ledger may
 /// send back to a client indicating the status
 /// of their submitted tx
-#[derive(Debug, Clone, FromPrimitive, ToPrimitive, PartialEq)]
+#[derive(Debug, Copy, Clone, FromPrimitive, ToPrimitive, PartialEq)]
 pub enum ErrorCodes {
     Ok = 0,
-    InvalidTx = 1,
-    InvalidSig = 2,
+    InvalidDecryptedChainId = 1,
+    ExpiredDecryptedTx = 2,
     WasmRuntimeError = 3,
-    InvalidOrder = 4,
-    ExtraTxs = 5,
-    Undecryptable = 6,
+    InvalidTx = 4,
+    InvalidSig = 5,
+    InvalidOrder = 6,
+    ExtraTxs = 7,
+    Undecryptable = 8,
+    AllocationError = 9,
+    ReplayTx = 10,
+    InvalidChainId = 11,
+    ExpiredTx = 12,
+}
+
+impl ErrorCodes {
+    /// Checks if the given [`ErrorCodes`] value is a protocol level error,
+    /// that can be recovered from at the finalize block stage.
+    pub const fn is_recoverable(&self) -> bool {
+        use ErrorCodes::*;
+        // NOTE: pattern match on all `ErrorCodes` variants, in order
+        // to catch potential bugs when adding new codes
+        match self {
+            Ok
+            | InvalidDecryptedChainId
+            | ExpiredDecryptedTx
+            | WasmRuntimeError => true,
+            InvalidTx | InvalidSig | InvalidOrder | ExtraTxs
+            | Undecryptable | AllocationError | ReplayTx | InvalidChainId
+            | ExpiredTx => false,
+        }
+    }
 }
 
 impl From<ErrorCodes> for u32 {
@@ -153,6 +187,22 @@ pub fn reset(config: config::Ledger) -> Result<()> {
     tendermint_node::reset(config.tendermint_dir())
         .map_err(Error::Tendermint)?;
     Ok(())
+}
+
+pub fn rollback(config: config::Ledger) -> Result<()> {
+    // Rollback Tendermint state
+    tracing::info!("Rollback Tendermint state");
+    let tendermint_block_height =
+        tendermint_node::rollback(config.tendermint_dir())
+            .map_err(Error::Tendermint)?;
+
+    // Rollback Namada state
+    let db_path = config.shell.db_dir(&config.chain_id);
+    let mut db = storage::PersistentDB::open(db_path, None);
+    tracing::info!("Rollback Namada state");
+
+    db.rollback(tendermint_block_height)
+        .map_err(|e| Error::StorageApi(storage_api::Error::new(e)))
 }
 
 #[derive(Debug)]
@@ -195,12 +245,10 @@ where
     /// The id of the current chain
     #[allow(dead_code)]
     chain_id: ChainId,
-    /// The persistent storage
-    pub(super) storage: Storage<D, H>,
+    /// The persistent storage with write log
+    pub(super) wl_storage: WlStorage<D, H>,
     /// Gas meter for the current block
     gas_meter: BlockGasMeter,
-    /// Write log for the current block
-    write_log: WriteLog,
     /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
     /// this field. They will be slashed when we finalize the block.
     byzantine_validators: Vec<Evidence>,
@@ -253,8 +301,13 @@ where
                 .expect("Creating directory for Namada should not fail");
         }
         // load last state from storage
-        let mut storage =
-            Storage::open(db_path, chain_id.clone(), native_token, db_cache);
+        let mut storage = Storage::open(
+            db_path,
+            chain_id.clone(),
+            native_token,
+            db_cache,
+            config.shell.storage_read_past_height_limit,
+        );
         storage
             .load_last_state()
             .map_err(|e| {
@@ -315,11 +368,14 @@ where
             TendermintMode::Seed => ShellMode::Seed,
         };
 
+        let wl_storage = WlStorage {
+            storage,
+            write_log: WriteLog::default(),
+        };
         Self {
             chain_id,
-            storage,
+            wl_storage,
             gas_meter: BlockGasMeter::default(),
-            write_log: WriteLog::default(),
             byzantine_validators: vec![],
             base_dir,
             wasm_dir,
@@ -354,14 +410,14 @@ where
     /// Iterate over the wrapper txs in order
     #[allow(dead_code)]
     fn iter_tx_queue(&mut self) -> impl Iterator<Item = &WrapperTxInQueue> {
-        self.storage.tx_queue.iter()
+        self.wl_storage.storage.tx_queue.iter()
     }
 
     /// Load the Merkle root hash and the height of the last committed block, if
     /// any. This is returned when ABCI sends an `info` request.
     pub fn last_state(&mut self) -> response::Info {
         let mut response = response::Info::default();
-        let result = self.storage.get_state();
+        let result = self.wl_storage.storage.get_state();
 
         match result {
             Some((root, height)) => {
@@ -384,12 +440,31 @@ where
         response
     }
 
+    /// Takes the optional tendermint timestamp of the block: if it's Some than
+    /// converts it to a [`DateTimeUtc`], otherwise retrieve from self the
+    /// time of the last block committed
+    pub fn get_block_timestamp(
+        &self,
+        tendermint_block_time: Option<Timestamp>,
+    ) -> DateTimeUtc {
+        if let Some(t) = tendermint_block_time {
+            if let Ok(t) = t.try_into() {
+                return t;
+            }
+        }
+        // Default to last committed block time
+        self.wl_storage
+            .storage
+            .get_last_block_timestamp()
+            .expect("Failed to retrieve last block timestamp")
+    }
+
     /// Read the value for a storage key dropping any error
     pub fn read_storage_key<T>(&self, key: &Key) -> Option<T>
     where
         T: Clone + BorshDeserialize,
     {
-        let result = self.storage.read(key);
+        let result = self.wl_storage.storage.read(key);
 
         match result {
             Ok((bytes, _gas)) => match bytes {
@@ -405,7 +480,7 @@ where
 
     /// Read the bytes for a storage key dropping any error
     pub fn read_storage_key_bytes(&self, key: &Key) -> Option<Vec<u8>> {
-        let result = self.storage.read(key);
+        let result = self.wl_storage.storage.read(key);
 
         match result {
             Ok((bytes, _gas)) => bytes,
@@ -418,8 +493,9 @@ where
         if !self.byzantine_validators.is_empty() {
             let byzantine_validators =
                 mem::take(&mut self.byzantine_validators);
-            let pos_params = self.storage.read_pos_params();
-            let current_epoch = self.storage.block.epoch;
+            // TODO: resolve this unwrap() better
+            let pos_params = read_pos_params(&self.wl_storage).unwrap();
+            let current_epoch = self.wl_storage.storage.block.epoch;
             for evidence in byzantine_validators {
                 tracing::info!("Processing evidence {evidence:?}.");
                 let evidence_height = match u64::try_from(evidence.height) {
@@ -433,6 +509,7 @@ where
                     }
                 };
                 let evidence_epoch = match self
+                    .wl_storage
                     .storage
                     .block
                     .pred_epochs
@@ -488,19 +565,23 @@ where
                         continue;
                     }
                 };
-                let validator = match self
-                    .storage
-                    .read_validator_address_raw_hash(&validator_raw_hash)
-                {
-                    Some(validator) => validator,
-                    None => {
-                        tracing::error!(
-                            "Cannot find validator's address from raw hash {}",
-                            validator_raw_hash
-                        );
-                        continue;
-                    }
-                };
+                let validator =
+                    match proof_of_stake::find_validator_by_raw_hash(
+                        &self.wl_storage,
+                        &validator_raw_hash,
+                    )
+                    .expect("Must be able to read storage")
+                    {
+                        Some(validator) => validator,
+                        None => {
+                            tracing::error!(
+                                "Cannot find validator's address from raw \
+                                 hash {}",
+                                validator_raw_hash
+                            );
+                            continue;
+                        }
+                    };
                 tracing::info!(
                     "Slashing {} for {} in epoch {}, block height {}",
                     validator,
@@ -508,7 +589,8 @@ where
                     evidence_epoch,
                     evidence_height
                 );
-                if let Err(err) = self.storage.slash(
+                if let Err(err) = slash(
+                    &mut self.wl_storage,
                     &pos_params,
                     current_epoch,
                     evidence_epoch,
@@ -546,23 +628,19 @@ where
     /// hash.
     pub fn commit(&mut self) -> response::Commit {
         let mut response = response::Commit::default();
-        // commit changes from the write-log to storage
-        self.write_log
-            .commit_block(&mut self.storage)
-            .expect("Expected committing block write log success");
-        // store the block's data in DB
-        self.storage.commit().unwrap_or_else(|e| {
+        // commit block's data from write log and store the in DB
+        self.wl_storage.commit_block().unwrap_or_else(|e| {
             tracing::error!(
                 "Encountered a storage error while committing a block {:?}",
                 e
             )
         });
 
-        let root = self.storage.merkle_root();
+        let root = self.wl_storage.storage.merkle_root();
         tracing::info!(
             "Committed block hash: {}, height: {}",
             root,
-            self.storage.last_height,
+            self.wl_storage.storage.last_height,
         );
         response.data = root.0;
         response
@@ -571,49 +649,138 @@ where
     /// Validate a transaction request. On success, the transaction will
     /// included in the mempool and propagated to peers, otherwise it will be
     /// rejected.
+    ///
+    /// Error codes:
+    ///    0: Ok
+    ///    1: Invalid tx
+    ///    2: Tx is invalidly signed
+    ///    7: Replay attack
+    ///    8: Invalid chain id in tx
     pub fn mempool_validate(
         &self,
         tx_bytes: &[u8],
         r#_type: MempoolTxType,
     ) -> response::CheckTx {
         let mut response = response::CheckTx::default();
-        match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
-            Ok(tx) => {
-                // Check balance for fee
-                if let Ok(TxType::Wrapper(wrapper)) = process_tx(tx) {
-                    let fee_payer = if wrapper.pk != masp_tx_key().ref_to() {
-                        wrapper.fee_payer()
-                    } else {
-                        masp()
-                    };
-                    // check that the fee payer has sufficient balance
-                    let balance =
-                        self.get_balance(&wrapper.fee.token, &fee_payer);
 
-                    // In testnets with a faucet, tx is allowed to skip fees if
-                    // it includes a valid PoW
-                    #[cfg(not(feature = "mainnet"))]
-                    let has_valid_pow = self.has_valid_pow_solution(&wrapper);
-                    #[cfg(feature = "mainnet")]
-                    let has_valid_pow = false;
-
-                    if !has_valid_pow && self.get_wrapper_tx_fees() > balance {
-                        response.code = 1;
-                        response.log = String::from(
-                            "The address given does not have sufficient \
-                             balance to pay fee",
-                        );
-                        return response;
-                    }
-                }
-
-                response.log = String::from("Mempool validation passed");
-            }
+        // Tx format check
+        let tx = match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
+            Ok(t) => t,
             Err(msg) => {
-                response.code = 1;
+                response.code = ErrorCodes::InvalidTx.into();
                 response.log = msg.to_string();
+                return response;
+            }
+        };
+
+        // Tx chain id
+        if tx.chain_id != self.chain_id {
+            response.code = ErrorCodes::InvalidChainId.into();
+            response.log = format!(
+                "Tx carries a wrong chain id: expected {}, found {}",
+                self.chain_id, tx.chain_id
+            );
+            return response;
+        }
+
+        // Tx expiration
+        if let Some(exp) = tx.expiration {
+            let last_block_timestamp = self.get_block_timestamp(None);
+
+            if last_block_timestamp > exp {
+                response.code = ErrorCodes::ExpiredTx.into();
+                response.log = format!(
+                    "Tx expired at {:#?}, last committed block time: {:#?}",
+                    exp, last_block_timestamp
+                );
+                return response;
             }
         }
+
+        // Tx signature check
+        let tx_type = match process_tx(tx) {
+            Ok(ty) => ty,
+            Err(msg) => {
+                response.code = ErrorCodes::InvalidSig.into();
+                response.log = msg.to_string();
+                return response;
+            }
+        };
+
+        // Tx type check
+        if let TxType::Wrapper(wrapper) = tx_type {
+            // Replay protection check
+            let inner_hash_key =
+                replay_protection::get_tx_hash_key(&wrapper.tx_hash);
+            if self
+                .wl_storage
+                .storage
+                .has_key(&inner_hash_key)
+                .expect("Error while checking inner tx hash key in storage")
+                .0
+            {
+                response.code = ErrorCodes::ReplayTx.into();
+                response.log = format!(
+                    "Inner transaction hash {} already in storage, replay \
+                     attempt",
+                    wrapper.tx_hash
+                );
+                return response;
+            }
+
+            let tx =
+                Tx::try_from(tx_bytes).expect("Deserialization shouldn't fail");
+            let wrapper_hash = hash::Hash(tx.unsigned_hash());
+            let wrapper_hash_key =
+                replay_protection::get_tx_hash_key(&wrapper_hash);
+            if self
+                .wl_storage
+                .storage
+                .has_key(&wrapper_hash_key)
+                .expect("Error while checking wrapper tx hash key in storage")
+                .0
+            {
+                response.code = ErrorCodes::ReplayTx.into();
+                response.log = format!(
+                    "Wrapper transaction hash {} already in storage, replay \
+                     attempt",
+                    wrapper_hash
+                );
+                return response;
+            }
+
+            // Check balance for fee
+            let fee_payer = if wrapper.pk != masp_tx_key().ref_to() {
+                wrapper.fee_payer()
+            } else {
+                masp()
+            };
+            // check that the fee payer has sufficient balance
+            let balance = self.get_balance(&wrapper.fee.token, &fee_payer);
+
+            // In testnets with a faucet, tx is allowed to skip fees if
+            // it includes a valid PoW
+            #[cfg(not(feature = "mainnet"))]
+            let has_valid_pow = self.has_valid_pow_solution(&wrapper);
+            #[cfg(feature = "mainnet")]
+            let has_valid_pow = false;
+
+            if !has_valid_pow && self.get_wrapper_tx_fees() > balance {
+                response.code = ErrorCodes::InvalidTx.into();
+                response.log = String::from(
+                    "The given address does not have a sufficient balance to \
+                     pay fee",
+                );
+                return response;
+            }
+        } else {
+            response.code = ErrorCodes::InvalidTx.into();
+            response.log = "Unsupported tx type".to_string();
+            return response;
+        }
+
+        response.log = "Mempool validation passed".to_string();
+
         response
     }
 
@@ -640,7 +807,7 @@ where
                     TxIndex::default(),
                     &mut gas_meter,
                     &mut write_log,
-                    &self.storage,
+                    &self.wl_storage.storage,
                     &mut vp_wasm_cache,
                     &mut tx_wasm_cache,
                 )
@@ -675,21 +842,18 @@ where
             genesis::genesis_config::open_genesis_config(genesis_path).unwrap(),
         );
         self.mode.get_validator_address().map(|addr| {
-            let pk_bytes = self
-                .storage
+            let sk: common::SecretKey = self
+                .wl_storage
                 .read(&pk_key(addr))
                 .expect(
                     "A validator should have a public key associated with \
                      it's established account",
                 )
-                .0
                 .expect(
                     "A validator should have a public key associated with \
                      it's established account",
                 );
-            let pk = common::SecretKey::deserialize(&mut pk_bytes.as_slice())
-                .expect("Validator's public key should be deserializable")
-                .ref_to();
+            let pk = sk.ref_to();
             wallet.find_key_by_pk(&pk).expect(
                 "A validator's established keypair should be stored in its \
                  wallet",
@@ -705,15 +869,15 @@ where
         tx: &namada::types::transaction::WrapperTx,
     ) -> bool {
         if let Some(solution) = &tx.pow_solution {
-            if let (Some(faucet_address), _gas) =
+            if let Some(faucet_address) =
                 namada::ledger::parameters::read_faucet_account_parameter(
-                    &self.storage,
+                    &self.wl_storage,
                 )
                 .expect("Must be able to read faucet account parameter")
             {
                 let source = Address::from(&tx.pk);
                 return solution
-                    .validate(&self.storage, &faucet_address, source)
+                    .validate(&self.wl_storage, &faucet_address, source)
                     .expect("Must be able to validate PoW solutions");
             }
         }
@@ -723,11 +887,10 @@ where
     #[cfg(not(feature = "mainnet"))]
     /// Get fixed amount of fees for wrapper tx
     fn get_wrapper_tx_fees(&self) -> token::Amount {
-        let (fees, _gas) =
-            namada::ledger::parameters::read_wrapper_tx_fees_parameter(
-                &self.storage,
-            )
-            .expect("Must be able to read wrapper tx fees parameter");
+        let fees = namada::ledger::parameters::read_wrapper_tx_fees_parameter(
+            &self.wl_storage,
+        )
+        .expect("Must be able to read wrapper tx fees parameter");
         fees.unwrap_or(token::Amount::whole(MIN_FEE))
     }
 
@@ -739,16 +902,16 @@ where
         tx: &namada::types::transaction::WrapperTx,
     ) -> bool {
         if let Some(solution) = &tx.pow_solution {
-            if let (Some(faucet_address), _gas) =
+            if let Some(faucet_address) =
                 namada::ledger::parameters::read_faucet_account_parameter(
-                    &self.storage,
+                    &self.wl_storage,
                 )
                 .expect("Must be able to read faucet account parameter")
             {
                 let source = Address::from(&tx.pk);
                 return solution
                     .invalidate_if_valid(
-                        &mut self.storage,
+                        &mut self.wl_storage,
                         &faucet_address,
                         &source,
                     )
@@ -767,12 +930,11 @@ mod test_utils {
     use std::path::PathBuf;
 
     use namada::ledger::storage::mockdb::MockDB;
-    use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
-    use namada::types::address::EstablishedAddressGen;
+    use namada::ledger::storage::{update_allowed_conversions, Sha256Hasher};
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
-    use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
+    use namada::types::storage::{BlockHash, Epoch, Epochs, Header};
     use namada::types::transaction::{Fee, WrapperTx};
     use tempfile::tempdir;
     use tokio::sync::mpsc::UnboundedReceiver;
@@ -874,9 +1036,13 @@ mod test_utils {
         }
 
         /// Forward a InitChain request and expect a success
-        pub fn init_chain(&mut self, req: RequestInitChain) {
+        pub fn init_chain(
+            &mut self,
+            req: RequestInitChain,
+            #[cfg(feature = "dev")] num_validators: u64,
+        ) {
             self.shell
-                .init_chain(req)
+                .init_chain(req, num_validators)
                 .expect("Test shell failed to initialize");
         }
 
@@ -922,27 +1088,36 @@ mod test_utils {
         /// in the current block proposal
         #[cfg(test)]
         pub fn enqueue_tx(&mut self, wrapper: WrapperTx) {
-            self.shell.storage.tx_queue.push(WrapperTxInQueue {
-                tx: wrapper,
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: false,
-            });
+            self.shell
+                .wl_storage
+                .storage
+                .tx_queue
+                .push(WrapperTxInQueue {
+                    tx: wrapper,
+                    #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow: false,
+                });
         }
     }
 
     /// Start a new test shell and initialize it. Returns the shell paired with
     /// a broadcast receiver, which will receives any protocol txs sent by the
     /// shell.
-    pub(super) fn setup() -> (TestShell, UnboundedReceiver<Vec<u8>>) {
+    pub(super) fn setup(
+        num_validators: u64,
+    ) -> (TestShell, UnboundedReceiver<Vec<u8>>) {
         let (mut test, receiver) = TestShell::new();
-        test.init_chain(RequestInitChain {
-            time: Some(Timestamp {
-                seconds: 0,
-                nanos: 0,
-            }),
-            chain_id: ChainId::default().to_string(),
-            ..Default::default()
-        });
+        test.init_chain(
+            RequestInitChain {
+                time: Some(Timestamp {
+                    seconds: 0,
+                    nanos: 0,
+                }),
+                chain_id: ChainId::default().to_string(),
+                ..Default::default()
+            },
+            num_validators,
+        );
         (test, receiver)
     }
 
@@ -959,6 +1134,8 @@ mod test_utils {
                 },
                 byzantine_validators: vec![],
                 txs: vec![],
+                proposer_address: vec![],
+                votes: vec![],
             }
         }
     }
@@ -986,11 +1163,18 @@ mod test_utils {
             tx_wasm_compilation_cache,
             native_token.clone(),
         );
+        shell
+            .wl_storage
+            .storage
+            .begin_block(BlockHash::default(), BlockHeight(1))
+            .expect("begin_block failed");
         let keypair = gen_keypair();
         // enqueue a wrapper tx
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -1005,35 +1189,18 @@ mod test_utils {
             #[cfg(not(feature = "mainnet"))]
             None,
         );
-        shell.storage.tx_queue.push(WrapperTxInQueue {
+        shell.wl_storage.storage.tx_queue.push(WrapperTxInQueue {
             tx: wrapper,
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
         });
         // Artificially increase the block height so that chain
         // will read the new block when restarted
-        let merkle_tree = MerkleTree::<Sha256Hasher>::default();
-        let stores = merkle_tree.stores();
-        let hash = BlockHash([0; 32]);
-        let pred_epochs = Default::default();
-        let address_gen = EstablishedAddressGen::new("test");
-        shell
-            .storage
-            .db
-            .write_block(BlockStateWrite {
-                merkle_tree_stores: stores,
-                header: None,
-                hash: &hash,
-                height: BlockHeight(1),
-                epoch: Epoch(0),
-                pred_epochs: &pred_epochs,
-                next_epoch_min_start_height: BlockHeight(3),
-                next_epoch_min_start_time: DateTimeUtc::now(),
-                address_gen: &address_gen,
-                results: &BlockResults::default(),
-                tx_queue: &shell.storage.tx_queue,
-            })
-            .expect("Test failed");
+        let mut pred_epochs: Epochs = Default::default();
+        pred_epochs.new_epoch(BlockHeight(1), 1000);
+        update_allowed_conversions(&mut shell.wl_storage)
+            .expect("update conversions failed");
+        shell.wl_storage.commit_block().expect("commit failed");
 
         // Drop the shell
         std::mem::drop(shell);
@@ -1052,6 +1219,338 @@ mod test_utils {
             tx_wasm_compilation_cache,
             address::nam(),
         );
-        assert!(!shell.storage.tx_queue.is_empty());
+        assert!(!shell.wl_storage.storage.tx_queue.is_empty());
+    }
+}
+
+/// Test the failure cases of [`mempool_validate`]
+#[cfg(test)]
+mod test_mempool_validate {
+    use namada::proof_of_stake::Epoch;
+    use namada::proto::SignedTxData;
+    use namada::types::transaction::{Fee, WrapperTx};
+
+    use super::test_utils::TestShell;
+    use super::{MempoolTxType, *};
+
+    /// Mempool validation must reject unsigned wrappers
+    #[test]
+    fn test_missing_signature() {
+        let (shell, _) = TestShell::new();
+
+        let keypair = super::test_utils::gen_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let mut wrapper = WrapperTx::new(
+            Fee {
+                amount: 100.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        )
+        .sign(&keypair, shell.chain_id.clone(), None)
+        .expect("Wrapper signing failed");
+
+        let unsigned_wrapper = if let Some(Ok(SignedTxData {
+            data: Some(data),
+            sig: _,
+        })) = wrapper
+            .data
+            .take()
+            .map(|data| SignedTxData::try_from_slice(&data[..]))
+        {
+            Tx::new(vec![], Some(data), shell.chain_id.clone(), None)
+        } else {
+            panic!("Test failed")
+        };
+
+        let mut result = shell.mempool_validate(
+            unsigned_wrapper.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidSig));
+        result = shell.mempool_validate(
+            unsigned_wrapper.to_bytes().as_ref(),
+            MempoolTxType::RecheckTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidSig));
+    }
+
+    /// Mempool validation must reject wrappers with an invalid signature
+    #[test]
+    fn test_invalid_signature() {
+        let (shell, _) = TestShell::new();
+
+        let keypair = super::test_utils::gen_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let mut wrapper = WrapperTx::new(
+            Fee {
+                amount: 100.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        )
+        .sign(&keypair, shell.chain_id.clone(), None)
+        .expect("Wrapper signing failed");
+
+        let invalid_wrapper = if let Some(Ok(SignedTxData {
+            data: Some(data),
+            sig,
+        })) = wrapper
+            .data
+            .take()
+            .map(|data| SignedTxData::try_from_slice(&data[..]))
+        {
+            let mut new_wrapper = if let TxType::Wrapper(wrapper) =
+                <TxType as BorshDeserialize>::deserialize(&mut data.as_ref())
+                    .expect("Test failed")
+            {
+                wrapper
+            } else {
+                panic!("Test failed")
+            };
+
+            // we mount a malleability attack to try and remove the fee
+            new_wrapper.fee.amount = 0.into();
+            let new_data = TxType::Wrapper(new_wrapper)
+                .try_to_vec()
+                .expect("Test failed");
+            Tx::new(
+                vec![],
+                Some(
+                    SignedTxData {
+                        sig,
+                        data: Some(new_data),
+                    }
+                    .try_to_vec()
+                    .expect("Test failed"),
+                ),
+                shell.chain_id.clone(),
+                None,
+            )
+        } else {
+            panic!("Test failed");
+        };
+
+        let mut result = shell.mempool_validate(
+            invalid_wrapper.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidSig));
+        result = shell.mempool_validate(
+            invalid_wrapper.to_bytes().as_ref(),
+            MempoolTxType::RecheckTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidSig));
+    }
+
+    /// Mempool validation must reject non-wrapper txs
+    #[test]
+    fn test_wrong_tx_type() {
+        let (shell, _) = TestShell::new();
+
+        // Test Raw TxType
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            None,
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let result = shell.mempool_validate(
+            tx.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidTx));
+        assert_eq!(result.log, "Unsupported tx type")
+    }
+
+    /// Mempool validation must reject already applied wrapper and decrypted
+    /// transactions
+    #[test]
+    fn test_replay_attack() {
+        let (mut shell, _) = TestShell::new();
+
+        let keypair = super::test_utils::gen_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 100.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        )
+        .sign(&keypair, shell.chain_id.clone(), None)
+        .expect("Wrapper signing failed");
+
+        let tx_type = match process_tx(wrapper.clone()).expect("Test failed") {
+            TxType::Wrapper(t) => t,
+            _ => panic!("Test failed"),
+        };
+
+        // Write wrapper hash to storage
+        let wrapper_hash = hash::Hash(wrapper.unsigned_hash());
+        let wrapper_hash_key =
+            replay_protection::get_tx_hash_key(&wrapper_hash);
+        shell
+            .wl_storage
+            .storage
+            .write(&wrapper_hash_key, &wrapper_hash)
+            .expect("Test failed");
+
+        // Try wrapper tx replay attack
+        let result = shell.mempool_validate(
+            wrapper.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::ReplayTx));
+        assert_eq!(
+            result.log,
+            format!(
+                "Wrapper transaction hash {} already in storage, replay \
+                 attempt",
+                wrapper_hash
+            )
+        );
+
+        let result = shell.mempool_validate(
+            wrapper.to_bytes().as_ref(),
+            MempoolTxType::RecheckTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::ReplayTx));
+        assert_eq!(
+            result.log,
+            format!(
+                "Wrapper transaction hash {} already in storage, replay \
+                 attempt",
+                wrapper_hash
+            )
+        );
+
+        // Write inner hash in storage
+        let inner_hash_key =
+            replay_protection::get_tx_hash_key(&tx_type.tx_hash);
+        shell
+            .wl_storage
+            .storage
+            .write(&inner_hash_key, &tx_type.tx_hash)
+            .expect("Test failed");
+
+        // Try inner tx replay attack
+        let result = shell.mempool_validate(
+            wrapper.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::ReplayTx));
+        assert_eq!(
+            result.log,
+            format!(
+                "Inner transaction hash {} already in storage, replay attempt",
+                tx_type.tx_hash
+            )
+        );
+
+        let result = shell.mempool_validate(
+            wrapper.to_bytes().as_ref(),
+            MempoolTxType::RecheckTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::ReplayTx));
+        assert_eq!(
+            result.log,
+            format!(
+                "Inner transaction hash {} already in storage, replay attempt",
+                tx_type.tx_hash
+            )
+        )
+    }
+
+    /// Check that a transaction with a wrong chain id gets discarded
+    #[test]
+    fn test_wrong_chain_id() {
+        let (shell, _) = TestShell::new();
+
+        let keypair = super::test_utils::gen_keypair();
+
+        let wrong_chain_id = ChainId("Wrong chain id".to_string());
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            wrong_chain_id.clone(),
+            None,
+        )
+        .sign(&keypair);
+
+        let result = shell.mempool_validate(
+            tx.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidChainId));
+        assert_eq!(
+            result.log,
+            format!(
+                "Tx carries a wrong chain id: expected {}, found {}",
+                shell.chain_id, wrong_chain_id
+            )
+        )
+    }
+
+    /// Check that an expired transaction gets rejected
+    #[test]
+    fn test_expired_tx() {
+        let (shell, _) = TestShell::new();
+
+        let keypair = super::test_utils::gen_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            Some(DateTimeUtc::now()),
+        )
+        .sign(&keypair);
+
+        let result = shell.mempool_validate(
+            tx.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::ExpiredTx));
     }
 }

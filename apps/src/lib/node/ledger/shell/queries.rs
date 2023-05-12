@@ -1,13 +1,16 @@
 //! Shell methods for querying state
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshSerialize;
 use ferveo_common::TendermintValidator;
 use namada::ledger::pos::into_tm_voting_power;
 use namada::ledger::queries::{RequestCtx, ResponseQuery};
-use namada::ledger::storage_api;
+use namada::ledger::storage_api::token;
+use namada::proof_of_stake::{
+    read_consensus_validator_set_addresses_with_stake, read_pos_params,
+};
 use namada::types::address::Address;
+use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
-use namada::types::{key, token};
 
 use super::*;
 use crate::node::ledger::response;
@@ -23,7 +26,7 @@ where
     /// INVARIANT: This method must be stateless.
     pub fn query(&self, query: request::Query) -> response::Query {
         let ctx = RequestCtx {
-            storage: &self.storage,
+            wl_storage: &self.wl_storage,
             event_log: self.event_log(),
             vp_wasm_cache: self.vp_wasm_cache.read_only(),
             tx_wasm_cache: self.tx_wasm_cache.read_only(),
@@ -32,7 +35,7 @@ where
 
         // Convert request to domain-type
         let request = match namada::ledger::queries::RequestQuery::try_from_tm(
-            &self.storage,
+            &self.wl_storage,
             query,
         ) {
             Ok(request) => request,
@@ -69,15 +72,10 @@ where
         token: &Address,
         owner: &Address,
     ) -> token::Amount {
-        let balance = storage_api::StorageRead::read(
-            &self.storage,
-            &token::balance_key(token, owner),
-        );
         // Storage read must not fail, but there might be no value, in which
         // case default (0) is returned
-        balance
-            .expect("Storage read in the protocol must not fail")
-            .unwrap_or_default()
+        token::read_balance(&self.wl_storage, token, owner)
+            .expect("Token balance read in the protocol must not fail")
     }
 
     /// Lookup data about a validator from their protocol signing key
@@ -90,46 +88,43 @@ where
             .try_to_vec()
             .expect("Serializing public key should not fail");
         // get the current epoch
-        let (current_epoch, _) = self.storage.get_current_epoch();
+        let (current_epoch, _) = self.wl_storage.storage.get_current_epoch();
+
+        // TODO: resolve both unwrap() instances better below
+
         // get the PoS params
-        let pos_params = self.storage.read_pos_params();
-        // get the active validator set
-        self.storage
-            .read_validator_set()
-            .get(current_epoch)
-            .expect("Validators for the next epoch should be known")
-            .active
+        let pos_params = read_pos_params(&self.wl_storage).unwrap();
+        // get the consensus validator set
+        let consensus_vals = read_consensus_validator_set_addresses_with_stake(
+            &self.wl_storage,
+            current_epoch,
+        )
+        .unwrap();
+
+        consensus_vals
             .iter()
             .find(|validator| {
                 let pk_key = key::protocol_pk_key(&validator.address);
-                match self.storage.read(&pk_key) {
-                    Ok((Some(bytes), _)) => bytes == pk_bytes,
+                match self.wl_storage.read_bytes(&pk_key) {
+                    Ok(Some(bytes)) => bytes == pk_bytes,
                     _ => false,
                 }
             })
             .map(|validator| {
                 let dkg_key =
                     key::dkg_session_keys::dkg_pk_key(&validator.address);
-                let bytes = self
-                    .storage
+                let dkg_publickey: DkgPublicKey = self
+                    .wl_storage
                     .read(&dkg_key)
                     .expect("Validator should have public dkg key")
-                    .0
                     .expect("Validator should have public dkg key");
-                let dkg_publickey =
-                    &<DkgPublicKey as BorshDeserialize>::deserialize(
-                        &mut bytes.as_ref(),
-                    )
-                    .expect(
-                        "DKG public key in storage should be deserializable",
-                    );
                 TendermintValidator {
                     power: into_tm_voting_power(
                         pos_params.tm_votes_per_token,
                         validator.bonded_stake,
                     ) as u64,
                     address: validator.address.to_string(),
-                    public_key: dkg_publickey.into(),
+                    public_key: (&dkg_publickey).into(),
                 }
             })
     }

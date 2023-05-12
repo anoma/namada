@@ -3,7 +3,7 @@
 use std::convert::TryInto;
 use std::fmt;
 
-use arse_merkle_tree::traits::{Hasher, Value};
+use arse_merkle_tree::traits::Hasher;
 use arse_merkle_tree::{Key as TreeKey, H256};
 use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{CommitmentProof, ExistenceProof};
@@ -155,7 +155,7 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Amt<H> {
 }
 
 /// The storage hasher used for the merkle tree.
-pub trait StorageHasher: Hasher + Default {
+pub trait StorageHasher: Hasher + fmt::Debug + Default {
     /// Hash the value to store
     fn hash(value: impl AsRef<[u8]>) -> H256;
 }

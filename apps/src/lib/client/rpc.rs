@@ -1,6 +1,5 @@
 //! Client RPC queries
 
-use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryInto;
@@ -15,7 +14,6 @@ use async_std::prelude::*;
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
 use eyre::{eyre, Context as EyreContext};
-use itertools::Itertools;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::primitives::ViewingKey;
@@ -24,22 +22,21 @@ use masp_primitives::transaction::components::Amount;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
+use namada::core::types::transaction::governance::ProposalType;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
-use namada::ledger::native_vp::governance::utils::Votes;
+use namada::ledger::native_vp::governance::utils::{self, Votes};
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
-use namada::ledger::pos::types::{decimal_mult_u64, WeightedValidator};
 use namada::ledger::pos::{
-    self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
+    self, BondId, BondsAndUnbondsDetail, CommissionPair, PosParams, Slash,
 };
 use namada::ledger::queries::{self, RPC};
 use namada::ledger::storage::ConversionState;
 use namada::proto::{SignedTxData, Tx};
-use namada::types::address::{masp, tokens, Address};
+use namada::types::address::{masp, Address};
 use namada::types::governance::{
-    OfflineProposal, OfflineVote, ProposalResult, ProposalVote, TallyResult,
-    VotePower,
+    OfflineProposal, OfflineVote, ProposalVote, VotePower, VoteType,
 };
 use namada::types::hash::Hash;
 use namada::types::key::*;
@@ -52,8 +49,7 @@ use namada::types::transaction::{
     process_tx, AffineCurve, DecryptedTx, EllipticCurve, PairingEngine, TxType,
     WrapperTx,
 };
-use namada::types::{address, storage, token};
-use rust_decimal::Decimal;
+use namada::types::{storage, token};
 use tokio::time::{Duration, Instant};
 
 use crate::cli::{self, args, Context};
@@ -120,12 +116,17 @@ pub async fn query_tx_status(
     .unwrap_or_else(|_| cli::safe_exit(1))
 }
 
-/// Query the epoch of the last committed block
-pub async fn query_epoch(args: args::Query) -> Epoch {
+/// Query and print the epoch of the last committed block
+pub async fn query_and_print_epoch(args: args::Query) -> Epoch {
     let client = HttpClient::new(args.ledger_address).unwrap();
     let epoch = unwrap_client_response(RPC.shell().epoch(&client).await);
     println!("Last committed epoch: {}", epoch);
     epoch
+}
+
+/// Query the epoch of the last committed block
+pub async fn query_epoch(client: &HttpClient) -> Epoch {
+    unwrap_client_response(RPC.shell().epoch(client).await)
 }
 
 /// Query the last committed block
@@ -225,7 +226,7 @@ pub async fn query_tx_deltas(
                     let mut transfer = None;
                     extract_payload(tx, &mut wrapper, &mut transfer);
                     // Epoch data is not needed for transparent transactions
-                    let epoch = wrapper.map(|x| x.epoch).unwrap_or_default();
+                    let epoch = Epoch::default();
                     if let Some(transfer) = transfer {
                         // Skip MASP addresses as they are already handled by
                         // ShieldedContext
@@ -276,8 +277,6 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
         &query_token,
     )
     .await;
-    // To facilitate lookups of human-readable token names
-    let tokens = tokens();
     let vks = ctx.wallet.get_viewing_keys();
     // To enable ExtendedFullViewingKeys to be displayed instead of ViewingKeys
     let fvk_map: HashMap<_, _> = vks
@@ -335,9 +334,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
             if account != masp() {
                 print!("  {}:", account);
                 for (addr, val) in amt.components() {
-                    let addr_enc = addr.encode();
-                    let readable =
-                        tokens.get(addr).cloned().unwrap_or(addr_enc.as_str());
+                    let token_alias = lookup_alias(&ctx, addr);
                     let sign = match val.cmp(&0) {
                         Ordering::Greater => "+",
                         Ordering::Less => "-",
@@ -347,7 +344,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
                         " {}{} {}",
                         sign,
                         token::Amount::from(val.unsigned_abs()),
-                        readable
+                        token_alias
                     );
                 }
                 println!();
@@ -359,9 +356,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
             if fvk_map.contains_key(&account) {
                 print!("  {}:", fvk_map[&account]);
                 for (addr, val) in amt.components() {
-                    let addr_enc = addr.encode();
-                    let readable =
-                        tokens.get(addr).cloned().unwrap_or(addr_enc.as_str());
+                    let token_alias = lookup_alias(&ctx, addr);
                     let sign = match val.cmp(&0) {
                         Ordering::Greater => "+",
                         Ordering::Less => "-",
@@ -371,7 +366,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
                         " {}{} {}",
                         sign,
                         token::Amount::from(val.unsigned_abs()),
-                        readable
+                        token_alias
                     );
                 }
                 println!();
@@ -465,7 +460,7 @@ pub async fn query_transparent_balance(
     args: args::QueryBalance,
 ) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
-    let tokens = address::tokens();
+    let tokens = ctx.tokens();
     match (args.token, args.owner) {
         (Some(token), Some(owner)) => {
             let token = ctx.get(&token);
@@ -482,28 +477,25 @@ pub async fn query_transparent_balance(
                 }
                 None => token::balance_key(&token, &owner.address().unwrap()),
             };
-            let currency_code = tokens
-                .get(&token)
-                .map(|c| Cow::Borrowed(*c))
-                .unwrap_or_else(|| Cow::Owned(token.to_string()));
+            let token_alias = lookup_alias(ctx, &token);
             match query_storage_value::<token::Amount>(&client, &key).await {
                 Some(balance) => match &args.sub_prefix {
                     Some(sub_prefix) => {
                         println!(
                             "{} with {}: {}",
-                            currency_code, sub_prefix, balance
+                            token_alias, sub_prefix, balance
                         );
                     }
-                    None => println!("{}: {}", currency_code, balance),
+                    None => println!("{}: {}", token_alias, balance),
                 },
                 None => {
-                    println!("No {} balance found for {}", currency_code, owner)
+                    println!("No {} balance found for {}", token_alias, owner)
                 }
             }
         }
         (None, Some(owner)) => {
             let owner = ctx.get_cached(&owner);
-            for (token, _) in tokens {
+            for token in tokens {
                 let prefix = token.to_db_key().into();
                 let balances =
                     query_storage_prefix::<token::Amount>(&client, &prefix)
@@ -528,7 +520,7 @@ pub async fn query_transparent_balance(
             }
         }
         (None, None) => {
-            for (token, _) in tokens {
+            for token in tokens {
                 let key = token::balance_prefix(&token);
                 let balances =
                     query_storage_prefix::<token::Amount>(&client, &key).await;
@@ -543,7 +535,7 @@ pub async fn query_transparent_balance(
 /// Query the token pinned balance(s)
 pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
     // Map addresses to token names
-    let tokens = address::tokens();
+    let tokens = ctx.tokens();
     let owners = if let Some(pa) = args
         .owner
         .and_then(|x| ctx.get_cached(&x).payment_address())
@@ -623,22 +615,19 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
                 // Extract and print only the specified token from the total
                 let (_asset_type, balance) =
                     value_by_address(&balance, token.clone(), epoch);
-                let currency_code = tokens
-                    .get(&token)
-                    .map(|c| Cow::Borrowed(*c))
-                    .unwrap_or_else(|| Cow::Owned(token.to_string()));
+                let token_alias = lookup_alias(ctx, &token);
                 if balance == 0 {
                     println!(
                         "Payment address {} was consumed during epoch {}. \
                          Received no shielded {}",
-                        owner, epoch, currency_code
+                        owner, epoch, token_alias
                     );
                 } else {
                     let asset_value = token::Amount::from(balance as u64);
                     println!(
                         "Payment address {} was consumed during epoch {}. \
                          Received {} {}",
-                        owner, epoch, asset_value, currency_code
+                        owner, epoch, asset_value, token_alias
                     );
                 }
             }
@@ -659,10 +648,12 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
                         );
                         found_any = true;
                     }
-                    let addr_enc = addr.encode();
                     println!(
                         "  {}: {}",
-                        tokens.get(addr).cloned().unwrap_or(addr_enc.as_str()),
+                        tokens
+                            .get(addr)
+                            .cloned()
+                            .unwrap_or_else(|| addr.clone()),
                         asset_value,
                     );
                 }
@@ -687,13 +678,8 @@ fn print_balances(
     let stdout = io::stdout();
     let mut w = stdout.lock();
 
-    // Token
-    let tokens = address::tokens();
-    let currency_code = tokens
-        .get(token)
-        .map(|c| Cow::Borrowed(*c))
-        .unwrap_or_else(|| Cow::Owned(token.to_string()));
-    writeln!(w, "Token {}", currency_code).unwrap();
+    let token_alias = lookup_alias(ctx, token);
+    writeln!(w, "Token {}", token_alias).unwrap();
 
     let print_num = balances
         .filter_map(
@@ -736,7 +722,7 @@ fn print_balances(
                     .unwrap()
             }
             None => {
-                writeln!(w, "No balances for token {}", currency_code).unwrap()
+                writeln!(w, "No balances for token {}", token_alias).unwrap()
             }
         }
     }
@@ -753,6 +739,7 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
         let author_key = gov_storage::get_author_key(id);
         let start_epoch_key = gov_storage::get_voting_start_epoch_key(id);
         let end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
+        let proposal_type_key = gov_storage::get_proposal_type_key(id);
 
         let author =
             query_storage_value::<Address>(client, &author_key).await?;
@@ -760,6 +747,9 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
             query_storage_value::<Epoch>(client, &start_epoch_key).await?;
         let end_epoch =
             query_storage_value::<Epoch>(client, &end_epoch_key).await?;
+        let proposal_type =
+            query_storage_value::<ProposalType>(client, &proposal_type_key)
+                .await?;
 
         if details {
             let content_key = gov_storage::get_content_key(id);
@@ -773,6 +763,7 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
                 query_storage_value::<Epoch>(client, &grace_epoch_key).await?;
 
             println!("Proposal: {}", id);
+            println!("{:4}Type: {}", "", proposal_type);
             println!("{:4}Author: {}", "", author);
             println!("{:4}Content:", "");
             for (key, value) in &content {
@@ -781,31 +772,43 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
             println!("{:4}Start Epoch: {}", "", start_epoch);
             println!("{:4}End Epoch: {}", "", end_epoch);
             println!("{:4}Grace Epoch: {}", "", grace_epoch);
+            let votes = get_proposal_votes(client, start_epoch, id).await;
+            let total_stake =
+                get_total_staked_tokens(client, start_epoch).await.into();
             if start_epoch > current_epoch {
                 println!("{:4}Status: pending", "");
             } else if start_epoch <= current_epoch && current_epoch <= end_epoch
             {
-                let votes = get_proposal_votes(client, start_epoch, id).await;
-                let partial_proposal_result =
-                    compute_tally(client, start_epoch, votes).await;
-                println!(
-                    "{:4}Yay votes: {}",
-                    "", partial_proposal_result.total_yay_power
-                );
-                println!(
-                    "{:4}Nay votes: {}",
-                    "", partial_proposal_result.total_nay_power
-                );
-                println!("{:4}Status: on-going", "");
+                match utils::compute_tally(votes, total_stake, &proposal_type) {
+                    Ok(partial_proposal_result) => {
+                        println!(
+                            "{:4}Yay votes: {}",
+                            "", partial_proposal_result.total_yay_power
+                        );
+                        println!(
+                            "{:4}Nay votes: {}",
+                            "", partial_proposal_result.total_nay_power
+                        );
+                        println!("{:4}Status: on-going", "");
+                    }
+                    Err(msg) => {
+                        eprintln!("Error in tally computation: {}", msg)
+                    }
+                }
             } else {
-                let votes = get_proposal_votes(client, start_epoch, id).await;
-                let proposal_result =
-                    compute_tally(client, start_epoch, votes).await;
-                println!("{:4}Status: done", "");
-                println!("{:4}Result: {}", "", proposal_result);
+                match utils::compute_tally(votes, total_stake, &proposal_type) {
+                    Ok(proposal_result) => {
+                        println!("{:4}Status: done", "");
+                        println!("{:4}Result: {}", "", proposal_result);
+                    }
+                    Err(msg) => {
+                        eprintln!("Error in tally computation: {}", msg)
+                    }
+                }
             }
         } else {
             println!("Proposal: {}", id);
+            println!("{:4}Type: {}", "", proposal_type);
             println!("{:4}Author: {}", "", author);
             println!("{:4}Start Epoch: {}", "", start_epoch);
             println!("{:4}End Epoch: {}", "", end_epoch);
@@ -823,7 +826,7 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
     }
 
     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
-    let current_epoch = query_epoch(args.query.clone()).await;
+    let current_epoch = query_and_print_epoch(args.query.clone()).await;
     match args.proposal_id {
         Some(id) => {
             if print_proposal(&client, id, current_epoch, true)
@@ -899,11 +902,11 @@ pub async fn query_shielded_balance(
     // Save the update state so that future fetches can be short-circuited
     let _ = ctx.shielded.save();
     // The epoch is required to identify timestamped tokens
-    let epoch = query_epoch(args.query.clone()).await;
+    let epoch = query_and_print_epoch(args.query.clone()).await;
     // Establish connection with which to do exchange rate queries
     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
     // Map addresses to token names
-    let tokens = address::tokens();
+    let tokens = ctx.tokens();
     match (args.token, owner.is_some()) {
         // Here the user wants to know the balance for a specific token
         (Some(token), true) => {
@@ -933,19 +936,16 @@ pub async fn query_shielded_balance(
                     .as_ref(),
             )
             .unwrap();
-            let currency_code = tokens
-                .get(&token)
-                .map(|c| Cow::Borrowed(*c))
-                .unwrap_or_else(|| Cow::Owned(token.to_string()));
+            let token_alias = lookup_alias(ctx, &token);
             if balance[&asset_type] == 0 {
                 println!(
                     "No shielded {} balance found for given key",
-                    currency_code
+                    token_alias
                 );
             } else {
                 let asset_value =
                     token::Amount::from(balance[&asset_type] as u64);
-                println!("{}: {}", currency_code, asset_value);
+                println!("{}: {}", token_alias, asset_value);
             }
         }
         // Here the user wants to know the balance of all tokens across users
@@ -989,13 +989,12 @@ pub async fn query_shielded_balance(
                 match decoded {
                     Some((addr, asset_epoch)) if asset_epoch == epoch => {
                         // Only assets with the current timestamp count
-                        let addr_enc = addr.encode();
                         println!(
                             "Shielded Token {}:",
                             tokens
                                 .get(&addr)
                                 .cloned()
-                                .unwrap_or(addr_enc.as_str())
+                                .unwrap_or_else(|| addr.clone())
                         );
                         read_tokens.insert(addr);
                     }
@@ -1016,12 +1015,13 @@ pub async fn query_shielded_balance(
                 }
             }
             // Print zero balances for remaining assets
-            for (token, currency_code) in tokens {
+            for token in tokens {
                 if !read_tokens.contains(&token) {
-                    println!("Shielded Token {}:", currency_code);
+                    let token_alias = lookup_alias(ctx, &token);
+                    println!("Shielded Token {}:", token_alias);
                     println!(
                         "No shielded {} balance found for any wallet key",
-                        currency_code
+                        token_alias
                     );
                 }
             }
@@ -1038,11 +1038,8 @@ pub async fn query_shielded_balance(
                     .as_ref(),
             )
             .unwrap();
-            let currency_code = tokens
-                .get(&token)
-                .map(|c| Cow::Borrowed(*c))
-                .unwrap_or_else(|| Cow::Owned(token.to_string()));
-            println!("Shielded Token {}:", currency_code);
+            let token_alias = lookup_alias(ctx, &token);
+            println!("Shielded Token {}:", token_alias);
             let mut found_any = false;
             for fvk in viewing_keys {
                 // Query the multi-asset balance at the given spending key
@@ -1071,7 +1068,7 @@ pub async fn query_shielded_balance(
             if !found_any {
                 println!(
                     "No shielded {} balance found for any wallet key",
-                    currency_code
+                    token_alias
                 );
             }
         }
@@ -1091,7 +1088,7 @@ pub async fn query_shielded_balance(
                     .shielded
                     .decode_all_amounts(client.clone(), balance)
                     .await;
-                print_decoded_balance_with_epoch(decoded_balance);
+                print_decoded_balance_with_epoch(ctx, decoded_balance);
             } else {
                 balance = ctx
                     .shielded
@@ -1107,23 +1104,20 @@ pub async fn query_shielded_balance(
                     .shielded
                     .decode_amount(client.clone(), balance, epoch)
                     .await;
-                print_decoded_balance(decoded_balance);
+                print_decoded_balance(ctx, decoded_balance);
             }
         }
     }
 }
 
-pub fn print_decoded_balance(decoded_balance: Amount<Address>) {
-    let tokens = address::tokens();
+pub fn print_decoded_balance(
+    ctx: &mut Context,
+    decoded_balance: Amount<Address>,
+) {
     let mut found_any = false;
     for (addr, value) in decoded_balance.components() {
         let asset_value = token::Amount::from(*value as u64);
-        let addr_enc = addr.encode();
-        println!(
-            "{} : {}",
-            tokens.get(addr).cloned().unwrap_or(addr_enc.as_str()),
-            asset_value
-        );
+        println!("{} : {}", lookup_alias(ctx, addr), asset_value);
         found_any = true;
     }
     if !found_any {
@@ -1132,16 +1126,16 @@ pub fn print_decoded_balance(decoded_balance: Amount<Address>) {
 }
 
 pub fn print_decoded_balance_with_epoch(
+    ctx: &mut Context,
     decoded_balance: Amount<(Address, Epoch)>,
 ) {
-    let tokens = address::tokens();
+    let tokens = ctx.tokens();
     let mut found_any = false;
     for ((addr, epoch), value) in decoded_balance.components() {
         let asset_value = token::Amount::from(*value as u64);
-        let addr_enc = addr.encode();
         println!(
             "{} | {} : {}",
-            tokens.get(addr).cloned().unwrap_or(addr_enc.as_str()),
+            tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
             epoch,
             asset_value
         );
@@ -1167,7 +1161,7 @@ pub async fn query_proposal_result(
     args: args::QueryProposalResult,
 ) {
     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
-    let current_epoch = query_epoch(args.query.clone()).await;
+    let current_epoch = query_and_print_epoch(args.query.clone()).await;
 
     match args.proposal_id {
         Some(id) => {
@@ -1180,10 +1174,34 @@ pub async fn query_proposal_result(
                     if current_epoch > end_epoch {
                         let votes =
                             get_proposal_votes(&client, end_epoch, id).await;
-                        let proposal_result =
-                            compute_tally(&client, end_epoch, votes).await;
+                        let proposal_type_key =
+                            gov_storage::get_proposal_type_key(id);
+                        let proposal_type =
+                            query_storage_value::<ProposalType>(
+                                &client,
+                                &proposal_type_key,
+                            )
+                            .await
+                            .expect(
+                                "Could not read proposal type from storage",
+                            );
+                        let total_stake =
+                            get_total_staked_tokens(&client, end_epoch)
+                                .await
+                                .into();
                         println!("Proposal: {}", id);
-                        println!("{:4}Result: {}", "", proposal_result);
+                        match utils::compute_tally(
+                            votes,
+                            total_stake,
+                            &proposal_type,
+                        ) {
+                            Ok(proposal_result) => {
+                                println!("{:4}Result: {}", "", proposal_result)
+                            }
+                            Err(msg) => {
+                                eprintln!("Error in tally computation: {}", msg)
+                            }
+                        }
                     } else {
                         eprintln!("Proposal is still in progress.");
                         cli::safe_exit(1)
@@ -1273,11 +1291,24 @@ pub async fn query_proposal_result(
                             files,
                         )
                         .await;
-                        let proposal_result =
-                            compute_tally(&client, proposal.tally_epoch, votes)
-                                .await;
-
-                        println!("{:4}Result: {}", "", proposal_result);
+                        let total_stake = get_total_staked_tokens(
+                            &client,
+                            proposal.tally_epoch,
+                        )
+                        .await
+                        .into();
+                        match utils::compute_tally(
+                            votes,
+                            total_stake,
+                            &ProposalType::Default(None),
+                        ) {
+                            Ok(proposal_result) => {
+                                println!("{:4}Result: {}", "", proposal_result)
+                            }
+                            Err(msg) => {
+                                eprintln!("Error in tally computation: {}", msg)
+                            }
+                        }
                     }
                     None => {
                         eprintln!(
@@ -1323,26 +1354,26 @@ pub async fn query_protocol_parameters(
     let key = param_storage::get_max_expected_time_per_block_key();
     let max_block_duration = query_storage_value::<u64>(&client, &key)
         .await
-        .expect("Parameter should be definied.");
+        .expect("Parameter should be defined.");
     println!("{:4}Max. block duration: {}", "", max_block_duration);
 
     let key = param_storage::get_tx_whitelist_storage_key();
     let vp_whitelist = query_storage_value::<Vec<String>>(&client, &key)
         .await
-        .expect("Parameter should be definied.");
+        .expect("Parameter should be defined.");
     println!("{:4}VP whitelist: {:?}", "", vp_whitelist);
 
     let key = param_storage::get_tx_whitelist_storage_key();
     let tx_whitelist = query_storage_value::<Vec<String>>(&client, &key)
         .await
-        .expect("Parameter should be definied.");
+        .expect("Parameter should be defined.");
     println!("{:4}Transactions whitelist: {:?}", "", tx_whitelist);
 
     println!("PoS parameters");
     let key = pos::params_key();
     let pos_params = query_storage_value::<PosParams>(&client, &key)
         .await
-        .expect("Parameter should be definied.");
+        .expect("Parameter should be defined.");
     println!(
         "{:4}Block proposer reward: {}",
         "", pos_params.block_proposer_reward
@@ -1368,575 +1399,372 @@ pub async fn query_protocol_parameters(
     println!("{:4}Votes per token: {}", "", pos_params.tm_votes_per_token);
 }
 
-/// Query PoS bond(s)
-pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
-    let epoch = query_epoch(args.query.clone()).await;
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
-    match (args.owner, args.validator) {
-        (Some(owner), Some(validator)) => {
-            let source = ctx.get(&owner);
-            let validator = ctx.get(&validator);
-            // Find owner's delegations to the given validator
-            let bond_id = pos::BondId { source, validator };
-            let bond_key = pos::bond_key(&bond_id);
-            let bonds =
-                query_storage_value::<pos::Bonds>(&client, &bond_key).await;
-            // Find owner's unbonded delegations from the given
-            // validator
-            let unbond_key = pos::unbond_key(&bond_id);
-            let unbonds =
-                query_storage_value::<pos::Unbonds>(&client, &unbond_key).await;
-            // Find validator's slashes, if any
-            let slashes_key = pos::validator_slashes_key(&bond_id.validator);
-            let slashes =
-                query_storage_value::<pos::Slashes>(&client, &slashes_key)
-                    .await
-                    .unwrap_or_default();
+pub async fn query_bond(
+    client: &HttpClient,
+    source: &Address,
+    validator: &Address,
+    epoch: Option<Epoch>,
+) -> token::Amount {
+    unwrap_client_response(
+        RPC.vp().pos().bond(client, source, validator, &epoch).await,
+    )
+}
 
-            let stdout = io::stdout();
-            let mut w = stdout.lock();
+pub async fn query_unbond_with_slashing(
+    client: &HttpClient,
+    source: &Address,
+    validator: &Address,
+) -> HashMap<(Epoch, Epoch), token::Amount> {
+    unwrap_client_response(
+        RPC.vp()
+            .pos()
+            .unbond_with_slashing(client, source, validator)
+            .await,
+    )
+}
 
-            if let Some(bonds) = &bonds {
-                let bond_type = if bond_id.source == bond_id.validator {
-                    "Self-bonds"
-                } else {
-                    "Delegations"
-                };
-                writeln!(w, "{}:", bond_type).unwrap();
-                process_bonds_query(
-                    bonds, &slashes, &epoch, None, None, None, &mut w,
-                );
-            }
+pub async fn query_and_print_unbonds(
+    client: &HttpClient,
+    source: &Address,
+    validator: &Address,
+) {
+    let unbonds = query_unbond_with_slashing(client, source, validator).await;
+    let current_epoch = query_epoch(client).await;
 
-            if let Some(unbonds) = &unbonds {
-                let bond_type = if bond_id.source == bond_id.validator {
-                    "Unbonded self-bonds"
-                } else {
-                    "Unbonded delegations"
-                };
-                writeln!(w, "{}:", bond_type).unwrap();
-                process_unbonds_query(
-                    unbonds, &slashes, &epoch, None, None, None, &mut w,
-                );
-            }
-
-            if bonds.is_none() && unbonds.is_none() {
-                writeln!(
-                    w,
-                    "No delegations found for {} to validator {}",
-                    bond_id.source,
-                    bond_id.validator.encode()
-                )
-                .unwrap();
-            }
-        }
-        (None, Some(validator)) => {
-            let validator = ctx.get(&validator);
-            // Find validator's self-bonds
-            let bond_id = pos::BondId {
-                source: validator.clone(),
-                validator,
-            };
-            let bond_key = pos::bond_key(&bond_id);
-            let bonds =
-                query_storage_value::<pos::Bonds>(&client, &bond_key).await;
-            // Find validator's unbonded self-bonds
-            let unbond_key = pos::unbond_key(&bond_id);
-            let unbonds =
-                query_storage_value::<pos::Unbonds>(&client, &unbond_key).await;
-            // Find validator's slashes, if any
-            let slashes_key = pos::validator_slashes_key(&bond_id.validator);
-            let slashes =
-                query_storage_value::<pos::Slashes>(&client, &slashes_key)
-                    .await
-                    .unwrap_or_default();
-
-            let stdout = io::stdout();
-            let mut w = stdout.lock();
-
-            if let Some(bonds) = &bonds {
-                writeln!(w, "Self-bonds:").unwrap();
-                process_bonds_query(
-                    bonds, &slashes, &epoch, None, None, None, &mut w,
-                );
-            }
-
-            if let Some(unbonds) = &unbonds {
-                writeln!(w, "Unbonded self-bonds:").unwrap();
-                process_unbonds_query(
-                    unbonds, &slashes, &epoch, None, None, None, &mut w,
-                );
-            }
-
-            if bonds.is_none() && unbonds.is_none() {
-                writeln!(
-                    w,
-                    "No self-bonds found for validator {}",
-                    bond_id.validator.encode()
-                )
-                .unwrap();
-            }
-        }
-        (Some(owner), None) => {
-            let owner = ctx.get(&owner);
-            // Find owner's bonds to any validator
-            let bonds_prefix = pos::bonds_for_source_prefix(&owner);
-            let bonds =
-                query_storage_prefix::<pos::Bonds>(&client, &bonds_prefix)
-                    .await;
-            // Find owner's unbonds to any validator
-            let unbonds_prefix = pos::unbonds_for_source_prefix(&owner);
-            let unbonds =
-                query_storage_prefix::<pos::Unbonds>(&client, &unbonds_prefix)
-                    .await;
-
-            let mut total: token::Amount = 0.into();
-            let mut total_active: token::Amount = 0.into();
-            let mut any_bonds = false;
-            if let Some(bonds) = bonds {
-                for (key, bonds) in bonds {
-                    match pos::is_bond_key(&key) {
-                        Some(pos::BondId { source, validator }) => {
-                            // Find validator's slashes, if any
-                            let slashes_key =
-                                pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<pos::Slashes>(
-                                &client,
-                                &slashes_key,
-                            )
-                            .await
-                            .unwrap_or_default();
-
-                            let stdout = io::stdout();
-                            let mut w = stdout.lock();
-                            any_bonds = true;
-                            let bond_type: Cow<str> = if source == validator {
-                                "Self-bonds".into()
-                            } else {
-                                format!(
-                                    "Delegations from {} to {}",
-                                    source, validator
-                                )
-                                .into()
-                            };
-                            writeln!(w, "{}:", bond_type).unwrap();
-                            let (tot, tot_active) = process_bonds_query(
-                                &bonds,
-                                &slashes,
-                                &epoch,
-                                Some(&source),
-                                Some(total),
-                                Some(total_active),
-                                &mut w,
-                            );
-                            total = tot;
-                            total_active = tot_active;
-                        }
-                        None => {
-                            panic!("Unexpected storage key {}", key)
-                        }
-                    }
-                }
-            }
-            if total_active != 0.into() && total_active != total {
-                println!("Active bonds total: {}", total_active);
-            }
-
-            let mut total: token::Amount = 0.into();
-            let mut total_withdrawable: token::Amount = 0.into();
-            if let Some(unbonds) = unbonds {
-                for (key, unbonds) in unbonds {
-                    match pos::is_unbond_key(&key) {
-                        Some(pos::BondId { source, validator }) => {
-                            // Find validator's slashes, if any
-                            let slashes_key =
-                                pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<pos::Slashes>(
-                                &client,
-                                &slashes_key,
-                            )
-                            .await
-                            .unwrap_or_default();
-
-                            let stdout = io::stdout();
-                            let mut w = stdout.lock();
-                            any_bonds = true;
-                            let bond_type: Cow<str> = if source == validator {
-                                "Unbonded self-bonds".into()
-                            } else {
-                                format!("Unbonded delegations from {}", source)
-                                    .into()
-                            };
-                            writeln!(w, "{}:", bond_type).unwrap();
-                            let (tot, tot_withdrawable) = process_unbonds_query(
-                                &unbonds,
-                                &slashes,
-                                &epoch,
-                                Some(&source),
-                                Some(total),
-                                Some(total_withdrawable),
-                                &mut w,
-                            );
-                            total = tot;
-                            total_withdrawable = tot_withdrawable;
-                        }
-                        None => {
-                            panic!("Unexpected storage key {}", key)
-                        }
-                    }
-                }
-            }
-            if total_withdrawable != 0.into() {
-                println!("Withdrawable total: {}", total_withdrawable);
-            }
-
-            if !any_bonds {
-                println!("No self-bonds or delegations found for {}", owner);
-            }
-        }
-        (None, None) => {
-            // Find all the bonds
-            let bonds_prefix = pos::bonds_prefix();
-            let bonds =
-                query_storage_prefix::<pos::Bonds>(&client, &bonds_prefix)
-                    .await;
-            // Find all the unbonds
-            let unbonds_prefix = pos::unbonds_prefix();
-            let unbonds =
-                query_storage_prefix::<pos::Unbonds>(&client, &unbonds_prefix)
-                    .await;
-
-            let mut total: token::Amount = 0.into();
-            let mut total_active: token::Amount = 0.into();
-            if let Some(bonds) = bonds {
-                for (key, bonds) in bonds {
-                    match pos::is_bond_key(&key) {
-                        Some(pos::BondId { source, validator }) => {
-                            // Find validator's slashes, if any
-                            let slashes_key =
-                                pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<pos::Slashes>(
-                                &client,
-                                &slashes_key,
-                            )
-                            .await
-                            .unwrap_or_default();
-
-                            let stdout = io::stdout();
-                            let mut w = stdout.lock();
-                            let bond_type = if source == validator {
-                                format!("Self-bonds for {}", validator.encode())
-                            } else {
-                                format!(
-                                    "Delegations from {} to validator {}",
-                                    source,
-                                    validator.encode()
-                                )
-                            };
-                            writeln!(w, "{}:", bond_type).unwrap();
-                            let (tot, tot_active) = process_bonds_query(
-                                &bonds,
-                                &slashes,
-                                &epoch,
-                                Some(&source),
-                                Some(total),
-                                Some(total_active),
-                                &mut w,
-                            );
-                            total = tot;
-                            total_active = tot_active;
-                        }
-                        None => {
-                            panic!("Unexpected storage key {}", key)
-                        }
-                    }
-                }
-            }
-            if total_active != 0.into() && total_active != total {
-                println!("Bond total active: {}", total_active);
-            }
-            println!("Bond total: {}", total);
-
-            let mut total: token::Amount = 0.into();
-            let mut total_withdrawable: token::Amount = 0.into();
-            if let Some(unbonds) = unbonds {
-                for (key, unbonds) in unbonds {
-                    match pos::is_unbond_key(&key) {
-                        Some(pos::BondId { source, validator }) => {
-                            // Find validator's slashes, if any
-                            let slashes_key =
-                                pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<pos::Slashes>(
-                                &client,
-                                &slashes_key,
-                            )
-                            .await
-                            .unwrap_or_default();
-
-                            let stdout = io::stdout();
-                            let mut w = stdout.lock();
-                            let bond_type = if source == validator {
-                                format!(
-                                    "Unbonded self-bonds for {}",
-                                    validator.encode()
-                                )
-                            } else {
-                                format!(
-                                    "Unbonded delegations from {} to \
-                                     validator {}",
-                                    source,
-                                    validator.encode()
-                                )
-                            };
-                            writeln!(w, "{}:", bond_type).unwrap();
-                            let (tot, tot_withdrawable) = process_unbonds_query(
-                                &unbonds,
-                                &slashes,
-                                &epoch,
-                                Some(&source),
-                                Some(total),
-                                Some(total_withdrawable),
-                                &mut w,
-                            );
-                            total = tot;
-                            total_withdrawable = tot_withdrawable;
-                        }
-                        None => {
-                            panic!("Unexpected storage key {}", key)
-                        }
-                    }
-                }
-            }
-            if total_withdrawable != 0.into() {
-                println!("Withdrawable total: {}", total_withdrawable);
-            }
-            println!("Unbonded total: {}", total);
+    let mut total_withdrawable = token::Amount::default();
+    let mut not_yet_withdrawable = HashMap::<Epoch, token::Amount>::new();
+    for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
+        if withdraw_epoch <= current_epoch {
+            total_withdrawable += amount;
+        } else {
+            let withdrawable_amount =
+                not_yet_withdrawable.entry(withdraw_epoch).or_default();
+            *withdrawable_amount += amount;
         }
     }
+    if total_withdrawable != token::Amount::default() {
+        println!("Total withdrawable now: {total_withdrawable}.");
+    }
+    if !not_yet_withdrawable.is_empty() {
+        println!("Current epoch: {current_epoch}.")
+    }
+    for (withdraw_epoch, amount) in not_yet_withdrawable {
+        println!(
+            "Amount {amount} withdrawable starting from epoch \
+             {withdraw_epoch}."
+        );
+    }
+}
+
+pub async fn query_withdrawable_tokens(
+    client: &HttpClient,
+    bond_source: &Address,
+    validator: &Address,
+    epoch: Option<Epoch>,
+) -> token::Amount {
+    unwrap_client_response(
+        RPC.vp()
+            .pos()
+            .withdrawable_tokens(client, bond_source, validator, &epoch)
+            .await,
+    )
+}
+
+/// Query PoS bond(s) and unbond(s)
+pub async fn query_bonds(
+    ctx: Context,
+    args: args::QueryBonds,
+) -> std::io::Result<()> {
+    let _epoch = query_and_print_epoch(args.query.clone()).await;
+    let client = HttpClient::new(args.query.ledger_address).unwrap();
+
+    let source = args.owner.map(|owner| ctx.get(&owner));
+    let validator = args.validator.map(|val| ctx.get(&val));
+
+    let stdout = io::stdout();
+    let mut w = stdout.lock();
+
+    let bonds_and_unbonds: pos::types::BondsAndUnbondsDetails =
+        unwrap_client_response(
+            RPC.vp()
+                .pos()
+                .bonds_and_unbonds(&client, &source, &validator)
+                .await,
+        );
+    let mut bonds_total: token::Amount = 0.into();
+    let mut bonds_total_slashed: token::Amount = 0.into();
+    let mut unbonds_total: token::Amount = 0.into();
+    let mut unbonds_total_slashed: token::Amount = 0.into();
+    let mut total_withdrawable: token::Amount = 0.into();
+    for (bond_id, details) in bonds_and_unbonds {
+        let mut total: token::Amount = 0.into();
+        let mut total_slashed: token::Amount = 0.into();
+        let bond_type = if bond_id.source == bond_id.validator {
+            format!("Self-bonds from {}", bond_id.validator)
+        } else {
+            format!(
+                "Delegations from {} to {}",
+                bond_id.source, bond_id.validator
+            )
+        };
+        writeln!(w, "{}:", bond_type)?;
+        for bond in details.bonds {
+            writeln!(
+                w,
+                "  Remaining active bond from epoch {}: Δ {}",
+                bond.start, bond.amount
+            )?;
+            total += bond.amount;
+            total_slashed += bond.slashed_amount.unwrap_or_default();
+        }
+        if total_slashed != token::Amount::default() {
+            writeln!(
+                w,
+                "Active (slashed) bonds total: {}",
+                total - total_slashed
+            )?;
+        }
+        writeln!(w, "Bonds total: {}", total)?;
+        writeln!(w)?;
+        bonds_total += total;
+        bonds_total_slashed += total_slashed;
+
+        let mut withdrawable = token::Amount::default();
+        if !details.unbonds.is_empty() {
+            let mut total: token::Amount = 0.into();
+            let mut total_slashed: token::Amount = 0.into();
+            let bond_type = if bond_id.source == bond_id.validator {
+                format!("Unbonded self-bonds from {}", bond_id.validator)
+            } else {
+                format!("Unbonded delegations from {}", bond_id.source)
+            };
+            writeln!(w, "{}:", bond_type)?;
+            for unbond in details.unbonds {
+                total += unbond.amount;
+                total_slashed += unbond.slashed_amount.unwrap_or_default();
+                writeln!(
+                    w,
+                    "  Withdrawable from epoch {} (active from {}): Δ {}",
+                    unbond.withdraw, unbond.start, unbond.amount
+                )?;
+            }
+            withdrawable = total - total_slashed;
+            writeln!(w, "Unbonded total: {}", total)?;
+
+            unbonds_total += total;
+            unbonds_total_slashed += total_slashed;
+            total_withdrawable += withdrawable;
+        }
+        writeln!(w, "Withdrawable total: {}", withdrawable)?;
+        writeln!(w)?;
+    }
+    if bonds_total != bonds_total_slashed {
+        writeln!(
+            w,
+            "All bonds total active: {}",
+            bonds_total - bonds_total_slashed
+        )?;
+    }
+    writeln!(w, "All bonds total: {}", bonds_total)?;
+
+    if unbonds_total != unbonds_total_slashed {
+        writeln!(
+            w,
+            "All unbonds total active: {}",
+            unbonds_total - unbonds_total_slashed
+        )?;
+    }
+    writeln!(w, "All unbonds total: {}", unbonds_total)?;
+    writeln!(w, "All unbonds total withdrawable: {}", total_withdrawable)?;
+    Ok(())
 }
 
 /// Query PoS bonded stake
 pub async fn query_bonded_stake(ctx: Context, args: args::QueryBondedStake) {
     let epoch = match args.epoch {
         Some(epoch) => epoch,
-        None => query_epoch(args.query.clone()).await,
+        None => query_and_print_epoch(args.query.clone()).await,
     };
     let client = HttpClient::new(args.query.ledger_address).unwrap();
-
-    // Find the validator set
-    let validator_set_key = pos::validator_set_key();
-    let validator_sets =
-        query_storage_value::<pos::ValidatorSets>(&client, &validator_set_key)
-            .await
-            .expect("Validator set should always be set");
-    let validator_set = validator_sets
-        .get(epoch)
-        .expect("Validator set should be always set in the current epoch");
 
     match args.validator {
         Some(validator) => {
             let validator = ctx.get(&validator);
             // Find bonded stake for the given validator
-            let validator_deltas_key = pos::validator_deltas_key(&validator);
-            let validator_deltas = query_storage_value::<pos::ValidatorDeltas>(
-                &client,
-                &validator_deltas_key,
-            )
-            .await;
-            match validator_deltas.and_then(|data| data.get(epoch)) {
-                Some(val_stake) => {
-                    let bonded_stake: u64 = val_stake.try_into().expect(
-                        "The sum of the bonded stake deltas shouldn't be \
-                         negative",
-                    );
-                    let weighted = WeightedValidator {
-                        address: validator.clone(),
-                        bonded_stake,
-                    };
-                    let is_active = validator_set.active.contains(&weighted);
-                    if !is_active {
-                        debug_assert!(
-                            validator_set.inactive.contains(&weighted)
-                        );
-                    }
-                    println!(
-                        "Validator {} is {}, bonded stake: {}",
-                        validator.encode(),
-                        if is_active { "active" } else { "inactive" },
-                        bonded_stake,
-                    )
+            let stake = get_validator_stake(&client, epoch, &validator).await;
+            match stake {
+                Some(stake) => {
+                    // TODO: show if it's in consensus set, below capacity, or
+                    // below threshold set
+                    println!("Bonded stake of validator {validator}: {stake}",)
                 }
                 None => {
-                    println!("No bonded stake found for {}", validator.encode())
+                    println!("No bonded stake found for {validator}")
                 }
             }
         }
         None => {
+            let consensus = unwrap_client_response(
+                RPC.vp()
+                    .pos()
+                    .consensus_validator_set(&client, &Some(epoch))
+                    .await,
+            );
+            let below_capacity = unwrap_client_response(
+                RPC.vp()
+                    .pos()
+                    .below_capacity_validator_set(&client, &Some(epoch))
+                    .await,
+            );
+
             // Iterate all validators
             let stdout = io::stdout();
             let mut w = stdout.lock();
 
-            writeln!(w, "Active validators:").unwrap();
-            for active in &validator_set.active {
-                writeln!(
-                    w,
-                    "  {}: {}",
-                    active.address.encode(),
-                    active.bonded_stake
-                )
-                .unwrap();
+            writeln!(w, "Consensus validators:").unwrap();
+            for val in consensus {
+                writeln!(w, "  {}: {}", val.address.encode(), val.bonded_stake)
+                    .unwrap();
             }
-            if !validator_set.inactive.is_empty() {
-                writeln!(w, "Inactive validators:").unwrap();
-                for inactive in &validator_set.inactive {
+            if !below_capacity.is_empty() {
+                writeln!(w, "Below capacity validators:").unwrap();
+                for val in &below_capacity {
                     writeln!(
                         w,
                         "  {}: {}",
-                        inactive.address.encode(),
-                        inactive.bonded_stake
+                        val.address.encode(),
+                        val.bonded_stake
                     )
                     .unwrap();
                 }
             }
         }
     }
-    let total_deltas_key = pos::total_deltas_key();
-    let total_deltas =
-        query_storage_value::<pos::TotalDeltas>(&client, &total_deltas_key)
-            .await
-            .expect("Total bonded stake should always be set");
-    let total_bonded_stake = total_deltas
-        .get(epoch)
-        .expect("Total bonded stake should be always set in the current epoch");
-    let total_bonded_stake: u64 = total_bonded_stake
-        .try_into()
-        .expect("total_bonded_stake should be a positive value");
 
-    println!("Total bonded stake: {}", total_bonded_stake);
+    let total_staked_tokens = get_total_staked_tokens(&client, epoch).await;
+    println!("Total bonded stake: {total_staked_tokens}");
 }
 
-/// Query PoS validator's commission rate
+/// Query and return validator's commission rate and max commission rate change
+/// per epoch
 pub async fn query_commission_rate(
+    client: &HttpClient,
+    validator: &Address,
+    epoch: Option<Epoch>,
+) -> Option<CommissionPair> {
+    unwrap_client_response(
+        RPC.vp()
+            .pos()
+            .validator_commission(client, validator, &epoch)
+            .await,
+    )
+}
+
+/// Query PoS validator's commission rate information
+pub async fn query_and_print_commission_rate(
     ctx: Context,
     args: args::QueryCommissionRate,
 ) {
-    let epoch = match args.epoch {
-        Some(epoch) => epoch,
-        None => query_epoch(args.query.clone()).await,
-    };
     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
     let validator = ctx.get(&args.validator);
-    let is_validator =
-        is_validator(&validator, args.query.ledger_address).await;
 
-    if is_validator {
-        let validator_commission_key =
-            pos::validator_commission_rate_key(&validator);
-        let validator_max_commission_change_key =
-            pos::validator_max_commission_rate_change_key(&validator);
-        let commission_rates = query_storage_value::<pos::CommissionRates>(
-            &client,
-            &validator_commission_key,
-        )
-        .await;
-        let max_rate_change = query_storage_value::<Decimal>(
-            &client,
-            &validator_max_commission_change_key,
-        )
-        .await;
-        let max_rate_change =
-            max_rate_change.expect("No max rate change found");
-        let commission_rates =
-            commission_rates.expect("No commission rate found ");
-        match commission_rates.get(epoch) {
-            Some(rate) => {
-                println!(
-                    "Validator {} commission rate: {}, max change per epoch: \
-                     {}",
-                    validator.encode(),
-                    *rate,
-                    max_rate_change,
-                )
-            }
-            None => {
-                println!(
-                    "No commission rate found for {} in epoch {}",
-                    validator.encode(),
-                    epoch
-                )
-            }
+    let info: Option<CommissionPair> =
+        query_commission_rate(&client, &validator, args.epoch).await;
+    match info {
+        Some(CommissionPair {
+            commission_rate: rate,
+            max_commission_change_per_epoch: change,
+        }) => {
+            println!(
+                "Validator {} commission rate: {}, max change per epoch: {}",
+                validator.encode(),
+                rate,
+                change
+            );
         }
-    } else {
-        println!("Cannot find validator with address {}", validator);
+        None => {
+            println!(
+                "Address {} is not a validator (did not find commission rate \
+                 and max change)",
+                validator.encode(),
+            );
+        }
     }
 }
 
 /// Query PoS slashes
 pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
+    let params_key = pos::params_key();
+    let params = query_storage_value::<PosParams>(&client, &params_key)
+        .await
+        .expect("Parameter should be defined.");
+
     match args.validator {
         Some(validator) => {
             let validator = ctx.get(&validator);
             // Find slashes for the given validator
-            let slashes_key = pos::validator_slashes_key(&validator);
-            let slashes =
-                query_storage_value::<pos::Slashes>(&client, &slashes_key)
-                    .await;
-            match slashes {
-                Some(slashes) => {
-                    let stdout = io::stdout();
-                    let mut w = stdout.lock();
+            let slashes: Vec<Slash> = unwrap_client_response(
+                RPC.vp().pos().validator_slashes(&client, &validator).await,
+            );
+            if !slashes.is_empty() {
+                let stdout = io::stdout();
+                let mut w = stdout.lock();
+                for slash in slashes {
+                    writeln!(
+                        w,
+                        "Slash epoch {}, type {}, rate {}",
+                        slash.epoch,
+                        slash.r#type,
+                        slash.r#type.get_slash_rate(&params)
+                    )
+                    .unwrap();
+                }
+            } else {
+                println!("No slashes found for {}", validator.encode())
+            }
+        }
+        None => {
+            let all_slashes: HashMap<Address, Vec<Slash>> =
+                unwrap_client_response(RPC.vp().pos().slashes(&client).await);
+
+            if !all_slashes.is_empty() {
+                let stdout = io::stdout();
+                let mut w = stdout.lock();
+                for (validator, slashes) in all_slashes.into_iter() {
                     for slash in slashes {
                         writeln!(
                             w,
-                            "Slash epoch {}, rate {}, type {}",
-                            slash.epoch, slash.rate, slash.r#type
+                            "Slash epoch {}, block height {}, rate {}, type \
+                             {}, validator {}",
+                            slash.epoch,
+                            slash.block_height,
+                            slash.r#type.get_slash_rate(&params),
+                            slash.r#type,
+                            validator,
                         )
                         .unwrap();
                     }
                 }
-                None => {
-                    println!("No slashes found for {}", validator.encode())
-                }
+            } else {
+                println!("No slashes found")
             }
         }
-        None => {
-            // Iterate slashes for all validators
-            let slashes_prefix = pos::slashes_prefix();
-            let slashes =
-                query_storage_prefix::<pos::Slashes>(&client, &slashes_prefix)
-                    .await;
+    }
+}
 
-            match slashes {
-                Some(slashes) => {
-                    let stdout = io::stdout();
-                    let mut w = stdout.lock();
-                    for (slashes_key, slashes) in slashes {
-                        if let Some(validator) =
-                            is_validator_slashes_key(&slashes_key)
-                        {
-                            for slash in slashes {
-                                writeln!(
-                                    w,
-                                    "Slash epoch {}, block height {}, rate \
-                                     {}, type {}, validator {}",
-                                    slash.epoch,
-                                    slash.block_height,
-                                    slash.rate,
-                                    slash.r#type,
-                                    validator,
-                                )
-                                .unwrap();
-                            }
-                        } else {
-                            eprintln!("Unexpected slashes key {}", slashes_key);
-                        }
-                    }
-                }
-                None => {
-                    println!("No slashes found")
-                }
-            }
+pub async fn query_delegations(ctx: Context, args: args::QueryDelegations) {
+    let client = HttpClient::new(args.query.ledger_address).unwrap();
+    let owner = ctx.get(&args.owner);
+    let delegations = unwrap_client_response(
+        RPC.vp().pos().delegation_validators(&client, &owner).await,
+    );
+    if delegations.is_empty() {
+        println!("No delegations found");
+    } else {
+        println!("Found delegations to:");
+        for delegation in delegations {
+            println!("  {delegation}");
         }
     }
 }
@@ -1963,38 +1791,29 @@ pub async fn get_public_key(
 }
 
 /// Check if the given address is a known validator.
-pub async fn is_validator(
-    address: &Address,
-    ledger_address: TendermintAddress,
-) -> bool {
-    let client = HttpClient::new(ledger_address).unwrap();
-    unwrap_client_response(RPC.vp().pos().is_validator(&client, address).await)
+pub async fn is_validator(client: &HttpClient, address: &Address) -> bool {
+    unwrap_client_response(RPC.vp().pos().is_validator(client, address).await)
 }
 
 /// Check if a given address is a known delegator
-pub async fn is_delegator(
-    address: &Address,
-    ledger_address: TendermintAddress,
-) -> bool {
-    let client = HttpClient::new(ledger_address).unwrap();
-    let bonds_prefix = pos::bonds_for_source_prefix(address);
-    let bonds =
-        query_storage_prefix::<pos::Bonds>(&client, &bonds_prefix).await;
-    bonds.is_some() && bonds.unwrap().count() > 0
+pub async fn is_delegator(client: &HttpClient, address: &Address) -> bool {
+    unwrap_client_response(
+        RPC.vp().pos().is_delegator(client, address, &None).await,
+    )
 }
 
+/// Check if a given address is a known delegator at a particular epoch
 pub async fn is_delegator_at(
     client: &HttpClient,
     address: &Address,
     epoch: Epoch,
 ) -> bool {
-    let key = pos::bonds_for_source_prefix(address);
-    let bonds_iter = query_storage_prefix::<pos::Bonds>(client, &key).await;
-    if let Some(mut bonds) = bonds_iter {
-        bonds.any(|(_, bond)| bond.get(epoch).is_some())
-    } else {
-        false
-    }
+    unwrap_client_response(
+        RPC.vp()
+            .pos()
+            .is_delegator(client, address, &Some(epoch))
+            .await,
+    )
 }
 
 /// Check if the address exists on chain. Established address exists if it has a
@@ -2047,146 +1866,12 @@ pub async fn get_testnet_pow_challenge(
     )
 }
 
-/// Accumulate slashes starting from `epoch_start` until (optionally)
-/// `withdraw_epoch` and apply them to the token amount `delta`.
-fn apply_slashes(
-    slashes: &[Slash],
-    mut delta: token::Amount,
-    epoch_start: Epoch,
-    withdraw_epoch: Option<Epoch>,
-    mut w: Option<&mut std::io::StdoutLock>,
-) -> token::Amount {
-    let mut slashed = token::Amount::default();
-    for slash in slashes {
-        if slash.epoch >= epoch_start
-            && slash.epoch < withdraw_epoch.unwrap_or_else(|| u64::MAX.into())
-        {
-            if let Some(w) = w.as_mut() {
-                writeln!(
-                    *w,
-                    "    ⚠ Slash: {} from epoch {}",
-                    slash.rate, slash.epoch
-                )
-                .unwrap();
-            }
-            let raw_delta: u64 = delta.into();
-            let current_slashed =
-                token::Amount::from(decimal_mult_u64(slash.rate, raw_delta));
-            slashed += current_slashed;
-            delta -= current_slashed;
-        }
-    }
-    if let Some(w) = w.as_mut() {
-        if slashed != 0.into() {
-            writeln!(*w, "    ⚠ Slash total: {}", slashed).unwrap();
-            writeln!(*w, "    ⚠ After slashing: Δ {}", delta).unwrap();
-        }
-    }
-    delta
-}
-
-/// Process the result of a blonds query to determine total bonds
-/// and total active bonds. This includes taking into account
-/// an aggregation of slashes since the start of the given epoch.
-fn process_bonds_query(
-    bonds: &Bonds,
-    slashes: &[Slash],
-    epoch: &Epoch,
-    source: Option<&Address>,
-    total: Option<token::Amount>,
-    total_active: Option<token::Amount>,
-    w: &mut std::io::StdoutLock,
-) -> (token::Amount, token::Amount) {
-    let mut total_active = total_active.unwrap_or_else(|| 0.into());
-    let mut current_total: token::Amount = 0.into();
-    for bond in bonds.iter() {
-        for (epoch_start, &(mut delta)) in bond.pos_deltas.iter().sorted() {
-            writeln!(w, "  Active from epoch {}: Δ {}", epoch_start, delta)
-                .unwrap();
-            delta = apply_slashes(slashes, delta, *epoch_start, None, Some(w));
-            current_total += delta;
-            if epoch >= epoch_start {
-                total_active += delta;
-            }
-        }
-    }
-    let total = total.unwrap_or_else(|| 0.into()) + current_total;
-    match source {
-        Some(addr) => {
-            writeln!(w, "  Bonded total from {}: {}", addr, current_total)
-                .unwrap();
-        }
-        None => {
-            if total_active != 0.into() && total_active != total {
-                writeln!(w, "Active bonds total: {}", total_active).unwrap();
-            }
-            writeln!(w, "Bonds total: {}", total).unwrap();
-        }
-    }
-    (total, total_active)
-}
-
-/// Process the result of an unbonds query to determine total bonds
-/// and total withdrawable bonds. This includes taking into account
-/// an aggregation of slashes since the start of the given epoch up
-/// until the withdrawal epoch.
-fn process_unbonds_query(
-    unbonds: &Unbonds,
-    slashes: &[Slash],
-    epoch: &Epoch,
-    source: Option<&Address>,
-    total: Option<token::Amount>,
-    total_withdrawable: Option<token::Amount>,
-    w: &mut std::io::StdoutLock,
-) -> (token::Amount, token::Amount) {
-    let mut withdrawable = total_withdrawable.unwrap_or_else(|| 0.into());
-    let mut current_total: token::Amount = 0.into();
-    for deltas in unbonds.iter() {
-        for ((epoch_start, epoch_end), &(mut delta)) in
-            deltas.deltas.iter().sorted()
-        {
-            let withdraw_epoch = *epoch_end + 1_u64;
-            writeln!(
-                w,
-                "  Withdrawable from epoch {} (active from {}): Δ {}",
-                withdraw_epoch, epoch_start, delta
-            )
-            .unwrap();
-            delta = apply_slashes(
-                slashes,
-                delta,
-                *epoch_start,
-                Some(withdraw_epoch),
-                Some(w),
-            );
-            current_total += delta;
-            if epoch > epoch_end {
-                withdrawable += delta;
-            }
-        }
-    }
-    let total = total.unwrap_or_else(|| 0.into()) + current_total;
-    match source {
-        Some(addr) => {
-            writeln!(w, "  Unbonded total from {}: {}", addr, current_total)
-                .unwrap();
-        }
-        None => {
-            if withdrawable != 0.into() {
-                writeln!(w, "Withdrawable total: {}", withdrawable).unwrap();
-            }
-            writeln!(w, "Unbonded total: {}", total).unwrap();
-        }
-    }
-    (total, withdrawable)
-}
-
 /// Query for all conversions.
 pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
     // The chosen token type of the conversions
     let target_token = args.token.as_ref().map(|x| ctx.get(x));
     // To facilitate human readable token addresses
-    let tokens = address::tokens();
+    let tokens = ctx.tokens();
     let client = HttpClient::new(args.query.ledger_address).unwrap();
     let masp_addr = masp();
     let key_prefix: Key = masp_addr.to_db_key().into();
@@ -2212,10 +1897,9 @@ pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
         }
         conversions_found = true;
         // Print the asset to which the conversion applies
-        let addr_enc = addr.encode();
         print!(
             "{}[{}]: ",
-            tokens.get(addr).cloned().unwrap_or(addr_enc.as_str()),
+            tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
             epoch,
         );
         // Now print out the components of the allowed conversion
@@ -2225,12 +1909,11 @@ pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
             // printing
             let (addr, epoch, _, _) = &conv_state.assets[asset_type];
             // Now print out this component of the conversion
-            let addr_enc = addr.encode();
             print!(
                 "{}{} {}[{}]",
                 prefix,
                 val,
-                tokens.get(addr).cloned().unwrap_or(addr_enc.as_str()),
+                tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
                 epoch
             );
             // Future iterations need to be prefixed with +
@@ -2257,6 +1940,31 @@ pub async fn query_conversion(
     Some(unwrap_client_response(
         RPC.shell().read_conversion(&client, &asset_type).await,
     ))
+}
+
+/// Query a wasm code hash
+pub async fn query_wasm_code_hash(
+    code_path: impl AsRef<str>,
+    ledger_address: TendermintAddress,
+) -> Option<Hash> {
+    let client = HttpClient::new(ledger_address.clone()).unwrap();
+    let hash_key = Key::wasm_hash(code_path.as_ref());
+    match query_storage_value_bytes(&client, &hash_key, None, false)
+        .await
+        .0
+    {
+        Some(hash) => {
+            Some(Hash::try_from(&hash[..]).expect("Invalid code hash"))
+        }
+        None => {
+            eprintln!(
+                "The corresponding wasm code of the code path {} doesn't \
+                 exist on chain.",
+                code_path.as_ref(),
+            );
+            None
+        }
+    }
 }
 
 /// Query a storage value and decode it with [`BorshDeserialize`].
@@ -2555,11 +2263,12 @@ pub async fn get_proposal_votes(
     let vote_iter =
         query_storage_prefix::<ProposalVote>(client, &vote_prefix_key).await;
 
-    let mut yay_validators: HashMap<Address, VotePower> = HashMap::new();
-    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+    let mut yay_validators: HashMap<Address, (VotePower, ProposalVote)> =
         HashMap::new();
-    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
-        HashMap::new();
+    let mut delegators: HashMap<
+        Address,
+        HashMap<Address, (VotePower, ProposalVote)>,
+    > = HashMap::new();
 
     if let Some(vote_iter) = vote_iter {
         for (key, vote) in vote_iter {
@@ -2570,8 +2279,9 @@ pub async fn get_proposal_votes(
                 let amount: VotePower =
                     get_validator_stake(client, epoch, &voter_address)
                         .await
+                        .unwrap_or_default()
                         .into();
-                yay_validators.insert(voter_address, amount);
+                yay_validators.insert(voter_address, (amount, vote));
             } else if !validators.contains(&voter_address) {
                 let validator_address =
                     gov_storage::get_vote_delegation_address(&key)
@@ -2587,17 +2297,11 @@ pub async fn get_proposal_votes(
                 )
                 .await;
                 if let Some(amount) = delegator_token_amount {
-                    if vote.is_yay() {
-                        let entry =
-                            yay_delegators.entry(voter_address).or_default();
-                        entry
-                            .insert(validator_address, VotePower::from(amount));
-                    } else {
-                        let entry =
-                            nay_delegators.entry(voter_address).or_default();
-                        entry
-                            .insert(validator_address, VotePower::from(amount));
-                    }
+                    let entry = delegators.entry(voter_address).or_default();
+                    entry.insert(
+                        validator_address,
+                        (VotePower::from(amount), vote),
+                    );
                 }
             }
         }
@@ -2605,8 +2309,7 @@ pub async fn get_proposal_votes(
 
     Votes {
         yay_validators,
-        yay_delegators,
-        nay_delegators,
+        delegators,
     }
 }
 
@@ -2615,15 +2318,16 @@ pub async fn get_proposal_offline_votes(
     proposal: OfflineProposal,
     files: HashSet<PathBuf>,
 ) -> Votes {
-    let validators = get_all_validators(client, proposal.tally_epoch).await;
+    // let validators = get_all_validators(client, proposal.tally_epoch).await;
 
     let proposal_hash = proposal.compute_hash();
 
-    let mut yay_validators: HashMap<Address, VotePower> = HashMap::new();
-    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+    let mut yay_validators: HashMap<Address, (VotePower, ProposalVote)> =
         HashMap::new();
-    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
-        HashMap::new();
+    let mut delegators: HashMap<
+        Address,
+        HashMap<Address, (VotePower, ProposalVote)>,
+    > = HashMap::new();
 
     for path in files {
         let file = File::open(&path).expect("Proposal file must exist.");
@@ -2642,7 +2346,10 @@ pub async fn get_proposal_offline_votes(
         }
 
         if proposal_vote.vote.is_yay()
-            && validators.contains(&proposal_vote.address)
+            // && validators.contains(&proposal_vote.address)
+            && unwrap_client_response(
+                RPC.vp().pos().is_validator(client, &proposal_vote.address).await,
+            )
         {
             let amount: VotePower = get_validator_stake(
                 client,
@@ -2650,8 +2357,12 @@ pub async fn get_proposal_offline_votes(
                 &proposal_vote.address,
             )
             .await
+            .unwrap_or_default()
             .into();
-            yay_validators.insert(proposal_vote.address, amount);
+            yay_validators.insert(
+                proposal_vote.address,
+                (amount, ProposalVote::Yay(VoteType::Default)),
+            );
         } else if is_delegator_at(
             client,
             &proposal_vote.address,
@@ -2659,138 +2370,128 @@ pub async fn get_proposal_offline_votes(
         )
         .await
         {
-            let key = pos::bonds_for_source_prefix(&proposal_vote.address);
-            let bonds_iter =
-                query_storage_prefix::<pos::Bonds>(client, &key).await;
-            if let Some(bonds) = bonds_iter {
-                for (key, epoched_bonds) in bonds {
-                    // Look-up slashes for the validator in this key and
-                    // apply them if any
-                    let validator = pos::get_validator_address_from_bond(&key)
-                        .expect(
-                            "Delegation key should contain validator address.",
-                        );
-                    let slashes_key = pos::validator_slashes_key(&validator);
-                    let slashes = query_storage_value::<pos::Slashes>(
-                        client,
-                        &slashes_key,
-                    )
-                    .await
-                    .unwrap_or_default();
-                    let mut delegated_amount: token::Amount = 0.into();
-                    let bond = epoched_bonds
-                        .get(proposal.tally_epoch)
-                        .expect("Delegation bond should be defined.");
-                    let mut to_deduct = bond.neg_deltas;
-                    for (start_epoch, &(mut delta)) in
-                        bond.pos_deltas.iter().sorted()
-                    {
-                        // deduct bond's neg_deltas
-                        if to_deduct > delta {
-                            to_deduct -= delta;
-                            // If the whole bond was deducted, continue to
-                            // the next one
-                            continue;
-                        } else {
-                            delta -= to_deduct;
-                            to_deduct = token::Amount::default();
-                        }
-
-                        delta = apply_slashes(
-                            &slashes,
-                            delta,
-                            *start_epoch,
-                            None,
-                            None,
-                        );
-                        delegated_amount += delta;
-                    }
-
-                    let validator_address =
-                        pos::get_validator_address_from_bond(&key).expect(
-                            "Delegation key should contain validator address.",
-                        );
-                    if proposal_vote.vote.is_yay() {
-                        let entry = yay_delegators
-                            .entry(proposal_vote.address.clone())
-                            .or_default();
-                        entry.insert(
-                            validator_address,
-                            VotePower::from(delegated_amount),
-                        );
-                    } else {
-                        let entry = nay_delegators
-                            .entry(proposal_vote.address.clone())
-                            .or_default();
-                        entry.insert(
-                            validator_address,
-                            VotePower::from(delegated_amount),
-                        );
+            // TODO: decide whether to do this with `bond_with_slashing` RPC
+            // endpoint or with `bonds_and_unbonds`
+            let bonds_and_unbonds: pos::types::BondsAndUnbondsDetails =
+                unwrap_client_response(
+                    RPC.vp()
+                        .pos()
+                        .bonds_and_unbonds(
+                            client,
+                            &Some(proposal_vote.address.clone()),
+                            &None,
+                        )
+                        .await,
+                );
+            for (
+                BondId {
+                    source: _,
+                    validator,
+                },
+                BondsAndUnbondsDetail {
+                    bonds,
+                    unbonds: _,
+                    slashes: _,
+                },
+            ) in bonds_and_unbonds
+            {
+                let mut delegated_amount = token::Amount::default();
+                for delta in bonds {
+                    if delta.start <= proposal.tally_epoch {
+                        delegated_amount += delta.amount
+                            - delta.slashed_amount.unwrap_or_default();
                     }
                 }
+
+                let entry = delegators
+                    .entry(proposal_vote.address.clone())
+                    .or_default();
+                entry.insert(
+                    validator,
+                    (
+                        VotePower::from(delegated_amount),
+                        proposal_vote.vote.clone(),
+                    ),
+                );
             }
+
+            // let key = pos::bonds_for_source_prefix(&proposal_vote.address);
+            // let bonds_iter =
+            //     query_storage_prefix::<pos::Bonds>(client, &key).await;
+            // if let Some(bonds) = bonds_iter {
+            //     for (key, epoched_bonds) in bonds {
+            //         // Look-up slashes for the validator in this key and
+            //         // apply them if any
+            //         let validator =
+            // pos::get_validator_address_from_bond(&key)
+            //             .expect(
+            //                 "Delegation key should contain validator
+            // address.",             );
+            //         let slashes_key = pos::validator_slashes_key(&validator);
+            //         let slashes = query_storage_value::<pos::Slashes>(
+            //             client,
+            //             &slashes_key,
+            //         )
+            //         .await
+            //         .unwrap_or_default();
+            //         let mut delegated_amount: token::Amount = 0.into();
+            //         let bond = epoched_bonds
+            //             .get(proposal.tally_epoch)
+            //             .expect("Delegation bond should be defined.");
+            //         let mut to_deduct = bond.neg_deltas;
+            //         for (start_epoch, &(mut delta)) in
+            //             bond.pos_deltas.iter().sorted()
+            //         {
+            //             // deduct bond's neg_deltas
+            //             if to_deduct > delta {
+            //                 to_deduct -= delta;
+            //                 // If the whole bond was deducted, continue to
+            //                 // the next one
+            //                 continue;
+            //             } else {
+            //                 delta -= to_deduct;
+            //                 to_deduct = token::Amount::default();
+            //             }
+
+            //             delta = apply_slashes(
+            //                 &slashes,
+            //                 delta,
+            //                 *start_epoch,
+            //                 None,
+            //                 None,
+            //             );
+            //             delegated_amount += delta;
+            //         }
+
+            //         let validator_address =
+            //             pos::get_validator_address_from_bond(&key).expect(
+            //                 "Delegation key should contain validator
+            // address.",             );
+            //         if proposal_vote.vote.is_yay() {
+            //             let entry = yay_delegators
+            //                 .entry(proposal_vote.address.clone())
+            //                 .or_default();
+            //             entry.insert(
+            //                 validator_address,
+            //                 VotePower::from(delegated_amount),
+            //             );
+            //         } else {
+            //             let entry = nay_delegators
+            //                 .entry(proposal_vote.address.clone())
+            //                 .or_default();
+            //             entry.insert(
+            //                 validator_address,
+            //                 VotePower::from(delegated_amount),
+            //             );
+            //         }
+            //     }
+            // }
         }
     }
 
     Votes {
         yay_validators,
-        yay_delegators,
-        nay_delegators,
-    }
-}
-
-// Compute the result of a proposal
-pub async fn compute_tally(
-    client: &HttpClient,
-    epoch: Epoch,
-    votes: Votes,
-) -> ProposalResult {
-    let total_staked_tokens: VotePower =
-        get_total_staked_tokens(client, epoch).await.into();
-
-    let Votes {
-        yay_validators,
-        yay_delegators,
-        nay_delegators,
-    } = votes;
-
-    let mut total_yay_staked_tokens = VotePower::from(0_u64);
-    for (_, amount) in yay_validators.clone().into_iter() {
-        total_yay_staked_tokens += amount;
-    }
-
-    // YAY: Add delegator amount whose validator didn't vote / voted nay
-    for (_, vote_map) in yay_delegators.iter() {
-        for (validator_address, vote_power) in vote_map.iter() {
-            if !yay_validators.contains_key(validator_address) {
-                total_yay_staked_tokens += vote_power;
-            }
-        }
-    }
-
-    // NAY: Remove delegator amount whose validator validator vote yay
-    for (_, vote_map) in nay_delegators.iter() {
-        for (validator_address, vote_power) in vote_map.iter() {
-            if yay_validators.contains_key(validator_address) {
-                total_yay_staked_tokens -= vote_power;
-            }
-        }
-    }
-
-    if total_yay_staked_tokens >= (total_staked_tokens / 3) * 2 {
-        ProposalResult {
-            result: TallyResult::Passed,
-            total_voting_power: total_staked_tokens,
-            total_yay_power: total_yay_staked_tokens,
-            total_nay_power: 0,
-        }
-    } else {
-        ProposalResult {
-            result: TallyResult::Rejected,
-            total_voting_power: total_staked_tokens,
-            total_yay_power: total_yay_staked_tokens,
-            total_nay_power: 0,
-        }
+        delegators,
     }
 }
 
@@ -2800,50 +2501,13 @@ pub async fn get_bond_amount_at(
     validator: &Address,
     epoch: Epoch,
 ) -> Option<token::Amount> {
-    let slashes_key = pos::validator_slashes_key(validator);
-    let slashes = query_storage_value::<pos::Slashes>(client, &slashes_key)
-        .await
-        .unwrap_or_default();
-    let bond_key = pos::bond_key(&BondId {
-        source: delegator.clone(),
-        validator: validator.clone(),
-    });
-    let epoched_bonds = query_storage_value::<Bonds>(client, &bond_key).await;
-    match epoched_bonds {
-        Some(epoched_bonds) => {
-            let mut delegated_amount: token::Amount = 0.into();
-            for bond in epoched_bonds.iter() {
-                let mut to_deduct = bond.neg_deltas;
-                for (epoch_start, &(mut delta)) in
-                    bond.pos_deltas.iter().sorted()
-                {
-                    // deduct bond's neg_deltas
-                    if to_deduct > delta {
-                        to_deduct -= delta;
-                        // If the whole bond was deducted, continue to
-                        // the next one
-                        continue;
-                    } else {
-                        delta -= to_deduct;
-                        to_deduct = token::Amount::default();
-                    }
-
-                    delta = apply_slashes(
-                        &slashes,
-                        delta,
-                        *epoch_start,
-                        None,
-                        None,
-                    );
-                    if epoch >= *epoch_start {
-                        delegated_amount += delta;
-                    }
-                }
-            }
-            Some(delegated_amount)
-        }
-        None => None,
-    }
+    let (_total, total_active) = unwrap_client_response(
+        RPC.vp()
+            .pos()
+            .bond_with_slashing(client, delegator, validator, &Some(epoch))
+            .await,
+    );
+    Some(total_active)
 }
 
 pub async fn get_all_validators(
@@ -2867,11 +2531,15 @@ pub async fn get_total_staked_tokens(
     )
 }
 
+/// Get the total stake of a validator at the given epoch. The total stake is a
+/// sum of validator's self-bonds and delegations to their address.
+/// Returns `None` when the given address is not a validator address. For a
+/// validator with `0` stake, this returns `Ok(token::Amount::default())`.
 async fn get_validator_stake(
     client: &HttpClient,
     epoch: Epoch,
     validator: &Address,
-) -> token::Amount {
+) -> Option<token::Amount> {
     unwrap_client_response(
         RPC.vp()
             .pos()
@@ -2884,7 +2552,9 @@ pub async fn get_delegators_delegation(
     client: &HttpClient,
     address: &Address,
 ) -> HashSet<Address> {
-    unwrap_client_response(RPC.vp().pos().delegations(client, address).await)
+    unwrap_client_response(
+        RPC.vp().pos().delegation_validators(client, address).await,
+    )
 }
 
 pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {
