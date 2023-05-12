@@ -43,7 +43,7 @@ namadac init-account \
 ```bash
 namadac init-account \
 --alias [my-multisig-alias] \
---source [my-key1] \
+--source [my-key] \
 --signers [my-key1, my-key2]
 ```
 
