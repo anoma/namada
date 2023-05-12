@@ -1177,7 +1177,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 secp256k1::PublicKey::from_secret_key(&secp_ctx, &secp_sk)
                     .serialize();
             let hash = ripemd160::Ripemd160::digest(
-                &sha2::Sha256::digest(&secp_pk).as_slice(),
+                sha2::Sha256::digest(&secp_pk).as_slice(),
             );
             let script = TransparentAddress::PublicKey(hash.into()).script();
             epoch_sensitive = true;
@@ -1213,7 +1213,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 .try_to_vec()
                 .expect("target address encoding");
             let hash = ripemd160::Ripemd160::digest(
-                &sha2::Sha256::digest(target_enc.as_ref()).as_slice(),
+                sha2::Sha256::digest(target_enc.as_ref()).as_slice(),
             );
             builder.add_transparent_output(
                 &TransparentAddress::PublicKey(hash.into()),
@@ -1254,7 +1254,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     secp256k1::PublicKey::from_secret_key(&secp_ctx, &secp_sk)
                         .serialize();
                 let hash = ripemd160::Ripemd160::digest(
-                    &sha2::Sha256::digest(&secp_pk).as_slice(),
+                    sha2::Sha256::digest(&secp_pk).as_slice(),
                 );
                 let script =
                     TransparentAddress::PublicKey(hash.into()).script();

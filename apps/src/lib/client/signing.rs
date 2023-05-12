@@ -61,6 +61,7 @@ pub async fn sign_tx<
     tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,
+    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<TxBroadcastData, tx::Error> {
     namada::ledger::signing::sign_tx::<C, U>(
         client,
@@ -69,34 +70,9 @@ pub async fn sign_tx<
         args,
         default,
         #[cfg(not(feature = "mainnet"))]
-        args.requires_pow,
+        requires_pow,
     )
     .await
-}
-
-pub fn dump_tx_helper(
-    ctx: &Context,
-    tx: &Tx,
-    extension: &str,
-    precomputed_hash: Option<&String>,
-) {
-    let chain_dir = ctx.config.ledger.chain_dir();
-    let hash = match precomputed_hash {
-        Some(hash) => hash.to_owned(),
-        None => {
-            let hash: Hash = tx
-                .hash()
-                .as_ref()
-                .try_into()
-                .expect("expected hash of dumped tx to be a hash");
-            format!("{}", hash)
-        }
-    };
-    let filename = chain_dir.join(hash).with_extension(extension);
-    let tx_bytes = tx.to_bytes();
-
-    std::fs::write(filename, tx_bytes)
-        .expect("expected to be able to write tx dump file");
 }
 
 /// Create a wrapper tx from a normal tx. Get the hash of the

@@ -24,7 +24,7 @@ use crate::tendermint_rpc::error::Error as TError;
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::types::governance::{
-    ProposalResult, ProposalVote, TallyResult, VotePower,
+    ProposalVote, VotePower,
 };
 use crate::types::hash::Hash;
 use crate::types::key::*;

@@ -160,7 +160,8 @@ pub async fn sign_tx<
     let tx = tx.sign(&keypair);
 
     let epoch = rpc::query_epoch(client).await;
-    Ok(if args.dry_run {
+
+    let broadcast_data = if args.dry_run {
         TxBroadcastData::DryRun(tx)
     } else {
         sign_wrapper(
@@ -173,7 +174,9 @@ pub async fn sign_tx<
             requires_pow,
         )
         .await
-    })
+    };
+
+    Ok(broadcast_data)
 }
 
 /// Create a wrapper tx from a normal tx. Get the hash of the
@@ -192,7 +195,7 @@ pub async fn sign_wrapper<C: crate::ledger::queries::Client + Sync>(
     } else {
         let wrapper_tx_fees_key = parameter_storage::get_wrapper_tx_fees_key();
         rpc::query_storage_value::<C, token::Amount>(
-            &client,
+            client,
             &wrapper_tx_fees_key,
         )
         .await
@@ -202,7 +205,7 @@ pub async fn sign_wrapper<C: crate::ledger::queries::Client + Sync>(
     let source = Address::from(&keypair.ref_to());
     let balance_key = token::balance_key(&fee_token, &source);
     let balance =
-        rpc::query_storage_value::<C, token::Amount>(&client, &balance_key)
+        rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
             .await
             .unwrap_or_default();
 

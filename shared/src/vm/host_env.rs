@@ -604,7 +604,7 @@ where
     let (log_val, gas) = write_log.read(&key);
     tx_add_gas(env, gas)?;
     Ok(match log_val {
-        Some(&write_log::StorageModification::Write { ref value }) => {
+        Some(write_log::StorageModification::Write { ref value }) => {
             let len: i64 = value
                 .len()
                 .try_into()
@@ -617,7 +617,7 @@ where
             // fail, given key has been deleted
             HostEnvResult::Fail.to_i64()
         }
-        Some(&write_log::StorageModification::InitAccount {
+        Some(write_log::StorageModification::InitAccount {
             ref vp_code_hash,
         }) => {
             // read the VP of a new account
@@ -629,7 +629,7 @@ where
             result_buffer.replace(vp_code_hash.to_vec());
             len
         }
-        Some(&write_log::StorageModification::Temp { ref value }) => {
+        Some(write_log::StorageModification::Temp { ref value }) => {
             let len: i64 = value
                 .len()
                 .try_into()
@@ -749,7 +749,7 @@ where
         );
         tx_add_gas(env, iter_gas + log_gas)?;
         match log_val {
-            Some(&write_log::StorageModification::Write { ref value }) => {
+            Some(write_log::StorageModification::Write { ref value }) => {
                 let key_val = KeyVal {
                     key,
                     val: value.clone(),
@@ -772,7 +772,7 @@ where
                 // a VP of a new account doesn't need to be iterated
                 continue;
             }
-            Some(&write_log::StorageModification::Temp { ref value }) => {
+            Some(write_log::StorageModification::Temp { ref value }) => {
                 let key_val = KeyVal {
                     key,
                     val: value.clone(),

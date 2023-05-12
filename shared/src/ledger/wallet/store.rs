@@ -1,3 +1,5 @@
+//! Wallet Store information
+
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::str::FromStr;
@@ -79,6 +81,7 @@ pub struct Store {
 /// Grouping of addresses by validity predicate.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum AddressVpType {
+    /// The Token
     Token,
 }
 
@@ -548,22 +551,29 @@ impl Store {
         });
     }
 
-    /// Gets all addresses given a vp_type
+    /// get an address with the vp type
     pub fn get_addresses_with_vp_type(
         &self,
         vp_type: AddressVpType,
     ) -> HashSet<Address> {
-        self.get_addresses_with_vp_type(vp_type)
+        // defaults to an empty set
+        self.address_vp_types
+            .get(&vp_type)
+            .cloned()
+            .unwrap_or_default()
     }
 
-    /// Add a vp_type to a given address
+    /// Adds a VP type to the address
     pub fn add_vp_type_to_address(
         &mut self,
         vp_type: AddressVpType,
         address: Address,
     ) {
         // defaults to an empty set
-        self.add_vp_type_to_address(vp_type, address)
+        self.address_vp_types
+            .entry(vp_type)
+            .or_default()
+            .insert(address);
     }
 
     /// Decode a Store from the given bytes

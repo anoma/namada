@@ -360,14 +360,14 @@ where
         // try to read from the write log first
         let (log_val, _gas) = self.write_log().read(key);
         match log_val {
-            Some(&write_log::StorageModification::Write { ref value }) => {
+            Some(write_log::StorageModification::Write { ref value }) => {
                 Ok(Some(value.clone()))
             }
-            Some(&write_log::StorageModification::Delete) => Ok(None),
-            Some(&write_log::StorageModification::InitAccount {
+            Some(write_log::StorageModification::Delete) => Ok(None),
+            Some(write_log::StorageModification::InitAccount {
                 ref vp_code_hash,
             }) => Ok(Some(vp_code_hash.to_vec())),
-            Some(&write_log::StorageModification::Temp { ref value }) => {
+            Some(write_log::StorageModification::Temp { ref value }) => {
                 Ok(Some(value.clone()))
             }
             None => {

@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 use ark_std::rand::prelude::*;
 use ark_std::rand::SeedableRng;
 use file_lock::{FileLock, FileOptions};
-use namada::ledger::wallet::AddressVpType;
 #[cfg(feature = "dev")]
 use namada::ledger::wallet::StoredKeypair;
 use namada::ledger::wallet::{gen_sk, Store, ValidatorKeys};

@@ -1,21 +1,22 @@
 //! Provides functionality for managing keys and addresses for a user
-mod alias;
 mod keys;
+pub mod alias;
 pub mod pre_genesis;
-mod store;
+pub mod store;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
-pub use alias::Alias;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::zip32::ExtendedFullViewingKey;
 pub use pre_genesis::gen_key_to_store;
-pub use store::{gen_sk, Store};
+pub use store::{gen_sk, Store, AddressVpType};
 use thiserror::Error;
 
+use alias::Alias;
 pub use self::keys::{DecryptionError, StoredKeypair};
 pub use self::store::{ConfirmationResponse, ValidatorData, ValidatorKeys};
 use crate::types::address::Address;
@@ -474,6 +475,24 @@ impl<U: WalletUtils> Wallet<U> {
             validator_alias,
             other,
         )
+    }
+
+    /// Gets all addresses given a vp_type
+    pub fn get_addresses_with_vp_type(
+        &self,
+        vp_type: AddressVpType,
+    ) -> HashSet<Address> {
+        self.store.get_addresses_with_vp_type(vp_type)
+    }
+
+    /// Add a vp_type to a given address
+    pub fn add_vp_type_to_address(
+        &mut self,
+        vp_type: AddressVpType,
+        address: Address,
+    ) {
+        // defaults to an empty set
+        self.store.add_vp_type_to_address(vp_type, address)
     }
 
     /// Provide immutable access to the backing store

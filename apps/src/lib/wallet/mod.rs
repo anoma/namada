@@ -1,4 +1,3 @@
-mod alias;
 pub mod defaults;
 mod keys;
 pub mod pre_genesis;
@@ -9,8 +8,9 @@ use std::path::{Path, PathBuf};
 use std::{env, fs};
 
 use namada::ledger::wallet::{
-    Alias, ConfirmationResponse, FindKeyError, Wallet, WalletUtils,
+    ConfirmationResponse, FindKeyError, Wallet, WalletUtils,
 };
+pub use namada::ledger::wallet::alias::Alias;
 pub use namada::ledger::wallet::{
     DecryptionError, StoredKeypair, ValidatorData, ValidatorKeys,
 };

@@ -19,7 +19,8 @@ use crate::client::tx::CLIShieldedUtils;
 use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
 use crate::config::{self, Config};
-use crate::wallet::{AddressVpType, CliWalletUtils};
+use namada::ledger::wallet::store::AddressVpType;
+use crate::wallet::CliWalletUtils;
 use crate::wasm_loader;
 
 /// Env. var to set chain ID

@@ -154,6 +154,9 @@ pub enum Error {
          updated."
     )]
     ImplicitInternalError,
+    /// Unexpected Error
+    #[error("Unexpected behavior reading the unbonds data has occurred")]
+    UnboundError,
     /// Epoch not in storage
     #[error("Proposal end epoch is not in the storage.")]
     EpochNotInStorage,
@@ -707,7 +710,7 @@ pub async fn submit_unbond<
     let latest_withdrawal_pre = withdrawable.into_iter().last();
 
     let data = pos::Unbond {
-        validator,
+        validator: validator.clone(),
         amount: args.amount,
         source,
     };
@@ -728,6 +731,54 @@ pub async fn submit_unbond<
         false,
     )
     .await?;
+
+
+
+    // Query the unbonds post-tx
+    let unbonds =
+        rpc::query_unbond_with_slashing(client, &bond_source, &validator).await;
+    let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
+    for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
+        let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();
+        *to_withdraw += amount;
+    }
+    let (latest_withdraw_epoch_post, latest_withdraw_amount_post) =
+        withdrawable.into_iter().last().unwrap();
+
+    if let Some((latest_withdraw_epoch_pre, latest_withdraw_amount_pre)) =
+        latest_withdrawal_pre
+    {
+        match latest_withdraw_epoch_post.cmp(&latest_withdraw_epoch_pre) {
+            std::cmp::Ordering::Less => {
+                if args.tx.force {
+                    eprintln!(
+                        "Unexpected behavior reading the unbonds data has occurred"
+                    );
+                } else {
+                    return Err(Error::UnboundError);
+                }
+            }
+            std::cmp::Ordering::Equal => {
+                println!(
+                    "Amount {} withdrawable starting from epoch {}",
+                    latest_withdraw_amount_post - latest_withdraw_amount_pre,
+                    latest_withdraw_epoch_post
+                );
+            }
+            std::cmp::Ordering::Greater => {
+                println!(
+                    "Amount {} withdrawable starting from epoch {}",
+                    latest_withdraw_amount_post, latest_withdraw_epoch_post
+                );
+            }
+        }
+    } else {
+        println!(
+            "Amount {} withdrawable starting from epoch {}",
+            latest_withdraw_amount_post, latest_withdraw_epoch_post
+        );
+    }
+
     Ok(())
 }
 

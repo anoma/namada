@@ -6,7 +6,7 @@ pub use dev::{
     christel_address, christel_keypair, daewon_address, daewon_keypair, keys,
     validator_address, validator_keypair, validator_keys,
 };
-use namada::ledger::wallet::Alias;
+use namada::ledger::wallet::alias::Alias;
 use namada::ledger::{eth_bridge, governance, pos};
 use namada::types::address::Address;
 use namada::types::key::*;
@@ -73,7 +73,7 @@ mod dev {
     use std::collections::HashMap;
 
     use borsh::BorshDeserialize;
-    use namada::ledger::wallet::Alias;
+    use namada::ledger::wallet::alias::Alias;
     use namada::ledger::{governance, pos};
     use namada::types::address::{
         apfel, btc, dot, eth, kartoffel, nam, schnitzel, Address,
