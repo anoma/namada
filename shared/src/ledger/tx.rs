@@ -1103,7 +1103,7 @@ pub async fn submit_transfer<
     tracing::debug!("Transfer data {:?}", transfer);
     let data = transfer.try_to_vec().map_err(Error::EncodeTxFailure)?;
 
-    let chain_id = args.tx.chain_id.clone();
+    let chain_id = args.tx.chain_id.clone().unwrap();
     let expiration = args.tx.expiration;
 
     #[cfg(not(feature = "mainnet"))]
