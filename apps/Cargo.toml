@@ -153,6 +153,7 @@ masp_proofs = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10
 bimap = {version = "0.6.2", features = ["serde"]}
 rust_decimal = "=1.26.1"
 rust_decimal_macros = "=1.26.1"
+directories = "4.0.1"
 
 [dev-dependencies]
 namada = {path = "../shared", default-features = false, features = ["testing", "wasm-runtime"]}
