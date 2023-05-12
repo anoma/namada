@@ -63,8 +63,10 @@ impl RewardsController {
 
         // Token amounts must be expressed in terms of the raw amount (namnam)
         // to properly run the PD controller
-        let locked = Dec::from(locked_tokens.raw_amount());
-        let total = Dec::from(total_tokens.raw_amount());
+        let locked =
+            Dec::try_from(locked_tokens.raw_amount()).expect("Should not fail");
+        let total =
+            Dec::try_from(total_tokens.raw_amount()).expect("Should not fail");
         let epochs_py: Dec = epochs_per_year.into();
 
         let locked_ratio = locked / total;

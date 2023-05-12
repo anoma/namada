@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use super::token::NATIVE_MAX_DECIMAL_PLACES;
 use crate::types::token::{Amount, Change};
-use crate::types::uint::Uint;
+use crate::types::uint::{Uint, I256};
 
 /// The number of Dec places for PoS rational calculations
 pub const POS_DECIMAL_PRECISION: u8 = 12;
@@ -48,10 +48,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 )]
 #[serde(try_from = "String")]
 #[serde(into = "String")]
-pub struct Dec(pub Uint);
+pub struct Dec(pub I256);
 
 impl std::ops::Deref for Dec {
-    type Target = Uint;
+    type Target = I256;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -67,37 +67,59 @@ impl std::ops::DerefMut for Dec {
 impl Dec {
     /// Division with truncation (TODO: better description)
     pub fn trunc_div(&self, rhs: &Self) -> Option<Self> {
-        self.0
-            .fixed_precision_div(rhs, POS_DECIMAL_PRECISION)
-            .map(Self)
+        let is_neg = self.0.is_negative() ^ rhs.0.is_negative();
+        let inner_uint = self.0.abs();
+        let inner_rhs_uint = rhs.0.abs();
+        match inner_uint
+            .fixed_precision_div(&inner_rhs_uint, POS_DECIMAL_PRECISION)
+        {
+            Some(res) => {
+                let res = I256::try_from(res).ok()?;
+                if is_neg {
+                    Some(Self(-res))
+                } else {
+                    Some(Self(res))
+                }
+            }
+            None => None,
+        }
     }
 
     /// The representation of 0
     pub fn zero() -> Self {
-        Self(Uint::zero())
+        Self(I256::zero())
     }
 
     /// The representation of 1
     pub fn one() -> Self {
-        Self(Uint::one() * Uint::exp10(POS_DECIMAL_PRECISION as usize))
+        Self(I256(
+            Uint::one() * Uint::exp10(POS_DECIMAL_PRECISION as usize),
+        ))
     }
 
     /// The representation of 2
     pub fn two() -> Self {
-        Self(
-            (Uint::one() + Uint::one())
-                * Uint::exp10(POS_DECIMAL_PRECISION as usize),
-        )
+        Self::one() + Self::one()
     }
 
     /// Create a new [`Dec`] using a mantissa and a scale.
-    pub fn new(mantissa: u64, scale: u8) -> Option<Self> {
+    pub fn new(mantissa: i128, scale: u8) -> Option<Self> {
         if scale > POS_DECIMAL_PRECISION {
             None
         } else {
-            Uint::exp10((POS_DECIMAL_PRECISION - scale) as usize)
-                .checked_mul(Uint::from(mantissa))
-                .map(Self)
+            let abs = u64::try_from(mantissa.abs()).ok()?;
+            match Uint::exp10((POS_DECIMAL_PRECISION - scale) as usize)
+                .checked_mul(Uint::from(abs))
+            {
+                Some(res) => {
+                    if mantissa.is_negative() {
+                        Some(Self(-I256(res)))
+                    } else {
+                        Some(Self(I256(res)))
+                    }
+                }
+                None => None,
+            }
         }
     }
 
@@ -110,9 +132,18 @@ impl Dec {
         }
     }
 
-    /// Convert the Dec type into a Uint with truncation
-    pub fn to_uint(&self) -> Uint {
+    /// Convert the Dec type into a I256 with truncation
+    pub fn to_i256(&self) -> I256 {
         self.0 / Uint::exp10(POS_DECIMAL_PRECISION as usize)
+    }
+
+    /// Convert the Dec type into a Uint with truncation
+    pub fn to_uint(&self) -> Option<Uint> {
+        if self.is_negative() {
+            None
+        } else {
+            Some(self.0.abs() / Uint::exp10(POS_DECIMAL_PRECISION as usize))
+        }
     }
 
     /// Do subtraction of two [`Dec`]s If and only if the value is
@@ -124,17 +155,24 @@ impl Dec {
             None
         }
     }
+
+    /// Return if the [`Dec`] is negative
+    pub fn is_negative(&self) -> bool {
+        self.0.is_negative()
+    }
 }
 
 impl FromStr for Dec {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        if s.starts_with('-') {
-            return Err(eyre!("Dec cannot be negative").into());
-        }
+        let ((large, small), is_neg) = if let Some(strip) = s.strip_prefix('-')
+        {
+            (strip.split_once('.').unwrap_or((s, "0")), true)
+        } else {
+            (s.split_once('.').unwrap_or((s, "0")), false)
+        };
 
-        let (large, small) = s.split_once('.').unwrap_or((s, "0"));
         let num_large = Uint::from_str_radix(large, 10).map_err(|e| {
             eyre!("Could not parse {} as an integer: {}", large, e)
         })?;
@@ -169,7 +207,13 @@ impl FromStr for Dec {
                     num_large
                 )
             })?;
-        Ok(Dec(int_part + decimal_part))
+        let inner = I256::try_from(int_part + decimal_part)
+            .map_err(|e| eyre!("Could not convert Uint to I256: {}", e))?;
+        if is_neg {
+            Ok(Dec(-inner))
+        } else {
+            Ok(Dec(inner))
+        }
     }
 }
 
@@ -183,25 +227,43 @@ impl TryFrom<String> for Dec {
 
 impl From<Amount> for Dec {
     fn from(amt: Amount) -> Self {
-        Self(
-            amt.raw_amount()
-                * Uint::exp10(
+        match I256::try_from(amt.raw_amount()).ok() {
+            Some(raw) => Self(
+                raw * Uint::exp10(
                     (POS_DECIMAL_PRECISION - NATIVE_MAX_DECIMAL_PLACES)
                         as usize,
                 ),
-        )
+            ),
+            None => Self::zero(),
+        }
+    }
+}
+
+impl TryFrom<Uint> for Dec {
+    type Error = Error;
+
+    fn try_from(value: Uint) -> std::result::Result<Self, Self::Error> {
+        let i256 = I256::try_from(value)
+            .map_err(|e| eyre!("Could not convert Uint to I256: {}", e))?;
+        Ok(Self(i256 * Uint::exp10(POS_DECIMAL_PRECISION as usize)))
     }
 }
 
 impl From<u64> for Dec {
     fn from(num: u64) -> Self {
-        Self(Uint::from(num) * Uint::exp10(POS_DECIMAL_PRECISION as usize))
+        Self(I256::from(num) * Uint::exp10(POS_DECIMAL_PRECISION as usize))
+    }
+}
+
+impl From<i128> for Dec {
+    fn from(num: i128) -> Self {
+        Self(I256::from(num) * Uint::exp10(POS_DECIMAL_PRECISION as usize))
     }
 }
 
 // Is error handling needed for this?
-impl From<Uint> for Dec {
-    fn from(num: Uint) -> Self {
+impl From<I256> for Dec {
+    fn from(num: I256) -> Self {
         Self(num * Uint::exp10(POS_DECIMAL_PRECISION as usize))
     }
 }
@@ -224,7 +286,7 @@ impl Add<u64> for Dec {
     type Output = Self;
 
     fn add(self, rhs: u64) -> Self::Output {
-        Self(self.0 + Uint::from(rhs))
+        Self(self.0 + I256::from(rhs))
     }
 }
 
@@ -242,11 +304,19 @@ impl Sub<Dec> for Dec {
     }
 }
 
-impl Mul<Uint> for Dec {
-    type Output = Uint;
+// impl Mul<Uint> for Dec {
+//     type Output = Uint;
 
-    fn mul(self, rhs: Uint) -> Self::Output {
-        self.0 * rhs / Uint::exp10(POS_DECIMAL_PRECISION as usize)
+//     fn mul(self, rhs: Uint) -> Self::Output {
+//         self.0 * rhs / Uint::exp10(POS_DECIMAL_PRECISION as usize)
+//     }
+// }
+
+impl Mul<u64> for Dec {
+    type Output = Dec;
+
+    fn mul(self, rhs: u64) -> Self::Output {
+        Self(self.0 * Uint::from(rhs))
     }
 }
 
@@ -262,7 +332,11 @@ impl Mul<Amount> for Dec {
     type Output = Amount;
 
     fn mul(self, rhs: Amount) -> Self::Output {
-        (rhs * self.0) / 10u64.pow(POS_DECIMAL_PRECISION as u32)
+        if !self.is_negative() {
+            (rhs * self.0.abs()) / 10u64.pow(POS_DECIMAL_PRECISION as u32)
+        } else {
+            panic!("aaa");
+        }
     }
 }
 
@@ -311,7 +385,8 @@ impl Div<u64> for Dec {
 
 impl Display for Dec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut string = self.0.to_string();
+        let is_neg = self.is_negative();
+        let mut string = self.0.abs().to_string();
         if string.len() > POS_DECIMAL_PRECISION as usize {
             let idx = string.len() - POS_DECIMAL_PRECISION as usize;
             string.insert(idx, '.');
@@ -326,6 +401,9 @@ impl Display for Dec {
         let stripped_string = string.trim_end_matches(['.', '0']);
         if stripped_string.is_empty() {
             f.write_str("0")
+        } else if is_neg {
+            let stripped_string = format!("-{}", stripped_string);
+            f.write_str(stripped_string.as_str())
         } else {
             f.write_str(stripped_string)
         }
@@ -360,20 +438,42 @@ mod test_dec {
         assert_eq!(Dec::new(1, 0).expect("Test failed"), Dec::one());
         assert_eq!(Dec::new(2, 0).expect("Test failed"), Dec::two());
         assert_eq!(
-            Dec(Uint::from(1653)),
+            Dec(I256(Uint::from(1653))),
             Dec::new(1653, POS_DECIMAL_PRECISION).expect("Test failed")
         );
         assert_eq!(
-            Dec::new(123456789, 4).expect("Test failed").to_uint(),
+            Dec(I256::from(-48756)),
+            Dec::new(-48756, POS_DECIMAL_PRECISION).expect("Test failed")
+        );
+        assert_eq!(
+            Dec::new(123456789, 4)
+                .expect("Test failed")
+                .to_uint()
+                .unwrap(),
             Uint::from(12345)
         );
         assert_eq!(
-            Dec::new(123, 4).expect("Test failed").to_uint(),
+            Dec::new(-123456789, 4).expect("Test failed").to_i256(),
+            I256::from(-12345)
+        );
+        assert_eq!(
+            Dec::new(123, 4).expect("Test failed").to_uint().unwrap(),
             Uint::zero()
         );
         assert_eq!(
-            Dec::from_str("4876.3855").expect("Test failed").to_uint(),
+            Dec::new(123, 4).expect("Test failed").to_i256(),
+            I256::zero()
+        );
+        assert_eq!(
+            Dec::from_str("4876.3855")
+                .expect("Test failed")
+                .to_uint()
+                .unwrap(),
             Uint::from(4876)
+        );
+        assert_eq!(
+            Dec::from_str("4876.3855").expect("Test failed").to_i256(),
+            I256::from(4876)
         );
 
         // Fixed precision division is more thoroughly tested for the `Uint`

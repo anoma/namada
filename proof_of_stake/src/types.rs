@@ -509,7 +509,8 @@ impl Display for SlashType {
 pub fn into_tm_voting_power(votes_per_token: Dec, tokens: Amount) -> i64 {
     let pow = votes_per_token
         * u128::try_from(tokens).expect("Voting power out of bounds");
-    i64::try_from(pow.to_uint()).expect("Invalid voting power")
+    i64::try_from(pow.to_uint().expect("Cant fail"))
+        .expect("Invalid voting power")
 }
 
 #[cfg(test)]

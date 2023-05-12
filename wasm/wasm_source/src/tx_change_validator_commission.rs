@@ -153,10 +153,10 @@ mod tests {
 
     fn arb_rate(min: Dec, max: Dec) -> impl Strategy<Value = Dec> {
         let scale = Dec::new(100_000, 0).expect("Test failed");
-        let int_min = (min * scale).to_uint();
-        let int_min = u64::try_from(int_min).unwrap();
-        let int_max = (max * scale).to_uint();
-        let int_max = u64::try_from(int_max).unwrap();
+        let int_min = (min * scale).to_i256();
+        let int_min = i128::try_from(int_min).unwrap();
+        let int_max = (max * scale).to_i256();
+        let int_max = i128::try_from(int_max).unwrap();
         (int_min..=int_max).prop_map(move |num| Dec::from(num) / scale)
     }
 

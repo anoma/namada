@@ -449,8 +449,15 @@ impl From<u64> for Amount {
 
 impl From<Dec> for Amount {
     fn from(dec: Dec) -> Amount {
-        Amount {
-            raw: dec.0 / Uint::exp10(POS_DECIMAL_PRECISION as usize),
+        if !dec.is_negative() {
+            Amount {
+                raw: dec.0.abs() / Uint::exp10(POS_DECIMAL_PRECISION as usize),
+            }
+        } else {
+            panic!(
+                "The Dec value is negative and cannot be multiplied by an \
+                 Amount"
+            )
         }
     }
 }

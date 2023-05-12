@@ -81,9 +81,18 @@ const MINUS_ZERO: Uint = Uint([0u64, 0u64, 0u64, 9223372036854775808]);
 
 /// A signed 256 big integer.
 #[derive(
-    Copy, Clone, Debug, Default, PartialEq, Eq, BorshSerialize, BorshDeserialize,
+    Copy,
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
 )]
-pub struct I256(Uint);
+pub struct I256(pub Uint);
 
 impl I256 {
     /// Check if the amount is not negative (greater
@@ -259,6 +268,7 @@ impl SubAssign for I256 {
     }
 }
 
+// NOTE: watch the overflow
 impl Mul<Uint> for I256 {
     type Output = Self;
 
@@ -266,6 +276,18 @@ impl Mul<Uint> for I256 {
         let is_neg = self.is_negative();
         let prod = self.abs() * rhs;
         if is_neg { -Self(prod) } else { Self(prod) }
+    }
+}
+
+impl Mul for I256 {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        if rhs.is_negative() {
+            -self * rhs.abs()
+        } else {
+            self * rhs.abs()
+        }
     }
 }
 

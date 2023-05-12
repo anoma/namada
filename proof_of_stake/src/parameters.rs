@@ -113,9 +113,11 @@ impl PosParams {
 
         // Check maximum total voting power cannot get larger than what
         // Tendermint allows
-        let max_total_voting_power = self.tm_votes_per_token
-            * Uint::from(TOKEN_MAX_AMOUNT)
-            * Uint::from(self.max_validator_slots);
+        let max_total_voting_power = (self.tm_votes_per_token
+            * TOKEN_MAX_AMOUNT
+            * self.max_validator_slots)
+            .to_uint()
+            .expect("Cannot fail");
         match i64::try_from(max_total_voting_power) {
             Ok(max_total_voting_power_i64) => {
                 if max_total_voting_power_i64 > MAX_TOTAL_VOTING_POWER {
@@ -178,7 +180,7 @@ pub mod testing {
             // `unbonding_len` > `pipeline_len`
             unbonding_len in pipeline_len + 1..pipeline_len + 8,
             pipeline_len in Just(pipeline_len),
-            tm_votes_per_token in 1..10_001_u64)
+            tm_votes_per_token in 1..10_001_i128)
             -> PosParams {
             PosParams {
                 max_validator_slots,
@@ -195,6 +197,7 @@ pub mod testing {
     /// Get an arbitrary rate - a Dec value between 0 and 1 inclusive, with
     /// some fixed precision
     pub fn arb_rate() -> impl Strategy<Value = Dec> {
-        (0..=100_000_u64).prop_map(|num| Dec::new(num, 5).expect("Test failed"))
+        (0..=100_000_i128)
+            .prop_map(|num| Dec::new(num, 5).expect("Test failed"))
     }
 }

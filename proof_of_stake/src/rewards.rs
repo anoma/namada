@@ -2,11 +2,12 @@
 
 use namada_core::types::dec::Dec;
 use namada_core::types::token::Amount;
-use namada_core::types::uint::Uint;
+use namada_core::types::uint::{Uint, I256};
 use thiserror::Error;
 
 /// This is equal to 0.01.
-const MIN_PROPOSER_REWARD: Dec = Dec(Uint([10000u64, 0u64, 0u64, 0u64]));
+const MIN_PROPOSER_REWARD: Dec =
+    Dec(I256(Uint([10000000000u64, 0u64, 0u64, 0u64])));
 
 /// Errors during rewards calculation
 #[derive(Debug, Error)]
