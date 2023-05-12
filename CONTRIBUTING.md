@@ -39,10 +39,12 @@ unclog add \
 
 The message should be a high-level description of the changes that should explain the scope of the change and affected components to Namada's users (while git commit messages should target developers).
 
+Aim to make the changelog description readable and understandable for people using Namada in plain English, assuming no familiarity with the code, dependencies and other low-level details, and explain not just *what* has changed, but also *why* it's changed.
+
 If none of the sections fit, new sections may be added. To find the existing section names, you can use e.g.:
 
 ```shell
-for i in $(ls -d .changelog/*/*/); do basename "$i"; done
+for i in $(ls -d .changelog/*/*/); do basename "$i"; done | sort | uniq
 ```
 
 ## Development priorities
