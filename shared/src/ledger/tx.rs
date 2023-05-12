@@ -13,6 +13,7 @@ use rust_decimal::Decimal;
 use thiserror::Error;
 use tokio::time::Duration;
 
+use super::rpc::query_wasm_code_hash;
 use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
 use crate::ibc::signer::Signer;
 use crate::ibc::timestamp::Timestamp as IbcTimestamp;
@@ -36,8 +37,6 @@ use crate::types::transaction::{pos, InitAccount, UpdateVp};
 use crate::types::{storage, token};
 use crate::vm;
 use crate::vm::WasmValidationError;
-
-use super::rpc::query_wasm_code_hash;
 
 /// Default timeout in seconds for requests to the `/accepted`
 /// and `/applied` ABCI query endpoints.
@@ -732,8 +731,6 @@ pub async fn submit_unbond<
     )
     .await?;
 
-
-
     // Query the unbonds post-tx
     let unbonds =
         rpc::query_unbond_with_slashing(client, &bond_source, &validator).await;
@@ -752,7 +749,8 @@ pub async fn submit_unbond<
             std::cmp::Ordering::Less => {
                 if args.tx.force {
                     eprintln!(
-                        "Unexpected behavior reading the unbonds data has occurred"
+                        "Unexpected behavior reading the unbonds data has \
+                         occurred"
                     );
                 } else {
                     return Err(Error::UnboundError);

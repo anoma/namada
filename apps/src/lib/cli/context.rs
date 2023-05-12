@@ -8,6 +8,7 @@ use std::str::FromStr;
 
 use color_eyre::eyre::Result;
 use namada::ledger::masp::ShieldedContext;
+use namada::ledger::wallet::store::AddressVpType;
 use namada::ledger::wallet::Wallet;
 use namada::types::address::Address;
 use namada::types::chain::ChainId;
@@ -19,7 +20,6 @@ use crate::client::tx::CLIShieldedUtils;
 use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
 use crate::config::{self, Config};
-use namada::ledger::wallet::store::AddressVpType;
 use crate::wallet::CliWalletUtils;
 use crate::wasm_loader;
 

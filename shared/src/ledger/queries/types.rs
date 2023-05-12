@@ -1,5 +1,4 @@
 use namada_core::ledger::storage::WlStorage;
-
 use tendermint::block::Height;
 use tendermint_rpc::endpoint::{
     abci_info, block, block_results, blockchain, commit, consensus_params,

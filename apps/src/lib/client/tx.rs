@@ -29,9 +29,8 @@ use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::prover::LocalTxProver;
 use namada::ledger::governance::storage as gov_storage;
-use namada::ledger::masp;
-use namada::ledger::pos::{CommissionPair, PosParams};
 use namada::ledger::masp::{ShieldedContext, ShieldedUtils};
+use namada::ledger::pos::{CommissionPair, PosParams};
 use namada::ledger::rpc::{TxBroadcastData, TxResponse};
 use namada::ledger::signing::TxSigningKey;
 use namada::ledger::wallet::{Wallet, WalletUtils};
@@ -41,6 +40,7 @@ use namada::types::address::Address;
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
+use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada::types::token;
@@ -48,17 +48,18 @@ use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
 };
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
-use rand_core::{CryptoRng, OsRng, RngCore};
 use namada::vm;
+use rand_core::{CryptoRng, OsRng, RngCore};
 use rust_decimal::Decimal;
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
-use crate::cli::{args, safe_exit, Context, InitProposal};
+use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::{
-    query_conversion, query_and_print_epoch, query_storage_value, query_wasm_code_hash,
+    query_and_print_epoch, query_conversion, query_storage_value,
+    query_wasm_code_hash,
 };
-use crate::client::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
+use crate::client::signing::{find_keypair, sign_tx, tx_signer};
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::node::ledger::tendermint_node;
 use crate::wallet::{gen_validator_keys, read_and_confirm_pwd, CliWalletUtils};
@@ -98,9 +99,10 @@ pub async fn submit_init_account<
 
 pub async fn submit_init_validator<
     C: namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
 >(
     client: &C,
-    mut ctx: Context,
+    wallet: &mut Wallet<U>,
     args::TxInitValidator {
         tx: tx_args,
         source,
@@ -113,6 +115,8 @@ pub async fn submit_init_validator<
         validator_vp_code_path,
         unsafe_dont_encrypt,
         tx_code_path,
+        chain_id,
+        expiration,
     }: args::TxInitValidator,
 ) {
     let alias = tx_args
@@ -126,7 +130,7 @@ pub async fn submit_init_validator<
     let account_key = account_key.unwrap_or_else(|| {
         println!("Generating validator account key...");
         let password = read_and_confirm_pwd(unsafe_dont_encrypt);
-        ctx.wallet
+        wallet
             .gen_key(scheme, Some(validator_key_alias.clone()), password)
             .1
             .ref_to()
@@ -143,7 +147,7 @@ pub async fn submit_init_validator<
         .unwrap_or_else(|| {
             println!("Generating consensus key...");
             let password = read_and_confirm_pwd(unsafe_dont_encrypt);
-            ctx.wallet
+            wallet
                 .gen_key(
                     // Note that TM only allows ed25519 for consensus key
                     SchemeType::Ed25519,
@@ -160,7 +164,7 @@ pub async fn submit_init_validator<
     }
     // Generate the validator keys
     let validator_keys =
-        gen_validator_keys(&mut ctx.wallet, protocol_key, scheme).unwrap();
+        gen_validator_keys(wallet, protocol_key, scheme).unwrap();
     let protocol_key = validator_keys.get_protocol_keypair().ref_to();
     let dkg_key = validator_keys
         .dkg_keypair
@@ -168,14 +172,9 @@ pub async fn submit_init_validator<
         .expect("DKG sessions keys should have been created")
         .public();
 
-    crate::wallet::save(&ctx.wallet).unwrap_or_else(|err| eprintln!("{}", err));
-
-    let vp_code_path = match &validator_vp_code_path {
-        Some(path) => path.file_name().unwrap().to_str().unwrap(),
-        None => VP_USER_WASM,
-    };
+    let vp_code_path = String::from_utf8(validator_vp_code_path).unwrap();
     let validator_vp_code_hash =
-        query_wasm_code_hash(client, vp_code_path, tx_args.ledger_address.clone())
+        query_wasm_code_hash::<C>(client, vp_code_path)
             .await
             .unwrap();
 
@@ -200,13 +199,10 @@ pub async fn submit_init_validator<
             safe_exit(1)
         }
     }
-    let tx_code_hash = query_wasm_code_hash(
-        client,
-        TX_INIT_VALIDATOR_WASM,
-        tx_args.ledger_address.clone(),
-    )
-    .await
-    .unwrap();
+    let tx_code_hash =
+        query_wasm_code_hash(client, args::TX_INIT_VALIDATOR_WASM)
+            .await
+            .unwrap();
 
     let data = InitValidator {
         account_key,
@@ -221,11 +217,12 @@ pub async fn submit_init_validator<
     let tx = Tx::new(
         tx_code_hash.to_vec(),
         Some(data),
-        ctx.config.ledger.chain_id.clone(),
+        chain_id,
         tx_args.expiration,
     );
-    let (mut ctx, result) = process_tx(
-        ctx,
+    let result = process_tx(
+        client,
+        wallet,
         &tx_args,
         tx,
         TxSigningKey::WalletAddress(source),
@@ -233,6 +230,7 @@ pub async fn submit_init_validator<
         false,
     )
     .await;
+
     if !tx_args.dry_run {
         let (validator_address_alias, validator_address) = match &result
             .initialized_accounts()[..]
@@ -1010,8 +1008,18 @@ async fn process_tx<
     args: &args::Tx,
     tx: Tx,
     default_signer: TxSigningKey,
+    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<Vec<Address>, tx::Error> {
-    tx::process_tx::<C, U>(client, wallet, args, tx, default_signer).await
+    tx::process_tx::<C, U>(
+        client,
+        wallet,
+        args,
+        tx,
+        default_signer,
+        #[cfg(not(feature = "mainnet"))]
+        requires_pow,
+    )
+    .await
 }
 
 /// Save accounts initialized from a tx into the wallet, if any.

@@ -23,9 +23,7 @@ use crate::tendermint::merkle::proof::Proof;
 use crate::tendermint_rpc::error::Error as TError;
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
-use crate::types::governance::{
-    ProposalVote, VotePower,
-};
+use crate::types::governance::{ProposalVote, VotePower};
 use crate::types::hash::Hash;
 use crate::types::key::*;
 use crate::types::storage::{BlockHeight, BlockResults, Epoch, PrefixValue};
@@ -731,9 +729,7 @@ pub async fn get_delegators_delegation<
 
 /// Query and return validator's commission rate and max commission rate change
 /// per epoch
-pub async fn query_commission_rate<
-    C: crate::ledger::queries::Client + Sync,
->(
+pub async fn query_commission_rate<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     validator: &Address,
     epoch: Option<Epoch>,

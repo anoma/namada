@@ -1644,139 +1644,142 @@ pub mod args {
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
-    const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
-    const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
-    const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
-    const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
-    const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
-    const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
-    const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
-    const TX_IBC_WASM: &str = "tx_ibc.wasm";
-    const VP_USER_WASM: &str = "vp_user.wasm";
-    const TX_BOND_WASM: &str = "tx_bond.wasm";
-    const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
-    const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
-    const TX_CHANGE_COMMISSION_WASM: &str =
+    pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
+    pub const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
+    pub const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
+    pub const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
+    pub const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
+    pub const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
+    pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
+    pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
+    pub const VP_USER_WASM: &str = "vp_user.wasm";
+    pub const TX_BOND_WASM: &str = "tx_bond.wasm";
+    pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
+    pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
+    pub const TX_CHANGE_COMMISSION_WASM: &str =
         "tx_change_validator_commission.wasm";
 
-    const ADDRESS: Arg<WalletAddress> = arg("address");
-    const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
-    const ALIAS: Arg<String> = arg("alias");
-    const ALLOW_DUPLICATE_IP: ArgFlag = flag("allow-duplicate-ip");
-    const AMOUNT: Arg<token::Amount> = arg("amount");
-    const ARCHIVE_DIR: ArgOpt<PathBuf> = arg_opt("archive-dir");
-    const BALANCE_OWNER: ArgOpt<WalletBalanceOwner> = arg_opt("owner");
-    const BASE_DIR: ArgDefault<PathBuf> = arg_default(
+    pub const ADDRESS: Arg<WalletAddress> = arg("address");
+    pub const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
+    pub const ALIAS: Arg<String> = arg("alias");
+    pub const ALLOW_DUPLICATE_IP: ArgFlag = flag("allow-duplicate-ip");
+    pub const AMOUNT: Arg<token::Amount> = arg("amount");
+    pub const ARCHIVE_DIR: ArgOpt<PathBuf> = arg_opt("archive-dir");
+    pub const BALANCE_OWNER: ArgOpt<WalletBalanceOwner> = arg_opt("owner");
+    pub const BASE_DIR: ArgDefault<PathBuf> = arg_default(
         "base-dir",
         DefaultFn(|| match env::var("NAMADA_BASE_DIR") {
             Ok(dir) => dir.into(),
             Err(_) => config::DEFAULT_BASE_DIR.into(),
         }),
     );
-    const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
-    // const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
-    const BROADCAST_ONLY: ArgFlag = flag("broadcast-only");
-    const CHAIN_ID: Arg<ChainId> = arg("chain-id");
-    const CHAIN_ID_OPT: ArgOpt<ChainId> = CHAIN_ID.opt();
-    const CHAIN_ID_PREFIX: Arg<ChainIdPrefix> = arg("chain-prefix");
-    const CHANNEL_ID: Arg<ChannelId> = arg("channel-id");
-    const CODE_PATH: Arg<PathBuf> = arg("code-path");
-    const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
-    const COMMISSION_RATE: Arg<Decimal> = arg("commission-rate");
-    const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<Timeout> = arg_default(
+    pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
+    // pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
+    pub const BROADCAST_ONLY: ArgFlag = flag("broadcast-only");
+    pub const CHAIN_ID: Arg<ChainId> = arg("chain-id");
+    pub const CHAIN_ID_OPT: ArgOpt<ChainId> = CHAIN_ID.opt();
+    pub const CHAIN_ID_PREFIX: Arg<ChainIdPrefix> = arg("chain-prefix");
+    pub const CHANNEL_ID: Arg<ChannelId> = arg("channel-id");
+    pub const CODE_PATH: Arg<PathBuf> = arg("code-path");
+    pub const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
+    pub const COMMISSION_RATE: Arg<Decimal> = arg("commission-rate");
+    pub const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<Timeout> = arg_default(
         "consensus-timeout-commit",
         DefaultFn(|| Timeout::from_str("1s").unwrap()),
     );
-    const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
-    const DATA_PATH: Arg<PathBuf> = arg("data-path");
-    const DECRYPT: ArgFlag = flag("decrypt");
-    const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
-    const DRY_RUN_TX: ArgFlag = flag("dry-run");
-    const DUMP_TX: ArgFlag = flag("dump-tx");
-    const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
-    const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
-    const FORCE: ArgFlag = flag("force");
-    const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
-    const GAS_AMOUNT: ArgDefault<token::Amount> =
+    pub const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
+    pub const DATA_PATH: Arg<PathBuf> = arg("data-path");
+    pub const DECRYPT: ArgFlag = flag("decrypt");
+    pub const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
+    pub const DRY_RUN_TX: ArgFlag = flag("dry-run");
+    pub const DUMP_TX: ArgFlag = flag("dump-tx");
+    pub const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
+    pub const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
+    pub const FORCE: ArgFlag = flag("force");
+    pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
+    pub const GAS_AMOUNT: ArgDefault<token::Amount> =
         arg_default("gas-amount", DefaultFn(|| token::Amount::from(0)));
-    const GAS_LIMIT: ArgDefault<token::Amount> =
+    pub const GAS_LIMIT: ArgDefault<token::Amount> =
         arg_default("gas-limit", DefaultFn(|| token::Amount::from(0)));
-    const GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
+    pub const GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".into()));
-    const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
-    const GENESIS_VALIDATOR: ArgOpt<String> = arg("genesis-validator").opt();
-    const HALT_ACTION: ArgFlag = flag("halt");
-    const HISTORIC: ArgFlag = flag("historic");
-    const LEDGER_ADDRESS_ABOUT: &str =
+    pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
+    pub const GENESIS_VALIDATOR: ArgOpt<String> =
+        arg("genesis-validator").opt();
+    pub const HALT_ACTION: ArgFlag = flag("halt");
+    pub const HISTORIC: ArgFlag = flag("historic");
+    pub const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
-    const LEDGER_ADDRESS_DEFAULT: ArgDefault<TendermintAddress> =
+    pub const LEDGER_ADDRESS_DEFAULT: ArgDefault<TendermintAddress> =
         LEDGER_ADDRESS.default(DefaultFn(|| {
             let raw = "127.0.0.1:26657";
             TendermintAddress::from_str(raw).unwrap()
         }));
 
-    const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("node");
-    const LOCALHOST: ArgFlag = flag("localhost");
-    const MASP_VALUE: Arg<MaspValue> = arg("value");
-    const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =
+    pub const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("node");
+    pub const LOCALHOST: ArgFlag = flag("localhost");
+    pub const MASP_VALUE: Arg<MaspValue> = arg("value");
+    pub const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =
         arg("max-commission-rate-change");
-    const MODE: ArgOpt<String> = arg_opt("mode");
-    const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
-    const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
-    const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
-    const OUT_FILE_PATH_OPT: ArgOpt<PathBuf> = arg_opt("out-file-path");
-    const OWNER: Arg<WalletAddress> = arg("owner");
-    const OWNER_OPT: ArgOpt<WalletAddress> = OWNER.opt();
-    const PIN: ArgFlag = flag("pin");
-    const PORT_ID: ArgDefault<PortId> = arg_default(
+    pub const MODE: ArgOpt<String> = arg_opt("mode");
+    pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
+    pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
+    pub const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
+    pub const OUT_FILE_PATH_OPT: ArgOpt<PathBuf> = arg_opt("out-file-path");
+    pub const OWNER: Arg<WalletAddress> = arg("owner");
+    pub const OWNER_OPT: ArgOpt<WalletAddress> = OWNER.opt();
+    pub const PIN: ArgFlag = flag("pin");
+    pub const PORT_ID: ArgDefault<PortId> = arg_default(
         "port-id",
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
     );
-    const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
-    const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
-    const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
-    const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
-    const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
-    const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
-    const PROPOSAL_VOTE_PGF_OPT: ArgOpt<String> = arg_opt("pgf");
-    const PROPOSAL_VOTE_ETH_OPT: ArgOpt<String> = arg_opt("eth");
-    const PROPOSAL_VOTE: Arg<String> = arg("vote");
-    const RAW_ADDRESS: Arg<Address> = arg("address");
-    const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
-    const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
-    const RECEIVER: Arg<String> = arg("receiver");
-    const SCHEME: ArgDefault<SchemeType> =
+    pub const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
+    pub const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
+    pub const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
+    pub const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
+    pub const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
+    pub const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
+    pub const PROPOSAL_VOTE_PGF_OPT: ArgOpt<String> = arg_opt("pgf");
+    pub const PROPOSAL_VOTE_ETH_OPT: ArgOpt<String> = arg_opt("eth");
+    pub const PROPOSAL_VOTE: Arg<String> = arg("vote");
+    pub const RAW_ADDRESS: Arg<Address> = arg("address");
+    pub const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
+    pub const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> =
+        arg_opt("public-key");
+    pub const RECEIVER: Arg<String> = arg("receiver");
+    pub const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
-    const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
-    const SIGNING_KEY_OPT: ArgOpt<WalletKeypair> = SIGNING_KEY.opt();
-    const SIGNING_KEY: Arg<WalletKeypair> = arg("signing-key");
-    const SOURCE: Arg<WalletAddress> = arg("source");
-    const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
-    const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
-    const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
-    const SUSPEND_ACTION: ArgFlag = flag("suspend");
-    const TENDERMINT_TX_INDEX: ArgFlag = flag("tx-index");
-    const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
-    const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
-    const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
-    const TOKEN: Arg<WalletAddress> = arg("token");
-    const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
-    const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
-    const TX_HASH: Arg<String> = arg("tx-hash");
-    const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
-    const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
-    const VALIDATOR: Arg<WalletAddress> = arg("validator");
-    const VALIDATOR_OPT: ArgOpt<WalletAddress> = VALIDATOR.opt();
-    const VALIDATOR_ACCOUNT_KEY: ArgOpt<WalletPublicKey> =
+    pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
+    pub const SIGNING_KEY_OPT: ArgOpt<WalletKeypair> = SIGNING_KEY.opt();
+    pub const SIGNING_KEY: Arg<WalletKeypair> = arg("signing-key");
+    pub const SOURCE: Arg<WalletAddress> = arg("source");
+    pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
+    pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
+    pub const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
+    pub const SUSPEND_ACTION: ArgFlag = flag("suspend");
+    pub const TENDERMINT_TX_INDEX: ArgFlag = flag("tx-index");
+    pub const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
+    pub const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
+    pub const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
+    pub const TOKEN: Arg<WalletAddress> = arg("token");
+    pub const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
+    pub const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
+    pub const TX_HASH: Arg<String> = arg("tx-hash");
+    pub const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
+    pub const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
+    pub const VALIDATOR: Arg<WalletAddress> = arg("validator");
+    pub const VALIDATOR_OPT: ArgOpt<WalletAddress> = VALIDATOR.opt();
+    pub const VALIDATOR_ACCOUNT_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("account-key");
-    const VALIDATOR_CONSENSUS_KEY: ArgOpt<WalletKeypair> =
+    pub const VALIDATOR_CONSENSUS_KEY: ArgOpt<WalletKeypair> =
         arg_opt("consensus-key");
-    const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> = arg_opt("validator-code-path");
-    const VALUE: ArgOpt<String> = arg_opt("value");
-    const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
-    const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
-    const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
+    pub const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> =
+        arg_opt("validator-code-path");
+    pub const VALUE: ArgOpt<String> = arg_opt("value");
+    pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
+    pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
+    pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
 
     /// Global command arguments
     #[derive(Clone, Debug)]
@@ -3197,7 +3200,7 @@ pub mod args {
                 signer,
                 tx_code_path,
                 password,
-                chain_id
+                chain_id,
             }
         }
     }

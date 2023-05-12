@@ -1,6 +1,6 @@
 //! Provides functionality for managing keys and addresses for a user
-mod keys;
 pub mod alias;
+mod keys;
 pub mod pre_genesis;
 pub mod store;
 
@@ -9,14 +9,13 @@ use std::fmt::Display;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
-
+use alias::Alias;
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::zip32::ExtendedFullViewingKey;
 pub use pre_genesis::gen_key_to_store;
-pub use store::{gen_sk, Store, AddressVpType};
+pub use store::{gen_sk, AddressVpType, Store};
 use thiserror::Error;
 
-use alias::Alias;
 pub use self::keys::{DecryptionError, StoredKeypair};
 pub use self::store::{ConfirmationResponse, ValidatorData, ValidatorKeys};
 use crate::types::address::Address;

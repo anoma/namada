@@ -7,10 +7,10 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
+pub use namada::ledger::wallet::alias::Alias;
 use namada::ledger::wallet::{
     ConfirmationResponse, FindKeyError, Wallet, WalletUtils,
 };
-pub use namada::ledger::wallet::alias::Alias;
 pub use namada::ledger::wallet::{
     DecryptionError, StoredKeypair, ValidatorData, ValidatorKeys,
 };
@@ -105,8 +105,8 @@ impl WalletUtils for CliWalletUtils {
 /// for signing protocol txs and for the DKG (which will also be stored)
 /// A protocol keypair may be optionally provided, indicating that
 /// we should re-use a keypair already in the wallet
-pub fn gen_validator_keys(
-    wallet: &mut Wallet<CliWalletUtils>,
+pub fn gen_validator_keys<U: WalletUtils>(
+    wallet: &mut Wallet<U>,
     protocol_pk: Option<common::PublicKey>,
     scheme: SchemeType,
 ) -> Result<ValidatorKeys, FindKeyError> {

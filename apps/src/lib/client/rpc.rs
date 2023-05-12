@@ -2,7 +2,6 @@
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-
 use std::fs::File;
 use std::io::{self, Write};
 use std::iter::Iterator;
@@ -31,25 +30,21 @@ use namada::ledger::masp::{
 use namada::ledger::native_vp::governance::utils::{self, Votes};
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::{
-    self, BondId, BondsAndUnbondsDetail,
-    CommissionPair, PosParams, Slash,
+    self, BondId, BondsAndUnbondsDetail, CommissionPair, PosParams, Slash,
 };
 use namada::ledger::queries::RPC;
-use namada::ledger::rpc::{TxResponse, query_epoch};
+use namada::ledger::rpc::{query_epoch, TxResponse};
 use namada::ledger::storage::ConversionState;
-use namada::ledger::wallet::{Wallet, AddressVpType};
+use namada::ledger::wallet::{AddressVpType, Wallet};
 use namada::proof_of_stake::types::WeightedValidator;
 use namada::types::address::{masp, Address};
 use namada::types::governance::{
-    OfflineProposal, OfflineVote,
-    ProposalVote, VotePower, VoteType,
+    OfflineProposal, OfflineVote, ProposalVote, VotePower, VoteType,
 };
 use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
-use namada::types::storage::{
-    BlockHeight, BlockResults, Epoch, Key, KeySeg,
-};
+use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
 use namada::types::{storage, token};
 
 use crate::cli::{self, args};
@@ -93,10 +88,10 @@ pub async fn query_results<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     args: args::Query,
 ) -> Vec<BlockResults> {
-    unwrap_client_response::<C,Vec<BlockResults>>(RPC.shell().read_results(client).await)
+    unwrap_client_response::<C, Vec<BlockResults>>(
+        RPC.shell().read_results(client).await,
+    )
 }
-
-
 
 /// Query the specified accepted transfers from the ledger
 pub async fn query_transfers<
@@ -293,7 +288,7 @@ pub async fn query_transparent_balance<
                 None => token::balance_key(&token, &owner.address().unwrap()),
             };
             let token_alias = lookup_alias(wallet, &token);
-            match query_storage_value::<C,token::Amount>(client, &key).await {
+            match query_storage_value::<C, token::Amount>(client, &key).await {
                 Some(balance) => match &args.sub_prefix {
                     Some(sub_prefix) => {
                         println!(
@@ -348,7 +343,7 @@ pub async fn query_transparent_balance<
 
 /// Query the token pinned balance(s)
 pub async fn query_pinned_balance<
-    C: namada::ledger::queries::Client  + Sync,
+    C: namada::ledger::queries::Client + Sync,
     U: ShieldedUtils<C = C>,
 >(
     client: &C,
@@ -358,9 +353,7 @@ pub async fn query_pinned_balance<
 ) {
     // Map addresses to token names
     let tokens = wallet.get_addresses_with_vp_type(AddressVpType::Token);
-    let owners = if let Some(pa) = args
-        .owner
-        .and_then(|x| x.payment_address())
+    let owners = if let Some(pa) = args.owner.and_then(|x| x.payment_address())
     {
         vec![pa]
     } else {
@@ -958,15 +951,14 @@ pub async fn query_proposal_result<
                             get_proposal_votes(client, end_epoch, id).await;
                         let proposal_type_key =
                             gov_storage::get_proposal_type_key(id);
-                        let proposal_type =
-                            query_storage_value::<C,ProposalType>(
-                                client,
-                                &proposal_type_key,
-                            )
-                            .await
-                            .expect(
-                                "Could not read proposal type from storage",
-                            );
+                        let proposal_type = query_storage_value::<
+                            C,
+                            ProposalType,
+                        >(
+                            client, &proposal_type_key
+                        )
+                        .await
+                        .expect("Could not read proposal type from storage");
                         let total_stake =
                             get_total_staked_tokens(client, end_epoch)
                                 .await
@@ -1395,18 +1387,20 @@ pub async fn query_bonded_stake<C: namada::ledger::queries::Client + Sync>(
             }
         }
         None => {
-            let consensus = unwrap_client_response::<C,HashSet<WeightedValidator>>(
-                RPC.vp()
-                    .pos()
-                    .consensus_validator_set(client, &Some(epoch))
-                    .await,
-            );
-            let below_capacity = unwrap_client_response::<C,HashSet<WeightedValidator>>(
-                RPC.vp()
-                    .pos()
-                    .below_capacity_validator_set(client, &Some(epoch))
-                    .await,
-            );
+            let consensus =
+                unwrap_client_response::<C, HashSet<WeightedValidator>>(
+                    RPC.vp()
+                        .pos()
+                        .consensus_validator_set(client, &Some(epoch))
+                        .await,
+                );
+            let below_capacity =
+                unwrap_client_response::<C, HashSet<WeightedValidator>>(
+                    RPC.vp()
+                        .pos()
+                        .below_capacity_validator_set(client, &Some(epoch))
+                        .await,
+                );
 
             // Iterate all validators
             let stdout = io::stdout();
@@ -1445,7 +1439,7 @@ pub async fn query_commission_rate<
     validator: &Address,
     epoch: Option<Epoch>,
 ) -> Option<CommissionPair> {
-    unwrap_client_response::<C,Option<CommissionPair>> (
+    unwrap_client_response::<C, Option<CommissionPair>>(
         RPC.vp()
             .pos()
             .validator_commission(client, validator, &epoch)
@@ -1498,7 +1492,7 @@ pub async fn query_slashes<
     args: args::QuerySlashes,
 ) {
     let params_key = pos::params_key();
-    let params = query_storage_value::<C,PosParams>(client, &params_key)
+    let params = query_storage_value::<C, PosParams>(client, &params_key)
         .await
         .expect("Parameter should be defined.");
 
@@ -1506,7 +1500,7 @@ pub async fn query_slashes<
         Some(validator) => {
             let validator = validator;
             // Find slashes for the given validator
-            let slashes: Vec<Slash> = unwrap_client_response::<C,Vec<Slash>>(
+            let slashes: Vec<Slash> = unwrap_client_response::<C, Vec<Slash>>(
                 RPC.vp().pos().validator_slashes(client, &validator).await,
             );
             if !slashes.is_empty() {
@@ -1528,7 +1522,9 @@ pub async fn query_slashes<
         }
         None => {
             let all_slashes: HashMap<Address, Vec<Slash>> =
-                unwrap_client_response::<C, HashMap<Address, Vec<Slash>>>(RPC.vp().pos().slashes(client).await);
+                unwrap_client_response::<C, HashMap<Address, Vec<Slash>>>(
+                    RPC.vp().pos().slashes(client).await,
+                );
 
             if !all_slashes.is_empty() {
                 let stdout = io::stdout();
@@ -1564,7 +1560,7 @@ pub async fn query_delegations<
     args: args::QueryDelegations,
 ) {
     let owner = args.owner;
-    let delegations = unwrap_client_response::<C,HashSet<Address>>(
+    let delegations = unwrap_client_response::<C, HashSet<Address>>(
         RPC.vp().pos().delegation_validators(client, &owner).await,
     );
     if delegations.is_empty() {
@@ -1632,7 +1628,7 @@ pub async fn known_address<C: namada::ledger::queries::Client + Sync>(
 
 /// Query for all conversions.
 pub async fn query_conversions<
-    C: namada::ledger::queries::Client  + Sync,
+    C: namada::ledger::queries::Client + Sync,
     U: ShieldedUtils<C = C>,
 >(
     client: &C,
@@ -2028,12 +2024,13 @@ pub async fn get_bond_amount_at<C: namada::ledger::queries::Client + Sync>(
     validator: &Address,
     epoch: Epoch,
 ) -> Option<token::Amount> {
-    let (_total, total_active) = unwrap_client_response::<C,(token::Amount,token::Amount)>(
-        RPC.vp()
-            .pos()
-            .bond_with_slashing(client, delegator, validator, &Some(epoch))
-            .await,
-    );
+    let (_total, total_active) =
+        unwrap_client_response::<C, (token::Amount, token::Amount)>(
+            RPC.vp()
+                .pos()
+                .bond_with_slashing(client, delegator, validator, &Some(epoch))
+                .await,
+        );
     Some(total_active)
 }
 
@@ -2058,7 +2055,7 @@ async fn get_validator_stake<C: namada::ledger::queries::Client + Sync>(
     epoch: Epoch,
     validator: &Address,
 ) -> Option<token::Amount> {
-    unwrap_client_response::<C,Option<token::Amount>>(
+    unwrap_client_response::<C, Option<token::Amount>>(
         RPC.vp()
             .pos()
             .validator_stake(client, validator, &Some(epoch))

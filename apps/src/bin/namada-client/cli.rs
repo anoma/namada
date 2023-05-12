@@ -11,9 +11,9 @@ use namada_apps::client::{rpc, tx, utils};
 use namada_apps::facade::tendermint::block::Height;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient};
-use tokio::time::sleep;
 use namada_apps::wallet::CliWalletUtils;
 use tendermint_rpc::HttpClient;
+use tokio::time::sleep;
 
 pub async fn main() -> Result<()> {
     match cli::namada_client_cli()? {
@@ -31,6 +31,7 @@ pub async fn main() -> Result<()> {
                     let dry_run = args.tx.dry_run;
                     tx::submit_custom::<HttpClient, CliWalletUtils>(
                         &client,
+                        &mut ctx.wallet,
                         args,
                     )
                     .await?;
