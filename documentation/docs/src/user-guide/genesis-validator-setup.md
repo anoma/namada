@@ -22,8 +22,24 @@ namada client utils init-genesis-validator \
 
 After generating your keys, the command will print something like this:
 
+- Linux 
 ```shell
-Pre-genesis TOML written to .namada/pre-genesis/1337-validator/validator.toml
+Pre-genesis TOML written to /home/$USER/.config/com.heliax.namada
+```
+- MacOS
+```shell
+Pre-genesis TOML written to /Users/$USER/Library/Application\ Support/com.heliax.namada
+```
+
+Save this directory as an environment variable for later use:
+
+- Linux 
+```shell
+export BASE_DIR="/home/$USER/.config/com.heliax.namada"
+```
+- MacOS
+```shell
+export BASE_DIR="/Users/$USER/Library/Application\ Support/com.heliax.namada"
 ```
 
 This file is the public configuration of your validator. You can safely share this file with the network's organizer, who is responsible for setting up and publishing the finalized genesis file and Namada configuration for the chain.
@@ -48,7 +64,7 @@ If you run this command in the same directory that you ran `namada client utils 
 ```shell
 namada client utils join-network \
     --chain-id $CHAIN_ID \
-    --pre-genesis-path workspace/.namada/pre-genesis/$ALIAS
+    --pre-genesis-path $BASE_DIR/pre-genesis/$ALIAS
 ```
 
 Once setup, you can start the ledger as usual with e.g.:

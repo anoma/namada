@@ -20,18 +20,31 @@ mkdir backup-pregenesis && cp -r .namada/pre-genesis backup-pregenesis/
 *(WARNING: THIS WILL ALSO DELETE YOUR VALIDATOR KEYS, DO NOT RUN UNLESS YOU'VE BACKED IT UP)*
 
 3. Delete ledger base directory 
-```bash
-rm -rf .namada
-```
+
+- Linux: `rm -rf $HOME/.config/namada`
+- MacOS: `rm -rf $HOME/Library/Application\ Support/com.heliax.namada`
+
 4. Check that namada and tendermint binaries are correct (see step 1)
-5. Create a `.namada` folder
+5. Create a base directory for the ledger
+- Linux: `mkdir $HOME/.config/namada`
+- MacOS: `mkdir $HOME/Library/Application\ Support/com.heliax.namada`
+
+Save the base directory path to a variable
+- Linux:
 ```bash
-mkdir .namada
-mkdir .namada/pre-genesis
+export BASE_DIR=$HOME/.config/namada
 ```
-6. Copy the backuped file back to `.namada/pre-genesis` folder
+- MacOS:
 ```bash
-cp -r backup-pregenesis/* .namada/pre-genesis/
+export BASE_DIR=$HOME/Library/Application\ Support/com.heliax.namada
+```
+6. Create a pre-genesis directory
+- Linux: `mkdir $HOME/.config/namada/pre-genesis`
+- MacOS: `mkdir $HOME/Library/Application\ Support/com.heliax.namada/pre-genesis`
+
+7. Copy the backuped file back to `$BASE_DIR/pre-genesis` folder
+```bash
+cp -r backup-pregenesis/* $BASE_DIR/pre-genesis/
 ```
 
 ## 3.1) Run your node as a genesis validator
