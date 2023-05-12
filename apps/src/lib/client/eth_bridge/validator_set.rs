@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::sync::Arc;
 
@@ -24,6 +25,78 @@ use crate::cli::{args, safe_exit, Context};
 use crate::client::eth_bridge::BlockOnEthSync;
 use crate::control_flow::install_shutdown_signal;
 use crate::facade::tendermint_rpc::{Client, HttpClient};
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(transparent)]
+struct ErrorPriority(u8);
+
+impl ErrorPriority {
+    /// Maximum priority.
+    const MAX: Self = Self(USER_MAX.0 + 1);
+    /// The maximum priority a user can configure
+    /// for errors to be displayed.
+    const USER_MAX: Self = Self(10);
+}
+
+impl From<u8> for ErrorPriority {
+    #[inline]
+    fn from(priority: ErrorPriority) -> Self {
+        Self(priority).clamp(Self(0), Self::USER_MAX);
+    }
+}
+
+/// Relayer related errors.
+#[derive(Debug, Default)]
+enum Error {
+    /// An error, with no further context.
+    ///
+    /// This is usually because context was already
+    /// provided in the form of `tracing!()` calls.
+    NoContext,
+    /// An error message with a reason and a priority
+    /// to be displayed.
+    WithReason {
+        /// The reason of the error.
+        reason: Cow<'static, str>,
+        /// The priority of the error.
+        ///
+        /// Lower priority errors may not get displayed.
+        priority: ErrorPriority,
+    },
+}
+
+impl Error {
+    /// Create a new error message.
+    fn new<P, M>(priority: P, msg: M) -> Self
+    where
+        P: Into<ErrorPriority>,
+        M: Into<Cow<'static, str>>,
+    {
+        Error::WithReason {
+            reason: msg.into(),
+            priority: priority.into(),
+        }
+    }
+
+    /// Optionally display an error message, depending on
+    /// its priority to be displayed.
+    fn maybe_display(&self, thres_priority: ErrorPriority) {
+        match self {
+            Error::WithReason { reason, priority }
+                if priority >= thres_priority =>
+            {
+                tracing::error!(
+                    %reason,
+                    "An error occurred during the relay"
+                );
+                if priority > 0 {
+                    safe_exit(1);
+                }
+            }
+            _ => {}
+        }
+    }
+}
 
 /// Get the status of a relay result.
 trait GetStatus {
@@ -479,21 +552,29 @@ async fn relay_validator_set_update_daemon(
 async fn get_governance_contract(
     nam_client: &HttpClient,
     eth_client: Arc<Provider<Http>>,
-) -> Governance<Provider<Http>> {
+) -> Result<Governance<Provider<Http>>, Error> {
     let governance_contract = RPC
         .shell()
         .eth_bridge()
         .read_governance_contract(nam_client)
         .await
-        .unwrap();
-    Governance::new(governance_contract.address, eth_client)
+        .map_err(|err| {
+            use namada::ledger::queries::tm::Error;
+            match err {
+                Error::Tendermint(e) => {
+                    Error::new(ErrorPriority::MAX, e.to_string())
+                }
+                e => Error::new(0, e.to_string()),
+            }
+        })?;
+    Ok(Governance::new(governance_contract.address, eth_client))
 }
 
 async fn relay_validator_set_update_once<R, F>(
     args: &args::ValidatorSetUpdateRelay,
     nam_client: &HttpClient,
     mut action: F,
-) -> Result<(), Option<String>>
+) -> Result<(), Error>
 where
     R: ShouldRelay,
     F: FnMut(R::RelayResult),
