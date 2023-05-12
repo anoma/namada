@@ -276,6 +276,8 @@ pub async fn submit_init_validator<
         };
         // add validator address and keys to the wallet
         ctx.wallet.add_validator_data(validator_address, validator_keys);
+        crate::wallet::save(&ctx.wallet)
+            .unwrap_or_else(|err| eprintln!("{}", err));
 
         let tendermint_home = ctx.config.ledger.tendermint_dir();
         tendermint_node::write_validator_key(&tendermint_home, &consensus_key);
