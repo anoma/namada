@@ -42,7 +42,7 @@ use namada::types::governance::{
 };
 use namada::types::hash::Hash;
 use namada::types::key::*;
-use namada::types::storage::Epoch;
+use namada::types::storage::{Epoch, Key};
 use namada::types::token;
 use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
@@ -99,10 +99,9 @@ pub async fn submit_init_account<
 
 pub async fn submit_init_validator<
     C: namada::ledger::queries::Client + Sync,
-    U: WalletUtils,
 >(
     client: &C,
-    wallet: &mut Wallet<U>,
+    ctx: &mut Context,
     args::TxInitValidator {
         tx: tx_args,
         source,
@@ -130,7 +129,7 @@ pub async fn submit_init_validator<
     let account_key = account_key.unwrap_or_else(|| {
         println!("Generating validator account key...");
         let password = read_and_confirm_pwd(unsafe_dont_encrypt);
-        wallet
+        ctx.wallet
             .gen_key(scheme, Some(validator_key_alias.clone()), password)
             .1
             .ref_to()
@@ -147,7 +146,7 @@ pub async fn submit_init_validator<
         .unwrap_or_else(|| {
             println!("Generating consensus key...");
             let password = read_and_confirm_pwd(unsafe_dont_encrypt);
-            wallet
+            ctx.wallet
                 .gen_key(
                     // Note that TM only allows ed25519 for consensus key
                     SchemeType::Ed25519,
@@ -164,7 +163,7 @@ pub async fn submit_init_validator<
     }
     // Generate the validator keys
     let validator_keys =
-        gen_validator_keys(wallet, protocol_key, scheme).unwrap();
+        gen_validator_keys(&mut ctx.wallet, protocol_key, scheme).unwrap();
     let protocol_key = validator_keys.get_protocol_keypair().ref_to();
     let dkg_key = validator_keys
         .dkg_keypair
@@ -222,18 +221,17 @@ pub async fn submit_init_validator<
     );
     let result = process_tx(
         client,
-        wallet,
+        &mut ctx.wallet,
         &tx_args,
         tx,
         TxSigningKey::WalletAddress(source),
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-    .await;
+    .await.expect("expected process_tx to work");
 
     if !tx_args.dry_run {
-        let (validator_address_alias, validator_address) = match &result
-            .initialized_accounts()[..]
+        let (validator_address_alias, validator_address) = match &result[..]
         {
             // There should be 1 account for the validator itself
             [validator_address] => {
@@ -277,10 +275,7 @@ pub async fn submit_init_validator<
             }
         };
         // add validator address and keys to the wallet
-        ctx.wallet
-            .add_validator_data(validator_address, validator_keys);
-        crate::wallet::save(&ctx.wallet)
-            .unwrap_or_else(|err| eprintln!("{}", err));
+        ctx.wallet.add_validator_data(validator_address, validator_keys);
 
         let tendermint_home = ctx.config.ledger.tendermint_dir();
         tendermint_node::write_validator_key(&tendermint_home, &consensus_key);
@@ -443,7 +438,7 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
 
     let signer = WalletAddress::new(proposal.clone().author.to_string());
     let governance_parameters = rpc::get_governance_parameters(client).await;
-    let current_epoch = rpc::query_epoch(client).await;
+    let current_epoch = rpc::query_and_print_epoch(client).await;
 
     if proposal.voting_start_epoch <= current_epoch
         || proposal.voting_start_epoch.0
@@ -564,8 +559,7 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
             .expect("Encoding proposal data shouldn't fail");
         let tx_code_hash = query_wasm_code_hash(
             client,
-            TX_INIT_PROPOSAL,
-            args.tx.ledger_address.clone(),
+            args::TX_INIT_PROPOSAL,
         )
         .await
         .unwrap();
@@ -592,10 +586,9 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
 
 pub async fn submit_vote_proposal<
     C: namada::ledger::queries::Client + Sync,
-    U: WalletUtils,
 >(
     client: &C,
-    wallet: &mut Wallet<U>,
+    ctx: &mut Context,
     args: args::VoteProposal,
 ) -> Result<(), tx::Error> {
     let signer = if let Some(addr) = &args.tx.signer {
@@ -666,7 +659,6 @@ pub async fn submit_vote_proposal<
             );
             safe_exit(1);
         }
-        let signer = ctx.get(signer);
         let proposal_file_path =
             args.proposal_data.expect("Proposal file should exist.");
         let file = File::open(&proposal_file_path).expect("File must exist.");
@@ -681,7 +673,7 @@ pub async fn submit_vote_proposal<
             safe_exit(1)
         }
 
-        let signing_key = find_keypair::<C, U>(client, wallet, signer).await?;
+        let signing_key = find_keypair::<C, CliWalletUtils>(client, &mut ctx.wallet, signer).await?;
         let offline_vote = OfflineVote::new(
             &proposal,
             proposal_vote,
@@ -708,7 +700,7 @@ pub async fn submit_vote_proposal<
             }
         }
     } else {
-        let current_epoch = rpc::query_epoch(client).await;
+        let current_epoch = rpc::query_and_print_epoch(client).await;
 
         let voter_address = signer.clone();
         let proposal_id = args.proposal_id.unwrap();
@@ -723,7 +715,7 @@ pub async fn submit_vote_proposal<
         // Check vote type and memo
         let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
         let proposal_type: ProposalType =
-            rpc::query_storage_value(&client, &proposal_type_key)
+            rpc::query_storage_value::<C, ProposalType>(client, &proposal_type_key)
                 .await
                 .unwrap_or_else(|| {
                     panic!(
@@ -746,7 +738,7 @@ pub async fn submit_vote_proposal<
                     match address {
                         Address::Established(_) => {
                             let vp_key = Key::validity_predicate(address);
-                            if !rpc::query_has_storage_key(&client, &vp_key)
+                            if !rpc::query_has_storage_key::<C>(client, &vp_key)
                                 .await
                             {
                                 eprintln!(
@@ -812,15 +804,17 @@ pub async fn submit_vote_proposal<
                     delegations: delegations.into_iter().collect(),
                 };
 
+                let chain_id = args.tx.chain_id.clone();
+                let expiration = args.tx.expiration;
                 let data = tx_data
                     .try_to_vec()
                     .expect("Encoding proposal data shouldn't fail");
                 let tx_code = args.tx_code_path;
-                let tx = Tx::new(tx_code, Some(data));
+                let tx = Tx::new(tx_code, Some(data), chain_id, expiration);
 
-                process_tx::<C, U>(
+                process_tx::<C, CliWalletUtils>(
                     client,
-                    wallet,
+                    &mut ctx.wallet,
                     &args.tx,
                     tx,
                     TxSigningKey::WalletAddress(signer.clone()),

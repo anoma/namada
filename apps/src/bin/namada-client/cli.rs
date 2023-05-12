@@ -3,7 +3,6 @@
 use std::time::Duration;
 
 use color_eyre::eyre::Result;
-use namada_apps::cli;
 use namada_apps::cli::args::CliToSdk;
 use namada_apps::cli::cmds::*;
 use namada_apps::cli::{self, safe_exit};
@@ -12,7 +11,6 @@ use namada_apps::facade::tendermint::block::Height;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient};
 use namada_apps::wallet::CliWalletUtils;
-use tendermint_rpc::HttpClient;
 use tokio::time::sleep;
 
 pub async fn main() -> Result<()> {
@@ -114,7 +112,7 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_init_validator::<HttpClient>(&client, ctx, args)
+                    tx::submit_init_validator::<HttpClient>(&client, &mut ctx, args)
                         .await;
                 }
                 Sub::TxInitProposal(TxInitProposal(args)) => {
@@ -132,9 +130,9 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_vote_proposal::<HttpClient, CliWalletUtils>(
+                    tx::submit_vote_proposal::<HttpClient>(
                         &client,
-                        &mut ctx.wallet,
+                        &mut ctx,
                         args,
                     )
                     .await?;
@@ -195,7 +193,7 @@ pub async fn main() -> Result<()> {
                 Sub::QueryEpoch(QueryEpoch(args)) => {
                     wait_until_node_is_synched(&args.ledger_address).await;
                     let client = HttpClient::new(args.ledger_address).unwrap();
-                    rpc::query_and_print_epoch(&client, args).await;
+                    rpc::query_and_print_epoch(&client).await;
                 }
                 Sub::QueryTransfers(QueryTransfers(args)) => {
                     wait_until_node_is_synched(&args.query.ledger_address)
@@ -219,7 +217,7 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.query.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    rpc::query_conversions(&client, args).await;
+                    rpc::query_conversions(&client, &mut ctx.wallet, args).await;
                 }
                 Sub::QueryBlock(QueryBlock(args)) => {
                     wait_until_node_is_synched(&args.ledger_address).await;
@@ -249,7 +247,7 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.query.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    rpc::query_bonds(&client, args).await;
+                    rpc::query_bonds(&client, &mut ctx.wallet, args).await;
                 }
                 Sub::QueryBondedStake(QueryBondedStake(args)) => {
                     wait_until_node_is_synched(&args.query.ledger_address)
@@ -267,7 +265,7 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.query.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    rpc::query_and_print_commission_rate(&client, args).await;
+                    rpc::query_and_print_commission_rate(&client, &mut ctx.wallet, args).await;
                 }
                 Sub::QuerySlashes(QuerySlashes(args)) => {
                     wait_until_node_is_synched(&args.query.ledger_address)
@@ -276,12 +274,16 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.query.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    rpc::query_slashes(&client, args).await;
+                    rpc::query_slashes(&client, &mut ctx.wallet, args).await;
                 }
                 Sub::QueryDelegations(QueryDelegations(args)) => {
                     wait_until_node_is_synched(&args.query.ledger_address)
                         .await;
-                    rpc::query_delegations(ctx, args).await;
+                    let client =
+                        HttpClient::new(args.query.ledger_address.clone())
+                            .unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_delegations(&client, &mut ctx.wallet, args).await;
                 }
                 Sub::QueryResult(QueryResult(args)) => {
                     wait_until_node_is_synched(&args.query.ledger_address)

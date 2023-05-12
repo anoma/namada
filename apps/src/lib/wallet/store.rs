@@ -2,6 +2,7 @@ use std::fs;
 use std::io::prelude::*;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use ark_std::rand::prelude::*;
 use ark_std::rand::SeedableRng;
@@ -9,6 +10,8 @@ use file_lock::{FileLock, FileOptions};
 #[cfg(feature = "dev")]
 use namada::ledger::wallet::StoredKeypair;
 use namada::ledger::wallet::{gen_sk, Store, ValidatorKeys};
+use namada::ledger::wallet::store::AddressVpType;
+use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::transaction::EllipticCurve;
 use thiserror::Error;
@@ -91,7 +94,7 @@ pub fn load(store_dir: &Path) -> Result<Store, LoadStoreError> {
             let mut store = Vec::<u8>::new();
             filelock.file.read_to_end(&mut store).map_err(|err| {
                 LoadStoreError::ReadWallet(
-                    store_dir.to_str().unwrap().into(),
+                    store_dir.to_str().unwrap().parse().unwrap(),
                     err.to_string(),
                 )
             })?;
@@ -107,7 +110,7 @@ pub fn load(store_dir: &Path) -> Result<Store, LoadStoreError> {
 /// Add addresses from a genesis configuration.
 #[cfg(not(feature = "dev"))]
 pub fn add_genesis_addresses(store: &mut Store, genesis: GenesisConfig) {
-    for (alias, addr) in super::defaults::addresses_from_genesis(genesis) {
+    for (alias, addr) in super::defaults::addresses_from_genesis(genesis.clone()) {
         store.insert_address::<CliWalletUtils>(alias, addr);
     }
     for (alias, token) in &genesis.token {

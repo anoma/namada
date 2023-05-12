@@ -69,7 +69,6 @@ pub async fn query_and_print_epoch<
     C: namada::ledger::queries::Client + Sync,
 >(
     client: &C,
-    args: args::Query,
 ) -> Epoch {
     let epoch = namada::ledger::rpc::query_epoch(client).await;
     println!("Last committed epoch: {}", epoch);
@@ -627,7 +626,7 @@ pub async fn query_proposal<C: namada::ledger::queries::Client + Sync>(
         Some(())
     }
 
-    let current_epoch = query_and_print_epoch(client, args.query.clone()).await;
+    let current_epoch = query_and_print_epoch(client).await;
     match args.proposal_id {
         Some(id) => {
             if print_proposal::<C>(client, id, current_epoch, true)
@@ -703,7 +702,7 @@ pub async fn query_shielded_balance<
     // Save the update state so that future fetches can be short-circuited
     let _ = shielded.save();
     // The epoch is required to identify timestamped tokens
-    let epoch = query_and_print_epoch(client, args.query.clone()).await;
+    let epoch = query_and_print_epoch(client).await;
     // Map addresses to token names
     let tokens = wallet.get_addresses_with_vp_type(AddressVpType::Token);
     match (args.token, owner.is_some()) {
@@ -1251,13 +1250,12 @@ pub async fn query_withdrawable_tokens<
 /// Query PoS bond(s) and unbond(s)
 pub async fn query_bonds<
     C: namada::ledger::queries::Client + Sync,
-    U: ShieldedUtils<C = C>,
 >(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
     args: args::QueryBonds,
 ) -> std::io::Result<()> {
-    let _epoch = query_and_print_epoch(client, args.query.clone()).await;
+    let _epoch = query_and_print_epoch(client).await;
 
     let source = args.owner;
     let validator = args.validator;
@@ -1367,7 +1365,7 @@ pub async fn query_bonded_stake<C: namada::ledger::queries::Client + Sync>(
 ) {
     let epoch = match args.epoch {
         Some(epoch) => epoch,
-        None => query_and_print_epoch(client, args.query.clone()).await,
+        None => query_and_print_epoch(client).await,
     };
 
     match args.validator {
@@ -1450,7 +1448,6 @@ pub async fn query_commission_rate<
 /// Query PoS validator's commission rate information
 pub async fn query_and_print_commission_rate<
     C: namada::ledger::queries::Client + Sync,
-    U: ShieldedUtils<C = C>,
 >(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
@@ -1485,7 +1482,6 @@ pub async fn query_and_print_commission_rate<
 /// Query PoS slashes
 pub async fn query_slashes<
     C: namada::ledger::queries::Client + Sync,
-    U: ShieldedUtils<C = C>,
 >(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
@@ -1553,7 +1549,6 @@ pub async fn query_slashes<
 
 pub async fn query_delegations<
     C: namada::ledger::queries::Client + Sync,
-    U: ShieldedUtils<C = C>,
 >(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
@@ -1629,7 +1624,6 @@ pub async fn known_address<C: namada::ledger::queries::Client + Sync>(
 /// Query for all conversions.
 pub async fn query_conversions<
     C: namada::ledger::queries::Client + Sync,
-    U: ShieldedUtils<C = C>,
 >(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,

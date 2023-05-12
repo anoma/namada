@@ -1635,7 +1635,6 @@ pub mod args {
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
     use rust_decimal::Decimal;
-
     use super::context::*;
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
@@ -1669,8 +1668,8 @@ pub mod args {
     pub const BASE_DIR: ArgDefault<PathBuf> = arg_default(
         "base-dir",
         DefaultFn(|| match env::var("NAMADA_BASE_DIR") {
-            Ok(dir) => dir.into(),
-            Err(_) => config::DEFAULT_BASE_DIR.into(),
+            Ok(dir) => PathBuf::from(dir),
+            Err(_) => PathBuf::from(config::DEFAULT_BASE_DIR),
         }),
     );
     pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
@@ -1702,7 +1701,7 @@ pub mod args {
     pub const GAS_LIMIT: ArgDefault<token::Amount> =
         arg_default("gas-limit", DefaultFn(|| token::Amount::from(0)));
     pub const GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
-        arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".into()));
+        arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".parse().unwrap()));
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     pub const GENESIS_VALIDATOR: ArgOpt<String> =
         arg("genesis-validator").opt();
@@ -2193,8 +2192,10 @@ pub mod args {
                 max_commission_rate_change: self.max_commission_rate_change,
                 validator_vp_code_path: ctx
                     .read_wasm(self.validator_vp_code_path),
+                expiration: self.expiration,
                 unsafe_dont_encrypt: self.unsafe_dont_encrypt,
                 tx_code_path: ctx.read_wasm(self.tx_code_path),
+                chain_id: self.chain_id,
             }
         }
     }
@@ -2213,8 +2214,10 @@ pub mod args {
             let validator_vp_code_path = VALIDATOR_CODE_PATH
                 .parse(matches)
                 .unwrap_or_else(|| PathBuf::from(VP_USER_WASM));
+            let expiration = EXPIRATION_OPT.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_INIT_VALIDATOR_WASM);
+            let chain_id = CHAIN_ID.parse(matches);
             Self {
                 tx,
                 source,
@@ -2225,8 +2228,10 @@ pub mod args {
                 commission_rate,
                 max_commission_rate_change,
                 validator_vp_code_path,
+                expiration,
                 unsafe_dont_encrypt,
                 tx_code_path,
+                chain_id,
             }
         }
 
@@ -3041,6 +3046,15 @@ pub mod args {
                     "The address of the owner of the delegations to find.",
                 ),
             )
+        }
+    }
+
+    impl CliToSdk<QueryDelegations<SdkTypes>> for QueryDelegations<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryDelegations<SdkTypes> {
+            QueryDelegations::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                owner: ctx.get(&self.owner),
+            }
         }
     }
 
