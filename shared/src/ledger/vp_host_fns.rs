@@ -5,7 +5,7 @@ use std::num::TryFromIntError;
 use namada_core::types::address::Address;
 use namada_core::types::hash::{Hash, HASH_LENGTH};
 use namada_core::types::storage::{
-    BlockHash, BlockHeight, Epoch, Key, TxIndex,
+    BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
 };
 use thiserror::Error;
 
@@ -247,6 +247,23 @@ where
     let (height, gas) = storage.get_block_height();
     add_gas(gas_meter, gas)?;
     Ok(height)
+}
+
+/// Getting the block header.
+pub fn get_block_header<DB, H>(
+    gas_meter: &mut VpGasMeter,
+    storage: &Storage<DB, H>,
+    height: BlockHeight,
+) -> EnvResult<Option<Header>>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    let (header, gas) = storage
+        .get_block_header(Some(height))
+        .map_err(RuntimeError::StorageError)?;
+    add_gas(gas_meter, gas)?;
+    Ok(header)
 }
 
 /// Getting the block hash. The height is that of the block to which the

@@ -4,6 +4,7 @@ use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use async_std::io;
 use async_std::io::prelude::WriteExt;

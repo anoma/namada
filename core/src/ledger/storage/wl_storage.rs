@@ -424,6 +424,16 @@ where
         Ok(self.storage().block.height)
     }
 
+    fn get_block_header(
+        &self,
+        height: storage::BlockHeight,
+    ) -> std::result::Result<Option<storage::Header>, storage_api::Error> {
+        self.storage()
+            .db
+            .read_block_header(height)
+            .into_storage_result()
+    }
+
     fn get_block_hash(
         &self,
     ) -> std::result::Result<storage::BlockHash, storage_api::Error> {

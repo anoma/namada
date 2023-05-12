@@ -1,6 +1,7 @@
 //! SDK functions to construct different types of transactions
 use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::str::FromStr;
 
 use borsh::BorshSerialize;
 use itertools::Either::*;
@@ -14,7 +15,8 @@ use thiserror::Error;
 use tokio::time::Duration;
 
 use super::rpc::query_wasm_code_hash;
-use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
+use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
+use crate::ibc::core::ics04_channel::timeout::TimeoutHeight;
 use crate::ibc::signer::Signer;
 use crate::ibc::timestamp::Timestamp as IbcTimestamp;
 use crate::ibc::tx_msg::Msg;
@@ -920,22 +922,24 @@ pub async fn submit_ibc_transfer<
         Some(sp) => sp.to_string().replace(RESERVED_ADDRESS_PREFIX, ""),
         None => token.to_string(),
     };
-    let token = Some(Coin {
+    let token = Coin {
         denom,
         amount: args.amount.to_string(),
-    });
+    };
 
     // this height should be that of the destination chain, not this chain
     let timeout_height = match args.timeout_height {
-        Some(h) => IbcHeight::new(0, h),
-        None => IbcHeight::zero(),
+        Some(h) => {
+            TimeoutHeight::At(IbcHeight::new(0, h).expect("invalid height"))
+        }
+        None => TimeoutHeight::Never,
     };
 
     let now: crate::tendermint::Time = DateTimeUtc::now().try_into().unwrap();
     let now: IbcTimestamp = now.into();
     let timeout_timestamp = if let Some(offset) = args.timeout_sec_offset {
         (now + Duration::new(offset, 0)).unwrap()
-    } else if timeout_height.is_zero() {
+    } else if timeout_height == TimeoutHeight::Never {
         // we cannot set 0 to both the height and the timestamp
         (now + Duration::new(3600, 0)).unwrap()
     } else {
@@ -943,13 +947,13 @@ pub async fn submit_ibc_transfer<
     };
 
     let msg = MsgTransfer {
-        source_port: args.port_id,
-        source_channel: args.channel_id,
+        port_id_on_a: args.port_id,
+        chan_id_on_a: args.channel_id,
         token,
-        sender: Signer::new(source.to_string()),
-        receiver: Signer::new(args.receiver),
-        timeout_height,
-        timeout_timestamp,
+        sender: Signer::from_str(&source.to_string()).expect("invalid signer"),
+        receiver: Signer::from_str(&args.receiver).expect("invalid signer"),
+        timeout_height_on_b: timeout_height,
+        timeout_timestamp_on_b: timeout_timestamp,
     };
     tracing::debug!("IBC transfer message {:?}", msg);
     let any_msg = msg.to_any();

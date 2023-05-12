@@ -105,33 +105,33 @@ clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
 data-encoding = "2.3.2"
 derivative = "2.2.0"
 # TODO using the same version of tendermint-rs as we do here.
-ibc-abcipp = {package = "ibc", git = "https://github.com/heliaxdev/ibc-rs", rev = "9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d", default-features = false, optional = true}
-ibc-proto-abcipp = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-rs", rev = "9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d", default-features = false, optional = true}
-ibc = {version = "0.14.0", default-features = false, optional = true}
-ibc-proto = {version = "0.17.1", default-features = false, optional = true}
+ibc-abcipp = {package = "ibc", git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "db14744bfba6239cc5f58345ff90f8b7d42637d6", features = ["serde"], optional = true}
+ibc-proto-abcipp = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-proto-rs", rev = "dd8ba23110a144ffe2074a0b889676468266435a", default-features = false, optional = true}
+ibc = {version = "0.36.0", default-features = false, features = ["serde"], optional = true}
+ibc-proto = {version = "0.26.0", default-features = false, optional = true}
 itertools = "0.10.0"
 loupe = {version = "0.1.3", optional = true}
 parity-wasm = {version = "0.45.0", features = ["sign_ext"], optional = true}
 paste = "1.0.9"
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm", optional = true}
-prost = "0.9.0"
+prost = "0.11.6"
 pwasm-utils = {git = "https://github.com/heliaxdev/wasm-utils", tag = "v0.20.0", features = ["sign_ext"], optional = true}
 rayon = {version = "=1.5.3", optional = true}
-rust_decimal = "1.26.1"
-rust_decimal_macros = "1.26.1"
+rust_decimal = "=1.26.1"
+rust_decimal_macros = "=1.26.1"
 serde = {version = "1.0.125", features = ["derive"]}
 serde_json = "1.0.62"
 sha2 = "0.9.3"
 # We switch off "blake2b" because it cannot be compiled to wasm
 tempfile = {version = "3.2.0", optional = true}
-tendermint-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", optional = true, rev="679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"}
-tendermint-rpc-abcipp = {package = "tendermint-rpc", git = "https://github.com/heliaxdev/tendermint-rs", features = ["trait-client"], default-features = false, optional = true, rev="679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"}
-tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", optional = true, rev="679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"}
-tendermint = {version = "0.23.6", optional = true, git = "https://github.com/heliaxdev/tendermint-rs", rev="679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"}
-tendermint-rpc = {version = "0.23.6", features = ["trait-client"], default-features = false, optional = true, git = "https://github.com/heliaxdev/tendermint-rs", rev="679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"}
-tendermint-proto = {version = "0.23.6", optional = true, git = "https://github.com/heliaxdev/tendermint-rs", rev="679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"}
-thiserror = "1.0.30"
+tendermint-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "a3a0ad5f07d380976bbd5321239aec9cc3a8f916", optional = true}
+tendermint-rpc-abcipp = {package = "tendermint-rpc", git = "https://github.com/heliaxdev/tendermint-rs", rev = "a3a0ad5f07d380976bbd5321239aec9cc3a8f916", features = ["http-client"], optional = true}
+tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", rev = "a3a0ad5f07d380976bbd5321239aec9cc3a8f916", optional = true}
+tendermint = {version = "0.23.6", optional = true}
+tendermint-rpc = {version = "0.23.6", features = ["http-client"], optional = true}
+tendermint-proto = {version = "0.23.6", optional = true}
+thiserror = "1.0.38"
 tracing = "0.1.30"
 wasmer = {version = "=2.2.0", optional = true}
 wasmer-cache = {version = "=2.2.0", optional = true}

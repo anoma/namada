@@ -28,10 +28,9 @@ namada_vp_prelude = {path = "../vp_prelude", default-features = false}
 namada_tx_prelude = {path = "../tx_prelude", default-features = false}
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
 concat-idents = "1.1.2"
-ibc = {version = "0.14.0", default-features = false}
-ibc-proto = {version = "0.17.1", default-features = false}
-ibc-relayer = {version = "0.14.0", default-features = false}
-prost = "0.9.0"
+ibc-relayer = {version = "0.22.0", default-features = false}
+ibc-relayer-types = {version = "0.22.0", default-features = false}
+prost = "0.11.6"
 regex = "1.7.0"
 serde_json = {version = "1.0.65"}
 sha2 = "0.9.3"
@@ -45,8 +44,8 @@ tokio = {version = "1.8.2", features = ["full"]}
 tracing = "0.1.30"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
 derivative = "2.2.0"
-rust_decimal = "1.26.1"
-rust_decimal_macros = "1.26.1"
+rust_decimal = "=1.26.1"
+rust_decimal_macros = "=1.26.1"
 
 [dev-dependencies]
 namada_apps = {path = "../apps", default-features = false, features = ["testing"]}
