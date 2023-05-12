@@ -41,15 +41,16 @@ Each steward is elected by governance through separate governance proposals. Eac
 ## Voting for the stewards
 
 ### What is a Steward (technically)?
-All valid PGF stewards will be established multisignature account addresses. These must be created by the intdended parties (which may very well be just one person, but could be more) that wish to represent the Steward entity. For example, if David Alice and Bob wish to represent the combined steward DAB, they may do so as a common entity. But likewise, Alice can create her own 1-out-of-1 multisig that to just represent herself.
+All valid PGF stewards will be established multisignature account addresses. These must be created by the intended parties (which may very well be just one person, but could be more) that wish to represent the steward entity. For example, if David Alice and Bob wish to represent the combined steward DAB, they may do so as a common entity. But likewise, Alice can create her own 1-out-of-1 multisig that to just represent herself.
 
 
 ### Becoming a Steward
 The first step towards becoming a Steward is to instantiate a multisignature account. This is done through the CLI.
 
-In order to propose candidacy as a PGF Steward, the Steward must initiate a custom governance proposal. At the cost of deposited NAM, the governance proposal is broadcasted on-chain and governance is able to vote on whether the Steward-applicant will be accepted or not. Together with this proposal, the applicant is encouraged to provide a motivational statement as to why they should be entrusted with the responsibility of proposing public goods candidates. This will also include a commitment to at least one of the categories of public goods funding that social consensus has established (or propose their own category, which would inherintly introduce a new category into social consensus, should the proposal be accepted).
+In order to propose candidacy as a PGF Steward, the steward must initiate a custom governance proposal. At the cost of deposited NAM, the governance proposal is broadcast on-chain and governance is able to vote on whether the steward-applicant will be accepted or not. Together with this proposal, the applicant is encouraged to provide a motivational statement as to why they should be entrusted with the responsibility of proposing public goods candidates. This will also include a commitment to at least one of the categories of public goods funding that social consensus has established (or propose their own category, which would inherently introduce a new category into social consensus, should the proposal be accepted).
 
-Proposing candidacy as a PGF Steward is something that is done at any time.
+Nominating oneself as a PGF steward may be done at any time.
+
 
 ### Losing stewardship status
 
