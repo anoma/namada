@@ -412,10 +412,12 @@ pub async fn submit_transfer<
     U: ShieldedUtils<C = C>,
 >(
     client: &C,
+    ctx: Context,
     wallet: &mut Wallet<V>,
     shielded: &mut ShieldedContext<U>,
-    args: args::TxTransfer,
+    mut args: args::TxTransfer,
 ) -> Result<(), tx::Error> {
+    args.tx.chain_id = args.tx.chain_id.or_else(|| Some(ctx.config.ledger.chain_id));
     tx::submit_transfer::<C, V, U>(client, wallet, shielded, args).await
 }
 
