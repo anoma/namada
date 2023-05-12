@@ -9,6 +9,8 @@ use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::env::consts::OS;
+
 
 use directories::ProjectDirs;
 use namada::types::chain::ChainId;
@@ -22,7 +24,15 @@ use crate::facade::tendermint::Timeout;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
 /// Base directory contains global config and chain directories.
-pub const DEFAULT_BASE_DIR: &str = ".namada";
+pub const LINUX_BASE_DIR : &str = "/home/$USER/.config/com.heliax.namada";
+pub const MACOS_BASE_DIR : &str = "/Users/$USER/Library/Application\\ Support/com.heliax.namada";
+
+pub const DEFAULT_BASE_DIR: &str = if cfg!(target_os = "macos") {
+    MACOS_BASE_DIR
+} else {
+    LINUX_BASE_DIR   
+};
+
 /// Default WASM dir.
 pub const DEFAULT_WASM_DIR: &str = "wasm";
 /// The WASM checksums file contains the hashes of built WASMs. It is inside the

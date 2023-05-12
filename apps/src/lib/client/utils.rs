@@ -995,7 +995,7 @@ pub fn init_genesis_validator(
     });
     println!();
     println!(
-        "Pre-genesis TOML written to {}",
+        "Pre-genesis TOML written to [your-base-dir]/{}",
         file_name.to_string_lossy()
     );
 }
