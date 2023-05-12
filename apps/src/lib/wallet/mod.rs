@@ -54,51 +54,54 @@ impl WalletUtils for CliWalletUtils {
         alias.trim().to_owned()
     }
 
-    /// The given alias has been selected but conflicts with another alias in
-    /// the store. Offer the user to either replace existing mapping, alter the
-    /// chosen alias to a name of their chosing, or cancel the aliasing.
-    fn show_overwrite_confirmation(
-        alias: &Alias,
-        alias_for: &str,
-    ) -> ConfirmationResponse {
-        print!(
-            "You're trying to create an alias \"{}\" that already exists for \
-             {} in your store.\nWould you like to replace it? \
-             s(k)ip/re(p)lace/re(s)elect: ",
-            alias, alias_for
-        );
-        io::stdout().flush().unwrap();
-
-        let mut buffer = String::new();
-        // Get the user to select between 3 choices
-        match io::stdin().read_line(&mut buffer) {
-            Ok(size) if size > 0 => {
-                // Isolate the single character representing the choice
-                let byte = buffer.chars().next().unwrap();
-                buffer.clear();
-                match byte {
-                    'p' | 'P' => return ConfirmationResponse::Replace,
-                    's' | 'S' => {
-                        // In the case of reselection, elicit new alias
-                        print!("Please enter a different alias: ");
-                        io::stdout().flush().unwrap();
-                        if io::stdin().read_line(&mut buffer).is_ok() {
-                            return ConfirmationResponse::Reselect(
-                                buffer.trim().into(),
-                            );
-                        }
-                    }
-                    'k' | 'K' => return ConfirmationResponse::Skip,
-                    // Input is senseless fall through to repeat prompt
-                    _ => {}
-                };
-            }
-            _ => {}
-        }
-        // Input is senseless fall through to repeat prompt
-        println!("Invalid option, try again.");
-        Self::show_overwrite_confirmation(alias, alias_for)
+    fn show_overwrite_confirmation(alias: &Alias, alias_for: &str) -> ConfirmationResponse {
+        ConfirmationResponse::Replace
     }
+    // The given alias has been selected but conflicts with another alias in
+    // the store. Offer the user to either replace existing mapping, alter the
+    // chosen alias to a name of their chosing, or cancel the aliasing.
+    // fn show_overwrite_confirmation(
+    //     alias: &Alias,
+    //     alias_for: &str,
+    // ) -> ConfirmationResponse {
+    //     print!(
+    //         "You're trying to create an alias \"{}\" that already exists for \
+    //          {} in your store.\nWould you like to replace it? \
+    //          s(k)ip/re(p)lace/re(s)elect: ",
+    //         alias, alias_for
+    //     );
+    //     io::stdout().flush().unwrap();
+    //
+    //     let mut buffer = String::new();
+    //     // Get the user to select between 3 choices
+    //     match io::stdin().read_line(&mut buffer) {
+    //         Ok(size) if size > 0 => {
+    //             // Isolate the single character representing the choice
+    //             let byte = buffer.chars().next().unwrap();
+    //             buffer.clear();
+    //             match byte {
+    //                 'p' | 'P' => return ConfirmationResponse::Replace,
+    //                 's' | 'S' => {
+    //                     // In the case of reselection, elicit new alias
+    //                     print!("Please enter a different alias: ");
+    //                     io::stdout().flush().unwrap();
+    //                     if io::stdin().read_line(&mut buffer).is_ok() {
+    //                         return ConfirmationResponse::Reselect(
+    //                             buffer.trim().into(),
+    //                         );
+    //                     }
+    //                 }
+    //                 'k' | 'K' => return ConfirmationResponse::Skip,
+    //                 // Input is senseless fall through to repeat prompt
+    //                 _ => {}
+    //             };
+    //         }
+    //         _ => {}
+    //     }
+    //     // Input is senseless fall through to repeat prompt
+    //     println!("Invalid option, try again.");
+    //     Self::show_overwrite_confirmation(alias, alias_for)
+    // }
 }
 
 /// Generate keypair
