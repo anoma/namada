@@ -88,24 +88,21 @@ pub mod mock_web3_client {
 
         /// Check and apply new incoming commands
         fn check_cmd_channel(&self) {
-            let cmd =
-                if let Ok(cmd) = self.0.borrow_mut().cmd_channel.try_recv() {
-                    cmd
-                } else {
-                    return;
-                };
-            match cmd {
-                TestCmd::Normal => self.0.borrow_mut().active = true,
-                TestCmd::Unresponsive => self.0.borrow_mut().active = false,
-                TestCmd::NewHeight(height) => {
-                    self.0.borrow_mut().latest_block_height = height
+            let mut oracle = self.0.borrow_mut();
+            while let Ok(cmd) = oracle.cmd_channel.try_recv() {
+                match cmd {
+                    TestCmd::Normal => oracle.active = true,
+                    TestCmd::Unresponsive => oracle.active = false,
+                    TestCmd::NewHeight(height) => {
+                        oracle.latest_block_height = height
+                    }
+                    TestCmd::NewEvent {
+                        event_type: ty,
+                        data,
+                        height,
+                        seen,
+                    } => oracle.events.push((ty, data, height, seen)),
                 }
-                TestCmd::NewEvent {
-                    event_type: ty,
-                    data,
-                    height,
-                    seen,
-                } => self.0.borrow_mut().events.push((ty, data, height, seen)),
             }
         }
 

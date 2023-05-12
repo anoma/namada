@@ -6,19 +6,19 @@ use std::ops::ControlFlow;
 use tokio::time::error::Elapsed;
 use tokio::time::{Duration, Instant};
 
-/// A timeout strategy to
+/// A sleep strategy to be applied to fallible runs of arbitrary tasks.
 #[derive(Debug, Clone)]
-pub enum TimeoutStrategy {
-    /// A constant timeout strategy.
+pub enum SleepStrategy {
+    /// Constant sleep.
     Constant(Duration),
-    /// A linear timeout strategy.
+    /// Linear backoff sleep.
     LinearBackoff {
-        /// The amount of time added to each consecutive timeout.
+        /// The amount of time added to each consecutive run.
         delta: Duration,
     },
 }
 
-impl TimeoutStrategy {
+impl SleepStrategy {
     /// Sleep and update the `backoff` timeout, if necessary.
     async fn sleep_update(&self, backoff: &mut Duration) {
         match self {
@@ -32,31 +32,44 @@ impl TimeoutStrategy {
         }
     }
 
+    /// Execute a fallible task.
+    ///
+    /// Different retries will result in a sleep operation,
+    /// with the current [`SleepStrategy`].
+    pub async fn run<T, F, G>(&self, mut future_gen: G) -> T
+    where
+        G: FnMut() -> F,
+        F: Future<Output = ControlFlow<T>>,
+    {
+        let mut backoff = Duration::from_secs(0);
+        loop {
+            let fut = future_gen();
+            match fut.await {
+                ControlFlow::Continue(()) => {
+                    self.sleep_update(&mut backoff).await;
+                }
+                ControlFlow::Break(ret) => break ret,
+            }
+        }
+    }
+
     /// Run a time constrained task until the given deadline.
     ///
     /// Different retries will result in a sleep operation,
-    /// with the current [`TimeoutStrategy`].
+    /// with the current [`SleepStrategy`].
     pub async fn timeout<T, F, G>(
         &self,
         deadline: Instant,
-        mut future_gen: G,
+        future_gen: G,
     ) -> Result<T, Elapsed>
     where
         G: FnMut() -> F,
         F: Future<Output = ControlFlow<T>>,
     {
-        tokio::time::timeout_at(deadline, async move {
-            let mut backoff = Duration::from_secs(0);
-            loop {
-                let fut = future_gen();
-                match fut.await {
-                    ControlFlow::Continue(()) => {
-                        self.sleep_update(&mut backoff).await;
-                    }
-                    ControlFlow::Break(ret) => break ret,
-                }
-            }
-        })
+        tokio::time::timeout_at(
+            deadline,
+            async move { self.run(future_gen).await },
+        )
         .await
     }
 }
