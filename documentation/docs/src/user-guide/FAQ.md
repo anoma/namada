@@ -27,7 +27,7 @@ HINT: `namadac balance`
 
 ### **Q: How do I use the Ethereum Bridge?**
     
-**A:** The Ethereum Bridge is not yet implemented as of 0.12.0. Keep an eye on the [Changelog](https://github.com/anoma/namada/tree/main/.changelog) :eyes: to see when it will be officially released.
+**A:** The Ethereum Bridge is not yet implemented as of 0.12.0. Keep an eye on the [Changelog](https://github.com/anoma/namada/tree/main/.changelog) 👀 to see when it will be officially released.
 
 ### **Q: How can I make an IBC transfer?**
     
