@@ -1817,9 +1817,9 @@ pub mod args {
                      configuration and state is stored. This value can also \
                      be set via `NAMADA_BASE_DIR` environment variable, but \
                      the argument takes precedence, if specified. Defaults to \
-                     `$XDG_DATA_HOME/com.heliax.namada` or \
-                     `$HOME/.local/share/com.heliax.namada` depending on the \
-                     operating system (former is linux, latter is osx).",
+                     `$HOME/.config/namada` or `$HOME/Library/Application\\ \
+                     Support/com.heliax.namada` depending on the operating \
+                     system (former is linux, latter is osx).",
                 ))
                 .arg(WASM_DIR.def().about(
                     "Directory with built WASM validity predicates, \

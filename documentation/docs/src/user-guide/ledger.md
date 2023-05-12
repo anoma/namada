@@ -10,7 +10,7 @@ namada ledger
 
 The node will attempt to connect to the persistent validator nodes and other peers in the network, and synchronize to the latest block.
 
-By default, the ledger will store its configuration and state in the `.namada` directory in either `$XDG_DATA_HOME/<project_path>` or `$HOME/.local/share/<project_path>`, where `<project_path>` is `com.heliax.namada`. You can use the `--base-dir` CLI global argument or `NAMADA_BASE_DIR` environment variable to change it.
+By default, the ledger will store its configuration and state in either `$HOME/.config/namada` or `$HOME/Library/Application\ Support/com.heliax.namada`. You can use the `--base-dir` CLI global argument or `NAMADA_BASE_DIR` environment variable to change it.
 
 The ledger also needs access to the built WASM files that are used in the genesis block. These files are included in release and shouldn't be modified, otherwise your node will fail with a consensus error on the genesis block. By default, these are expected to be in the `wasm` directory inside the chain directory that's in the base directory. This can also be set with the `--wasm-dir` CLI global argument, `NAMADA_WASM_DIR` environment variable or the configuration file.
 
