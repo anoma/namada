@@ -347,6 +347,16 @@ pub struct QuerySlashes<C: NamadaTypes = SdkTypes> {
     pub validator: Option<C::Address>,
 }
 
+/// Query PoS delegations
+#[derive(Clone, Debug)]
+pub struct QueryDelegations<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+    /// Address of an owner
+    pub owner: C::Address,
+}
+
+
 /// Query the raw bytes of given storage key
 #[derive(Clone, Debug)]
 pub struct QueryRawBytes<C: NamadaTypes = SdkTypes> {
@@ -361,6 +371,8 @@ pub struct QueryRawBytes<C: NamadaTypes = SdkTypes> {
 pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// Simulate applying the transaction
     pub dry_run: bool,
+    /// Dump the transaction bytes
+    pub dump_tx: bool,
     /// Submit the transaction even if it doesn't pass client checks
     pub force: bool,
     /// Do not wait for the transaction to be added to the blockchain

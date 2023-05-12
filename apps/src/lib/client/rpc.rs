@@ -31,12 +31,11 @@ use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::masp::{
     Conversions, PinnedBalanceError, ShieldedContext, ShieldedUtils,
 };
-use namada::ledger::native_vp::governance::utils::Votes;
 use namada::ledger::native_vp::governance::utils::{self, Votes};
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::{
-    self, self, is_validator_slashes_key, BondId, Bonds, BondsAndUnbondsDetail,
-    CommissionPair, PosParams, PosParams, Slash, Slash, Unbonds,
+    self, is_validator_slashes_key, BondId, Bonds, BondsAndUnbondsDetail,
+    CommissionPair, PosParams, Slash, Unbonds,
 };
 use namada::ledger::queries::RPC;
 use namada::ledger::rpc::TxResponse;
@@ -44,7 +43,6 @@ use namada::ledger::storage::ConversionState;
 use namada::ledger::wallet::Wallet;
 use namada::proto::{SignedTxData, Tx};
 use namada::types::address::{masp, tokens, Address};
-use namada::types::address::{masp, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineProposal, OfflineVote, OfflineVote, ProposalResult,
     ProposalVote, VotePower, VotePower, VoteType,

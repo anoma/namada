@@ -938,7 +938,7 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryResult(pub args::QueryResult);
+    pub struct QueryResult(pub args::QueryResult<args::CliTypes>);
 
     impl SubCmd for QueryResult {
         const CMD: &'static str = "tx-result";
@@ -1385,7 +1385,7 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryDelegations(pub args::QueryDelegations);
+    pub struct QueryDelegations(pub args::QueryDelegations<args::CliTypes>);
 
     impl SubCmd for QueryDelegations {
         const CMD: &'static str = "delegations";
@@ -1402,7 +1402,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Find PoS delegations from the given owner address.")
-                .add_args::<args::QueryDelegations>()
+                .add_args::<args::QueryDelegations<args::CliTypes>>()
         }
     }
 
@@ -1636,7 +1636,7 @@ pub mod args {
     use namada::types::token;
     use rust_decimal::Decimal;
 
-    use super::{context::*, namada_version, APP_NAME, cmds};
+    use super::context::*;
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
     use crate::config;
@@ -1940,13 +1940,6 @@ pub mod args {
         }
     }
 
-    /// Transaction associated results arguments
-    #[derive(Clone, Debug)]
-    pub struct QueryResult {
-        /// Common query args
-        pub query: Query,
-        /// Hash of transaction to lookup
-        pub tx_hash: String,
     pub trait CliToSdk<X>: Args {
         fn to_sdk(self, ctx: &mut Context) -> X;
     }
@@ -2401,7 +2394,6 @@ pub mod args {
                 ))
         }
     }
-    }}
     #[derive(Clone, Debug)]
     pub struct InitProposal<C: NamadaTypes = SdkTypes> {
         /// Common tx arguments
@@ -3033,6 +3025,22 @@ pub mod args {
         }
     }
 
+    impl Args for QueryDelegations<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let owner = OWNER.parse(matches);
+            Self { query, owner }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>().arg(
+                OWNER.def().about(
+                    "The address of the owner of the delegations to find.",
+                ),
+            )
+        }
+    }
+
     impl CliToSdk<QueryRawBytes<SdkTypes>> for QueryRawBytes<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> QueryRawBytes<SdkTypes> {
             QueryRawBytes::<SdkTypes> {
@@ -3076,6 +3084,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> Tx<SdkTypes> {
             Tx::<SdkTypes> {
                 dry_run: self.dry_run,
+                dump_tx: self.dump_tx,
                 force: self.force,
                 broadcast_only: self.broadcast_only,
                 ledger_address: (),
@@ -3087,6 +3096,8 @@ pub mod args {
                 signer: self.signer.map(|x| ctx.get(&x)),
                 tx_code_path: ctx.read_wasm(self.tx_code_path),
                 password: self.password,
+                expiration: self.expiration,
+                chain_id: self.chain_id,
             }
         }
     }
@@ -3169,6 +3180,7 @@ pub mod args {
             let signing_key = SIGNING_KEY_OPT.parse(matches);
             let signer = SIGNER.parse(matches);
             let tx_code_path = PathBuf::from(TX_REVEAL_PK);
+            let chain_id = CHAIN_ID.parse(matches);
             let password = None;
             Self {
                 dry_run,
@@ -3185,6 +3197,7 @@ pub mod args {
                 signer,
                 tx_code_path,
                 password,
+                chain_id
             }
         }
     }
@@ -3679,6 +3692,7 @@ pub mod args {
                 ))
         }
     }
+}
 
 pub fn namada_cli() -> (cmds::Namada, String) {
     let app = namada_app();
@@ -3695,7 +3709,7 @@ pub fn namada_cli() -> (cmds::Namada, String) {
     safe_exit(2);
 }
 
-pub fn namada_node_cli() -> Result<(cmds::NamadaNode, Context), E> {
+pub fn namada_node_cli() -> Result<(cmds::NamadaNode, Context)> {
     let app = namada_node_app();
     cmds::NamadaNode::parse_or_print_help(app)
 }
@@ -3706,7 +3720,7 @@ pub enum NamadaClient {
     WithContext(Box<(cmds::NamadaClientWithContext, Context)>),
 }
 
-pub fn namada_client_cli() -> Result<NamadaClient, E> {
+pub fn namada_client_cli() -> Result<NamadaClient> {
     let app = namada_client_app();
     let mut app = cmds::NamadaClient::add_sub(app);
     let matches = app.clone().get_matches();
@@ -3730,7 +3744,7 @@ pub fn namada_client_cli() -> Result<NamadaClient, E> {
     }
 }
 
-pub fn namada_wallet_cli() -> Result<(cmds::NamadaWallet, Context), E> {
+pub fn namada_wallet_cli() -> Result<(cmds::NamadaWallet, Context)> {
     let app = namada_wallet_app();
     cmds::NamadaWallet::parse_or_print_help(app)
 }
