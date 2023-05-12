@@ -126,9 +126,7 @@ enum RelayResult {
     GovernanceCallError(String),
     /// Some nonce related error occurred.
     ///
-    /// The following comparison must hold:
-    ///
-    ///     contract + 1 = argument
+    /// The following comparison must hold: `contract + 1 = argument`.
     NonceError {
         /// The value of the [`Epoch`] argument passed via CLI.
         argument: Epoch,
