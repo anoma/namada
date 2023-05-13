@@ -11,9 +11,10 @@ use namada::ledger::gas::VpGasMeter;
 use namada::proto::Tx;
 use namada::types::chain::ChainId;
 use namada::types::governance::{ProposalVote, VoteType};
+use namada::types::hash::Hash;
 use namada::types::key::ed25519;
 use namada::types::masp::{TransferSource, TransferTarget};
-use namada::types::storage::TxIndex;
+use namada::types::storage::{Key, TxIndex};
 use namada::types::transaction::governance::VoteProposalData;
 use namada::types::transaction::pos::{Bond, CommissionChange};
 use namada::types::transaction::UpdateVp;
@@ -25,18 +26,16 @@ use namada_benches::{
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
     TX_BOND_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_REVEAL_PK_WASM,
     TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UPDATE_VP_WASM, TX_VOTE_PROPOSAL_WASM,
-    WASM_DIR,
+    VP_VALIDATOR_WASM, WASM_DIR,
 };
 use rust_decimal::Decimal;
 
 const VP_USER_WASM: &str = "vp_user.wasm";
 const VP_TOKEN_WASM: &str = "vp_token.wasm";
 const VP_IMPLICIT_WASM: &str = "vp_implicit.wasm";
-const VP_VALIDATOR_WASM: &str = "vp_validator.wasm";
 const VP_MASP_WASM: &str = "vp_masp.wasm";
 
 fn vp_user(c: &mut Criterion) {
-    let vp_code = wasm_loader::read_wasm_or_exit(WASM_DIR, VP_USER_WASM);
     let mut group = c.benchmark_group("vp_user");
 
     let foreign_key_write =
@@ -70,14 +69,15 @@ fn vp_user(c: &mut Criterion) {
         &defaults::bertha_keypair(),
     );
 
+    let shell = BenchShell::default();
+    let vp_validator_hash = shell
+        .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
+        .unwrap();
     let vp = generate_tx(
         TX_UPDATE_VP_WASM,
         UpdateVp {
             addr: defaults::albert_address(),
-            vp_code: wasm_loader::read_wasm_or_exit(
-                WASM_DIR,
-                "vp_validator.wasm",
-            ),
+            vp_code_hash: vp_validator_hash,
         },
         &defaults::albert_keypair(),
     );
@@ -121,6 +121,9 @@ fn vp_user(c: &mut Criterion) {
         "vp",
     ]) {
         let mut shell = BenchShell::default();
+        let vp_code_hash: Hash = shell
+            .read_storage_key(&Key::wasm_hash(VP_USER_WASM))
+            .unwrap();
         shell.execute_tx(signed_tx);
         let (verifiers, keys_changed) = shell
             .wl_storage
@@ -129,22 +132,20 @@ fn vp_user(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    run::vp(
-                        &vp_code,
-                        signed_tx,
-                        &TxIndex(0),
-                        &defaults::albert_address(),
-                        &shell.wl_storage.storage,
-                        &shell.wl_storage.write_log,
-                        &mut VpGasMeter::new(u64::MAX, 0),
-                        &keys_changed,
-                        &verifiers,
-                        shell.vp_wasm_cache.clone(),
-                        false,
-                    )
-                    .unwrap()
-                );
+                assert!(run::vp(
+                    &vp_code_hash,
+                    signed_tx,
+                    &TxIndex(0),
+                    &defaults::albert_address(),
+                    &shell.wl_storage.storage,
+                    &shell.wl_storage.write_log,
+                    &mut VpGasMeter::new(u64::MAX, 0),
+                    &keys_changed,
+                    &verifiers,
+                    shell.vp_wasm_cache.clone(),
+                    false,
+                )
+                .unwrap());
             })
         });
     }
@@ -153,7 +154,6 @@ fn vp_user(c: &mut Criterion) {
 }
 
 fn vp_implicit(c: &mut Criterion) {
-    let vp_code = wasm_loader::read_wasm_or_exit(WASM_DIR, VP_IMPLICIT_WASM);
     let mut group = c.benchmark_group("vp_implicit");
 
     let mut csprng = rand::rngs::OsRng {};
@@ -240,6 +240,9 @@ fn vp_implicit(c: &mut Criterion) {
         "governance_vote",
     ]) {
         let mut shell = BenchShell::default();
+        let vp_code_hash: Hash = shell
+            .read_storage_key(&Key::wasm_hash(VP_IMPLICIT_WASM))
+            .unwrap();
 
         if bench_name != "reveal_pk" {
             // Reveal publick key
@@ -264,22 +267,20 @@ fn vp_implicit(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    run::vp(
-                        &vp_code,
-                        tx,
-                        &TxIndex(0),
-                        &Address::from(&implicit_account.to_public()),
-                        &shell.wl_storage.storage,
-                        &shell.wl_storage.write_log,
-                        &mut VpGasMeter::new(u64::MAX, 0),
-                        &keys_changed,
-                        &verifiers,
-                        shell.vp_wasm_cache.clone(),
-                        false,
-                    )
-                    .unwrap()
+                assert!(run::vp(
+                    &vp_code_hash,
+                    tx,
+                    &TxIndex(0),
+                    &Address::from(&implicit_account.to_public()),
+                    &shell.wl_storage.storage,
+                    &shell.wl_storage.write_log,
+                    &mut VpGasMeter::new(u64::MAX, 0),
+                    &keys_changed,
+                    &verifiers,
+                    shell.vp_wasm_cache.clone(),
+                    false,
                 )
+                .unwrap())
             })
         });
     }
@@ -288,7 +289,10 @@ fn vp_implicit(c: &mut Criterion) {
 }
 
 fn vp_validator(c: &mut Criterion) {
-    let vp_code = wasm_loader::read_wasm_or_exit(WASM_DIR, VP_VALIDATOR_WASM);
+    let shell = BenchShell::default();
+    let vp_code_hash: Hash = shell
+        .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
+        .unwrap();
     let mut group = c.benchmark_group("vp_validator");
 
     let foreign_key_write =
@@ -326,10 +330,7 @@ fn vp_validator(c: &mut Criterion) {
         TX_UPDATE_VP_WASM,
         UpdateVp {
             addr: defaults::validator_address(),
-            vp_code: wasm_loader::read_wasm_or_exit(
-                WASM_DIR,
-                "vp_validator.wasm",
-            ),
+            vp_code_hash: vp_code_hash.clone(),
         },
         &defaults::validator_keypair(),
     );
@@ -393,22 +394,20 @@ fn vp_validator(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    run::vp(
-                        &vp_code,
-                        signed_tx,
-                        &TxIndex(0),
-                        &defaults::validator_address(),
-                        &shell.wl_storage.storage,
-                        &shell.wl_storage.write_log,
-                        &mut VpGasMeter::new(u64::MAX, 0),
-                        &keys_changed,
-                        &verifiers,
-                        shell.vp_wasm_cache.clone(),
-                        false,
-                    )
-                    .unwrap()
-                );
+                assert!(run::vp(
+                    &vp_code_hash,
+                    signed_tx,
+                    &TxIndex(0),
+                    &defaults::validator_address(),
+                    &shell.wl_storage.storage,
+                    &shell.wl_storage.write_log,
+                    &mut VpGasMeter::new(u64::MAX, 0),
+                    &keys_changed,
+                    &verifiers,
+                    shell.vp_wasm_cache.clone(),
+                    false,
+                )
+                .unwrap());
             })
         });
     }
@@ -417,7 +416,6 @@ fn vp_validator(c: &mut Criterion) {
 }
 
 fn vp_token(c: &mut Criterion) {
-    let vp_code = wasm_loader::read_wasm_or_exit(WASM_DIR, VP_TOKEN_WASM);
     let mut group = c.benchmark_group("vp_token");
 
     let foreign_key_write =
@@ -442,6 +440,9 @@ fn vp_token(c: &mut Criterion) {
         .zip(["foreign_key_write", "transfer"])
     {
         let mut shell = BenchShell::default();
+        let vp_code_hash: Hash = shell
+            .read_storage_key(&Key::wasm_hash(VP_TOKEN_WASM))
+            .unwrap();
         shell.execute_tx(signed_tx);
         let (verifiers, keys_changed) = shell
             .wl_storage
@@ -450,29 +451,26 @@ fn vp_token(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    run::vp(
-                        &vp_code,
-                        signed_tx,
-                        &TxIndex(0),
-                        &defaults::albert_address(),
-                        &shell.wl_storage.storage,
-                        &shell.wl_storage.write_log,
-                        &mut VpGasMeter::new(u64::MAX, 0),
-                        &keys_changed,
-                        &verifiers,
-                        shell.vp_wasm_cache.clone(),
-                        false,
-                    )
-                    .unwrap()
-                );
+                assert!(run::vp(
+                    &vp_code_hash,
+                    signed_tx,
+                    &TxIndex(0),
+                    &defaults::albert_address(),
+                    &shell.wl_storage.storage,
+                    &shell.wl_storage.write_log,
+                    &mut VpGasMeter::new(u64::MAX, 0),
+                    &keys_changed,
+                    &verifiers,
+                    shell.vp_wasm_cache.clone(),
+                    false,
+                )
+                .unwrap());
             })
         });
     }
 }
 
 fn vp_masp(c: &mut Criterion) {
-    let vp_code = wasm_loader::read_wasm_or_exit(WASM_DIR, VP_MASP_WASM);
     let mut group = c.benchmark_group("vp_masp");
 
     let amount = Amount::whole(500);
@@ -480,6 +478,10 @@ fn vp_masp(c: &mut Criterion) {
     for bench_name in ["shielding", "unshielding", "shielded"] {
         group.bench_function(bench_name, |b| {
             let mut shielded_ctx = BenchShieldedCtx::default();
+            let vp_code_hash: Hash = shielded_ctx
+                .shell
+                .read_storage_key(&Key::wasm_hash(VP_MASP_WASM))
+                .unwrap();
 
             let albert_spending_key = shielded_ctx
                 .ctx
@@ -536,22 +538,20 @@ fn vp_masp(c: &mut Criterion) {
                 .verifiers_and_changed_keys(&BTreeSet::default());
 
             b.iter(|| {
-                assert!(
-                    run::vp(
-                        &vp_code,
-                        &signed_tx,
-                        &TxIndex(0),
-                        &defaults::validator_address(),
-                        &shielded_ctx.shell.wl_storage.storage,
-                        &shielded_ctx.shell.wl_storage.write_log,
-                        &mut VpGasMeter::new(u64::MAX, 0),
-                        &keys_changed,
-                        &verifiers,
-                        shielded_ctx.shell.vp_wasm_cache.clone(),
-                        false,
-                    )
-                    .unwrap()
-                );
+                assert!(run::vp(
+                    &vp_code_hash,
+                    &signed_tx,
+                    &TxIndex(0),
+                    &defaults::validator_address(),
+                    &shielded_ctx.shell.wl_storage.storage,
+                    &shielded_ctx.shell.wl_storage.write_log,
+                    &mut VpGasMeter::new(u64::MAX, 0),
+                    &keys_changed,
+                    &verifiers,
+                    shielded_ctx.shell.vp_wasm_cache.clone(),
+                    false,
+                )
+                .unwrap());
             })
         });
     }

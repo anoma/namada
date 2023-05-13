@@ -17,19 +17,18 @@
 use std::ops::{Deref, DerefMut};
 
 use borsh::BorshSerialize;
+use ibc_proto::google::protobuf::Any;
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::core::ledger::ibc::actions;
+use namada::core::ledger::ibc::storage::port_key;
 use namada::core::types::address::{self, Address};
 use namada::core::types::key::common::SecretKey;
 use namada::core::types::storage::Key;
 use namada::core::types::token::{Amount, Transfer};
-use namada::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
+use namada::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use namada::ibc::clients::ics07_tendermint::client_state::{
     AllowUpdate, ClientState,
 };
 use namada::ibc::clients::ics07_tendermint::consensus_state::ConsensusState;
-use namada::ibc::core::ics02_client::client_consensus::AnyConsensusState;
-use namada::ibc::core::ics02_client::client_state::AnyClientState;
 use namada::ibc::core::ics02_client::client_type::ClientType;
 use namada::ibc::core::ics02_client::trust_threshold::TrustThreshold;
 use namada::ibc::core::ics03_connection::connection::{
@@ -39,27 +38,31 @@ use namada::ibc::core::ics03_connection::version::Version;
 use namada::ibc::core::ics04_channel::channel::{
     ChannelEnd, Counterparty as ChannelCounterparty, Order, State,
 };
+use namada::ibc::core::ics04_channel::timeout::TimeoutHeight;
 use namada::ibc::core::ics04_channel::Version as ChannelVersion;
-use namada::ibc::core::ics23_commitment::commitment::CommitmentRoot;
+use namada::ibc::core::ics23_commitment::commitment::{
+    CommitmentPrefix, CommitmentRoot,
+};
 use namada::ibc::core::ics23_commitment::specs::ProofSpecs;
 use namada::ibc::core::ics24_host::identifier::{
-    ChainId as IbcChainId, ChannelId, ClientId, ConnectionId, PortId,
+    ChainId as IbcChainId, ChannelId, ClientId, ConnectionId, PortChannelId,
+    PortId,
 };
-use namada::ibc::core::ics24_host::path::{ChannelEndsPath, ConnectionsPath};
 use namada::ibc::core::ics24_host::Path as IbcPath;
 use namada::ibc::signer::Signer;
 use namada::ibc::timestamp::Timestamp as IbcTimestamp;
 use namada::ibc::tx_msg::Msg;
 use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::cosmos::base::v1beta1::Coin;
+use namada::ibc_proto::protobuf::Protobuf;
 use namada::ledger::gas::TxGasMeter;
+use namada::ledger::ibc::storage::{channel_key, connection_key};
 use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
 use namada::proof_of_stake;
 use namada::proto::Tx;
 use namada::tendermint::Hash;
-use namada::tendermint_proto::Protobuf;
 use namada::types::address::InternalAddress;
 use namada::types::chain::ChainId;
 use namada::types::masp::{
@@ -84,6 +87,7 @@ use namada_apps::wallet::defaults;
 use namada_apps::{config, wasm_loader};
 use namada_test_utils::tx_data::TxWriteData;
 use rand_core::OsRng;
+use std::str::FromStr;
 use tempfile::TempDir;
 
 pub const WASM_DIR: &str = "../wasm";
@@ -97,6 +101,7 @@ pub const TX_REVEAL_PK_WASM: &str = "tx_reveal_pk.wasm";
 pub const TX_CHANGE_VALIDATOR_COMMISSION_WASM: &str =
     "tx_change_validator_commission.wasm";
 pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
+pub const VP_VALIDATOR_WASM: &str = "vp_validator.wasm";
 
 pub const ALBERT_PAYMENT_ADDRESS: &str = "albert_payment";
 pub const ALBERT_SPENDING_KEY: &str = "albert_spending";
@@ -210,7 +215,7 @@ impl BenchShell {
             &mut self.inner.wl_storage.write_log,
             &mut TxGasMeter::new(u64::MAX),
             &TxIndex(0),
-            &tx.code,
+            &tx.code_or_hash,
             tx.data.as_ref().unwrap(),
             &mut self.inner.vp_wasm_cache,
             &mut self.inner.tx_wasm_cache,
@@ -240,14 +245,16 @@ impl BenchShell {
 
     pub fn init_ibc_channel(&mut self) {
         // Set connection open
-        let client_id = ClientId::new(ClientType::Tendermint, 1).unwrap();
+        let client_id =
+            ClientId::new(ClientType::new("01-tendermint".to_string()), 1)
+                .unwrap();
         let connection = ConnectionEnd::new(
             ConnectionState::Open,
             client_id.clone(),
             Counterparty::new(
                 client_id,
                 Some(ConnectionId::new(1)),
-                actions::commitment_prefix(),
+                CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
             ),
             vec![Version::default()],
             std::time::Duration::new(100, 0),
@@ -256,24 +263,14 @@ impl BenchShell {
         let addr_key =
             Key::from(Address::Internal(InternalAddress::Ibc).to_db_key());
 
-        let path = IbcPath::Connections(ConnectionsPath(ConnectionId::new(1)));
-        let connection_key =
-            addr_key.join(&Key::parse(path.to_string()).unwrap());
-
+        let connection_key = connection_key(&ConnectionId::new(1));
         self.wl_storage
             .storage
             .write(&connection_key, connection.encode_vec().unwrap())
             .unwrap();
 
         // Set port
-        let path = Key::parse(
-            IbcPath::Ports(namada::ibc::core::ics24_host::path::PortsPath(
-                PortId::transfer(),
-            ))
-            .to_string(),
-        )
-        .unwrap();
-        let port_key = addr_key.join(&path);
+        let port_key = port_key(&PortId::transfer());
 
         let index_key = addr_key
             .join(&Key::from("capabilities/index".to_string().to_db_key()));
@@ -302,20 +299,21 @@ impl BenchShell {
             Order::Unordered,
             counterparty,
             vec![ConnectionId::new(1)],
-            ChannelVersion::ics20(),
+            ChannelVersion::new("ics20-1".to_string()),
         );
-        let path = IbcPath::ChannelEnds(ChannelEndsPath(
-            PortId::transfer(),
+        let channel_key = channel_key(&PortChannelId::new(
             ChannelId::new(5),
+            PortId::transfer(),
         ));
-        let channel_key = addr_key.join(&Key::parse(path.to_string()).unwrap());
         self.wl_storage
             .storage
             .write(&channel_key, channel.encode_vec().unwrap())
             .unwrap();
 
         // Set client state
-        let client_id = ClientId::new(ClientType::Tendermint, 1).unwrap();
+        let client_id =
+            ClientId::new(ClientType::new("01-tendermint".to_string()), 1)
+                .unwrap();
         let client_state_key = addr_key.join(&Key::from(
             IbcPath::ClientState(
                 namada::ibc::core::ics24_host::path::ClientStatePath(
@@ -331,21 +329,23 @@ impl BenchShell {
             std::time::Duration::new(1, 0),
             std::time::Duration::new(2, 0),
             std::time::Duration::new(1, 0),
-            IbcHeight::new(0, 1),
+            IbcHeight::new(0, 1).unwrap(),
             ProofSpecs::cosmos(),
             vec![],
             AllowUpdate {
                 after_expiry: true,
                 after_misbehaviour: true,
             },
+            None,
         )
         .unwrap();
-        let bytes = AnyClientState::Tendermint(client_state)
-            .encode_vec()
-            .expect("encoding failed");
         self.wl_storage
             .storage
-            .write(&client_state_key, bytes)
+            .write(
+                &client_state_key,
+                <ClientState as Protobuf<Any>>::encode_vec(&client_state)
+                    .unwrap(),
+            )
             .expect("write failed");
 
         // Set consensus state
@@ -369,12 +369,13 @@ impl BenchShell {
             next_validators_hash: Hash::Sha256([0u8; 32]),
         };
 
-        let bytes = AnyConsensusState::Tendermint(consensus_state)
-            .encode_vec()
-            .unwrap();
         self.wl_storage
             .storage
-            .write(&consensus_key, bytes)
+            .write(
+                &consensus_key,
+                <ConsensusState as Protobuf<Any>>::encode_vec(&consensus_state)
+                    .unwrap(),
+            )
             .unwrap();
     }
 }
@@ -415,25 +416,27 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
 }
 
 pub fn generate_ibc_transfer_tx() -> Tx {
-    let token = Some(Coin {
+    let token = Coin {
         denom: address::nam().to_string(),
         amount: Amount::whole(1000).to_string(),
-    });
+    };
 
-    let timeout_height = IbcHeight::new(0, 100);
+    let timeout_height = TimeoutHeight::At(IbcHeight::new(0, 100).unwrap());
 
     let now: namada::tendermint::Time = DateTimeUtc::now().try_into().unwrap();
     let now: IbcTimestamp = now.into();
     let timeout_timestamp = (now + std::time::Duration::new(3600, 0)).unwrap();
 
     let msg = MsgTransfer {
-        source_port: PortId::transfer(),
-        source_channel: ChannelId::new(5),
+        port_id_on_a: PortId::transfer(),
+        chan_id_on_a: ChannelId::new(5),
         token,
-        sender: Signer::new(defaults::albert_address()),
-        receiver: Signer::new(defaults::bertha_address()),
-        timeout_height,
-        timeout_timestamp,
+        sender: Signer::from_str(&defaults::albert_address().to_string())
+            .unwrap(),
+        receiver: Signer::from_str(&defaults::bertha_address().to_string())
+            .unwrap(),
+        timeout_height_on_b: timeout_height,
+        timeout_timestamp_on_b: timeout_timestamp,
     };
     let any_msg = msg.to_any();
     let mut data = vec![];

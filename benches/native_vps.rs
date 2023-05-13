@@ -1,17 +1,16 @@
 use std::collections::BTreeSet;
+use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use namada::core::ledger::ibc::actions;
 use namada::core::types::address::{self, Address};
 use namada::ibc::core::ics02_client::client_type::ClientType;
 use namada::ibc::core::ics03_connection::connection::Counterparty;
 use namada::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
 use namada::ibc::core::ics03_connection::version::Version;
-use namada::ibc::core::ics04_channel::channel::{
-    ChannelEnd, Counterparty as ChannelCounterparty, Order, State,
-};
+use namada::ibc::core::ics04_channel::channel::Order;
 use namada::ibc::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
 use namada::ibc::core::ics04_channel::Version as ChannelVersion;
+use namada::ibc::core::ics23_commitment::commitment::CommitmentPrefix;
 use namada::ibc::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortId,
 };
@@ -190,15 +189,13 @@ fn governance(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    governance
-                        .validate_tx(
-                            signed_tx.data.as_ref().unwrap(),
-                            governance.ctx.keys_changed,
-                            governance.ctx.verifiers,
-                        )
-                        .unwrap()
-                )
+                assert!(governance
+                    .validate_tx(
+                        signed_tx.data.as_ref().unwrap(),
+                        governance.ctx.keys_changed,
+                        governance.ctx.verifiers,
+                    )
+                    .unwrap())
             })
         });
     }
@@ -257,15 +254,13 @@ fn slash_fund(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    slash_fund
-                        .validate_tx(
-                            tx.data.as_ref().unwrap(),
-                            slash_fund.ctx.keys_changed,
-                            slash_fund.ctx.verifiers,
-                        )
-                        .unwrap()
-                )
+                assert!(slash_fund
+                    .validate_tx(
+                        tx.data.as_ref().unwrap(),
+                        slash_fund.ctx.keys_changed,
+                        slash_fund.ctx.verifiers,
+                    )
+                    .unwrap())
             })
         });
     }
@@ -276,20 +271,22 @@ fn slash_fund(c: &mut Criterion) {
 fn ibc(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_ibc");
 
-    let foreign_key_write =
-        generate_foreign_key_tx(&defaults::albert_keypair());
-
     // Connection handshake
     let msg = MsgConnectionOpenInit {
-        client_id: ClientId::new(ClientType::Tendermint, 1).unwrap(),
+        client_id_on_a: ClientId::new(
+            ClientType::new("01-tendermint".to_string()),
+            1,
+        )
+        .unwrap(),
         counterparty: Counterparty::new(
-            ClientId::new(ClientType::Tendermint, 1).unwrap(),
+            ClientId::from_str(&"01-tendermint-1").unwrap(),
             Some(ConnectionId::new(1)),
-            actions::commitment_prefix(),
+            CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
         ),
         version: Some(Version::default()),
         delay_period: std::time::Duration::new(100, 0),
-        signer: Signer::new(defaults::albert_address()),
+        signer: Signer::from_str(&defaults::albert_address().to_string())
+            .unwrap(),
     };
     let any_msg = msg.to_any();
     let mut data = vec![];
@@ -306,19 +303,14 @@ fn ibc(c: &mut Criterion) {
     .sign(&defaults::albert_keypair());
 
     // Channel handshake
-    let counterparty =
-        ChannelCounterparty::new(PortId::transfer(), Some(ChannelId::new(5)));
-    let channel = ChannelEnd::new(
-        State::Init,
-        Order::Unordered,
-        counterparty,
-        vec![ConnectionId::new(1)],
-        ChannelVersion::ics20(),
-    );
     let msg = MsgChannelOpenInit {
-        port_id: PortId::transfer(),
-        channel,
-        signer: Signer::new(defaults::albert_address()),
+        port_id_on_a: PortId::transfer(),
+        connection_hops_on_a: vec![ConnectionId::new(1)],
+        port_id_on_b: PortId::transfer(),
+        ordering: Order::Unordered,
+        signer: Signer::from_str(&defaults::albert_address().to_string())
+            .unwrap(),
+        version_proposal: ChannelVersion::new("ics20-1".to_string()),
     };
 
     let any_msg = msg.to_any();
@@ -338,19 +330,11 @@ fn ibc(c: &mut Criterion) {
     // Ibc transfer
     let outgoing_transfer = generate_ibc_transfer_tx();
 
-    for (signed_tx, bench_name) in [
-        foreign_key_write,
-        open_connection,
-        open_channel,
-        outgoing_transfer,
-    ]
-    .iter()
-    .zip([
-        "foreign_key_write",
-        "open_connection",
-        "open_channel",
-        "outgoing_transfer",
-    ]) {
+    for (signed_tx, bench_name) in
+        [open_connection, open_channel, outgoing_transfer]
+            .iter()
+            .zip(["open_connection", "open_channel", "outgoing_transfer"])
+    {
         let mut shell = BenchShell::default();
         shell.init_ibc_channel();
 
@@ -376,14 +360,13 @@ fn ibc(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    ibc.validate_tx(
+                assert!(ibc
+                    .validate_tx(
                         signed_tx.data.as_ref().unwrap(),
                         ibc.ctx.keys_changed,
                         ibc.ctx.verifiers,
                     )
-                    .unwrap()
-                )
+                    .unwrap())
             })
         });
     }
@@ -436,14 +419,13 @@ fn ibc_token(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    ibc.validate_tx(
+                assert!(ibc
+                    .validate_tx(
                         signed_tx.data.as_ref().unwrap(),
                         ibc.ctx.keys_changed,
                         ibc.ctx.verifiers,
                     )
-                    .unwrap()
-                )
+                    .unwrap())
             })
         });
     }

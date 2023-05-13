@@ -39,12 +39,15 @@ path = "host_env.rs"
 [dependencies]
 async-trait = "0.1.51"
 borsh = "0.9.0"
-ferveo-common = { git = "https://github.com/anoma/ferveo" }
+ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
+ibc-relayer = { version = "0.22.0", default-features = false }
+ibc-relayer-types = { version = "0.22.0", default-features = false }
+ibc-proto = { version = "0.26.0", default-features = false }
 masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
 namada = { path = "../shared" }
 namada_apps = { path = "../apps" }
 namada_test_utils = { path = "../test_utils" }
-prost = "0.9.0"
+prost = "0.11.6"
 rand = "0.8"
 rand_core = "0.6"
 rust_decimal = "1.26.1" 

@@ -10,8 +10,10 @@ use namada::proof_of_stake;
 use namada::proto::Tx;
 use namada::types::chain::ChainId;
 use namada::types::governance::{ProposalVote, VoteType};
+use namada::types::hash::Hash;
 use namada::types::key::{ed25519, secp256k1};
 use namada::types::masp::{TransferSource, TransferTarget};
+use namada::types::storage::Key;
 use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
 };
@@ -26,7 +28,7 @@ use namada_benches::{
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
     TX_BOND_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_INIT_PROPOSAL_WASM,
     TX_REVEAL_PK_WASM, TX_UNBOND_WASM, TX_UPDATE_VP_WASM,
-    TX_VOTE_PROPOSAL_WASM, WASM_DIR,
+    TX_VOTE_PROPOSAL_WASM, VP_VALIDATOR_WASM, WASM_DIR,
 };
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -294,14 +296,15 @@ fn reveal_pk(c: &mut Criterion) {
 }
 
 fn update_vp(c: &mut Criterion) {
+    let shell = BenchShell::default();
+    let vp_code_hash: Hash = shell
+        .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
+        .unwrap();
     let signed_tx = generate_tx(
         TX_UPDATE_VP_WASM,
         UpdateVp {
             addr: defaults::albert_address(),
-            vp_code: wasm_loader::read_wasm_or_exit(
-                WASM_DIR,
-                "vp_validator.wasm",
-            ),
+            vp_code_hash,
         },
         &defaults::albert_keypair(),
     );
@@ -322,13 +325,17 @@ fn init_account(c: &mut Criterion) {
             .try_to_sk()
             .unwrap();
 
+    let shell = BenchShell::default();
+    let vp_code_hash: Hash = shell
+        .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
+        .unwrap();
     let signed_tx = generate_tx(
         TX_INIT_ACCOUNT_WASM,
         InitAccount {
             public_key: new_account.to_public(),
-            vp_code: wasm_loader::read_wasm_or_exit(WASM_DIR, "vp_user.wasm"),
+            vp_code_hash,
         },
-        &new_account,
+        &defaults::albert_keypair(),
     );
 
     c.bench_function("init_account", |b| {
@@ -475,6 +482,10 @@ fn init_validator(c: &mut Criterion) {
     .public()
     .into();
 
+    let shell = BenchShell::default();
+    let validator_vp_code_hash: Hash = shell
+        .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
+        .unwrap();
     let signed_tx = generate_tx(
         TX_INIT_VALIDATOR_WASM,
         InitValidator {
@@ -484,10 +495,7 @@ fn init_validator(c: &mut Criterion) {
             dkg_key,
             commission_rate: Decimal::default(),
             max_commission_rate_change: Decimal::default(),
-            validator_vp_code: wasm_loader::read_wasm_or_exit(
-                WASM_DIR,
-                "vp_validator.wasm",
-            ),
+            validator_vp_code_hash,
         },
         &defaults::albert_keypair(),
     );
