@@ -350,7 +350,7 @@ impl Config {
 }
 
 pub fn get_default_namada_folder() -> PathBuf {
-    if let Some(project_dir) = ProjectDirs::from("", "", "namada") {
+    if let Some(project_dir) = ProjectDirs::from("", "", "Namada") {
         project_dir.data_dir().to_path_buf()
     } else {
         DEFAULT_BASE_DIR.into()
