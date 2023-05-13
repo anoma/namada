@@ -2221,10 +2221,8 @@ pub mod args {
                 max_commission_rate_change: self.max_commission_rate_change,
                 validator_vp_code_path: ctx
                     .read_wasm(self.validator_vp_code_path),
-                expiration: self.expiration,
                 unsafe_dont_encrypt: self.unsafe_dont_encrypt,
                 tx_code_path: ctx.read_wasm(self.tx_code_path),
-                chain_id: self.chain_id,
             }
         }
     }
@@ -2243,10 +2241,8 @@ pub mod args {
             let validator_vp_code_path = VALIDATOR_CODE_PATH
                 .parse(matches)
                 .unwrap_or_else(|| PathBuf::from(VP_USER_WASM));
-            let expiration = EXPIRATION_OPT.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_INIT_VALIDATOR_WASM);
-            let chain_id = CHAIN_ID.parse(matches);
             Self {
                 tx,
                 source,
@@ -2257,10 +2253,8 @@ pub mod args {
                 commission_rate,
                 max_commission_rate_change,
                 validator_vp_code_path,
-                expiration,
                 unsafe_dont_encrypt,
                 tx_code_path,
-                chain_id,
             }
         }
 

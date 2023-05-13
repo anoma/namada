@@ -163,10 +163,6 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     pub max_commission_rate_change: Decimal,
     /// Path to the VP WASM code file
     pub validator_vp_code_path: C::Data,
-    /// The optional expiration of the transaction
-    pub expiration: Option<DateTimeUtc>,
-    /// The chain id for which the transaction is intended
-    pub chain_id: ChainId,
     /// Path to the TX WASM code file
     pub tx_code_path: C::Data,
     /// Don't encrypt the keypair

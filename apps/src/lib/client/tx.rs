@@ -92,10 +92,9 @@ pub async fn submit_init_validator<
         validator_vp_code_path,
         unsafe_dont_encrypt,
         tx_code_path,
-        chain_id,
-        expiration,
     }: args::TxInitValidator,
 ) {
+    let tx_args = args::Tx {chain_id: tx_args.clone().chain_id.or_else(|| Some(ctx.config.ledger.chain_id.clone())), ..tx_args.clone()};
     let alias = tx_args
         .initialized_account_alias
         .as_ref()
@@ -194,7 +193,7 @@ pub async fn submit_init_validator<
     let tx = Tx::new(
         tx_code_hash.to_vec(),
         Some(data),
-        chain_id,
+        tx_args.chain_id.clone().unwrap(),
         tx_args.expiration,
     );
     let (mut ctx, result) = process_tx(
