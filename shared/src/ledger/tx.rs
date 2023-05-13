@@ -289,7 +289,7 @@ pub async fn submit_reveal_pk_aux<
     let tx = Tx::new(
         tx_code,
         Some(tx_data),
-        args.chain_id.clone(),
+        args.chain_id.clone().expect("value should be there"),
         args.expiration,
     );
 
@@ -583,7 +583,7 @@ pub async fn submit_validator_commission_change<
     };
     let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
 
-    let chain_id = args.tx.chain_id.clone();
+    let chain_id = args.tx.chain_id.clone().unwrap();
     let expiration = args.tx.expiration;
 
     let tx = Tx::new(tx_code, Some(data), chain_id, expiration);
@@ -646,7 +646,7 @@ pub async fn submit_withdraw<
     let data = pos::Withdraw { validator, source };
     let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
 
-    let chain_id = args.tx.chain_id.clone();
+    let chain_id = args.tx.chain_id.clone().unwrap();
     let expiration = args.tx.expiration;
 
     let tx = Tx::new(tx_code, Some(data), chain_id, expiration);
@@ -717,7 +717,7 @@ pub async fn submit_unbond<
     };
     let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
 
-    let chain_id = args.tx.chain_id.clone();
+    let chain_id = args.tx.chain_id.clone().unwrap();
     let expiration = args.tx.expiration;
 
     let tx = Tx::new(tx_code, Some(data), chain_id, expiration);
@@ -827,7 +827,7 @@ pub async fn submit_bond<
     };
     let data = bond.try_to_vec().map_err(Error::EncodeTxFailure)?;
 
-    let chain_id = args.tx.chain_id.clone();
+    let chain_id = args.tx.chain_id.clone().unwrap();
     let expiration = args.tx.expiration;
 
     let tx = Tx::new(tx_code, Some(data), chain_id, expiration);
@@ -961,7 +961,7 @@ pub async fn submit_ibc_transfer<
     prost::Message::encode(&any_msg, &mut data)
         .map_err(Error::EncodeFailure)?;
 
-    let chain_id = args.tx.chain_id.clone();
+    let chain_id = args.tx.chain_id.clone().unwrap();
     let expiration = args.tx.expiration;
 
     let tx = Tx::new(tx_code, Some(data), chain_id, expiration);
@@ -1103,7 +1103,7 @@ pub async fn submit_transfer<
     tracing::debug!("Transfer data {:?}", transfer);
     let data = transfer.try_to_vec().map_err(Error::EncodeTxFailure)?;
 
-    let chain_id = args.tx.chain_id.clone();
+    let chain_id = args.tx.chain_id.clone().unwrap();
     let expiration = args.tx.expiration;
 
     #[cfg(not(feature = "mainnet"))]
@@ -1147,7 +1147,7 @@ pub async fn submit_init_account<
         vp_code_hash,
     };
     let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
-    let chain_id = args.tx.chain_id.clone();
+    let chain_id = args.tx.chain_id.clone().unwrap();
     let expiration = args.tx.expiration;
     let tx = Tx::new(tx_code, Some(data), chain_id, expiration);
     // TODO Move unwrap to an either
@@ -1229,7 +1229,7 @@ pub async fn submit_update_vp<
     let data = UpdateVp { addr, vp_code_hash };
     let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
 
-    let chain_id = args.tx.chain_id.clone();
+    let chain_id = args.tx.chain_id.clone().unwrap();
     let expiration = args.tx.expiration;
 
     let tx = Tx::new(tx_code_hash.to_vec(), Some(data), chain_id, expiration);
@@ -1257,7 +1257,7 @@ pub async fn submit_custom<
 ) -> Result<(), Error> {
     let tx_code = args.code_path;
     let data = args.data_path;
-    let chain_id = args.tx.chain_id.clone();
+    let chain_id = args.tx.chain_id.clone().unwrap();
     let expiration = args.tx.expiration;
     let tx = Tx::new(tx_code, data, chain_id, expiration);
     let initialized_accounts = process_tx::<C, U>(

@@ -256,7 +256,7 @@ pub async fn sign_wrapper<C: crate::ledger::queries::Client + Sync>(
     let decrypted_hash = tx.tx_hash.to_string();
     TxBroadcastData::Wrapper {
         tx: tx
-            .sign(keypair, args.chain_id.clone(), args.expiration)
+            .sign(keypair, args.chain_id.clone().unwrap(), args.expiration)
             .expect("Wrapper tx signing keypair should be correct"),
         wrapper_hash,
         decrypted_hash,

@@ -3226,7 +3226,7 @@ pub mod args {
             let signing_key = SIGNING_KEY_OPT.parse(matches);
             let signer = SIGNER.parse(matches);
             let tx_code_path = PathBuf::from(TX_REVEAL_PK);
-            let chain_id = CHAIN_ID.parse(matches);
+            let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;
             Self {
                 dry_run,

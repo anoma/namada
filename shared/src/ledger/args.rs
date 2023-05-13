@@ -394,7 +394,7 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// The optional expiration of the transaction
     pub expiration: Option<DateTimeUtc>,
     /// The chain id for which the transaction is intended
-    pub chain_id: ChainId,
+    pub chain_id: Option<ChainId>,
     /// Sign the tx with the key for the given alias from your wallet
     pub signing_key: Option<C::Keypair>,
     /// Sign the tx with the keypair of the public key of the given address
