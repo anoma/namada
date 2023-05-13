@@ -412,6 +412,7 @@ impl Test {
     }
 
     pub fn get_base_dir(&self, who: &Who) -> PathBuf {
+        let default_namada_folder = config::get_default_namada_folder();
         match who {
             Who::NonValidator => self.test_dir.path().to_owned(),
             Who::Validator(index) => self
@@ -420,7 +421,7 @@ impl Test {
                 .join(self.net.chain_id.as_str())
                 .join(utils::NET_ACCOUNTS_DIR)
                 .join(format!("validator-{}", index))
-                .join(config::DEFAULT_BASE_DIR),
+                .join(default_namada_folder),
         }
     }
 }
@@ -888,11 +889,12 @@ pub fn copy_wasm_to_chain_dir<'a>(
     }
 
     // Copy the built WASM files from "wasm" directory to each validator dir
+    let default_namada_folder = config::get_default_namada_folder();
     for validator_name in genesis_validator_keys {
         let target_wasm_dir = chain_dir
             .join(utils::NET_ACCOUNTS_DIR)
             .join(validator_name)
-            .join(config::DEFAULT_BASE_DIR)
+            .join(default_namada_folder.clone())
             .join(chain_id.as_str())
             .join(config::DEFAULT_WASM_DIR);
         for file in &wasm_files {

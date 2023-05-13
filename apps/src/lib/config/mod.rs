@@ -20,8 +20,6 @@ use crate::cli;
 use crate::facade::tendermint::Timeout;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
-/// Base directory contains global config and chain directories.
-pub const DEFAULT_BASE_DIR: &str = ".namada";
 /// Default WASM dir.
 pub const DEFAULT_WASM_DIR: &str = "wasm";
 /// The WASM checksums file contains the hashes of built WASMs. It is inside the
@@ -353,7 +351,10 @@ pub fn get_default_namada_folder() -> PathBuf {
     if let Some(project_dir) = ProjectDirs::from("com", "heliax", "namada") {
         project_dir.data_dir().to_path_buf()
     } else {
-        DEFAULT_BASE_DIR.into()
+        // In extremis, default to the old behavior of simply using the path
+        // ".namada" as the base directory. This will only occur in
+        // pathological situations where no user home directory exists.
+        ".namada".into()
     }
 }
 
