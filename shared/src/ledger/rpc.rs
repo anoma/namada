@@ -437,7 +437,7 @@ pub async fn dry_run_tx<C: crate::ledger::queries::Client + Sync>(
         RPC.shell().dry_run_tx(client, data, height, prove).await,
     )
     .data;
-    println!{"Dry-run result: {}", result};
+    println! {"Dry-run result: {}", result};
     result
 }
 

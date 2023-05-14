@@ -244,7 +244,9 @@ fn make_client_state(test: &Test, height: Height) -> TmClientState {
     let key = param_storage::get_epoch_duration_storage_key();
     let epoch_duration = Runtime::new()
         .unwrap()
-        .block_on(query_storage_value::<HttpClient, EpochDuration>(&client, &key))
+        .block_on(query_storage_value::<HttpClient, EpochDuration>(
+            &client, &key,
+        ))
         .unwrap();
     let unbonding_period = pipeline_len * epoch_duration.min_duration.0;
 

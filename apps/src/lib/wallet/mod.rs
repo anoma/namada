@@ -54,7 +54,10 @@ impl WalletUtils for CliWalletUtils {
         alias.trim().to_owned()
     }
 
-    fn show_overwrite_confirmation(alias: &Alias, alias_for: &str) -> ConfirmationResponse {
+    fn show_overwrite_confirmation(
+        alias: &Alias,
+        alias_for: &str,
+    ) -> ConfirmationResponse {
         ConfirmationResponse::Replace
     }
     // The given alias has been selected but conflicts with another alias in
@@ -65,8 +68,8 @@ impl WalletUtils for CliWalletUtils {
     //     alias_for: &str,
     // ) -> ConfirmationResponse {
     //     print!(
-    //         "You're trying to create an alias \"{}\" that already exists for \
-    //          {} in your store.\nWould you like to replace it? \
+    //         "You're trying to create an alias \"{}\" that already exists for
+    // \          {} in your store.\nWould you like to replace it? \
     //          s(k)ip/re(p)lace/re(s)elect: ",
     //         alias, alias_for
     //     );

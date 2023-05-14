@@ -11,7 +11,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER_PERMISSIVE;
 use masp_proofs::prover::LocalTxProver;
 use namada::ledger::governance::storage as gov_storage;
-use namada::ledger::masp::{ShieldedUtils, ShieldedContext};
+use namada::ledger::masp::{ShieldedContext, ShieldedUtils};
 use namada::ledger::rpc::{TxBroadcastData, TxResponse};
 use namada::ledger::signing::TxSigningKey;
 use namada::ledger::wallet::{Wallet, WalletUtils};
@@ -34,44 +34,45 @@ use tendermint_rpc::HttpClient;
 use super::rpc;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
-use crate::client::rpc::{
-    query_wasm_code_hash,
-};
+use crate::client::rpc::query_wasm_code_hash;
 use crate::client::signing::find_keypair;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::node::ledger::tendermint_node;
 use crate::wallet::{gen_validator_keys, read_and_confirm_pwd, CliWalletUtils};
 
-pub async fn submit_custom<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn submit_custom<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     mut args: args::TxCustom,
 ) -> Result<(), tx::Error> {
-    args.tx.chain_id = args.tx.chain_id.or_else(|| Some(ctx.config.ledger.chain_id.clone()));
+    args.tx.chain_id = args
+        .tx
+        .chain_id
+        .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
     tx::submit_custom::<C, _>(client, &mut ctx.wallet, args).await
 }
 
-pub async fn submit_update_vp<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn submit_update_vp<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     mut args: args::TxUpdateVp,
 ) -> Result<(), tx::Error> {
-    args.tx.chain_id = args.tx.chain_id.or_else(|| Some(ctx.config.ledger.chain_id.clone()));
+    args.tx.chain_id = args
+        .tx
+        .chain_id
+        .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
     tx::submit_update_vp::<C, _>(client, &mut ctx.wallet, args).await
 }
 
-pub async fn submit_init_account<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn submit_init_account<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     mut args: args::TxInitAccount,
 ) -> Result<(), tx::Error> {
-    args.tx.chain_id = args.tx.chain_id.or_else(|| Some(ctx.config.ledger.chain_id.clone()));
+    args.tx.chain_id = args
+        .tx
+        .chain_id
+        .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
     tx::submit_init_account::<C, _>(client, &mut ctx.wallet, args).await
 }
 
@@ -94,7 +95,13 @@ pub async fn submit_init_validator<
         tx_code_path,
     }: args::TxInitValidator,
 ) {
-    let tx_args = args::Tx {chain_id: tx_args.clone().chain_id.or_else(|| Some(ctx.config.ledger.chain_id.clone())), ..tx_args.clone()};
+    let tx_args = args::Tx {
+        chain_id: tx_args
+            .clone()
+            .chain_id
+            .or_else(|| Some(ctx.config.ledger.chain_id.clone())),
+        ..tx_args.clone()
+    };
     let alias = tx_args
         .initialized_account_alias
         .as_ref()
@@ -205,11 +212,11 @@ pub async fn submit_init_validator<
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-    .await.expect("expected process_tx to work");
+    .await
+    .expect("expected process_tx to work");
 
     if !tx_args.dry_run {
-        let (validator_address_alias, validator_address) = match &result[..]
-        {
+        let (validator_address_alias, validator_address) = match &result[..] {
             // There should be 1 account for the validator itself
             [validator_address] => {
                 let validator_address_alias = match tx_args
@@ -252,7 +259,8 @@ pub async fn submit_init_validator<
             }
         };
         // add validator address and keys to the wallet
-        ctx.wallet.add_validator_data(validator_address, validator_keys);
+        ctx.wallet
+            .add_validator_data(validator_address, validator_keys);
         crate::wallet::save(&ctx.wallet)
             .unwrap_or_else(|err| eprintln!("{}", err));
 
@@ -387,19 +395,23 @@ pub async fn submit_transfer(
     mut ctx: Context,
     mut args: args::TxTransfer,
 ) -> Result<(), tx::Error> {
-    args.tx.chain_id = args.tx.chain_id.or_else(|| Some(ctx.config.ledger.chain_id.clone()));
+    args.tx.chain_id = args
+        .tx
+        .chain_id
+        .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
     tx::submit_transfer(client, &mut ctx.wallet, &mut ctx.shielded, args).await
 }
 
-pub async fn submit_ibc_transfer<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn submit_ibc_transfer<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     mut args: args::TxIbcTransfer,
 ) -> Result<(), tx::Error> {
-    args.tx.chain_id = args.tx.chain_id.or_else(|| Some(ctx.config.ledger.chain_id.clone()));
-    tx::submit_ibc_transfer::<C,_>(client, &mut ctx.wallet, args).await
+    args.tx.chain_id = args
+        .tx
+        .chain_id
+        .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
+    tx::submit_ibc_transfer::<C, _>(client, &mut ctx.wallet, args).await
 }
 
 pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
@@ -407,7 +419,10 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
     mut ctx: Context,
     mut args: args::InitProposal,
 ) -> Result<(), tx::Error> {
-    args.tx.chain_id = args.tx.chain_id.or_else(|| Some(ctx.config.ledger.chain_id.clone()));
+    args.tx.chain_id = args
+        .tx
+        .chain_id
+        .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
     let file = File::open(&args.proposal_data).expect("File must exist.");
     let proposal: Proposal =
         serde_json::from_reader(file).expect("JSON was not well-formatted");
@@ -533,12 +548,9 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
         let data = init_proposal_data
             .try_to_vec()
             .expect("Encoding proposal data shouldn't fail");
-        let tx_code_hash = query_wasm_code_hash(
-            client,
-            args::TX_INIT_PROPOSAL,
-        )
-        .await
-        .unwrap();
+        let tx_code_hash = query_wasm_code_hash(client, args::TX_INIT_PROPOSAL)
+            .await
+            .unwrap();
         let tx = Tx::new(
             tx_code_hash.to_vec(),
             Some(data),
@@ -560,14 +572,15 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
     }
 }
 
-pub async fn submit_vote_proposal<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     mut args: args::VoteProposal,
 ) -> Result<(), tx::Error> {
-    args.tx.chain_id = args.tx.chain_id.or_else(|| Some(ctx.config.ledger.chain_id.clone()));
+    args.tx.chain_id = args
+        .tx
+        .chain_id
+        .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
     let signer = if let Some(addr) = &args.tx.signer {
         addr
     } else {
@@ -650,7 +663,9 @@ pub async fn submit_vote_proposal<
             safe_exit(1)
         }
 
-        let signing_key = find_keypair::<C, CliWalletUtils>(client, &mut ctx.wallet, signer).await?;
+        let signing_key =
+            find_keypair::<C, CliWalletUtils>(client, &mut ctx.wallet, signer)
+                .await?;
         let offline_vote = OfflineVote::new(
             &proposal,
             proposal_vote,
@@ -691,15 +706,14 @@ pub async fn submit_vote_proposal<
 
         // Check vote type and memo
         let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
-        let proposal_type: ProposalType =
-            rpc::query_storage_value::<C, ProposalType>(client, &proposal_type_key)
-                .await
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Didn't find type of proposal id {} in storage",
-                        proposal_id
-                    )
-                });
+        let proposal_type: ProposalType = rpc::query_storage_value::<
+            C,
+            ProposalType,
+        >(client, &proposal_type_key)
+        .await
+        .unwrap_or_else(|| {
+            panic!("Didn't find type of proposal id {} in storage", proposal_id)
+        });
 
         if let ProposalVote::Yay(ref vote_type) = proposal_vote {
             if &proposal_type != vote_type {
@@ -812,27 +826,33 @@ pub async fn submit_vote_proposal<
     }
 }
 
-pub async fn submit_reveal_pk<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn submit_reveal_pk<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     mut args: args::RevealPk,
 ) -> Result<(), tx::Error> {
-    args.tx.chain_id = args.tx.chain_id.or_else(|| Some(ctx.config.ledger.chain_id.clone()));
+    args.tx.chain_id = args
+        .tx
+        .chain_id
+        .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
     tx::submit_reveal_pk::<C, _>(client, &mut ctx.wallet, args).await
 }
 
-pub async fn reveal_pk_if_needed<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn reveal_pk_if_needed<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     public_key: &common::PublicKey,
     args: &args::Tx,
 ) -> Result<bool, tx::Error> {
-    let args = args::Tx {chain_id: args.clone().chain_id.or_else(|| Some(ctx.config.ledger.chain_id.clone())), ..args.clone()};
-    tx::reveal_pk_if_needed::<C, _>(client, &mut ctx.wallet, public_key, &args).await
+    let args = args::Tx {
+        chain_id: args
+            .clone()
+            .chain_id
+            .or_else(|| Some(ctx.config.ledger.chain_id.clone())),
+        ..args.clone()
+    };
+    tx::reveal_pk_if_needed::<C, _>(client, &mut ctx.wallet, public_key, &args)
+        .await
 }
 
 pub async fn has_revealed_pk<C: namada::ledger::queries::Client + Sync>(
@@ -842,16 +862,21 @@ pub async fn has_revealed_pk<C: namada::ledger::queries::Client + Sync>(
     tx::has_revealed_pk(client, addr).await
 }
 
-pub async fn submit_reveal_pk_aux<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn submit_reveal_pk_aux<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     public_key: &common::PublicKey,
     args: &args::Tx,
 ) -> Result<(), tx::Error> {
-    let args = args::Tx {chain_id: args.clone().chain_id.or_else(|| Some(ctx.config.ledger.chain_id.clone())), ..args.clone()};
-    tx::submit_reveal_pk_aux::<C, _>(client, &mut ctx.wallet, public_key, &args).await
+    let args = args::Tx {
+        chain_id: args
+            .clone()
+            .chain_id
+            .or_else(|| Some(ctx.config.ledger.chain_id.clone())),
+        ..args.clone()
+    };
+    tx::submit_reveal_pk_aux::<C, _>(client, &mut ctx.wallet, public_key, &args)
+        .await
 }
 
 /// Check if current epoch is in the last third of the voting period of the
@@ -904,36 +929,39 @@ async fn filter_delegations<C: namada::ledger::queries::Client + Sync>(
     delegations.into_iter().flatten().collect()
 }
 
-pub async fn submit_bond<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn submit_bond<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     mut args: args::Bond,
 ) -> Result<(), tx::Error> {
-    args.tx.chain_id = args.tx.chain_id.or_else(|| Some(ctx.config.ledger.chain_id.clone()));
+    args.tx.chain_id = args
+        .tx
+        .chain_id
+        .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
     tx::submit_bond::<C, _>(client, &mut ctx.wallet, args).await
 }
 
-pub async fn submit_unbond<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn submit_unbond<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     mut args: args::Unbond,
 ) -> Result<(), tx::Error> {
-    args.tx.chain_id = args.tx.chain_id.or_else(|| Some(ctx.config.ledger.chain_id.clone()));
+    args.tx.chain_id = args
+        .tx
+        .chain_id
+        .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
     tx::submit_unbond::<C, _>(client, &mut ctx.wallet, args).await
 }
 
-pub async fn submit_withdraw<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn submit_withdraw<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     mut args: args::Withdraw,
 ) -> Result<(), tx::Error> {
-    args.tx.chain_id = args.tx.chain_id.or_else(|| Some(ctx.config.ledger.chain_id.clone()));
+    args.tx.chain_id = args
+        .tx
+        .chain_id
+        .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
     tx::submit_withdraw::<C, _>(client, &mut ctx.wallet, args).await
 }
 
@@ -944,8 +972,16 @@ pub async fn submit_validator_commission_change<
     mut ctx: Context,
     mut args: args::TxCommissionRateChange,
 ) -> Result<(), tx::Error> {
-    args.tx.chain_id = args.tx.chain_id.or_else(|| Some(ctx.config.ledger.chain_id.clone()));
-    tx::submit_validator_commission_change::<C, _>(client, &mut ctx.wallet, args).await
+    args.tx.chain_id = args
+        .tx
+        .chain_id
+        .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
+    tx::submit_validator_commission_change::<C, _>(
+        client,
+        &mut ctx.wallet,
+        args,
+    )
+    .await
 }
 
 /// Capture the result of running a transaction
@@ -970,9 +1006,7 @@ impl ProcessTxResponse {
 
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
-async fn process_tx<
-    C: namada::ledger::queries::Client + Sync,
->(
+async fn process_tx<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     args: &args::Tx,
@@ -980,19 +1014,21 @@ async fn process_tx<
     default_signer: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<(Context, Vec<Address>), tx::Error> {
-    let args = args::Tx {chain_id: args.clone().chain_id.or_else(|| Some(tx.chain_id.clone())), ..args.clone()};
-    let res: Vec<Address> =
-        tx::process_tx::<C, _>(
-            client,
-            &mut ctx.wallet,
-            &args,
-            tx,
-            default_signer,
-            #[cfg(not(feature = "mainnet"))]
-            requires_pow,
-        )
-        .await?;
-     Ok((ctx, res))
+    let args = args::Tx {
+        chain_id: args.clone().chain_id.or_else(|| Some(tx.chain_id.clone())),
+        ..args.clone()
+    };
+    let res: Vec<Address> = tx::process_tx::<C, _>(
+        client,
+        &mut ctx.wallet,
+        &args,
+        tx,
+        default_signer,
+        #[cfg(not(feature = "mainnet"))]
+        requires_pow,
+    )
+    .await?;
+    Ok((ctx, res))
 }
 
 /// Save accounts initialized from a tx into the wallet, if any.

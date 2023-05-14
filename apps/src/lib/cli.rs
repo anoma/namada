@@ -1662,6 +1662,7 @@ pub mod args {
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
     use rust_decimal::Decimal;
+
     use super::context::*;
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
@@ -2167,7 +2168,13 @@ pub mod args {
                 tx: self.tx.to_sdk(ctx),
                 source: ctx.get(&self.source),
                 vp_code: ctx.read_wasm(self.vp_code),
-                vp_code_path: self.vp_code_path.as_path().to_str().unwrap().to_string().into_bytes(),
+                vp_code_path: self
+                    .vp_code_path
+                    .as_path()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+                    .into_bytes(),
                 tx_code_path: ctx.read_wasm(self.tx_code_path),
                 public_key: ctx.get_cached(&self.public_key),
             }
@@ -2222,8 +2229,13 @@ pub mod args {
                 protocol_key: self.protocol_key.map(|x| ctx.get_cached(&x)),
                 commission_rate: self.commission_rate,
                 max_commission_rate_change: self.max_commission_rate_change,
-                validator_vp_code_path:
-                self.validator_vp_code_path.as_path().to_str().unwrap().to_string().into_bytes(),
+                validator_vp_code_path: self
+                    .validator_vp_code_path
+                    .as_path()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+                    .into_bytes(),
                 unsafe_dont_encrypt: self.unsafe_dont_encrypt,
                 tx_code_path: ctx.read_wasm(self.tx_code_path),
             }
@@ -2309,8 +2321,20 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> TxUpdateVp<SdkTypes> {
             TxUpdateVp::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                vp_code_path: self.vp_code_path.as_path().to_str().unwrap().to_string().into_bytes(),
-                tx_code_path: self.tx_code_path.as_path().to_str().unwrap().to_string().into_bytes(),
+                vp_code_path: self
+                    .vp_code_path
+                    .as_path()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+                    .into_bytes(),
+                tx_code_path: self
+                    .tx_code_path
+                    .as_path()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+                    .into_bytes(),
                 addr: ctx.get(&self.addr),
             }
         }

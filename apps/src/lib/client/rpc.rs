@@ -1248,9 +1248,7 @@ pub async fn query_withdrawable_tokens<
 }
 
 /// Query PoS bond(s) and unbond(s)
-pub async fn query_bonds<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn query_bonds<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
     args: args::QueryBonds,
@@ -1480,9 +1478,7 @@ pub async fn query_and_print_commission_rate<
 }
 
 /// Query PoS slashes
-pub async fn query_slashes<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn query_slashes<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
     args: args::QuerySlashes,
@@ -1547,9 +1543,7 @@ pub async fn query_slashes<
     }
 }
 
-pub async fn query_delegations<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn query_delegations<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
     args: args::QueryDelegations,
@@ -1622,9 +1616,7 @@ pub async fn known_address<C: namada::ledger::queries::Client + Sync>(
 }
 
 /// Query for all conversions.
-pub async fn query_conversions<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn query_conversions<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
     args: args::QueryConversions,
