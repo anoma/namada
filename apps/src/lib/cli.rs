@@ -2166,7 +2166,8 @@ pub mod args {
             TxInitAccount::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 source: ctx.get(&self.source),
-                vp_code_path: ctx.read_wasm(self.vp_code_path),
+                vp_code: ctx.read_wasm(self.vp_code),
+                vp_code_path: self.vp_code_path.as_path().to_str().unwrap().to_string().into_bytes(),
                 tx_code_path: ctx.read_wasm(self.tx_code_path),
                 public_key: ctx.get_cached(&self.public_key),
             }
@@ -2180,11 +2181,13 @@ pub mod args {
             let vp_code_path = CODE_PATH_OPT
                 .parse(matches)
                 .unwrap_or_else(|| PathBuf::from(VP_USER_WASM));
+            let vp_code = vp_code_path.clone();
             let tx_code_path = PathBuf::from(TX_INIT_ACCOUNT_WASM);
             let public_key = PUBLIC_KEY.parse(matches);
             Self {
                 tx,
                 source,
+                vp_code,
                 vp_code_path,
                 public_key,
                 tx_code_path,

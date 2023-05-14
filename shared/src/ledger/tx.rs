@@ -1134,10 +1134,10 @@ pub async fn submit_init_account<
     args: args::TxInitAccount,
 ) -> Result<(), Error> {
     let public_key = args.public_key;
-    let vp_code = args.vp_code_path;
+    let vp_code = args.vp_code;
     // Validate the VP code
     validate_untrusted_code_err(&vp_code, args.tx.force)?;
-    let vp_code_path = String::from_utf8(vp_code).unwrap();
+    let vp_code_path = String::from_utf8(args.vp_code_path).unwrap();
     let vp_code_hash =
         query_wasm_code_hash(client, vp_code_path).await.unwrap();
 

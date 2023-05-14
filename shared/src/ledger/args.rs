@@ -134,6 +134,8 @@ pub struct TxInitAccount<C: NamadaTypes = SdkTypes> {
     pub tx: Tx<C>,
     /// Address of the source account
     pub source: C::Address,
+    /// Wasm VP for the new account
+    pub vp_code: C::Data,
     /// Path to the VP WASM code file for the new account
     pub vp_code_path: C::Data,
     /// Path to the TX WASM code file
