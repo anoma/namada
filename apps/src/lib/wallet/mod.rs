@@ -55,8 +55,8 @@ impl WalletUtils for CliWalletUtils {
     }
 
     fn show_overwrite_confirmation(
-        alias: &Alias,
-        alias_for: &str,
+        _alias: &Alias,
+        _alias_for: &str,
     ) -> ConfirmationResponse {
         ConfirmationResponse::Replace
     }

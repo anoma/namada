@@ -10,7 +10,6 @@ use namada_apps::client::{rpc, tx, utils};
 use namada_apps::facade::tendermint::block::Height;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient};
-use namada_apps::wallet::CliWalletUtils;
 use tokio::time::sleep;
 
 pub async fn main() -> Result<()> {

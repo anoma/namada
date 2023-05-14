@@ -1696,7 +1696,7 @@ pub mod args {
         "base-dir",
         DefaultFn(|| match env::var("NAMADA_BASE_DIR") {
             Ok(dir) => PathBuf::from(dir),
-            Err(_) => PathBuf::from(config::get_default_namada_folder()),
+            Err(_) => config::get_default_namada_folder(),
         }),
     );
     pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
