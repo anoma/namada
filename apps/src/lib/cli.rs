@@ -2219,8 +2219,8 @@ pub mod args {
                 protocol_key: self.protocol_key.map(|x| ctx.get_cached(&x)),
                 commission_rate: self.commission_rate,
                 max_commission_rate_change: self.max_commission_rate_change,
-                validator_vp_code_path: ctx
-                    .read_wasm(self.validator_vp_code_path),
+                validator_vp_code_path:
+                self.validator_vp_code_path.as_path().to_str().unwrap().to_string().into_bytes(),
                 unsafe_dont_encrypt: self.unsafe_dont_encrypt,
                 tx_code_path: ctx.read_wasm(self.tx_code_path),
             }
