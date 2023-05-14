@@ -984,26 +984,6 @@ pub async fn submit_validator_commission_change<
     .await
 }
 
-/// Capture the result of running a transaction
-enum ProcessTxResponse {
-    /// Result of submitting a transaction to the blockchain
-    Applied(TxResponse),
-    /// Result of submitting a transaction to the mempool
-    Broadcast(Response),
-    /// Result of dry running transaction
-    DryRun,
-}
-
-impl ProcessTxResponse {
-    /// Get the the accounts that were reported to be initialized
-    fn initialized_accounts(&self) -> Vec<Address> {
-        match self {
-            Self::Applied(result) => result.initialized_accounts.clone(),
-            _ => vec![],
-        }
-    }
-}
-
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
 async fn process_tx<C: namada::ledger::queries::Client + Sync>(
