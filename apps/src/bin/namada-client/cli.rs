@@ -207,7 +207,9 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.query.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    rpc::query_bonds(&client, &mut ctx.wallet, args).await;
+                    rpc::query_bonds(&client, &mut ctx.wallet, args)
+                        .await
+                        .expect("expected successful query of bonds");
                 }
                 Sub::QueryBondedStake(QueryBondedStake(args)) => {
                     wait_until_node_is_synched(&args.query.ledger_address)
