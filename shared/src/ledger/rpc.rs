@@ -433,10 +433,12 @@ pub async fn dry_run_tx<C: crate::ledger::queries::Client + Sync>(
     tx_bytes: Vec<u8>,
 ) -> namada_core::types::transaction::TxResult {
     let (data, height, prove) = (Some(tx_bytes), None, false);
-    unwrap_client_response::<C, _>(
+    let result = unwrap_client_response::<C, _>(
         RPC.shell().dry_run_tx(client, data, height, prove).await,
     )
-    .data
+    .data;
+    println!{"Dry-run result: {}", result};
+    result
 }
 
 /// Data needed for broadcasting a tx and
