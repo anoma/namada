@@ -2306,8 +2306,8 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> TxUpdateVp<SdkTypes> {
             TxUpdateVp::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                vp_code_path: ctx.read_wasm(self.vp_code_path),
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                vp_code_path: self.vp_code_path.as_path().to_str().unwrap().to_string().into_bytes(),
+                tx_code_path: self.tx_code_path.as_path().to_str().unwrap().to_string().into_bytes(),
                 addr: ctx.get(&self.addr),
             }
         }
