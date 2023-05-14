@@ -58,6 +58,7 @@ pub async fn join_network(
     use tokio::fs;
 
     let base_dir = global_args.base_dir;
+    let default_namada_folder = crate::config::get_default_namada_folder();
 
     // If the base-dir doesn't exist yet, create it
     if let Err(err) = fs::canonicalize(&base_dir).await {
@@ -151,7 +152,7 @@ pub async fn join_network(
     // first.
     let cwd = env::current_dir().unwrap();
     let (unpack_dir, non_default_dir) =
-        if base_dir_full != cwd.join(config::DEFAULT_BASE_DIR) {
+        if base_dir_full != cwd.join(default_namada_folder.clone()) {
             (base_dir.clone(), true)
         } else {
             (PathBuf::from_str(".").unwrap(), false)
@@ -170,7 +171,7 @@ pub async fn join_network(
             fs::rename(
                 &wasm_dir,
                 unpack_dir
-                    .join(config::DEFAULT_BASE_DIR)
+                    .join(default_namada_folder.clone())
                     .join(chain_id.as_str())
                     .join(config::DEFAULT_WASM_DIR),
             )
@@ -181,7 +182,7 @@ pub async fn join_network(
         // Move the chain dir
         fs::rename(
             unpack_dir
-                .join(config::DEFAULT_BASE_DIR)
+                .join(default_namada_folder.clone())
                 .join(chain_id.as_str()),
             &chain_dir,
         )
@@ -191,7 +192,7 @@ pub async fn join_network(
         // Move the genesis file
         fs::rename(
             unpack_dir
-                .join(config::DEFAULT_BASE_DIR)
+                .join(default_namada_folder.clone())
                 .join(format!("{}.toml", chain_id.as_str())),
             base_dir_full.join(format!("{}.toml", chain_id.as_str())),
         )
@@ -201,7 +202,7 @@ pub async fn join_network(
         // Move the global config
         fs::rename(
             unpack_dir
-                .join(config::DEFAULT_BASE_DIR)
+                .join(default_namada_folder.clone())
                 .join(config::global::FILENAME),
             base_dir_full.join(config::global::FILENAME),
         )
@@ -209,7 +210,7 @@ pub async fn join_network(
         .unwrap();
 
         // Remove the default dir
-        fs::remove_dir_all(unpack_dir.join(config::DEFAULT_BASE_DIR))
+        fs::remove_dir_all(unpack_dir.join(default_namada_folder.clone()))
             .await
             .unwrap();
     }
@@ -416,6 +417,8 @@ pub fn init_network(
 ) {
     let mut config = genesis_config::open_genesis_config(genesis_path).unwrap();
 
+    let default_namada_folder = crate::config::get_default_namada_folder();
+
     // Update the WASM checksums
     let checksums =
         wasm_loader::Checksums::read_checksums_file(&wasm_checksums_path);
@@ -440,8 +443,7 @@ pub fn init_network(
     // The `temp_chain_id` gets renamed after we have chain ID
     let accounts_dir = temp_dir.join(NET_ACCOUNTS_DIR);
     // Base dir used in account sub-directories
-    let accounts_temp_dir =
-        PathBuf::from(config::DEFAULT_BASE_DIR).join(temp_chain_id.as_str());
+    let accounts_temp_dir = default_namada_folder.join(temp_chain_id.as_str());
 
     let mut rng: ThreadRng = thread_rng();
 
@@ -680,7 +682,7 @@ pub fn init_network(
             .join(chain_id.as_str())
             .join(NET_ACCOUNTS_DIR)
             .join(name)
-            .join(config::DEFAULT_BASE_DIR);
+            .join(default_namada_folder.clone());
         let temp_validator_chain_dir =
             validator_dir.join(temp_chain_id.as_str());
         let validator_chain_dir = validator_dir.join(chain_id.as_str());
@@ -715,7 +717,7 @@ pub fn init_network(
         |(ix, (name, validator_config))| {
             let accounts_dir = chain_dir.join(NET_ACCOUNTS_DIR);
             let validator_dir =
-                accounts_dir.join(name).join(config::DEFAULT_BASE_DIR);
+                accounts_dir.join(name).join(default_namada_folder.clone());
             let mut config = Config::load(
                 &validator_dir,
                 &chain_id,
@@ -729,7 +731,7 @@ pub fn init_network(
             // parameter. We need to remove this prefix, because
             // these sub-directories will be moved to validators' root
             // directories.
-            config.ledger.shell.base_dir = config::DEFAULT_BASE_DIR.into();
+            config.ledger.shell.base_dir = default_namada_folder.clone();
             // Add a ledger P2P persistent peers
             config.ledger.tendermint.p2p_persistent_peers = persistent_peers
                     .iter()
@@ -807,14 +809,14 @@ pub fn init_network(
     // Create a release tarball for anoma-network-config
     if !dont_archive {
         let mut release = tar::Builder::new(Vec::new());
-        let release_genesis_path = PathBuf::from(config::DEFAULT_BASE_DIR)
-            .join(format!("{}.toml", chain_id.as_str()));
+        let release_genesis_path =
+            default_namada_folder.join(format!("{}.toml", chain_id.as_str()));
         release
             .append_path_with_name(genesis_path, release_genesis_path)
             .unwrap();
         let global_config_path = GlobalConfig::file_path(&global_args.base_dir);
         let release_global_config_path =
-            GlobalConfig::file_path(config::DEFAULT_BASE_DIR);
+            GlobalConfig::file_path(default_namada_folder.clone());
         release
             .append_path_with_name(
                 global_config_path,
@@ -824,15 +826,14 @@ pub fn init_network(
         let chain_config_path =
             Config::file_path(&global_args.base_dir, &chain_id);
         let release_chain_config_path =
-            Config::file_path(config::DEFAULT_BASE_DIR, &chain_id);
+            Config::file_path(default_namada_folder.clone(), &chain_id);
         release
             .append_path_with_name(chain_config_path, release_chain_config_path)
             .unwrap();
-        let release_wasm_checksums_path =
-            PathBuf::from(config::DEFAULT_BASE_DIR)
-                .join(chain_id.as_str())
-                .join(config::DEFAULT_WASM_DIR)
-                .join(config::DEFAULT_WASM_CHECKSUMS_FILE);
+        let release_wasm_checksums_path = default_namada_folder
+            .join(chain_id.as_str())
+            .join(config::DEFAULT_WASM_DIR)
+            .join(config::DEFAULT_WASM_CHECKSUMS_FILE);
         release
             .append_path_with_name(
                 &wasm_checksums_path,
