@@ -744,6 +744,7 @@ pub async fn query_commission_rate<C: crate::ledger::queries::Client + Sync>(
     )
 }
 
+/// Query a validator's bonds for a given epoch
 pub async fn query_bond<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     source: &Address,
@@ -755,6 +756,7 @@ pub async fn query_bond<C: crate::ledger::queries::Client + Sync>(
     )
 }
 
+/// Query a validator's unbonds for a given epoch
 pub async fn query_and_print_unbonds<
     C: crate::ledger::queries::Client + Sync,
 >(
@@ -790,6 +792,7 @@ pub async fn query_and_print_unbonds<
     }
 }
 
+/// Query withdrawable tokens in a validator account for a given epoch
 pub async fn query_withdrawable_tokens<
     C: crate::ledger::queries::Client + Sync,
 >(
@@ -806,6 +809,7 @@ pub async fn query_withdrawable_tokens<
     )
 }
 
+/// Query all unbonds for a validator, applying slashes
 pub async fn query_unbond_with_slashing<
     C: crate::ledger::queries::Client + Sync,
 >(
