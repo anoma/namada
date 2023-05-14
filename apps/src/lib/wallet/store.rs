@@ -3,15 +3,12 @@ use std::io::prelude::*;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-
 use ark_std::rand::prelude::*;
 use ark_std::rand::SeedableRng;
 use file_lock::{FileLock, FileOptions};
-
 #[cfg(feature = "dev")]
 use namada::ledger::wallet::StoredKeypair;
 use namada::ledger::wallet::{gen_sk, Store, ValidatorKeys};
-
 use namada::types::key::*;
 use namada::types::transaction::EllipticCurve;
 use thiserror::Error;
