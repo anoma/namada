@@ -85,7 +85,7 @@ pub async fn query_block<C: namada::ledger::queries::Client + Sync>(
 /// Query the results of the last committed block
 pub async fn query_results<C: namada::ledger::queries::Client + Sync>(
     client: &C,
-    _args: args::Query,
+    args: args::Query,
 ) -> Vec<BlockResults> {
     unwrap_client_response::<C, Vec<BlockResults>>(
         RPC.shell().read_results(client).await,
@@ -414,7 +414,7 @@ pub async fn query_pinned_balance<
                 // Extract and print only the specified token from the total
                 let (_asset_type, balance) =
                     value_by_address(&balance, token.clone(), epoch);
-                let token_alias = lookup_alias(wallet, token);
+                let token_alias = lookup_alias(wallet, &token);
                 if balance == 0 {
                     println!(
                         "Payment address {} was consumed during epoch {}. \
@@ -1250,7 +1250,7 @@ pub async fn query_withdrawable_tokens<
 /// Query PoS bond(s) and unbond(s)
 pub async fn query_bonds<C: namada::ledger::queries::Client + Sync>(
     client: &C,
-    _wallet: &mut Wallet<CliWalletUtils>,
+    wallet: &mut Wallet<CliWalletUtils>,
     args: args::QueryBonds,
 ) -> std::io::Result<()> {
     let _epoch = query_and_print_epoch(client).await;
@@ -1448,7 +1448,7 @@ pub async fn query_and_print_commission_rate<
     C: namada::ledger::queries::Client + Sync,
 >(
     client: &C,
-    _wallet: &mut Wallet<CliWalletUtils>,
+    wallet: &mut Wallet<CliWalletUtils>,
     args: args::QueryCommissionRate,
 ) {
     let validator = args.validator;
@@ -1480,7 +1480,7 @@ pub async fn query_and_print_commission_rate<
 /// Query PoS slashes
 pub async fn query_slashes<C: namada::ledger::queries::Client + Sync>(
     client: &C,
-    _wallet: &mut Wallet<CliWalletUtils>,
+    wallet: &mut Wallet<CliWalletUtils>,
     args: args::QuerySlashes,
 ) {
     let params_key = pos::params_key();
@@ -1545,7 +1545,7 @@ pub async fn query_slashes<C: namada::ledger::queries::Client + Sync>(
 
 pub async fn query_delegations<C: namada::ledger::queries::Client + Sync>(
     client: &C,
-    _wallet: &mut Wallet<CliWalletUtils>,
+    wallet: &mut Wallet<CliWalletUtils>,
     args: args::QueryDelegations,
 ) {
     let owner = args.owner;

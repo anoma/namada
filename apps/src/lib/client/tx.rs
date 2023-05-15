@@ -11,6 +11,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER_PERMISSIVE;
 use masp_proofs::prover::LocalTxProver;
 use namada::ledger::governance::storage as gov_storage;
+use namada::ledger::masp::{ShieldedContext, ShieldedUtils};
 use namada::ledger::rpc::{TxBroadcastData, TxResponse};
 use namada::ledger::signing::TxSigningKey;
 use namada::ledger::wallet::{Wallet, WalletUtils};
@@ -91,7 +92,7 @@ pub async fn submit_init_validator<
         max_commission_rate_change,
         validator_vp_code_path,
         unsafe_dont_encrypt,
-        tx_code_path: _,
+        tx_code_path,
     }: args::TxInitValidator,
 ) {
     let tx_args = args::Tx {
