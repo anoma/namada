@@ -138,7 +138,7 @@ pub fn add_genesis_addresses(
     genesis: GenesisConfig,
 ) {
     for (alias, addr) in defaults::addresses_from_genesis(genesis) {
-        wallet.add_address(alias.normalize(), addr);
+        wallet.add_address(alias.normalize(), addr, true);
     }
 }
 

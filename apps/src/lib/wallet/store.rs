@@ -116,7 +116,7 @@ pub fn add_genesis_addresses(store: &mut Store, genesis: GenesisConfig) {
     for (alias, addr) in
         super::defaults::addresses_from_genesis(genesis.clone())
     {
-        store.insert_address::<CliWalletUtils>(alias, addr);
+        store.insert_address::<CliWalletUtils>(alias, addr, true);
     }
     for (alias, token) in &genesis.token {
         if let Some(address) = token.address.as_ref() {
@@ -152,10 +152,11 @@ fn new() -> Store {
             alias,
             StoredKeypair::new(keypair, no_password.clone()).0,
             pkh,
+            true,
         );
     }
     for (alias, addr) in super::defaults::addresses() {
-        store.insert_address::<CliWalletUtils>(alias, addr);
+        store.insert_address::<CliWalletUtils>(alias, addr, true);
     }
     store
 }
