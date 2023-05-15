@@ -13,7 +13,8 @@ If you find a bug, please submit an issue with the `bug` [issue template](https:
 
 ## How to join a Namada testnet
   1. [Environment setup](./environment-setup.md)
-  2. [Pre-genesis validator](./pre-genesis-validator.md)
+  2. [Pre-genesis validator setup](./genesis-validator-setup.md)
+  3. [Pre-genesis validator apply](./genesis-validator-apply.md)
   3. [Running your genesis validator](./run-your-genesis-validator.md)
   4. [Running a full node](./running-a-full-node.md)
   5. [Becoming a validator post-genesis](./post-genesis-validator.md)
@@ -25,14 +26,26 @@ The Namada public testnet is permissionless, anyone can join without the authori
 
 
 ## Latest Testnet
-- Namada public testnet 6 (offline):
+- Namada public testnet 8:
+  - From date: 17th of May 2023 17.00 UTC 
+  - Namada protocol version: `v0.15.3` 
+  - Tendermint (Core) version: `v0.1.4-abciplus`
+  - CHAIN_ID: `TBD`
+
+
+## Testnet History Timeline
+- Namada public testnet 7:
+  - From date: 24th of April 2023 17.00 UTC 
+  - Namada protocol version: `v0.15.1` 
+  - Tendermint (Core) version: `v0.1.4-abciplus`
+  - CHAIN_ID: `public-testnet-7.0.3c5a38dc983`
+
+- Namada public testnet 6:
   - From date: 29th of March 2023 17.00 UTC 
   - Namada protocol version: `v0.14.3` 
   - Tendermint (Core) version: `v0.1.4-abciplus`
   - CHAIN_ID: `public-testnet-6.0.a0266444b06`
 
-
-## Testnet History Timeline
 
 - Namada public testnet 5:
   - From date: 15th of March 2023  

@@ -4,7 +4,7 @@ A genesis validator is one which is a validator right from the first block of th
 
 ### Prerequisites
 
-- a machine that meets the [requirements](./install.md#hardware-requirements) for running a validator node
+- a machine that meets the [requirements](../user-guide/install/hardware.md) for running a validator node
 - an associated public IPv4 address with ports 26656 reachable from anywhere for P2P connections
 
 ## Pre-genesis
@@ -13,65 +13,51 @@ To setup all the [required keys](#required-keys) for a genesis validator for an 
 
 You must also provide a static `{IP:port}` to the `--net-address` argument of your future node's P2P address.
 
-```shell
-export ALIAS="1337-validator"
-namada client utils init-genesis-validator \
-    --alias $ALIAS \
-    --net-address 1.2.3.4:26656
+### 1. Create your validator keys:
+``` bash
+export ALIAS="CHOOSE_A_NAME_FOR_YOUR_VALIDATOR"
+export PUBLIC_IP="LAPTOP_OR_SERVER_IP"
+namada client utils init-genesis-validator --alias $ALIAS \
+--max-commission-rate-change 0.01 --commission-rate 0.05 \
+--net-address $PUBLIC_IP:26656
 ```
 
-After generating your keys, the command will print something like this:
+### 2. After generating your keys, the command will print something like this:
 
-- Linux 
-```shell
-Pre-genesis TOML written to /home/$USER/.config/com.heliax.namada
-```
-- MacOS
-```shell
-Pre-genesis TOML written to /Users/$USER/Library/Application\ Support/com.heliax.namada
+```admonish note
+If you have set the variable $XDG_DATA_HOME this is where the pre-genesis TOML will be written to. Otherwise see below for the default locations.
 ```
 
-Save this directory as an environment variable for later use:
-
-- Linux 
+#### Linux 
 ```shell
-export BASE_DIR="/home/$USER/.config/com.heliax.namada"
+Pre-genesis TOML written to $HOME/.local/share/namada
 ```
-- MacOS
+#### MacOS
 ```shell
-export BASE_DIR="/Users/$USER/Library/Application\ Support/com.heliax.namada"
+Pre-genesis TOML written to /Users/$USER/Library/Application\ Support/Namada
+```
+
+### 3. Save this directory as an environment variable for later use:
+
+#### Linux 
+```shell
+export BASE_DIR="$HOME/.local/share/namada"
+```
+#### MacOS
+```shell
+export BASE_DIR="/Users/$USER/Library/Application\ Support/Namada"
 ```
 
 This file is the public configuration of your validator. You can safely share this file with the network's organizer, who is responsible for setting up and publishing the finalized genesis file and Namada configuration for the chain.
 
 Note that the wallet containing your private keys will also be written into this directory.
 
-## After network config release
+### 4. You can print the validator.toml by running: 
 
-Once the network is finalized, a new chain ID will be created and released on [anoma-network-config/releases](https://github.com/heliaxdev/namada-network-config/releases) (a custom configs URL can be used instead with `NAMADA_NETWORK_CONFIGS_SERVER` env var). You can use it to setup your genesis validator node for the `--chain-id` argument in the command below.
-
-```shell
-export CHAIN_ID="TBD"
-namada client utils join-network \
-    --chain-id $CHAIN_ID \
-    --genesis-validator $ALIAS
-```
-
-This command will use your pre-genesis wallet for the given chain and take care of setting up Namada with Tendermint.
-
-If you run this command in the same directory that you ran `namada client utils init-genesis-validator`, it should find the pre-genesis wallet for you, otherwise you can pass the path to the pre-genesis directory using `--pre-genesis-path`. e.g.
-
-```shell
-namada client utils join-network \
-    --chain-id $CHAIN_ID \
-    --pre-genesis-path $BASE_DIR/pre-genesis/$ALIAS
-```
-
-Once setup, you can start the ledger as usual with e.g.:
-
-```shell
-namada ledger
-```
+### Linux 
+`cat $HOME/.local/share/namada/pre-genesis/$ALIAS/validator.toml`
+### MacOS 
+`cat $HOME/Library/Application\ Support/Namada/pre-genesis/$ALIAS/validator.toml`
 
 ## Required keys
 
