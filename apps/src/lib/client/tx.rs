@@ -1404,8 +1404,7 @@ impl<P1>
     fn map_params(&self, _s: P1) {}
 
     fn map_key(&self, s: ExtendedSpendingKey) -> ExtendedFullViewingKey {
-        #[allow(deprecated)]
-        s.to_extended_full_viewing_key()
+        (&s).into()
     }
 }
 

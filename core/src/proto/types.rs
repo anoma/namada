@@ -258,26 +258,28 @@ pub struct Ciphertext {
 }
 
 impl Ciphertext {
-    /// Make a ciphertext section based on the given section. Note that this
+    /// Make a ciphertext section based on the given sections. Note that this
     /// encryption is not idempotent
     #[cfg(feature = "ferveo-tpke")]
-    pub fn new(section: Section, pubkey: &EncryptionKey) -> Self {
+    pub fn new(sections: Vec<Section>, pubkey: &EncryptionKey) -> Self {
         let mut rng = rand::thread_rng();
-        let bytes = section.try_to_vec().expect("unable to serialize section");
+        let bytes = sections
+            .try_to_vec()
+            .expect("unable to serialize sections");
         Self {
             length: bytes.len() as u32,
             ciphertext: tpke::encrypt(&bytes, pubkey.0, &mut rng),
         }
     }
 
-    /// Decrypt this ciphertext back to the original plaintext.
+    /// Decrypt this ciphertext back to the original plaintext sections.
     #[cfg(feature = "ferveo-tpke")]
     pub fn decrypt(
         &self,
         privkey: <EllipticCurve as PairingEngine>::G2Affine,
-    ) -> std::io::Result<Section> {
+    ) -> std::io::Result<Vec<Section>> {
         let bytes = tpke::decrypt(&self.ciphertext, privkey);
-        Section::try_from_slice(&bytes)
+        Vec::<Section>::try_from_slice(&bytes)
     }
 
     /// Get the hash of this ciphertext section. This operation is done in such
@@ -952,10 +954,15 @@ impl Tx {
         &mut self,
         privkey: <EllipticCurve as PairingEngine>::G2Affine,
     ) -> std::result::Result<(), WrapperTxErr> {
-        for section in &mut self.sections {
-            if let Section::Ciphertext(ct) = section {
-                *section =
-                    ct.decrypt(privkey).map_err(|_| WrapperTxErr::InvalidTx)?;
+        // Iterate backwrds to sidestep the effects of deletion on indexing
+        for i in (0..self.sections.len()).rev() {
+            if let Section::Ciphertext(ct) = &self.sections[i] {
+                // Add all the deecrypted sections
+                self.sections.extend(
+                    ct.decrypt(privkey).map_err(|_| WrapperTxErr::InvalidTx)?
+                );
+                // Remove the original ciphertext
+                self.sections.remove(i);
             }
         }
         self.data().ok_or(WrapperTxErr::DecryptedHash)?;
@@ -969,17 +976,20 @@ impl Tx {
     #[cfg(feature = "ferveo-tpke")]
     pub fn encrypt(&mut self, pubkey: &EncryptionKey) {
         let header_hash = self.header_hash();
-        for section in &mut self.sections {
-            match section {
+        let mut plaintexts = vec![];
+        // Iterate backwrds to sidestep the effects of deletion on indexing
+        for i in (0..self.sections.len()).rev() {
+            match &self.sections[i] {
                 Section::Signature(sig) if sig.target == header_hash => {}
-                _ => {
-                    *section = Section::Ciphertext(Ciphertext::new(
-                        section.clone(),
-                        pubkey,
-                    ))
-                }
+                // Add eligible section to the list of sections to encrypt
+                _ => plaintexts.push(self.sections.remove(i)),
             }
         }
+        // Encrypt all eligible sections in one go
+        self.sections.push(Section::Ciphertext(Ciphertext::new(
+            plaintexts,
+            pubkey,
+        )));
     }
 
     /// Determines the type of the input Tx
@@ -1234,8 +1244,9 @@ mod tests {
         let pubkey = EncryptionKey(<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator());
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
         // generate encrypted payload
-        let plaintext =
-            Section::Data(Data::new("Super secret stuff".as_bytes().to_vec()));
+        let plaintext = vec![
+            Section::Data(Data::new("Super secret stuff".as_bytes().to_vec())),
+        ];
         let encrypted = Ciphertext::new(plaintext.clone(), &pubkey);
         // check that encryption doesn't do trivial things
         assert_ne!(
@@ -1262,8 +1273,9 @@ mod tests {
         let pubkey = EncryptionKey(<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator());
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
         // generate encrypted payload
-        let plaintext =
-            Section::Data(Data::new("Super secret stuff".as_bytes().to_vec()));
+        let plaintext = vec![
+            Section::Data(Data::new("Super secret stuff".as_bytes().to_vec())),
+        ];
         let encrypted = Ciphertext::new(plaintext.clone(), &pubkey);
         // serialize via Borsh
         let borsh = encrypted.try_to_vec().expect("Test failed");
@@ -1291,8 +1303,9 @@ mod tests {
         let pubkey = EncryptionKey(<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator());
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
         // generate encrypted payload
-        let plaintext =
-            Section::Data(Data::new("Super secret stuff".as_bytes().to_vec()));
+        let plaintext = vec![
+            Section::Data(Data::new("Super secret stuff".as_bytes().to_vec())),
+        ];
         let encrypted = Ciphertext::new(plaintext.clone(), &pubkey);
         // serialize via Serde
         let js = serde_json::to_string(&encrypted).expect("Test failed");
