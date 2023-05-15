@@ -46,6 +46,11 @@ where
 /// `namadac`.
 pub fn setup_single_node_test() -> Result<(Test, NamadaBgCmd)> {
     let test = setup::single_node_net()?;
+    run_single_node_test_from(test)
+}
+
+/// Same as [`setup_single_node_test`], but use a pre-existing test directory.
+pub fn run_single_node_test_from(test: Test) -> Result<(Test, NamadaBgCmd)> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
     ledger.exp_string("Namada ledger node started")?;
