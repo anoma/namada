@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::{self, Display};
 use std::ops::{Index, IndexMut};
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
@@ -60,6 +61,25 @@ impl Display for EventType {
             EventType::Proposal => write!(f, "proposal"),
         }?;
         Ok(())
+    }
+}
+
+impl FromStr for EventType {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "accepted" => Ok(EventType::Accepted),
+            "applied" => Ok(EventType::Applied),
+            "proposal" => Ok(EventType::Proposal),
+            // IBC
+            "update_client" => Ok(EventType::Ibc("update_client".to_string())),
+            "send_packet" => Ok(EventType::Ibc("send_packet".to_string())),
+            "write_acknowledgement" => {
+                Ok(EventType::Ibc("write_acknowledgement".to_string()))
+            }
+            _ => Err(Error::InvalidEventType),
+        }
     }
 }
 
@@ -199,6 +219,9 @@ impl Attributes {
 /// Errors to do with emitting events.
 #[derive(Error, Debug)]
 pub enum Error {
+    /// Error when parsing an event type
+    #[error("Invalid event type")]
+    InvalidEventType,
     /// Error when parsing attributes from an event JSON.
     #[error("Json missing `attributes` field")]
     MissingAttributes,
