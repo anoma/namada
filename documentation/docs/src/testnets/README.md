@@ -30,7 +30,7 @@ The Namada public testnet is permissionless, anyone can join without the authori
   - From date: 17th of May 2023 17.00 UTC 
   - Namada protocol version: `v0.15.3` 
   - Tendermint (Core) version: `v0.1.4-abciplus`
-  - CHAIN_ID: `TBD`
+  - CHAIN_ID: `public-testnet-8.0.b92ef72b820`
 
 
 ## Testnet History Timeline
