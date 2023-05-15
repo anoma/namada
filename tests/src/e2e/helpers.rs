@@ -30,18 +30,20 @@ use crate::e2e::setup::{Bin, Who, APPS_PACKAGE};
 use crate::{run, run_as};
 
 /// Instantiate a new [`HttpClient`] to perform RPC requests with.
-pub async fn rpc_client_do<'fut, 'usr: 'fut, B, A, F, R>(
+pub async fn rpc_client_do<'fut, 'usr, U, A, F, R>(
     ledger_address: &str,
-    borrowed_data: &'usr B,
+    user_data: U,
     mut action: A,
 ) -> R
 where
-    A: FnMut(Rpc, HttpClient, &'usr B) -> F,
+    'usr: 'fut,
+    U: 'usr,
+    A: FnMut(Rpc, HttpClient, U) -> F,
     F: Future<Output = R> + 'fut,
 {
     let client =
         HttpClient::new(ledger_address).expect("Invalid ledger address");
-    action(RPC, client, borrowed_data).await
+    action(RPC, client, user_data).await
 }
 
 /// Sets up a test chain with a single validator node running in the background,
