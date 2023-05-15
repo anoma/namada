@@ -206,13 +206,10 @@ where
 
     let empty = vec![];
     let tx_data = tx.data.as_ref().unwrap_or(&empty);
-    // Mock gas meter to ignore runtime gas metering while we
-    // rely on the gas table
-    let mut mock_gas_meter = TxGasMeter::new(u64::MAX);
     wasm::run::tx(
         storage,
         write_log,
-        &mut mock_gas_meter,
+        tx_gas_meter,
         tx_index,
         &tx.code_or_hash,
         tx_data,
