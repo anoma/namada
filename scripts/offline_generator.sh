@@ -3,7 +3,7 @@
 # A script to generate some transaction test vectors. It must be executed at the
 # root of the Namada repository. All MASP transaction types are tested. This
 # script assumes that the WASM scripts have already been built using
-# `make build-wasm-scripts`. Run `./scripts/online_generator` to generate the
+# `make build-wasm-scripts`. Run `./scripts/offline_generator` to generate the
 # test vectors.
 
 NAMADA_DIR="$(pwd)"
