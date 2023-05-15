@@ -21,25 +21,25 @@ mkdir backup-pregenesis && cp -r .namada/pre-genesis backup-pregenesis/
 
 3. Delete ledger base directory 
 
-- Linux: `rm -rf $HOME/.config/namada`
+- Linux: `rm -rf $HOME/.local/share/namada`
 - MacOS: `rm -rf $HOME/Library/Application\ Support/com.heliax.namada`
 
 4. Check that namada and tendermint binaries are correct (see step 1)
 5. Create a base directory for the ledger
-- Linux: `mkdir $HOME/.config/namada`
+- Linux: `mkdir $HOME/.local/share/namada`
 - MacOS: `mkdir $HOME/Library/Application\ Support/com.heliax.namada`
 
 Save the base directory path to a variable
 - Linux:
 ```bash
-export BASE_DIR=$HOME/.config/namada
+export BASE_DIR=$HOME/.local/share/namada
 ```
 - MacOS:
 ```bash
 export BASE_DIR=$HOME/Library/Application\ Support/com.heliax.namada
 ```
 6. Create a pre-genesis directory
-- Linux: `mkdir $HOME/.config/namada/pre-genesis`
+- Linux: `mkdir $HOME/.local/share/namada/pre-genesis`
 - MacOS: `mkdir $HOME/Library/Application\ Support/com.heliax.namada/pre-genesis`
 
 7. Copy the backuped file back to `$BASE_DIR/pre-genesis` folder

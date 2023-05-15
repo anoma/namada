@@ -10,15 +10,15 @@ namada client utils init-genesis-validator --alias $ALIAS \
 --net-address $PUBLIC_IP:26656
 ```
 2. Expect the message:
-- Linux: `Pre-genesis TOML written to /home/[your-username]/.config/namada/pre-genesis/[your-alias]/validator.toml`
+- Linux: `Pre-genesis TOML written to /home/[your-username]/.local/share/namada/pre-genesis/[your-alias]/validator.toml`
 - MacOS: `Pre-genesis TOML written to /Users/[your-username]/Library/Application Support/com.heliax.namada/pre-genesis/[your-alias]/validator.toml`
 
-This will generate a folder inside `$HOME/.config/namada` or `$HOME/Library/Application\ Support/com.heliax.namada` depending on the operating system (OS). The former is based on a linux OS and the latter is based on a MacOS.
+This will generate a folder inside `$HOME/.local/share/namada` or `$HOME/Library/Application\ Support/com.heliax.namada` depending on the operating system (OS). The former is based on a linux OS and the latter is based on a MacOS.
 
 3. You can print the validator.toml by running: 
 
-- Linux `cat $HOME/.config/namada/pre-genesis/$ALIAS/validator.toml`
-- MacOS `cat $HOME/Library/Application\ Support/com.heliax.namada/pre-genesis/$ALIAS/validator.toml`
+- Linux `cat $HOME/.local/share/namada/pre-genesis/$ALIAS/validator.toml`
+- MacOS `cat $HOME/Library/Application\ Support/com.heliax.namada/Namada/pre-genesis/$ALIAS/validator.toml`
 
 
 ## 2.1) Submitting the config
