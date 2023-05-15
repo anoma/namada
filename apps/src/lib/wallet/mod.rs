@@ -54,6 +54,9 @@ impl WalletUtils for CliWalletUtils {
         alias.trim().to_owned()
     }
 
+    // TODO: bring this back. removed in an evil merge change because e2e tests
+    // trigger it non-interactively; we will need to add a `--force` option to
+    // bypass it instead.
     fn show_overwrite_confirmation(
         _alias: &Alias,
         _alias_for: &str,
