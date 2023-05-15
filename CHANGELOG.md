@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## v0.15.3
+
+Namada 0.15.3 is a maintenance release addressing the creation of
+incorrect data directories on Mac and Windows platforms.
+
+### BUG FIXES
+
+- Place the default data directory in the local rather than the roaming profile
+  on Windows. ([#1368](https://github.com/anoma/namada/pull/1368))
+- Use blank qualifier and organization, and upcased Namada, to
+  construct default base directories on Mac and Windows platforms.
+  ([#1369](https://github.com/anoma/namada/pull/1369))
+
 ## v0.15.2
 
 Namada 0.15.2 is a bugfix release containing various fixes, including
