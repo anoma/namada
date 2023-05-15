@@ -18,7 +18,7 @@ export BASE_DIR=$HOME/.local/share/namada
 ```
 - MacOS:
 ```bash
-export BASE_DIR=$HOME/Library/Application\ Support/com.heliax.namada/Namada
+export BASE_DIR=$HOME/Library/Application\ Support/Namada
 ```
 
 The ledger also needs access to the built WASM files that are used in the genesis block. These files are included in release and shouldn't be modified, otherwise your node will fail with a consensus error on the genesis block. By default, these are expected to be in the `wasm` directory inside the chain directory that's in the base directory. This can also be set with the `--wasm-dir` CLI global argument, `NAMADA_WASM_DIR` environment variable or the configuration file.
