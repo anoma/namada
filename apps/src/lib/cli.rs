@@ -2407,7 +2407,7 @@ pub mod args {
         }
     }
 
-    /// A transfer to be added to the Ethereum bridge pool.
+    /// Submit a validator set update protocol tx.
     #[derive(Clone, Debug)]
     pub struct SubmitValidatorSetUpdate {
         /// The query parameters.
