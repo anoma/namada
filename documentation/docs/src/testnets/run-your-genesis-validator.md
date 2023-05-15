@@ -39,12 +39,12 @@ export BASE_DIR=$HOME/.config/namada
 export BASE_DIR=$HOME/Library/Application\ Support/com.heliax.namada
 ```
 6. Create a pre-genesis directory
-- Linux: `mkdir $HOME/.config/namada/pre-genesis`
-- MacOS: `mkdir $HOME/Library/Application\ Support/com.heliax.namada/pre-genesis`
+`mkdir .namada/pre-genesis`
+
 
 7. Copy the backuped file back to `$BASE_DIR/pre-genesis` folder
 ```bash
-cp -r backup-pregenesis/* $BASE_DIR/pre-genesis/
+cp -r backup-pregenesis/* .namada/pre-genesis/
 ```
 
 ## 3.1) Run your node as a genesis validator
