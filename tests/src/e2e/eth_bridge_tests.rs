@@ -1,10 +1,13 @@
 mod helpers;
 
 use std::num::NonZeroU64;
+use std::ops::ControlFlow;
 use std::str::FromStr;
 
+use borsh::BorshDeserialize;
 use color_eyre::eyre::{eyre, Result};
 use namada::eth_bridge::oracle;
+use namada::eth_bridge::storage::vote_tallies;
 use namada::ledger::eth_bridge::{
     ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
     UpgradeableContract,
@@ -12,14 +15,17 @@ use namada::ledger::eth_bridge::{
 use namada::types::address::wnam;
 use namada::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
 use namada::types::ethereum_events::EthAddress;
+use namada::types::storage::Epoch;
 use namada::types::{address, token};
 use namada_apps::config::ethereum_bridge;
+use namada_apps::control_flow::timeouts::SleepStrategy;
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::{
     EthereumEvent, TransferToEthereum, TransferToNamada,
 };
 use namada_core::types::token::Amount;
+use tokio::time::{Duration, Instant};
 
 use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::eth_bridge_tests::helpers::{
@@ -30,6 +36,7 @@ use crate::e2e::eth_bridge_tests::helpers::{
 };
 use crate::e2e::helpers::{
     find_address, find_balance, get_actor_rpc, init_established_account,
+    rpc_client_do, run_single_node_test_from,
 };
 use crate::e2e::setup;
 use crate::e2e::setup::constants::{
@@ -1211,6 +1218,165 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
     assert_eq!(bertha_established_wdai_balance, second_transfer_amount);
 
     // TODO: invalid transfer
+
+    Ok(())
+}
+
+/// Test that manually submitting a validator set update protocol
+/// transaction works.
+#[tokio::test]
+async fn test_submit_validator_set_udpate() -> Result<()> {
+    let (test, bg_ledger) = setup_single_validator_test()?;
+
+    let ledger_addr = get_actor_rpc(&test, &Who::Validator(0));
+    let rpc_addr = format!("http://{ledger_addr}");
+
+    // wait for epoch E > 1 to be installed
+    let instant = Instant::now() + Duration::from_secs(180);
+    SleepStrategy::Constant(Duration::from_millis(500))
+        .timeout(instant, || async {
+            match rpc_client_do(&rpc_addr, &(), |rpc, client, ()| async move {
+                rpc.shell().epoch(&client).await.ok()
+            })
+            .await
+            {
+                Some(epoch) if epoch.0 > 0 => ControlFlow::Break(()),
+                _ => ControlFlow::Continue(()),
+            }
+        })
+        .await?;
+
+    // check that we have a complete proof for E=1
+    let valset_upd_keys = vote_tallies::Keys::from(&Epoch(1));
+    let seen_key = valset_upd_keys.seen();
+    SleepStrategy::Constant(Duration::from_millis(500))
+        .timeout(instant, || async {
+            rpc_client_do(
+                &rpc_addr,
+                &seen_key,
+                |rpc, client, seen_key| async move {
+                    rpc.shell()
+                        .storage_value(&client, None, None, false, seen_key)
+                        .await
+                        .map_or_else(
+                            |_| {
+                                unreachable!(
+                                    "By the end of epoch 0, a proof should be \
+                                     available"
+                                )
+                            },
+                            |rsp| {
+                                let seen =
+                                    bool::try_from_slice(&rsp.data).unwrap();
+                                assert!(
+                                    seen,
+                                    "No valset upd complete proof in storage"
+                                );
+                                ControlFlow::Break(())
+                            },
+                        )
+                },
+            )
+            .await
+        })
+        .await?;
+
+    // shut down ledger
+    let mut ledger = bg_ledger.foreground();
+    ledger.send_control('c')?;
+    ledger.exp_string("Namada ledger node has shut down.")?;
+    ledger.exp_eof()?;
+    drop(ledger);
+
+    // delete the valset upd proof for E=1 from storage
+    for key in &valset_upd_keys {
+        let key = key.to_string();
+        let delete_args =
+            vec!["ledger", "db-delete-value", "--storage-key", &key];
+        let mut delete_cmd =
+            run_as!(test, Who::Validator(0), Bin::Node, delete_args, Some(30))?;
+        delete_cmd
+            .exp_string("Value successfully deleted from the database.")?;
+        drop(delete_cmd);
+    }
+
+    // restart the ledger
+    let (test, _bg_ledger) = run_single_node_test_from(test)?;
+
+    // check that no complete proof is available for E=1 anymore
+    SleepStrategy::Constant(Duration::from_millis(500))
+        .timeout(instant, || async {
+            rpc_client_do(
+                &rpc_addr,
+                &seen_key,
+                |rpc, client, seen_key| async move {
+                    rpc.shell()
+                        .storage_value(&client, None, None, false, seen_key)
+                        .await
+                        .map_or_else(
+                            |_| unreachable!("The RPC does not error out"),
+                            |rsp| {
+                                assert_eq!(
+                                    rsp.info,
+                                    format!(
+                                        "No value found for key: {seen_key}"
+                                    )
+                                );
+                                ControlFlow::Break(())
+                            },
+                        )
+                },
+            )
+            .await
+        })
+        .await?;
+
+    // submit valset upd vote extension protocol tx for E=1
+    let tx_args = vec![
+        "validator-set-update",
+        "--ledger-address",
+        &ledger_addr,
+        "--epoch",
+        "1",
+    ];
+    let mut namadac_tx =
+        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(30))?;
+    namadac_tx.exp_string("Transaction added to mempool")?;
+    drop(namadac_tx);
+
+    // check that a complete proof is once more available for E=1
+    SleepStrategy::Constant(Duration::from_millis(500))
+        .timeout(instant, || async {
+            rpc_client_do(
+                &rpc_addr,
+                &seen_key,
+                |rpc, client, seen_key| async move {
+                    rpc.shell()
+                        .storage_value(&client, None, None, false, seen_key)
+                        .await
+                        .map_or_else(
+                            |_| ControlFlow::Continue(()),
+                            |rsp| {
+                                if rsp
+                                    .info
+                                    .starts_with("No value found for key")
+                                {
+                                    return ControlFlow::Continue(());
+                                }
+                                let seen =
+                                    bool::try_from_slice(&rsp.data).unwrap();
+                                assert!(
+                                    seen,
+                                    "No valset upd complete proof in storage"
+                                );
+                                ControlFlow::Break(())
+                            },
+                        )
+                },
+            )
+            .await
+        })
+        .await?;
 
     Ok(())
 }
