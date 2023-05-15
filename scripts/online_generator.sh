@@ -51,7 +51,7 @@ elif [ "$1" = "server" ]; then
 
     cp $NAMADA_BASE_DIR/setup/other/wallet.toml $NAMADA_BASE_DIR/wallet.toml
 
-    cargo run --bin namada -- --mode validator --base-dir $NAMADA_BASE_DIR/setup/validator-0/.namada/ ledger
+    cargo run --bin namadan -- --mode validator --base-dir $NAMADA_BASE_DIR/setup/validator-0/.namada/ ledger
 elif [ "$1" = "client" ]; then
     echo > $NAMADA_TX_LOG_PATH
 
