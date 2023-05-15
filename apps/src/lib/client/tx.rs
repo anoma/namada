@@ -113,7 +113,7 @@ pub async fn submit_init_validator<
         println!("Generating validator account key...");
         let password = read_and_confirm_pwd(unsafe_dont_encrypt);
         ctx.wallet
-            .gen_key(scheme, Some(validator_key_alias.clone()), password)
+            .gen_key(scheme, Some(validator_key_alias.clone()), password, tx_args.wallet_alias_force)
             .1
             .ref_to()
     });
@@ -135,6 +135,7 @@ pub async fn submit_init_validator<
                     SchemeType::Ed25519,
                     Some(consensus_key_alias.clone()),
                     password,
+                    tx_args.wallet_alias_force,
                 )
                 .1
         });
@@ -243,6 +244,7 @@ pub async fn submit_init_validator<
                 if let Some(new_alias) = ctx.wallet.add_address(
                     validator_address_alias.clone(),
                     validator_address.clone(),
+                    tx_args.wallet_alias_force,
                 ) {
                     println!(
                         "Added alias {} for address {}.",

@@ -383,6 +383,8 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// If any new account is initialized by the tx, use the given alias to
     /// save it in the wallet.
     pub initialized_account_alias: Option<String>,
+    /// Whether to force overwrite the above alias, if it is provided, in the wallet.
+    pub wallet_alias_force: bool,
     /// The amount being payed to include the transaction
     pub fee_amount: token::Amount,
     /// The token in which the fee is being paid
@@ -408,6 +410,8 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
 pub struct MaspAddrKeyAdd {
     /// Key alias
     pub alias: String,
+    /// Whether to force overwrite the alias
+    pub alias_force: bool,
     /// Any MASP value
     pub value: MaspValue,
     /// Don't encrypt the keypair
@@ -419,6 +423,8 @@ pub struct MaspAddrKeyAdd {
 pub struct MaspSpendKeyGen {
     /// Key alias
     pub alias: String,
+    /// Whether to force overwrite the alias
+    pub alias_force: bool,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
 }
@@ -428,6 +434,8 @@ pub struct MaspSpendKeyGen {
 pub struct MaspPayAddrGen<C: NamadaTypes = SdkTypes> {
     /// Key alias
     pub alias: String,
+    /// Whether to force overwrite the alias
+    pub alias_force: bool,
     /// Viewing key
     pub viewing_key: C::ViewingKey,
     /// Pin
@@ -441,6 +449,8 @@ pub struct KeyAndAddressGen {
     pub scheme: SchemeType,
     /// Key alias
     pub alias: Option<String>,
+    /// Whether to force overwrite the alias, if provided
+    pub alias_force: bool,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
 }
@@ -506,6 +516,8 @@ pub struct AddressOrAliasFind {
 pub struct AddressAdd {
     /// Address alias
     pub alias: String,
+    /// Whether to force overwrite the alias
+    pub alias_force: bool,
     /// Address to add
     pub address: Address,
 }

@@ -199,13 +199,14 @@ fn spending_key_gen(
     ctx: Context,
     args::MaspSpendKeyGen {
         alias,
+        alias_force,
         unsafe_dont_encrypt,
     }: args::MaspSpendKeyGen,
 ) {
     let mut wallet = ctx.wallet;
     let alias = alias.to_lowercase();
     let password = read_and_confirm_pwd(unsafe_dont_encrypt);
-    let (alias, _key) = wallet.gen_spending_key(alias, password);
+    let (alias, _key) = wallet.gen_spending_key(alias, password, alias_force);
     namada_apps::wallet::save(&wallet)
         .unwrap_or_else(|err| eprintln!("{}", err));
     println!(
@@ -219,6 +220,7 @@ fn payment_address_gen(
     ctx: Context,
     args::MaspPayAddrGen {
         alias,
+        alias_force,
         viewing_key,
         pin,
     }: args::MaspPayAddrGen,
@@ -234,6 +236,7 @@ fn payment_address_gen(
         .insert_payment_addr(
             alias,
             PaymentAddress::from(payment_addr).pinned(pin),
+            alias_force,
         )
         .unwrap_or_else(|| {
             eprintln!("Payment address not added");
@@ -252,6 +255,7 @@ fn address_key_add(
     mut ctx: Context,
     args::MaspAddrKeyAdd {
         alias,
+        alias_force,
         value,
         unsafe_dont_encrypt,
     }: args::MaspAddrKeyAdd,
@@ -261,7 +265,7 @@ fn address_key_add(
         MaspValue::FullViewingKey(viewing_key) => {
             let alias = ctx
                 .wallet
-                .insert_viewing_key(alias, viewing_key)
+                .insert_viewing_key(alias, viewing_key, alias_force)
                 .unwrap_or_else(|| {
                     eprintln!("Viewing key not added");
                     cli::safe_exit(1);
@@ -272,7 +276,7 @@ fn address_key_add(
             let password = read_and_confirm_pwd(unsafe_dont_encrypt);
             let alias = ctx
                 .wallet
-                .encrypt_insert_spending_key(alias, spending_key, password)
+                .encrypt_insert_spending_key(alias, spending_key, password, alias_force)
                 .unwrap_or_else(|| {
                     eprintln!("Spending key not added");
                     cli::safe_exit(1);
@@ -282,7 +286,7 @@ fn address_key_add(
         MaspValue::PaymentAddress(payment_addr) => {
             let alias = ctx
                 .wallet
-                .insert_payment_addr(alias, payment_addr)
+                .insert_payment_addr(alias, payment_addr, alias_force)
                 .unwrap_or_else(|| {
                     eprintln!("Payment address not added");
                     cli::safe_exit(1);
@@ -305,12 +309,13 @@ fn key_and_address_gen(
     args::KeyAndAddressGen {
         scheme,
         alias,
+        alias_force,
         unsafe_dont_encrypt,
     }: args::KeyAndAddressGen,
 ) {
     let mut wallet = ctx.wallet;
     let password = read_and_confirm_pwd(unsafe_dont_encrypt);
-    let (alias, _key) = wallet.gen_key(scheme, alias, password);
+    let (alias, _key) = wallet.gen_key(scheme, alias, password, alias_force);
     namada_apps::wallet::save(&wallet)
         .unwrap_or_else(|err| eprintln!("{}", err));
     println!(
@@ -487,7 +492,7 @@ fn address_or_alias_find(ctx: Context, args: args::AddressOrAliasFind) {
 fn address_add(ctx: Context, args: args::AddressAdd) {
     let mut wallet = ctx.wallet;
     if wallet
-        .add_address(args.alias.clone().to_lowercase(), args.address)
+        .add_address(args.alias.clone().to_lowercase(), args.address, args.alias_force)
         .is_none()
     {
         eprintln!("Address not added");

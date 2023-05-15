@@ -110,8 +110,9 @@ impl<U: WalletUtils> Wallet<U> {
         scheme: SchemeType,
         alias: Option<String>,
         password: Option<String>,
+        force_alias: bool,
     ) -> (String, common::SecretKey) {
-        let (alias, key) = self.store.gen_key::<U>(scheme, alias, password);
+        let (alias, key) = self.store.gen_key::<U>(scheme, alias, password, force_alias);
         // Cache the newly added key
         self.decrypted_key_cache.insert(alias.clone(), key.clone());
         (alias.into(), key)
@@ -122,8 +123,9 @@ impl<U: WalletUtils> Wallet<U> {
         &mut self,
         alias: String,
         password: Option<String>,
+        force_alias: bool,
     ) -> (String, ExtendedSpendingKey) {
-        let (alias, key) = self.store.gen_spending_key::<U>(alias, password);
+        let (alias, key) = self.store.gen_spending_key::<U>(alias, password, force_alias);
         // Cache the newly added key
         self.decrypted_spendkey_cache.insert(alias.clone(), key);
         (alias.into(), key)
@@ -392,9 +394,10 @@ impl<U: WalletUtils> Wallet<U> {
         &mut self,
         alias: impl AsRef<str>,
         address: Address,
+        force_alias: bool,
     ) -> Option<String> {
         self.store
-            .insert_address::<U>(alias.into(), address)
+            .insert_address::<U>(alias.into(), address, force_alias)
             .map(Into::into)
     }
 
@@ -405,9 +408,10 @@ impl<U: WalletUtils> Wallet<U> {
         alias: String,
         keypair: StoredKeypair<common::SecretKey>,
         pkh: PublicKeyHash,
+        force_alias: bool,
     ) -> Option<String> {
         self.store
-            .insert_keypair::<U>(alias.into(), keypair, pkh)
+            .insert_keypair::<U>(alias.into(), keypair, pkh, force_alias)
             .map(Into::into)
     }
 
@@ -416,9 +420,10 @@ impl<U: WalletUtils> Wallet<U> {
         &mut self,
         alias: String,
         view_key: ExtendedViewingKey,
+        force_alias: bool,
     ) -> Option<String> {
         self.store
-            .insert_viewing_key::<U>(alias.into(), view_key)
+            .insert_viewing_key::<U>(alias.into(), view_key, force_alias)
             .map(Into::into)
     }
 
@@ -428,9 +433,10 @@ impl<U: WalletUtils> Wallet<U> {
         alias: String,
         spend_key: StoredKeypair<ExtendedSpendingKey>,
         viewkey: ExtendedViewingKey,
+        force_alias: bool,
     ) -> Option<String> {
         self.store
-            .insert_spending_key::<U>(alias.into(), spend_key, viewkey)
+            .insert_spending_key::<U>(alias.into(), spend_key, viewkey, force_alias)
             .map(Into::into)
     }
 
@@ -441,12 +447,14 @@ impl<U: WalletUtils> Wallet<U> {
         alias: String,
         spend_key: ExtendedSpendingKey,
         password: Option<String>,
+        force_alias: bool,
     ) -> Option<String> {
         self.store
             .insert_spending_key::<U>(
                 alias.into(),
                 StoredKeypair::new(spend_key, password).0,
                 ExtendedFullViewingKey::from(&spend_key.into()).into(),
+                force_alias,
             )
             .map(Into::into)
     }
@@ -456,9 +464,10 @@ impl<U: WalletUtils> Wallet<U> {
         &mut self,
         alias: String,
         payment_addr: PaymentAddress,
+        force_alias: bool,
     ) -> Option<String> {
         self.store
-            .insert_payment_addr::<U>(alias.into(), payment_addr)
+            .insert_payment_addr::<U>(alias.into(), payment_addr, force_alias)
             .map(Into::into)
     }
 
