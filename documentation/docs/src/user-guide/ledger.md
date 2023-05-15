@@ -10,7 +10,7 @@ namada ledger
 
 The node will attempt to connect to the persistent validator nodes and other peers in the network, and synchronize to the latest block.
 
-By default, the ledger will store its configuration and state in either `$HOME/.local/share/namada` or `$HOME/Library/Application\ Support/com.heliax.namada/Namada`. You can use the `--base-dir` CLI global argument or `BASE_DIR` environment variable to change it.
+By default, the ledger will store its configuration and state in either `$HOME/.local/share/namada` or `$HOME/Library/Application\ Support/Namada`. You can use the `--base-dir` CLI global argument or `BASE_DIR` environment variable to change it.
 
 - Linux:
 ```bash
