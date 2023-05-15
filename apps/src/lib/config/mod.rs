@@ -9,7 +9,6 @@ use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::env::consts::OS;
 
 
 use directories::ProjectDirs;
