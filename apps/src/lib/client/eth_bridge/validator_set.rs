@@ -33,6 +33,7 @@ enum Error {
     ///
     /// This is usually because context was already
     /// provided in the form of `tracing!()` calls.
+    #[default]
     NoContext,
     /// An error message with a reason and an associated
     /// `tracing` log level.
@@ -75,23 +76,36 @@ impl Error {
         }
     }
 
-    /// Display an error message and potentially exit
-    /// from the relayer process.
+    /// Exit from the relayer process, if the error
+    /// was critical.
     fn maybe_exit(&self) {
+        if let Error::WithReason { critical: true, .. } = self {
+            safe_exit(1);
+        }
+    }
+
+    /// Display the error message.
+    fn display(&self) {
         match self {
             Error::WithReason {
                 reason,
-                level,
-                critical,
+                level: tracing::Level::ERROR,
+                ..
             } => {
-                tracing::event!(
-                    level,
+                tracing::error!(
                     %reason,
                     "An error occurred during the relay"
                 );
-                if critical {
-                    safe_exit(1);
-                }
+            }
+            Error::WithReason {
+                reason,
+                level: tracing::Level::DEBUG,
+                ..
+            } => {
+                tracing::debug!(
+                    %reason,
+                    "An error occurred during the relay"
+                );
             }
             _ => {}
         }
@@ -411,9 +425,8 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
         )
         .await;
         if let Err(err) = result {
-            let err = err.as_ref().map(|s| s.as_ref()).unwrap_or("Unspecified");
-            tracing::error!(reason = err, "The relay failed");
-            safe_exit(1);
+            err.display();
+            err.maybe_exit();
         }
     }
 }
@@ -467,7 +480,12 @@ async fn relay_validator_set_update_daemon(
         // so it is best to always fetch the latest governance
         // contract address
         let governance =
-            get_governance_contract(&nam_client, Arc::clone(&eth_client)).await;
+            get_governance_contract(&nam_client, Arc::clone(&eth_client))
+                .await
+                .unwrap_or_else(|err| {
+                    err.display();
+                    safe_exit(1);
+                });
         let governance_epoch_prep_call = governance.validator_set_nonce();
         let governance_epoch_fut =
             governance_epoch_prep_call.call().map(|result| {
@@ -542,8 +560,7 @@ async fn relay_validator_set_update_daemon(
         ).await;
 
         if let Err(err) = result {
-            let err = err.as_ref().map(|s| s.as_ref()).unwrap_or("Unspecified");
-            tracing::error!(err, "An error occurred during the relay");
+            err.display();
             last_call_succeeded = false;
         }
     }
@@ -561,8 +578,8 @@ async fn get_governance_contract(
         .map_err(|err| {
             use namada::ledger::queries::tm::Error;
             match err {
-                Error::Tendermint(e) => Error::critical(e.to_string()),
-                e => Error::recoverable(e.to_string()),
+                Error::Tendermint(e) => self::Error::critical(e.to_string()),
+                e => self::Error::recoverable(e.to_string()),
             }
         })?;
     Ok(Governance::new(governance_contract.address, eth_client))
@@ -580,7 +597,11 @@ where
     let epoch_to_relay = if let Some(epoch) = args.epoch {
         epoch
     } else {
-        RPC.shell().epoch(nam_client).await.unwrap().next()
+        RPC.shell()
+            .epoch(nam_client)
+            .await
+            .map_err(|e| Error::critical(e.to_string()))?
+            .next()
     };
     let shell = RPC.shell().eth_bridge();
     let encoded_proof_fut =
@@ -600,7 +621,7 @@ where
             encoded_validator_set_args_fut,
             governance_address_fut
         )
-        .map_err(|err| Some(err.to_string()))?;
+        .map_err(|err| Error::recoverable(err.to_string()))?;
 
     let (bridge_hash, gov_hash, signatures): (
         [u8; 32],
@@ -610,13 +631,19 @@ where
     let consensus_set: ValidatorSetArgs =
         abi_decode_struct(encoded_validator_set_args);
 
-    let eth_client =
-        Arc::new(Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap());
+    let eth_client = Arc::new(
+        Provider::<Http>::try_from(&args.eth_rpc_endpoint).map_err(|err| {
+            Error::critical(format!(
+                "Invalid rpc endpoint: {:?}: {err}",
+                args.eth_rpc_endpoint
+            ))
+        })?,
+    );
     let governance = Governance::new(governance_contract.address, eth_client);
 
     if let Err(result) = R::should_relay(epoch_to_relay, &governance) {
         action(result);
-        return Err(None);
+        return Err(Error::NoContext);
     }
 
     let mut relay_op = governance.update_validators_set(
@@ -636,17 +663,20 @@ where
         relay_op.tx.set_from(eth_addr.into());
     }
 
-    let pending_tx = relay_op.send().await.unwrap();
+    let pending_tx = relay_op
+        .send()
+        .await
+        .map_err(|e| Error::critical(e.to_string()))?;
     let transf_result = pending_tx
         .confirmations(args.confirmations as usize)
         .await
-        .map_err(|err| Some(err.to_string()))?;
+        .map_err(|err| Error::critical(err.to_string()))?;
 
     let transf_result: R::RelayResult = transf_result.into();
     let status = if transf_result.is_successful() {
         Ok(())
     } else {
-        Err(None)
+        Err(Error::NoContext)
     };
 
     action(transf_result);
