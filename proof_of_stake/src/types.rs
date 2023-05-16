@@ -3,7 +3,7 @@
 mod rev_order;
 
 use core::fmt::Debug;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::hash::Hash;
@@ -442,7 +442,7 @@ pub struct BondsAndUnbondsDetail {
     /// Unbonds
     pub unbonds: Vec<UnbondDetails>,
     /// Slashes applied to any of the bonds and/or unbonds
-    pub slashes: HashSet<Slash>,
+    pub slashes: Vec<Slash>,
 }
 
 /// Bond with all its details
