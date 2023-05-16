@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use borsh::BorshSerialize;
 use criterion::{criterion_group, criterion_main, Criterion};
@@ -140,6 +140,7 @@ fn vp_user(c: &mut Criterion) {
                     &shell.wl_storage.storage,
                     &shell.wl_storage.write_log,
                     &mut VpGasMeter::new(u64::MAX, 0),
+                    &BTreeMap::default(),
                     &keys_changed,
                     &verifiers,
                     shell.vp_wasm_cache.clone(),
@@ -275,6 +276,7 @@ fn vp_implicit(c: &mut Criterion) {
                     &shell.wl_storage.storage,
                     &shell.wl_storage.write_log,
                     &mut VpGasMeter::new(u64::MAX, 0),
+                    &BTreeMap::default(),
                     &keys_changed,
                     &verifiers,
                     shell.vp_wasm_cache.clone(),
@@ -402,6 +404,7 @@ fn vp_validator(c: &mut Criterion) {
                     &shell.wl_storage.storage,
                     &shell.wl_storage.write_log,
                     &mut VpGasMeter::new(u64::MAX, 0),
+                    &BTreeMap::default(),
                     &keys_changed,
                     &verifiers,
                     shell.vp_wasm_cache.clone(),
@@ -459,6 +462,7 @@ fn vp_token(c: &mut Criterion) {
                     &shell.wl_storage.storage,
                     &shell.wl_storage.write_log,
                     &mut VpGasMeter::new(u64::MAX, 0),
+                    &BTreeMap::default(),
                     &keys_changed,
                     &verifiers,
                     shell.vp_wasm_cache.clone(),
@@ -546,6 +550,7 @@ fn vp_masp(c: &mut Criterion) {
                     &shielded_ctx.shell.wl_storage.storage,
                     &shielded_ctx.shell.wl_storage.write_log,
                     &mut VpGasMeter::new(u64::MAX, 0),
+                    &BTreeMap::default(),
                     &keys_changed,
                     &verifiers,
                     shielded_ctx.shell.vp_wasm_cache.clone(),

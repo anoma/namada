@@ -133,8 +133,8 @@ where
                 ))),
             },
         }?;
-        gas_meter.add_compiling_gas(tx_len)?;
         gas_meter.add_tx_load_from_storage_gas(tx_len)?;
+        gas_meter.add_compiling_gas(tx_len)?;
 
         let (module, store) =
             fetch_or_compile(tx_wasm_cache, &code_hash, write_log, storage)?;
@@ -233,6 +233,7 @@ pub fn vp<DB, H, CA>(
     storage: &Storage<DB, H>,
     write_log: &WriteLog,
     gas_meter: &mut VpGasMeter,
+    gas_table: &BTreeMap<String, u64>,
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
     mut vp_wasm_cache: VpCache<CA>,
@@ -285,21 +286,69 @@ where
     run_vp(
         module,
         imports,
+        vp_code_hash,
         input_data,
         address,
         keys_changed,
         verifiers,
+        storage,
+        write_log,
+        gas_meter,
+        gas_table,
     )
 }
 
-fn run_vp(
+fn run_vp<DB, H>(
     module: wasmer::Module,
     vp_imports: wasmer::ImportObject,
+    vp_code_hash: &Hash,
     input_data: &[u8],
     address: &Address,
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
-) -> Result<bool> {
+    storage: &Storage<DB, H>,
+    write_log: &WriteLog,
+    gas_meter: &mut VpGasMeter,
+    gas_table: &BTreeMap<String, u64>,
+) -> Result<bool>
+where
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    // Compilation gas even if the compiled module is in cache
+    let key = Key::wasm_code_len(&vp_code_hash);
+    let vp_code_len = match write_log.read(&key).0 {
+        Some(StorageModification::Write { value }) => {
+            u64::try_from_slice(value)
+                .map_err(|e| Error::ConversionError(e.to_string()))
+        }
+        _ => match storage.read(&key).map_err(|e| Error::LoadWasmCode(format!("Read wasm vp code length from storage failed: key {}, error {}", key, e)))?.0 {
+            Some(v) => u64::try_from_slice(&v)
+                .map_err(|e| Error::ConversionError(e.to_string())),
+                None => Err(Error::LoadWasmCode(format!(
+                    "No wasm code length in storage: key {}",
+                    key
+                ))),
+        },
+    }?;
+    gas_meter
+        .add_vp_load_from_storage_gas(vp_code_len)
+        .map_err(Error::GasError)?;
+    gas_meter
+        .add_compiling_gas(vp_code_len)
+        .map_err(Error::GasError)?;
+
+    let vp_gas_required =
+        match gas_table.get(&vp_code_hash.to_string().to_ascii_lowercase()) {
+            Some(gas) => gas.to_owned(),
+            #[cfg(test)]
+            None => 1_000,
+            #[cfg(not(test))]
+            None => 0,
+        };
+
+    gas_meter.add(vp_gas_required).map_err(Error::GasError)?;
+
     let input: VpInput = VpInput {
         addr: address,
         data: input_data,
@@ -423,10 +472,34 @@ where
         let vp_wasm_cache = unsafe { ctx.vp_wasm_cache.get() };
         let write_log = unsafe { ctx.write_log.get() };
         let storage = unsafe { ctx.storage.get() };
+        let gas_meter = unsafe { ctx.gas_meter.get() };
         let env = VpVmEnv {
             memory: WasmMemory::default(),
             ctx,
         };
+        let gas_table_key = &namada_core::ledger::parameters::storage::get_gas_table_storage_key();
+        let gas_table = match write_log.read(&gas_table_key).0 {
+            Some(StorageModification::Write { value }) => {
+                BTreeMap::try_from_slice(value)
+                    .map_err(|e| Error::ConversionError(e.to_string()))
+            }
+            _ => match storage
+                .read(&gas_table_key)
+                .map_err(|e| {
+                    Error::LoadWasmCode(format!(
+                        "Read gas table from storage failed: {}",
+                        e
+                    ))
+                })?
+                .0
+            {
+                Some(v) => BTreeMap::try_from_slice(&v)
+                    .map_err(|e| Error::ConversionError(e.to_string())),
+                None => Err(Error::LoadWasmCode(
+                    "No gas table in storage".to_string(),
+                )),
+            },
+        }?;
 
         // Compile the wasm module
         let (module, store) =
@@ -440,10 +513,15 @@ where
         run_vp(
             module,
             imports,
+            &vp_code_hash,
             &input_data[..],
             address,
             keys_changed,
             verifiers,
+            storage,
+            write_log,
+            gas_meter,
+            &gas_table,
         )
     }
 }
@@ -650,6 +728,7 @@ mod tests {
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
         let mut gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
+        let gas_table = BTreeMap::default();
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -690,6 +769,7 @@ mod tests {
             &storage,
             &write_log,
             &mut gas_meter,
+            &gas_table,
             &keys_changed,
             &verifiers,
             vp_cache.clone(),
@@ -719,6 +799,7 @@ mod tests {
             &storage,
             &write_log,
             &mut gas_meter,
+            &gas_table,
             &keys_changed,
             &verifiers,
             vp_cache,
@@ -738,6 +819,7 @@ mod tests {
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
         let mut gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
+        let gas_table = BTreeMap::default();
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -765,6 +847,7 @@ mod tests {
             &storage,
             &write_log,
             &mut gas_meter,
+            &gas_table,
             &keys_changed,
             &verifiers,
             vp_cache.clone(),
@@ -785,6 +868,7 @@ mod tests {
             &storage,
             &write_log,
             &mut gas_meter,
+            &gas_table,
             &keys_changed,
             &verifiers,
             vp_cache,
@@ -861,6 +945,7 @@ mod tests {
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
         let mut gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
+        let gas_table = BTreeMap::default();
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -888,6 +973,7 @@ mod tests {
             &storage,
             &write_log,
             &mut gas_meter,
+            &gas_table,
             &keys_changed,
             &verifiers,
             vp_cache,
@@ -973,6 +1059,7 @@ mod tests {
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
         let mut gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
+        let gas_table = BTreeMap::default();
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -1005,6 +1092,7 @@ mod tests {
             &storage,
             &write_log,
             &mut gas_meter,
+            &gas_table,
             &keys_changed,
             &verifiers,
             vp_cache,
@@ -1026,6 +1114,7 @@ mod tests {
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
         let mut gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
+        let gas_table = BTreeMap::default();
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -1070,6 +1159,7 @@ mod tests {
             &storage,
             &write_log,
             &mut gas_meter,
+            &gas_table,
             &keys_changed,
             &verifiers,
             vp_cache,
@@ -1178,6 +1268,7 @@ mod tests {
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
         let mut gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
+        let gas_table = BTreeMap::default();
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
@@ -1194,6 +1285,7 @@ mod tests {
             &storage,
             &write_log,
             &mut gas_meter,
+            &gas_table,
             &keys_changed,
             &verifiers,
             vp_cache,

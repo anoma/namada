@@ -2,9 +2,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::panic;
 
-use borsh::BorshDeserialize;
 use namada_core::ledger::gas::TxGasMeter;
-use namada_core::ledger::storage::write_log::StorageModification;
 use namada_core::types::hash::Hash;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
@@ -272,47 +270,6 @@ where
                         }
                     };
 
-                    //FIXME: move gas inside vp? Yes but also change eval_vp to call vp instead of run_vp
-                    // Compilation gas even if the compiled module is in cache
-                    let key = storage::Key::wasm_code_len(&vp_code_hash);
-                    let vp_code_len = match write_log.read(&key).0 {
-                        Some(StorageModification::Write { value }) => {
-                            u64::try_from_slice(value).map_err(|e| {
-                                Error::ConversionError(e.to_string())
-                            })
-                        }
-                        _ => match storage
-                            .read(&key)
-                            .map_err(Error::StorageError)?
-                            .0
-                        {
-                            Some(v) => u64::try_from_slice(&v).map_err(|e| {
-                                Error::ConversionError(e.to_string())
-                            }),
-                            None => Err(Error::MissingWasmCodeInStorage(
-                                vp_code_hash.clone(),
-                            )),
-                        },
-                    }?;
-                    gas_meter
-                        .add_compiling_gas(vp_code_len)
-                        .map_err(Error::GasError)?;
-                    gas_meter
-                        .add_vp_load_from_storage_gas(vp_code_len)
-                        .map_err(Error::GasError)?;
-
-                    let vp_gas_required = match gas_table
-                        .get(&vp_code_hash.to_string().to_ascii_lowercase())
-                    {
-                        Some(gas) => gas.to_owned(),
-                        #[cfg(test)]
-                        None => 1_000,
-                        #[cfg(not(test))]
-                        None => 0,
-                    };
-
-                    gas_meter.add(vp_gas_required).map_err(Error::GasError)?;
-
                     // NOTE: because of the whitelisted gas and the gas metering
                     // for the exposed vm env functions,
                     //    the first signature verification (if any) is accounted
@@ -325,6 +282,7 @@ where
                         storage,
                         write_log,
                         &mut gas_meter,
+                        &gas_table,
                         &keys_changed,
                         &verifiers,
                         vp_wasm_cache.clone(),
