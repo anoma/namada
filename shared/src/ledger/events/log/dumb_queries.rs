@@ -31,15 +31,12 @@ impl QueryMatcher {
             return false;
         }
 
-        for attr in &self.attributes {
-            if let Some(value) = event.attributes.get(attr.0) {
-                if value != attr.1 {
-                    return false;
-                }
+        self.attributes.iter().all(|(key, value)| {
+            match event.attributes.get(key) {
+                Some(v) => v == value,
+                None => false,
             }
-        }
-
-        true
+        })
     }
 
     /// Returns a query matching the given accepted transaction hash.
