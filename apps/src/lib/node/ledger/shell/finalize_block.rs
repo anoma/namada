@@ -899,7 +899,8 @@ mod test_finalize_block {
         is_validator_slashes_key, slashes_prefix,
     };
     use namada::proof_of_stake::types::{
-        decimal_mult_amount, SlashType, ValidatorState, WeightedValidator,
+        decimal_mult_amount, BondId, SlashType, ValidatorState,
+        WeightedValidator,
     };
     use namada::proof_of_stake::{
         enqueued_slashes_handle, get_num_consensus_validators,
@@ -2769,6 +2770,119 @@ mod test_finalize_block {
         }
         let current_epoch = shell.wl_storage.storage.block.epoch;
         assert_eq!(current_epoch.0, 12_u64);
+
+        println!("\nCHECK BOND AND UNBOND DETAILS");
+        let details = namada_proof_of_stake::bonds_and_unbonds(
+            &shell.wl_storage,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let del_id = BondId {
+            source: delegator.clone(),
+            validator: val1.address.clone(),
+        };
+        let self_id = BondId {
+            source: val1.address.clone(),
+            validator: val1.address.clone(),
+        };
+
+        let del_details = details.get(&del_id).unwrap();
+        let self_details = details.get(&self_id).unwrap();
+        dbg!(del_details, self_details);
+
+        // Check slashes
+        assert_eq!(del_details.slashes, self_details.slashes);
+        assert_eq!(del_details.slashes.len(), 3);
+        assert_eq!(del_details.slashes[0].epoch, Epoch(3));
+        assert!(equal_enough(del_details.slashes[0].rate, cubic_rate));
+        assert_eq!(del_details.slashes[1].epoch, Epoch(3));
+        assert!(equal_enough(del_details.slashes[1].rate, cubic_rate));
+        assert_eq!(del_details.slashes[2].epoch, Epoch(4));
+        assert!(equal_enough(del_details.slashes[2].rate, cubic_rate));
+
+        // Check delegations
+        assert_eq!(del_details.bonds.len(), 2);
+        assert_eq!(del_details.bonds[0].start, Epoch(3));
+        assert_eq!(
+            del_details.bonds[0].amount,
+            del_1_amount - del_unbond_1_amount
+        );
+        // TODO: decimal mult issues should be resolved with PR 1282
+        assert!(
+            (del_details.bonds[0].slashed_amount.unwrap().change()
+                - decimal_mult_amount(
+                    std::cmp::min(Decimal::ONE, dec!(3) * cubic_rate),
+                    del_1_amount - del_unbond_1_amount
+                )
+                .change())
+            .abs()
+                <= 2
+        );
+        assert_eq!(del_details.bonds[1].start, Epoch(7));
+        assert_eq!(del_details.bonds[1].amount, del_2_amount);
+        assert_eq!(del_details.bonds[1].slashed_amount, None);
+
+        // Check self-bonds
+        assert_eq!(self_details.bonds.len(), 1);
+        assert_eq!(self_details.bonds[0].start, Epoch(0));
+        assert_eq!(
+            self_details.bonds[0].amount,
+            initial_stake - self_unbond_1_amount + self_bond_1_amount
+                - self_unbond_2_amount
+        );
+        // TODO: not sure why this is correct??? (with + self_bond_1_amount -
+        // self_unbond_2_amount)
+        // TODO: Make sure this is sound and what we expect
+        assert_eq!(
+            self_details.bonds[0].slashed_amount,
+            Some(decimal_mult_amount(
+                std::cmp::min(Decimal::ONE, dec!(3) * cubic_rate),
+                initial_stake - self_unbond_1_amount + self_bond_1_amount
+                    - self_unbond_2_amount
+            ))
+        );
+
+        // Check delegation unbonds
+        assert_eq!(del_details.unbonds.len(), 1);
+        assert_eq!(del_details.unbonds[0].start, Epoch(3));
+        assert_eq!(del_details.unbonds[0].withdraw, Epoch(9));
+        assert_eq!(del_details.unbonds[0].amount, del_unbond_1_amount);
+        assert!(
+            (del_details.unbonds[0].slashed_amount.unwrap().change()
+                - decimal_mult_amount(
+                    std::cmp::min(Decimal::ONE, dec!(2) * cubic_rate),
+                    del_unbond_1_amount
+                )
+                .change())
+            .abs()
+                <= 1
+        );
+
+        // Check self-unbonds
+        assert_eq!(self_details.unbonds.len(), 3);
+        assert_eq!(self_details.unbonds[0].start, Epoch(0));
+        assert_eq!(self_details.unbonds[0].withdraw, Epoch(8));
+        assert_eq!(self_details.unbonds[1].start, Epoch(0));
+        assert_eq!(self_details.unbonds[1].withdraw, Epoch(11));
+        assert_eq!(self_details.unbonds[2].start, Epoch(5));
+        assert_eq!(self_details.unbonds[2].withdraw, Epoch(11));
+        assert_eq!(self_details.unbonds[0].amount, self_unbond_1_amount);
+        assert_eq!(self_details.unbonds[0].slashed_amount, None);
+        assert_eq!(
+            self_details.unbonds[1].amount,
+            self_unbond_2_amount - self_bond_1_amount
+        );
+        assert_eq!(
+            self_details.unbonds[1].slashed_amount,
+            Some(decimal_mult_amount(
+                std::cmp::min(Decimal::ONE, dec!(3) * cubic_rate),
+                self_unbond_2_amount - self_bond_1_amount
+            ))
+        );
+        assert_eq!(self_details.unbonds[2].amount, self_bond_1_amount);
+        assert_eq!(self_details.unbonds[2].slashed_amount, None);
 
         println!("\nWITHDRAWING DELEGATION UNBOND");
         let slash_pool_balance_pre_withdraw = slash_pool_balance;
