@@ -24,47 +24,42 @@ use serde::{Deserialize, Serialize};
     Serialize,
     Deserialize,
 )]
-pub struct BlockHeight {
-    inner: Uint256,
-}
+#[repr(transparent)]
+pub struct BlockHeight(Uint256);
 
 impl fmt::Display for BlockHeight {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.inner)
+        write!(f, "{}", self.0)
     }
 }
 
 impl From<u64> for BlockHeight {
     fn from(value: u64) -> Self {
-        Self {
-            inner: Uint256::from(value),
-        }
+        Self(Uint256::from(value))
     }
 }
 
 impl From<NonZeroU64> for BlockHeight {
     fn from(value: NonZeroU64) -> Self {
-        Self {
-            inner: Uint256::from(value.get()),
-        }
+        Self(Uint256::from(value.get()))
     }
 }
 
 impl From<Uint256> for BlockHeight {
     fn from(value: Uint256) -> Self {
-        Self { inner: value }
+        Self(value)
     }
 }
 
 impl From<BlockHeight> for Uint256 {
-    fn from(value: BlockHeight) -> Self {
-        value.inner
+    fn from(BlockHeight(value): BlockHeight) -> Self {
+        value
     }
 }
 
 impl<'a> From<&'a BlockHeight> for &'a Uint256 {
-    fn from(height: &'a BlockHeight) -> Self {
-        &height.inner
+    fn from(BlockHeight(height): &'a BlockHeight) -> Self {
+        height
     }
 }
 
@@ -72,15 +67,13 @@ impl Add for BlockHeight {
     type Output = BlockHeight;
 
     fn add(self, rhs: Self) -> Self::Output {
-        Self {
-            inner: self.inner + rhs.inner,
-        }
+        Self(self.0 + rhs.0)
     }
 }
 
 impl AddAssign for BlockHeight {
     fn add_assign(&mut self, rhs: Self) {
-        self.inner += rhs.inner;
+        self.0 += rhs.0;
     }
 }
 
@@ -88,7 +81,7 @@ impl Deref for BlockHeight {
     type Target = Uint256;
 
     fn deref(&self) -> &Self::Target {
-        &self.inner
+        &self.0
     }
 }
 
@@ -97,7 +90,7 @@ impl BorshSerialize for BlockHeight {
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {
-        let be = self.inner.to_bytes_be();
+        let be = self.0.to_bytes_be();
         BorshSerialize::serialize(&be, writer)
     }
 }
@@ -105,8 +98,6 @@ impl BorshSerialize for BlockHeight {
 impl BorshDeserialize for BlockHeight {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
         let be: Vec<u8> = BorshDeserialize::deserialize(buf)?;
-        Ok(Self {
-            inner: Uint256::from_bytes_be(&be),
-        })
+        Ok(Self(Uint256::from_bytes_be(&be)))
     }
 }
