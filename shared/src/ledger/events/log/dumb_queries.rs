@@ -10,6 +10,7 @@ use std::collections::HashMap;
 
 use crate::ibc::core::ics04_channel::packet::Sequence;
 use crate::ibc::core::ics24_host::identifier::{ChannelId, ClientId, PortId};
+use crate::ibc::Height as IbcHeight;
 use crate::ledger::events::{Event, EventType};
 use crate::types::hash::Hash;
 use crate::types::storage::BlockHeight;
@@ -66,14 +67,24 @@ impl QueryMatcher {
         client_id: ClientId,
         consensus_height: BlockHeight,
     ) -> Self {
+        use crate::ibc::core::ics02_client::events::{
+            CLIENT_ID_ATTRIBUTE_KEY, CONSENSUS_HEIGHTS_ATTRIBUTE_KEY,
+        };
+        use crate::ibc::events::IbcEventType;
+
         let mut attributes = HashMap::new();
-        attributes.insert("client_id".to_string(), client_id.to_string());
+        attributes
+            .insert(CLIENT_ID_ATTRIBUTE_KEY.to_string(), client_id.to_string());
         attributes.insert(
-            "consensus_height".to_string(),
-            format!("0-{}", consensus_height),
+            CONSENSUS_HEIGHTS_ATTRIBUTE_KEY.to_string(),
+            IbcHeight::new(0, consensus_height.0)
+                .expect("invalid height")
+                .to_string(),
         );
         Self {
-            event_type: EventType::Ibc("update_client".to_string()),
+            event_type: EventType::Ibc(
+                IbcEventType::UpdateClient.as_str().to_string(),
+            ),
             attributes,
         }
     }
@@ -88,13 +99,21 @@ impl QueryMatcher {
         sequence: Sequence,
     ) -> Self {
         let mut attributes = HashMap::new();
-        attributes.insert("src_port".to_string(), source_port.to_string());
         attributes
-            .insert("src_channel".to_string(), source_channel.to_string());
-        attributes.insert("dst_port".to_string(), destination_port.to_string());
-        attributes
-            .insert("dst_channel".to_string(), destination_channel.to_string());
-        attributes.insert("sequence".to_string(), sequence.to_string());
+            .insert("packet_src_port".to_string(), source_port.to_string());
+        attributes.insert(
+            "packet_src_channel".to_string(),
+            source_channel.to_string(),
+        );
+        attributes.insert(
+            "packet_dst_port".to_string(),
+            destination_port.to_string(),
+        );
+        attributes.insert(
+            "packet_dst_channel".to_string(),
+            destination_channel.to_string(),
+        );
+        attributes.insert("packet_sequence".to_string(), sequence.to_string());
         Self {
             event_type,
             attributes,
