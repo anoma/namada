@@ -8,6 +8,9 @@ use crate::types::address::nam;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::token::balance_key;
 
+/// Sub-key for storing the initial Ethereum block height when
+/// events will first be extracted from.
+pub const ETH_START_HEIGHT_SUBKEY: &str = "eth_start_height";
 /// Sub-key for storing the acitve / inactive status of the Ethereum bridge.
 pub const ACTIVE_SUBKEY: &str = "active_status";
 /// Sub-key for storing the minimum confirmations parameter
@@ -22,6 +25,17 @@ pub const GOVERNANCE_CONTRACT_SUBKEY: &str = "governance_contract_address";
 /// Key prefix for the storage subspace
 pub fn prefix() -> Key {
     Key::from(ADDRESS.to_db_key())
+}
+
+/// Key for storing the initial Ethereum block height when
+/// events will first be extracted from.
+pub fn eth_start_height_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(PARAM_ADDRESS),
+            DbKeySeg::StringSeg(ETH_START_HEIGHT_SUBKEY.into()),
+        ],
+    }
 }
 
 /// The key to the escrow of the VP.
