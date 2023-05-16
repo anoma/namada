@@ -115,6 +115,8 @@ where
             let code = wasm_loader::read_wasm(&self.wasm_dir, name)
                 .map_err(Error::ReadingWasm)?;
             let code_hash = CodeHash::sha256(&code);
+            let code_len = u64::try_from(code.len())
+                .map_err(|e| Error::LoadingWasm(e.to_string()))?;
 
             let checksum = info.get("hash").ok_or_else(|| {
                 Error::LoadingWasm(format!(
@@ -142,6 +144,9 @@ where
 
                 let code_key = Key::wasm_code(&code_hash);
                 self.wl_storage.write_bytes(&code_key, code)?;
+
+                let code_len_key = Key::wasm_code_len(&code_hash);
+                self.wl_storage.write(&code_len_key, code_len)?;
 
                 let hash_key = Key::wasm_hash(name);
                 self.wl_storage.write_bytes(&hash_key, code_hash)?;

@@ -13,9 +13,11 @@ pub enum Error {
     BlockGasExceeded,
     #[error("Overflow during gas operations")]
     GasOverflow,
+    #[error("Error converting to u64")]
+    ConversionError,
 }
 
-const TX_SIZE_GAS_PER_BYTE: u64 = 1;
+const TX_SIZE_GAS_PER_BYTE: u64 = 10;
 const COMPILE_GAS_PER_BYTE: u64 = 1;
 const PARALLEL_GAS_DIVIDER: u64 = 10;
 
@@ -147,13 +149,38 @@ impl TxGasMeter {
     }
 
     /// Add the compiling cost proportionate to the code length
-    pub fn add_compiling_gas(&mut self, bytes_len: usize) -> Result<()> {
-        self.add(bytes_len as u64 * COMPILE_GAS_PER_BYTE)
+    pub fn add_compiling_gas(&mut self, bytes_len: u64) -> Result<()> {
+        self.add(
+            bytes_len
+                .checked_mul(COMPILE_GAS_PER_BYTE)
+                .ok_or(Error::GasOverflow)?,
+        )
     }
 
     /// Add the gas for the space that the transaction requires in the block
-    pub fn add_tx_size_gas(&mut self, bytes_len: usize) -> Result<()> {
-        self.add(bytes_len as u64 * TX_SIZE_GAS_PER_BYTE)
+    pub fn add_tx_size_gas(
+        &mut self,
+        bytes_len: impl TryInto<u64>,
+    ) -> Result<()> {
+        let bytes_len =
+            bytes_len.try_into().map_err(|_| Error::ConversionError)?;
+        self.add(
+            bytes_len
+                .checked_mul(TX_SIZE_GAS_PER_BYTE)
+                .ok_or(Error::GasOverflow)?,
+        )
+    }
+
+    /// Add the gas for loading the transaction's code from storage
+    pub fn add_tx_load_from_storage_gas(
+        &mut self,
+        bytes_len: u64,
+    ) -> Result<()> {
+        self.add(
+            bytes_len
+                .checked_mul(MIN_STORAGE_GAS)
+                .ok_or(Error::GasOverflow)?,
+        )
     }
 
     /// Add the gas cost used in validity predicates to the current transaction.
@@ -202,8 +229,24 @@ impl VpGasMeter {
     }
 
     /// Add the compiling cost proportionate to the code length
-    pub fn add_compiling_gas(&mut self, bytes_len: usize) -> Result<()> {
-        self.add(bytes_len as u64 * COMPILE_GAS_PER_BYTE)
+    pub fn add_compiling_gas(&mut self, bytes_len: u64) -> Result<()> {
+        self.add(
+            bytes_len
+                .checked_mul(COMPILE_GAS_PER_BYTE)
+                .ok_or(Error::GasOverflow)?,
+        )
+    }
+
+    /// Add the gas for loading the non-native vp's code from storage
+    pub fn add_vp_load_from_storage_gas(
+        &mut self,
+        bytes_len: u64,
+    ) -> Result<()> {
+        self.add(
+            bytes_len
+                .checked_mul(MIN_STORAGE_GAS)
+                .ok_or(Error::GasOverflow)?,
+        )
     }
 }
 

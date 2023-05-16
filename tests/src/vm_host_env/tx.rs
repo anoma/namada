@@ -1,5 +1,5 @@
 use std::borrow::Borrow;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::parameters::{self, EpochDuration};
@@ -212,6 +212,7 @@ impl TestTxEnv {
             &self.wl_storage.storage,
             &mut self.wl_storage.write_log,
             &mut self.gas_meter,
+            &BTreeMap::default(),
             &self.tx_index,
             &self.tx.code_or_hash,
             self.tx.data.as_ref().unwrap_or(&empty_data),

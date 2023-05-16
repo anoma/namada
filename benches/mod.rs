@@ -14,6 +14,7 @@
 //! For more realistic results these benchmarks should be run on all the
 //! combination of supported OS/architecture.
 
+use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 
 use borsh::BorshSerialize;
@@ -214,6 +215,7 @@ impl BenchShell {
             &self.inner.wl_storage.storage,
             &mut self.inner.wl_storage.write_log,
             &mut TxGasMeter::new(u64::MAX),
+            &BTreeMap::default(),
             &TxIndex(0),
             &tx.code_or_hash,
             tx.data.as_ref().unwrap(),

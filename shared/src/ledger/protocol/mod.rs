@@ -2,9 +2,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::panic;
 
+use borsh::BorshDeserialize;
 use namada_core::ledger::gas::TxGasMeter;
 use namada_core::ledger::storage::write_log::StorageModification;
-use namada_core::types::hash::{Hash, HASH_LENGTH};
+use namada_core::types::hash::Hash;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
@@ -72,6 +73,8 @@ pub enum Error {
     TxCodeHashConversion,
     #[error("Could not retrieve wasm code from storage for hash {0}")]
     MissingWasmCodeInStorage(Hash),
+    #[error("Failed type conversion: {0}")]
+    ConversionError(String),
 }
 
 /// Result of applying a transaction
@@ -165,51 +168,13 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    // Always account for compilation gas cost
-    let (tx_hash, tx_code) = if tx.code_or_hash.len() == HASH_LENGTH {
-        // we assume that there is no wasm code with HASH_LENGTH
-        let code_hash = Hash::try_from(tx.code_or_hash.as_slice())
-            .map_err(|_| Error::TxCodeHashConversion)?;
-
-        let key = storage::Key::wasm_code(&code_hash);
-        let tx_code = match write_log.read(&key).0 {
-            Some(StorageModification::Write { value }) => value.clone(),
-            _ => storage
-                .read(&key)
-                .map_err(Error::StorageError)?
-                .0
-                .ok_or_else(|| {
-                    Error::MissingWasmCodeInStorage(code_hash.clone())
-                })?,
-        };
-
-        (code_hash, std::borrow::Cow::Owned(tx_code))
-    } else {
-        (
-            Hash(tx.code_hash()),
-            std::borrow::Cow::Borrowed(&tx.code_or_hash),
-        )
-    };
-
-    tx_gas_meter
-        .add_compiling_gas(tx_code.len())
-        .map_err(Error::GasError)?;
-    let tx_hash = tx_hash.to_string().to_ascii_lowercase();
-    let tx_gas_required = match gas_table.get(tx_hash.as_str()) {
-        Some(gas) => gas.to_owned(),
-        #[cfg(test)]
-        None => 1_000,
-        #[cfg(not(test))]
-        None => 0, // VPs will reject the non-whitelisted tx
-    };
-    tx_gas_meter.add(tx_gas_required).map_err(Error::GasError)?;
-
     let empty = vec![];
     let tx_data = tx.data.as_ref().unwrap_or(&empty);
     wasm::run::tx(
         storage,
         write_log,
         tx_gas_meter,
+        gas_table,
         tx_index,
         &tx.code_or_hash,
         tx_data,
@@ -307,34 +272,46 @@ where
                         }
                     };
 
-                    // Always account for compilation gas cost
-                    let vp_code = {
-                        let key = storage::Key::wasm_code(&vp_code_hash);
-                        match write_log.read(&key).0 {
-                            Some(StorageModification::Write { value }) => {
-                                value.clone()
-                            }
-                            _ => storage
-                                .read(&key)
-                                .map_err(Error::StorageError)?
-                                .0
-                                .ok_or_else(|| {
-                                    Error::MissingWasmCodeInStorage(
-                                        vp_code_hash.clone(),
-                                    )
-                                })?,
+                    //FIXME: move gas inside vp? Yes but also change eval_vp to call vp instead of run_vp
+                    // Compilation gas even if the compiled module is in cache
+                    let key = storage::Key::wasm_code_len(&vp_code_hash);
+                    let vp_code_len = match write_log.read(&key).0 {
+                        Some(StorageModification::Write { value }) => {
+                            u64::try_from_slice(value).map_err(|e| {
+                                Error::ConversionError(e.to_string())
+                            })
                         }
-                    };
-
+                        _ => match storage
+                            .read(&key)
+                            .map_err(Error::StorageError)?
+                            .0
+                        {
+                            Some(v) => u64::try_from_slice(&v).map_err(|e| {
+                                Error::ConversionError(e.to_string())
+                            }),
+                            None => Err(Error::MissingWasmCodeInStorage(
+                                vp_code_hash.clone(),
+                            )),
+                        },
+                    }?;
                     gas_meter
-                        .add_compiling_gas(vp_code.len())
+                        .add_compiling_gas(vp_code_len)
+                        .map_err(Error::GasError)?;
+                    gas_meter
+                        .add_vp_load_from_storage_gas(vp_code_len)
                         .map_err(Error::GasError)?;
 
-                    add_precomputed_gas(
-                        &mut gas_meter,
-                        gas_table,
-                        &vp_code_hash.to_string().to_ascii_lowercase(),
-                    )?;
+                    let vp_gas_required = match gas_table
+                        .get(&vp_code_hash.to_string().to_ascii_lowercase())
+                    {
+                        Some(gas) => gas.to_owned(),
+                        #[cfg(test)]
+                        None => 1_000,
+                        #[cfg(not(test))]
+                        None => 0,
+                    };
+
+                    gas_meter.add(vp_gas_required).map_err(Error::GasError)?;
 
                     // NOTE: because of the whitelisted gas and the gas metering
                     // for the exposed vm env functions,
@@ -539,21 +516,4 @@ fn merge_vp_results(
         gas_used,
         errors,
     })
-}
-
-/// Add the precomputed cost for the vp
-fn add_precomputed_gas(
-    gas_meter: &mut VpGasMeter,
-    gas_table: &BTreeMap<String, u64>,
-    vp: &str,
-) -> Result<()> {
-    let vp_gas_required = match gas_table.get(vp) {
-        Some(gas) => gas.to_owned(),
-        #[cfg(test)]
-        None => 1_000,
-        #[cfg(not(test))]
-        None => 0,
-    };
-
-    gas_meter.add(vp_gas_required).map_err(Error::GasError)
 }

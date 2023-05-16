@@ -1,9 +1,11 @@
 //! Wasm runners
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
 
-use namada_core::ledger::gas::TxGasMeter;
+use borsh::BorshDeserialize;
+use namada_core::ledger::gas::{self, TxGasMeter};
+use namada_core::ledger::storage::write_log::StorageModification;
 use parity_wasm::elements;
 use pwasm_utils::{self, rules};
 use thiserror::Error;
@@ -37,7 +39,7 @@ const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 pub enum Error {
     #[error("Memory error: {0}")]
     MemoryError(memory::Error),
-    #[error("Unable to inject gas meter")]
+    #[error("Unable to inject stack limiter")]
     StackLimiterInjection,
     #[error("Wasm deserialization error: {0}")]
     DeserializationError(elements::Error),
@@ -72,6 +74,10 @@ pub enum Error {
     LoadWasmCode(String),
     #[error("Unable to find compiled wasm code")]
     NoCompiledWasmCode,
+    #[error("Error while accounting for gas: {0}")]
+    GasError(#[from] gas::Error),
+    #[error("Failed type conversion: {0}")]
+    ConversionError(String),
 }
 
 /// Result for functions that may fail
@@ -84,6 +90,7 @@ pub fn tx<DB, H, CA>(
     storage: &Storage<DB, H>,
     write_log: &mut WriteLog,
     gas_meter: &mut TxGasMeter,
+    gas_table: &BTreeMap<String, u64>,
     tx_index: &TxIndex,
     tx_code: impl AsRef<[u8]>,
     tx_data: impl AsRef<[u8]>,
@@ -95,17 +102,65 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    let (module, store) = if tx_code.as_ref().len() == HASH_LENGTH {
+    let (module, store, tx_hash) = if tx_code.as_ref().len() == HASH_LENGTH {
         // we assume that there is no wasm code with HASH_LENGTH
         let code_hash =
             Hash::try_from(tx_code.as_ref()).map_err(Error::CodeHash)?;
-        fetch_or_compile(tx_wasm_cache, &code_hash, write_log, storage)?
+
+        // Compilation gas even if the compiled module is in cache
+        let key = Key::wasm_code_len(&code_hash);
+        let tx_len = match write_log.read(&key).0 {
+            Some(StorageModification::Write { value }) => {
+                u64::try_from_slice(value)
+                    .map_err(|e| Error::ConversionError(e.to_string()))
+            }
+            _ => match storage
+                .read(&key)
+                .map_err(|e| {
+                    Error::LoadWasmCode(format!(
+                        "Read wasm code length failed from storage: key {}, \
+                             error {}",
+                        key, e
+                    ))
+                })?
+                .0
+            {
+                Some(v) => u64::try_from_slice(&v)
+                    .map_err(|e| Error::ConversionError(e.to_string())),
+                None => Err(Error::LoadWasmCode(format!(
+                    "No wasm code length in storage: key {}",
+                    key
+                ))),
+            },
+        }?;
+        gas_meter.add_compiling_gas(tx_len)?;
+        gas_meter.add_tx_load_from_storage_gas(tx_len)?;
+
+        let (module, store) =
+            fetch_or_compile(tx_wasm_cache, &code_hash, write_log, storage)?;
+        (module, store, code_hash)
     } else {
-        match tx_wasm_cache.compile_or_fetch(tx_code)? {
-            Some((module, store)) => (module, store),
+        // Compilation gas even if the compiled module is in cache
+        gas_meter.add_compiling_gas(
+            u64::try_from(tx_code.as_ref().len())
+                .map_err(|e| Error::ConversionError(e.to_string()))?,
+        )?;
+
+        match tx_wasm_cache.compile_or_fetch(tx_code.as_ref())? {
+            Some((module, store)) => (module, store, Hash::sha256(tx_code)),
             None => return Err(Error::NoCompiledWasmCode),
         }
     };
+
+    let tx_gas_required =
+        match gas_table.get(&tx_hash.to_string().to_ascii_lowercase()) {
+            Some(gas) => gas.to_owned(),
+            #[cfg(test)]
+            None => 1_000,
+            #[cfg(not(test))]
+            None => 0, // VPs will reject the non-whitelisted tx
+        };
+    gas_meter.add(tx_gas_required)?;
 
     let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
     let mut verifiers = BTreeSet::new();
@@ -429,7 +484,6 @@ where
     CN: 'static + CacheName,
     CA: 'static + WasmCacheAccess,
 {
-    use crate::core::ledger::storage::write_log::StorageModification;
     match wasm_cache.fetch(code_hash)? {
         Some((module, store)) => Ok((module, store)),
         None => {
@@ -535,6 +589,7 @@ mod tests {
         let storage = TestStorage::default();
         let mut write_log = WriteLog::default();
         let mut gas_meter = TxGasMeter::new(TX_GAS_LIMIT);
+        let gas_table = BTreeMap::default();
         let tx_index = TxIndex::default();
 
         // This code will allocate memory of the given size
@@ -558,6 +613,7 @@ mod tests {
             &storage,
             &mut write_log,
             &mut gas_meter,
+            &gas_table,
             &tx_index,
             &code_hash,
             tx_data,
@@ -573,6 +629,7 @@ mod tests {
             &storage,
             &mut write_log,
             &mut gas_meter,
+            &gas_table,
             &tx_index,
             &code_hash,
             tx_data,
@@ -746,6 +803,7 @@ mod tests {
         let storage = TestStorage::default();
         let mut write_log = WriteLog::default();
         let mut gas_meter = TxGasMeter::new(TX_GAS_LIMIT);
+        let gas_table = BTreeMap::default();
         let tx_index = TxIndex::default();
 
         let tx_no_op = TestWasms::TxNoOp.read_bytes();
@@ -769,6 +827,7 @@ mod tests {
             &storage,
             &mut write_log,
             &mut gas_meter,
+            &gas_table,
             &tx_index,
             code_hash,
             tx_data,
@@ -864,6 +923,7 @@ mod tests {
         let mut storage = TestStorage::default();
         let mut write_log = WriteLog::default();
         let mut gas_meter = TxGasMeter::new(TX_GAS_LIMIT);
+        let gas_table = BTreeMap::default();
         let tx_index = TxIndex::default();
 
         let tx_read_key = TestWasms::TxReadStorageKey.read_bytes();
@@ -892,6 +952,7 @@ mod tests {
             &storage,
             &mut write_log,
             &mut gas_meter,
+            &gas_table,
             &tx_index,
             code_hash,
             tx_data,
@@ -1059,6 +1120,7 @@ mod tests {
         let storage = TestStorage::default();
         let mut write_log = WriteLog::default();
         let mut gas_meter = TxGasMeter::new(TX_GAS_LIMIT);
+        let gas_table = BTreeMap::default();
         let (mut vp_cache, _) =
             wasm::compilation_cache::common::testing::cache();
         let (mut tx_cache, _) =
@@ -1072,6 +1134,7 @@ mod tests {
             &storage,
             &mut write_log,
             &mut gas_meter,
+            &gas_table,
             &tx_index,
             code_hash,
             tx_data,
