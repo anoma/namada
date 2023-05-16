@@ -233,7 +233,7 @@ mod native_vp_host_env {
         fn eval(
             &self,
             _ctx: VpCtx<'static, Self::Db, Self::H, Self::Eval, Self::CA>,
-            _vp_code: Vec<u8>,
+            _vp_code_hash: Vec<u8>,
             _input_data: Vec<u8>,
         ) -> namada::types::internal::HostEnvResult {
             unimplemented!(

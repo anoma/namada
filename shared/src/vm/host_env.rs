@@ -287,7 +287,7 @@ pub trait VpEvaluator {
     fn eval(
         &self,
         ctx: VpCtx<'static, Self::Db, Self::H, Self::Eval, Self::CA>,
-        vp_code: Vec<u8>,
+        vp_code_hash: Vec<u8>,
         input_data: Vec<u8>,
     ) -> HostEnvResult;
 }
@@ -1884,8 +1884,8 @@ where
 /// Evaluate a validity predicate with the given input data.
 pub fn vp_eval<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<'static, MEM, DB, H, EVAL, CA>,
-    vp_code_ptr: u64,
-    vp_code_len: u64,
+    vp_code_hash_ptr: u64,
+    vp_code_hash_len: u64,
     input_data_ptr: u64,
     input_data_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
@@ -1896,10 +1896,10 @@ where
     EVAL: VpEvaluator<Db = DB, H = H, Eval = EVAL, CA = CA>,
     CA: WasmCacheAccess,
 {
-    let (vp_code, gas) =
-        env.memory
-            .read_bytes(vp_code_ptr, vp_code_len as _)
-            .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+    let (vp_code, gas) = env
+        .memory
+        .read_bytes(vp_code_hash_ptr, vp_code_hash_len as _)
+        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_host_fns::add_gas(gas_meter, gas)?;
 

@@ -196,8 +196,8 @@ pub mod vp {
         pub fn namada_vp_log_string(str_ptr: u64, str_len: u64);
 
         pub fn namada_vp_eval(
-            vp_code_ptr: u64,
-            vp_code_len: u64,
+            vp_code_hash_ptr: u64,
+            vp_code_hash_len: u64,
             input_data_ptr: u64,
             input_data_len: u64,
         ) -> i64;
