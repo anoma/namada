@@ -2494,7 +2494,7 @@ where
     );
     let mut slashes_cache = HashMap::<Address, Vec<Slash>>::new();
     // Applied slashes grouped by validator address
-    let mut applied_slashes = HashMap::<Address, HashSet<Slash>>::new();
+    let mut applied_slashes = HashMap::<Address, Vec<Slash>>::new();
 
     // TODO: if validator is `Some`, look-up all its bond owners (including
     // self-bond, if any) first
@@ -2639,7 +2639,7 @@ where
     S: StorageRead,
 {
     let slashes = find_validator_slashes(storage, &validator)?;
-    let mut applied_slashes = HashMap::<Address, HashSet<Slash>>::new();
+    let mut applied_slashes = HashMap::<Address, Vec<Slash>>::new();
 
     let bonds = find_bonds(storage, &source, &validator)?
         .into_iter()
@@ -2684,8 +2684,13 @@ fn make_bond_details(
     change: token::Change,
     start: Epoch,
     slashes: &[Slash],
-    applied_slashes: &mut HashMap<Address, HashSet<Slash>>,
+    applied_slashes: &mut HashMap<Address, Vec<Slash>>,
 ) -> BondDetails {
+    let prev_applied_slashes = applied_slashes
+        .clone()
+        .get(validator)
+        .cloned()
+        .unwrap_or_default();
     let amount = token::Amount::from_change(change);
     let slashed_amount =
         slashes
@@ -2694,15 +2699,18 @@ fn make_bond_details(
                 if slash.epoch >= start {
                     let validator_slashes =
                         applied_slashes.entry(validator.clone()).or_default();
-                    if !validator_slashes.contains(slash) {
-                        validator_slashes.insert(slash.clone());
+                    if !prev_applied_slashes
+                        .iter()
+                        .any(|s| s.clone() == slash.clone())
+                    {
+                        validator_slashes.push(slash.clone());
                     }
                     return Some(
                         acc.unwrap_or_default()
                             + mult_change_to_amount(slash.rate, change),
                     );
                 }
-                None
+                acc
             });
     let slashed_amount =
         slashed_amount.map(|slashed| cmp::min(amount, slashed));
@@ -2720,8 +2728,13 @@ fn make_unbond_details(
     amount: token::Amount,
     (start, withdraw): (Epoch, Epoch),
     slashes: &[Slash],
-    applied_slashes: &mut HashMap<Address, HashSet<Slash>>,
+    applied_slashes: &mut HashMap<Address, Vec<Slash>>,
 ) -> UnbondDetails {
+    let prev_applied_slashes = applied_slashes
+        .clone()
+        .get(validator)
+        .cloned()
+        .unwrap_or_default();
     // TODO: checks bounds for considering valid unbond with slash!
     let slashed_amount =
         slashes
@@ -2738,15 +2751,18 @@ fn make_unbond_details(
                 {
                     let validator_slashes =
                         applied_slashes.entry(validator.clone()).or_default();
-                    if !validator_slashes.contains(slash) {
-                        validator_slashes.insert(slash.clone());
+                    if !prev_applied_slashes
+                        .iter()
+                        .any(|s| s.clone() == slash.clone())
+                    {
+                        validator_slashes.push(slash.clone());
                     }
                     return Some(
                         acc.unwrap_or_default()
                             + decimal_mult_amount(slash.rate, amount),
                     );
                 }
-                None
+                acc
             });
     let slashed_amount =
         slashed_amount.map(|slashed| cmp::min(amount, slashed));
