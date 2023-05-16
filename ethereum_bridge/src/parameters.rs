@@ -299,6 +299,7 @@ mod tests {
     #[test]
     fn test_round_trip_toml_serde() -> Result<()> {
         let config = EthereumBridgeConfig {
+            eth_start_height: Default::default(),
             min_confirmations: MinimumConfirmations::default(),
             contracts: Contracts {
                 native_erc20: EthAddress([42; 20]),
@@ -323,6 +324,7 @@ mod tests {
     fn test_ethereum_bridge_config_read_write_storage() {
         let mut wl_storage = TestWlStorage::default();
         let config = EthereumBridgeConfig {
+            eth_start_height: Default::default(),
             min_confirmations: MinimumConfirmations::default(),
             contracts: Contracts {
                 native_erc20: EthAddress([42; 20]),
@@ -356,6 +358,7 @@ mod tests {
     fn test_ethereum_bridge_config_storage_corrupt() {
         let mut wl_storage = TestWlStorage::default();
         let config = EthereumBridgeConfig {
+            eth_start_height: Default::default(),
             min_confirmations: MinimumConfirmations::default(),
             contracts: Contracts {
                 native_erc20: EthAddress([42; 20]),

@@ -90,6 +90,7 @@ pub fn bootstrap_ethereum_bridge(
     wl_storage: &mut TestWlStorage,
 ) -> EthereumBridgeConfig {
     let config = EthereumBridgeConfig {
+        eth_start_height: Default::default(),
         min_confirmations: MinimumConfirmations::from(unsafe {
             // SAFETY: The only way the API contract of `NonZeroU64` can
             // be violated is if we construct values
@@ -166,6 +167,7 @@ pub fn init_storage_with_validators(
     )
     .expect("Test failed");
     let config = EthereumBridgeConfig {
+        eth_start_height: Default::default(),
         min_confirmations: Default::default(),
         contracts: Contracts {
             native_erc20: wnam(),

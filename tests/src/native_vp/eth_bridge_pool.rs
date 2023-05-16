@@ -63,6 +63,7 @@ mod test_bridge_pool_vp {
             ..Default::default()
         };
         let config = EthereumBridgeConfig {
+            eth_start_height: Default::default(),
             min_confirmations: Default::default(),
             contracts: Contracts {
                 native_erc20: wnam(),

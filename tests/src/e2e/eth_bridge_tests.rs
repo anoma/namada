@@ -365,6 +365,7 @@ async fn test_bridge_pool_e2e() {
     let test = setup::network(
         |mut genesis| {
             genesis.ethereum_bridge_params = Some(EthereumBridgeConfig {
+                eth_start_height: Default::default(),
                 min_confirmations: Default::default(),
                 contracts: Contracts {
                     native_erc20: wnam(),
@@ -561,6 +562,7 @@ async fn test_bridge_pool_e2e() {
 #[tokio::test]
 async fn test_wnam_transfer() -> Result<()> {
     let ethereum_bridge_params = EthereumBridgeConfig {
+        eth_start_height: Default::default(),
         min_confirmations: MinimumConfirmations::from(unsafe {
             // SAFETY: The only way the API contract of `NonZeroU64` can
             // be violated is if we construct values
@@ -588,7 +590,8 @@ async fn test_wnam_transfer() -> Result<()> {
     // use a network-config.toml with eth bridge parameters in it
     let test = setup::network(
         |mut genesis| {
-            genesis.ethereum_bridge_params = Some(ethereum_bridge_params);
+            genesis.ethereum_bridge_params =
+                Some(ethereum_bridge_params.clone());
             let native_token = genesis.token.get_mut("NAM").unwrap();
             native_token_address =
                 Some(native_token.address.as_ref().unwrap().clone());
@@ -667,6 +670,7 @@ async fn test_wnam_transfer() -> Result<()> {
 #[test]
 fn test_configure_oracle_from_storage() -> Result<()> {
     let ethereum_bridge_params = EthereumBridgeConfig {
+        eth_start_height: Default::default(),
         min_confirmations: MinimumConfirmations::from(unsafe {
             // SAFETY: The only way the API contract of `NonZeroU64` can
             // be violated is if we construct values
@@ -689,7 +693,8 @@ fn test_configure_oracle_from_storage() -> Result<()> {
     // use a network-config.toml with eth bridge parameters in it
     let test = setup::network(
         |mut genesis| {
-            genesis.ethereum_bridge_params = Some(ethereum_bridge_params);
+            genesis.ethereum_bridge_params =
+                Some(ethereum_bridge_params.clone());
             genesis
         },
         None,

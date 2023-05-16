@@ -82,6 +82,7 @@ impl EventsEndpointClient {
 /// events.
 pub fn setup_single_validator_test() -> Result<(Test, NamadaBgCmd)> {
     let ethereum_bridge_params = EthereumBridgeConfig {
+        eth_start_height: Default::default(),
         min_confirmations: MinimumConfirmations::from(unsafe {
             // SAFETY: The only way the API contract of `NonZeroU64` can
             // be violated is if we construct values
@@ -104,7 +105,8 @@ pub fn setup_single_validator_test() -> Result<(Test, NamadaBgCmd)> {
     // use a network-config.toml with eth bridge parameters in it
     let test = setup::network(
         |mut genesis| {
-            genesis.ethereum_bridge_params = Some(ethereum_bridge_params);
+            genesis.ethereum_bridge_params =
+                Some(ethereum_bridge_params.clone());
             genesis
         },
         None,
