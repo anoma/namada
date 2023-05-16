@@ -827,6 +827,7 @@ pub mod cmds {
         Run(LedgerRun),
         Reset(LedgerReset),
         DumpDb(LedgerDumpDb),
+        DbDeleteValue(LedgerDbDeleteValue),
     }
 
     impl SubCmd for Ledger {
@@ -837,8 +838,11 @@ pub mod cmds {
                 let run = SubCmd::parse(matches).map(Self::Run);
                 let reset = SubCmd::parse(matches).map(Self::Reset);
                 let dump_db = SubCmd::parse(matches).map(Self::DumpDb);
+                let db_delete_value =
+                    SubCmd::parse(matches).map(Self::DbDeleteValue);
                 run.or(reset)
                     .or(dump_db)
+                    .or(db_delete_value)
                     // The `run` command is the default if no sub-command given
                     .or(Some(Self::Run(LedgerRun(args::LedgerRun(None)))))
             })
@@ -853,6 +857,7 @@ pub mod cmds {
                 .subcommand(LedgerRun::def())
                 .subcommand(LedgerReset::def())
                 .subcommand(LedgerDumpDb::def())
+                .subcommand(LedgerDbDeleteValue::def())
         }
     }
 
@@ -909,6 +914,29 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Dump Namada ledger node's DB from a block into a file.")
                 .add_args::<args::LedgerDumpDb>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerDbDeleteValue(pub args::LedgerDbDeleteValue);
+
+    impl SubCmd for LedgerDbDeleteValue {
+        const CMD: &'static str = "db-delete-value";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::LedgerDbDeleteValue::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Delete a value from the ledger node's DB at the given \
+                     key.",
+                )
+                .setting(AppSettings::ArgRequiredElseHelp)
+                .add_args::<args::LedgerDbDeleteValue>()
         }
     }
 
@@ -2263,6 +2291,26 @@ pub mod args {
         }
     }
 
+    #[derive(Clone, Debug)]
+    pub struct LedgerDbDeleteValue {
+        pub storage_key: storage::Key,
+    }
+
+    impl Args for LedgerDbDeleteValue {
+        fn parse(matches: &ArgMatches) -> Self {
+            let storage_key = STORAGE_KEY.parse(matches);
+            Self { storage_key }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                STORAGE_KEY
+                    .def()
+                    .about("Storage key to delete a value from."),
+            )
+        }
+    }
+
     /// Transaction associated results arguments
     #[derive(Clone, Debug)]
     pub struct QueryResult {
@@ -2359,7 +2407,7 @@ pub mod args {
         }
     }
 
-    /// A transfer to be added to the Ethereum bridge pool.
+    /// Submit a validator set update protocol tx.
     #[derive(Clone, Debug)]
     pub struct SubmitValidatorSetUpdate {
         /// The query parameters.

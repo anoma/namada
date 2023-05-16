@@ -40,6 +40,9 @@ pub fn main() -> Result<()> {
             cmds::Ledger::DumpDb(cmds::LedgerDumpDb(args)) => {
                 ledger::dump_db(ctx.config.ledger, args);
             }
+            cmds::Ledger::DbDeleteValue(cmds::LedgerDbDeleteValue(args)) => {
+                ledger::db_delete_value(ctx.config.ledger, args);
+            }
         },
         cmds::NamadaNode::Config(sub) => match sub {
             cmds::Config::Gen(cmds::ConfigGen) => {

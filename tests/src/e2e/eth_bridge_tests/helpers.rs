@@ -239,7 +239,7 @@ pub async fn read_erc20_supply(
     ledger_addr: &str,
     asset: &EthAddress,
 ) -> Result<Option<token::Amount>> {
-    rpc_client_do(ledger_addr, |rpc, client| async move {
+    rpc_client_do(ledger_addr, &(), |rpc, client, ()| async move {
         let amount = rpc
             .shell()
             .eth_bridge()
