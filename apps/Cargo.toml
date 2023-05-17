@@ -70,7 +70,7 @@ abciplus = [
 ]
 
 [dependencies]
-namada = {path = "../shared", default-features = false, features = ["wasm-runtime", "ferveo-tpke"]}
+namada = {path = "../shared", default-features = false, features = ["wasm-runtime", "ferveo-tpke", "masp-tx-gen", "http-client"]}
 ark-serialize = "0.3.0"
 ark-std = "0.3.0"
 # branch = "bat/arse-merkle-tree"
@@ -125,10 +125,10 @@ signal-hook = "0.3.9"
 sysinfo = {version = "=0.21.1", default-features = false}
 tar = "0.4.37"
 # temporarily using fork work-around
-tendermint-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "a3a0ad5f07d380976bbd5321239aec9cc3a8f916", optional = true}
-tendermint-config-abcipp = {package = "tendermint-config", git = "https://github.com/heliaxdev/tendermint-rs", rev = "a3a0ad5f07d380976bbd5321239aec9cc3a8f916", optional = true}
-tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", rev = "a3a0ad5f07d380976bbd5321239aec9cc3a8f916", optional = true}
-tendermint-rpc-abcipp = {package = "tendermint-rpc", git = "https://github.com/heliaxdev/tendermint-rs", rev = "a3a0ad5f07d380976bbd5321239aec9cc3a8f916", features = ["http-client", "websocket-client"], optional = true}
+tendermint-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "4db3c5ea09fae4057008d22bf9e96bf541b55b35", optional = true}
+tendermint-config-abcipp = {package = "tendermint-config", git = "https://github.com/heliaxdev/tendermint-rs", rev = "4db3c5ea09fae4057008d22bf9e96bf541b55b35", optional = true}
+tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", rev = "4db3c5ea09fae4057008d22bf9e96bf541b55b35", optional = true}
+tendermint-rpc-abcipp = {package = "tendermint-rpc", git = "https://github.com/heliaxdev/tendermint-rs", rev = "4db3c5ea09fae4057008d22bf9e96bf541b55b35", features = ["http-client", "websocket-client"], optional = true}
 tendermint = {version = "0.23.6", optional = true}
 tendermint-config = {version = "0.23.6", optional = true}
 tendermint-proto = {version = "0.23.6", optional = true}
@@ -151,8 +151,8 @@ winapi = "0.3.9"
 masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", features = ["transparent-inputs"] }
 masp_proofs = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", features = ["bundled-prover", "download-params"] }
 bimap = {version = "0.6.2", features = ["serde"]}
-rust_decimal = "1.26.1"
-rust_decimal_macros = "1.26.1"
+rust_decimal = "=1.26.1"
+rust_decimal_macros = "=1.26.1"
 directories = "4.0.1"
 
 [dev-dependencies]

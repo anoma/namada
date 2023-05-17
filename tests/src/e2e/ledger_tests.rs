@@ -23,7 +23,7 @@ use namada::types::address::{btc, eth, masp_rewards, Address};
 use namada::types::governance::ProposalType;
 use namada::types::storage::Epoch;
 use namada::types::token;
-use namada_apps::client::tx::ShieldedContext;
+use namada_apps::client::tx::CLIShieldedUtils;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
@@ -580,7 +580,7 @@ fn ledger_txs_and_queries() -> Result<()> {
 #[test]
 fn masp_txs_and_queries() -> Result<()> {
     // Download the shielded pool parameters before starting node
-    let _ = ShieldedContext::new(PathBuf::new());
+    let _ = CLIShieldedUtils::new(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.
@@ -850,7 +850,7 @@ fn masp_txs_and_queries() -> Result<()> {
 #[test]
 fn masp_pinned_txs() -> Result<()> {
     // Download the shielded pool parameters before starting node
-    let _ = ShieldedContext::new(PathBuf::new());
+    let _ = CLIShieldedUtils::new(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.
@@ -1011,7 +1011,7 @@ fn masp_pinned_txs() -> Result<()> {
 #[test]
 fn masp_incentives() -> Result<()> {
     // Download the shielded pool parameters before starting node
-    let _ = ShieldedContext::new(PathBuf::new());
+    let _ = CLIShieldedUtils::new(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.

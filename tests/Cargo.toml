@@ -21,7 +21,7 @@ abciplus = [
 wasm-runtime = ["namada/wasm-runtime"]
 
 [dependencies]
-namada = {path = "../shared", default-features = false, features = ["testing"]}
+namada = {path = "../shared", default-features = false, features = ["testing", "namada-sdk"]}
 namada_core = {path = "../core", default-features = false, features = ["testing"]}
 namada_test_utils = {path = "../test_utils"}
 namada_vp_prelude = {path = "../vp_prelude", default-features = false}
@@ -44,8 +44,8 @@ tokio = {version = "1.8.2", features = ["full"]}
 tracing = "0.1.30"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
 derivative = "2.2.0"
-rust_decimal = "1.26.1"
-rust_decimal_macros = "1.26.1"
+rust_decimal = "=1.26.1"
+rust_decimal_macros = "=1.26.1"
 
 [dev-dependencies]
 namada_apps = {path = "../apps", default-features = false, features = ["testing"]}
