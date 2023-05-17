@@ -179,7 +179,13 @@ where
         vp_wasm_cache,
         tx_wasm_cache,
     )
-    .map_err(Error::TxRunnerError)
+    .map_err(|e| {
+        if let wasm::run::Error::GasError(gas_error) = e {
+            Error::GasError(gas_error)
+        } else {
+            Error::TxRunnerError(e)
+        }
+    })
 }
 
 /// Check the acceptance of a transaction by validity predicates

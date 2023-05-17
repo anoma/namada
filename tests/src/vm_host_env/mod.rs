@@ -18,6 +18,7 @@ pub mod vp;
 #[cfg(test)]
 mod tests {
 
+    use std::collections::BTreeMap;
     use std::panic;
 
     use itertools::Itertools;
@@ -133,13 +134,11 @@ mod tests {
 
         // Trying to delete a validity predicate should fail
         let key = storage::Key::validity_predicate(&test_account);
-        assert!(
-            panic::catch_unwind(|| { tx::ctx().delete(&key).unwrap() })
-                .err()
-                .map(|a| a.downcast_ref::<String>().cloned().unwrap())
-                .unwrap()
-                .contains("CannotDeleteVp")
-        );
+        assert!(panic::catch_unwind(|| { tx::ctx().delete(&key).unwrap() })
+            .err()
+            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+            .unwrap()
+            .contains("CannotDeleteVp"));
     }
 
     #[test]
@@ -470,21 +469,17 @@ mod tests {
                     .expect("decoding signed data we just signed")
             });
             assert_eq!(&signed_tx_data.data, data);
-            assert!(
-                vp::CTX
-                    .verify_tx_signature(&pk, &signed_tx_data.sig)
-                    .unwrap()
-            );
+            assert!(vp::CTX
+                .verify_tx_signature(&pk, &signed_tx_data.sig)
+                .unwrap());
 
             let other_keypair = key::testing::keypair_2();
-            assert!(
-                !vp::CTX
-                    .verify_tx_signature(
-                        &other_keypair.ref_to(),
-                        &signed_tx_data.sig
-                    )
-                    .unwrap()
-            );
+            assert!(!vp::CTX
+                .verify_tx_signature(
+                    &other_keypair.ref_to(),
+                    &signed_tx_data.sig
+                )
+                .unwrap());
         }
     }
 
@@ -539,12 +534,20 @@ mod tests {
         assert!(!result);
 
         // evaluating the VP template which always returns `true` should pass
+        let gas_table: BTreeMap<String, u64> = BTreeMap::default();
         let code = TestWasms::VpAlwaysTrue.read_bytes();
         let code_hash = Hash::sha256(&code);
+        let code_len = (code.len() as u64).try_to_vec().unwrap();
         vp_host_env::with(|env| {
             // store wasm codes
             let key = Key::wasm_code(&code_hash);
+            let len_key = Key::wasm_code_len(&code_hash);
             env.wl_storage.storage.write(&key, code.clone()).unwrap();
+            env.wl_storage
+                .storage
+                .write(&len_key, code_len.clone())
+                .unwrap();
+            env.wl_storage.storage.write(&namada::ledger::parameters::storage::get_gas_table_storage_key(), gas_table.clone().try_to_vec().unwrap()).unwrap();
         });
         let input_data = vec![];
         let result = vp::CTX.eval(code_hash, input_data).unwrap();
@@ -554,10 +557,17 @@ mod tests {
         // pass
         let code = TestWasms::VpAlwaysFalse.read_bytes();
         let code_hash = Hash::sha256(&code);
+        let code_len = (code.len() as u64).try_to_vec().unwrap();
         vp_host_env::with(|env| {
             // store wasm codes
             let key = Key::wasm_code(&code_hash);
+            let len_key = Key::wasm_code_len(&code_hash);
             env.wl_storage.storage.write(&key, code.clone()).unwrap();
+            env.wl_storage
+                .storage
+                .write(&len_key, code_len.clone())
+                .unwrap();
+            env.wl_storage.storage.write(&namada::ledger::parameters::storage::get_gas_table_storage_key(), gas_table.clone().try_to_vec().unwrap()).unwrap();
         });
         let input_data = vec![];
         let result = vp::CTX.eval(code_hash, input_data).unwrap();

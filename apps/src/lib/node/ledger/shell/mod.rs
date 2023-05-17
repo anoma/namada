@@ -95,8 +95,6 @@ pub enum Error {
     TxDecoding(proto::Error),
     #[error("Error trying to apply a transaction: {0}")]
     TxApply(protocol::Error),
-    #[error("Gas limit exceeding while applying transactions in block")]
-    GasOverflow,
     #[error("{0}")]
     Tendermint(tendermint_node::Error),
     #[error("Server error: {0}")]

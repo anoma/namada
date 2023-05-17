@@ -675,7 +675,10 @@ mod tests {
         // store the wasm code
         let code_hash = Hash::sha256(&tx_code);
         let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
+        let code_len = (tx_code.len() as u64).try_to_vec().unwrap();
         write_log.write(&key, tx_code).unwrap();
+        write_log.write(&len_key, code_len).unwrap();
 
         // Assuming 200 pages, 12.8 MiB limit
         assert_eq!(memory::TX_MEMORY_MAX_PAGES, 200);
@@ -738,13 +741,23 @@ mod tests {
         // store the wasm code
         let code_hash = Hash::sha256(&vp_eval);
         let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
+        let code_len = (vp_eval.len() as u64).try_to_vec().unwrap();
         storage.write(&key, vp_eval).unwrap();
+        storage.write(&len_key, code_len).unwrap();
         // This code will allocate memory of the given size
         let vp_memory_limit = TestWasms::VpMemoryLimit.read_bytes();
         // store the wasm code
         let limit_code_hash = Hash::sha256(&vp_memory_limit);
         let key = Key::wasm_code(&limit_code_hash);
+        let len_key = Key::wasm_code_len(&limit_code_hash);
+        let code_len = (vp_memory_limit.len() as u64).try_to_vec().unwrap();
         storage.write(&key, vp_memory_limit).unwrap();
+        storage.write(&len_key, code_len).unwrap();
+        let gas_table_key = &namada_core::ledger::parameters::storage::get_gas_table_storage_key();
+        storage
+            .write(&gas_table_key, gas_table.try_to_vec().unwrap())
+            .unwrap();
 
         // Assuming 200 pages, 12.8 MiB limit
         assert_eq!(memory::VP_MEMORY_MAX_PAGES, 200);
@@ -828,8 +841,11 @@ mod tests {
         let vp_code = TestWasms::VpMemoryLimit.read_bytes();
         // store the wasm code
         let code_hash = Hash::sha256(&vp_code);
+        let code_len = (vp_code.len() as u64).try_to_vec().unwrap();
         let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
         storage.write(&key, vp_code).unwrap();
+        storage.write(&len_key, code_len).unwrap();
 
         // Assuming 200 pages, 12.8 MiB limit
         assert_eq!(memory::VP_MEMORY_MAX_PAGES, 200);
@@ -894,7 +910,10 @@ mod tests {
         // store the wasm code
         let code_hash = Hash::sha256(&tx_no_op);
         let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
+        let code_len = (tx_no_op.len() as u64).try_to_vec().unwrap();
         write_log.write(&key, tx_no_op).unwrap();
+        write_log.write(&len_key, code_len).unwrap();
 
         // Assuming 200 pages, 12.8 MiB limit
         assert_eq!(memory::TX_MEMORY_MAX_PAGES, 200);
@@ -954,7 +973,10 @@ mod tests {
         // store the wasm code
         let code_hash = Hash::sha256(&vp_code);
         let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
+        let code_len = (vp_code.len() as u64).try_to_vec().unwrap();
         storage.write(&key, vp_code).unwrap();
+        storage.write(&len_key, code_len).unwrap();
 
         // Assuming 200 pages, 12.8 MiB limit
         assert_eq!(memory::VP_MEMORY_MAX_PAGES, 200);
@@ -1015,8 +1037,11 @@ mod tests {
         let tx_read_key = TestWasms::TxReadStorageKey.read_bytes();
         // store the wasm code
         let code_hash = Hash::sha256(&tx_read_key);
+        let code_len = (tx_read_key.len() as u64).try_to_vec().unwrap();
         let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
         write_log.write(&key, tx_read_key).unwrap();
+        write_log.write(&len_key, code_len).unwrap();
 
         // Allocating `2^24` (16 MiB) for a value in storage that the tx
         // attempts to read should be above the memory limit and should
@@ -1067,8 +1092,11 @@ mod tests {
         let vp_read_key = TestWasms::VpReadStorageKey.read_bytes();
         // store the wasm code
         let code_hash = Hash::sha256(&vp_read_key);
+        let code_len = (vp_read_key.len() as u64).try_to_vec().unwrap();
         let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
         storage.write(&key, vp_read_key).unwrap();
+        storage.write(&len_key, code_len).unwrap();
 
         // Allocating `2^24` (16 MiB) for a value in storage that the tx
         // attempts to read should be above the memory limit and should
@@ -1123,14 +1151,20 @@ mod tests {
         let vp_eval = TestWasms::VpEval.read_bytes();
         // store the wasm code
         let code_hash = Hash::sha256(&vp_eval);
+        let code_len = (vp_eval.len() as u64).try_to_vec().unwrap();
         let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
         storage.write(&key, vp_eval).unwrap();
+        storage.write(&len_key, code_len).unwrap();
         // This code will read value from the storage
         let vp_read_key = TestWasms::VpReadStorageKey.read_bytes();
         // store the wasm code
         let read_code_hash = Hash::sha256(&vp_read_key);
+        let code_len = (vp_read_key.len() as u64).try_to_vec().unwrap();
         let key = Key::wasm_code(&read_code_hash);
+        let len_key = Key::wasm_code_len(&read_code_hash);
         storage.write(&key, vp_read_key).unwrap();
+        storage.write(&len_key, code_len).unwrap();
 
         // Allocating `2^24` (16 MiB) for a value in storage that the tx
         // attempts to read should be above the memory limit and should
@@ -1217,8 +1251,11 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
         // store the tx code
         let code_hash = Hash::sha256(&tx_code);
+        let code_len = (tx_code.len() as u64).try_to_vec().unwrap();
         let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
         write_log.write(&key, tx_code).unwrap();
+        write_log.write(&len_key, code_len).unwrap();
 
         tx(
             &storage,
@@ -1274,8 +1311,11 @@ mod tests {
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         // store the vp code
         let code_hash = Hash::sha256(&vp_code);
+        let code_len = (vp_code.len() as u64).try_to_vec().unwrap();
         let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
         storage.write(&key, vp_code).unwrap();
+        storage.write(&len_key, code_len).unwrap();
 
         vp(
             &code_hash,

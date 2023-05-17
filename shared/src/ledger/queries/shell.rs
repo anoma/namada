@@ -358,7 +358,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use borsh::BorshDeserialize;
+    use borsh::{BorshDeserialize, BorshSerialize};
     use namada_test_utils::TestWasms;
 
     use crate::ledger::queries::testing::TestClient;
@@ -399,7 +399,13 @@ mod test {
         let tx_no_op = TestWasms::TxNoOp.read_bytes();
         let tx_hash = Hash::sha256(&tx_no_op);
         let key = Key::wasm_code(&tx_hash);
+        let len_key = Key::wasm_code_len(&tx_hash);
         client.wl_storage.storage.write(&key, &tx_no_op).unwrap();
+        client
+            .wl_storage
+            .storage
+            .write(&len_key, (tx_no_op.len() as u64).try_to_vec().unwrap())
+            .unwrap();
 
         // Request last committed epoch
         let read_epoch = RPC.shell().epoch(&client).await.unwrap();
