@@ -7,16 +7,20 @@ use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use itertools::sorted;
 use masp_primitives::zip32::ExtendedFullViewingKey;
+use namada::ledger::masp::find_valid_diversifier;
+use namada::ledger::wallet::FindKeyError;
 use namada::types::key::*;
 use namada::types::masp::{MaspValue, PaymentAddress};
 use namada_apps::cli;
+use namada_apps::cli::args::CliToSdk;
 use namada_apps::cli::{args, cmds, Context};
-use namada_apps::client::tx::find_valid_diversifier;
-use namada_apps::wallet::{DecryptionError, FindKeyError};
+use namada_apps::wallet::{
+    read_and_confirm_pwd, CliWalletUtils, DecryptionError,
+};
 use rand_core::OsRng;
 
 pub fn main() -> Result<()> {
-    let (cmd, ctx) = cli::namada_wallet_cli()?;
+    let (cmd, mut ctx) = cli::namada_wallet_cli()?;
     match cmd {
         cmds::NamadaWallet::Key(sub) => match sub {
             cmds::WalletKey::Gen(cmds::KeyGen(args)) => {
@@ -45,6 +49,7 @@ pub fn main() -> Result<()> {
                 spending_key_gen(ctx, args)
             }
             cmds::WalletMasp::GenPayAddr(cmds::MaspGenPayAddr(args)) => {
+                let args = args.to_sdk(&mut ctx);
                 payment_address_gen(ctx, args)
             }
             cmds::WalletMasp::AddAddrKey(cmds::MaspAddAddrKey(args)) => {
@@ -79,7 +84,7 @@ fn address_key_find(
         println!("Viewing key: {}", viewing_key);
         if unsafe_show_secret {
             // Check if alias is also a spending key
-            match wallet.find_spending_key(&alias) {
+            match wallet.find_spending_key(&alias, None) {
                 Ok(spending_key) => println!("Spending key: {}", spending_key),
                 Err(FindKeyError::KeyNotFound) => {}
                 Err(err) => eprintln!("{}", err),
@@ -141,7 +146,7 @@ fn spending_keys_list(
             // Print those too if they are available and requested.
             if unsafe_show_secret {
                 if let Some(spending_key) = spending_key_opt {
-                    match spending_key.get(decrypt, None) {
+                    match spending_key.get::<CliWalletUtils>(decrypt, None) {
                         // Here the spending key is unencrypted or successfully
                         // decrypted
                         Ok(spending_key) => {
@@ -199,8 +204,10 @@ fn spending_key_gen(
 ) {
     let mut wallet = ctx.wallet;
     let alias = alias.to_lowercase();
-    let (alias, _key) = wallet.gen_spending_key(alias, unsafe_dont_encrypt);
-    wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
+    let password = read_and_confirm_pwd(unsafe_dont_encrypt);
+    let (alias, _key) = wallet.gen_spending_key(alias, password);
+    namada_apps::wallet::save(&wallet)
+        .unwrap_or_else(|err| eprintln!("{}", err));
     println!(
         "Successfully added a spending key with alias: \"{}\"",
         alias
@@ -209,7 +216,7 @@ fn spending_key_gen(
 
 /// Generate a shielded payment address from the given key.
 fn payment_address_gen(
-    mut ctx: Context,
+    ctx: Context,
     args::MaspPayAddrGen {
         alias,
         viewing_key,
@@ -217,10 +224,7 @@ fn payment_address_gen(
     }: args::MaspPayAddrGen,
 ) {
     let alias = alias.to_lowercase();
-    let viewing_key =
-        ExtendedFullViewingKey::from(ctx.get_cached(&viewing_key))
-            .fvk
-            .vk;
+    let viewing_key = ExtendedFullViewingKey::from(viewing_key).fvk.vk;
     let (div, _g_d) = find_valid_diversifier(&mut OsRng);
     let payment_addr = viewing_key
         .to_payment_address(div)
@@ -235,7 +239,8 @@ fn payment_address_gen(
             eprintln!("Payment address not added");
             cli::safe_exit(1);
         });
-    wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
+    namada_apps::wallet::save(&wallet)
+        .unwrap_or_else(|err| eprintln!("{}", err));
     println!(
         "Successfully generated a payment address with the following alias: {}",
         alias,
@@ -264,13 +269,10 @@ fn address_key_add(
             (alias, "viewing key")
         }
         MaspValue::ExtendedSpendingKey(spending_key) => {
+            let password = read_and_confirm_pwd(unsafe_dont_encrypt);
             let alias = ctx
                 .wallet
-                .encrypt_insert_spending_key(
-                    alias,
-                    spending_key,
-                    unsafe_dont_encrypt,
-                )
+                .encrypt_insert_spending_key(alias, spending_key, password)
                 .unwrap_or_else(|| {
                     eprintln!("Spending key not added");
                     cli::safe_exit(1);
@@ -288,7 +290,8 @@ fn address_key_add(
             (alias, "payment address")
         }
     };
-    ctx.wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
+    namada_apps::wallet::save(&ctx.wallet)
+        .unwrap_or_else(|err| eprintln!("{}", err));
     println!(
         "Successfully added a {} with the following alias to wallet: {}",
         typ, alias,
@@ -306,8 +309,10 @@ fn key_and_address_gen(
     }: args::KeyAndAddressGen,
 ) {
     let mut wallet = ctx.wallet;
-    let (alias, _key) = wallet.gen_key(scheme, alias, unsafe_dont_encrypt);
-    wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
+    let password = read_and_confirm_pwd(unsafe_dont_encrypt);
+    let (alias, _key) = wallet.gen_key(scheme, alias, password);
+    namada_apps::wallet::save(&wallet)
+        .unwrap_or_else(|err| eprintln!("{}", err));
     println!(
         "Successfully added a key and an address with alias: \"{}\"",
         alias
@@ -326,7 +331,7 @@ fn key_find(
 ) {
     let mut wallet = ctx.wallet;
     let found_keypair = match public_key {
-        Some(pk) => wallet.find_key_by_pk(&pk),
+        Some(pk) => wallet.find_key_by_pk(&pk, None),
         None => {
             let alias = alias.or(value);
             match alias {
@@ -337,7 +342,7 @@ fn key_find(
                     );
                     cli::safe_exit(1)
                 }
-                Some(alias) => wallet.find_key(alias.to_lowercase()),
+                Some(alias) => wallet.find_key(alias.to_lowercase(), None),
             }
         }
     };
@@ -385,7 +390,7 @@ fn key_list(
             if let Some(pkh) = pkh {
                 writeln!(w, "    Public key hash: {}", pkh).unwrap();
             }
-            match stored_keypair.get(decrypt, None) {
+            match stored_keypair.get::<CliWalletUtils>(decrypt, None) {
                 Ok(keypair) => {
                     writeln!(w, "    Public key: {}", keypair.ref_to())
                         .unwrap();
@@ -409,7 +414,7 @@ fn key_list(
 fn key_export(ctx: Context, args::KeyExport { alias }: args::KeyExport) {
     let mut wallet = ctx.wallet;
     wallet
-        .find_key(alias.to_lowercase())
+        .find_key(alias.to_lowercase(), None)
         .map(|keypair| {
             let file_data = keypair
                 .try_to_vec()
@@ -488,7 +493,8 @@ fn address_add(ctx: Context, args: args::AddressAdd) {
         eprintln!("Address not added");
         cli::safe_exit(1);
     }
-    wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
+    namada_apps::wallet::save(&wallet)
+        .unwrap_or_else(|err| eprintln!("{}", err));
     println!(
         "Successfully added a key and an address with alias: \"{}\"",
         args.alias.to_lowercase()
