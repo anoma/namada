@@ -503,7 +503,7 @@ pub fn init_network(
             println!("Generating validator {} consensus key...", name);
             let password = read_and_confirm_pwd(unsafe_dont_encrypt);
             let (_alias, keypair) =
-                wallet.gen_key(SchemeType::Ed25519, Some(alias), password);
+                wallet.gen_key(SchemeType::Ed25519, Some(alias), password, true);
 
             // Write consensus key for Tendermint
             tendermint_node::write_validator_key(&tm_home_dir, &keypair);
@@ -520,7 +520,7 @@ pub fn init_network(
             println!("Generating validator {} account key...", name);
             let password = read_and_confirm_pwd(unsafe_dont_encrypt);
             let (_alias, keypair) =
-                wallet.gen_key(SchemeType::Ed25519, Some(alias), password);
+                wallet.gen_key(SchemeType::Ed25519, Some(alias), password, true);
             keypair.ref_to()
         });
 
@@ -533,7 +533,7 @@ pub fn init_network(
             println!("Generating validator {} protocol signing key...", name);
             let password = read_and_confirm_pwd(unsafe_dont_encrypt);
             let (_alias, keypair) =
-                wallet.gen_key(SchemeType::Ed25519, Some(alias), password);
+                wallet.gen_key(SchemeType::Ed25519, Some(alias), password, true);
             keypair.ref_to()
         });
 
@@ -576,7 +576,7 @@ pub fn init_network(
             Some(genesis_config::HexString(dkg_pk.to_string()));
 
         // Write keypairs to wallet
-        wallet.add_address(name.clone(), address);
+        wallet.add_address(name.clone(), address, true);
 
         crate::wallet::save(&wallet).unwrap();
     });
@@ -599,7 +599,7 @@ pub fn init_network(
         if config.address.is_none() {
             let address = address::gen_established_address("token");
             config.address = Some(address.to_string());
-            wallet.add_address(name.clone(), address);
+            wallet.add_address(name.clone(), address, true);
         }
         if config.vp.is_none() {
             config.vp = Some("vp_token".to_string());
@@ -618,6 +618,7 @@ pub fn init_network(
                     SchemeType::Ed25519,
                     Some(name.clone()),
                     password,
+                    true,
                 );
                 let public_key =
                     genesis_config::HexString(keypair.ref_to().to_string());
@@ -860,7 +861,7 @@ fn init_established_account(
     if config.address.is_none() {
         let address = address::gen_established_address("established");
         config.address = Some(address.to_string());
-        wallet.add_address(&name, address);
+        wallet.add_address(&name, address, true);
     }
     if config.public_key.is_none() {
         println!("Generating established account {} key...", name.as_ref());
@@ -869,6 +870,7 @@ fn init_established_account(
             SchemeType::Ed25519,
             Some(format!("{}-key", name.as_ref())),
             password,
+            true,
         );
         let public_key =
             genesis_config::HexString(keypair.ref_to().to_string());
