@@ -34,6 +34,7 @@ jobs:
         mdbook_open_on_gh: [badboy/mdbook-open-on-gh@v2.2.0]
         mdbook_admonish: [tommilligan/mdbook-admonish@v1.7.0]
         mdbook_katex: [lzanini/mdbook-katex@v0.4.0]
+        mdbook_pagetoc: [slowsage/mdbook-pagetoc@v0.1.7]
         make:
           - name: Build specs
             folder: documentation/specs
@@ -121,6 +122,7 @@ jobs:
             curl https://i.jpillora.com/${{ matrix.mdbook_open_on_gh }}! | bash
             curl https://i.jpillora.com/${{ matrix.mdbook_admonish }}! | bash
             curl https://i.jpillora.com/${{ matrix.mdbook_katex }}! | bash
+            curl https://i.jpillora.com/${{ matrix.mdbook_pagetoc }}! | bash
             cd ${{ matrix.make.folder }} && mdbook-admonish install
       - name: ${{ matrix.make.name }}
         run: ${{ matrix.make.command }}
