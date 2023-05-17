@@ -1,0 +1,1 @@
+- Adds specs for gas and fee ([#889](https://github.com/anoma/namada/pull/889))
