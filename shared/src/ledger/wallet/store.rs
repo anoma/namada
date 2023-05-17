@@ -231,6 +231,7 @@ impl Store {
         scheme: SchemeType,
         alias: Option<String>,
         password: Option<String>,
+        force_alias: bool,
     ) -> (Alias, common::SecretKey) {
         let sk = gen_sk(scheme);
         let pkh: PublicKeyHash = PublicKeyHash::from(&sk.ref_to());
@@ -238,12 +239,12 @@ impl Store {
         let address = Address::Implicit(ImplicitAddress(pkh.clone()));
         let alias: Alias = alias.unwrap_or_else(|| pkh.clone().into()).into();
         if self
-            .insert_keypair::<U>(alias.clone(), keypair_to_store, pkh)
+            .insert_keypair::<U>(alias.clone(), keypair_to_store, pkh, force_alias)
             .is_none()
         {
             panic!("Action cancelled, no changes persisted.");
         }
-        if self.insert_address::<U>(alias.clone(), address).is_none() {
+        if self.insert_address::<U>(alias.clone(), address, force_alias).is_none() {
             panic!("Action cancelled, no changes persisted.");
         }
         (alias, raw_keypair)
@@ -254,6 +255,7 @@ impl Store {
         &mut self,
         alias: String,
         password: Option<String>,
+        force_alias: bool,
     ) -> (Alias, ExtendedSpendingKey) {
         let spendkey = Self::generate_spending_key();
         let viewkey = ExtendedFullViewingKey::from(&spendkey.into()).into();
@@ -261,7 +263,7 @@ impl Store {
             StoredKeypair::new(spendkey, password);
         let alias = Alias::from(alias);
         if self
-            .insert_spending_key::<U>(alias.clone(), spendkey_to_store, viewkey)
+            .insert_spending_key::<U>(alias.clone(), spendkey_to_store, viewkey, force_alias)
             .is_none()
         {
             panic!("Action cancelled, no changes persisted.");
@@ -297,6 +299,7 @@ impl Store {
         alias: Alias,
         keypair: StoredKeypair<common::SecretKey>,
         pkh: PublicKeyHash,
+        force: bool,
     ) -> Option<Alias> {
         if alias.is_empty() {
             println!(
@@ -308,7 +311,7 @@ impl Store {
         // addresses sharing the same namesake before checking if alias has been
         // used.
         let counterpart_address = self.addresses.remove_by_left(&alias);
-        if self.contains_alias(&alias) {
+        if self.contains_alias(&alias) && !force {
             match U::show_overwrite_confirmation(&alias, "a key") {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {
@@ -316,7 +319,7 @@ impl Store {
                     // terminates with a cancellation
                     counterpart_address
                         .map(|x| self.addresses.insert(alias.clone(), x.1));
-                    return self.insert_keypair::<U>(new_alias, keypair, pkh);
+                    return self.insert_keypair::<U>(new_alias, keypair, pkh, false);
                 }
                 ConfirmationResponse::Skip => {
                     // Restore the removed address since this insertion action
@@ -342,17 +345,18 @@ impl Store {
         alias: Alias,
         spendkey: StoredKeypair<ExtendedSpendingKey>,
         viewkey: ExtendedViewingKey,
+        force: bool,
     ) -> Option<Alias> {
         if alias.is_empty() {
             eprintln!("Empty alias given.");
             return None;
         }
-        if self.contains_alias(&alias) {
+        if self.contains_alias(&alias) && !force {
             match U::show_overwrite_confirmation(&alias, "a spending key") {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {
                     return self.insert_spending_key::<U>(
-                        new_alias, spendkey, viewkey,
+                        new_alias, spendkey, viewkey, false,
                     );
                 }
                 ConfirmationResponse::Skip => return None,
@@ -370,16 +374,17 @@ impl Store {
         &mut self,
         alias: Alias,
         viewkey: ExtendedViewingKey,
+        force: bool,
     ) -> Option<Alias> {
         if alias.is_empty() {
             eprintln!("Empty alias given.");
             return None;
         }
-        if self.contains_alias(&alias) {
+        if self.contains_alias(&alias) && !force {
             match U::show_overwrite_confirmation(&alias, "a viewing key") {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {
-                    return self.insert_viewing_key::<U>(new_alias, viewkey);
+                    return self.insert_viewing_key::<U>(new_alias, viewkey, false);
                 }
                 ConfirmationResponse::Skip => return None,
             }
@@ -413,17 +418,18 @@ impl Store {
         &mut self,
         alias: Alias,
         payment_addr: PaymentAddress,
+        force: bool,
     ) -> Option<Alias> {
         if alias.is_empty() {
             eprintln!("Empty alias given.");
             return None;
         }
-        if self.contains_alias(&alias) {
+        if self.contains_alias(&alias) && !force {
             match U::show_overwrite_confirmation(&alias, "a payment address") {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {
                     return self
-                        .insert_payment_addr::<U>(new_alias, payment_addr);
+                        .insert_payment_addr::<U>(new_alias, payment_addr, false);
                 }
                 ConfirmationResponse::Skip => return None,
             }
@@ -453,6 +459,7 @@ impl Store {
         &mut self,
         alias: Alias,
         address: Address,
+        force: bool,
     ) -> Option<Alias> {
         if alias.is_empty() {
             println!("Empty alias given, defaulting to {}.", address.encode());
@@ -469,7 +476,7 @@ impl Store {
                 true
             }
         });
-        if self.addresses.contains_left(&alias) {
+        if self.addresses.contains_left(&alias) && !force {
             match U::show_overwrite_confirmation(&alias, "an address") {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {
@@ -480,7 +487,7 @@ impl Store {
                         counterpart_key,
                         counterpart_pkh,
                     );
-                    return self.insert_address::<U>(new_alias, address);
+                    return self.insert_address::<U>(new_alias, address, false);
                 }
                 ConfirmationResponse::Skip => {
                     // Restore the removed keypair since this insertion action
