@@ -424,27 +424,14 @@ where
             };
 
             // Returning error from here will short-circuit the VP parallel
-            // execution. It's important that we only short-circuit gas
-            // errors to get deterministic gas costs
+            // execution.
             result.gas_used.set(gas_meter).map_err(Error::GasError)?;
-            match accept {
-                Ok(accepted) => {
-                    if !accepted {
-                        result.rejected_vps.insert(addr.clone());
-                    } else {
-                        result.accepted_vps.insert(addr.clone());
-                    }
-                    Ok(result)
-                }
-                Err(err) => match err {
-                    Error::GasError(_) => Err(err),
-                    _ => {
-                        result.rejected_vps.insert(addr.clone());
-                        result.errors.push((addr.clone(), err.to_string()));
-                        Ok(result)
-                    }
-                },
+            if accept? {
+                result.accepted_vps.insert(addr.clone());
+            } else {
+                result.rejected_vps.insert(addr.clone());
             }
+            Ok(result)
         })
         .try_reduce(VpsResult::default, |a, b| {
             merge_vp_results(a, b, tx_gas_limit, initial_gas)
