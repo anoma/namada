@@ -817,7 +817,16 @@ where
                 .storage
                 .ethereum_height
                 .clone()
-                .unwrap_or_default();
+                .unwrap_or_else(|| {
+                    self.wl_storage
+                        .read(&eth_bridge::storage::eth_start_height_key())
+                        .expect(
+                            "Failed to read Ethereum start height from storage",
+                        )
+                        .expect(
+                            "The Ethereum start height should be in storage",
+                        )
+                });
             tracing::info!(
                 ?start_block,
                 "Found Ethereum height from which the Ethereum oracle should \
