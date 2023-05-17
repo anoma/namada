@@ -1688,6 +1688,7 @@ pub mod args {
     pub const ADDRESS: Arg<WalletAddress> = arg("address");
     pub const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
     pub const ALIAS: Arg<String> = arg("alias");
+    pub const ALIAS_FORCE: ArgFlag = flag("alias-force");
     pub const ALLOW_DUPLICATE_IP: ArgFlag = flag("allow-duplicate-ip");
     pub const AMOUNT: Arg<token::Amount> = arg("amount");
     pub const ARCHIVE_DIR: ArgOpt<PathBuf> = arg_opt("archive-dir");
@@ -1805,6 +1806,7 @@ pub mod args {
         arg_opt("validator-code-path");
     pub const VALUE: ArgOpt<String> = arg_opt("value");
     pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
+    pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
 
@@ -3157,6 +3159,7 @@ pub mod args {
                 broadcast_only: self.broadcast_only,
                 ledger_address: (),
                 initialized_account_alias: self.initialized_account_alias,
+                wallet_alias_force: self.wallet_alias_force,
                 fee_amount: self.fee_amount,
                 fee_token: ctx.get(&self.fee_token),
                 gas_limit: self.gas_limit,
@@ -3241,6 +3244,7 @@ pub mod args {
             let broadcast_only = BROADCAST_ONLY.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
+            let wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
             let fee_amount = GAS_AMOUNT.parse(matches);
             let fee_token = GAS_TOKEN.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches).into();
@@ -3257,6 +3261,7 @@ pub mod args {
                 broadcast_only,
                 ledger_address,
                 initialized_account_alias,
+                wallet_alias_force,
                 fee_amount,
                 fee_token,
                 gas_limit,
@@ -3296,10 +3301,12 @@ pub mod args {
     impl Args for MaspAddrKeyAdd {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
+            let alias_force = ALIAS_FORCE.parse(matches);
             let value = MASP_VALUE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
+                alias_force,
                 value,
                 unsafe_dont_encrypt,
             }
@@ -3326,9 +3333,11 @@ pub mod args {
     impl Args for MaspSpendKeyGen {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
+            let alias_force = ALIAS_FORCE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
+                alias_force,
                 unsafe_dont_encrypt,
             }
         }
@@ -3350,6 +3359,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> MaspPayAddrGen<SdkTypes> {
             MaspPayAddrGen::<SdkTypes> {
                 alias: self.alias,
+                alias_force: self.alias_force,
                 viewing_key: ctx.get_cached(&self.viewing_key),
                 pin: self.pin,
             }
@@ -3359,10 +3369,12 @@ pub mod args {
     impl Args for MaspPayAddrGen<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
+            let alias_force = ALIAS_FORCE.parse(matches);
             let viewing_key = VIEWING_KEY.parse(matches);
             let pin = PIN.parse(matches);
             Self {
                 alias,
+                alias_force,
                 viewing_key,
                 pin,
             }
@@ -3386,10 +3398,12 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let scheme = SCHEME.parse(matches);
             let alias = ALIAS_OPT.parse(matches);
+            let alias_force = ALIAS_FORCE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 scheme,
                 alias,
+                alias_force,
                 unsafe_dont_encrypt,
             }
         }
@@ -3557,8 +3571,9 @@ pub mod args {
     impl Args for AddressAdd {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
+            let alias_force = ALIAS_FORCE.parse(matches);
             let address = RAW_ADDRESS.parse(matches);
-            Self { alias, address }
+            Self { alias, alias_force, address }
         }
 
         fn def(app: App) -> App {
