@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## v0.16.0
+
+Namada 0.16.0 is a regular release focused on providing the Namada SDK
+to developers.
+
+### DOCS
+
+- Added page table-of-contents via mdbook-pagetoc plugin for the developer
+  documentation. ([#1275](https://github.com/anoma/namada/pull/1275))
+
+### IMPROVEMENTS
+
+- Bump RocksDB crate to 0.21.0 to address compilation errors on certain C++
+  toolchains. ([#1366](https://github.com/anoma/namada/pull/1366))
+
 ## v0.15.3
 
 Namada 0.15.3 is a maintenance release addressing the creation of
@@ -33,7 +48,7 @@ a major improvement to storage usage.
 
 ### IMPROVEMENTS
 
-- Changed the default base directory. On linux, the default path will be `$XDG_DATA_HOME/com.heliax.namada`, on OSX it will be `$HOME/.local/share/com.heliax.namada`.
+- Changed the default base directory. On linux, the default path will be `$XDG_DATA_HOME/namada`, on OSX it will be `$HOME/Library/Application Support/com.heliax.namada`.
   ([#1138](https://github.com/anoma/namada/pull/1138))
 - RocksDB optimization to reduce the storage usage
   ([#1333](https://github.com/anoma/namada/issues/1333))
