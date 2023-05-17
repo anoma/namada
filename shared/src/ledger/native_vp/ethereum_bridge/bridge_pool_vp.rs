@@ -537,6 +537,7 @@ mod test_bridge_pool_vp {
     fn setup_storage() -> WlStorage<MockDB, Sha256Hasher> {
         // a dummy config for testing
         let config = EthereumBridgeConfig {
+            eth_start_height: Default::default(),
             min_confirmations: Default::default(),
             contracts: Contracts {
                 native_erc20: wnam(),

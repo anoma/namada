@@ -1041,6 +1041,7 @@ pub fn genesis() -> Genesis {
         pos_params: PosParams::default(),
         gov_params: GovParams::default(),
         ethereum_bridge_params: Some(EthereumBridgeConfig {
+            eth_start_height: Default::default(),
             min_confirmations: Default::default(),
             contracts: Contracts {
                 native_erc20: wnam(),

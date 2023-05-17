@@ -8,6 +8,7 @@ use namada_core::ledger::storage::types::encode;
 use namada_core::ledger::storage::WlStorage;
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::ethereum_events::EthAddress;
+use namada_core::types::ethereum_structs;
 use namada_core::types::storage::Key;
 use serde::{Deserialize, Serialize};
 
@@ -119,7 +120,6 @@ pub struct Contracts {
 
 /// Represents chain parameters for the Ethereum bridge.
 #[derive(
-    Copy,
     Clone,
     Debug,
     Eq,
@@ -130,6 +130,8 @@ pub struct Contracts {
     BorshDeserialize,
 )]
 pub struct EthereumBridgeConfig {
+    /// Initial Ethereum block height when events will first be extracted from.
+    pub eth_start_height: ethereum_structs::BlockHeight,
     /// Minimum number of confirmations needed to trust an Ethereum branch.
     /// This must be at least one.
     pub min_confirmations: MinimumConfirmations,
@@ -149,6 +151,7 @@ impl EthereumBridgeConfig {
         H: storage::traits::StorageHasher,
     {
         let Self {
+            eth_start_height,
             min_confirmations,
             contracts:
                 Contracts {
@@ -162,6 +165,7 @@ impl EthereumBridgeConfig {
         let native_erc20_key = bridge_storage::native_erc20_key();
         let bridge_contract_key = bridge_storage::bridge_contract_key();
         let governance_contract_key = bridge_storage::governance_contract_key();
+        let eth_start_height_key = bridge_storage::eth_start_height_key();
         wl_storage
             .write_bytes(
                 &active_key,
@@ -179,6 +183,9 @@ impl EthereumBridgeConfig {
             .unwrap();
         wl_storage
             .write_bytes(&governance_contract_key, encode(governance))
+            .unwrap();
+        wl_storage
+            .write_bytes(&eth_start_height_key, encode(eth_start_height))
             .unwrap();
         // Initialize the storage for the Ethereum Bridge VP.
         vp::init_storage(wl_storage);
@@ -199,6 +206,7 @@ impl EthereumBridgeConfig {
         let native_erc20_key = bridge_storage::native_erc20_key();
         let bridge_contract_key = bridge_storage::bridge_contract_key();
         let governance_contract_key = bridge_storage::governance_contract_key();
+        let eth_start_height_key = bridge_storage::eth_start_height_key();
 
         let Some(min_confirmations) = StorageRead::read::<MinimumConfirmations>(
             wl_storage,
@@ -217,8 +225,10 @@ impl EthereumBridgeConfig {
         let bridge_contract = must_read_key(wl_storage, &bridge_contract_key);
         let governance_contract =
             must_read_key(wl_storage, &governance_contract_key);
+        let eth_start_height = must_read_key(wl_storage, &eth_start_height_key);
 
         Some(Self {
+            eth_start_height,
             min_confirmations,
             contracts: Contracts {
                 native_erc20,
@@ -289,6 +299,7 @@ mod tests {
     #[test]
     fn test_round_trip_toml_serde() -> Result<()> {
         let config = EthereumBridgeConfig {
+            eth_start_height: Default::default(),
             min_confirmations: MinimumConfirmations::default(),
             contracts: Contracts {
                 native_erc20: EthAddress([42; 20]),
@@ -313,6 +324,7 @@ mod tests {
     fn test_ethereum_bridge_config_read_write_storage() {
         let mut wl_storage = TestWlStorage::default();
         let config = EthereumBridgeConfig {
+            eth_start_height: Default::default(),
             min_confirmations: MinimumConfirmations::default(),
             contracts: Contracts {
                 native_erc20: EthAddress([42; 20]),
@@ -346,6 +358,7 @@ mod tests {
     fn test_ethereum_bridge_config_storage_corrupt() {
         let mut wl_storage = TestWlStorage::default();
         let config = EthereumBridgeConfig {
+            eth_start_height: Default::default(),
             min_confirmations: MinimumConfirmations::default(),
             contracts: Contracts {
                 native_erc20: EthAddress([42; 20]),
