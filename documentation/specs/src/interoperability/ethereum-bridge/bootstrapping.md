@@ -15,6 +15,9 @@ bridge and maintain its liveness.
 To bootstrap the Ethereum bridge, there are six governance parameters which
 must be written to storage:
 
+- `eth_start_height` - The Ethereum block height when the smart contracts
+  were deployed. This value also corresponds to the height of the first
+  block processed by Namada's Ethereum oracle.
 - `eth_bridge_min_confirmations` - The minimum number of block confirmations
   on Ethereum required for any given event to be voted on by Namada validators.
 - `eth_bridge_bridge_address` - The address of the `Bridge` contract, used to
@@ -47,12 +50,9 @@ governance proposal for a given Namada chain:
    Additionally, the knowledge of $E_0$ must be communicated through the governance
    proposal's JSON data. This is important, as subsequent validator sets from epochs
    $E$ such that $E > E_0$ should be relayed if the governance proposal passes.
-   The Ethereum block height when the contracts were deployed should also be
-   included in the proposal.
 3. Validators should vote on the proposal if the wasm code correctly updates
    Namada's storage, the proposal contains the epoch $E_0$ of the first set of
-   validators in the deployed contracts and the Ethereum height at which the
-   contracts were deployed, and the contracts are initialized correctly.
+   validators in the deployed contracts and the contracts are initialized correctly.
 4. Eventually, the proposal passes at some epoch $E_{end} \le E_{grace}$, if enough
    validators vote on it. Then, the Ethereum oracle receives an update command, so it
    can start processing Ethereum blocks to extract confirmed events. Should the proposal
@@ -94,8 +94,7 @@ the consensus validator set does not change at any point.
             "discussions-to": "hello@heliax.dev",
             "created": "2023-01-01T08:00:00Z",
             "license": "Unlicense",
-            "namada_start_epoch": "30",
-            "eth_height_deployed": "15000000"
+            "namada_start_epoch": "30"
         },
         "author": "hello@heliax.dev",
         "voting_start_epoch": 30,
