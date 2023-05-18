@@ -113,7 +113,12 @@ pub async fn submit_init_validator<
         println!("Generating validator account key...");
         let password = read_and_confirm_pwd(unsafe_dont_encrypt);
         ctx.wallet
-            .gen_key(scheme, Some(validator_key_alias.clone()), password, tx_args.wallet_alias_force)
+            .gen_key(
+                scheme,
+                Some(validator_key_alias.clone()),
+                password,
+                tx_args.wallet_alias_force,
+            )
             .1
             .ref_to()
     });

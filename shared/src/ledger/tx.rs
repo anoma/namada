@@ -488,7 +488,11 @@ pub async fn save_initialized_accounts<U: WalletUtils>(
                 None => U::read_alias(&encoded).into(),
             };
             let alias = alias.into_owned();
-            let added = wallet.add_address(alias.clone(), address.clone(), args.wallet_alias_force);
+            let added = wallet.add_address(
+                alias.clone(),
+                address.clone(),
+                args.wallet_alias_force,
+            );
             match added {
                 Some(new_alias) if new_alias != encoded => {
                     println!(
