@@ -63,6 +63,7 @@ use ibc_relayer_types::Height;
 use namada::ibc::core::ics24_host::identifier::PortChannelId as IbcPortChannelId;
 use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::google::protobuf::Any;
+use namada::ledger::events::EventType;
 use namada::ledger::ibc::storage::*;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::{self, PosParams};
@@ -73,7 +74,8 @@ use namada::types::key::PublicKey;
 use namada::types::storage::{BlockHeight, Key, RESERVED_ADDRESS_PREFIX};
 use namada::types::token::Amount;
 use namada_apps::client::rpc::{
-    query_storage_value, query_storage_value_bytes,
+    query_ibc_client_update_event, query_ibc_packet_event, query_storage_value,
+    query_storage_value_bytes,
 };
 use namada_apps::client::utils::id_from_pk;
 use namada_apps::config::genesis::genesis_config::GenesisConfig;
@@ -349,6 +351,11 @@ fn update_client(
     };
     submit_ibc_tx(target_test, message, ALBERT)?;
 
+    check_ibc_update_query(
+        target_test,
+        client_id,
+        BlockHeight(target_height.revision_height()),
+    )?;
     Ok(())
 }
 
@@ -702,6 +709,7 @@ fn transfer_token(
         Some(IbcEvent::SendPacket(event)) => event.packet,
         _ => return Err(eyre!("Transaction failed")),
     };
+    check_ibc_packet_query(test_a, &"send_packet".parse().unwrap(), &packet)?;
 
     let height_a = query_height(test_a)?;
     let proofs = get_commitment_proof(test_a, &packet, height_a)?;
@@ -720,6 +728,11 @@ fn transfer_token(
         }
         _ => return Err(eyre!("Transaction failed")),
     };
+    check_ibc_packet_query(
+        test_b,
+        &"write_acknowledgement".parse().unwrap(),
+        &packet,
+    )?;
 
     // get the proof on Chain B
     let height_b = query_height(test_b)?;
@@ -1150,6 +1163,56 @@ fn get_event(test: &Test, height: u32) -> Result<Option<IbcEvent>> {
     }
     // No IBC event was found
     Ok(None)
+}
+
+fn check_ibc_update_query(
+    test: &Test,
+    client_id: &ClientId,
+    consensus_height: BlockHeight,
+) -> Result<()> {
+    let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
+    let client = HttpClient::new(ledger_address).unwrap();
+    match Runtime::new()
+        .unwrap()
+        .block_on(query_ibc_client_update_event(
+            &client,
+            &client_id.as_str().parse().unwrap(),
+            consensus_height,
+        )) {
+        Ok(Some(event)) => {
+            println!("Found the update event: {:?}", event);
+            Ok(())
+        }
+        Ok(None) => Err(eyre!("No update event for the client {}", client_id)),
+        Err(e) => Err(eyre!("IBC update event query failed: {}", e)),
+    }
+}
+
+fn check_ibc_packet_query(
+    test: &Test,
+    event_type: &EventType,
+    packet: &Packet,
+) -> Result<()> {
+    let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
+    let client = HttpClient::new(ledger_address).unwrap();
+    match Runtime::new().unwrap().block_on(query_ibc_packet_event(
+        &client,
+        event_type,
+        &packet.source_port.as_str().parse().unwrap(),
+        &packet.source_channel.as_str().parse().unwrap(),
+        &packet.destination_port.as_str().parse().unwrap(),
+        &packet.destination_channel.as_str().parse().unwrap(),
+        packet.sequence.to_string().parse().unwrap(),
+    )) {
+        Ok(Some(event)) => {
+            println!("Found the packet event: {:?}", event);
+            Ok(())
+        }
+        Ok(None) => Err(eyre!("No packet event for the packet {}", packet)),
+        Err(e) => Err(eyre!("IBC packet event query failed: {}", e)),
+    }
 }
 
 fn query_value_with_proof(
