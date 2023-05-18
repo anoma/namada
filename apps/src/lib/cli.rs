@@ -3573,7 +3573,11 @@ pub mod args {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
             let address = RAW_ADDRESS.parse(matches);
-            Self { alias, alias_force, address }
+            Self {
+                alias,
+                alias_force,
+                address,
+            }
         }
 
         fn def(app: App) -> App {
