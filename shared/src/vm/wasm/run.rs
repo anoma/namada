@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
-use namada_core::ledger::gas::{self, TxGasMeter};
+use namada_core::ledger::gas::{self, TxGasMeter, TxVpGasMetering};
 use namada_core::ledger::storage::write_log::StorageModification;
 use parity_wasm::elements;
 use pwasm_utils::{self, rules};
@@ -133,7 +133,7 @@ where
                 ))),
             },
         }?;
-        gas_meter.add_tx_load_from_storage_gas(tx_len)?;
+        gas_meter.add_wasm_load_from_storage_gas(tx_len)?;
         gas_meter.add_compiling_gas(tx_len)?;
 
         let (module, store) =
@@ -332,7 +332,7 @@ where
         },
     }?;
     gas_meter
-        .add_vp_load_from_storage_gas(vp_code_len)
+        .add_wasm_load_from_storage_gas(vp_code_len)
         .map_err(Error::GasError)?;
     gas_meter
         .add_compiling_gas(vp_code_len)
@@ -502,6 +502,7 @@ where
         }?;
 
         // Compile the wasm module
+        //FIXME: need to account gas for loading and compilation!
         let (module, store) =
             fetch_or_compile(vp_wasm_cache, &vp_code_hash, write_log, storage)?;
 

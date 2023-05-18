@@ -19,7 +19,7 @@ pub enum Error {
 
 const TX_SIZE_GAS_PER_BYTE: u64 = 10;
 const COMPILE_GAS_PER_BYTE: u64 = 1;
-const PARALLEL_GAS_DIVIDER: u64 = 10;
+const PARALLEL_GAS_DIVIDER: u64 = 10; //FIXME: should this depend on the length of the vector of rest?
 
 /// The minimum gas cost for accessing the storage
 pub const MIN_STORAGE_GAS: u64 = 1;
@@ -32,6 +32,32 @@ pub const STORAGE_WRITE_GAS_PER_BYTE: u64 = 100;
 
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Trait to share gas operations for transactions and validity predicates
+pub trait TxVpGasMetering {
+    /// Add gas cost. It will return error when the
+    /// consumed gas exceeds the provided transaction gas limit, but the state
+    /// will still be updated
+    fn add(&mut self, gas: u64) -> Result<()>;
+
+    /// Add the compiling cost proportionate to the code length
+    fn add_compiling_gas(&mut self, bytes_len: u64) -> Result<()> {
+        self.add(
+            bytes_len
+                .checked_mul(COMPILE_GAS_PER_BYTE)
+                .ok_or(Error::GasOverflow)?,
+        )
+    }
+
+    /// Add the gas for loading the wasm code from storage
+    fn add_wasm_load_from_storage_gas(&mut self, bytes_len: u64) -> Result<()> {
+        self.add(
+            bytes_len
+                .checked_mul(MIN_STORAGE_GAS)
+                .ok_or(Error::GasOverflow)?,
+        )
+    }
+}
 
 /// Gas metering in a block. The amount of gas consumed in a block is based on
 /// the tx_gas_limit declared by each [`TxGasMeter`]
@@ -122,20 +148,8 @@ impl BlockGasMeter {
     }
 }
 
-impl TxGasMeter {
-    /// Initialize a new Tx gas meter. Requires the gas limit for the specific
-    /// transaction
-    pub fn new(tx_gas_limit: u64) -> Self {
-        Self {
-            tx_gas_limit,
-            transaction_gas: 0,
-        }
-    }
-
-    /// Add gas cost for the current transaction. It will return error when the
-    /// consumed gas exceeds the provided transaction gas limit, but the state
-    /// will still be updated.
-    pub fn add(&mut self, gas: u64) -> Result<()> {
+impl TxVpGasMetering for TxGasMeter {
+    fn add(&mut self, gas: u64) -> Result<()> {
         self.transaction_gas = self
             .transaction_gas
             .checked_add(gas)
@@ -147,38 +161,28 @@ impl TxGasMeter {
 
         Ok(())
     }
+}
 
-    /// Add the compiling cost proportionate to the code length
-    pub fn add_compiling_gas(&mut self, bytes_len: u64) -> Result<()> {
-        self.add(
-            bytes_len
-                .checked_mul(COMPILE_GAS_PER_BYTE)
-                .ok_or(Error::GasOverflow)?,
-        )
+impl TxGasMeter {
+    /// Initialize a new Tx gas meter. Requires the gas limit for the specific
+    /// transaction
+    pub fn new(tx_gas_limit: u64) -> Self {
+        Self {
+            tx_gas_limit,
+            transaction_gas: 0,
+        }
     }
 
     /// Add the gas for the space that the transaction requires in the block
     pub fn add_tx_size_gas(
         &mut self,
-        bytes_len: impl TryInto<u64>,
+        bytes_len: impl TryInto<u64>, //FIXME: no generic here
     ) -> Result<()> {
         let bytes_len =
             bytes_len.try_into().map_err(|_| Error::ConversionError)?;
         self.add(
             bytes_len
                 .checked_mul(TX_SIZE_GAS_PER_BYTE)
-                .ok_or(Error::GasOverflow)?,
-        )
-    }
-
-    /// Add the gas for loading the transaction's code from storage
-    pub fn add_tx_load_from_storage_gas(
-        &mut self,
-        bytes_len: u64,
-    ) -> Result<()> {
-        self.add(
-            bytes_len
-                .checked_mul(MIN_STORAGE_GAS)
                 .ok_or(Error::GasOverflow)?,
         )
     }
@@ -194,27 +198,12 @@ impl TxGasMeter {
     }
 }
 
-impl VpGasMeter {
-    /// Initialize a new VP gas meter, starting with the gas consumed in the
-    /// transaction so far. Also requires the transaction gas limit.
-    pub fn new(tx_gas_limit: u64, initial_gas: u64) -> Self {
-        Self {
-            tx_gas_limit,
-            initial_gas,
-            current_gas: 0,
-        }
-    }
-
-    /// Consume gas in a validity predicate. It will return error when the
-    /// consumed gas exceeds the transaction gas limit, but the state will still
-    /// be updated.
-    pub fn add(&mut self, gas: u64) -> Result<()> {
-        let gas = self
+impl TxVpGasMetering for VpGasMeter {
+    fn add(&mut self, gas: u64) -> Result<()> {
+        self.current_gas = self
             .current_gas
             .checked_add(gas)
             .ok_or(Error::GasOverflow)?;
-
-        self.current_gas = gas;
 
         let current_total = self
             .initial_gas
@@ -227,26 +216,18 @@ impl VpGasMeter {
 
         Ok(())
     }
+}
 
-    /// Add the compiling cost proportionate to the code length
-    pub fn add_compiling_gas(&mut self, bytes_len: u64) -> Result<()> {
-        self.add(
-            bytes_len
-                .checked_mul(COMPILE_GAS_PER_BYTE)
-                .ok_or(Error::GasOverflow)?,
-        )
-    }
-
-    /// Add the gas for loading the non-native vp's code from storage
-    pub fn add_vp_load_from_storage_gas(
-        &mut self,
-        bytes_len: u64,
-    ) -> Result<()> {
-        self.add(
-            bytes_len
-                .checked_mul(MIN_STORAGE_GAS)
-                .ok_or(Error::GasOverflow)?,
-        )
+impl VpGasMeter {
+    /// Initialize a new VP gas meter, starting with the gas consumed in the
+    /// transaction so far. Also requires the transaction gas limit.
+    pub fn new(tx_gas_limit: u64, initial_gas: u64) -> Self {
+        //FIXME: should this take the reference to the txgasmeter?
+        Self {
+            tx_gas_limit,
+            initial_gas,
+            current_gas: 0,
+        }
     }
 }
 

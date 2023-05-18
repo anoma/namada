@@ -7,6 +7,7 @@ use data_encoding::HEXUPPER;
 use namada::core::hints;
 use namada::core::ledger::storage::WlStorage;
 use namada::core::types::hash::Hash;
+use namada::ledger::gas::TxVpGasMetering;
 use namada::ledger::storage::TempWlStorage;
 use namada::proof_of_stake::pos_queries::PosQueries;
 use namada::types::hash::HASH_LENGTH;

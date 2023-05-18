@@ -13,7 +13,7 @@ use thiserror::Error;
 
 use super::gas::MIN_STORAGE_GAS;
 use crate::ledger::gas;
-use crate::ledger::gas::VpGasMeter;
+use crate::ledger::gas::{TxVpGasMetering, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, write_log, Storage, StorageHasher};
 use crate::proto::Tx;

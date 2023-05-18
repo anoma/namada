@@ -8,7 +8,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
 use crate::ledger::eth_bridge::vp::EthBridge;
-use crate::ledger::gas::{self, VpGasMeter};
+use crate::ledger::gas::{self, TxVpGasMetering, VpGasMeter};
 use crate::ledger::ibc::vp::{Ibc, IbcToken};
 use crate::ledger::native_vp::governance::GovernanceVp;
 use crate::ledger::native_vp::parameters::{self, ParametersVp};
