@@ -383,7 +383,8 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// If any new account is initialized by the tx, use the given alias to
     /// save it in the wallet.
     pub initialized_account_alias: Option<String>,
-    /// Whether to force overwrite the above alias, if it is provided, in the wallet.
+    /// Whether to force overwrite the above alias, if it is provided, in the
+    /// wallet.
     pub wallet_alias_force: bool,
     /// The amount being payed to include the transaction
     pub fee_amount: token::Amount,

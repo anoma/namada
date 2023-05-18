@@ -276,7 +276,12 @@ fn address_key_add(
             let password = read_and_confirm_pwd(unsafe_dont_encrypt);
             let alias = ctx
                 .wallet
-                .encrypt_insert_spending_key(alias, spending_key, password, alias_force)
+                .encrypt_insert_spending_key(
+                    alias,
+                    spending_key,
+                    password,
+                    alias_force,
+                )
                 .unwrap_or_else(|| {
                     eprintln!("Spending key not added");
                     cli::safe_exit(1);
@@ -492,7 +497,11 @@ fn address_or_alias_find(ctx: Context, args: args::AddressOrAliasFind) {
 fn address_add(ctx: Context, args: args::AddressAdd) {
     let mut wallet = ctx.wallet;
     if wallet
-        .add_address(args.alias.clone().to_lowercase(), args.address, args.alias_force)
+        .add_address(
+            args.alias.clone().to_lowercase(),
+            args.address,
+            args.alias_force,
+        )
         .is_none()
     {
         eprintln!("Address not added");
