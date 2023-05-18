@@ -252,7 +252,7 @@ pub fn get_params_dir() -> PathBuf {
 
 /// Abstracts platform specific details away from the logic of shielded pool
 /// operations.
-#[async_trait]
+#[async_trait(?Send)]
 pub trait ShieldedUtils:
     Sized + BorshDeserialize + BorshSerialize + Default + Clone
 {
@@ -263,10 +263,10 @@ pub trait ShieldedUtils:
     fn local_tx_prover(&self) -> LocalTxProver;
 
     /// Load up the currently saved ShieldedContext
-    fn load(self) -> std::io::Result<ShieldedContext<Self>>;
+    async fn load(self) -> std::io::Result<ShieldedContext<Self>>;
 
     /// Sace the given ShieldedContext for future loads
-    fn save(&self, ctx: &ShieldedContext<Self>) -> std::io::Result<()>;
+    async fn save(&self, ctx: &ShieldedContext<Self>) -> std::io::Result<()>;
 }
 
 /// Make a ViewingKey that can view notes encrypted by given ExtendedSpendingKey
@@ -394,15 +394,15 @@ impl<U: ShieldedUtils + Default> Default for ShieldedContext<U> {
 impl<U: ShieldedUtils> ShieldedContext<U> {
     /// Try to load the last saved shielded context from the given context
     /// directory. If this fails, then leave the current context unchanged.
-    pub fn load(&mut self) -> std::io::Result<()> {
-        let new_ctx = self.utils.clone().load()?;
+    pub async fn load(&mut self) -> std::io::Result<()> {
+        let new_ctx = self.utils.clone().load().await?;
         *self = new_ctx;
         Ok(())
     }
 
     /// Save this shielded context into its associated context directory
-    pub fn save(&self) -> std::io::Result<()> {
-        self.utils.save(self)
+    pub async fn save(&self) -> std::io::Result<()> {
+        self.utils.save(self).await
     }
 
     /// Merge data from the given shielded context into the current shielded
