@@ -119,7 +119,7 @@ In the rare occurance of a tie, the steward retains membership by default.
 
 ### Electing stewards
 
-Once the decision has been made on whether to elect (or remove) the intended Steward, the established address corresponding to the multisig is added to (removed from) the `PGF` internal address.
+Once the decision has been made on whether to elect (or remove) the intended steward, the established address corresponding to the multisig is added to (removed from) the `PGF` internal address.
 
 ### Example
 
