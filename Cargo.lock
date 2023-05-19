@@ -2333,8 +2333,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4eb1a864a501629691edf6c15a593b7a51eebaa1e8468e9ddc623de7c9b58ec6"
 dependencies = [
  "cfg-if 1.0.0",
+ "js-sys",
  "libc",
  "wasi 0.11.0+wasi-snapshot-preview1",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -3387,7 +3389,7 @@ dependencies = [
 [[package]]
 name = "masp_note_encryption"
 version = "0.2.0"
-source = "git+https://github.com/anoma/masp?rev=1ed99e86d8795a363df170042089283ea9a43d93#1ed99e86d8795a363df170042089283ea9a43d93"
+source = "git+https://github.com/anoma/masp?rev=cfea8c95d3f73077ca3e25380fd27e5b46e828fd#cfea8c95d3f73077ca3e25380fd27e5b46e828fd"
 dependencies = [
  "borsh",
  "chacha20 0.9.1",
@@ -3400,7 +3402,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "0.9.0"
-source = "git+https://github.com/anoma/masp?rev=1ed99e86d8795a363df170042089283ea9a43d93#1ed99e86d8795a363df170042089283ea9a43d93"
+source = "git+https://github.com/anoma/masp?rev=cfea8c95d3f73077ca3e25380fd27e5b46e828fd#cfea8c95d3f73077ca3e25380fd27e5b46e828fd"
 dependencies = [
  "aes",
  "bip0039",
@@ -3430,7 +3432,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "0.9.0"
-source = "git+https://github.com/anoma/masp?rev=1ed99e86d8795a363df170042089283ea9a43d93#1ed99e86d8795a363df170042089283ea9a43d93"
+source = "git+https://github.com/anoma/masp?rev=cfea8c95d3f73077ca3e25380fd27e5b46e828fd#cfea8c95d3f73077ca3e25380fd27e5b46e828fd"
 dependencies = [
  "bellman 0.13.1",
  "blake2b_simd",
@@ -3998,7 +4000,6 @@ dependencies = [
  "borsh",
  "hex",
  "masp_primitives",
- "masp_proofs",
  "namada_core",
 ]
 
