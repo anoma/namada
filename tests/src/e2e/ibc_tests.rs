@@ -67,6 +67,7 @@ use namada::ledger::events::EventType;
 use namada::ledger::ibc::storage::*;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::{self, PosParams};
+use namada::ledger::queries::RPC;
 use namada::ledger::storage::ics23_specs::ibc_proof_specs;
 use namada::ledger::storage::Sha256Hasher;
 use namada::types::address::{Address, InternalAddress};
@@ -74,8 +75,7 @@ use namada::types::key::PublicKey;
 use namada::types::storage::{BlockHeight, Key, RESERVED_ADDRESS_PREFIX};
 use namada::types::token::Amount;
 use namada_apps::client::rpc::{
-    query_ibc_client_update_event, query_ibc_packet_event, query_storage_value,
-    query_storage_value_bytes,
+    query_storage_value, query_storage_value_bytes,
 };
 use namada_apps::client::utils::id_from_pk;
 use namada_apps::config::genesis::genesis_config::GenesisConfig;
@@ -1175,10 +1175,10 @@ fn check_ibc_update_query(
     let client = HttpClient::new(ledger_address).unwrap();
     match Runtime::new()
         .unwrap()
-        .block_on(query_ibc_client_update_event(
+        .block_on(RPC.shell().ibc_client_update(
             &client,
             &client_id.as_str().parse().unwrap(),
-            consensus_height,
+            &consensus_height,
         )) {
         Ok(Some(event)) => {
             println!("Found the update event: {:?}", event);
@@ -1197,14 +1197,14 @@ fn check_ibc_packet_query(
     let rpc = get_actor_rpc(test, &Who::Validator(0));
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
-    match Runtime::new().unwrap().block_on(query_ibc_packet_event(
+    match Runtime::new().unwrap().block_on(RPC.shell().ibc_packet(
         &client,
         event_type,
         &packet.source_port.as_str().parse().unwrap(),
         &packet.source_channel.as_str().parse().unwrap(),
         &packet.destination_port.as_str().parse().unwrap(),
         &packet.destination_channel.as_str().parse().unwrap(),
-        packet.sequence.to_string().parse().unwrap(),
+        &packet.sequence.to_string().parse().unwrap(),
     )) {
         Ok(Some(event)) => {
             println!("Found the packet event: {:?}", event);
