@@ -2,12 +2,14 @@
 
 use std::iter::Peekable;
 
+use crate::ledger::parameters::EpochDuration;
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
-use crate::ledger::{gas, storage_api};
+use crate::ledger::{gas, parameters, storage_api};
 use crate::types::address::Address;
-use crate::types::storage;
+use crate::types::storage::{self, BlockHeight};
+use crate::types::time::DateTimeUtc;
 
 /// Storage with write log that allows to implement prefix iterator that works
 /// with changes not yet committed to the DB.
@@ -33,17 +35,6 @@ where
         Self { write_log, storage }
     }
 
-    /// Commit the genesis state to DB. This should only be used before any
-    /// blocks are produced.
-    pub fn commit_genesis(&mut self) -> storage_api::Result<()> {
-        // Because the `impl StorageWrite for WlStorage` writes into block-level
-        // write log, we just commit the `block_write_log`, but without
-        // committing an actual block in storage
-        self.write_log
-            .commit_block(&mut self.storage)
-            .into_storage_result()
-    }
-
     /// Commit the current transaction's write log to the block when it's
     /// accepted by all the triggered validity predicates. Starts a new
     /// transaction write log.
@@ -64,6 +55,42 @@ where
             .commit_block(&mut self.storage)
             .into_storage_result()?;
         self.storage.commit_block().into_storage_result()
+    }
+
+    /// Initialize a new epoch when the current epoch is finished. Returns
+    /// `true` on a new epoch.
+    pub fn update_epoch(
+        &mut self,
+        height: BlockHeight,
+        time: DateTimeUtc,
+    ) -> crate::ledger::storage::Result<bool> {
+        let parameters =
+            parameters::read(self).expect("Couldn't read protocol parameters");
+
+        // Check if the current epoch is over
+        let new_epoch = height >= self.storage.next_epoch_min_start_height
+            && time >= self.storage.next_epoch_min_start_time;
+        if new_epoch {
+            // Begin a new epoch
+            self.storage.block.epoch = self.storage.block.epoch.next();
+            let EpochDuration {
+                min_num_of_blocks,
+                min_duration,
+            } = parameters.epoch_duration;
+            self.storage.next_epoch_min_start_height =
+                height + min_num_of_blocks;
+            self.storage.next_epoch_min_start_time = time + min_duration;
+            // TODO put this into PoS parameters and pass it to tendermint
+            // `consensus_params` on `InitChain` and `EndBlock`
+            let evidence_max_age_num_blocks: u64 = 100000;
+            self.storage
+                .block
+                .pred_epochs
+                .new_epoch(height, evidence_max_age_num_blocks);
+            tracing::info!("Began a new epoch {}", self.storage.block.epoch);
+        }
+        self.storage.update_epoch_in_merkle_tree()?;
+        Ok(new_epoch)
     }
 }
 

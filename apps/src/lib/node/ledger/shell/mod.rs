@@ -1065,9 +1065,9 @@ where
         tx: &namada::types::transaction::WrapperTx,
     ) -> bool {
         if let Some(solution) = &tx.pow_solution {
-            if let (Some(faucet_address), _gas) =
+            if let Some(faucet_address) =
                 namada::ledger::parameters::read_faucet_account_parameter(
-                    &self.wl_storage.storage,
+                    &self.wl_storage,
                 )
                 .expect("Must be able to read faucet account parameter")
             {
@@ -1083,11 +1083,10 @@ where
     #[cfg(not(feature = "mainnet"))]
     /// Get fixed amount of fees for wrapper tx
     fn get_wrapper_tx_fees(&self) -> token::Amount {
-        let (fees, _gas) =
-            namada::ledger::parameters::read_wrapper_tx_fees_parameter(
-                &self.wl_storage.storage,
-            )
-            .expect("Must be able to read wrapper tx fees parameter");
+        let fees = namada::ledger::parameters::read_wrapper_tx_fees_parameter(
+            &self.wl_storage,
+        )
+        .expect("Must be able to read wrapper tx fees parameter");
         fees.unwrap_or(token::Amount::whole(MIN_FEE))
     }
 
@@ -1099,9 +1098,9 @@ where
         tx: &namada::types::transaction::WrapperTx,
     ) -> bool {
         if let Some(solution) = &tx.pow_solution {
-            if let (Some(faucet_address), _gas) =
+            if let Some(faucet_address) =
                 namada::ledger::parameters::read_faucet_account_parameter(
-                    &self.wl_storage.storage,
+                    &self.wl_storage,
                 )
                 .expect("Must be able to read faucet account parameter")
             {

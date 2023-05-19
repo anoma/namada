@@ -3280,6 +3280,11 @@ fn test_genesis_validators() -> Result<()> {
     validator_1.exp_string("Committed block hash")?;
     non_validator.exp_string("Committed block hash")?;
 
+    // Wait for a first block
+    validator_0.exp_string("Committed block hash")?;
+    validator_1.exp_string("Committed block hash")?;
+    non_validator.exp_string("Committed block hash")?;
+
     let bg_validator_0 = validator_0.background();
     let bg_validator_1 = validator_1.background();
     let _bg_non_validator = non_validator.background();

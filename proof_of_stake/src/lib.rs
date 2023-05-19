@@ -32,7 +32,7 @@ use epoched::{EpochOffset, OffsetPipelineLen};
 use namada_core::ledger::storage_api::collections::lazy_map::{
     NestedSubKey, SubKey,
 };
-use namada_core::ledger::storage_api::collections::LazyCollection;
+use namada_core::ledger::storage_api::collections::{LazyCollection, LazySet};
 use namada_core::ledger::storage_api::token::credit_tokens;
 use namada_core::ledger::storage_api::{
     self, OptionExt, StorageRead, StorageWrite,
@@ -47,10 +47,11 @@ use once_cell::unsync::Lazy;
 use parameters::PosParams;
 use rust_decimal::Decimal;
 use storage::{
-    bonds_for_source_prefix, bonds_prefix, get_validator_address_from_bond,
-    into_tm_voting_power, is_bond_key, is_unbond_key, is_validator_slashes_key,
-    mult_amount, mult_change_to_amount, num_consensus_validators_key,
-    params_key, slashes_prefix, unbonds_for_source_prefix, unbonds_prefix,
+    bonds_for_source_prefix, bonds_prefix, consensus_keys_key,
+    get_validator_address_from_bond, into_tm_voting_power, is_bond_key,
+    is_unbond_key, is_validator_slashes_key, mult_amount,
+    mult_change_to_amount, num_consensus_validators_key, params_key,
+    slashes_prefix, unbonds_for_source_prefix, unbonds_prefix,
     validator_address_raw_hash_key, validator_max_commission_rate_change_key,
     BondDetails, BondsAndUnbondsDetail, BondsAndUnbondsDetails,
     ReverseOrdTokenAmount, UnbondDetails, WeightedValidator,
@@ -299,7 +300,7 @@ pub fn validator_slashes_handle(validator: &Address) -> Slashes {
     Slashes::open(key)
 }
 
-/// new init genesis
+/// Init genesis
 pub fn init_genesis<S>(
     storage: &mut S,
     params: &PosParams,
@@ -327,11 +328,14 @@ where
         max_commission_rate_change,
     } in validators
     {
+        // This will fail if the key is already being used - the uniqueness must
+        // be enforced in the genesis configuration to prevent it
+        try_insert_consensus_key(storage, &consensus_key)?;
+
         total_bonded += tokens;
 
         // Insert the validator into a validator set and write its epoched
         // validator data
-        // TODO: ValidatorState inside of here
         insert_validator_into_validator_set(
             storage,
             params,
@@ -399,6 +403,8 @@ where
         )?;
     }
 
+    tracing::debug!("FINISHED GENESIS");
+
     Ok(())
 }
 
@@ -407,8 +413,6 @@ pub fn read_pos_params<S>(storage: &S) -> storage_api::Result<PosParams>
 where
     S: StorageRead,
 {
-    // let value = storage.read_bytes(&params_key())?.unwrap();
-    // Ok(decode(value).unwrap())
     storage
         .read(&params_key())
         .transpose()
@@ -525,6 +529,7 @@ pub fn read_validator_stake<S>(
 where
     S: StorageRead,
 {
+    tracing::debug!("Read validator stake at epoch {}", epoch);
     let handle = validator_deltas_handle(validator);
     let amount = handle
         .get_sum(storage, epoch, params)?
@@ -738,7 +743,7 @@ where
     }
 }
 
-/// NEW: Self-bond tokens to a validator when `source` is `None` or equal to
+/// Self-bond tokens to a validator when `source` is `None` or equal to
 /// the `validator` address, or delegate tokens from the `source` to the
 /// `validator`.
 pub fn bond_tokens<S>(
@@ -752,6 +757,7 @@ where
     S: StorageRead + StorageWrite,
 {
     let amount = amount.change();
+    tracing::debug!("Bonding token amount {amount} at epoch {current_epoch}");
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
     if let Some(source) = source {
@@ -763,8 +769,6 @@ where
             );
         }
     }
-    // TODO: what happens if an address used to be a validator but no longer is?
-    // Think if the 'get' here needs to be amended.
     let state = validator_state_handle(validator).get(
         storage,
         pipeline_epoch,
@@ -790,16 +794,16 @@ where
 
     // Initialize or update the bond at the pipeline offset
     let offset = params.pipeline_len;
-    // TODO: ensure that this method of checking if the bond exists works
+    let cur_remain = bond_handle
+        .get_delta_val(storage, current_epoch + offset, &params)?
+        .unwrap_or_default();
+    tracing::debug!(
+        "Bond remain at offset epoch {}: {}",
+        current_epoch + offset,
+        cur_remain
+    );
+    bond_handle.set(storage, cur_remain + amount, current_epoch, offset)?;
 
-    if !bond_handle.get_data_handler().is_empty(storage)? {
-        let cur_remain = bond_handle
-            .get_delta_val(storage, current_epoch + offset, &params)?
-            .unwrap_or_default();
-        bond_handle.set(storage, cur_remain + amount, current_epoch, offset)?;
-    } else {
-        bond_handle.init(storage, amount, current_epoch, offset)?;
-    }
     // Update the validator set
     update_validator_set(storage, &params, validator, amount, current_epoch)?;
 
@@ -852,7 +856,7 @@ where
             &target_epoch,
             address,
         )?;
-        validator_state_handle(address).init(
+        validator_state_handle(address).set(
             storage,
             ValidatorState::Consensus,
             current_epoch,
@@ -898,7 +902,7 @@ where
                 &target_epoch,
                 address,
             )?;
-            validator_state_handle(address).init(
+            validator_state_handle(address).set(
                 storage,
                 ValidatorState::Consensus,
                 current_epoch,
@@ -913,7 +917,7 @@ where
                 &target_epoch,
                 address,
             )?;
-            validator_state_handle(address).init(
+            validator_state_handle(address).set(
                 storage,
                 ValidatorState::BelowCapacity,
                 current_epoch,
@@ -924,7 +928,7 @@ where
     Ok(())
 }
 
-/// NEW: Update validator set when a validator receives a new bond and when
+/// Update validator set when a validator receives a new bond and when
 /// its bond is unbonded (self-bond or delegation).
 fn update_validator_set<S>(
     storage: &mut S,
@@ -940,6 +944,9 @@ where
         return Ok(());
     }
     let epoch = current_epoch + params.pipeline_len;
+    tracing::debug!(
+        "Update epoch for validator set: {epoch}, validator: {validator}"
+    );
     let consensus_validator_set = consensus_validator_set_handle();
     let below_capacity_validator_set = below_capacity_validator_set_handle();
 
@@ -950,13 +957,12 @@ where
 
     let tokens_pre = read_validator_stake(storage, params, validator, epoch)?
         .unwrap_or_default();
+
+    // tracing::debug!("VALIDATOR STAKE BEFORE UPDATE: {}", tokens_pre);
+
     let tokens_post = tokens_pre.change() + token_change;
     // TODO: handle overflow or negative vals perhaps with TryFrom
     let tokens_post = token::Amount::from_change(tokens_post);
-
-    // let position =
-    // validator_set_positions_handle().at(&current_epoch).get(storage,
-    // validator)
 
     // TODO: The position is only set when the validator is in consensus or
     // below_capacity set (not in below_threshold set)
@@ -965,13 +971,19 @@ where
             .ok_or_err_msg(
                 "Validator must have a stored validator set position",
             )?;
-
     let consensus_vals_pre = consensus_val_handle.at(&tokens_pre);
 
-    if consensus_vals_pre.contains(storage, &position)? {
-        // It's initially consensus
+    let in_consensus = if consensus_vals_pre.contains(storage, &position)? {
         let val_address = consensus_vals_pre.get(storage, &position)?;
-        assert!(val_address.is_some());
+        debug_assert!(val_address.is_some());
+        val_address == Some(validator.clone())
+    } else {
+        false
+    };
+
+    if in_consensus {
+        // It's initially consensus
+        tracing::debug!("Target validator is consensus");
 
         consensus_vals_pre.remove(storage, &position)?;
 
@@ -982,6 +994,7 @@ where
             )?;
 
         if tokens_post < max_below_capacity_validator_amount {
+            tracing::debug!("Need to swap validators");
             // Place the validator into the below-capacity set and promote the
             // lowest position max below-capacity validator.
 
@@ -1024,6 +1037,7 @@ where
                 params.pipeline_len,
             )?;
         } else {
+            tracing::debug!("Validator remains in consensus set");
             // The current validator should remain in the consensus set - place
             // it into a new position
             insert_validator_into_set(
@@ -1111,7 +1125,6 @@ where
 }
 
 /// Validator sets and positions copying into a future epoch
-/// TODO: do we need to copy positions?
 pub fn copy_validator_sets_and_positions<S>(
     storage: &mut S,
     current_epoch: Epoch,
@@ -1122,10 +1135,6 @@ pub fn copy_validator_sets_and_positions<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    // TODO: need some logic to determine if the below-capacity validator set
-    // even needs to be copied (it may truly be empty after having one time
-    // contained validators in the past)
-
     let prev_epoch = target_epoch - 1;
 
     let (consensus, below_capacity) = (
@@ -1164,6 +1173,8 @@ where
         below_cap_in_mem.insert((stake, position), address);
     }
 
+    tracing::debug!("{consensus_in_mem:?}");
+
     for ((val_stake, val_position), val_address) in consensus_in_mem.into_iter()
     {
         consensus_validator_set
@@ -1171,6 +1182,11 @@ where
             .at(&val_stake)
             .insert(storage, val_position, val_address)?;
     }
+    tracing::debug!("New validator set should be inserted:");
+    tracing::debug!(
+        "{:?}",
+        read_consensus_validator_set_addresses(storage, target_epoch)?
+    );
 
     for ((val_stake, val_position), val_address) in below_cap_in_mem.into_iter()
     {
@@ -1314,6 +1330,12 @@ where
     S: StorageRead + StorageWrite,
 {
     let next_position = find_next_position(handle, storage)?;
+    tracing::debug!(
+        "Inserting validator {} into position {:?} at epoch {}",
+        address.clone(),
+        next_position.clone(),
+        epoch.clone()
+    );
     handle.insert(storage, next_position, address.clone())?;
     validator_set_positions_handle().at(epoch).insert(
         storage,
@@ -1323,7 +1345,7 @@ where
     Ok(())
 }
 
-/// NEW: Unbond.
+/// Unbond.
 pub fn unbond_tokens<S>(
     storage: &mut S,
     source: Option<&Address>,
@@ -1335,8 +1357,14 @@ where
     S: StorageRead + StorageWrite,
 {
     let amount = amount.change();
+    tracing::debug!("Unbonding token amount {amount} at epoch {current_epoch}");
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
+    tracing::debug!(
+        "Current validator stake at pipeline: {}",
+        read_validator_stake(storage, &params, validator, pipeline_epoch)?
+            .unwrap_or_default()
+    );
 
     if let Some(source) = source {
         if source != validator
@@ -1351,11 +1379,8 @@ where
         return Err(BondError::NotAValidator(validator.clone()).into());
     }
 
-    // Should be able to unbond inactive validators, but we'll need to prevent
-    // jailed unbonding with slashing
-
-    // Check that validator is not inactive at anywhere between the current
-    // epoch and pipeline offset
+    // TODO: Should be able to unbond inactive validators, but we'll need to
+    // prevent jailed unbonding with slashing
     // let validator_state_handle = validator_state_handle(validator);
     // for epoch in current_epoch.iter_range(params.pipeline_len) {
     //     if let Some(ValidatorState::Inactive) =
@@ -1400,6 +1425,16 @@ where
         .get_data_handler()
         .iter(storage)?
         .collect();
+    // tracing::debug!("Bonds before decrementing:");
+    // for ep in Epoch::default().iter_range(params.unbonding_len * 3) {
+    //     tracing::debug!(
+    //         "bond delta at epoch {}: {}",
+    //         ep,
+    //         bond_remain_handle
+    //             .get_delta_val(storage, ep, &params)?
+    //             .unwrap_or_default()
+    //     )
+    // }
     let mut bond_iter = bonds.into_iter().rev();
 
     // Map: { bond start epoch, (new bond value, unbond value) }
@@ -1444,6 +1479,18 @@ where
         )?;
     }
 
+    // tracing::debug!("Bonds after decrementing:");
+    // for ep in Epoch::default().iter_range(params.unbonding_len * 3) {
+    //     tracing::debug!(
+    //         "bond delta at epoch {}: {}",
+    //         ep,
+    //         bond_remain_handle
+    //             .get_delta_val(storage, ep, &params)?
+    //             .unwrap_or_default()
+    //     )
+    // }
+
+    tracing::debug!("Updating validator set for unbonding");
     // Update the validator set at the pipeline offset
     update_validator_set(storage, &params, validator, -amount, current_epoch)?;
 
@@ -1504,9 +1551,7 @@ pub struct BecomeValidator<'a, S> {
     pub max_commission_rate_change: Decimal,
 }
 
-/// NEW: Initialize data for a new validator.
-/// TODO: should this still happen at pipeline if it is occurring with 0 bonded
-/// stake
+/// Initialize data for a new validator.
 pub fn become_validator<S>(
     args: BecomeValidator<'_, S>,
 ) -> storage_api::Result<()>
@@ -1525,6 +1570,9 @@ where
         max_commission_rate_change,
     } = args;
 
+    // This will fail if the key is already being used
+    try_insert_consensus_key(storage, consensus_key)?;
+
     // Non-epoched validator data
     write_validator_address_raw_hash(storage, address, consensus_key)?;
     write_validator_max_commission_rate_change(
@@ -1534,31 +1582,31 @@ where
     )?;
 
     // Epoched validator data
-    validator_consensus_key_handle(address).init(
+    validator_consensus_key_handle(address).set(
         storage,
         consensus_key.clone(),
         current_epoch,
         params.pipeline_len,
     )?;
-    validator_eth_hot_key_handle(address).init(
+    validator_eth_hot_key_handle(address).set(
         storage,
         eth_hot_key.clone(),
         current_epoch,
         params.pipeline_len,
     )?;
-    validator_eth_cold_key_handle(address).init(
+    validator_eth_cold_key_handle(address).set(
         storage,
         eth_cold_key.clone(),
         current_epoch,
         params.pipeline_len,
     )?;
-    validator_commission_rate_handle(address).init(
+    validator_commission_rate_handle(address).set(
         storage,
         commission_rate,
         current_epoch,
         params.pipeline_len,
     )?;
-    validator_deltas_handle(address).init(
+    validator_deltas_handle(address).set(
         storage,
         token::Change::default(),
         current_epoch,
@@ -1567,7 +1615,6 @@ where
 
     let stake = token::Amount::default();
 
-    // TODO: need to set the validator state inside of this function
     insert_validator_into_validator_set(
         storage,
         params,
@@ -1579,7 +1626,7 @@ where
     Ok(())
 }
 
-/// NEW: Withdraw.
+/// Withdraw.
 pub fn withdraw_tokens<S>(
     storage: &mut S,
     source: Option<&Address>,
@@ -1589,12 +1636,11 @@ pub fn withdraw_tokens<S>(
 where
     S: StorageRead + StorageWrite,
 {
+    tracing::debug!("Withdrawing tokens in epoch {current_epoch}");
     let params = read_pos_params(storage)?;
     let source = source.unwrap_or(validator);
 
     let slashes = validator_slashes_handle(validator);
-    // TODO: need some error handling to determine if this unbond even exists?
-    // A handle to an empty location is valid - we just won't see any data
     let unbond_handle = unbond_handle(source, validator);
 
     let mut slashed = token::Amount::default();
@@ -1611,11 +1657,16 @@ where
             amount,
         ) = unbond?;
 
+        tracing::debug!(
+            "Unbond delta ({start_epoch}..{withdraw_epoch}), amount {amount}",
+        );
+
         // TODO: worry about updating this later after PR 740 perhaps
         // 1. cubic slashing
         // 2. adding slash rates in same epoch, applying cumulatively in dif
         // epochs
         if withdraw_epoch > current_epoch {
+            tracing::debug!("Not yet withdrawable");
             continue;
         }
         for slash in slashes.iter(storage)? {
@@ -1642,9 +1693,11 @@ where
         unbonds_to_remove.push((withdraw_epoch, start_epoch));
     }
     withdrawable_amount -= slashed;
+    tracing::debug!("Withdrawing total {withdrawable_amount}");
 
     // Remove the unbond data from storage
     for (withdraw_epoch, start_epoch) in unbonds_to_remove {
+        tracing::debug!("Remove ({start_epoch}..{withdraw_epoch}) from unbond");
         unbond_handle
             .at(&withdraw_epoch)
             .remove(storage, &start_epoch)?;
@@ -1716,7 +1769,7 @@ where
     commission_handle.set(storage, new_rate, current_epoch, params.pipeline_len)
 }
 
-/// NEW: apply a slash and write it to storage
+/// apply a slash and write it to storage
 pub fn slash<S>(
     storage: &mut S,
     params: &PosParams,
@@ -1821,7 +1874,35 @@ where
     Ok(())
 }
 
-/// NEW: Get the total bond amount for a given bond ID at a given epoch
+/// Check if the given consensus key is already being used to ensure uniqueness.
+///
+/// If it's not being used, it will be inserted into the set that's being used
+/// for this. If it's already used, this will return an Error.
+pub fn try_insert_consensus_key<S>(
+    storage: &mut S,
+    consensus_key: &common::PublicKey,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = consensus_keys_key();
+    LazySet::open(key).try_insert(storage, consensus_key.clone())
+}
+
+/// Check if the given consensus key is already being used to ensure uniqueness.
+pub fn is_consensus_key_used<S>(
+    storage: &S,
+    consensus_key: &common::PublicKey,
+) -> storage_api::Result<bool>
+where
+    S: StorageRead,
+{
+    let key = consensus_keys_key();
+    let handle = LazySet::open(key);
+    handle.contains(storage, consensus_key)
+}
+
+/// Get the total bond amount for a given bond ID at a given epoch
 pub fn bond_amount<S>(
     storage: &S,
     params: &PosParams,
@@ -1863,7 +1944,7 @@ where
     Ok((total, total_active))
 }
 
-/// NEW: adapting `PosBase::validator_set_update for lazy storage
+/// Update tendermint validator set
 pub fn validator_set_update_tendermint<S, T>(
     storage: &S,
     params: &PosParams,

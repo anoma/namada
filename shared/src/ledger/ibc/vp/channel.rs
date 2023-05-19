@@ -954,13 +954,8 @@ where
     }
 
     fn max_expected_time_per_block(&self) -> Duration {
-        match parameters::read(self.ctx.storage) {
-            Ok((parameters, gas)) => {
-                match self.ctx.gas_meter.borrow_mut().add(gas) {
-                    Ok(_) => parameters.max_expected_time_per_block.into(),
-                    Err(_) => Duration::default(),
-                }
-            }
+        match parameters::read(&self.ctx.pre()) {
+            Ok(parameters) => parameters.max_expected_time_per_block.into(),
             Err(_) => Duration::default(),
         }
     }

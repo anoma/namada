@@ -448,7 +448,6 @@ where
 
         let new_epoch = self
             .wl_storage
-            .storage
             .update_epoch(height, header_time)
             .expect("Must be able to update epoch");
 
@@ -1246,7 +1245,7 @@ mod test_finalize_block {
             min_duration: DurationSecs(0),
         };
         namada::ledger::parameters::update_epoch_parameter(
-            &mut shell.wl_storage.storage,
+            &mut shell.wl_storage,
             &epoch_duration,
         )
         .unwrap();
@@ -1287,7 +1286,7 @@ mod test_finalize_block {
         add_proposal(1, ProposalVote::Nay);
 
         // Commit the genesis state
-        shell.wl_storage.commit_genesis().unwrap();
+        shell.wl_storage.commit_block().unwrap();
         shell.commit();
 
         // Collect all storage key-vals into a sorted map

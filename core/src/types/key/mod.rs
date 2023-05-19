@@ -482,9 +482,16 @@ pub mod testing {
         })
     }
 
-    /// Generate an arbitrary [`common::SecretKey`].
+    /// Generate an arbitrary `ed25519` [`common::SecretKey`].
     pub fn arb_common_keypair() -> impl Strategy<Value = common::SecretKey> {
         arb_keypair::<ed25519::SigScheme>()
+            .prop_map(|keypair| keypair.try_to_sk().unwrap())
+    }
+
+    /// Generate an arbitrary `secp256k1` [`common::SecretKey`].
+    pub fn arb_common_secp256k1_keypair()
+    -> impl Strategy<Value = common::SecretKey> {
+        arb_keypair::<secp256k1::SigScheme>()
             .prop_map(|keypair| keypair.try_to_sk().unwrap())
     }
 

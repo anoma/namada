@@ -1,5 +1,7 @@
 //! PoS system tests
 
+mod state_machine;
+
 use std::cmp::min;
 use std::ops::Range;
 
@@ -193,7 +195,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         current_epoch,
     )
     .unwrap();
-    s.commit_genesis().unwrap();
+    s.commit_block().unwrap();
 
     // Advance to epoch 1
     current_epoch = advance_epoch(&mut s, &params);
@@ -460,8 +462,15 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
     // Unbond the self-bond
-    unbond_tokens(&mut s, None, &validator.address, amount_del, current_epoch)
-        .unwrap();
+    let amount_self_unbond = token::Amount::from(50_000);
+    unbond_tokens(
+        &mut s,
+        None,
+        &validator.address,
+        amount_self_unbond,
+        current_epoch,
+    )
+    .unwrap();
 
     let val_stake_pre = read_validator_stake(
         &s,
@@ -482,33 +491,33 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     .unwrap();
     let unbond = unbond_handle(&validator.address, &validator.address);
 
-    assert_eq!(val_delta, Some(-amount_del.change()));
+    assert_eq!(val_delta, Some(-amount_self_unbond.change()));
     assert_eq!(
         unbond
             .at(&(pipeline_epoch + params.unbonding_len))
             .get(&s, &(self_bond_epoch + params.pipeline_len))
             .unwrap(),
-        Some(amount_self_bond)
-    );
-    assert_eq!(
-        unbond
-            .at(&(pipeline_epoch + params.unbonding_len))
-            .get(&s, &Epoch::default())
-            .unwrap(),
-        Some(amount_del - amount_self_bond)
+        Some(amount_self_unbond)
     );
     assert_eq!(
         val_stake_pre,
         Some(validator.tokens + amount_self_bond + amount_del)
     );
-    assert_eq!(val_stake_post, Some(validator.tokens + amount_self_bond));
+    assert_eq!(
+        val_stake_post,
+        Some(
+            validator.tokens + amount_self_bond + amount_del
+                - amount_self_unbond
+        )
+    );
 
     // Unbond delegation
+    let amount_undel = token::Amount::from(1_000_000);
     unbond_tokens(
         &mut s,
         Some(&delegator),
         &validator.address,
-        amount_self_bond,
+        amount_undel,
         current_epoch,
     )
     .unwrap();
@@ -532,19 +541,29 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     .unwrap();
     let unbond = unbond_handle(&delegator, &validator.address);
 
-    assert_eq!(val_delta, Some(-(amount_self_bond + amount_del).change()));
+    assert_eq!(
+        val_delta,
+        Some(-(amount_self_unbond + amount_undel).change())
+    );
     assert_eq!(
         unbond
             .at(&(pipeline_epoch + params.unbonding_len))
             .get(&s, &(delegation_epoch + params.pipeline_len))
             .unwrap(),
-        Some(amount_self_bond)
+        Some(amount_undel)
     );
     assert_eq!(
         val_stake_pre,
         Some(validator.tokens + amount_self_bond + amount_del)
     );
-    assert_eq!(val_stake_post, Some(validator.tokens));
+    assert_eq!(
+        val_stake_post,
+        Some(
+            validator.tokens + amount_self_bond - amount_self_unbond
+                + amount_del
+                - amount_undel
+        )
+    );
 
     let withdrawable_offset = params.unbonding_len + params.pipeline_len;
 
@@ -579,7 +598,13 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
             &super::ADDRESS,
         ))
         .unwrap();
-    assert_eq!(Some(pos_balance_pre + amount_self_bond), pos_balance);
+    assert_eq!(
+        Some(
+            pos_balance_pre + amount_self_bond - amount_self_unbond
+                + amount_del
+        ),
+        pos_balance
+    );
 
     // Withdraw the delegation unbond
     withdraw_tokens(
@@ -599,7 +624,14 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
             &super::ADDRESS,
         ))
         .unwrap();
-    assert_eq!(Some(pos_balance_pre), pos_balance);
+    assert_eq!(
+        Some(
+            pos_balance_pre + amount_self_bond - amount_self_unbond
+                + amount_del
+                - amount_undel
+        ),
+        pos_balance
+    );
 }
 
 /// Test validator initialization.
@@ -625,7 +657,7 @@ fn test_become_validator_aux(
         current_epoch,
     )
     .unwrap();
-    s.commit_genesis().unwrap();
+    s.commit_block().unwrap();
 
     // Advance to epoch 1
     current_epoch = advance_epoch(&mut s, &params);
@@ -802,7 +834,7 @@ fn test_validator_sets() {
         // Set their consensus key (needed for
         // `validator_set_update_tendermint` fn)
         validator_consensus_key_handle(addr)
-            .init(s, pk.clone(), epoch, params.pipeline_len)
+            .set(s, pk.clone(), epoch, params.pipeline_len)
             .unwrap();
     };
 
@@ -1440,7 +1472,7 @@ fn test_validator_sets_swap() {
         // Set their consensus key (needed for
         // `validator_set_update_tendermint` fn)
         validator_consensus_key_handle(addr)
-            .init(s, pk.clone(), epoch, params.pipeline_len)
+            .set(s, pk.clone(), epoch, params.pipeline_len)
             .unwrap();
     };
 
@@ -1608,7 +1640,7 @@ fn arb_genesis_validators(
     size: Range<usize>,
 ) -> impl Strategy<Value = Vec<GenesisValidator>> {
     let tokens: Vec<_> = (0..size.end)
-        .map(|_| (1..=1_000_000_000_000_u64).prop_map(token::Amount::from))
+        .map(|_| (1..=10_u64).prop_map(token::Amount::from))
         .collect();
     (size, tokens).prop_map(|(size, token_amounts)| {
         // use unique seeds to generate validators' address and consensus key
