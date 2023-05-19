@@ -19,7 +19,7 @@ pub enum Error {
 
 const TX_SIZE_GAS_PER_BYTE: u64 = 10;
 const COMPILE_GAS_PER_BYTE: u64 = 1;
-const PARALLEL_GAS_DIVIDER: u64 = 10; //FIXME: should this depend on the length of the vector of rest?
+const PARALLEL_GAS_DIVIDER: u64 = 10;
 
 /// The minimum gas cost for accessing the storage
 pub const MIN_STORAGE_GAS: u64 = 1;
@@ -176,7 +176,7 @@ impl TxGasMeter {
     /// Add the gas for the space that the transaction requires in the block
     pub fn add_tx_size_gas(
         &mut self,
-        bytes_len: impl TryInto<u64>, //FIXME: no generic here
+        bytes_len: impl TryInto<u64>,
     ) -> Result<()> {
         let bytes_len =
             bytes_len.try_into().map_err(|_| Error::ConversionError)?;
@@ -222,7 +222,6 @@ impl VpGasMeter {
     /// Initialize a new VP gas meter, starting with the gas consumed in the
     /// transaction so far. Also requires the transaction gas limit.
     pub fn new(tx_gas_limit: u64, initial_gas: u64) -> Self {
-        //FIXME: should this take the reference to the txgasmeter?
         Self {
             tx_gas_limit,
             initial_gas,

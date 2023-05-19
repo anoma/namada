@@ -83,6 +83,11 @@ pub enum Error {
 /// Result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
+enum WasmPayload<'fetch> {
+    Hash(&'fetch Hash),
+    Code(&'fetch [u8]),
+}
+
 /// Execute a transaction code. Returns the set verifiers addresses requested by
 /// the transaction.
 #[allow(clippy::too_many_arguments)]
@@ -102,55 +107,29 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    let (module, store, tx_hash) = if tx_code.as_ref().len() == HASH_LENGTH {
+    let (tx_hash, code) = if tx_code.as_ref().len() == HASH_LENGTH {
         // we assume that there is no wasm code with HASH_LENGTH
-        let code_hash =
+        let tx_hash =
             Hash::try_from(tx_code.as_ref()).map_err(Error::CodeHash)?;
 
-        // Compilation gas even if the compiled module is in cache
-        let key = Key::wasm_code_len(&code_hash);
-        let tx_len = match write_log.read(&key).0 {
-            Some(StorageModification::Write { value }) => {
-                u64::try_from_slice(value)
-                    .map_err(|e| Error::ConversionError(e.to_string()))
-            }
-            _ => match storage
-                .read(&key)
-                .map_err(|e| {
-                    Error::LoadWasmCode(format!(
-                        "Read wasm code length failed from storage: key {}, \
-                             error {}",
-                        key, e
-                    ))
-                })?
-                .0
-            {
-                Some(v) => u64::try_from_slice(&v)
-                    .map_err(|e| Error::ConversionError(e.to_string())),
-                None => Err(Error::LoadWasmCode(format!(
-                    "No wasm code length in storage: key {}",
-                    key
-                ))),
-            },
-        }?;
-        gas_meter.add_wasm_load_from_storage_gas(tx_len)?;
-        gas_meter.add_compiling_gas(tx_len)?;
-
-        let (module, store) =
-            fetch_or_compile(tx_wasm_cache, &code_hash, write_log, storage)?;
-        (module, store, code_hash)
+        (tx_hash, None)
     } else {
-        // Compilation gas even if the compiled module is in cache
-        gas_meter.add_compiling_gas(
-            u64::try_from(tx_code.as_ref().len())
-                .map_err(|e| Error::ConversionError(e.to_string()))?,
-        )?;
-
-        match tx_wasm_cache.compile_or_fetch(tx_code.as_ref())? {
-            Some((module, store)) => (module, store, Hash::sha256(tx_code)),
-            None => return Err(Error::NoCompiledWasmCode),
-        }
+        let tx_hash = Hash::sha256(tx_code.as_ref());
+        (tx_hash, Some(tx_code.as_ref()))
     };
+
+    let code_or_hash = match code {
+        Some(code) => WasmPayload::Code(code),
+        None => WasmPayload::Hash(&tx_hash),
+    };
+
+    let (module, store) = fetch_or_compile(
+        tx_wasm_cache,
+        code_or_hash,
+        write_log,
+        storage,
+        gas_meter,
+    )?;
 
     let tx_gas_required =
         match gas_table.get(&tx_hash.to_string().to_ascii_lowercase()) {
@@ -250,8 +229,13 @@ where
     };
 
     // Compile the wasm module
-    let (module, store) =
-        fetch_or_compile(&mut vp_wasm_cache, vp_code_hash, write_log, storage)?;
+    let (module, store) = fetch_or_compile(
+        &mut vp_wasm_cache,
+        WasmPayload::Hash(vp_code_hash),
+        write_log,
+        storage,
+        gas_meter,
+    )?;
 
     let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
     let mut result_buffer: Option<Vec<u8>> = None;
@@ -291,14 +275,12 @@ where
         address,
         keys_changed,
         verifiers,
-        storage,
-        write_log,
         gas_meter,
         gas_table,
     )
 }
 
-fn run_vp<DB, H>(
+fn run_vp(
     module: wasmer::Module,
     vp_imports: wasmer::ImportObject,
     vp_code_hash: &Hash,
@@ -306,38 +288,9 @@ fn run_vp<DB, H>(
     address: &Address,
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
-    storage: &Storage<DB, H>,
-    write_log: &WriteLog,
     gas_meter: &mut VpGasMeter,
     gas_table: &BTreeMap<String, u64>,
-) -> Result<bool>
-where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + StorageHasher,
-{
-    // Compilation gas even if the compiled module is in cache
-    let key = Key::wasm_code_len(&vp_code_hash);
-    let vp_code_len = match write_log.read(&key).0 {
-        Some(StorageModification::Write { value }) => {
-            u64::try_from_slice(value)
-                .map_err(|e| Error::ConversionError(e.to_string()))
-        }
-        _ => match storage.read(&key).map_err(|e| Error::LoadWasmCode(format!("Read wasm vp code length from storage failed: key {}, error {}", key, e)))?.0 {
-            Some(v) => u64::try_from_slice(&v)
-                .map_err(|e| Error::ConversionError(e.to_string())),
-                None => Err(Error::LoadWasmCode(format!(
-                    "No wasm code length in storage: key {}",
-                    key
-                ))),
-        },
-    }?;
-    gas_meter
-        .add_wasm_load_from_storage_gas(vp_code_len)
-        .map_err(Error::GasError)?;
-    gas_meter
-        .add_compiling_gas(vp_code_len)
-        .map_err(Error::GasError)?;
-
+) -> Result<bool> {
     let vp_gas_required =
         match gas_table.get(&vp_code_hash.to_string().to_ascii_lowercase()) {
             Some(gas) => gas.to_owned(),
@@ -502,9 +455,13 @@ where
         }?;
 
         // Compile the wasm module
-        //FIXME: need to account gas for loading and compilation!
-        let (module, store) =
-            fetch_or_compile(vp_wasm_cache, &vp_code_hash, write_log, storage)?;
+        let (module, store) = fetch_or_compile(
+            vp_wasm_cache,
+            WasmPayload::Hash(&vp_code_hash),
+            write_log,
+            storage,
+            gas_meter,
+        )?;
 
         let initial_memory =
             memory::prepare_vp_memory(&store).map_err(Error::MemoryError)?;
@@ -519,8 +476,6 @@ where
             address,
             keys_changed,
             verifiers,
-            storage,
-            write_log,
             gas_meter,
             &gas_table,
         )
@@ -550,12 +505,13 @@ pub fn prepare_wasm_code<T: AsRef<[u8]>>(code: T) -> Result<Vec<u8>> {
     elements::serialize(module).map_err(Error::SerializationError)
 }
 
-// Fetch or compile a WASM code from the cache or storage
+// Fetch or compile a WASM code from the cache or storage. Account for the loading and code compilation gas costs.
 fn fetch_or_compile<DB, H, CN, CA>(
     wasm_cache: &mut Cache<CN, CA>,
-    code_hash: &Hash,
+    code_or_hash: WasmPayload,
     write_log: &WriteLog,
     storage: &Storage<DB, H>,
+    gas_meter: &mut dyn TxVpGasMetering,
 ) -> Result<(Module, Store)>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -563,35 +519,87 @@ where
     CN: 'static + CacheName,
     CA: 'static + WasmCacheAccess,
 {
-    match wasm_cache.fetch(code_hash)? {
-        Some((module, store)) => Ok((module, store)),
-        None => {
-            let key = Key::wasm_code(code_hash);
-            let code = match write_log.read(&key).0 {
-                Some(StorageModification::Write { value }) => value.clone(),
-                _ => match storage
-                    .read(&key)
-                    .map_err(|e| {
-                        Error::LoadWasmCode(format!(
-                            "Read wasm code failed from storage: key {}, \
+    match code_or_hash {
+        WasmPayload::Hash(code_hash) => {
+            let (module, store, tx_len) = match wasm_cache.fetch(code_hash)? {
+                Some((module, store)) => {
+                    // Gas accounting even if the compiled module is in cache
+                    let key = Key::wasm_code_len(&code_hash);
+                    let tx_len = match write_log.read(&key).0 {
+                        Some(StorageModification::Write { value }) => {
+                            u64::try_from_slice(value).map_err(|e| {
+                                Error::ConversionError(e.to_string())
+                            })
+                        }
+                        _ => match storage
+                            .read(&key)
+                            .map_err(|e| {
+                                Error::LoadWasmCode(format!(
+                        "Read wasm code length failed from storage: key {}, \
                              error {}",
-                            key, e
-                        ))
-                    })?
-                    .0
-                {
-                    Some(v) => v,
-                    None => {
-                        return Err(Error::LoadWasmCode(format!(
-                            "No wasm code in storage: key {}",
-                            key
-                        )));
+                        key, e
+                    ))
+                            })?
+                            .0
+                        {
+                            Some(v) => u64::try_from_slice(&v).map_err(|e| {
+                                Error::ConversionError(e.to_string())
+                            }),
+                            None => Err(Error::LoadWasmCode(format!(
+                                "No wasm code length in storage: key {}",
+                                key
+                            ))),
+                        },
+                    }?;
+
+                    (module, store, tx_len)
+                }
+                None => {
+                    let key = Key::wasm_code(code_hash);
+                    let code = match write_log.read(&key).0 {
+                        Some(StorageModification::Write { value }) => {
+                            value.clone()
+                        }
+                        _ => match storage
+                            .read(&key)
+                            .map_err(|e| {
+                                Error::LoadWasmCode(format!(
+                                "Read wasm code failed from storage: key {}, \
+                             error {}",
+                                key, e
+                            ))
+                            })?
+                            .0
+                        {
+                            Some(v) => v,
+                            None => {
+                                return Err(Error::LoadWasmCode(format!(
+                                    "No wasm code in storage: key {}",
+                                    key
+                                )));
+                            }
+                        },
+                    };
+                    let tx_len = u64::try_from(code.len())
+                        .map_err(|e| Error::ConversionError(e.to_string()))?;
+
+                    match wasm_cache.compile_or_fetch(code)? {
+                        Some((module, store)) => (module, store, tx_len),
+                        None => return Err(Error::NoCompiledWasmCode),
                     }
-                },
+                }
             };
 
+            gas_meter.add_wasm_load_from_storage_gas(tx_len)?;
+            gas_meter.add_compiling_gas(tx_len)?;
+            Ok((module, store))
+        }
+        WasmPayload::Code(code) => {
+            gas_meter.add_compiling_gas(
+                u64::try_from(code.as_ref().len())
+                    .map_err(|e| Error::ConversionError(e.to_string()))?,
+            )?;
             validate_untrusted_wasm(&code).map_err(Error::ValidationError)?;
-
             match wasm_cache.compile_or_fetch(code)? {
                 Some((module, store)) => Ok((module, store)),
                 None => Err(Error::NoCompiledWasmCode),
