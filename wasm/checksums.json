@@ -1,20 +1,74 @@
 {
-    "tx_bond.wasm": "tx_bond.1fac5f79b23232f25370160cc71f3ae9c6e6b35a929d79922826d0853288be6a.wasm",
-    "tx_change_validator_commission.wasm": "tx_change_validator_commission.fc6b3d798cbda1833e1ca9be03fe0cab998048e0a829ae127ac1282b300e7f0e.wasm",
-    "tx_ibc.wasm": "tx_ibc.9a8291d8a249f19d17608d8c1ff5d13a8eea25b9cf1629299707553121ff78fc.wasm",
-    "tx_init_account.wasm": "tx_init_account.016e2ff541a09b2e4709d7d1b8d36d336412ccb57ab7390fdfb5726324dec8a5.wasm",
-    "tx_init_proposal.wasm": "tx_init_proposal.32b350ea3377b679bb81035bb19be9f0dd7d678e4de4e8ddb24f8050c5564ba5.wasm",
-    "tx_init_validator.wasm": "tx_init_validator.c400691869282c6302a2772e11ab086798bbbdcc60d497c3dc279096bd2ad4bd.wasm",
-    "tx_reveal_pk.wasm": "tx_reveal_pk.1981f185eae27de9135244b8238fd388206268e69dd511f246751aeaf8137b2a.wasm",
-    "tx_transfer.wasm": "tx_transfer.54cee6bef28d0ff33281788c124eaabf49486414a0a3eba1a66bfba33347c824.wasm",
-    "tx_unbond.wasm": "tx_unbond.486ed4ed2324c783a1715b94dc8dcda6fbb3ab7827d66945f8d9179de743fd79.wasm",
-    "tx_update_vp.wasm": "tx_update_vp.bfcf8672a62187858551fc914b675a9dbfd581d65daffbbbebcedcc28f7aa339.wasm",
-    "tx_vote_proposal.wasm": "tx_vote_proposal.9a170b3265c9d6e58dc4f7889c7426698f3f72a3797bbe4c5cbb21f24dfffb70.wasm",
-    "tx_withdraw.wasm": "tx_withdraw.b77e8e47d787dfc7a311f4bb4c4772573064e5cdd0251af2c4bc6b807ef4f362.wasm",
-    "vp_implicit.wasm": "vp_implicit.835dc08ccebdb356d0d757cd9813a56a40a98bc688f12c6f8fed74310b2c6d13.wasm",
-    "vp_masp.wasm": "vp_masp.5cd63d431ffde6c33f0e1fb2a85b940721a924656998e187fb10dc2064676b1d.wasm",
-    "vp_testnet_faucet.wasm": "vp_testnet_faucet.cf0b5c725807c847a271f72711aa4e1d059539cbc6e2d569d5e6e9fcc14253f1.wasm",
-    "vp_token.wasm": "vp_token.0b0152e2974bfa3f15d3fc30ee8d9687b5418055c67314cedbf50ce972b763c5.wasm",
-    "vp_user.wasm": "vp_user.0ed07e207a6e1f29fdf113a39f9032d0cbec04a6e92a040970d96bb9c3ddbed8.wasm",
-    "vp_validator.wasm": "vp_validator.bfa5e9a46f6d722a16f2ded4bb6c05dde382e6de6e882847714720804b2c7661.wasm"
+    "tx_bond.wasm": {
+        "gas": "160",
+        "hash": "2c7bee49a52513a403fb35694ebfd238b9d4b96aeaa6d43cc67f5a81d378e080"
+    },
+    "tx_change_validator_commission.wasm": {
+        "gas": "220",
+        "hash": "149ad6f2ad711282b043f36727fe4af9c0d3a51887e683c2b3032fe4ce34281b"
+    },
+    "tx_ibc.wasm": {
+        "gas": "1240",
+        "hash": "74c8041170ef6944c9e2fa3bf87cdccdd1c80108e6f7108277c521f25e422aba"
+    },
+    "tx_init_account.wasm": {
+        "gas": "230",
+        "hash": "4d975d0f4c7959a4906c47f98d257d003a034074f6af52791e737bfb3b469ef2"
+    },
+    "tx_init_proposal.wasm": {
+        "gas": "40",
+        "hash": "508b7acdb8e4031d339adc70cca707fc8318481a2f63178b1c865d28d153c82d"
+    },
+    "tx_init_validator.wasm": {
+        "gas": "730",
+        "hash": "eb8a6c44d87c330f78cb552fd3a6778831964d76c2780f9bfe52fd52be27a71f"
+    },
+    "tx_reveal_pk.wasm": {
+        "gas": "170",
+        "hash": "be878e819c5a50a057818ca36f9f803967f2750e9defeb1122c6a07292c4f10b"
+    },
+    "tx_transfer.wasm": {
+        "gas": "110",
+        "hash": "22e7ee45debf9e826058090665373a77d6df6d4739116692c86a2f7e4d879703"
+    },
+    "tx_unbond.wasm": {
+        "gas": "430",
+        "hash": "a1ccdf15828ed0de597528e0cedfcc1572f824310b60cbd564ec4ff13f8c16b1"
+    },
+    "tx_update_vp.wasm": {
+        "gas": "140",
+        "hash": "000833cf971f5e9d5d7842ad474b6ae939e46d20b18924af116b54af7433cd64"
+    },
+    "tx_vote_proposal.wasm": {
+        "gas": "120",
+        "hash": "636e971ecbd6ed708ee6e69d15020b2f08a6794d8b2ddabf7c64c7406be235ca"
+    },
+    "tx_withdraw.wasm": {
+        "gas": "260",
+        "hash": "a88f0fe4fbcad6dc0ae27fba8b5fd6fb415e074252f778aa93306a58041e865f"
+    },
+    "vp_implicit.wasm": {
+        "gas": "40",
+        "hash": "186f8912945cb9c5f36dbda8402bcef0073e714bf89e229a9e2ed26de8401cb9"
+    },
+    "vp_masp.wasm": {
+        "gas": "8030",
+        "hash": "e50ca2a72df71bb71d0e405a003aa4f7210f3c336f7d3310089cf4e87ebbea30"
+    },
+    "vp_testnet_faucet.wasm": {
+        "gas": "0",
+        "hash": "a26ae96c2700063c043fc180aaf6114a3f2621759b3518193f374ac5beebe6c4"
+    },
+    "vp_token.wasm": {
+        "gas": "30",
+        "hash": "f5dd59c0c21e4e0bbfa22a87a556a0d0178b1ec33aa357641ab25215d2fd8813"
+    },
+    "vp_user.wasm": {
+        "gas": "60",
+        "hash": "ea9589a9ef40fd0f94dfc0b081e37efc0d9e91b6f7ba34153d61f02f372c4650"
+    },
+    "vp_validator.wasm": {
+        "gas": "50",
+        "hash": "98c2ded76ae76eb0ec25980a7fbd9c827a8a2e2186532f1c03edb4a469eff671"
+    }
 }
