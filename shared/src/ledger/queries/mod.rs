@@ -7,7 +7,8 @@ use shell::SHELL;
 #[cfg(any(test, feature = "async-client"))]
 pub use types::Client;
 pub use types::{
-    EncodedResponseQuery, RequestCtx, RequestQuery, ResponseQuery, Router,
+    EncodedResponseQuery, Error, RequestCtx, RequestQuery, ResponseQuery,
+    Router,
 };
 use vp::VP;
 // Re-export to show in rustdoc!
