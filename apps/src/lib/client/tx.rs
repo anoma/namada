@@ -112,11 +112,8 @@ const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
-    let code_path = args.code_path.file_name().unwrap().to_str().unwrap();
-    let tx_code_hash =
-        query_wasm_code_hash(code_path, args.tx.ledger_address.clone())
-            .await
-            .unwrap();
+    // let code_path = args.code_path.file_name().unwrap().to_str().unwrap();
+    let code = std::fs::read(args.code_path).expect("Expected a file at given data path");
     let data = args.data_path.map(|data_path| {
         std::fs::read(data_path).expect("Expected a file at given data path")
     });
@@ -141,7 +138,7 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let pks_index_map = rpc::get_address_pks_map(&client, &address).await;
 
     let tx = Tx::new_with_timestamp(
-        tx_code_hash.to_vec(),
+        code.to_vec(),
         data,
         timestamp,
         ctx.config.ledger.chain_id.clone(),
@@ -203,6 +200,8 @@ pub async fn submit_update_account(
         }
     }
 
+    let current_threshold = rpc::get_address_threshold(&client, &addr).await;
+
     let vp_code_hash = if let Some(vp_code_path) = args.vp_code_path {
         let vp_code_path = vp_code_path.file_name().unwrap().to_str().unwrap();
         Some(
@@ -224,12 +223,12 @@ pub async fn submit_update_account(
         .public_keys
         .iter()
         .map(|account_key| ctx.get_cached(account_key))
-        .collect();
+        .collect::<Vec<common::PublicKey>>();
 
     let data = UpdateAccount {
         addr: addr.clone(),
         vp_code_hash,
-        public_keys,
+        public_keys: public_keys.clone(),
         threshold: args.threshold,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
@@ -242,6 +241,40 @@ pub async fn submit_update_account(
     );
 
     let pks_map = rpc::get_address_pks_map(&client, &addr).await;
+
+    println!("hello my name is gianmarco i come from italy and i like pizza");
+    println!("{}", public_keys.len());
+    println!("{}", current_threshold);
+    if let Some(threshold) = args.threshold {
+        let is_valid = if public_keys.len() < current_threshold as usize {
+            eprintln!("The number of supplied public keys is not greater than the threshold.");
+            false
+        } else if public_keys.len() < threshold as usize {
+            eprintln!("The number of supplied public keys is not greater than the supplied threshold.");
+            false
+        } else if pks_map.len() < threshold as usize {
+            eprintln!("The supplied threshold is not greater than the current number of public keys.");
+            false
+        } else {
+            true
+        };
+        if !is_valid {
+            safe_exit(1);
+        }
+    } else {
+        let is_valid = if public_keys.len() < current_threshold as usize {
+            eprintln!("The number of supplied public keys is less than the supplied threshold.");
+            false
+        } else if pks_map.len() < current_threshold as usize {
+            eprintln!("The supplied threshold is greater than the current number of public keys.");
+            false
+        } else {
+            true
+        };
+        if !is_valid {
+            safe_exit(1);
+        }
+    }
 
     let (_ctx, _initialized_accounts) = process_tx(
         ctx,

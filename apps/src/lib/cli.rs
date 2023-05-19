@@ -2430,7 +2430,7 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Tx>()
                 .arg(
-                    CODE_PATH.def().about(
+                    CODE_PATH_OPT.def().about(
                         "The path to the new validity predicate WASM code.",
                     ),
                 )
