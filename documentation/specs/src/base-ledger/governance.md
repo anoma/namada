@@ -33,7 +33,7 @@ Governance adds the internal address:
 - `GovernanceAddress`
 
 This address contains all the proposals under its address space.
-=======
+
 ### Governance storage
 
 Each proposal will be stored in a sub-key under the internal proposal address. The storage keys involved are:
