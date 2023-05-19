@@ -27,7 +27,9 @@ Now, we need to create a json file `proposal.json` holding the content of our pr
     "voting_start_epoch": 3,
     "voting_end_epoch": 6,
     "grace_epoch": 12,
-    "proposal_code_path": "./wasm_for_tests/tx_no_op.wasm"
+    "type": {
+        "Default":null
+        }
 }
 ```
 
@@ -37,7 +39,11 @@ You should change the value of:
 - `voting_start_epoch` with a future epoch (must be a multiple of 3) for which you want the voting to begin
 - `voting_end_epoch` with an epoch greater than `voting_start_epoch`, a multiple of 3, and by which no further votes will be accepted
 - `grace_epoch` with an epoch greater than `voting_end_epoch` + 6, in which the proposal, if passed, will come into effect
-- `proposal_code_path` with the absolute path of the wasm file to execute (or remove the field completely)
+- `type` with the correct type for your proposal, which can be one of the followings:
+    - `"type": {"Default":null}` for a default proposal without wasm code
+    - `"type": {"Default":"$PATH_TO_WASM_CODE"}` for a default proposal with an associated wasm code
+    - `"type": "PGFCouncil"` to initiate a proposal for a new council
+    - `"type": "ETHBridge"` for an ethereum bridge related proposal
 
 As soon as your `proposal.json` file is ready, you can submit the proposal with (making sure to be in the same directory as the `proposal.json` file):
 
@@ -70,7 +76,7 @@ namada client vote-proposal \
     --signer validator
 ```
 
-where `--vote` can be either `yay` or `nay`.
+where `--vote` can be either `yay` or `nay`. An optional `memo` field can be attached to the vote for pgf and eth bridge proposals.
 
 ## Check the result
 

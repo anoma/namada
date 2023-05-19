@@ -8,7 +8,7 @@ The ledger is backed by an account-based system. Each account has a unique [addr
 
 ### Addresses
 
-There are two main types of address: transparent and shielded.
+There are two main types of addresses: transparent and shielded.
 
 The transparent addresses are the addresses of accounts associated with dynamic storage sub-spaces, where the address of the account is the prefix key segment of its sub-space.
 
@@ -39,7 +39,7 @@ The SHA-256 hash of this data [encoded with Borsh](encoding.html#borsh-binary-en
 
 The fields of a `WrapperTx` are:
 
-- `fee`: Fee to be payed by the source implicit account for including the tx in a block.
+- `fee`: Fee to be paid by the source implicit account for including the tx in a block.
 - `pk`: [Public key](crypto.md#public-keys) of the source implicit account.
 - `epoch`: The [epoch](#epochs) in which the transaction is being included. This should be queried from a synchronized ledger node before the transaction is fully constructed.
 
@@ -52,7 +52,7 @@ The fields of a `WrapperTx` are:
 
    Please refer to the [signing of the default transactions](ledger/default-transactions.md#signing-transactions) to learn how to construct inner transaction's signatures which will be accepted by the [default validity predicates](ledger/default-validity-predicates.md).
 
-   Note that currently the key doesn't change and so it stay constant for the duration of a chain and `<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator()` may be used to encrypt the inner transaction for now as done by the the [`WrapperTx::new` method](https://dev.namada.net/master/rustdoc/namada/types/transaction/wrapper/wrapper_tx/struct.WrapperTx.html#method.new) (depends on <https://github.com/anoma/namada/issues/669>).
+   Note that currently the key doesn't change and so it stays constant for the duration of a chain and `<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator()` may be used to encrypt the inner transaction for now as done by the [`WrapperTx::new` method](https://dev.namada.net/master/rustdoc/namada/types/transaction/wrapper/wrapper_tx/struct.WrapperTx.html#method.new) (depends on <https://github.com/anoma/namada/issues/669>).
 
 - `tx_hash`: A SHA-256 hash of the inner transaction. This MUST match the hash of decrypted `inner_tx`.
 
@@ -86,7 +86,7 @@ The parameters for [epoch](#epochs) duration are:
 
 ### Mempool
 
-When a request to add a transaction to the mempool is received, it will only be added it's a [`Tx` encoded with proto3](./encoding.md#transactions).
+When a request to add a transaction to the mempool is received, it will only be added if it's a [`Tx` encoded with proto3](./encoding.md#transactions).
 
 ### Outer transaction processing
 
@@ -211,7 +211,7 @@ cargo test test_vp_stack_limiter
 
 #### Transaction host environment functions
 
-The following functions from the host ledger are made available in transaction's WASM code. They MAY be imported in the WASM module as shown bellow and MUST be provided by the ledger's WASM runtime:
+The following functions from the host ledger are made available in transaction's WASM code. They MAY be imported in the WASM module as shown below and MUST be provided by the ledger's WASM runtime:
 
 ```wat
 (import "env" "gas" (func (param i32)))
@@ -237,12 +237,12 @@ Additionally, the WASM module MUST export its memory as shown:
 (export "memory" (memory 0))
 ```
 
-- `namada_tx_init_account` TODO newly created accounts' validity predicates aren't used until the block is committed (i.e. only the transaction that created the account may write into its storage in the block in which its being applied).
+- `namada_tx_init_account` TODO newly created accounts' validity predicates aren't used until the block is committed (i.e. only the transaction that created the account may write into its storage in the block in which it's being applied).
 - TODO describe functions in detail
 
 #### Validity predicate host environment functions
 
-The following functions from the host ledger are made available in validity predicate's WASM code. They MAY be imported in the WASM module as shown bellow and MUST be provided by the ledger's WASM runtime.
+The following functions from the host ledger are made available in validity predicate's WASM code. They MAY be imported in the WASM module as shown below and MUST be provided by the ledger's WASM runtime.
 
 ```wat
 (import "env" "gas" (func (param i32)))

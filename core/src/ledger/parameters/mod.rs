@@ -264,7 +264,7 @@ where
 /// gas cost.
 pub fn update_epochs_per_year_parameter<S>(
     storage: &mut S,
-    value: &EpochDuration,
+    value: &u64,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -277,7 +277,7 @@ where
 /// cost.
 pub fn update_pos_gain_p_parameter<S>(
     storage: &mut S,
-    value: &EpochDuration,
+    value: &Decimal,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -290,7 +290,7 @@ where
 /// cost.
 pub fn update_pos_gain_d_parameter<S>(
     storage: &mut S,
-    value: &EpochDuration,
+    value: &Decimal,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -303,7 +303,7 @@ where
 /// gas cost.
 pub fn update_staked_ratio_parameter<S>(
     storage: &mut S,
-    value: &EpochDuration,
+    value: &Decimal,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -316,7 +316,7 @@ where
 /// and gas cost.
 pub fn update_pos_inflation_amount_parameter<S>(
     storage: &mut S,
-    value: &EpochDuration,
+    value: &u64,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -410,6 +410,7 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
+    // read max expected block time
     let max_expected_time_per_block_key =
         storage::get_max_expected_time_per_block_key();
     let value = storage.read(&max_expected_time_per_block_key)?;

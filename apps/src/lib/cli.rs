@@ -825,9 +825,11 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum Ledger {
         Run(LedgerRun),
+        RunUntil(LedgerRunUntil),
         Reset(LedgerReset),
         DumpDb(LedgerDumpDb),
         DbDeleteValue(LedgerDbDeleteValue),
+        RollBack(LedgerRollBack),
     }
 
     impl SubCmd for Ledger {
@@ -840,9 +842,13 @@ pub mod cmds {
                 let dump_db = SubCmd::parse(matches).map(Self::DumpDb);
                 let db_delete_value =
                     SubCmd::parse(matches).map(Self::DbDeleteValue);
+                let rollback = SubCmd::parse(matches).map(Self::RollBack);
+                let run_until = SubCmd::parse(matches).map(Self::RunUntil);
                 run.or(reset)
                     .or(dump_db)
                     .or(db_delete_value)
+                    .or(rollback)
+                    .or(run_until)
                     // The `run` command is the default if no sub-command given
                     .or(Some(Self::Run(LedgerRun(args::LedgerRun(None)))))
             })
@@ -855,9 +861,11 @@ pub mod cmds {
                      defaults to run the node.",
                 )
                 .subcommand(LedgerRun::def())
+                .subcommand(LedgerRunUntil::def())
                 .subcommand(LedgerReset::def())
                 .subcommand(LedgerDumpDb::def())
                 .subcommand(LedgerDbDeleteValue::def())
+                .subcommand(LedgerRollBack::def())
         }
     }
 
@@ -877,6 +885,28 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Run Namada ledger node.")
                 .add_args::<args::LedgerRun>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerRunUntil(pub args::LedgerRunUntil);
+
+    impl SubCmd for LedgerRunUntil {
+        const CMD: &'static str = "run-until";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::LedgerRunUntil::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Run Namada ledger node until a given height. Then halt \
+                     or suspend.",
+                )
+                .add_args::<args::LedgerRunUntil>()
         }
     }
 
@@ -937,6 +967,26 @@ pub mod cmds {
                 )
                 .setting(AppSettings::ArgRequiredElseHelp)
                 .add_args::<args::LedgerDbDeleteValue>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerRollBack;
+
+    impl SubCmd for LedgerRollBack {
+        const CMD: &'static str = "rollback";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|_matches| Self)
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD).about(
+                "Roll Namada state back to the previous height. This command \
+                 does not create a backup of neither the Namada nor the \
+                 Tendermint state before execution: for extra safety, it is \
+                 recommended to make a backup in advance.",
+            )
         }
     }
 
@@ -2028,7 +2078,7 @@ pub mod args {
     use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
     use namada::types::masp::MaspValue;
-    use namada::types::storage::{self, Epoch};
+    use namada::types::storage::{self, BlockHeight, Epoch};
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
     use namada::types::token::Amount;
@@ -2038,9 +2088,8 @@ pub mod args {
     use super::context::*;
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
-    use crate::client::types::{ParsedTxArgs, ParsedTxTransferArgs};
     use crate::config;
-    use crate::config::TendermintMode;
+    use crate::config::{Action, ActionAtHeight, TendermintMode};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
@@ -2058,6 +2107,7 @@ pub mod args {
             Err(_) => config::DEFAULT_BASE_DIR.into(),
         }),
     );
+    const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
     // const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
     const BROADCAST_ONLY: ArgFlag = flag("broadcast-only");
     const CHAIN_ID: Arg<ChainId> = arg("chain-id");
@@ -2093,6 +2143,7 @@ pub mod args {
         DefaultFn(|| "http://localhost:8545".into()),
     );
     const ETH_SYNC: ArgFlag = flag("sync");
+    const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
     const FEE_AMOUNT: ArgDefault<token::Amount> =
         arg_default("fee-amount", DefaultFn(|| token::Amount::from(0)));
     const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
@@ -2105,7 +2156,9 @@ pub mod args {
         arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".into()));
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     const GENESIS_VALIDATOR: ArgOpt<String> = arg("genesis-validator").opt();
+    const HALT_ACTION: ArgFlag = flag("halt");
     const HASH_LIST: Arg<String> = arg("hash-list");
+    const HISTORIC: ArgFlag = flag("historic");
     const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
@@ -2115,7 +2168,7 @@ pub mod args {
             TendermintAddress::from_str(raw).unwrap()
         }));
 
-    const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
+    const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("node");
     const LOCALHOST: ArgFlag = flag("localhost");
     const MAX_ETH_GAS: ArgOpt<u64> = arg_opt("max_eth-gas");
     const MASP_VALUE: Arg<MaspValue> = arg("value");
@@ -2140,7 +2193,9 @@ pub mod args {
     const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
     const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
     const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
-    const PROPOSAL_VOTE: Arg<ProposalVote> = arg("vote");
+    const PROPOSAL_VOTE_PGF_OPT: ArgOpt<String> = arg_opt("pgf");
+    const PROPOSAL_VOTE_ETH_OPT: ArgOpt<String> = arg_opt("eth");
+    const PROPOSAL_VOTE: Arg<String> = arg("vote");
     const RAW_ADDRESS: Arg<Address> = arg("address");
     const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
@@ -2156,6 +2211,7 @@ pub mod args {
     const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
+    const SUSPEND_ACTION: ArgFlag = flag("suspend");
     const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
     const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
@@ -2251,10 +2307,55 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
+            app.arg(NAMADA_START_TIME.def().about(
+                "The start time of the ledger. Accepts a relaxed form of \
+                 RFC3339. A space or a 'T' are accepted as the separator \
+                 between the date and time components. Additional spaces are \
+                 allowed between each component.\nAll of these examples are \
+                 equivalent:\n2023-01-20T12:12:12Z\n2023-01-20 \
+                 12:12:12Z\n2023-  01-20T12:  12:12Z",
+            ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerRunUntil {
+        pub time: Option<DateTimeUtc>,
+        pub action_at_height: ActionAtHeight,
+    }
+
+    impl Args for LedgerRunUntil {
+        fn parse(matches: &ArgMatches) -> Self {
+            Self {
+                time: NAMADA_START_TIME.parse(matches),
+                action_at_height: ActionAtHeight {
+                    height: BLOCK_HEIGHT.parse(matches),
+                    action: if HALT_ACTION.parse(matches) {
+                        Action::Halt
+                    } else {
+                        Action::Suspend
+                    },
+                },
+            }
+        }
+
+        fn def(app: App) -> App {
             app.arg(
                 NAMADA_START_TIME
                     .def()
                     .about("The start time of the ledger."),
+            )
+            .arg(BLOCK_HEIGHT.def().about("The block height to run until."))
+            .arg(HALT_ACTION.def().about("Halt at the given block height"))
+            .arg(
+                SUSPEND_ACTION
+                    .def()
+                    .about("Suspend consensus at the given block height"),
+            )
+            .group(
+                ArgGroup::new("find_flags")
+                    .args(&[HALT_ACTION.name, SUSPEND_ACTION.name])
+                    .required(true),
             )
         }
     }
@@ -2264,6 +2365,7 @@ pub mod args {
         // TODO: allow to specify height
         // pub block_height: Option<BlockHeight>,
         pub out_file_path: PathBuf,
+        pub historic: bool,
     }
 
     impl Args for LedgerDumpDb {
@@ -2272,9 +2374,12 @@ pub mod args {
             let out_file_path = OUT_FILE_PATH_OPT
                 .parse(matches)
                 .unwrap_or_else(|| PathBuf::from("db_dump".to_string()));
+            let historic = HISTORIC.parse(matches);
+
             Self {
                 // block_height,
                 out_file_path,
+                historic,
             }
         }
 
@@ -2287,6 +2392,9 @@ pub mod args {
                     "Path for the output file (omitting file extension). \
                      Defaults to \"db_dump.{block_height}.toml\" in the \
                      current working directory.",
+                ))
+                .arg(HISTORIC.def().about(
+                    "If provided, dump also the diff of the last height",
                 ))
         }
     }
@@ -2845,21 +2953,6 @@ pub mod args {
         pub amount: token::Amount,
     }
 
-    impl TxTransfer {
-        pub fn parse_from_context(
-            &self,
-            ctx: &mut Context,
-        ) -> ParsedTxTransferArgs {
-            ParsedTxTransferArgs {
-                tx: self.tx.parse_from_context(ctx),
-                source: ctx.get_cached(&self.source),
-                target: ctx.get(&self.target),
-                token: ctx.get(&self.token),
-                amount: self.amount,
-            }
-        }
-    }
-
     impl Args for TxTransfer {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
@@ -3278,7 +3371,11 @@ pub mod args {
         /// Proposal id
         pub proposal_id: Option<u64>,
         /// The vote
-        pub vote: ProposalVote,
+        pub vote: String,
+        /// PGF proposal
+        pub proposal_pgf: Option<String>,
+        /// ETH proposal
+        pub proposal_eth: Option<String>,
         /// Flag if proposal vote should be run offline
         pub offline: bool,
         /// The proposal file path
@@ -3289,6 +3386,8 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let proposal_id = PROPOSAL_ID_OPT.parse(matches);
+            let proposal_pgf = PROPOSAL_VOTE_PGF_OPT.parse(matches);
+            let proposal_eth = PROPOSAL_VOTE_ETH_OPT.parse(matches);
             let vote = PROPOSAL_VOTE.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
             let proposal_data = DATA_PATH_OPT.parse(matches);
@@ -3297,6 +3396,8 @@ pub mod args {
                 tx,
                 proposal_id,
                 vote,
+                proposal_pgf,
+                proposal_eth,
                 offline,
                 proposal_data,
             }
@@ -3316,7 +3417,29 @@ pub mod args {
                 .arg(
                     PROPOSAL_VOTE
                         .def()
-                        .about("The vote for the proposal. Either yay or nay."),
+                        .about("The vote for the proposal. Either yay or nay"),
+                )
+                .arg(
+                    PROPOSAL_VOTE_PGF_OPT
+                        .def()
+                        .about(
+                            "The list of proposed councils and spending \
+                             caps:\n$council1 $cap1 $council2 $cap2 ... \
+                             (council is bech32m encoded address, cap is \
+                             expressed in microNAM",
+                        )
+                        .requires(PROPOSAL_ID.name)
+                        .conflicts_with(PROPOSAL_VOTE_ETH_OPT.name),
+                )
+                .arg(
+                    PROPOSAL_VOTE_ETH_OPT
+                        .def()
+                        .about(
+                            "The signing key and message bytes (hex encoded) \
+                             to be signed: $signing_key $message",
+                        )
+                        .requires(PROPOSAL_ID.name)
+                        .conflicts_with(PROPOSAL_VOTE_PGF_OPT.name),
                 )
                 .arg(
                     PROPOSAL_OFFLINE
@@ -3849,33 +3972,12 @@ pub mod args {
         pub fee_token: WalletAddress,
         /// The max amount of gas used to process tx
         pub gas_limit: GasLimit,
+        /// The optional expiration of the transaction
+        pub expiration: Option<DateTimeUtc>,
         /// Sign the tx with the key for the given alias from your wallet
         pub signing_key: Option<WalletKeypair>,
         /// Sign the tx with the keypair of the public key of the given address
         pub signer: Option<WalletAddress>,
-    }
-
-    impl Tx {
-        pub fn parse_from_context(&self, ctx: &mut Context) -> ParsedTxArgs {
-            ParsedTxArgs {
-                dry_run: self.dry_run,
-                dump_tx: self.dump_tx,
-                force: self.force,
-                broadcast_only: self.broadcast_only,
-                ledger_address: self.ledger_address.clone(),
-                initialized_account_alias: self
-                    .initialized_account_alias
-                    .clone(),
-                fee_amount: self.fee_amount,
-                fee_token: ctx.get(&self.fee_token),
-                gas_limit: self.gas_limit.clone(),
-                signing_key: self
-                    .signing_key
-                    .as_ref()
-                    .map(|sk| ctx.get_cached(sk)),
-                signer: self.signer.as_ref().map(|signer| ctx.get(signer)),
-            }
-        }
     }
 
     impl Args for Tx {
@@ -3893,7 +3995,13 @@ pub mod args {
                 "Do not wait for the transaction to be applied. This will \
                  return once the transaction is added to the mempool.",
             ))
-            .arg(LEDGER_ADDRESS_DEFAULT.def().about(LEDGER_ADDRESS_ABOUT))
+            .arg(
+                LEDGER_ADDRESS_DEFAULT
+                    .def()
+                    .about(LEDGER_ADDRESS_ABOUT)
+                    // This used to be "ledger-address", alias for compatibility
+                    .alias("ledger-address"),
+            )
             .arg(ALIAS_OPT.def().about(
                 "If any new account is initialized by the tx, use the given \
                  alias to save it in the wallet. If multiple accounts are \
@@ -3909,6 +4017,12 @@ pub mod args {
                     "The maximum amount of gas needed to run transaction",
                 ),
             )
+            .arg(EXPIRATION_OPT.def().about(
+                "The expiration datetime of the transaction, after which the \
+                 tx won't be accepted anymore. All of these examples are \
+                 equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
+                 12:12:12Z\n2012-  12-12T12:  12:12Z",
+            ))
             .arg(
                 SIGNING_KEY_OPT
                     .def()
@@ -3940,6 +4054,7 @@ pub mod args {
             let fee_amount = GAS_AMOUNT.parse(matches);
             let fee_token = GAS_TOKEN.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches).into();
+            let expiration = EXPIRATION_OPT.parse(matches);
 
             let signing_key = SIGNING_KEY_OPT.parse(matches);
             let signer = SIGNER.parse(matches);
@@ -3953,6 +4068,7 @@ pub mod args {
                 fee_amount,
                 fee_token,
                 gas_limit,
+                expiration,
                 signing_key,
                 signer,
             }
@@ -3968,7 +4084,13 @@ pub mod args {
 
     impl Args for Query {
         fn def(app: App) -> App {
-            app.arg(LEDGER_ADDRESS_DEFAULT.def().about(LEDGER_ADDRESS_ABOUT))
+            app.arg(
+                LEDGER_ADDRESS_DEFAULT
+                    .def()
+                    .about(LEDGER_ADDRESS_ABOUT)
+                    // This used to be "ledger-address", alias for compatibility
+                    .alias("ledger-address"),
+            )
         }
 
         fn parse(matches: &ArgMatches) -> Self {
@@ -4364,7 +4486,8 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository."))
+            app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the repository: \
+                                          https://github.com/heliaxdev/anoma-network-config"))
                 .arg(GENESIS_VALIDATOR.def().about("The alias of the genesis validator that you want to set up as, if any."))
                 .arg(PRE_GENESIS_PATH.def().about("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\"."))
             .arg(DONT_PREFETCH_WASM.def().about(

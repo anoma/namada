@@ -12,9 +12,9 @@ use thiserror::Error;
 use super::generated::types;
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint_proto::abci::ResponseDeliverTx;
+use crate::types::chain::ChainId;
 use crate::types::keccak::{keccak_hash, KeccakHash};
-use crate::types::key;
-use crate::types::key::*;
+use crate::types::key::{self, *};
 use crate::types::time::DateTimeUtc;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::token::Transfer;
@@ -205,16 +205,21 @@ pub struct SigningTx {
     pub code_hash: [u8; 32],
     pub data: Option<Vec<u8>>,
     pub timestamp: DateTimeUtc,
+    pub chain_id: ChainId,
+    pub expiration: Option<DateTimeUtc>,
 }
 
 impl SigningTx {
     pub fn hash(&self) -> [u8; 32] {
         let timestamp = Some(self.timestamp.into());
+        let expiration = self.expiration.map(|e| e.into());
         let mut bytes = vec![];
         types::Tx {
             code: self.code_hash.to_vec(),
             data: self.data.clone(),
             timestamp,
+            chain_id: self.chain_id.as_str().to_owned(),
+            expiration,
         }
         .encode(&mut bytes)
         .expect("encoding a transaction failed");
@@ -235,6 +240,8 @@ impl SigningTx {
             code_hash: self.code_hash,
             data: Some(signed),
             timestamp: self.timestamp,
+            chain_id: self.chain_id,
+            expiration: self.expiration,
         }
     }
 
@@ -254,6 +261,8 @@ impl SigningTx {
             code_hash: self.code_hash,
             data,
             timestamp: self.timestamp,
+            chain_id: self.chain_id.clone(),
+            expiration: self.expiration,
         };
         let signed_data = tx.hash();
         common::SigScheme::verify_signature(pk, &signed_data, sig)
@@ -267,6 +276,8 @@ impl SigningTx {
                 code,
                 data: self.data,
                 timestamp: self.timestamp,
+                chain_id: self.chain_id,
+                expiration: self.expiration,
             })
         } else {
             None
@@ -280,6 +291,8 @@ impl From<Tx> for SigningTx {
             code_hash: hash_tx(&tx.code).0,
             data: tx.data,
             timestamp: tx.timestamp,
+            chain_id: tx.chain_id,
+            expiration: tx.expiration,
         }
     }
 }
@@ -294,6 +307,8 @@ pub struct Tx {
     pub code: Vec<u8>,
     pub data: Option<Vec<u8>>,
     pub timestamp: DateTimeUtc,
+    pub chain_id: ChainId,
+    pub expiration: Option<DateTimeUtc>,
 }
 
 impl TryFrom<&[u8]> for Tx {
@@ -305,10 +320,18 @@ impl TryFrom<&[u8]> for Tx {
             Some(t) => t.try_into().map_err(Error::InvalidTimestamp)?,
             None => return Err(Error::NoTimestampError),
         };
+        let chain_id = ChainId(tx.chain_id);
+        let expiration = match tx.expiration {
+            Some(e) => Some(e.try_into().map_err(Error::InvalidTimestamp)?),
+            None => None,
+        };
+
         Ok(Tx {
             code: tx.code,
             data: tx.data,
             timestamp,
+            chain_id,
+            expiration,
         })
     }
 }
@@ -316,10 +339,14 @@ impl TryFrom<&[u8]> for Tx {
 impl From<Tx> for types::Tx {
     fn from(tx: Tx) -> Self {
         let timestamp = Some(tx.timestamp.into());
+        let expiration = tx.expiration.map(|e| e.into());
+
         types::Tx {
             code: tx.code,
             data: tx.data,
             timestamp,
+            chain_id: tx.chain_id.as_str().to_owned(),
+            expiration,
         }
     }
 }
@@ -411,11 +438,18 @@ impl From<Tx> for ResponseDeliverTx {
 }
 
 impl Tx {
-    pub fn new(code: Vec<u8>, data: Option<Vec<u8>>) -> Self {
+    pub fn new(
+        code: Vec<u8>,
+        data: Option<Vec<u8>>,
+        chain_id: ChainId,
+        expiration: Option<DateTimeUtc>,
+    ) -> Self {
         Tx {
             code,
             data,
             timestamp: DateTimeUtc::now(),
+            chain_id,
+            expiration,
         }
     }
 
@@ -429,6 +463,34 @@ impl Tx {
 
     pub fn hash(&self) -> [u8; 32] {
         SigningTx::from(self.clone()).hash()
+    }
+
+    pub fn unsigned_hash(&self) -> [u8; 32] {
+        match self.data {
+            Some(ref data) => {
+                match SignedTxData::try_from_slice(data) {
+                    Ok(signed_data) => {
+                        // Reconstruct unsigned tx
+                        let unsigned_tx = Tx {
+                            code: self.code.clone(),
+                            data: signed_data.data,
+                            timestamp: self.timestamp,
+                            chain_id: self.chain_id.clone(),
+                            expiration: self.expiration,
+                        };
+                        unsigned_tx.hash()
+                    }
+                    Err(_) => {
+                        // Unsigned tx
+                        self.hash()
+                    }
+                }
+            }
+            None => {
+                // Unsigned tx
+                self.hash()
+            }
+        }
     }
 
     pub fn code_hash(&self) -> [u8; 32] {
@@ -537,7 +599,9 @@ mod tests {
     fn test_tx() {
         let code = "wasm code".as_bytes().to_owned();
         let data = "arbitrary data".as_bytes().to_owned();
-        let tx = Tx::new(code.clone(), Some(data.clone()));
+        let chain_id = ChainId::default();
+        let tx =
+            Tx::new(code.clone(), Some(data.clone()), chain_id.clone(), None);
 
         let bytes = tx.to_bytes();
         let tx_from_bytes =
@@ -548,6 +612,8 @@ mod tests {
             code,
             data: Some(data),
             timestamp: None,
+            chain_id: chain_id.0,
+            expiration: None,
         };
         let mut bytes = vec![];
         types_tx.encode(&mut bytes).expect("encoding failed");

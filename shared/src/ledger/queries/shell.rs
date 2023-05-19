@@ -344,14 +344,13 @@ where
 mod test {
 
     use borsh::BorshDeserialize;
+    use namada_test_utils::TestWasms;
 
     use crate::ledger::queries::testing::TestClient;
     use crate::ledger::queries::RPC;
     use crate::ledger::storage_api::{self, StorageWrite};
     use crate::proto::Tx;
     use crate::types::{address, token};
-
-    const TX_NO_OP_WASM: &str = "../wasm_for_tests/tx_no_op.wasm";
 
     #[test]
     fn test_shell_queries_router_paths() {
@@ -386,8 +385,13 @@ mod test {
         assert_eq!(current_epoch, read_epoch);
 
         // Request dry run tx
-        let tx_no_op = std::fs::read(TX_NO_OP_WASM).expect("cannot load wasm");
-        let tx = Tx::new(tx_no_op, None);
+        let tx_no_op = TestWasms::TxNoOp.read_bytes();
+        let tx = Tx::new(
+            tx_no_op,
+            None,
+            client.wl_storage.storage.chain_id.clone(),
+            None,
+        );
         let tx_bytes = tx.to_bytes();
         let result = RPC
             .shell()

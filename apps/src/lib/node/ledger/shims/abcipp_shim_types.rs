@@ -20,7 +20,7 @@ pub mod shim {
     #[cfg(feature = "abcipp")]
     use crate::facade::tendermint_proto::abci::{
         RequestExtendVote, RequestVerifyVoteExtension, ResponseExtendVote,
-        ResponseVerifyVoteExtension,
+        ResponseVerifyVoteExtension, VoteInfo,
     };
     use crate::node::ledger::shell;
 
@@ -195,6 +195,8 @@ pub mod shim {
             Misbehavior as Evidence, RequestFinalizeBlock,
         };
 
+        use super::VoteInfo;
+
         pub struct VerifyHeader;
 
         pub struct RevertProposal;
@@ -206,11 +208,14 @@ pub mod shim {
             pub result: super::response::TxResult,
         }
 
+        #[derive(Debug, Clone)]
         pub struct FinalizeBlock {
             pub hash: BlockHash,
             pub header: Header,
             pub byzantine_validators: Vec<Evidence>,
             pub txs: Vec<ProcessedTx>,
+            pub proposer_address: Vec<u8>,
+            pub votes: Vec<VoteInfo>,
         }
 
         #[cfg(feature = "abcipp")]
@@ -228,6 +233,8 @@ pub mod shim {
                     },
                     byzantine_validators: req.byzantine_validators,
                     txs: vec![],
+                    proposer_address: req.proposer_address,
+                    votes: req.decided_last_commit.unwrap().votes,
                 }
             }
         }
@@ -250,6 +257,8 @@ pub mod shim {
                     },
                     byzantine_validators: req.byzantine_validators,
                     txs: vec![],
+                    proposer_address: header.proposer_address,
+                    votes: req.last_commit_info.unwrap().votes,
                 }
             }
         }

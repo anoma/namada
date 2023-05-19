@@ -6,7 +6,7 @@ license = "GPL-3.0"
 name = "namada_apps"
 readme = "../README.md"
 resolver = "2"
-version = "0.14.3"
+version = "0.15.0"
 default-run = "namada"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -81,6 +81,7 @@ ark-serialize = "0.3.0"
 ark-std = "0.3.0"
 # branch = "bat/arse-merkle-tree"
 arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "04ad1eeb28901b57a7599bbe433b3822965dabe8", features = ["std", "borsh"]}
+assert_matches = "1.5.0"
 async-std = {version = "=1.11.0", features = ["unstable"]}
 async-trait = "0.1.51"
 base64 = "0.13.0"
@@ -130,7 +131,7 @@ rayon = "=1.5.3"
 regex = "1.4.5"
 reqwest = "0.11.4"
 rlimit = "0.5.4"
-rocksdb = {version = "0.19.0", features = ['zstd', 'jemalloc'], default-features = false}
+rocksdb = {version = "0.20.1", features = ['zstd', 'jemalloc'], default-features = false}
 rpassword = "5.0.1"
 serde = {version = "1.0.125", features = ["derive"]}
 serde_bytes = "0.11.5"
@@ -179,6 +180,7 @@ bytes = "1.1.0"
 [dev-dependencies]
 assert_matches = "1.5.0"
 namada = {path = "../shared", default-features = false, features = ["testing", "wasm-runtime"]}
+namada_test_utils = {path = "../test_utils"}
 bit-set = "0.5.2"
 # A fork with state machime testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
