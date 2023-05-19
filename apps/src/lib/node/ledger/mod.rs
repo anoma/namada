@@ -448,8 +448,7 @@ fn start_abci_broadcaster_shell(
 
     // Setup DB cache, it must outlive the DB instance that's in the shell
     let db_cache =
-        rocksdb::Cache::new_lru_cache(db_block_cache_size_bytes as usize)
-            .unwrap();
+        rocksdb::Cache::new_lru_cache(db_block_cache_size_bytes as usize);
 
     // Construct our ABCI application.
     let tendermint_mode = config.tendermint.tendermint_mode.clone();

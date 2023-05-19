@@ -2,13 +2,14 @@ use core::fmt;
 use std::str::FromStr;
 
 use derivation_path::{ChildIndex, DerivationPath as DerivationPathInner};
-use namada::types::key::SchemeType;
 use thiserror::Error;
 use tiny_hderive::bip44::{
     DerivationPath as HDeriveDerivationPath,
     IntoDerivationPath as IntoHDeriveDerivationPath,
 };
 use tiny_hderive::Error as HDeriveError;
+
+use crate::types::key::SchemeType;
 
 const ETH_COIN_TYPE: u32 = 60;
 const NAMADA_COIN_TYPE: u32 = 877;
@@ -113,9 +114,8 @@ impl IntoHDeriveDerivationPath for DerivationPath {
 
 #[cfg(test)]
 mod tests {
-    use namada::types::key::SchemeType;
-
     use super::DerivationPath;
+    use crate::types::key::SchemeType;
 
     #[test]
     fn path_is_compatible() {

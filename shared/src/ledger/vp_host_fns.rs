@@ -5,7 +5,7 @@ use std::num::TryFromIntError;
 use namada_core::types::address::Address;
 use namada_core::types::hash::{Hash, HASH_LENGTH};
 use namada_core::types::storage::{
-    BlockHash, BlockHeight, Epoch, Key, TxIndex,
+    BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
 };
 use thiserror::Error;
 
@@ -67,14 +67,14 @@ where
     let (log_val, gas) = write_log.read_pre(key);
     add_gas(gas_meter, gas)?;
     match log_val {
-        Some(&write_log::StorageModification::Write { ref value }) => {
+        Some(write_log::StorageModification::Write { ref value }) => {
             Ok(Some(value.clone()))
         }
         Some(&write_log::StorageModification::Delete) => {
             // Given key has been deleted
             Ok(None)
         }
-        Some(&write_log::StorageModification::InitAccount {
+        Some(write_log::StorageModification::InitAccount {
             ref vp_code_hash,
         }) => {
             // Read the VP of a new account
@@ -109,14 +109,14 @@ where
     let (log_val, gas) = write_log.read(key);
     add_gas(gas_meter, gas)?;
     match log_val {
-        Some(&write_log::StorageModification::Write { ref value }) => {
+        Some(write_log::StorageModification::Write { ref value }) => {
             Ok(Some(value.clone()))
         }
         Some(&write_log::StorageModification::Delete) => {
             // Given key has been deleted
             Ok(None)
         }
-        Some(&write_log::StorageModification::InitAccount {
+        Some(write_log::StorageModification::InitAccount {
             ref vp_code_hash,
         }) => {
             // Read the VP code hash of a new account
@@ -146,7 +146,7 @@ pub fn read_temp(
     let (log_val, gas) = write_log.read(key);
     add_gas(gas_meter, gas)?;
     match log_val {
-        Some(&write_log::StorageModification::Temp { ref value }) => {
+        Some(write_log::StorageModification::Temp { ref value }) => {
             Ok(Some(value.clone()))
         }
         None => Ok(None),
@@ -247,6 +247,23 @@ where
     let (height, gas) = storage.get_block_height();
     add_gas(gas_meter, gas)?;
     Ok(height)
+}
+
+/// Getting the block header.
+pub fn get_block_header<DB, H>(
+    gas_meter: &mut VpGasMeter,
+    storage: &Storage<DB, H>,
+    height: BlockHeight,
+) -> EnvResult<Option<Header>>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    let (header, gas) = storage
+        .get_block_header(Some(height))
+        .map_err(RuntimeError::StorageError)?;
+    add_gas(gas_meter, gas)?;
+    Ok(header)
 }
 
 /// Getting the block hash. The height is that of the block to which the

@@ -21,6 +21,8 @@ use crate::parameters::PosParams;
 pub const LAZY_MAP_SUB_KEY: &str = "lazy_map";
 /// Sub-key for an epoched data structure's last (most recent) epoch of update
 pub const LAST_UPDATE_SUB_KEY: &str = "last_update";
+/// Sub-key for an epoched data structure's oldest epoch with some data
+pub const OLDEST_EPOCH_SUB_KEY: &str = "oldest_epoch";
 
 /// Discrete epoched data handle
 pub struct Epoched<
@@ -86,7 +88,7 @@ where
     {
         let key = self.get_last_update_storage_key();
         storage.write(&key, current_epoch)?;
-
+        self.set_oldest_epoch(storage, current_epoch)?;
         self.set_at_epoch(storage, value, current_epoch, 0)
     }
 
@@ -175,19 +177,22 @@ where
         S: StorageWrite + StorageRead,
     {
         let last_update = self.get_last_update(storage)?;
-        if let Some(last_update) = last_update {
-            if last_update < current_epoch {
+        let oldest_epoch = self.get_oldest_epoch(storage)?;
+        if let (Some(last_update), Some(oldest_epoch)) =
+            (last_update, oldest_epoch)
+        {
+            let oldest_to_keep = current_epoch
+                .0
+                .checked_sub(NUM_PAST_EPOCHS)
+                .unwrap_or_default();
+            if oldest_epoch.0 < oldest_to_keep {
+                let diff = oldest_to_keep - oldest_epoch.0;
                 // Go through the epochs before the expected oldest epoch and
                 // keep the latest one
                 tracing::debug!(
                     "Trimming data for epoched data in epoch {current_epoch}, \
                      last updated at {last_update}."
                 );
-                let diff = current_epoch
-                    .checked_sub(last_update)
-                    .unwrap_or_default()
-                    .0;
-                let oldest_epoch = Self::sub_past_epochs(last_update);
                 let data_handler = self.get_data_handler();
                 let mut latest_value: Option<Data> = None;
                 // Remove data before the new oldest epoch, keep the latest
@@ -213,15 +218,22 @@ where
                             latest_value,
                         )?;
                     }
+                    self.set_oldest_epoch(storage, new_oldest_epoch)?;
                 }
                 // Update the epoch of the last update to the current epoch
                 let key = self.get_last_update_storage_key();
                 storage.write(&key, current_epoch)?;
+                return Ok(());
             }
-        } else {
-            // Set the epoch of the last update to the current epoch
-            let key = self.get_last_update_storage_key();
-            storage.write(&key, current_epoch)?;
+        }
+
+        // Set the epoch of the last update to the current epoch
+        let key = self.get_last_update_storage_key();
+        storage.write(&key, current_epoch)?;
+
+        // If there's no oldest epoch written yet, set it to the current one
+        if oldest_epoch.is_none() {
+            self.set_oldest_epoch(storage, current_epoch)?;
         }
         Ok(())
     }
@@ -253,6 +265,35 @@ where
 
     fn sub_past_epochs(epoch: Epoch) -> Epoch {
         Epoch(epoch.0.checked_sub(NUM_PAST_EPOCHS).unwrap_or_default())
+    }
+
+    fn get_oldest_epoch_storage_key(&self) -> storage::Key {
+        self.storage_prefix
+            .push(&OLDEST_EPOCH_SUB_KEY.to_owned())
+            .unwrap()
+    }
+
+    fn get_oldest_epoch<S>(
+        &self,
+        storage: &S,
+    ) -> storage_api::Result<Option<Epoch>>
+    where
+        S: StorageRead,
+    {
+        let key = self.get_oldest_epoch_storage_key();
+        storage.read(&key)
+    }
+
+    fn set_oldest_epoch<S>(
+        &self,
+        storage: &mut S,
+        new_oldest_epoch: Epoch,
+    ) -> storage_api::Result<()>
+    where
+        S: StorageRead + StorageWrite,
+    {
+        let key = self.get_oldest_epoch_storage_key();
+        storage.write(&key, new_oldest_epoch)
     }
 }
 
@@ -378,6 +419,7 @@ where
     {
         let key = self.get_last_update_storage_key();
         storage.write(&key, current_epoch)?;
+        self.set_oldest_epoch(storage, current_epoch)?;
         self.set_at_epoch(storage, value, current_epoch, 0)
     }
 
@@ -477,19 +519,22 @@ where
         S: StorageWrite + StorageRead,
     {
         let last_update = self.get_last_update(storage)?;
-        if let Some(last_update) = last_update {
-            if last_update < current_epoch {
+        let oldest_epoch = self.get_oldest_epoch(storage)?;
+        if let (Some(last_update), Some(oldest_epoch)) =
+            (last_update, oldest_epoch)
+        {
+            let oldest_to_keep = current_epoch
+                .0
+                .checked_sub(NUM_PAST_EPOCHS)
+                .unwrap_or_default();
+            if oldest_epoch.0 < oldest_to_keep {
+                let diff = oldest_to_keep - oldest_epoch.0;
                 // Go through the epochs before the expected oldest epoch and
                 // sum them into it
                 tracing::debug!(
                     "Trimming data for epoched delta data in epoch \
                      {current_epoch}, last updated at {last_update}."
                 );
-                let diff = current_epoch
-                    .checked_sub(last_update)
-                    .unwrap_or_default()
-                    .0;
-                let oldest_epoch = Self::sub_past_epochs(last_update);
                 let data_handler = self.get_data_handler();
                 // Find the sum of values before the new oldest epoch to be kept
                 let mut sum: Option<Data> = None;
@@ -521,15 +566,22 @@ where
                         new_oldest_epoch,
                         new_oldest_epoch_data,
                     )?;
+                    self.set_oldest_epoch(storage, new_oldest_epoch)?;
                 }
                 // Update the epoch of the last update to the current epoch
                 let key = self.get_last_update_storage_key();
                 storage.write(&key, current_epoch)?;
+                return Ok(());
             }
-        } else {
-            // Set the epoch of the last update to the current epoch
-            let key = self.get_last_update_storage_key();
-            storage.write(&key, current_epoch)?;
+        }
+
+        // Set the epoch of the last update to the current epoch
+        let key = self.get_last_update_storage_key();
+        storage.write(&key, current_epoch)?;
+
+        // If there's no oldest epoch written yet, set it to the current one
+        if oldest_epoch.is_none() {
+            self.set_oldest_epoch(storage, current_epoch)?;
         }
         Ok(())
     }
@@ -575,6 +627,35 @@ where
 
     fn sub_past_epochs(epoch: Epoch) -> Epoch {
         Epoch(epoch.0.checked_sub(NUM_PAST_EPOCHS).unwrap_or_default())
+    }
+
+    fn get_oldest_epoch_storage_key(&self) -> storage::Key {
+        self.storage_prefix
+            .push(&OLDEST_EPOCH_SUB_KEY.to_owned())
+            .unwrap()
+    }
+
+    fn get_oldest_epoch<S>(
+        &self,
+        storage: &S,
+    ) -> storage_api::Result<Option<Epoch>>
+    where
+        S: StorageRead,
+    {
+        let key = self.get_oldest_epoch_storage_key();
+        storage.read(&key)
+    }
+
+    fn set_oldest_epoch<S>(
+        &self,
+        storage: &mut S,
+        new_oldest_epoch: Epoch,
+    ) -> storage_api::Result<()>
+    where
+        S: StorageRead + StorageWrite,
+    {
+        let key = self.get_oldest_epoch_storage_key();
+        storage.write(&key, new_oldest_epoch)
     }
 }
 
@@ -671,89 +752,382 @@ pub trait EpochOffset:
     fn dyn_offset() -> DynEpochOffset;
 }
 
-// mod test {
-// use namada_core::ledger::storage::testing::TestStorage;
-// use namada_core::types::address::{self, Address};
-// use namada_core::types::storage::Key;
-//
-// use super::{
-// storage, storage_api, Epoch, LazyMap, NestedEpoched, NestedMap,
-// OffsetPipelineLen,
-// };
-//
-// #[test]
-// fn testing_epoched_new() -> storage_api::Result<()> {
-// let mut storage = TestStorage::default();
-//
-// let key1 = storage::Key::parse("test_nested1").unwrap();
-// let nested1 =
-// NestedEpoched::<LazyMap<Address, u64>, OffsetPipelineLen>::open(
-// key1,
-// );
-// nested1.init(&mut storage, Epoch(0))?;
-//
-// let key2 = storage::Key::parse("test_nested2").unwrap();
-// let nested2 = NestedEpoched::<
-// NestedMap<u64, LazyMap<u64, Address>>,
-// OffsetPipelineLen,
-// >::open(key2);
-// nested2.init(&mut storage, Epoch(0))?;
-//
-// dbg!(&nested1.get_last_update_storage_key());
-// dbg!(&nested1.get_last_update(&storage));
-//
-// nested1.at(&Epoch(0)).insert(
-// &mut storage,
-// address::testing::established_address_1(),
-// 1432,
-// )?;
-// dbg!(&nested1.at(&Epoch(0)).iter(&mut storage)?.next());
-// dbg!(&nested1.at(&Epoch(1)).iter(&mut storage)?.next());
-//
-// nested2.at(&Epoch(0)).at(&100).insert(
-// &mut storage,
-// 1,
-// address::testing::established_address_2(),
-// )?;
-// dbg!(&nested2.at(&Epoch(0)).iter(&mut storage)?.next());
-// dbg!(&nested2.at(&Epoch(1)).iter(&mut storage)?.next());
-//
-// dbg!(&nested_epoched.get_epoch_key(&Epoch::from(0)));
-//
-// let epoch = Epoch::from(0);
-// let addr = address::testing::established_address_1();
-// let amount: u64 = 234235;
-//
-// nested_epoched
-//     .at(&epoch)
-//     .insert(&mut storage, addr.clone(), amount)?;
-//
-// let epoch = epoch + 3_u64;
-// nested_epoched.at(&epoch).insert(
-//     &mut storage,
-//     addr.clone(),
-//     999_u64,
-// )?;
-//
-// dbg!(nested_epoched.contains_epoch(&storage, &Epoch::from(0))?);
-// dbg!(
-//     nested_epoched
-//         .get_data_handler()
-//         .get_data_key(&Epoch::from(3))
-// );
-// dbg!(nested_epoched.contains_epoch(&storage, &Epoch::from(3))?);
-// dbg!(
-//     nested_epoched
-//         .at(&Epoch::from(0))
-//         .get(&storage, &addr.clone())?
-// );
-// dbg!(
-//     nested_epoched
-//         .at(&Epoch::from(3))
-//         .get(&storage, &addr.clone())?
-// );
-// dbg!(nested_epoched.at(&Epoch::from(3)).get_data_key(&addr));
-//
-// Ok(())
-// }
-// }
+#[cfg(test)]
+mod test {
+    use namada_core::ledger::storage::testing::TestWlStorage;
+    use test_log::test;
+
+    use super::*;
+
+    #[test]
+    fn test_epoched_data_trimming() -> storage_api::Result<()> {
+        let mut s = TestWlStorage::default();
+
+        const NUM_PAST_EPOCHS: u64 = 2;
+        let key_prefix = storage::Key::parse("test").unwrap();
+        let epoched = Epoched::<u64, OffsetPipelineLen, NUM_PAST_EPOCHS>::open(
+            key_prefix,
+        );
+        let data_handler = epoched.get_data_handler();
+        assert!(epoched.get_last_update(&s)?.is_none());
+        assert!(epoched.get_oldest_epoch(&s)?.is_none());
+
+        epoched.init_at_genesis(&mut s, 0, Epoch(0))?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(0)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(0));
+
+        epoched.set(&mut s, 1, Epoch(0), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(0)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
+
+        epoched.set(&mut s, 2, Epoch(1), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(1)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
+        assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
+
+        // Nothing is trimmed yet, oldest kept epoch is 0
+        epoched.set(&mut s, 3, Epoch(2), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(2)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
+        assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
+        assert_eq!(data_handler.get(&s, &Epoch(2))?, Some(3));
+
+        // Epoch 0 should be trimmed now, oldest kept epoch is 1
+        epoched.set(&mut s, 4, Epoch(3), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(3)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(1)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
+        assert_eq!(data_handler.get(&s, &Epoch(2))?, Some(3));
+        assert_eq!(data_handler.get(&s, &Epoch(3))?, Some(4));
+
+        // Anything before epoch 3 should be trimmed
+        epoched.set(&mut s, 5, Epoch(5), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(5)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(3)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(1))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(2))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(3))?, Some(4));
+        assert_eq!(data_handler.get(&s, &Epoch(5))?, Some(5));
+
+        // Anything before epoch 8 should be trimmed
+        epoched.set(&mut s, 6, Epoch(10), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(10)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(8)));
+        for epoch in Epoch(0).iter_range(7) {
+            assert_eq!(data_handler.get(&s, &epoch)?, None);
+        }
+        // The value from the latest epoch 5 is assigned to epoch 8
+        assert_eq!(data_handler.get(&s, &Epoch(8))?, Some(5));
+        assert_eq!(data_handler.get(&s, &Epoch(9))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(10))?, Some(6));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_epoched_without_data_trimming() -> storage_api::Result<()> {
+        let mut s = TestWlStorage::default();
+
+        const NUM_PAST_EPOCHS: u64 = u64::MAX;
+        let key_prefix = storage::Key::parse("test").unwrap();
+        let epoched = Epoched::<u64, OffsetPipelineLen, NUM_PAST_EPOCHS>::open(
+            key_prefix,
+        );
+        let data_handler = epoched.get_data_handler();
+        assert!(epoched.get_last_update(&s)?.is_none());
+        assert!(epoched.get_oldest_epoch(&s)?.is_none());
+
+        epoched.init_at_genesis(&mut s, 0, Epoch(0))?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(0)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(0));
+
+        epoched.set(&mut s, 1, Epoch(0), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(0)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
+
+        epoched.set(&mut s, 2, Epoch(1), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(1)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
+        assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
+
+        epoched.set(&mut s, 3, Epoch(2), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(2)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
+        assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
+        assert_eq!(data_handler.get(&s, &Epoch(2))?, Some(3));
+
+        epoched.set(&mut s, 4, Epoch(3), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(3)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
+        assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
+        assert_eq!(data_handler.get(&s, &Epoch(2))?, Some(3));
+        assert_eq!(data_handler.get(&s, &Epoch(3))?, Some(4));
+
+        epoched.set(&mut s, 5, Epoch(5), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(5)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
+        assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
+        assert_eq!(data_handler.get(&s, &Epoch(2))?, Some(3));
+        assert_eq!(data_handler.get(&s, &Epoch(3))?, Some(4));
+        assert_eq!(data_handler.get(&s, &Epoch(5))?, Some(5));
+
+        epoched.set(&mut s, 6, Epoch(10), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(10)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
+        assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
+        assert_eq!(data_handler.get(&s, &Epoch(2))?, Some(3));
+        assert_eq!(data_handler.get(&s, &Epoch(3))?, Some(4));
+        assert_eq!(data_handler.get(&s, &Epoch(5))?, Some(5));
+        assert_eq!(data_handler.get(&s, &Epoch(6))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(7))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(8))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(9))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(10))?, Some(6));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_epoched_delta_data_trimming() -> storage_api::Result<()> {
+        let mut s = TestWlStorage::default();
+
+        const NUM_PAST_EPOCHS: u64 = 2;
+        let key_prefix = storage::Key::parse("test").unwrap();
+        let epoched =
+            EpochedDelta::<u64, OffsetPipelineLen, NUM_PAST_EPOCHS>::open(
+                key_prefix,
+            );
+        let data_handler = epoched.get_data_handler();
+        assert!(epoched.get_last_update(&s)?.is_none());
+        assert!(epoched.get_oldest_epoch(&s)?.is_none());
+
+        epoched.init_at_genesis(&mut s, 0, Epoch(0))?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(0)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(0));
+
+        epoched.set(&mut s, 1, Epoch(0), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(0)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
+
+        epoched.set(&mut s, 2, Epoch(1), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(1)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
+        assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
+
+        // Nothing is trimmed yet, oldest kept epoch is 0
+        epoched.set(&mut s, 3, Epoch(2), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(2)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
+        assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
+        assert_eq!(data_handler.get(&s, &Epoch(2))?, Some(3));
+
+        // Epoch 0 should be trimmed now, oldest kept epoch is 1
+        epoched.set(&mut s, 4, Epoch(3), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(3)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(1)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, None);
+        // The value from epoch 0 should be added to epoch 1
+        assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(3));
+        assert_eq!(data_handler.get(&s, &Epoch(2))?, Some(3));
+        assert_eq!(data_handler.get(&s, &Epoch(3))?, Some(4));
+
+        // Anything before epoch 3 should be trimmed
+        epoched.set(&mut s, 5, Epoch(5), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(5)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(3)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(1))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(2))?, None);
+        // The values from epoch 1 and 2 should be added to epoch 3
+        assert_eq!(data_handler.get(&s, &Epoch(3))?, Some(10));
+        assert_eq!(data_handler.get(&s, &Epoch(5))?, Some(5));
+
+        // Anything before epoch 8 should be trimmed
+        epoched.set(&mut s, 6, Epoch(10), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(10)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(8)));
+        for epoch in Epoch(0).iter_range(7) {
+            assert_eq!(data_handler.get(&s, &epoch)?, None);
+        }
+        // The values from epoch 3 and 5 should be added to epoch 3
+        assert_eq!(data_handler.get(&s, &Epoch(8))?, Some(15));
+        assert_eq!(data_handler.get(&s, &Epoch(9))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(10))?, Some(6));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_epoched_delta_without_data_trimming() -> storage_api::Result<()> {
+        let mut s = TestWlStorage::default();
+
+        // Nothing should ever get trimmed
+        const NUM_PAST_EPOCHS: u64 = u64::MAX;
+        let key_prefix = storage::Key::parse("test").unwrap();
+        let epoched =
+            EpochedDelta::<u64, OffsetPipelineLen, NUM_PAST_EPOCHS>::open(
+                key_prefix,
+            );
+        let data_handler = epoched.get_data_handler();
+        assert!(epoched.get_last_update(&s)?.is_none());
+        assert!(epoched.get_oldest_epoch(&s)?.is_none());
+
+        epoched.init_at_genesis(&mut s, 0, Epoch(0))?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(0)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(0));
+
+        epoched.set(&mut s, 1, Epoch(0), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(0)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
+
+        epoched.set(&mut s, 2, Epoch(1), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(1)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
+        assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
+
+        epoched.set(&mut s, 3, Epoch(2), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(2)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
+        assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
+        assert_eq!(data_handler.get(&s, &Epoch(2))?, Some(3));
+
+        epoched.set(&mut s, 4, Epoch(3), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(3)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
+        assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
+        assert_eq!(data_handler.get(&s, &Epoch(2))?, Some(3));
+        assert_eq!(data_handler.get(&s, &Epoch(3))?, Some(4));
+
+        epoched.set(&mut s, 5, Epoch(5), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(5)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
+        assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
+        assert_eq!(data_handler.get(&s, &Epoch(2))?, Some(3));
+        assert_eq!(data_handler.get(&s, &Epoch(3))?, Some(4));
+        assert_eq!(data_handler.get(&s, &Epoch(5))?, Some(5));
+
+        epoched.set(&mut s, 6, Epoch(10), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(10)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
+        assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
+        assert_eq!(data_handler.get(&s, &Epoch(2))?, Some(3));
+        assert_eq!(data_handler.get(&s, &Epoch(3))?, Some(4));
+        assert_eq!(data_handler.get(&s, &Epoch(5))?, Some(5));
+        assert_eq!(data_handler.get(&s, &Epoch(6))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(7))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(8))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(9))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(10))?, Some(6));
+
+        Ok(())
+    }
+
+    // use namada_core::ledger::storage::testing::TestStorage;
+    // use namada_core::types::address::{self, Address};
+    // use namada_core::types::storage::Key;
+    //
+    // use super::{
+    // storage, storage_api, Epoch, LazyMap, NestedEpoched, NestedMap,
+    // OffsetPipelineLen,
+    // };
+    //
+    // #[test]
+    // fn testing_epoched_new() -> storage_api::Result<()> {
+    // let mut storage = TestStorage::default();
+    //
+    // let key1 = storage::Key::parse("test_nested1").unwrap();
+    // let nested1 =
+    // NestedEpoched::<LazyMap<Address, u64>, OffsetPipelineLen>::open(
+    // key1,
+    // );
+    // nested1.init(&mut storage, Epoch(0))?;
+    //
+    // let key2 = storage::Key::parse("test_nested2").unwrap();
+    // let nested2 = NestedEpoched::<
+    // NestedMap<u64, LazyMap<u64, Address>>,
+    // OffsetPipelineLen,
+    // >::open(key2);
+    // nested2.init(&mut storage, Epoch(0))?;
+    //
+    // dbg!(&nested1.get_last_update_storage_key());
+    // dbg!(&nested1.get_last_update(&storage));
+    //
+    // nested1.at(&Epoch(0)).insert(
+    // &mut storage,
+    // address::testing::established_address_1(),
+    // 1432,
+    // )?;
+    // dbg!(&nested1.at(&Epoch(0)).iter(&mut storage)?.next());
+    // dbg!(&nested1.at(&Epoch(1)).iter(&mut storage)?.next());
+    //
+    // nested2.at(&Epoch(0)).at(&100).insert(
+    // &mut storage,
+    // 1,
+    // address::testing::established_address_2(),
+    // )?;
+    // dbg!(&nested2.at(&Epoch(0)).iter(&mut storage)?.next());
+    // dbg!(&nested2.at(&Epoch(1)).iter(&mut storage)?.next());
+    //
+    // dbg!(&nested_epoched.get_epoch_key(&Epoch::from(0)));
+    //
+    // let epoch = Epoch::from(0);
+    // let addr = address::testing::established_address_1();
+    // let amount: u64 = 234235;
+    //
+    // nested_epoched
+    //     .at(&epoch)
+    //     .insert(&mut storage, addr.clone(), amount)?;
+    //
+    // let epoch = epoch + 3_u64;
+    // nested_epoched.at(&epoch).insert(
+    //     &mut storage,
+    //     addr.clone(),
+    //     999_u64,
+    // )?;
+    //
+    // dbg!(nested_epoched.contains_epoch(&storage, &Epoch::from(0))?);
+    // dbg!(
+    //     nested_epoched
+    //         .get_data_handler()
+    //         .get_data_key(&Epoch::from(3))
+    // );
+    // dbg!(nested_epoched.contains_epoch(&storage, &Epoch::from(3))?);
+    // dbg!(
+    //     nested_epoched
+    //         .at(&Epoch::from(0))
+    //         .get(&storage, &addr.clone())?
+    // );
+    // dbg!(
+    //     nested_epoched
+    //         .at(&Epoch::from(3))
+    //         .get(&storage, &addr.clone())?
+    // );
+    // dbg!(nested_epoched.at(&Epoch::from(3)).get_data_key(&addr));
+    //
+    // Ok(())
+    // }
+}
