@@ -51,8 +51,13 @@ fn new_blake2b() -> Blake2b {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use itertools::Itertools;
-    use namada::ledger::storage::{types, WlStorage};
+    use namada::ledger::storage::write_log::WriteLog;
+    use namada::ledger::storage::{
+        types, update_allowed_conversions, WlStorage,
+    };
     use namada::ledger::storage_api::{self, StorageWrite};
     use namada::types::chain::ChainId;
     use namada::types::storage::{BlockHash, BlockHeight, Key};
@@ -72,6 +77,7 @@ mod tests {
             db_path.path(),
             ChainId::default(),
             address::nam(),
+            None,
             None,
         );
         let key = Key::parse("key").expect("cannot parse the key string");
@@ -120,6 +126,7 @@ mod tests {
             ChainId::default(),
             address::nam(),
             None,
+            None,
         );
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
@@ -132,19 +139,26 @@ mod tests {
         storage
             .write(&key, value_bytes.clone())
             .expect("write failed");
-        storage.commit_block().expect("commit failed");
+        storage.block.epoch = storage.block.epoch.next();
+        storage.block.pred_epochs.new_epoch(BlockHeight(100), 1000);
+        // make wl_storage to update conversion for a new epoch
+        let mut wl_storage = WlStorage::new(WriteLog::default(), storage);
+        update_allowed_conversions(&mut wl_storage)
+            .expect("update conversions failed");
+        wl_storage.commit_block().expect("commit failed");
 
-        // save the last state and drop the storage
-        let root = storage.merkle_root().0;
-        let hash = storage.get_block_hash().0;
-        let address_gen = storage.address_gen.clone();
-        drop(storage);
+        // save the last state and the storage
+        let root = wl_storage.storage.merkle_root().0;
+        let hash = wl_storage.storage.get_block_hash().0;
+        let address_gen = wl_storage.storage.address_gen.clone();
+        drop(wl_storage);
 
         // load the last state
         let mut storage = PersistentStorage::open(
             db_path.path(),
             ChainId::default(),
             address::nam(),
+            None,
             None,
         );
         storage
@@ -168,6 +182,7 @@ mod tests {
             db_path.path(),
             ChainId::default(),
             address::nam(),
+            None,
             None,
         );
         storage
@@ -213,6 +228,7 @@ mod tests {
             ChainId::default(),
             address::nam(),
             None,
+            None,
         );
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
@@ -247,6 +263,11 @@ mod tests {
         fn test_read_with_height(blocks_write_value in vec(any::<bool>(), 20)) {
             test_read_with_height_aux(blocks_write_value).unwrap()
         }
+
+        #[test]
+        fn test_get_merkle_tree(blocks_write_type in vec(0..5_u64, 50)) {
+            test_get_merkle_tree_aux(blocks_write_type).unwrap()
+        }
     }
 
     /// Test reads at arbitrary block heights.
@@ -270,6 +291,7 @@ mod tests {
             db_path.path(),
             ChainId::default(),
             address::nam(),
+            None,
             None,
         );
 
@@ -348,6 +370,181 @@ mod tests {
         Ok(())
     }
 
+    /// Test the restore of the merkle tree
+    fn test_get_merkle_tree_aux(
+        blocks_write_type: Vec<u64>,
+    ) -> namada::ledger::storage::Result<()> {
+        let db_path =
+            TempDir::new().expect("Unable to create a temporary DB directory");
+        let mut storage = PersistentStorage::open(
+            db_path.path(),
+            ChainId::default(),
+            address::nam(),
+            None,
+            None,
+        );
+
+        let num_keys = 5;
+        let blocks_write_type = blocks_write_type.into_iter().enumerate().map(
+            |(index, write_type)| {
+                // try to update some keys at each height
+                let height = BlockHeight::from(index as u64 / num_keys + 1);
+                let key = Key::parse(format!("key{}", index as u64 % num_keys))
+                    .unwrap();
+                (height, key, write_type)
+            },
+        );
+
+        let mut roots = HashMap::new();
+
+        // write values at Height 0 like init_storage
+        for i in 0..num_keys {
+            let key = Key::parse(format!("key{}", i)).unwrap();
+            let value_bytes = types::encode(&storage.block.height);
+            storage.write(&key, value_bytes)?;
+        }
+
+        // Update and commit
+        let hash = BlockHash::default();
+        storage.begin_block(hash, BlockHeight(1))?;
+        for (height, key, write_type) in blocks_write_type.clone() {
+            let mut batch = PersistentStorage::batch();
+            if height != storage.block.height {
+                // to check the root later
+                roots.insert(storage.block.height, storage.merkle_root());
+                if storage.block.height.0 % 5 == 0 {
+                    // new epoch every 5 heights
+                    storage.block.epoch = storage.block.epoch.next();
+                    storage
+                        .block
+                        .pred_epochs
+                        .new_epoch(storage.block.height, 1000);
+                }
+                storage.commit_block()?;
+                let hash = BlockHash::default();
+                storage
+                    .begin_block(hash, storage.block.height.next_height())?;
+            }
+            match write_type {
+                0 => {
+                    // no update
+                }
+                1 => {
+                    storage.delete(&key)?;
+                }
+                2 => {
+                    let value_bytes = types::encode(&storage.block.height);
+                    storage.write(&key, value_bytes)?;
+                }
+                3 => {
+                    storage.batch_delete_subspace_val(&mut batch, &key)?;
+                }
+                _ => {
+                    let value_bytes = types::encode(&storage.block.height);
+                    storage.batch_write_subspace_val(
+                        &mut batch,
+                        &key,
+                        value_bytes,
+                    )?;
+                }
+            }
+            storage.exec_batch(batch)?;
+        }
+        roots.insert(storage.block.height, storage.merkle_root());
+        storage.commit_block()?;
+
+        let mut current_state = HashMap::new();
+        for i in 0..num_keys {
+            let key = Key::parse(format!("key{}", i)).unwrap();
+            current_state.insert(key, true);
+        }
+        // Check a Merkle tree
+        for (height, key, write_type) in blocks_write_type {
+            let tree = storage.get_merkle_tree(height)?;
+            assert_eq!(tree.root().0, roots.get(&height).unwrap().0);
+            match write_type {
+                0 => {
+                    if *current_state.get(&key).unwrap() {
+                        assert!(tree.has_key(&key)?);
+                    } else {
+                        assert!(!tree.has_key(&key)?);
+                    }
+                }
+                1 | 3 => {
+                    assert!(!tree.has_key(&key)?);
+                    current_state.insert(key, false);
+                }
+                _ => {
+                    assert!(tree.has_key(&key)?);
+                    current_state.insert(key, true);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Test the restore of the merkle tree
+    #[test]
+    fn test_prune_merkle_tree_stores() {
+        let db_path =
+            TempDir::new().expect("Unable to create a temporary DB directory");
+        let mut storage = PersistentStorage::open(
+            db_path.path(),
+            ChainId::default(),
+            address::nam(),
+            None,
+            Some(5),
+        );
+        storage
+            .begin_block(BlockHash::default(), BlockHeight(1))
+            .expect("begin_block failed");
+
+        let key = Key::parse("key").expect("cannot parse the key string");
+        let value: u64 = 1;
+        storage
+            .write(&key, types::encode(&value))
+            .expect("write failed");
+
+        storage.block.epoch = storage.block.epoch.next();
+        storage.block.pred_epochs.new_epoch(BlockHeight(1), 1000);
+        storage.commit_block().expect("commit failed");
+
+        storage
+            .begin_block(BlockHash::default(), BlockHeight(6))
+            .expect("begin_block failed");
+
+        let key = Key::parse("key2").expect("cannot parse the key string");
+        let value: u64 = 2;
+        storage
+            .write(&key, types::encode(&value))
+            .expect("write failed");
+
+        storage.block.epoch = storage.block.epoch.next();
+        storage.block.pred_epochs.new_epoch(BlockHeight(6), 1000);
+        storage.commit_block().expect("commit failed");
+
+        let result = storage.get_merkle_tree(1.into());
+        assert!(result.is_ok(), "The tree at Height 1 should be restored");
+
+        storage
+            .begin_block(BlockHash::default(), BlockHeight(11))
+            .expect("begin_block failed");
+        storage.block.epoch = storage.block.epoch.next();
+        storage.block.pred_epochs.new_epoch(BlockHeight(11), 1000);
+        storage.commit_block().expect("commit failed");
+
+        let result = storage.get_merkle_tree(1.into());
+        assert!(result.is_err(), "The tree at Height 1 should be pruned");
+        let result = storage.get_merkle_tree(5.into());
+        assert!(
+            result.is_err(),
+            "The tree at Height 5 shouldn't be able to be restored"
+        );
+        let result = storage.get_merkle_tree(6.into());
+        assert!(result.is_ok(), "The tree should be restored");
+    }
+
     /// Test the prefix iterator with RocksDB.
     #[test]
     fn test_persistent_storage_prefix_iter() {
@@ -357,6 +554,7 @@ mod tests {
             db_path.path(),
             ChainId::default(),
             address::nam(),
+            None,
             None,
         );
         let mut storage = WlStorage {

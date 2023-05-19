@@ -557,6 +557,7 @@ mod test_bridge_pool_vp {
                 ChainId::default(),
                 address::nam(),
                 None,
+                None,
             ),
             write_log: Default::default(),
         };

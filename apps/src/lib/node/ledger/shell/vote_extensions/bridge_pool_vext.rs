@@ -140,6 +140,7 @@ where
             self.wl_storage
                 .ethbridge_queries()
                 .get_bridge_pool_root_at_height(ext.data.block_height)
+                .expect("We asserted that the queried height is correct")
                 .0
         };
         let nonce = self
@@ -679,7 +680,8 @@ mod test_bp_vote_extensions {
             shell
                 .wl_storage
                 .ethbridge_queries()
-                .get_bridge_pool_root_at_height(4.into()),
+                .get_bridge_pool_root_at_height(4.into())
+                .unwrap(),
             KeccakHash([1; 32])
         );
         shell.wl_storage.storage.block.height = 5.into();
@@ -705,7 +707,8 @@ mod test_bp_vote_extensions {
             shell
                 .wl_storage
                 .ethbridge_queries()
-                .get_bridge_pool_root_at_height(5.into()),
+                .get_bridge_pool_root_at_height(5.into())
+                .unwrap(),
             KeccakHash([2; 32])
         );
         let to_sign = keccak_hash([[1; 32], Uint::from(0).to_bytes()].concat());
@@ -765,7 +768,8 @@ mod test_bp_vote_extensions {
             shell
                 .wl_storage
                 .ethbridge_queries()
-                .get_bridge_pool_root_at_height(4.into()),
+                .get_bridge_pool_root_at_height(4.into())
+                .unwrap(),
             KeccakHash([1; 32])
         );
         shell.wl_storage.storage.block.height = 5.into();
@@ -791,7 +795,8 @@ mod test_bp_vote_extensions {
             shell
                 .wl_storage
                 .ethbridge_queries()
-                .get_bridge_pool_root_at_height(5.into()),
+                .get_bridge_pool_root_at_height(5.into())
+                .unwrap(),
             KeccakHash([2; 32])
         );
         let to_sign = keccak_hash([[1; 32], Uint::from(0).to_bytes()].concat());

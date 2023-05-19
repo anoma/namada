@@ -105,7 +105,8 @@ where
     let epoch = wl_storage.pos_queries().get_epoch(height);
     let root = wl_storage
         .ethbridge_queries()
-        .get_bridge_pool_root_at_height(height);
+        .get_bridge_pool_root_at_height(height)
+        .expect("A BP root should be available at the given height");
     let nonce = wl_storage
         .ethbridge_queries()
         .get_bridge_pool_nonce_at_height(height);

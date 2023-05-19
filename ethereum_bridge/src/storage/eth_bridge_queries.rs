@@ -240,15 +240,9 @@ where
     pub fn get_bridge_pool_root_at_height(
         self,
         height: BlockHeight,
-    ) -> KeccakHash {
-        self.wl_storage
-            .storage
-            .db
-            .read_merkle_tree_stores(height)
-            .expect("We should always be able to read the database")
-            .expect("Every root should correspond to an existing block height")
-            .get_root(StoreType::BridgePool)
-            .into()
+    ) -> Option<KeccakHash> {
+        let base_tree = self.wl_storage.storage.get_merkle_tree(height).ok()?;
+        Some(base_tree.sub_root(&StoreType::BridgePool).into())
     }
 
     /// Determines if it is possible to send a validator set update vote
