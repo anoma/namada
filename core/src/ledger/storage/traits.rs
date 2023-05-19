@@ -172,7 +172,7 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Amt<H> {
         value: StorageBytes,
     ) -> Result<Hash, Error> {
         let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
-        let value = TreeBytes::from(value.as_ref().to_owned());
+        let value = TreeBytes::from(value.to_vec());
         self.update(key, value)
             .map(Into::into)
             .map_err(|err| Error::MerkleTree(err.to_string()))

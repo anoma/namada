@@ -14,7 +14,6 @@ use core::fmt::Debug;
 use std::cmp::Ordering;
 
 use borsh::BorshSerialize;
-use merkle_tree::StorageBytes;
 pub use merkle_tree::{
     MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreType,
 };

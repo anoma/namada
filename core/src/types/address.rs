@@ -214,6 +214,7 @@ impl Address {
                     }
                     InternalAddress::EthBridgePool => {
                         internal::ETH_BRIDGE_POOL.to_string()
+                    }
                     InternalAddress::ReplayProtection => {
                         internal::REPLAY_PROTECTION.to_string()
                     }
@@ -272,6 +273,7 @@ impl Address {
                 }
                 internal::ETH_BRIDGE_POOL => {
                     Ok(Address::Internal(InternalAddress::EthBridgePool))
+                }
                 internal::REPLAY_PROTECTION => {
                     Ok(Address::Internal(InternalAddress::ReplayProtection))
                 }
