@@ -278,7 +278,9 @@ where
 mod test_prepare_proposal {
 
     use borsh::BorshSerialize;
+    use namada::ledger::replay_protection;
     use namada::proof_of_stake::Epoch;
+    use namada::types::hash::Hash;
     use namada::types::transaction::{Fee, WrapperTx};
 
     use super::*;
@@ -419,6 +421,224 @@ mod test_prepare_proposal {
         assert_eq!(received, expected_txs);
     }
 
+    /// Test that if the unsigned wrapper tx hash is known (replay attack), the
+    /// transaction is not included in the block
+    #[test]
+    fn test_wrapper_tx_hash() {
+        let (mut shell, _) = test_utils::setup(1);
+
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let signed = wrapper
+            .sign(&keypair, shell.chain_id.clone(), None)
+            .expect("Test failed");
+
+        // Write wrapper hash to storage
+        let wrapper_unsigned_hash = Hash(signed.unsigned_hash());
+        let hash_key =
+            replay_protection::get_tx_hash_key(&wrapper_unsigned_hash);
+        shell
+            .wl_storage
+            .storage
+            .write(&hash_key, vec![])
+            .expect("Test failed");
+
+        let req = RequestPrepareProposal {
+            txs: vec![signed.to_bytes()],
+            ..Default::default()
+        };
+
+        let received =
+            shell.prepare_proposal(req).txs.into_iter().map(|tx_bytes| {
+                Tx::try_from(tx_bytes.as_slice())
+                    .expect("Test failed")
+                    .data
+                    .expect("Test failed")
+            });
+        assert_eq!(received.len(), 0);
+    }
+
+    /// Test that if two identical wrapper txs are proposed for this block, only
+    /// one gets accepted
+    #[test]
+    fn test_wrapper_tx_hash_same_block() {
+        let (shell, _) = test_utils::setup(1);
+
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let signed = wrapper
+            .sign(&keypair, shell.chain_id.clone(), None)
+            .expect("Test failed");
+        let req = RequestPrepareProposal {
+            txs: vec![signed.to_bytes(); 2],
+            ..Default::default()
+        };
+        let received =
+            shell.prepare_proposal(req).txs.into_iter().map(|tx_bytes| {
+                Tx::try_from(tx_bytes.as_slice())
+                    .expect("Test failed")
+                    .data
+                    .expect("Test failed")
+            });
+        assert_eq!(received.len(), 1);
+    }
+
+    /// Test that if the unsigned inner tx hash is known (replay attack), the
+    /// transaction is not included in the block
+    #[test]
+    fn test_inner_tx_hash() {
+        let (mut shell, _) = test_utils::setup(1);
+
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let inner_unsigned_hash = wrapper.tx_hash.clone();
+        let signed = wrapper
+            .sign(&keypair, shell.chain_id.clone(), None)
+            .expect("Test failed");
+
+        // Write inner hash to storage
+        let hash_key = replay_protection::get_tx_hash_key(&inner_unsigned_hash);
+        shell
+            .wl_storage
+            .storage
+            .write(&hash_key, vec![])
+            .expect("Test failed");
+
+        let req = RequestPrepareProposal {
+            txs: vec![signed.to_bytes()],
+            ..Default::default()
+        };
+
+        let received =
+            shell.prepare_proposal(req).txs.into_iter().map(|tx_bytes| {
+                Tx::try_from(tx_bytes.as_slice())
+                    .expect("Test failed")
+                    .data
+                    .expect("Test failed")
+            });
+        assert_eq!(received.len(), 0);
+    }
+
+    /// Test that if two identical decrypted txs are proposed for this block,
+    /// only one gets accepted
+    #[test]
+    fn test_inner_tx_hash_same_block() {
+        let (shell, _) = test_utils::setup(1);
+
+        let keypair = crate::wallet::defaults::daewon_keypair();
+        let keypair_2 = crate::wallet::defaults::daewon_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx.clone(),
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let signed = wrapper
+            .sign(&keypair, shell.chain_id.clone(), None)
+            .expect("Test failed");
+
+        let new_wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair_2,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let new_signed = new_wrapper
+            .sign(&keypair, shell.chain_id.clone(), None)
+            .expect("Test failed");
+
+        let req = RequestPrepareProposal {
+            txs: vec![signed.to_bytes(), new_signed.to_bytes()],
+            ..Default::default()
+        };
+        let received =
+            shell.prepare_proposal(req).txs.into_iter().map(|tx_bytes| {
+                Tx::try_from(tx_bytes.as_slice())
+                    .expect("Test failed")
+                    .data
+                    .expect("Test failed")
+            });
+        assert_eq!(received.len(), 1);
+    }
+
     /// Test that expired wrapper transactions are not included in the block
     #[test]
     fn test_expired_wrapper_tx() {
@@ -462,6 +682,6 @@ mod test_prepare_proposal {
         };
         let result = shell.prepare_proposal(req);
         eprintln!("Proposal: {:?}", result.txs);
-        assert!(result.txs.is_empty());
+        assert_eq!(result.txs.len(), 0);
     }
 }
