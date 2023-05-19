@@ -1,12 +1,26 @@
 # Governance
 
-Before describing Namada governance, it is useful to define the concepts of validators, delegators, and NAM:
+Before describing Namada governance, it is useful to define the concepts of NAM, validators, delegators, and delegates:
 
+*Cryptoeconomic terminology*
 - Namada's economic model is based around a single native token, NAM, which is controlled by the protocol.
-- A Namada _validator_ is an account with a public consensus key, which may participate in producing blocks and governance activities. A validator may not also be a delegator.
-- A Namada _delegator_ is an account that delegates some tokens to a validator. A delegator may not also be a validator.
 
-Namada introduces a governance mechanism to propose and apply protocol changes without the need for a hard fork, and to signal stakeholder approval for potential hard forks. Anyone holding some `NAM` will be able to propose some changes in a proposal for which delegators and validators will cast their `yay` or `nay` votes; in addition it will also be possible to attach some payloads to proposals, in specific cases, to embed additional information. Governance on Namada supports both `signaling` and `voting` mechanisms. The signaling mechanism is used for changes which require a hard fork, while the voting mechanism is used for changes which merely alter state. In cases where the chain is not able to produce blocks anymore, Namada relies on [off chain signaling](#off-chain-protocol) to agree on a common move.
+*Consensus terminology*
+- A Namada _validator_ is an account with a public consensus key, which may participate in producing blocks and governance activities. A validator may not also be a delegator.
+
+Non-validator addresses on Namada are able to bond their tokens. When they do so, they specify a validator which is now responsible for voting on blocks on the bonder's behalf. When doing so, the validator's voting-power is proportional to the sum of its self-bonded tokens and all the bonded tokens from other addesses to their own address.
+
+When an address bonds tokens, the address is able to specify a *delegate*. The respective validator of that address becomes the default *delegate* (explained below) of that address. Similarly, a delegate's `voting-power` (now in terms of voting on Governance proposals, not blocks) is proportional to the sum of its self-bonded tokens and all the bonded tokens from other addresses to their own address.
+
+*Governance terminology*
+With the above definitions in mind, we can now define the following terms:
+
+- A Namada _delegator_ is an account that delegates some tokens to a _delegate_ for voting purposes. Any address is either a delegator or a delegate, but not both.
+- A Namada _delegate_ is an account that has been given the right to vote on the behalf of a delegator. A delegate may not also be a delegator.
+
+Namada introduces a governance mechanism to propose and apply protocol changes without the need for a hard fork, and to signal stakeholder approval for potential hard forks. Anyone holding some `NAM` will be able to propose some changes in a proposal for which delegators and validators will cast their `yay` or `nay` votes. It will also be possible to attach some payloads to proposals, in specific cases, to embed additional information. 
+
+Governance on Namada supports both `signaling` and `voting` mechanisms. The signaling mechanism is used for changes which require a hard fork, while the voting mechanism is used for changes which merely alter state. In cases where the chain is not able to produce blocks anymore, Namada relies on [off chain signaling](#off-chain-protocol) to agree on a common move.
 
 Further information about delegators, validators, and NAM can be found in the [economics section](../economics.md).
 
@@ -14,13 +28,11 @@ Further information about delegators, validators, and NAM can be found in the [e
 
 ### Governance Address
 
-Governance adds 2 internal addresses:
+Governance adds the internal address:
 
 - `GovernanceAddress`
-- `SlashFundAddress`
 
-The first internal address contains all the proposals under its address space.
-The second internal address holds the funds of rejected proposals.
+This address contains all the proposals under its address space.
 
 ### Governance storage
 
@@ -243,7 +255,10 @@ It is possible to check the actual implementation [here](https://github.com/anom
 
 ### Refund and Proposal Execution mechanism
 
-Together with tallying, in the first block at the beginning of each epoch, in the `finalize_block` function, the protocol will manage the execution of accepted proposals and refunding. For each ended proposal with a positive outcome, it will refund the locked funds from `GovernanceAddress` to the proposal author address (specified in the proposal `author` field). For each proposal that has been rejected, instead, the locked funds will be moved to the `SlashFundAddress`. Moreover, if the proposal had a positive outcome and `proposal_code` is defined, these changes will be executed right away.
+Together with tallying, in the first block at the beginning of each epoch, in the `finalize_block` function, the protocol will manage the execution of accepted proposals and refunding. For each ended proposal with a positive outcome, it will refund the locked funds from `GovernanceAddress` to the proposal author address (specified in the proposal `author` field).  Moreover, if the proposal had a positive outcome and `proposal_code` is defined, these changes will be executed immidiately.
+
+For each proposal that has been rejected, instead, the locked funds will burnt (removed from total supply).
+
 To summarize the execution of governance in the `finalize_block` function:
 
 If the proposal outcome is positive and current epoch is equal to the proposal `grace_epoch`, in the `finalize_block` function:
@@ -251,31 +266,10 @@ If the proposal outcome is positive and current epoch is equal to the proposal `
 - execute any changes specified by `proposal_code`
 
 In case the proposal was rejected or if any error, in the `finalize_block` function:
-- transfer the locked funds to `SlashFundAddress`
+- Burn the locked funds
 
 The result is then signaled by creating and inserting a [`Tendermint Event`](https://github.com/tendermint/tendermint/blob/ab0835463f1f89dcadf83f9492e98d85583b0e71/docs/spec/abci/abci.md#events.
 
-## SlashFundAddress
-
-Funds locked in `SlashFundAddress` address should be spendable only by proposals.
-
-### SlashFundAddress storage
-
-```
-/\$SlashFundAddress/?: Vec<u8>
-```
-
-The funds will be stored under:
-
-```
-/\$NAMAddress/balance/\$SlashFundAddress: u64
-```
-
-### SlashFundAddress VP
-
-The slash_fund validity predicate will approve a transfer only if the transfer has been made by the protocol (by checking the existence of `/\$GovernanceAddress/pending/\$proposal_id` storage key)
-
-It is possible to check the actual implementation [here](https://github.com/anoma/namada/blob/main/shared/src/ledger/slash_fund/mod.rs#L70).
 
 ## Off-chain protocol
 
