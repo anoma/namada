@@ -1,7 +1,7 @@
 # Summary
 
 - [Introduction](./README.md)
-- [Quickstart](./quick-start.md)
+- [Quickstart - How to run a validator on Namada](./quick-start.md)
 - [User guide](./user-guide/README.md)
   - [Installing Namada](./user-guide/install/README.md)
     - [Hardware requirements](./user-guide/install/hardware.md)

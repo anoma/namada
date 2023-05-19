@@ -2,6 +2,24 @@
 
 Welcome to Namada's docs!
 
+## How to read this book
+Here are some useful tips for reading this book:
+* Comments start with `#`:
+
+```# this is a comment make sure you read them!```
+
+* Sample outputs start with an arrow:
+  
+```➜ this is an example command line output useful for comparing```
+
+* Commands you should run are prefixed with a `$`:
+
+```$ this is a command you should run```
+
+* User-defined inputs are in square brackets:
+
+```$ this is a command you should run [with your own input]```
+
 ## About Namada
 
 [Namada](https://namada.net/) is a Proof-of-Stake layer 1 protocol for asset-agnostic, interchain privacy. Namada is Anoma's first fractal instance and is currently being developed by [Heliax](https://heliax.dev), a public goods lab.
