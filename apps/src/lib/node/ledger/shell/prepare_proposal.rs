@@ -1,7 +1,7 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
 use namada::core::hints;
-use namada::ledger::storage::{DBIter, StorageHasher, DB};
+use namada::ledger::storage::{DBIter, StorageHasher, TempWlStorage, DB};
 use namada::proof_of_stake::pos_queries::PosQueries;
 use namada::proto::Tx;
 use namada::types::internal::WrapperTxInQueue;
@@ -47,8 +47,12 @@ where
             let alloc = self.get_encrypted_txs_allocator();
 
             // add encrypted txs
-            let (encrypted_txs, alloc) =
-                self.build_encrypted_txs(alloc, &req.txs, &req.time);
+            let (encrypted_txs, alloc) = self.build_encrypted_txs(
+                alloc,
+                TempWlStorage::new(&self.wl_storage.storage),
+                &req.txs,
+                &req.time,
+            );
             let mut txs = encrypted_txs;
 
             // decrypt the wrapper txs included in the previous block
@@ -119,6 +123,7 @@ where
     fn build_encrypted_txs(
         &self,
         mut alloc: EncryptedTxBatchAllocator,
+        mut temp_wl_storage: TempWlStorage<D, H>,
         txs: &[TxBytes],
         block_time: &Option<Timestamp>,
     ) -> (Vec<TxBytes>, BlockSpaceAllocator<BuildingDecryptedTxBatch>) {
@@ -138,8 +143,10 @@ where
                     if let (Some(block_time), Some(exp)) = (block_time.as_ref(), &tx.expiration) {
                         if block_time > exp { return None }
                     }
-                    if let Ok(TxType::Wrapper(_)) = process_tx(tx) {
-                        return Some(tx_bytes.clone());
+                    if let Ok(TxType::Wrapper(ref wrapper)) = process_tx(tx) {
+                        if self.replay_protection_checks(wrapper, tx_bytes.as_slice(), &mut temp_wl_storage).is_ok() {
+                            return Some(tx_bytes.clone())
+                        }
                     }
                 }
                 None
