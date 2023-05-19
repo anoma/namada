@@ -9,6 +9,7 @@ pub struct InternalStats {
     vp_cache_size: (usize, usize),
     tx_cache_size: (usize, usize),
     tx_executed: HashMap<String, u64>,
+    wrapper_txs: u64,
 }
 
 impl InternalStats {
@@ -49,6 +50,10 @@ impl InternalStats {
         } else {
             info.strip_suffix(", ").unwrap().to_string()
         }
+    }
+
+    pub fn incerement_wrapper_txs(&mut self) {
+        self.wrapper_txs += 1;
     }
 }
 
