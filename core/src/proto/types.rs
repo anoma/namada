@@ -245,10 +245,6 @@ impl Signature {
     derive(BorshSerialize, BorshDeserialize, BorshSchema)
 )]
 pub struct Ciphertext {
-    /// Length of following ciphertext. Required for type punning in the
-    /// absence of ferveo so that ciphertext can be read as Vec.
-    #[cfg(feature = "ferveo-tpke")]
-    pub length: u32,
     /// The ciphertext corresponding to the original section serialization
     #[cfg(feature = "ferveo-tpke")]
     pub ciphertext: tpke::Ciphertext<EllipticCurve>,
@@ -267,7 +263,6 @@ impl Ciphertext {
             .try_to_vec()
             .expect("unable to serialize sections");
         Self {
-            length: bytes.len() as u32,
             ciphertext: tpke::encrypt(&bytes, pubkey.0, &mut rng),
         }
     }
@@ -314,13 +309,14 @@ impl borsh::ser::BorshSerialize for Ciphertext {
         auth_tag.serialize(&mut tag_buffer).map_err(|err| {
             std::io::Error::new(std::io::ErrorKind::InvalidData, err)
         })?;
-        let length: u32 =
-            (nonce_buffer.len() + ciphertext.len() + tag_buffer.len()) as u32;
+        let mut payload = Vec::new();
         // serialize the three byte arrays
         BorshSerialize::serialize(
-            &(length, nonce_buffer, ciphertext, tag_buffer),
-            writer,
-        )
+            &(nonce_buffer, ciphertext, tag_buffer),
+            &mut payload,
+        )?;
+        // now serialize the ciphertext payload with length
+        BorshSerialize::serialize(&payload, writer)
     }
 }
 
@@ -328,10 +324,9 @@ impl borsh::ser::BorshSerialize for Ciphertext {
 impl borsh::BorshDeserialize for Ciphertext {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
         type VecTuple = (u32, Vec<u8>, Vec<u8>, Vec<u8>);
-        let (length, nonce, ciphertext, auth_tag): VecTuple =
+        let (_length, nonce, ciphertext, auth_tag): VecTuple =
             BorshDeserialize::deserialize(buf)?;
         Ok(Self {
-            length,
             ciphertext: tpke::Ciphertext {
                 nonce: ark_serialize::CanonicalDeserialize::deserialize(
                     &*nonce,
