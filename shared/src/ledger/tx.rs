@@ -61,7 +61,7 @@ pub enum Error {
     TxBroadcast(RpcError),
     /// Invalid comission rate set
     #[error("Invalid new commission rate, received {0}")]
-    InvalidCommisionRate(Decimal),
+    InvalidCommissionRate(Decimal),
     /// Invalid validator address
     #[error("The address {0} doesn't belong to any known validator account.")]
     InvalidValidatorAddress(Address),
@@ -73,7 +73,7 @@ pub enum Error {
     TooLargeOfChange(Decimal),
     /// Error retrieving from storage
     #[error("Error retrieving from storage")]
-    Retrival,
+    Retrieval,
     /// No unbonded bonds ready to withdraw in the current epoch
     #[error(
         "There are no unbonded bonds ready to withdraw in the current epoch \
@@ -535,7 +535,7 @@ pub async fn submit_validator_commission_change<
                 );
                 Ok(())
             } else {
-                Err(Error::InvalidCommisionRate(args.rate))
+                Err(Error::InvalidCommissionRate(args.rate))
             }
         } else {
             Ok(())
@@ -563,14 +563,14 @@ pub async fn submit_validator_commission_change<
                          effect."
                     );
                     if !args.tx.force {
-                        return Err(Error::InvalidCommisionRate(args.rate));
+                        return Err(Error::InvalidCommissionRate(args.rate));
                     }
                 }
             }
             None => {
                 eprintln!("Error retrieving from storage");
                 if !args.tx.force {
-                    return Err(Error::Retrival);
+                    return Err(Error::Retrieval);
                 }
             }
         }
