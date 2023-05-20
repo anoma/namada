@@ -13,7 +13,7 @@ export TM_HASH=v0.1.4-abciplus
 ## Installing Namada
 1. Clone namada repository and checkout the correct versions
 
-```bash
+```shell
 git clone https://github.com/anoma/namada && cd namada && git checkout $NAMADA_TAG
 ```
 2. Build binaries

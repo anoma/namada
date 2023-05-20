@@ -6,7 +6,7 @@ This guide is for those interested in operating a Namada validator node and assu
 
 ## Installing Namada
 
-See [the installation guide](./user-guide/install/index.html) for details on installing the Namada binaries. Commands in this guide will assume you have the Namada binaries (`namada`, `namadan`, `namadaw`, `namadac`) on your $PATH.
+See [the installation guide](./user-guide/install/README.md) for details on installing the Namada binaries. Commands in this guide will assume you have the Namada binaries (`namada`, `namadan`, `namadaw`, `namadac`) on your $PATH.
 
 If you the binaries stored somewhere, but are not on your path (perhaps you downloaded the binaries), you can add the binaries to to your $PATH with:
 
@@ -29,7 +29,7 @@ tmux
 
 # inside the tmux/or not
 
-namada ledger
+$ namada ledger
 
 # can detach the tmux (Ctrl-B then D)
 ```
@@ -132,8 +132,12 @@ Initialize a validator account under any alias - in this example, "example-valid
 ```shell
 namadac init-validator \
   --alias example-validator \
+  --source example-established \
+  --commission-rate 0.01 \
+  --max-commission-rate-change 0.05 \
   --source example-established
-
+```
+```shell
 ➜  Jan 06 22:26:29.927  INFO namada_apps::cli::context: Chain ID: namada-testnet-1.2.bf0181d9f7e0
 Generating validator account key...
 ```
@@ -244,10 +248,8 @@ namadac bonded-stake \
 ```
   
 ```shell
-➜ Jan 06 22:31:24.908  INFO namada_apps::cli::context: Chain ID: namada-testnet-1.2.bf0181d9f7e0
-Last committed epoch: 22395
-Validator atest1v4ehgw36g3prx3pjxapyvve3xvury3fkxg6nqsesxccnzw2rxdryg335xcmnysjzxdzyvd2pamfmwd is active, voting power: 1
-Total voting power: 44
+➜ Bonded stake of validator atest1v4ehgw36gs6rjd69xaqnj33kxqcnv3pc8qmryd6z8yeygdjrxepygwzrg4z52dekg4rrzwz9m09dm8: 1000
+Total bonded stake: 301000
 ```
 
 Note that with the above command, you can also specify `--epoch` argument to check a future epoch.

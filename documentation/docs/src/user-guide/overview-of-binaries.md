@@ -1,6 +1,6 @@
 # Overview of binaries
 
-This guide assumes that the Namada binaries are [installed](./install/) and available on path. These are:
+This guide assumes that the Namada binaries are [installed](./install/README.md) and available on path. These are:
 
 - `namada`: The main binary that can be used to interact with all the components of Namada
 - `namadan`: The ledger node
@@ -9,9 +9,9 @@ This guide assumes that the Namada binaries are [installed](./install/) and avai
 
 The main binary `namada` has sub-commands for all of the other binaries:
 
-- `namada client = namadac`
-- `namada node   = namadan`
-- `namada wallet = namadaw`
+- `namada client == namadac`
+- `namada node   == namadan`
+- `namada wallet == namadaw`
 
 To explore the command-line interface, add `--help` argument at any sub-command level to find out any possible sub-commands and/or arguments.
 

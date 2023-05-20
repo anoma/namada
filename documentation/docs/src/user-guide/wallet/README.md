@@ -1,6 +1,6 @@
 # Namada Wallet Guide
 
-This document describes the different wallet concepts and options that are available to users of Namada who want to be able to [send, receive and interact](#send-and-receive-nam-tokens) with NAM tokens on the Namada blockchain.
+This document describes the different wallet concepts and options that are available to users of Namada who want to be able to [send, receive and interact](./send-and-receive-nam-tokens.md) with NAM tokens on the Namada blockchain.
 
 
 <!-- I want to either hyperlink or delete the below. I don't understand-->
