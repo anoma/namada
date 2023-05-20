@@ -1,4 +1,4 @@
-# 1) Environment setup
+# Environment setup
 ```admonish note
 If you don't want to build Namada from source you can [install Namada from binaries](../user-guide/install/from-binary.md)
 ```
