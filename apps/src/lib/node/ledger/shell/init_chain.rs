@@ -206,14 +206,18 @@ where
         );
 
         // Initialize genesis validator accounts
-        self.initialize_validators(&genesis.validators, &mut vp_code_cache);
+        let staking_token = staking_token_address(&self.wl_storage);
+        self.initialize_validators(
+            &staking_token,
+            &genesis.validators,
+            &mut vp_code_cache,
+        );
         // set the initial validators set
-        Ok(
-            self.set_initial_validators(
-                genesis.validators,
-                &genesis.pos_params,
-            ),
-        )
+        Ok(self.set_initial_validators(
+            &staking_token,
+            genesis.validators,
+            &genesis.pos_params,
+        ))
     }
 
     /// Initialize genesis established accounts
@@ -356,11 +360,11 @@ where
     /// Initialize genesis validator accounts
     fn initialize_validators(
         &mut self,
+        staking_token: &Address,
         validators: &[genesis::Validator],
         vp_code_cache: &mut HashMap<String, Vec<u8>>,
     ) {
         // Initialize genesis validator accounts
-        let staking_token = staking_token_address(&self.wl_storage);
         for validator in validators {
             let vp_code = vp_code_cache.get_or_insert_with(
                 validator.validator_vp_code_path.clone(),
@@ -422,6 +426,7 @@ where
     /// Initialize the PoS and set the initial validator set
     fn set_initial_validators(
         &mut self,
+        staking_token: &Address,
         validators: Vec<genesis::Validator>,
         pos_params: &PosParams,
     ) -> response::InitChain {
