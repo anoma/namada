@@ -309,6 +309,7 @@ mod test_vote_extensions {
     #[cfg(feature = "abcipp")]
     #[cfg(feature = "abcipp")]
     use borsh::BorshSerialize;
+    use namada::core::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
     use namada::core::ledger::storage_api::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
@@ -584,6 +585,11 @@ mod test_vote_extensions {
             shell.wl_storage.pos_queries().get_current_decision_height() + 11;
         shell.finalize_block(req).expect("Test failed");
         shell.commit();
+        for _i in 0..EPOCH_SWITCH_BLOCKS_DELAY {
+            let req = FinalizeBlock::default();
+            shell.finalize_block(req).expect("Test failed");
+            shell.commit();
+        }
         assert_eq!(shell.wl_storage.storage.get_current_epoch().0.0, 1);
         assert!(
             shell
