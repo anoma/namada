@@ -136,8 +136,13 @@ pub struct Tendermint {
     /// Set `true` for strict address routability rules
     /// Set `false` for private or local networks
     pub p2p_addr_book_strict: bool,
-    /// How long we wait after committing a block, before starting on the new
-    /// height
+    /// Tendermint Consensus Parameters
+    pub consensus_timeout_propose: Timeout,
+    pub consensus_timeout_propose_delta: Timeout,
+    pub consensus_timeout_prevote: Timeout,
+    pub consensus_timeout_prevote_delta: Timeout,
+    pub consensus_timeout_precommit: Timeout,
+    pub consensus_timeout_precommit_delta: Timeout,
     pub consensus_timeout_commit: Timeout,
     pub tendermint_mode: TendermintMode,
     pub instrumentation_prometheus: bool,
@@ -184,6 +189,12 @@ impl Ledger {
                 p2p_pex: true,
                 p2p_allow_duplicate_ip: false,
                 p2p_addr_book_strict: true,
+                consensus_timeout_propose: Timeout::from_str("3s").unwrap(),
+                consensus_timeout_propose_delta: Timeout::from_str("500ms").unwrap(),
+                consensus_timeout_prevote: Timeout::from_str("1s").unwrap(),
+                consensus_timeout_prevote_delta: Timeout::from_str("500ms").unwrap(),
+                consensus_timeout_precommit: Timeout::from_str("1s").unwrap(),
+                consensus_timeout_precommit_delta: Timeout::from_str("500ms").unwrap(),
                 consensus_timeout_commit: Timeout::from_str("1s").unwrap(),
                 tendermint_mode: mode,
                 instrumentation_prometheus: false,
