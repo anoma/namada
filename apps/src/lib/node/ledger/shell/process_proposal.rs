@@ -1407,7 +1407,7 @@ mod test_process_proposal {
     /// Test that a wrapper or protocol transaction with a mismatching chain id
     /// causes the entire block to be rejected
     #[test]
-    fn test_wong_chain_id() {
+    fn test_wrong_chain_id() {
         let (mut shell, _) = test_utils::setup(1);
         let keypair = crate::wallet::defaults::daewon_keypair();
 
@@ -1469,7 +1469,7 @@ mod test_process_proposal {
     /// Test that a decrypted transaction with a mismatching chain id gets
     /// rejected without rejecting the entire block
     #[test]
-    fn test_decrypted_wong_chain_id() {
+    fn test_decrypted_wrong_chain_id() {
         let (mut shell, _) = test_utils::setup(1);
         let keypair = crate::wallet::defaults::daewon_keypair();
 
