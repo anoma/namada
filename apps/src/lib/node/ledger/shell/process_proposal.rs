@@ -442,7 +442,7 @@ where
             |tx| {
                 let tx_chain_id = tx.chain_id.clone();
                 let tx_expiration = tx.expiration;
-                let tx_type = process_tx(tx).map_err(|err| {
+                let tx_type = process_tx(tx.clone()).map_err(|err| {
                     // This occurs if the wrapper / protocol tx signature is
                     // invalid
                     TxResult {
@@ -450,10 +450,10 @@ where
                         info: err.to_string(),
                     }
                 })?;
-                Ok((tx_chain_id, tx_expiration, tx_type))
+                Ok((tx_chain_id, tx_expiration, tx_type, tx))
             },
         );
-        let (tx_chain_id, tx_expiration, tx) = match maybe_tx {
+        let (tx_chain_id, tx_expiration, tx_type, tx) = match maybe_tx {
             Ok(tx) => tx,
             Err(tx_result) => return tx_result,
         };
@@ -461,7 +461,7 @@ where
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
-        match tx {
+        match tx_type {
             // If it is a raw transaction, we do no further validation
             TxType::Raw(_) => TxResult {
                 code: ErrorCodes::InvalidTx.into(),
@@ -686,7 +686,7 @@ where
                     },
                 }
             }
-            TxType::Wrapper(tx) => {
+            TxType::Wrapper(wrapper_tx) => {
                 // decrypted txs shouldn't show up before wrapper txs
                 if metadata.has_decrypted_txs {
                     return TxResult {
@@ -748,7 +748,7 @@ where
                 }
 
                 // validate the ciphertext via Ferveo
-                if !tx.validate_ciphertext() {
+                if !wrapper_tx.validate_ciphertext() {
                     TxResult {
                         code: ErrorCodes::InvalidTx.into(),
                         info: format!(
@@ -782,8 +782,6 @@ where
                              log",
                         );
 
-                    let tx = Tx::try_from(tx_bytes)
-                        .expect("Deserialization shouldn't fail");
                     let wrapper_hash = Hash(tx.unsigned_hash());
                     let wrapper_hash_key =
                         replay_protection::get_tx_hash_key(&wrapper_hash);
@@ -810,18 +808,20 @@ where
                     // transaction key, then the fee payer is effectively
                     // the MASP, otherwise derive
                     // the payer from public key.
-                    let fee_payer = if tx.pk != masp_tx_key().ref_to() {
-                        tx.fee_payer()
+                    let fee_payer = if wrapper_tx.pk != masp_tx_key().ref_to() {
+                        wrapper_tx.fee_payer()
                     } else {
                         masp()
                     };
                     // check that the fee payer has sufficient balance
-                    let balance = self.get_balance(&tx.fee.token, &fee_payer);
+                    let balance =
+                        self.get_balance(&wrapper_tx.fee.token, &fee_payer);
 
                     // In testnets, tx is allowed to skip fees if it
                     // includes a valid PoW
                     #[cfg(not(feature = "mainnet"))]
-                    let has_valid_pow = self.has_valid_pow_solution(&tx);
+                    let has_valid_pow =
+                        self.has_valid_pow_solution(&wrapper_tx);
                     #[cfg(feature = "mainnet")]
                     let has_valid_pow = false;
 
