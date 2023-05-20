@@ -179,7 +179,7 @@ fn validate_tx(
                         .expect("target address encoding");
 
                     let hash =
-                        Ripemd160::digest(sha256(&target_enc).as_slice());
+                        Ripemd160::digest(sha256(&target_enc).0.as_slice());
 
                     if <[u8; 20]>::from(hash) != pub_bytes {
                         debug_log!(
