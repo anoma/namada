@@ -392,6 +392,18 @@ async fn update_tendermint_config(
 
     #[cfg(feature = "abciplus")]
     {
+        config.consensus.timeout_propose =
+            tendermint_config.consensus_timeout_propose;
+        config.consensus.timeout_propose_delta =
+            tendermint_config.consensus_timeout_propose_delta;
+        config.consensus.timeout_prevote =
+            tendermint_config.consensus_timeout_prevote;
+        config.consensus.timeout_prevote_delta =
+            tendermint_config.consensus_timeout_prevote_delta;
+        config.consensus.timeout_precommit =
+            tendermint_config.consensus_timeout_precommit;
+        config.consensus.timeout_precommit_delta =
+            tendermint_config.consensus_timeout_precommit_delta;
         config.consensus.timeout_commit =
             tendermint_config.consensus_timeout_commit;
     }
