@@ -280,6 +280,7 @@ where
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_vp(
     module: wasmer::Module,
     vp_imports: wasmer::ImportObject,
@@ -431,13 +432,13 @@ where
             ctx,
         };
         let gas_table_key = &namada_core::ledger::parameters::storage::get_gas_table_storage_key();
-        let gas_table = match write_log.read(&gas_table_key).0 {
+        let gas_table = match write_log.read(gas_table_key).0 {
             Some(StorageModification::Write { value }) => {
                 BTreeMap::try_from_slice(value)
                     .map_err(|e| Error::ConversionError(e.to_string()))
             }
             _ => match storage
-                .read(&gas_table_key)
+                .read(gas_table_key)
                 .map_err(|e| {
                     Error::LoadWasmCode(format!(
                         "Read gas table from storage failed: {}",
@@ -505,7 +506,8 @@ pub fn prepare_wasm_code<T: AsRef<[u8]>>(code: T) -> Result<Vec<u8>> {
     elements::serialize(module).map_err(Error::SerializationError)
 }
 
-// Fetch or compile a WASM code from the cache or storage. Account for the loading and code compilation gas costs.
+// Fetch or compile a WASM code from the cache or storage. Account for the
+// loading and code compilation gas costs.
 fn fetch_or_compile<DB, H, CN, CA>(
     wasm_cache: &mut Cache<CN, CA>,
     code_or_hash: WasmPayload,
@@ -524,7 +526,7 @@ where
             let (module, store, tx_len) = match wasm_cache.fetch(code_hash)? {
                 Some((module, store)) => {
                     // Gas accounting even if the compiled module is in cache
-                    let key = Key::wasm_code_len(&code_hash);
+                    let key = Key::wasm_code_len(code_hash);
                     let tx_len = match write_log.read(&key).0 {
                         Some(StorageModification::Write { value }) => {
                             u64::try_from_slice(value).map_err(|e| {
@@ -535,10 +537,10 @@ where
                             .read(&key)
                             .map_err(|e| {
                                 Error::LoadWasmCode(format!(
-                        "Read wasm code length failed from storage: key {}, \
-                             error {}",
-                        key, e
-                    ))
+                                    "Read wasm code length failed from \
+                                     storage: key {}, error {}",
+                                    key, e
+                                ))
                             })?
                             .0
                         {
@@ -564,10 +566,10 @@ where
                             .read(&key)
                             .map_err(|e| {
                                 Error::LoadWasmCode(format!(
-                                "Read wasm code failed from storage: key {}, \
-                             error {}",
-                                key, e
-                            ))
+                                    "Read wasm code failed from storage: key \
+                                     {}, error {}",
+                                    key, e
+                                ))
                             })?
                             .0
                         {
@@ -599,7 +601,7 @@ where
                 u64::try_from(code.as_ref().len())
                     .map_err(|e| Error::ConversionError(e.to_string()))?,
             )?;
-            validate_untrusted_wasm(&code).map_err(Error::ValidationError)?;
+            validate_untrusted_wasm(code).map_err(Error::ValidationError)?;
             match wasm_cache.compile_or_fetch(code)? {
                 Some((module, store)) => Ok((module, store)),
                 None => Err(Error::NoCompiledWasmCode),
@@ -765,7 +767,7 @@ mod tests {
         storage.write(&len_key, code_len).unwrap();
         let gas_table_key = &namada_core::ledger::parameters::storage::get_gas_table_storage_key();
         storage
-            .write(&gas_table_key, gas_table.try_to_vec().unwrap())
+            .write(gas_table_key, gas_table.try_to_vec().unwrap())
             .unwrap();
 
         // Assuming 200 pages, 12.8 MiB limit

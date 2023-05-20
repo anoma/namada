@@ -15,7 +15,8 @@ use namada_benches::{generate_tx, BenchShell, TX_TRANSFER_WASM};
 
 fn process_tx(c: &mut Criterion) {
     let mut shell = BenchShell::default();
-    // Advance chain height to allow the inclusion of wrapper txs by the block space allocator
+    // Advance chain height to allow the inclusion of wrapper txs by the block
+    // space allocator
     shell.wl_storage.storage.last_height = BlockHeight(2);
     let tx = generate_tx(
         TX_TRANSFER_WASM,

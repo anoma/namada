@@ -189,13 +189,15 @@ fn governance(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(governance
-                    .validate_tx(
-                        signed_tx.data.as_ref().unwrap(),
-                        governance.ctx.keys_changed,
-                        governance.ctx.verifiers,
-                    )
-                    .unwrap())
+                assert!(
+                    governance
+                        .validate_tx(
+                            signed_tx.data.as_ref().unwrap(),
+                            governance.ctx.keys_changed,
+                            governance.ctx.verifiers,
+                        )
+                        .unwrap()
+                )
             })
         });
     }
@@ -254,13 +256,15 @@ fn slash_fund(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(slash_fund
-                    .validate_tx(
-                        tx.data.as_ref().unwrap(),
-                        slash_fund.ctx.keys_changed,
-                        slash_fund.ctx.verifiers,
-                    )
-                    .unwrap())
+                assert!(
+                    slash_fund
+                        .validate_tx(
+                            tx.data.as_ref().unwrap(),
+                            slash_fund.ctx.keys_changed,
+                            slash_fund.ctx.verifiers,
+                        )
+                        .unwrap()
+                )
             })
         });
     }
@@ -279,7 +283,7 @@ fn ibc(c: &mut Criterion) {
         )
         .unwrap(),
         counterparty: Counterparty::new(
-            ClientId::from_str(&"01-tendermint-1").unwrap(),
+            ClientId::from_str("01-tendermint-1").unwrap(),
             Some(ConnectionId::new(1)),
             CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
         ),
@@ -360,13 +364,14 @@ fn ibc(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(ibc
-                    .validate_tx(
+                assert!(
+                    ibc.validate_tx(
                         signed_tx.data.as_ref().unwrap(),
                         ibc.ctx.keys_changed,
                         ibc.ctx.verifiers,
                     )
-                    .unwrap())
+                    .unwrap()
+                )
             })
         });
     }
@@ -419,13 +424,14 @@ fn ibc_token(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(ibc
-                    .validate_tx(
+                assert!(
+                    ibc.validate_tx(
                         signed_tx.data.as_ref().unwrap(),
                         ibc.ctx.keys_changed,
                         ibc.ctx.verifiers,
                     )
-                    .unwrap())
+                    .unwrap()
+                )
             })
         });
     }

@@ -288,7 +288,7 @@ where
                         storage,
                         write_log,
                         &mut gas_meter,
-                        &gas_table,
+                        gas_table,
                         &keys_changed,
                         &verifiers,
                         vp_wasm_cache.clone(),

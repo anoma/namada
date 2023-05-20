@@ -135,7 +135,7 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
     join_all(checksums.0.into_iter().map(|(name, map)| {
         let wasm_directory = wasm_directory.as_ref().to_owned();
         let full_name =
-            name.replace(".", &format!(".{}.", map.get("hash").unwrap()));
+            name.replace('.', &format!(".{}.", map.get("hash").unwrap()));
 
         // Async check and download (if needed) each file
         tokio::spawn(async move {
@@ -270,7 +270,7 @@ pub fn read_wasm(
         if let Some(name) = os_name.to_str() {
             let wasm_path = match checksums.0.get(name) {
                 Some(map) => wasm_directory.as_ref().join(name.replace(
-                    ".",
+                    '.',
                     &format!(
                         ".{}.",
                         map.get("hash").ok_or_else(|| eyre!(

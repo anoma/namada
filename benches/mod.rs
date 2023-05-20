@@ -16,6 +16,7 @@
 
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
+use std::str::FromStr;
 
 use borsh::BorshSerialize;
 use ibc_proto::google::protobuf::Any;
@@ -88,7 +89,6 @@ use namada_apps::wallet::defaults;
 use namada_apps::{config, wasm_loader};
 use namada_test_utils::tx_data::TxWriteData;
 use rand_core::OsRng;
-use std::str::FromStr;
 use tempfile::TempDir;
 
 pub const WASM_DIR: &str = "../wasm";

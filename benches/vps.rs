@@ -132,21 +132,23 @@ fn vp_user(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(run::vp(
-                    &vp_code_hash,
-                    signed_tx,
-                    &TxIndex(0),
-                    &defaults::albert_address(),
-                    &shell.wl_storage.storage,
-                    &shell.wl_storage.write_log,
-                    &mut VpGasMeter::new(u64::MAX, 0),
-                    &BTreeMap::default(),
-                    &keys_changed,
-                    &verifiers,
-                    shell.vp_wasm_cache.clone(),
-                    false,
-                )
-                .unwrap());
+                assert!(
+                    run::vp(
+                        &vp_code_hash,
+                        signed_tx,
+                        &TxIndex(0),
+                        &defaults::albert_address(),
+                        &shell.wl_storage.storage,
+                        &shell.wl_storage.write_log,
+                        &mut VpGasMeter::new(u64::MAX, 0),
+                        &BTreeMap::default(),
+                        &keys_changed,
+                        &verifiers,
+                        shell.vp_wasm_cache.clone(),
+                        false,
+                    )
+                    .unwrap()
+                );
             })
         });
     }
@@ -268,21 +270,23 @@ fn vp_implicit(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(run::vp(
-                    &vp_code_hash,
-                    tx,
-                    &TxIndex(0),
-                    &Address::from(&implicit_account.to_public()),
-                    &shell.wl_storage.storage,
-                    &shell.wl_storage.write_log,
-                    &mut VpGasMeter::new(u64::MAX, 0),
-                    &BTreeMap::default(),
-                    &keys_changed,
-                    &verifiers,
-                    shell.vp_wasm_cache.clone(),
-                    false,
+                assert!(
+                    run::vp(
+                        &vp_code_hash,
+                        tx,
+                        &TxIndex(0),
+                        &Address::from(&implicit_account.to_public()),
+                        &shell.wl_storage.storage,
+                        &shell.wl_storage.write_log,
+                        &mut VpGasMeter::new(u64::MAX, 0),
+                        &BTreeMap::default(),
+                        &keys_changed,
+                        &verifiers,
+                        shell.vp_wasm_cache.clone(),
+                        false,
+                    )
+                    .unwrap()
                 )
-                .unwrap())
             })
         });
     }
@@ -396,21 +400,23 @@ fn vp_validator(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(run::vp(
-                    &vp_code_hash,
-                    signed_tx,
-                    &TxIndex(0),
-                    &defaults::validator_address(),
-                    &shell.wl_storage.storage,
-                    &shell.wl_storage.write_log,
-                    &mut VpGasMeter::new(u64::MAX, 0),
-                    &BTreeMap::default(),
-                    &keys_changed,
-                    &verifiers,
-                    shell.vp_wasm_cache.clone(),
-                    false,
-                )
-                .unwrap());
+                assert!(
+                    run::vp(
+                        &vp_code_hash,
+                        signed_tx,
+                        &TxIndex(0),
+                        &defaults::validator_address(),
+                        &shell.wl_storage.storage,
+                        &shell.wl_storage.write_log,
+                        &mut VpGasMeter::new(u64::MAX, 0),
+                        &BTreeMap::default(),
+                        &keys_changed,
+                        &verifiers,
+                        shell.vp_wasm_cache.clone(),
+                        false,
+                    )
+                    .unwrap()
+                );
             })
         });
     }
@@ -454,21 +460,23 @@ fn vp_token(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(run::vp(
-                    &vp_code_hash,
-                    signed_tx,
-                    &TxIndex(0),
-                    &defaults::albert_address(),
-                    &shell.wl_storage.storage,
-                    &shell.wl_storage.write_log,
-                    &mut VpGasMeter::new(u64::MAX, 0),
-                    &BTreeMap::default(),
-                    &keys_changed,
-                    &verifiers,
-                    shell.vp_wasm_cache.clone(),
-                    false,
-                )
-                .unwrap());
+                assert!(
+                    run::vp(
+                        &vp_code_hash,
+                        signed_tx,
+                        &TxIndex(0),
+                        &defaults::albert_address(),
+                        &shell.wl_storage.storage,
+                        &shell.wl_storage.write_log,
+                        &mut VpGasMeter::new(u64::MAX, 0),
+                        &BTreeMap::default(),
+                        &keys_changed,
+                        &verifiers,
+                        shell.vp_wasm_cache.clone(),
+                        false,
+                    )
+                    .unwrap()
+                );
             })
         });
     }
@@ -542,21 +550,23 @@ fn vp_masp(c: &mut Criterion) {
                 .verifiers_and_changed_keys(&BTreeSet::default());
 
             b.iter(|| {
-                assert!(run::vp(
-                    &vp_code_hash,
-                    &signed_tx,
-                    &TxIndex(0),
-                    &defaults::validator_address(),
-                    &shielded_ctx.shell.wl_storage.storage,
-                    &shielded_ctx.shell.wl_storage.write_log,
-                    &mut VpGasMeter::new(u64::MAX, 0),
-                    &BTreeMap::default(),
-                    &keys_changed,
-                    &verifiers,
-                    shielded_ctx.shell.vp_wasm_cache.clone(),
-                    false,
-                )
-                .unwrap());
+                assert!(
+                    run::vp(
+                        &vp_code_hash,
+                        &signed_tx,
+                        &TxIndex(0),
+                        &defaults::validator_address(),
+                        &shielded_ctx.shell.wl_storage.storage,
+                        &shielded_ctx.shell.wl_storage.write_log,
+                        &mut VpGasMeter::new(u64::MAX, 0),
+                        &BTreeMap::default(),
+                        &keys_changed,
+                        &verifiers,
+                        shielded_ctx.shell.vp_wasm_cache.clone(),
+                        false,
+                    )
+                    .unwrap()
+                );
             })
         });
     }

@@ -363,19 +363,24 @@ where
                                 }
 
                                 // Tx gas (partial check)
-                                let tx_hash = if tx.code_or_hash.len()
-                                    == HASH_LENGTH
-                                {
-                                    match Hash::try_from(tx.code_or_hash.as_slice()) {
+                                let tx_hash =
+                                    if tx.code_or_hash.len() == HASH_LENGTH {
+                                        match Hash::try_from(
+                                        tx.code_or_hash.as_slice(),
+                                    ) {
                                         Ok(hash) => hash,
                                         Err(_) => return TxResult {
-                                            code: ErrorCodes::DecryptedTxGasLimit.into(),
-                                            info: format!("Failed conversion of transaction's hash")
-                                        }
+                                            code:
+                                                ErrorCodes::DecryptedTxGasLimit
+                                                    .into(),
+                                            info: "Failed conversion of \
+                                                   transaction's hash"
+                                                .to_string(),
+                                        },
                                     }
-                                } else {
-                                    Hash(tx.code_hash())
-                                };
+                                    } else {
+                                        Hash(tx.code_hash())
+                                    };
                                 let tx_gas = match gas_table.get(
                                     &tx_hash.to_string().to_ascii_lowercase(),
                                 ) {
@@ -383,7 +388,8 @@ where
                                     #[cfg(test)]
                                     None => 1_000,
                                     #[cfg(not(test))]
-                                    None => 0, // VPs will rejected the non-whitelisted tx
+                                    None => 0, /* VPs will rejected the
+                                                * non-whitelisted tx */
                                 };
                                 let inner_tx_gas_limit = temp_wl_storage
                                     .storage
@@ -394,9 +400,14 @@ where
                                     TxGasMeter::new(inner_tx_gas_limit);
                                 if let Err(e) = tx_gas_meter.add(tx_gas) {
                                     return TxResult {
-                                            code: ErrorCodes::DecryptedTxGasLimit.into(),
-                                            info: format!("Decrypted transaction gas error: {}", e)
-                                        };
+                                        code: ErrorCodes::DecryptedTxGasLimit
+                                            .into(),
+                                        info: format!(
+                                            "Decrypted transaction gas error: \
+                                             {}",
+                                            e
+                                        ),
+                                    };
                                 }
                             }
 
