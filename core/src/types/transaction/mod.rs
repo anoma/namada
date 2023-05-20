@@ -34,9 +34,13 @@ use crate::types::key::*;
 use crate::types::storage;
 
 /// Get the hash of a transaction
-pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
-    let digest = Sha256::digest(tx_bytes);
-    Hash(*digest.as_ref())
+pub fn hash_tx(tx_or_hash_bytes: &[u8]) -> Hash {
+    if tx_or_hash_bytes.len() == HASH_LENGTH {
+        // we assume that there is no wasm code with HASH_LENGTH
+        Hash::try_from(tx_or_hash_bytes).unwrap()
+    } else {
+        Hash(*Sha256::digest(tx_or_hash_bytes).as_ref())
+    }
 }
 
 /// Transaction application result
@@ -593,3 +597,5 @@ pub mod tx_types {
 
 #[cfg(feature = "ferveo-tpke")]
 pub use tx_types::*;
+
+use super::hash::HASH_LENGTH;
