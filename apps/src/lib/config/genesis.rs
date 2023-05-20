@@ -963,13 +963,17 @@ pub fn genesis(num_validators: u64) -> Genesis {
                 .unwrap();
         let account_keypair = consensus_keypair.clone();
         let address = address::gen_established_address("validator account");
-        let (protocol_keypair, dkg_keypair) =
+        let eth_cold_keypair =
+            common::SecretKey::try_from_sk(&secp_eth_cold_keypair).unwrap();
+        let (protocol_keypair, eth_bridge_keypair, dkg_keypair) =
             wallet::defaults::validator_keys();
         let validator = Validator {
             pos_data: GenesisValidator {
                 address,
                 tokens: token::Amount::whole(200_000),
                 consensus_key: consensus_keypair.ref_to(),
+                eth_cold_key: eth_cold_keypair.ref_to(),
+                eth_hot_key: eth_bridge_keypair.ref_to(),
                 commission_rate: dec!(0.05),
                 max_commission_rate_change: dec!(0.01),
             },
