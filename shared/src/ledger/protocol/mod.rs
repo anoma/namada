@@ -130,14 +130,14 @@ where
                 .map_err(Error::GasError)?;
             let initialized_accounts = write_log.get_initialized_accounts();
             let changed_keys = write_log.get_keys();
-            let ibc_event = write_log.take_ibc_event();
+            let ibc_events = write_log.take_ibc_events();
 
             Ok(TxResult {
                 gas_used,
                 changed_keys,
                 vps_result,
                 initialized_accounts,
-                ibc_event,
+                ibc_events,
             })
         }
         _ => {

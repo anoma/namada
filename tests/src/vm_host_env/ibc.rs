@@ -2,17 +2,20 @@ use core::time::Duration;
 use std::collections::HashMap;
 use std::str::FromStr;
 
-pub use namada::core::ledger::ibc::actions::*;
-use namada::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
-use namada::ibc::core::ics02_client::client_consensus::ConsensusState;
-use namada::ibc::core::ics02_client::client_state::{
-    AnyClientState, ClientState,
+use namada::ibc::applications::transfer::acknowledgement::TokenTransferAcknowledgement;
+use namada::ibc::applications::transfer::coin::PrefixedCoin;
+use namada::ibc::applications::transfer::msgs::transfer::MsgTransfer;
+use namada::ibc::applications::transfer::packet::PacketData;
+use namada::ibc::applications::transfer::VERSION;
+use namada::ibc::core::ics02_client::client_state::ClientState;
+use namada::ibc::core::ics02_client::client_type::ClientType;
+use namada::ibc::core::ics02_client::consensus_state::ConsensusState;
+use namada::ibc::core::ics02_client::msgs::create_client::MsgCreateClient;
+use namada::ibc::core::ics02_client::msgs::update_client::MsgUpdateClient;
+use namada::ibc::core::ics02_client::msgs::upgrade_client::MsgUpgradeClient;
+use namada::ibc::core::ics03_connection::connection::{
+    ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
 };
-use namada::ibc::core::ics02_client::header::Header;
-use namada::ibc::core::ics02_client::msgs::create_client::MsgCreateAnyClient;
-use namada::ibc::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
-use namada::ibc::core::ics02_client::msgs::upgrade_client::MsgUpgradeAnyClient;
-use namada::ibc::core::ics03_connection::connection::Counterparty as ConnCounterparty;
 use namada::ibc::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
 use namada::ibc::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
 use namada::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
@@ -31,50 +34,69 @@ use namada::ibc::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
 use namada::ibc::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
 use namada::ibc::core::ics04_channel::msgs::timeout::MsgTimeout;
 use namada::ibc::core::ics04_channel::msgs::timeout_on_close::MsgTimeoutOnClose;
-use namada::ibc::core::ics04_channel::packet::{Packet, Sequence};
+pub use namada::ibc::core::ics04_channel::packet::{Packet, Sequence};
+use namada::ibc::core::ics04_channel::timeout::TimeoutHeight;
 use namada::ibc::core::ics04_channel::Version as ChanVersion;
-use namada::ibc::core::ics24_host::identifier::{
-    ChannelId, ClientId, ConnectionId, PortId,
+use namada::ibc::core::ics23_commitment::commitment::{
+    CommitmentPrefix, CommitmentProofBytes,
 };
-use namada::ibc::mock::client_state::{MockClientState, MockConsensusState};
+pub use namada::ibc::core::ics24_host::identifier::{
+    ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
+};
+use namada::ibc::mock::client_state::{MockClientState, MOCK_CLIENT_TYPE};
+use namada::ibc::mock::consensus_state::MockConsensusState;
 use namada::ibc::mock::header::MockHeader;
-use namada::ibc::proofs::{ConsensusProof, Proofs};
 use namada::ibc::signer::Signer;
 use namada::ibc::timestamp::Timestamp;
 use namada::ibc::Height;
 use namada::ibc_proto::cosmos::base::v1beta1::Coin;
+use namada::ibc_proto::google::protobuf::Any;
 use namada::ibc_proto::ibc::core::commitment::v1::MerkleProof;
+use namada::ibc_proto::ibc::core::connection::v1::MsgConnectionOpenTry as RawMsgConnectionOpenTry;
 use namada::ibc_proto::ics23::CommitmentProof;
+use namada::ibc_proto::protobuf::Protobuf;
 use namada::ledger::gas::VpGasMeter;
-use namada::ledger::ibc::init_genesis_storage;
 pub use namada::ledger::ibc::storage::{
-    ack_key, capability_index_key, capability_key, channel_counter_key,
-    channel_key, client_counter_key, client_state_key, client_type_key,
-    commitment_key, connection_counter_key, connection_key,
-    consensus_state_key, next_sequence_ack_key, next_sequence_recv_key,
-    next_sequence_send_key, port_key, receipt_key,
+    ack_key, channel_counter_key, channel_key, client_counter_key,
+    client_state_key, client_type_key, client_update_height_key,
+    client_update_timestamp_key, commitment_key, connection_counter_key,
+    connection_key, consensus_state_key, ibc_token_prefix,
+    next_sequence_ack_key, next_sequence_recv_key, next_sequence_send_key,
+    port_key, receipt_key,
 };
 use namada::ledger::ibc::vp::{
-    get_dummy_header as tm_dummy_header, Ibc, IbcToken,
+    get_dummy_genesis_validator, get_dummy_header as tm_dummy_header, Ibc,
+    IbcToken,
 };
 use namada::ledger::native_vp::{Ctx, NativeVp};
+use namada::ledger::parameters::storage::{
+    get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
+};
+use namada::ledger::parameters::EpochDuration;
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::Sha256Hasher;
 use namada::ledger::tx_env::TxEnv;
+use namada::ledger::{ibc, pos};
+use namada::proof_of_stake::parameters::PosParams;
 use namada::proto::Tx;
-use namada::tendermint_proto::Protobuf;
+use namada::tendermint::time::Time as TmTime;
+use namada::tendermint_proto::Protobuf as TmProtobuf;
 use namada::types::address::{self, Address, InternalAddress};
 use namada::types::hash::Hash;
-use namada::types::ibc::data::{FungibleTokenPacketData, PacketAck};
-use namada::types::storage::{self, BlockHash, BlockHeight, Key, TxIndex};
+use namada::types::storage::{
+    self, BlockHash, BlockHeight, Epoch, Key, TxIndex,
+};
+use namada::types::time::DurationSecs;
 use namada::types::token::{self, Amount};
 use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_test_utils::TestWasms;
-use namada_tx_prelude::StorageWrite;
+use namada_tx_prelude::BorshSerialize;
 
 use crate::tx::{self, *};
 
 const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
+
+const COMMITMENT_PREFIX: &[u8] = b"ibc";
 
 pub struct TestIbcVp<'a> {
     pub ibc: Ibc<'a, MockDB, Sha256Hasher, WasmCacheRwAccess>,
@@ -188,7 +210,13 @@ pub fn init_storage() -> (Address, Address) {
     let code_hash = Hash::sha256(&code);
 
     tx_host_env::with(|env| {
-        init_genesis_storage(&mut env.wl_storage);
+        ibc::init_genesis_storage(&mut env.wl_storage);
+        pos::init_genesis_storage(
+            &mut env.wl_storage,
+            &PosParams::default(),
+            vec![get_dummy_genesis_validator()].into_iter(),
+            Epoch(1),
+        );
         // store wasm code
         let key = Key::wasm_code(&code_hash);
         env.wl_storage.storage.write(&key, code.clone()).unwrap();
@@ -210,22 +238,50 @@ pub fn init_storage() -> (Address, Address) {
     // initialize an account
     let account = tx::ctx().init_account(code_hash).unwrap();
     let key = token::balance_key(&token, &account);
-    let init_bal = Amount::from_uint(1_000_000_000u64, 0).unwrap();
-    tx::ctx().write(&key, init_bal).unwrap();
+    let init_bal = Amount::whole(100);
+    let bytes = init_bal.try_to_vec().expect("encoding failed");
+    tx_host_env::with(|env| {
+        env.wl_storage.storage.write(&key, &bytes).unwrap();
+    });
+
+    // epoch duration
+    let key = get_epoch_duration_storage_key();
+    let epoch_duration = EpochDuration {
+        min_num_of_blocks: 10,
+        min_duration: DurationSecs(100),
+    };
+    let bytes = epoch_duration.try_to_vec().unwrap();
+    tx_host_env::with(|env| {
+        env.wl_storage.storage.write(&key, &bytes).unwrap();
+    });
+
+    // max_expected_time_per_block
+    let time = DurationSecs::from(Duration::new(60, 0));
+    let key = get_max_expected_time_per_block_key();
+    let bytes = namada::ledger::storage::types::encode(&time);
+    tx_host_env::with(|env| {
+        env.wl_storage.storage.write(&key, &bytes).unwrap();
+    });
+
     (token, account)
 }
 
-pub fn prepare_client()
--> (ClientId, AnyClientState, HashMap<storage::Key, Vec<u8>>) {
+pub fn client_id() -> ClientId {
+    let (client_state, _) = dummy_client();
+    ClientId::new(client_state.client_type(), 0).expect("invalid client ID")
+}
+
+pub fn prepare_client() -> (ClientId, Any, HashMap<storage::Key, Vec<u8>>) {
     let mut writes = HashMap::new();
 
-    let msg = msg_create_client();
+    let (client_state, consensus_state) = dummy_client();
     // client state
-    let client_state = msg.client_state.clone();
-    let client_id =
-        client_id(client_state.client_type(), 0).expect("invalid client ID");
+    let client_id = client_id();
     let key = client_state_key(&client_id);
-    let bytes = msg.client_state.encode_vec().expect("encoding failed");
+    let bytes = client_state
+        .into_box()
+        .encode_vec()
+        .expect("encoding failed");
     writes.insert(key, bytes);
     // client type
     let key = client_type_key(&client_id);
@@ -235,14 +291,54 @@ pub fn prepare_client()
     // consensus state
     let height = client_state.latest_height();
     let key = consensus_state_key(&client_id, height);
-    let bytes = msg.consensus_state.encode_vec().expect("encoding failed");
+    let bytes = consensus_state
+        .into_box()
+        .encode_vec()
+        .expect("encoding failed");
+    writes.insert(key, bytes);
+    // client update time
+    let key = client_update_timestamp_key(&client_id);
+    let time = tx_host_env::with(|env| {
+        let header = env
+            .wl_storage
+            .storage
+            .get_block_header(None)
+            .unwrap()
+            .0
+            .unwrap();
+        header.time
+    });
+    let bytes = TmTime::try_from(time)
+        .unwrap()
+        .encode_vec()
+        .expect("encoding failed");
+    writes.insert(key, bytes);
+    // client update height
+    let key = client_update_height_key(&client_id);
+    let height = tx_host_env::with(|env| {
+        let height = env.wl_storage.storage.get_block_height().0;
+        Height::new(0, height.0).expect("invalid height")
+    });
+    let bytes = height.encode_vec().expect("encoding failed");
     writes.insert(key, bytes);
     // client counter
     let key = client_counter_key();
     let bytes = 1_u64.to_be_bytes().to_vec();
     writes.insert(key, bytes);
 
-    (client_id, client_state, writes)
+    (client_id, client_state.into(), writes)
+}
+
+fn dummy_client() -> (MockClientState, MockConsensusState) {
+    let height = Height::new(0, 1).expect("invalid height");
+    let header = MockHeader {
+        height,
+        timestamp: Timestamp::now(),
+    };
+    let client_state = MockClientState::new(header);
+    let consensus_state = MockConsensusState::new(header);
+
+    (client_state, consensus_state)
 }
 
 pub fn prepare_opened_connection(
@@ -250,11 +346,16 @@ pub fn prepare_opened_connection(
 ) -> (ConnectionId, HashMap<storage::Key, Vec<u8>>) {
     let mut writes = HashMap::new();
 
-    let conn_id = connection_id(0);
+    let conn_id = ConnectionId::new(0);
     let key = connection_key(&conn_id);
     let msg = msg_connection_open_init(client_id.clone());
-    let mut conn = init_connection(&msg);
-    open_connection(&mut conn);
+    let conn = ConnectionEnd::new(
+        ConnState::Open,
+        msg.client_id_on_a.clone(),
+        msg.counterparty.clone(),
+        vec![msg.version.clone().unwrap_or_default()],
+        msg.delay_period,
+    );
     let bytes = conn.encode_vec().expect("encoding failed");
     writes.insert(key, bytes);
     // connection counter
@@ -272,22 +373,23 @@ pub fn prepare_opened_channel(
     let mut writes = HashMap::new();
 
     // port
-    let port_id = port_id("test_port").expect("invalid port ID");
+    let port_id = PortId::transfer();
     let key = port_key(&port_id);
     writes.insert(key, 0_u64.to_be_bytes().to_vec());
-    // capability
-    let key = capability_key(0);
-    let bytes = port_id.as_bytes().to_vec();
-    writes.insert(key, bytes);
     // channel
-    let channel_id = channel_id(0);
-    let port_channel_id = port_channel_id(port_id.clone(), channel_id);
+    let channel_id = ChannelId::new(0);
+    let port_channel_id =
+        PortChannelId::new(channel_id.clone(), port_id.clone());
     let key = channel_key(&port_channel_id);
-    let msg = msg_channel_open_init(port_id.clone(), conn_id.clone());
-    let mut channel = msg.channel;
-    open_channel(&mut channel);
-    if !is_ordered {
-        channel.ordering = Order::Unordered;
+    let mut channel = ChannelEnd::new(
+        ChanState::Open,
+        Order::Unordered,
+        dummy_channel_counterparty(),
+        vec![conn_id.clone()],
+        ChanVersion::new(VERSION.to_string()),
+    );
+    if is_ordered {
+        channel.ordering = Order::Ordered;
     }
     let bytes = channel.encode_vec().expect("encoding failed");
     writes.insert(key, bytes);
@@ -295,99 +397,106 @@ pub fn prepare_opened_channel(
     (port_id, channel_id, writes)
 }
 
-pub fn msg_create_client() -> MsgCreateAnyClient {
-    let height = Height::new(0, 1);
-    let header = MockHeader {
-        height,
-        timestamp: Timestamp::now(),
-    };
-    let client_state = MockClientState::new(header).wrap_any();
-    let consensus_state = MockConsensusState::new(header).wrap_any();
-    MsgCreateAnyClient {
-        client_state,
-        consensus_state,
-        signer: Signer::new("test"),
+pub fn msg_create_client() -> MsgCreateClient {
+    let (client_state, consensus_state) = dummy_client();
+    MsgCreateClient {
+        client_state: client_state.into(),
+        consensus_state: consensus_state.into(),
+        signer: Signer::from_str("test").expect("invalid signer"),
     }
 }
 
-pub fn msg_update_client(client_id: ClientId) -> MsgUpdateAnyClient {
-    let height = Height::new(0, 2);
+pub fn msg_update_client(client_id: ClientId) -> MsgUpdateClient {
+    let height = Height::new(0, 2).expect("invalid height");
     let header = MockHeader {
         height,
         timestamp: Timestamp::now(),
     }
-    .wrap_any();
-    MsgUpdateAnyClient {
+    .into();
+    MsgUpdateClient {
         client_id,
         header,
-        signer: Signer::new("test"),
+        signer: Signer::from_str("test").expect("invalid signer"),
     }
 }
 
-pub fn msg_upgrade_client(client_id: ClientId) -> MsgUpgradeAnyClient {
-    let height = Height::new(0, 1);
+pub fn msg_upgrade_client(client_id: ClientId) -> MsgUpgradeClient {
+    let height = Height::new(0, 1).expect("invalid height");
     let header = MockHeader {
         height,
         timestamp: Timestamp::now(),
     };
-    let client_state = MockClientState::new(header).wrap_any();
-    let consensus_state = MockConsensusState::new(header).wrap_any();
+    let client_state = MockClientState::new(header).into();
+    let consensus_state = MockConsensusState::new(header).into();
     let proof_upgrade_client = MerkleProof {
         proofs: vec![CommitmentProof { proof: None }],
     };
     let proof_upgrade_consensus_state = MerkleProof {
         proofs: vec![CommitmentProof { proof: None }],
     };
-    MsgUpgradeAnyClient {
+    MsgUpgradeClient {
         client_id,
         client_state,
         consensus_state,
         proof_upgrade_client,
         proof_upgrade_consensus_state,
-        signer: Signer::new("test"),
+        signer: Signer::from_str("test").expect("invalid signer"),
     }
 }
 
 pub fn msg_connection_open_init(client_id: ClientId) -> MsgConnectionOpenInit {
     MsgConnectionOpenInit {
-        client_id,
+        client_id_on_a: client_id,
         counterparty: dummy_connection_counterparty(),
         version: None,
-        delay_period: Duration::new(100, 0),
-        signer: Signer::new("test"),
+        delay_period: Duration::new(0, 0),
+        signer: Signer::from_str("test").expect("invalid signer"),
     }
 }
 
 pub fn msg_connection_open_try(
     client_id: ClientId,
-    client_state: AnyClientState,
+    client_state: Any,
 ) -> MsgConnectionOpenTry {
-    MsgConnectionOpenTry {
-        previous_connection_id: None,
-        client_id,
+    let consensus_height = Height::new(0, 1).expect("invalid height");
+    // Convert a message from RawMsgConnectionOpenTry
+    // because MsgConnectionOpenTry cannot be created directly
+    #[allow(deprecated)]
+    RawMsgConnectionOpenTry {
+        client_id: client_id.as_str().to_string(),
         client_state: Some(client_state),
-        counterparty: dummy_connection_counterparty(),
-        counterparty_versions: vec![ConnVersion::default()],
-        proofs: dummy_proofs(),
-        delay_period: Duration::new(100, 0),
-        signer: Signer::new("test"),
+        counterparty: Some(dummy_connection_counterparty().into()),
+        delay_period: 0,
+        counterparty_versions: vec![ConnVersion::default().into()],
+        proof_init: dummy_proof().into(),
+        proof_height: Some(dummy_proof_height().into()),
+        proof_consensus: dummy_proof().into(),
+        consensus_height: Some(consensus_height.into()),
+        proof_client: dummy_proof().into(),
+        signer: "test".to_string(),
+        previous_connection_id: ConnectionId::default().to_string(),
     }
+    .try_into()
+    .expect("invalid message")
 }
 
 pub fn msg_connection_open_ack(
     connection_id: ConnectionId,
-    client_state: AnyClientState,
+    client_state: Any,
 ) -> MsgConnectionOpenAck {
-    let counterparty_connection_id =
-        ConnectionId::from_str("counterpart_test_connection")
-            .expect("Creating a connection ID failed");
+    let consensus_height = Height::new(0, 1).expect("invalid height");
+    let counterparty = dummy_connection_counterparty();
     MsgConnectionOpenAck {
-        connection_id,
-        counterparty_connection_id,
-        client_state: Some(client_state),
-        proofs: dummy_proofs(),
+        conn_id_on_a: connection_id,
+        conn_id_on_b: counterparty.connection_id().cloned().unwrap(),
+        client_state_of_a_on_b: client_state,
+        proof_conn_end_on_b: dummy_proof(),
+        proof_client_state_of_a_on_b: dummy_proof(),
+        proof_consensus_state_of_a_on_b: dummy_proof(),
+        proofs_height_on_b: dummy_proof_height(),
+        consensus_height_of_a_on_b: consensus_height,
         version: ConnVersion::default(),
-        signer: Signer::new("test"),
+        signer: Signer::from_str("test").expect("invalid signer"),
     }
 }
 
@@ -395,33 +504,29 @@ pub fn msg_connection_open_confirm(
     connection_id: ConnectionId,
 ) -> MsgConnectionOpenConfirm {
     MsgConnectionOpenConfirm {
-        connection_id,
-        proofs: dummy_proofs(),
-        signer: Signer::new("test"),
+        conn_id_on_b: connection_id,
+        proof_conn_end_on_a: dummy_proof(),
+        proof_height_on_a: dummy_proof_height(),
+        signer: Signer::from_str("test").expect("invalid signer"),
     }
 }
 
-fn dummy_proofs() -> Proofs {
-    let height = Height::new(0, 1);
-    let consensus_proof =
-        ConsensusProof::new(vec![0].try_into().unwrap(), height).unwrap();
-    Proofs::new(
-        vec![0].try_into().unwrap(),
-        Some(vec![0].try_into().unwrap()),
-        Some(consensus_proof),
-        None,
-        height,
-    )
-    .unwrap()
+fn dummy_proof() -> CommitmentProofBytes {
+    vec![0].try_into().unwrap()
+}
+
+fn dummy_proof_height() -> Height {
+    Height::new(0, 1).unwrap()
 }
 
 fn dummy_connection_counterparty() -> ConnCounterparty {
-    let counterpart_client_id = ClientId::from_str("counterpart_test_client")
-        .expect("Creating a client ID failed");
-    let counterpart_conn_id =
-        ConnectionId::from_str("counterpart_test_connection")
-            .expect("Creating a connection ID failed");
-    connection_counterparty(counterpart_client_id, counterpart_conn_id)
+    let client_type = ClientType::new(MOCK_CLIENT_TYPE.to_string());
+    let client_id = ClientId::new(client_type, 42).expect("invalid client ID");
+    let conn_id = ConnectionId::new(12);
+    let commitment_prefix =
+        CommitmentPrefix::try_from(COMMITMENT_PREFIX.to_vec())
+            .expect("the prefix should be parsable");
+    ConnCounterparty::new(client_id, Some(conn_id), commitment_prefix)
 }
 
 pub fn msg_channel_open_init(
@@ -429,9 +534,12 @@ pub fn msg_channel_open_init(
     conn_id: ConnectionId,
 ) -> MsgChannelOpenInit {
     MsgChannelOpenInit {
-        port_id,
-        channel: dummy_channel(ChanState::Init, Order::Ordered, conn_id),
-        signer: Signer::new("test"),
+        port_id_on_a: port_id,
+        connection_hops_on_a: vec![conn_id],
+        port_id_on_b: PortId::transfer(),
+        ordering: Order::Unordered,
+        signer: Signer::from_str("test").expect("invalid signer"),
+        version_proposal: ChanVersion::new(VERSION.to_string()),
     }
 }
 
@@ -439,13 +547,20 @@ pub fn msg_channel_open_try(
     port_id: PortId,
     conn_id: ConnectionId,
 ) -> MsgChannelOpenTry {
+    let counterparty = dummy_channel_counterparty();
+    #[allow(deprecated)]
     MsgChannelOpenTry {
-        port_id,
-        previous_channel_id: None,
-        channel: dummy_channel(ChanState::TryOpen, Order::Ordered, conn_id),
-        counterparty_version: ChanVersion::ics20(),
-        proofs: dummy_proofs(),
-        signer: Signer::new("test"),
+        port_id_on_b: port_id,
+        connection_hops_on_b: vec![conn_id],
+        port_id_on_a: counterparty.port_id().clone(),
+        chan_id_on_a: counterparty.channel_id().cloned().unwrap(),
+        version_supported_on_a: ChanVersion::new(VERSION.to_string()),
+        proof_chan_end_on_a: dummy_proof(),
+        proof_height_on_a: dummy_proof_height(),
+        ordering: Order::Unordered,
+        signer: Signer::from_str("test").expect("invalid signer"),
+        previous_channel_id: ChannelId::default().to_string(),
+        version_proposal: ChanVersion::default(),
     }
 }
 
@@ -453,15 +568,15 @@ pub fn msg_channel_open_ack(
     port_id: PortId,
     channel_id: ChannelId,
 ) -> MsgChannelOpenAck {
+    let counterparty = dummy_channel_counterparty();
     MsgChannelOpenAck {
-        port_id,
-        channel_id,
-        counterparty_channel_id: *dummy_channel_counterparty()
-            .channel_id()
-            .unwrap(),
-        counterparty_version: ChanVersion::ics20(),
-        proofs: dummy_proofs(),
-        signer: Signer::new("test"),
+        port_id_on_a: port_id,
+        chan_id_on_a: channel_id,
+        chan_id_on_b: counterparty.channel_id().cloned().unwrap(),
+        version_on_b: ChanVersion::new(VERSION.to_string()),
+        proof_chan_end_on_b: dummy_proof(),
+        proof_height_on_b: dummy_proof_height(),
+        signer: Signer::from_str("test").expect("invalid signer"),
     }
 }
 
@@ -470,10 +585,11 @@ pub fn msg_channel_open_confirm(
     channel_id: ChannelId,
 ) -> MsgChannelOpenConfirm {
     MsgChannelOpenConfirm {
-        port_id,
-        channel_id,
-        proofs: dummy_proofs(),
-        signer: Signer::new("test"),
+        port_id_on_b: port_id,
+        chan_id_on_b: channel_id,
+        proof_chan_end_on_a: dummy_proof(),
+        proof_height_on_a: dummy_proof_height(),
+        signer: Signer::from_str("test").expect("invalid signer"),
     }
 }
 
@@ -482,9 +598,9 @@ pub fn msg_channel_close_init(
     channel_id: ChannelId,
 ) -> MsgChannelCloseInit {
     MsgChannelCloseInit {
-        port_id,
-        channel_id,
-        signer: Signer::new("test"),
+        port_id_on_a: port_id,
+        chan_id_on_a: channel_id,
+        signer: Signer::from_str("test").expect("invalid signer"),
     }
 }
 
@@ -493,33 +609,18 @@ pub fn msg_channel_close_confirm(
     channel_id: ChannelId,
 ) -> MsgChannelCloseConfirm {
     MsgChannelCloseConfirm {
-        port_id,
-        channel_id,
-        proofs: dummy_proofs(),
-        signer: Signer::new("test"),
+        port_id_on_b: port_id,
+        chan_id_on_b: channel_id,
+        proof_chan_end_on_a: dummy_proof(),
+        proof_height_on_a: dummy_proof_height(),
+        signer: Signer::from_str("test").expect("invalid signer"),
     }
 }
 
-fn dummy_channel(
-    state: ChanState,
-    order: Order,
-    connection_id: ConnectionId,
-) -> ChannelEnd {
-    ChannelEnd::new(
-        state,
-        order,
-        dummy_channel_counterparty(),
-        vec![connection_id],
-        ChanVersion::ics20(),
-    )
-}
-
 pub fn dummy_channel_counterparty() -> ChanCounterparty {
-    let counterpart_port_id = PortId::from_str("counterpart_test_port")
-        .expect("Creating a port ID failed");
-    let counterpart_channel_id = ChannelId::from_str("channel-42")
-        .expect("Creating a channel ID failed");
-    channel_counterparty(counterpart_port_id, counterpart_channel_id)
+    let port_id = PortId::transfer();
+    let channel_id = ChannelId::new(42);
+    ChanCounterparty::new(port_id, Some(channel_id))
 }
 
 pub fn unorder_channel(channel: &mut ChannelEnd) {
@@ -532,43 +633,46 @@ pub fn msg_transfer(
     token: String,
     sender: &Address,
 ) -> MsgTransfer {
-    let timeout_timestamp =
-        (Timestamp::now() + Duration::from_secs(100)).unwrap();
+    let timestamp = (Timestamp::now() + Duration::from_secs(100)).unwrap();
     MsgTransfer {
-        source_port: port_id,
-        source_channel: channel_id,
-        token: Some(Coin {
+        port_id_on_a: port_id,
+        chan_id_on_a: channel_id,
+        token: Coin {
             denom: token,
             amount: 100u64.to_string(),
-        }),
-        sender: Signer::new(sender.to_string()),
-        receiver: Signer::new(
-            address::testing::gen_established_address().to_string(),
-        ),
-        timeout_height: Height::new(1, 100),
-        timeout_timestamp,
+        },
+        sender: Signer::from_str(&sender.to_string()).expect("invalid signer"),
+        receiver: Signer::from_str(
+            &address::testing::gen_established_address().to_string(),
+        )
+        .expect("invalid signer"),
+        timeout_height_on_b: TimeoutHeight::Never,
+        timeout_timestamp_on_b: timestamp,
     }
 }
 
 pub fn set_timeout_timestamp(msg: &mut MsgTransfer) {
-    msg.timeout_timestamp =
-        (msg.timeout_timestamp - Duration::from_secs(101)).unwrap();
+    msg.timeout_timestamp_on_b =
+        (msg.timeout_timestamp_on_b - Duration::from_secs(101)).unwrap();
 }
 
 pub fn msg_packet_recv(packet: Packet) -> MsgRecvPacket {
     MsgRecvPacket {
         packet,
-        proofs: dummy_proofs(),
-        signer: Signer::new("test"),
+        proof_commitment_on_a: dummy_proof(),
+        proof_height_on_a: dummy_proof_height(),
+        signer: Signer::from_str("test").expect("invalid signer"),
     }
 }
 
 pub fn msg_packet_ack(packet: Packet) -> MsgAcknowledgement {
+    let packet_ack = TokenTransferAcknowledgement::success();
     MsgAcknowledgement {
         packet,
-        acknowledgement: PacketAck::result_success().encode_to_vec().into(),
-        proofs: dummy_proofs(),
-        signer: Signer::new("test"),
+        acknowledgement: packet_ack.into(),
+        proof_acked_on_b: dummy_proof(),
+        proof_height_on_b: dummy_proof_height(),
+        signer: Signer::from_str("test").expect("invalid signer"),
     }
 }
 
@@ -580,32 +684,37 @@ pub fn received_packet(
     receiver: &Address,
 ) -> Packet {
     let counterparty = dummy_channel_counterparty();
-    let timeout_timestamp =
-        (Timestamp::now() + Duration::from_secs(100)).unwrap();
-    let data = FungibleTokenPacketData {
-        denom: token,
-        amount: 100u64.to_string(),
-        sender: address::testing::gen_established_address().to_string(),
-        receiver: receiver.to_string(),
+    let timestamp = (Timestamp::now() + Duration::from_secs(100)).unwrap();
+    let coin = PrefixedCoin {
+        denom: token.parse().expect("invalid denom"),
+        amount: 100.into(),
+    };
+    let sender = address::testing::gen_established_address().to_string();
+    let data = PacketData {
+        token: coin,
+        sender: Signer::from_str(&sender).expect("invalid signer"),
+        receiver: Signer::from_str(&receiver.to_string())
+            .expect("invalid signer"),
     };
     Packet {
-        sequence,
-        source_port: counterparty.port_id().clone(),
-        source_channel: *counterparty.channel_id().unwrap(),
-        destination_port: port_id,
-        destination_channel: channel_id,
+        seq_on_a: sequence,
+        port_id_on_a: counterparty.port_id().clone(),
+        chan_id_on_a: counterparty.channel_id().unwrap().clone(),
+        port_id_on_b: port_id,
+        chan_id_on_b: channel_id,
         data: serde_json::to_vec(&data).unwrap(),
-        timeout_height: Height::new(1, 10),
-        timeout_timestamp,
+        timeout_height_on_b: TimeoutHeight::Never,
+        timeout_timestamp_on_b: timestamp,
     }
 }
 
 pub fn msg_timeout(packet: Packet, next_sequence_recv: Sequence) -> MsgTimeout {
     MsgTimeout {
         packet,
-        next_sequence_recv,
-        proofs: dummy_proofs(),
-        signer: Signer::new("test"),
+        next_seq_recv_on_b: next_sequence_recv,
+        proof_unreceived_on_b: dummy_proof(),
+        proof_height_on_b: dummy_proof_height(),
+        signer: Signer::from_str("test").expect("invalid signer"),
     }
 }
 
@@ -613,22 +722,46 @@ pub fn msg_timeout_on_close(
     packet: Packet,
     next_sequence_recv: Sequence,
 ) -> MsgTimeoutOnClose {
-    // add the channel proof
-    let height = Height::new(0, 1);
-    let consensus_proof =
-        ConsensusProof::new(vec![0].try_into().unwrap(), height).unwrap();
-    let proofs = Proofs::new(
-        vec![0].try_into().unwrap(),
-        Some(vec![0].try_into().unwrap()),
-        Some(consensus_proof),
-        Some(vec![0].try_into().unwrap()),
-        height,
-    )
-    .unwrap();
     MsgTimeoutOnClose {
         packet,
-        next_sequence_recv,
-        proofs,
-        signer: Signer::new("test"),
+        next_seq_recv_on_b: next_sequence_recv,
+        proof_unreceived_on_b: dummy_proof(),
+        proof_close_on_b: dummy_proof(),
+        proof_height_on_b: dummy_proof_height(),
+        signer: Signer::from_str("test").expect("invalid signer"),
     }
+}
+
+pub fn packet_from_message(
+    msg: &MsgTransfer,
+    sequence: Sequence,
+    counterparty: &ChanCounterparty,
+) -> Packet {
+    let coin = PrefixedCoin::try_from(msg.token.clone()).expect("invalid coin");
+    let packet_data = PacketData {
+        token: coin,
+        sender: msg.sender.clone(),
+        receiver: msg.receiver.clone(),
+    };
+    let data =
+        serde_json::to_vec(&packet_data).expect("Encoding PacketData failed");
+
+    Packet {
+        seq_on_a: sequence,
+        port_id_on_a: msg.port_id_on_a.clone(),
+        chan_id_on_a: msg.chan_id_on_a.clone(),
+        port_id_on_b: counterparty.port_id.clone(),
+        chan_id_on_b: counterparty
+            .channel_id()
+            .cloned()
+            .expect("the counterparty channel should exist"),
+        data,
+        timeout_height_on_b: msg.timeout_height_on_b,
+        timeout_timestamp_on_b: msg.timeout_timestamp_on_b,
+    }
+}
+
+pub fn balance_key_with_ibc_prefix(denom: String, owner: &Address) -> Key {
+    let prefix = ibc_token_prefix(denom).expect("invalid denom");
+    token::multitoken_balance_key(&prefix, owner)
 }

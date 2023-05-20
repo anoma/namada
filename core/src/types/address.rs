@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::ibc::signer::Signer;
 use crate::types::key;
 use crate::types::key::PublicKeyHash;
 use crate::types::storage::Key;
@@ -362,6 +363,15 @@ impl FromStr for Address {
 
     fn from_str(s: &str) -> Result<Self> {
         Address::decode(s)
+    }
+}
+
+/// for IBC signer
+impl TryFrom<Signer> for Address {
+    type Error = DecodeError;
+
+    fn try_from(signer: Signer) -> Result<Self> {
+        Address::decode(signer.as_ref())
     }
 }
 

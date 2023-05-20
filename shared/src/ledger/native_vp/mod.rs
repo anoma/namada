@@ -20,7 +20,9 @@ use crate::ledger::storage::{Storage, StorageHasher};
 use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
-use crate::types::storage::{BlockHash, BlockHeight, Epoch, Key, TxIndex};
+use crate::types::storage::{
+    BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
+};
 use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::WasmCacheAccess;
 
@@ -237,6 +239,13 @@ where
         self.ctx.get_block_height()
     }
 
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, storage_api::Error> {
+        self.ctx.get_block_header(height)
+    }
+
     fn get_block_hash(&self) -> Result<BlockHash, storage_api::Error> {
         self.ctx.get_block_hash()
     }
@@ -321,6 +330,13 @@ where
         self.ctx.get_block_height()
     }
 
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, storage_api::Error> {
+        self.ctx.get_block_header(height)
+    }
+
     fn get_block_hash(&self) -> Result<BlockHash, storage_api::Error> {
         self.ctx.get_block_hash()
     }
@@ -393,6 +409,18 @@ where
         vp_host_fns::get_block_height(
             &mut self.gas_meter.borrow_mut(),
             self.storage,
+        )
+        .into_storage_result()
+    }
+
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, storage_api::Error> {
+        vp_host_fns::get_block_header(
+            &mut self.gas_meter.borrow_mut(),
+            self.storage,
+            height,
         )
         .into_storage_result()
     }
@@ -496,7 +524,7 @@ where
         #[cfg(not(feature = "wasm-runtime"))]
         {
             // This line is here to prevent unused var clippy warning
-            let _ = (vp_code, input_data);
+            let _ = (vp_code_hash, input_data);
             unimplemented!(
                 "The \"wasm-runtime\" feature must be enabled to use the \
                  `eval` function."
