@@ -9,6 +9,7 @@ pub struct InternalStats {
     vp_cache_size: (usize, usize),
     tx_cache_size: (usize, usize),
     tx_executed: HashMap<String, u64>,
+    wrapper_txs: u64,
 }
 
 impl InternalStats {
@@ -50,15 +51,21 @@ impl InternalStats {
             info.strip_suffix(", ").unwrap().to_string()
         }
     }
+
+    pub fn increment_wrapper_txs(&mut self) {
+        self.wrapper_txs += 1;
+    }
 }
 
 impl Display for InternalStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Applied {} transactions, successful txs: {}, rejected txs: {}, \
-             errored txs: {}, vp cache size: {} - {}, tx cache size {} - {}",
+            "Applied {} transactions. Wrappers: {}, successful inner txs: {}, \
+             rejected inner txs: {}, errored inner txs: {}, vp cache size: {} \
+             - {}, tx cache size {} - {}",
             self.successful_tx + self.rejected_txs + self.errored_txs,
+            self.wrapper_txs,
             self.successful_tx,
             self.rejected_txs,
             self.errored_txs,
