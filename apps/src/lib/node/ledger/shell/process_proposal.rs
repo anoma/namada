@@ -928,6 +928,7 @@ mod test_process_proposal {
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::Epoch;
+    use namada::types::time::DateTimeUtc;
     use namada::types::token;
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
@@ -1088,7 +1089,7 @@ mod test_process_proposal {
     /// if the bridge is not active.
     #[test]
     fn check_rejected_eth_events_bridge_inactive() {
-        let (mut shell, _, _, _) = setup_at_height(3);
+        let (mut shell, _, _, _) = test_utils::setup_at_height(3);
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
         let addr = shell.mode.get_validator_address().expect("Test failed");
         let event = EthereumEvent::TransfersToNamada {
@@ -1138,7 +1139,7 @@ mod test_process_proposal {
     /// if the bridge is not active.
     #[test]
     fn check_rejected_bp_roots_bridge_inactive() {
-        let (mut shell, _a, _b, _c) = setup_at_height(3);
+        let (mut shell, _a, _b, _c) = test_utils::setup_at_height(3);
         shell.wl_storage.storage.block.height =
             shell.wl_storage.storage.last_height;
         shell.commit();
@@ -1194,7 +1195,7 @@ mod test_process_proposal {
     #[cfg(feature = "abcipp")]
     #[test]
     fn check_rejected_vext_bridge_inactive() {
-        let (mut shell, _a, _b, _c) = setup_at_height(3);
+        let (mut shell, _a, _b, _c) = test_utils::setup_at_height(3);
         shell.wl_storage.storage.block.height =
             shell.wl_storage.storage.last_height;
         shell.commit();

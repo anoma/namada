@@ -2074,7 +2074,6 @@ pub mod args {
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::ethereum_events::EthAddress;
-    use namada::types::governance::ProposalVote;
     use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
     use namada::types::masp::MaspValue;

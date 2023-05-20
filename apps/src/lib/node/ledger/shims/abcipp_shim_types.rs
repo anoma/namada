@@ -16,11 +16,12 @@ pub mod shim {
         ResponseCheckTx, ResponseCommit, ResponseEcho, ResponseFlush,
         ResponseInfo, ResponseInitChain, ResponseListSnapshots,
         ResponseLoadSnapshotChunk, ResponseOfferSnapshot, ResponseQuery,
+        VoteInfo,
     };
     #[cfg(feature = "abcipp")]
     use crate::facade::tendermint_proto::abci::{
         RequestExtendVote, RequestVerifyVoteExtension, ResponseExtendVote,
-        ResponseVerifyVoteExtension, VoteInfo,
+        ResponseVerifyVoteExtension,
     };
     use crate::node::ledger::shell;
 

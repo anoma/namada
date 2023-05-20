@@ -5,7 +5,7 @@ use std::hash::Hash;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
 use namada::ledger::eth_bridge::EthBridgeStatus;
-use namada::ledger::parameters::{self, Parameters, Parameters};
+use namada::ledger::parameters::{self, Parameters};
 use namada::ledger::pos::{
     into_tm_voting_power, staking_token_address, PosParams,
 };

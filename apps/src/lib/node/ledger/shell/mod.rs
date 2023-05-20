@@ -37,7 +37,7 @@ use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, WlStorage, DB,
 };
 use namada::ledger::storage_api::{self, StorageRead};
-use namada::ledger::{ibc, pos, protocol, replay_protection};
+use namada::ledger::{pos, protocol, replay_protection};
 use namada::proof_of_stake::{self, read_pos_params, slash};
 use namada::proto::{self, Tx};
 use namada::types::address::{masp, masp_tx_key, Address};
@@ -46,6 +46,7 @@ use namada::types::ethereum_events::EthereumEvent;
 use namada::types::internal::WrapperTxInQueue;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
+use namada::types::time::DateTimeUtc;
 use namada::types::token::{self};
 #[cfg(not(feature = "mainnet"))]
 use namada::types::transaction::MIN_FEE;
@@ -1784,13 +1785,11 @@ mod test_utils {
 
 #[cfg(all(test, not(feature = "abcipp")))]
 mod abciplus_mempool_tests {
-    use borsh::BorshSerialize;
-    use namada::proto::{SignableEthMessage, Signed, Tx};
+    use namada::proto::{SignableEthMessage, Signed};
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::key::RefTo;
-    use namada::types::storage::{BlockHeight, Epoch};
+    use namada::types::storage::BlockHeight;
     use namada::types::transaction::protocol::ProtocolTxType;
-    use namada::types::transaction::{Fee, WrapperTx};
     use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
 
     use crate::node::ledger::shell::test_utils;
@@ -1886,6 +1885,7 @@ mod abciplus_mempool_tests {
 mod test_mempool_validate {
     use namada::proof_of_stake::Epoch;
     use namada::proto::SignedTxData;
+    use namada::types::time::DateTimeUtc;
     use namada::types::transaction::{Fee, WrapperTx};
 
     use super::*;

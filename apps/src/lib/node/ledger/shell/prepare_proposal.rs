@@ -8,7 +8,6 @@ use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::proto::Tx;
 use namada::types::internal::WrapperTxInQueue;
 use namada::types::storage::BlockHeight;
-use namada::types::time::DateTimeUtc;
 use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
@@ -401,9 +400,7 @@ mod test_prepare_proposal {
         NestedSubKey, SubKey,
     };
     use namada::ledger::pos::PosQueries;
-    use namada::proof_of_stake::{
-        consensus_validator_set_handle, Epoch, Epoch,
-    };
+    use namada::proof_of_stake::{consensus_validator_set_handle, Epoch};
     #[cfg(feature = "abcipp")]
     use namada::proto::SignableEthMessage;
     use namada::proto::{Signed, SignedTxData};
@@ -411,9 +408,10 @@ mod test_prepare_proposal {
     #[cfg(feature = "abcipp")]
     use namada::types::key::common;
     use namada::types::key::RefTo;
-    use namada::types::storage::{BlockHeight, Epoch};
+    use namada::types::storage::BlockHeight;
+    use namada::types::time::DateTimeUtc;
     use namada::types::transaction::protocol::ProtocolTxType;
-    use namada::types::transaction::{Fee, TxType, WrapperTx, WrapperTx};
+    use namada::types::transaction::{Fee, TxType, WrapperTx};
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::bridge_pool_roots;
     use namada::types::vote_extensions::ethereum_events;
@@ -432,7 +430,7 @@ mod test_prepare_proposal {
     #[cfg(feature = "abcipp")]
     use crate::node::ledger::shell::test_utils::setup_at_height;
     use crate::node::ledger::shell::test_utils::{
-        self, self, gen_keypair, gen_keypair, TestShell,
+        self, gen_keypair, TestShell,
     };
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
@@ -909,7 +907,7 @@ mod test_prepare_proposal {
         }
 
         let mut req = FinalizeBlock::default();
-        req.header.time = namada::types::time::DateTimeUtc::now();
+        req.header.time = DateTimeUtc::now();
         shell.wl_storage.storage.last_height = LAST_HEIGHT;
         shell.finalize_block(req).expect("Test failed");
         shell.commit();
