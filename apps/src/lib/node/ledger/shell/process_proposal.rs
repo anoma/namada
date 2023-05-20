@@ -149,11 +149,16 @@ where
                     &mut temp_wl_storage,
                     block_time,
                 );
-                if let ErrorCodes::Ok =
-                    ErrorCodes::from_u32(result.code).unwrap()
-                {
+                let error_code = ErrorCodes::from_u32(result.code).unwrap();
+                if let ErrorCodes::Ok = error_code {
                     temp_wl_storage.write_log.commit_tx();
                 } else {
+                    tracing::info!(
+                        "Process proposal rejected an invalid tx. Error code: \
+                         {:?}, info: {}",
+                        error_code,
+                        result.info
+                    );
                     temp_wl_storage.write_log.drop_tx();
                 }
                 result
