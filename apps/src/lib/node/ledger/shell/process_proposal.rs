@@ -689,7 +689,7 @@ where
                     },
                 }
             }
-            TxType::Wrapper(wrapper_tx) => {
+            TxType::Wrapper(wrapper) => {
                 // decrypted txs shouldn't show up before wrapper txs
                 if metadata.has_decrypted_txs {
                     return TxResult {
@@ -751,7 +751,7 @@ where
                 }
 
                 // validate the ciphertext via Ferveo
-                if !wrapper_tx.validate_ciphertext() {
+                if !wrapper.validate_ciphertext() {
                     TxResult {
                         code: ErrorCodes::InvalidTx.into(),
                         info: format!(
@@ -811,20 +811,19 @@ where
                     // transaction key, then the fee payer is effectively
                     // the MASP, otherwise derive
                     // the payer from public key.
-                    let fee_payer = if wrapper_tx.pk != masp_tx_key().ref_to() {
-                        wrapper_tx.fee_payer()
+                    let fee_payer = if wrapper.pk != masp_tx_key().ref_to() {
+                        wrapper.fee_payer()
                     } else {
                         masp()
                     };
                     // check that the fee payer has sufficient balance
                     let balance =
-                        self.get_balance(&wrapper_tx.fee.token, &fee_payer);
+                        self.get_balance(&wrapper.fee.token, &fee_payer);
 
                     // In testnets, tx is allowed to skip fees if it
                     // includes a valid PoW
                     #[cfg(not(feature = "mainnet"))]
-                    let has_valid_pow =
-                        self.has_valid_pow_solution(&wrapper_tx);
+                    let has_valid_pow = self.has_valid_pow_solution(&wrapper);
                     #[cfg(feature = "mainnet")]
                     let has_valid_pow = false;
 
