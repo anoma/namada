@@ -5,12 +5,16 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use bimap::BiHashMap;
+use bip39::Seed;
+use itertools::Itertools;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 #[cfg(feature = "masp-tx-gen")]
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
+use slip10_ed25519;
 
 use super::alias::{self, Alias};
+use super::derivation_path::DerivationPath;
 use super::pre_genesis;
 use crate::ledger::wallet::{StoredKeypair, WalletUtils};
 use crate::types::address::{Address, ImplicitAddress};
@@ -190,7 +194,7 @@ impl Store {
         keys
     }
 
-    /// Get all known addresses by their alias, paired with PKH, if known.
+    /// Get all known addresses by their alias.
     pub fn get_addresses(&self) -> &BiHashMap<Alias, Address> {
         &self.addresses
     }
@@ -223,19 +227,34 @@ impl Store {
 
     /// Generate a new keypair and insert it into the store with the provided
     /// alias. If none provided, the alias will be the public key hash.
-    /// If no password is provided, the keypair will be stored raw without
-    /// encryption. Returns the alias of the key and a reference-counting
-    /// pointer to the key.
+    /// If the alias already exists, optionally force overwrite the keypair
+    /// for the alias.
+    /// If no encryption password is provided, the keypair will be stored raw
+    /// without encryption.
+    /// Optionally, use a given random seed and a BIP44 derivation path.
+    /// Returns the alias of the key and a reference-counting pointer to the
+    /// key.
     pub fn gen_key<U: WalletUtils>(
         &mut self,
         scheme: SchemeType,
         alias: Option<String>,
-        password: Option<String>,
-        force_alias: bool,
+        alias_force: bool,
+        seed_and_derivation_path: Option<(Seed, DerivationPath)>,
+        encryption_password: Option<String>,
     ) -> (Alias, common::SecretKey) {
-        let sk = gen_sk(scheme);
+        let sk = if let Some((seed, derivation_path)) = seed_and_derivation_path
+        {
+            gen_sk_from_seed_and_derivation_path(
+                scheme,
+                seed.as_bytes(),
+                derivation_path,
+            )
+        } else {
+            gen_sk_rng(scheme)
+        };
         let pkh: PublicKeyHash = PublicKeyHash::from(&sk.ref_to());
-        let (keypair_to_store, raw_keypair) = StoredKeypair::new(sk, password);
+        let (keypair_to_store, raw_keypair) =
+            StoredKeypair::new(sk, encryption_password);
         let address = Address::Implicit(ImplicitAddress(pkh.clone()));
         let alias: Alias = alias.unwrap_or_else(|| pkh.clone().into()).into();
         if self
@@ -243,14 +262,14 @@ impl Store {
                 alias.clone(),
                 keypair_to_store,
                 pkh,
-                force_alias,
+                alias_force,
             )
             .is_none()
         {
             panic!("Action cancelled, no changes persisted.");
         }
         if self
-            .insert_address::<U>(alias.clone(), address, force_alias)
+            .insert_address::<U>(alias.clone(), address, alias_force)
             .is_none()
         {
             panic!("Action cancelled, no changes persisted.");
@@ -314,6 +333,12 @@ impl Store {
         pkh: PublicKeyHash,
         force: bool,
     ) -> Option<Alias> {
+        // abort if the key already exists
+        if self.pkhs.contains_key(&pkh) {
+            println!("The key already exists.");
+            return None;
+        }
+
         if alias.is_empty() {
             println!(
                 "Empty alias given, defaulting to {}.",
@@ -613,7 +638,7 @@ impl Store {
 }
 
 /// Generate a new secret key.
-pub fn gen_sk(scheme: SchemeType) -> common::SecretKey {
+pub fn gen_sk_rng(scheme: SchemeType) -> common::SecretKey {
     use rand::rngs::OsRng;
     let mut csprng = OsRng {};
     match scheme {
@@ -626,6 +651,43 @@ pub fn gen_sk(scheme: SchemeType) -> common::SecretKey {
         SchemeType::Common => common::SigScheme::generate(&mut csprng)
             .try_to_sk()
             .unwrap(),
+    }
+}
+
+/// Generate a new secret key from the seed.
+pub fn gen_sk_from_seed_and_derivation_path(
+    scheme: SchemeType,
+    seed: &[u8],
+    derivation_path: DerivationPath,
+) -> common::SecretKey {
+    match scheme {
+        SchemeType::Ed25519 => {
+            let indexes = derivation_path
+                .path()
+                .iter()
+                .map(|idx| idx.to_bits())
+                .collect_vec();
+            // SLIP10 Ed25519 key derivation function promotes all indexes to
+            // hardened indexes.
+            let sk = slip10_ed25519::derive_ed25519_private_key(seed, &indexes);
+            ed25519::SigScheme::from_bytes(sk).try_to_sk().unwrap()
+        }
+        SchemeType::Secp256k1 => {
+            let xpriv = tiny_hderive::bip32::ExtendedPrivKey::derive(
+                seed,
+                derivation_path,
+            )
+            .expect("Secret key derivation should not fail.");
+            secp256k1::SigScheme::from_bytes(xpriv.secret())
+                .try_to_sk()
+                .unwrap()
+        }
+        SchemeType::Common => {
+            panic!(
+                "Cannot generate common signing scheme. Must convert from \
+                 alternative scheme."
+            )
+        }
     }
 }
 
@@ -666,5 +728,164 @@ impl<'de> Deserialize<'de> for AddressVpType {
 
         let raw: String = Deserialize::deserialize(deserializer)?;
         Self::from_str(&raw).map_err(D::Error::custom)
+    }
+}
+
+#[cfg(all(test, feature = "dev"))]
+mod test_wallet {
+    use base58::{self, FromBase58};
+    use bip39::{Language, Mnemonic};
+    use hex;
+
+    use super::super::derivation_path::DerivationPath;
+    use super::*;
+
+    #[test]
+    fn gen_sk_from_mnemonic_code_secp256k1() {
+        const SCHEME: SchemeType = SchemeType::Secp256k1;
+        const MNEMONIC_CODE: &str = "cruise ball fame lucky fabric govern \
+                                     length fruit permit tonight fame pear \
+                                     horse park key chimney furnace lobster \
+                                     foot example shoot dry fuel lawn";
+        const SEED_EXPECTED: &str = "8601e9f639f995f856c8ecfa3cd298d292253d071d6fa75d50dd31f6ba9df743ec279354a73fe78e6011738027fb994e5d904c476c4679c7c35e82586e14297f";
+        const PASSPHRASE: &str = "test";
+        const DERIVATION_PATH: &str = "m/44'/60'/0'/0/0";
+        const SK_EXPECTED: &str =
+            "9e426cc5f63cdbd5f362adb918a07c2b16c593b2bc1b244f33b9e2c3ac6b265a";
+
+        let mnemonic = Mnemonic::from_phrase(MNEMONIC_CODE, Language::English)
+            .expect("Mnemonic construction cannot fail.");
+        let seed = Seed::new(&mnemonic, PASSPHRASE);
+        assert_eq!(format!("{:x}", seed), SEED_EXPECTED);
+
+        let derivation_path =
+            DerivationPath::from_path_str(SCHEME, DERIVATION_PATH)
+                .expect("Derivation path construction cannot fail");
+
+        let sk = gen_sk_from_seed_and_derivation_path(
+            SCHEME,
+            seed.as_bytes(),
+            derivation_path,
+        );
+
+        assert_eq!(&sk.to_string()[2..], SK_EXPECTED);
+    }
+
+    #[test]
+    fn gen_sk_from_mnemonic_code_ed25519() {
+        const SCHEME: SchemeType = SchemeType::Ed25519;
+        const MNEMONIC_CODE: &str = "cruise ball fame lucky fabric govern \
+                                     length fruit permit tonight fame pear \
+                                     horse park key chimney furnace lobster \
+                                     foot example shoot dry fuel lawn";
+        const SEED_EXPECTED: &str = "8601e9f639f995f856c8ecfa3cd298d292253d071d6fa75d50dd31f6ba9df743ec279354a73fe78e6011738027fb994e5d904c476c4679c7c35e82586e14297f";
+        const PASSPHRASE: &str = "test";
+        const DERIVATION_PATH: &str = "m/44'/877'/0'/0/0";
+        const DERIVATION_PATH_HARDENED: &str = "m/44'/877'/0'/0'/0'";
+
+        let mnemonic = Mnemonic::from_phrase(MNEMONIC_CODE, Language::English)
+            .expect("Mnemonic construction cannot fail.");
+        let seed = Seed::new(&mnemonic, PASSPHRASE);
+        assert_eq!(format!("{:x}", seed), SEED_EXPECTED);
+
+        let derivation_path =
+            DerivationPath::from_path_str(SCHEME, DERIVATION_PATH)
+                .expect("Derivation path construction cannot fail");
+
+        let derivation_path_hardened =
+            DerivationPath::from_path_str(SCHEME, DERIVATION_PATH_HARDENED)
+                .expect("Derivation path construction cannot fail");
+
+        let sk = gen_sk_from_seed_and_derivation_path(
+            SCHEME,
+            seed.as_bytes(),
+            derivation_path,
+        );
+
+        let sk_hard = gen_sk_from_seed_and_derivation_path(
+            SCHEME,
+            seed.as_bytes(),
+            derivation_path_hardened,
+        );
+
+        // check that indexes are promoted to hardened
+        assert_eq!(&sk.to_string(), &sk_hard.to_string());
+    }
+
+    fn do_test_gen_sk_from_seed_and_derivation_path(
+        scheme: SchemeType,
+        seed: &str,
+        derivation_path: &str,
+        priv_key: &str,
+    ) {
+        let sk = gen_sk_from_seed_and_derivation_path(
+            scheme,
+            hex::decode(seed)
+                .expect("Seed parsing cannot fail.")
+                .as_slice(),
+            DerivationPath::from_path_str(scheme, derivation_path)
+                .expect("Derivation path construction cannot fail"),
+        );
+        let sk_expected = if priv_key.starts_with("xprv") {
+            // this is an extended private key encoded in base58
+            let xprv =
+                priv_key.from_base58().expect("XPRV parsing cannot fail.");
+            hex::encode(&xprv[46..78])
+        } else {
+            priv_key.to_string()
+        };
+        assert_eq!(&sk.to_string()[2..], sk_expected);
+    }
+
+    #[test]
+    fn gen_sk_from_seed_secp256k1() {
+        const SCHEME: SchemeType = SchemeType::Secp256k1;
+        // https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki
+        {
+            // Test vector 1
+            const SEED: &str = "000102030405060708090a0b0c0d0e0f";
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m", "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'", "xprv9uHRZZhk6KAJC1avXpDAp4MDc3sQKNxDiPvvkX8Br5ngLNv1TxvUxt4cV1rGL5hj6KCesnDYUhd7oWgT11eZG7XnxHrnYeSvkzY7d2bhkJ7");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/1", "xprv9wTYmMFdV23N2TdNG573QoEsfRrWKQgWeibmLntzniatZvR9BmLnvSxqu53Kw1UmYPxLgboyZQaXwTCg8MSY3H2EU4pWcQDnRnrVA1xe8fs");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/1/2'", "xprv9z4pot5VBttmtdRTWfWQmoH1taj2axGVzFqSb8C9xaxKymcFzXBDptWmT7FwuEzG3ryjH4ktypQSAewRiNMjANTtpgP4mLTj34bhnZX7UiM");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/1/2'/2", "xprvA2JDeKCSNNZky6uBCviVfJSKyQ1mDYahRjijr5idH2WwLsEd4Hsb2Tyh8RfQMuPh7f7RtyzTtdrbdqqsunu5Mm3wDvUAKRHSC34sJ7in334");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/1/2'/2/1000000000", "xprvA41z7zogVVwxVSgdKUHDy1SKmdb533PjDz7J6N6mV6uS3ze1ai8FHa8kmHScGpWmj4WggLyQjgPie1rFSruoUihUZREPSL39UNdE3BBDu76");
+        }
+        {
+            // Test vector 2
+            const SEED: &str = "fffcf9f6f3f0edeae7e4e1dedbd8d5d2cfccc9c6c3c0bdbab7b4b1aeaba8a5a29f9c999693908d8a8784817e7b7875726f6c696663605d5a5754514e4b484542";
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m", "xprv9s21ZrQH143K31xYSDQpPDxsXRTUcvj2iNHm5NUtrGiGG5e2DtALGdso3pGz6ssrdK4PFmM8NSpSBHNqPqm55Qn3LqFtT2emdEXVYsCzC2U");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0", "xprv9vHkqa6EV4sPZHYqZznhT2NPtPCjKuDKGY38FBWLvgaDx45zo9WQRUT3dKYnjwih2yJD9mkrocEZXo1ex8G81dwSM1fwqWpWkeS3v86pgKt");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0/2147483647'", "xprv9wSp6B7kry3Vj9m1zSnLvN3xH8RdsPP1Mh7fAaR7aRLcQMKTR2vidYEeEg2mUCTAwCd6vnxVrcjfy2kRgVsFawNzmjuHc2YmYRmagcEPdU9");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0/2147483647'/1", "xprv9zFnWC6h2cLgpmSA46vutJzBcfJ8yaJGg8cX1e5StJh45BBciYTRXSd25UEPVuesF9yog62tGAQtHjXajPPdbRCHuWS6T8XA2ECKADdw4Ef");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0/2147483647'/1/2147483646'", "xprvA1RpRA33e1JQ7ifknakTFpgNXPmW2YvmhqLQYMmrj4xJXXWYpDPS3xz7iAxn8L39njGVyuoseXzU6rcxFLJ8HFsTjSyQbLYnMpCqE2VbFWc");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0/2147483647'/1/2147483646'/2", "xprvA2nrNbFZABcdryreWet9Ea4LvTJcGsqrMzxHx98MMrotbir7yrKCEXw7nadnHM8Dq38EGfSh6dqA9QWTyefMLEcBYJUuekgW4BYPJcr9E7j");
+        }
+    }
+
+    #[test]
+    fn gen_sk_from_seed_ed25519() {
+        const SCHEME: SchemeType = SchemeType::Ed25519;
+        // https://github.com/satoshilabs/slips/blob/master/slip-0010.md
+        {
+            // Test vector 1 for ed15519
+            const SEED: &str = "000102030405060708090a0b0c0d0e0f";
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m", "2b4be7f19ee27bbf30c667b642d5f4aa69fd169872f8fc3059c08ebae2eb19e7");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'", "68e0fe46dfb67e368c75379acec591dad19df3cde26e63b93a8e704f1dade7a3");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/1'", "b1d0bad404bf35da785a64ca1ac54b2617211d2777696fbffaf208f746ae84f2");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/1'/2'", "92a5b23c0b8a99e37d07df3fb9966917f5d06e02ddbd909c7e184371463e9fc9");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/1'/2'/2'", "30d1dc7e5fc04c31219ab25a27ae00b50f6fd66622f6e9c913253d6511d1e662");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/1'/2'/2'/1000000000'", "8f94d394a8e8fd6b1bc2f3f49f5c47e385281d5c17e65324b0f62483e37e8793");
+        }
+        {
+            // Test vector 2 for ed15519
+            const SEED: &str = "fffcf9f6f3f0edeae7e4e1dedbd8d5d2cfccc9c6c3c0bdbab7b4b1aeaba8a5a29f9c999693908d8a8784817e7b7875726f6c696663605d5a5754514e4b484542";
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m", "171cb88b1b3c1db25add599712e36245d75bc65a1a5c9e18d76f9f2b1eab4012");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'", "1559eb2bbec5790b0c65d8693e4d0875b1747f4970ae8b650486ed7470845635");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/2147483647'", "ea4f5bfe8694d8bb74b7b59404632fd5968b774ed545e810de9c32a4fb4192f4");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/2147483647'/1'", "3757c7577170179c7868353ada796c839135b3d30554bbb74a4b1e4a5a58505c");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/2147483647'/1'/2147483646'", "5837736c89570de861ebc173b1086da4f505d4adb387c6a1b1342d5e4ac9ec72");
+            do_test_gen_sk_from_seed_and_derivation_path(SCHEME, SEED, "m/0'/2147483647'/1'/2147483646'/2'", "551d333177df541ad876a60ea71f00447931c0a9da16f227c11ea080d7391b8d");
+        }
     }
 }

@@ -10,7 +10,7 @@ use namada::ledger::wallet::{gen_key_to_store, WalletUtils};
 use namada::types::key::SchemeType;
 
 use crate::wallet::store::gen_validator_keys;
-use crate::wallet::{read_and_confirm_pwd, CliWalletUtils};
+use crate::wallet::{read_and_confirm_encryption_password, CliWalletUtils};
 
 /// Validator pre-genesis wallet file name
 const VALIDATOR_FILE_NAME: &str = "wallet.toml";
@@ -27,7 +27,7 @@ pub fn gen_and_store(
     unsafe_dont_encrypt: bool,
     store_dir: &Path,
 ) -> std::io::Result<ValidatorWallet> {
-    let password = read_and_confirm_pwd(unsafe_dont_encrypt);
+    let password = read_and_confirm_encryption_password(unsafe_dont_encrypt);
     let validator = gen(scheme, password);
     let data = validator.store.encode();
     let wallet_path = validator_file_name(store_dir);
@@ -66,9 +66,7 @@ pub fn load(store_dir: &Path) -> Result<ValidatorWallet, ReadError> {
                 || store.consensus_key.is_encrypted()
                 || store.account_key.is_encrypted()
             {
-                Some(CliWalletUtils::read_password(
-                    "Enter decryption password: ",
-                ))
+                Some(CliWalletUtils::read_decryption_password())
             } else {
                 None
             };

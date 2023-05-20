@@ -31,7 +31,9 @@ use crate::config::{self, Config, TendermintMode};
 use crate::facade::tendermint::node::Id as TendermintNodeId;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::node::ledger::tendermint_node;
-use crate::wallet::{pre_genesis, read_and_confirm_pwd, CliWalletUtils};
+use crate::wallet::{
+    pre_genesis, read_and_confirm_encryption_password, CliWalletUtils,
+};
 use crate::wasm_loader;
 
 pub const NET_ACCOUNTS_DIR: &str = "setup";
@@ -491,7 +493,7 @@ pub fn init_network(
         config.address = Some(address.to_string());
 
         // Generate the consensus, account and reward keys, unless they're
-        // pre-defined.
+        // pre-defined. Do not use mnemonic code / HD derivation path.
         let mut wallet = crate::wallet::load_or_new(&chain_dir);
 
         let consensus_pk = try_parse_public_key(
@@ -501,13 +503,11 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-consensus-key", name);
             println!("Generating validator {} consensus key...", name);
-            let password = read_and_confirm_pwd(unsafe_dont_encrypt);
-            let (_alias, keypair) = wallet.gen_key(
-                SchemeType::Ed25519,
-                Some(alias),
-                password,
-                true,
-            );
+            let password =
+                read_and_confirm_encryption_password(unsafe_dont_encrypt);
+            let (_alias, keypair) = wallet
+                .gen_key(SchemeType::Ed25519, Some(alias), true, password, None)
+                .expect("Key generation should not fail.");
 
             // Write consensus key for Tendermint
             tendermint_node::write_validator_key(&tm_home_dir, &keypair);
@@ -522,13 +522,11 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-account-key", name);
             println!("Generating validator {} account key...", name);
-            let password = read_and_confirm_pwd(unsafe_dont_encrypt);
-            let (_alias, keypair) = wallet.gen_key(
-                SchemeType::Ed25519,
-                Some(alias),
-                password,
-                true,
-            );
+            let password =
+                read_and_confirm_encryption_password(unsafe_dont_encrypt);
+            let (_alias, keypair) = wallet
+                .gen_key(SchemeType::Ed25519, Some(alias), true, password, None)
+                .expect("Key generation should not fail.");
             keypair.ref_to()
         });
 
@@ -539,13 +537,11 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-protocol-key", name);
             println!("Generating validator {} protocol signing key...", name);
-            let password = read_and_confirm_pwd(unsafe_dont_encrypt);
-            let (_alias, keypair) = wallet.gen_key(
-                SchemeType::Ed25519,
-                Some(alias),
-                password,
-                true,
-            );
+            let password =
+                read_and_confirm_encryption_password(unsafe_dont_encrypt);
+            let (_alias, keypair) = wallet
+                .gen_key(SchemeType::Ed25519, Some(alias), true, password, None)
+                .expect("Key generation should not fail.");
             keypair.ref_to()
         });
 
@@ -593,7 +589,8 @@ pub fn init_network(
         crate::wallet::save(&wallet).unwrap();
     });
 
-    // Create a wallet for all accounts other than validators
+    // Create a wallet for all accounts other than validators.
+    //  Do not use mnemonic code / HD derivation path.
     let mut wallet =
         crate::wallet::load_or_new(&accounts_dir.join(NET_OTHER_ACCOUNTS_DIR));
     if let Some(established) = &mut config.established {
@@ -625,13 +622,17 @@ pub fn init_network(
                     "Generating implicit account {} key and address ...",
                     name
                 );
-                let password = read_and_confirm_pwd(unsafe_dont_encrypt);
-                let (_alias, keypair) = wallet.gen_key(
-                    SchemeType::Ed25519,
-                    Some(name.clone()),
-                    password,
-                    true,
-                );
+                let password =
+                    read_and_confirm_encryption_password(unsafe_dont_encrypt);
+                let (_alias, keypair) = wallet
+                    .gen_key(
+                        SchemeType::Ed25519,
+                        Some(name.clone()),
+                        true,
+                        password,
+                        None,
+                    )
+                    .expect("Key generation should not fail.");
                 let public_key =
                     genesis_config::HexString(keypair.ref_to().to_string());
                 config.public_key = Some(public_key);
@@ -877,13 +878,17 @@ fn init_established_account(
     }
     if config.public_key.is_none() {
         println!("Generating established account {} key...", name.as_ref());
-        let password = read_and_confirm_pwd(unsafe_dont_encrypt);
-        let (_alias, keypair) = wallet.gen_key(
-            SchemeType::Ed25519,
-            Some(format!("{}-key", name.as_ref())),
-            password,
-            true,
-        );
+        let password =
+            read_and_confirm_encryption_password(unsafe_dont_encrypt);
+        let (_alias, keypair) = wallet
+            .gen_key(
+                SchemeType::Ed25519,
+                Some(format!("{}-key", name.as_ref())),
+                true,
+                password,
+                None, // do not use mnemonic code / HD derivation path
+            )
+            .expect("Key generation should not fail.");
         let public_key =
             genesis_config::HexString(keypair.ref_to().to_string());
         config.public_key = Some(public_key);

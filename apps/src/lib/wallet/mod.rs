@@ -7,15 +7,16 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
+use bip39::{Language, Mnemonic};
 pub use namada::ledger::wallet::alias::Alias;
 use namada::ledger::wallet::{
-    ConfirmationResponse, FindKeyError, Wallet, WalletUtils,
+    ConfirmationResponse, FindKeyError, GenRestoreKeyError, Wallet, WalletUtils,
 };
-pub use namada::ledger::wallet::{
-    DecryptionError, StoredKeypair, ValidatorData, ValidatorKeys,
-};
+pub use namada::ledger::wallet::{ValidatorData, ValidatorKeys};
 use namada::types::key::*;
+use rand_core::OsRng;
 pub use store::wallet_file;
+use zeroize::Zeroizing;
 
 use crate::cli;
 use crate::config::genesis::genesis_config::GenesisConfig;
@@ -24,34 +25,78 @@ use crate::config::genesis::genesis_config::GenesisConfig;
 pub struct CliWalletUtils;
 
 impl WalletUtils for CliWalletUtils {
+    type Rng = OsRng;
     type Storage = PathBuf;
 
-    /// Read the password for encryption/decryption from the file/env/stdin.
-    /// Panics if all options are empty/invalid.
-    fn read_password(prompt_msg: &str) -> String {
+    fn read_decryption_password() -> String {
+        match env::var("NAMADA_WALLET_PASSWORD_FILE") {
+            Ok(path) => fs::read_to_string(path)
+                .expect("Something went wrong reading the file"),
+            Err(_) => match env::var("NAMADA_WALLET_PASSWORD") {
+                Ok(password) => password,
+                Err(_) => {
+                    let prompt = "Enter your decryption password: ";
+                    rpassword::read_password_from_tty(Some(prompt))
+                        .expect("Failed reading password from tty.")
+                }
+            },
+        }
+    }
+
+    fn read_encryption_password() -> String {
         let pwd = match env::var("NAMADA_WALLET_PASSWORD_FILE") {
             Ok(path) => fs::read_to_string(path)
                 .expect("Something went wrong reading the file"),
             Err(_) => match env::var("NAMADA_WALLET_PASSWORD") {
                 Ok(password) => password,
-                Err(_) => rpassword::read_password_from_tty(Some(prompt_msg))
-                    .unwrap_or_default(),
+                Err(_) => {
+                    let prompt = "Enter your encryption password: ";
+                    read_and_confirm_passphrase_tty(prompt).unwrap_or_else(
+                        |e| {
+                            eprintln!("{e}");
+                            eprintln!(
+                                "Action cancelled, no changes persisted."
+                            );
+                            cli::safe_exit(1)
+                        },
+                    )
+                }
             },
         };
         if pwd.is_empty() {
             eprintln!("Password cannot be empty");
+            eprintln!("Action cancelled, no changes persisted.");
             cli::safe_exit(1)
         }
         pwd
     }
 
-    /// Read an alias from the file/env/stdin.
     fn read_alias(prompt_msg: &str) -> String {
         print!("Choose an alias for {}: ", prompt_msg);
         io::stdout().flush().unwrap();
         let mut alias = String::new();
         io::stdin().read_line(&mut alias).unwrap();
         alias.trim().to_owned()
+    }
+
+    fn read_mnemonic_code() -> Result<Mnemonic, GenRestoreKeyError> {
+        let phrase = get_secure_user_input("Input mnemonic code: ")
+            .map_err(|_| GenRestoreKeyError::MnemonicInputError)?;
+        Mnemonic::from_phrase(phrase.as_ref(), Language::English)
+            .map_err(|_| GenRestoreKeyError::MnemonicInputError)
+    }
+
+    fn read_mnemonic_passphrase(confirm: bool) -> String {
+        let prompt = "Enter BIP39 passphrase (empty for none): ";
+        let result = if confirm {
+            read_and_confirm_passphrase_tty(prompt)
+        } else {
+            rpassword::read_password_from_tty(Some(prompt))
+        };
+        result.unwrap_or_else(|e| {
+            eprintln!("{}", e);
+            cli::safe_exit(1);
+        })
     }
 
     // The given alias has been selected but conflicts with another alias in
@@ -99,6 +144,36 @@ impl WalletUtils for CliWalletUtils {
         println!("Invalid option, try again.");
         Self::show_overwrite_confirmation(alias, alias_for)
     }
+}
+
+fn get_secure_user_input<S>(request: S) -> std::io::Result<Zeroizing<String>>
+where
+    S: std::fmt::Display,
+{
+    print!("{} ", request);
+    std::io::stdout().flush()?;
+
+    let mut response = String::new();
+    std::io::stdin().read_line(&mut response)?;
+    Ok(Zeroizing::new(response))
+}
+
+pub fn read_and_confirm_passphrase_tty(
+    prompt: &str,
+) -> Result<String, std::io::Error> {
+    let passphrase = rpassword::read_password_from_tty(Some(prompt))?;
+    if !passphrase.is_empty() {
+        let confirmed = rpassword::read_password_from_tty(Some(
+            "Enter same passphrase again: ",
+        ))?;
+        if confirmed != passphrase {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Passphrases did not match",
+            ));
+        }
+    }
+    Ok(passphrase)
 }
 
 /// Generate keypair
@@ -183,28 +258,38 @@ pub fn load_or_new_from_genesis(
     Wallet::<CliWalletUtils>::new(store_dir.to_path_buf(), store)
 }
 
-/// Read the password for encryption from the file/env/stdin with
-/// confirmation.
-pub fn read_and_confirm_pwd(unsafe_dont_encrypt: bool) -> Option<String> {
-    let password = if unsafe_dont_encrypt {
+/// Read the password for encryption from the file/env/stdin, with
+/// confirmation if read from stdin.
+pub fn read_and_confirm_encryption_password(
+    unsafe_dont_encrypt: bool,
+) -> Option<String> {
+    if unsafe_dont_encrypt {
         println!("Warning: The keypair will NOT be encrypted.");
         None
     } else {
-        Some(CliWalletUtils::read_password(
-            "Enter your encryption password: ",
-        ))
-    };
-    // Bis repetita for confirmation.
-    let to_confirm = if unsafe_dont_encrypt {
-        None
-    } else {
-        Some(CliWalletUtils::read_password(
-            "To confirm, please enter the same encryption password once more: ",
-        ))
-    };
-    if to_confirm != password {
-        eprintln!("Your two inputs do not match!");
-        cli::safe_exit(1)
+        Some(CliWalletUtils::read_encryption_password())
     }
-    password
+}
+
+#[cfg(test)]
+mod tests {
+    use bip39::MnemonicType;
+    use namada::ledger::wallet::WalletUtils;
+    use rand_core;
+
+    use super::CliWalletUtils;
+
+    #[test]
+    fn test_generate_mnemonic() {
+        const MNEMONIC_TYPE: MnemonicType = MnemonicType::Words12;
+
+        let mut rng = rand_core::OsRng;
+        let mnemonic1 =
+            CliWalletUtils::generate_mnemonic_code(MNEMONIC_TYPE, &mut rng)
+                .unwrap();
+        let mnemonic2 =
+            CliWalletUtils::generate_mnemonic_code(MNEMONIC_TYPE, &mut rng)
+                .unwrap();
+        assert_ne!(mnemonic1.into_phrase(), mnemonic2.into_phrase());
+    }
 }
