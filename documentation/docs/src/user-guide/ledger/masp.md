@@ -1,6 +1,6 @@
 # Shielded transfers
 
-In Namada, shielded transfers are enabled by the Multi-Asset Shielded Pool (MASP). The MASP is a zero-knowledge circuit (zk-SNARK) that extends the Zcash Sapling circuit to add support for sending arbitrary assets. All assets in the pool share the same anonymity set, this means that the more transactions are issued to MASP, the stronger are the privacity guarantees.
+In Namada, shielded transfers are enabled by the [Multi-Asset Shielded Pool](https://specs.namada.net/masp/ledger-integration.html?highlight=MASP#masp-integration-spec) (MASP). The MASP is a zero-knowledge circuit (zk-SNARK) that extends the Zcash Sapling circuit to add support for sending arbitrary assets. All assets in the pool share the same anonymity set, this means that the more transactions are issued to MASP, the stronger are the privacity guarantees.
 
 ## Using MASP
 
@@ -8,53 +8,19 @@ If you are familiar with Zcash, the set of interactions you can execute with the
 
 - [**Shielding transfers:** transparent to shielded addresses](#shielding-transfers)
 - [**Shielded transfers:** shielded to shielded addresses](#shielded-transfers)
-- [**Deshielding transfers:** shielded to transparent addresses](#deshielding-tranfers)
+- [**Unshielding transfers:** shielded to transparent addresses](#unshielding-transfers)
 
 ```admonish info "Lexicon"
 - A **Spending Key** is a type of private key that allows any user in possession of it to spend the balance of the associated address. For shielded addresses, possessing the Spending Key also allows the user to view the address’ balance and transaction data.
 - A **Viewing Key** allows any user in possession of it to view and disclose transaction details. It is derived from the Spending Key and hold the same alias. 
 ```
 
-### Shielding transfers
+### Shielded transfers
 
 To try out shielded transfers, you first need to be in possession of a
 transparent account with some token balance.
 
-#### Create your transparent account
 
-Generate an implicit account:
-
-```shell
-namadaw address gen --alias [your-implicit-account-alias]
-```
-
-Then, create an established account on-chain using the implicit account you've just generated:
-
-```shell
-namadac init-account \
-    --source [your-implicit-account-alias] \
-    --public-key [your-implicit-account-alias] \
-    --alias [your-established-account-alias]
-```
-
-#### Get tokens from the Testnet Faucet
-
-```admonish info "Testnet Faucet Tokens"
-The testnet tokens which the faucet can provide you have the aliases `NAM`,
-`BTC`, `ETH`, `DOT`, `Schnitzel`, `Apfel`, and `Kartoffel`. The faucet
-will transfer these in increments of 1000 maximum at a time.
-```
-
-```shell
-namadac transfer \
-    --token btc \
-    --amount 1000 \
-    --source faucet \
-    --target [your-established-account-alias] \
-    --signer [your-implicit-account-alias]
-```
-
-Now that you have a transparent account with some tokens, you can generate a Spending Key to hold your shielded balances.
 
 #### Generate your Spending Key
 
@@ -119,7 +85,7 @@ namadac transfer \
     --signer [your-implicit-account-alias]
 ```
 
-### Deshielding tranfers
+### Unshielding transfers
 
 You can also transfer back your balance to a transparent account:
 

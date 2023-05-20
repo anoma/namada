@@ -1,5 +1,5 @@
 # An introduction to Namada Addresses
-The purpose of the Namada wallet is to provide a user-interface to store and manage both keys and addresses. In this context, keys are (potentially) very large integers that have some meaning on an eliptic curve. Keys are the fundamental building blocks for accounts on Namada. Keys come in the form of *pairs* (secret and public), can be used to derive the **account address** (first 40 chars of the SHA256 hash of the public key).
+The purpose of the Namada wallet is to provide a user-interface to store and manage both keys and addresses. [Technically speaking](https://vitalik.ca/general/2017/01/14/exploring_ecp.html), keys are just(potentially) very large integers that have some meaning on an eliptic curve. The wallet simply "remembers" these very large numbers on your behalf. Keys are the fundamental building blocks for accounts on Namada. Keys come in the form of *pairs* (secret and public), and can be used to derive the **account address** (first 40 chars of the SHA256 hash of the public key).
 
 
 All accounts in Namada have a unique address, exactly one Validity Predicate and optionally any additional data in its dynamic storage sub-space.

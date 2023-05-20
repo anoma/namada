@@ -15,3 +15,4 @@ Once inside the directory containing the binaries:
 ```bash
 sudo cp ./namada* /usr/local/bin/
 ```
+

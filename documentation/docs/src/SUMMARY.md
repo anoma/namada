@@ -13,6 +13,7 @@
   - [The Ledger](./user-guide/ledger.md)
   - [Wallet guide](./user-guide/wallet/README.md)
     - [Namada addresses](./user-guide/wallet/an-introduction-to-namada-addresses.md)
+    - [Established Accounts](./user-guide/wallet/established-accounts.md)
     - [File system wallet](./user-guide/wallet/file-system-wallet.md)
     - [Web wallet](./user-guide/wallet/web-wallet.md)
     - [Paper wallet](./user-guide/wallet/paper-wallet.md)

@@ -1,10 +1,10 @@
 ## Send and Receive NAM tokens
 
-In Namada, tokens are implemented as accounts with the [Token Validity Predicate](https://github.com/anoma/namada/blob/namada/wasm/wasm_source/src/vp_token.rs). It checks that its total supply is preserved in any transaction that uses this token. Your wallet will be pre-loaded with some token addresses that are initialized in the genesis block.
+In Namada, tokens are implemented as accounts with the [Token Validity Predicate](https://github.com/anoma/namada/blob/namada/wasm/wasm_source/src/vp_token.rs). The validity predicate (VP) checks that the total supply (of the token) is preserved in any transaction that uses this token. Your wallet will be pre-loaded with some token addresses that are initialized in the genesis block.
 
 ### Initialize an established account
 
-If you already have a key in your wallet, you can skip this step. Otherwise, [generate a new keypair](#generate-a-keypair) now.
+If you already have a key in your wallet, you can skip this step. Otherwise, [generate a new keypair](./an-introduction-to-namada-addresses.md#generate-a-keypair) now.
 
 Then, send a transaction to initialize your new established account and save its address with the alias `my-new-acc`. The `my-key` public key will be written into the account's storage for authorizing future transactions. We also sign this transaction with `my-key`.
 
@@ -17,7 +17,7 @@ namada client init-account \
 
 Once this transaction has been applied, the client will automatically see the new address created by the transaction and add it to your Wallet with the chosen alias `my-new-acc`.
 
-This command uses the prebuilt [User Validity Predicate](https://github.com/anoma/namada/blob/namada/wasm/wasm_source/src/vp_user.rs).
+This command uses the prebuilt [User Validity Predicate](https://github.com/anoma/namada/blob/namada/wasm/wasm_source/src/vp_token.rs).
 
 ### Send a Payment
 
@@ -42,7 +42,7 @@ namada client balance --token NAM --owner my-new-acc
 ```
 
 ```admonish note
-For any client command that submits a transaction (`init-account`, `transfer`, `tx`, `update` and [PoS transactions](ledger/pos.md)), you can use the `--dry-run` flag to simulate the transaction being applied in the block and see what would be the result.
+For any client command that submits a transaction (`init-account`, `transfer`, `tx`, `update` and [PoS transactions](../ledger/pos.md)), you can use the `--dry-run` flag to simulate the transaction being applied in the block and see what would be the result.
 
 ```
 
