@@ -1,4 +1,4 @@
-# 4) Run your full node as a user
+# Full Node Setup
 1. Wait for the genesis file to be ready, you will receive a `$CHAIN_ID`.
 2. Join the network with the `CHAIN_ID`
 ```bash
