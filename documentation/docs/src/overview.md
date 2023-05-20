@@ -11,16 +11,16 @@
 
 - Zcash-like transfers for any assets (fungible and non-fungible)
 - Rewarded usage of privacy as a public good
-- Interoperability with Ethereum via a custom bridge with trust-minimisation
+- Interoperability with Ethereum via a custom bridge with trust-minimization
 - Vertically integrated user interfaces
 
 ## Overview of features
 - Proof-of-Stake with governance to secure and evolve Namada
 - Fast-finality BFT with 4-second blocks
 - Near-zero fees
-- Trustless 2-way Ethereum bridge via IBC implementation on ETH
-- IBC bridges to chains that already speak IBC (all Cosmos chains)
-- MASP
+- Trust-minimized 2-way Ethereum bridge
+- IBC connections to chains that already speak IBC (all Cosmos chains)
+- Multi-Asset Shielded Pool (MASP)
 - Convert Circuit (shielded set rewards)
 - A reference interface
 - Ledger application
