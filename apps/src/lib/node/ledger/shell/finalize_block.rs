@@ -321,6 +321,12 @@ where
                     continue;
                 }
                 TxType::Protocol(protocol_tx) => match protocol_tx.tx {
+                    ProtocolTxType::BridgePoolVext(_)
+                    | ProtocolTxType::BridgePool(_)
+                    | ProtocolTxType::ValSetUpdateVext(_)
+                    | ProtocolTxType::ValidatorSetUpdate(_) => {
+                        (Event::new_tx_event(&tx_type, height.0), None)
+                    }
                     ProtocolTxType::EthEventsVext(ref ext) => {
                         if self
                             .mode
@@ -334,15 +340,7 @@ where
                                 self.mode.dequeue_eth_event(event);
                             }
                         }
-                        Event::new_tx_event(&tx_type, height.0)
-                    }
-                    ProtocolTxType::BridgePoolVext(_)
-                    | ProtocolTxType::BridgePool(_) => {
-                        Event::new_tx_event(&tx_type, height.0)
-                    }
-                    ProtocolTxType::ValSetUpdateVext(_)
-                    | ProtocolTxType::ValidatorSetUpdate(_) => {
-                        Event::new_tx_event(&tx_type, height.0)
+                        (Event::new_tx_event(&tx_type, height.0), None)
                     }
                     ProtocolTxType::EthereumEvents(ref digest) => {
                         if let Some(address) =
@@ -358,7 +356,7 @@ where
                                 }
                             }
                         }
-                        Event::new_tx_event(&tx_type, height.0)
+                        (Event::new_tx_event(&tx_type, height.0), None)
                     }
                     ref protocol_tx_type => {
                         tracing::error!(
