@@ -1594,7 +1594,7 @@ mod test_utils {
         Receiver<oracle::control::Command>,
     ) {
         let (mut test, receiver, eth_receiver, control_receiver) =
-            TestShell::new_at_height(height);
+            TestShell::new_at_height(last_height);
         test.init_chain(
             RequestInitChain {
                 time: Some(Timestamp {
@@ -1610,7 +1610,26 @@ mod test_utils {
         (test, receiver, eth_receiver, control_receiver)
     }
 
-    /// Same as [`setup`], but returns a shell at block height 0.
+    /// Same as [`setup_at_height`], but returns a shell at the given block
+    /// height, with a single validator.
+    #[inline]
+    pub(super) fn setup_at_height<H: Into<BlockHeight>>(
+        last_height: H,
+    ) -> (
+        TestShell,
+        UnboundedReceiver<Vec<u8>>,
+        Sender<EthereumEvent>,
+        Receiver<oracle::control::Command>,
+    ) {
+        let last_height = last_height.into();
+        setup_with_cfg(SetupCfg {
+            last_height,
+            ..Default::default()
+        })
+    }
+
+    /// Same as [`setup_with_cfg`], but returns a shell at block height 0,
+    /// with a single validator.
     #[inline]
     pub(super) fn setup() -> (
         TestShell,
@@ -1618,7 +1637,7 @@ mod test_utils {
         Sender<EthereumEvent>,
         Receiver<oracle::control::Command>,
     ) {
-        setup_with_cfg(Default::default())
+        setup_with_cfg(SetupCfg::<u64>::default())
     }
 
     /// This is just to be used in testing. It is not
