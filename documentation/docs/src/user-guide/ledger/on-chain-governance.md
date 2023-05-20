@@ -13,17 +13,17 @@ Now, we need to create a json file `proposal.json` holding the content of our pr
 ```json
 {
     "content": {
-        "title": "Proposal title",
-        "authors": "email@proposal.n",
-        "discussions-to": "www.github.com/anoma/aip/1",
-        "created": "2022-03-10T08:54:37Z",
+        "title": "One Small Step for Namada, One Giant Leap for Memekind",
+        "authors": "email@proton.me",
+        "discussions-to": "forum.namada.net/t/namada-proposal/1",
+        "created": "2069-04-20T00:04:44Z",
         "license": "MIT",
-        "abstract": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros. Nullam sed ex justo. Ut at placerat ipsum, sit amet rhoncus libero. Sed blandit non purus non suscipit. Phasellus sed quam nec augue bibendum bibendum ut vitae urna. Sed odio diam, ornare nec sapien eget, congue viverra enim.",
-        "motivation": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices.",
-        "details": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros.",
-        "requires": "2"
+        "abstract": "We present a proposal that will send our community to the moon. This proposal outlines all training necessary to accomplish this goal. All memers are welcome to join.",
+        "motivation": "When you think about it, the moon isn't actually that far away.The moon is only 384,400 km. We have not yet brought Namada to the moon, so it is only natural to use 101 as the prime number for our modular arithmetic operations. 384,400 (mod 101) = 95. 95 km is a distance that can be easily covered by a single person in a single day. Namada was produced by more than 100 people. So 95/100 = 0, rounded to the nearest integer. This means that Namada can reach the moon in no time.",
+        "details": "Bringing Namada to the moon in no time is easily achievable. We just need to pass this governance proposal and set the plan in action",
+        "requires": "420"
     },
-    "author": "TODO",
+    "author": "bengt",
     "voting_start_epoch": 3,
     "voting_end_epoch": 6,
     "grace_epoch": 12,
@@ -32,6 +32,8 @@ Now, we need to create a json file `proposal.json` holding the content of our pr
         }
 }
 ```
+
+In the content field, most of the fields are self-explanatory. The `requires` field references a proposal id that must be passed before this proposal can be executed. The `created` field must be in the format `YYYY-MM-DDTHH:MM:SSZ`.
 
 You should change the value of:
 
@@ -44,6 +46,7 @@ You should change the value of:
     - `"type": {"Default":"$PATH_TO_WASM_CODE"}` for a default proposal with an associated wasm code
     - `"type": "PGFCouncil"` to initiate a proposal for a new council
     - `"type": "ETHBridge"` for an ethereum bridge related proposal
+
 
 As soon as your `proposal.json` file is ready, you can submit the proposal with (making sure to be in the same directory as the `proposal.json` file):
 

@@ -1,6 +1,6 @@
 # Off-chain proposals
 
-If for any reason issuing an on-chain proposal is not adequate to your needs, you still have the option to create an off-chain proposal.
+If for any reason issuing an on-chain proposal is not adequate to your needs, you still have the option to create an off-chain proposal. An off-chain proposal is intended for proposals that do not require any on-chain code execution. The proposal would be distributed on some third-party channel (e.g. a forum) and the voting would be done off-chain. The result of the voting would be computed off-chain and then submitted to the ledger.
 
 ## Create proposal
 
