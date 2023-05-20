@@ -521,7 +521,7 @@ mod test_prepare_proposal {
     /// proposed block.
     #[test]
     fn test_prepare_proposal_rejects_non_wrapper_tx() {
-        let (shell, _) = test_utils::setup(1);
+        let (shell, _recv, _, _) = test_utils::setup();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction_data".as_bytes().to_owned()),
@@ -540,7 +540,7 @@ mod test_prepare_proposal {
     /// we simply exclude it from the proposal
     #[test]
     fn test_error_in_processing_tx() {
-        let (shell, _) = test_utils::setup(1);
+        let (shell, _recv, _, _) = test_utils::setup();
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -586,10 +586,7 @@ mod test_prepare_proposal {
     fn test_prepare_proposal_filter_out_bad_vext_signatures() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
 
-        let (mut shell, _recv, _, _) = test_utils::setup();
-
-        // artificially change the block height
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
+        let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
 
         let signed_vote_extension = {
             let (protocol_key, _, _) = wallet::defaults::validator_keys();
@@ -659,10 +656,7 @@ mod test_prepare_proposal {
     fn test_prepare_proposal_filter_out_bad_vext_validators() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
 
-        let (mut shell, _recv, _, _) = test_utils::setup();
-
-        // artificially change the block height
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
+        let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
 
         let (validator_addr, protocol_key) = {
             let bertha_key = wallet::defaults::bertha_keypair();
@@ -691,10 +685,7 @@ mod test_prepare_proposal {
     fn test_prepare_proposal_filter_duped_ethereum_events() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 
-        let (mut shell, _recv, _, _) = test_utils::setup();
-
-        // artificially change the block height
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
+        let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
 
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let validator_addr = wallet::defaults::validator_address();
@@ -786,10 +777,7 @@ mod test_prepare_proposal {
     fn test_prepare_proposal_vext_normal_op() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 
-        let (mut shell, _recv, _, _) = test_utils::setup();
-
-        // artificially change the block height
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
+        let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
 
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let validator_addr = wallet::defaults::validator_address();
@@ -1098,7 +1086,7 @@ mod test_prepare_proposal {
     /// Test that expired wrapper transactions are not included in the block
     #[test]
     fn test_expired_wrapper_tx() {
-        let (shell, _) = test_utils::setup(1);
+        let (shell, _recv, _, _) = test_utils::setup();
         let keypair = gen_keypair();
         let tx_time = DateTimeUtc::now();
         let tx = Tx::new(

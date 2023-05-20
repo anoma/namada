@@ -984,7 +984,7 @@ mod test_finalize_block {
     /// not appear in the queue of txs to be decrypted
     #[test]
     fn test_process_proposal_rejected_wrapper_tx() {
-        let (mut shell, _, _, _) = setup_at_height(1);
+        let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
         let mut processed_txs = vec![];
         let mut valid_wrappers = vec![];
@@ -1077,7 +1077,7 @@ mod test_finalize_block {
     /// proposal
     #[test]
     fn test_process_proposal_rejected_decrypted_tx() {
-        let (mut shell, _, _, _) = setup_at_height(1);
+        let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
         let raw_tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -1133,7 +1133,7 @@ mod test_finalize_block {
     /// but the tx result contains the appropriate error code.
     #[test]
     fn test_undecryptable_returns_error_code() {
-        let (mut shell, _, _, _) = setup_at_height(1);
+        let (mut shell, _, _, _) = setup();
 
         let keypair = crate::wallet::defaults::daewon_keypair();
         let pubkey = EncryptionKey::default();
@@ -1192,7 +1192,7 @@ mod test_finalize_block {
     /// decrypted txs are de-queued.
     #[test]
     fn test_mixed_txs_queued_in_correct_order() {
-        let (mut shell, _, _, _) = setup_at_height(1);
+        let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
         let mut processed_txs = vec![];
         let mut valid_txs = vec![];
@@ -1372,7 +1372,7 @@ mod test_finalize_block {
     /// list of events to vote on.
     #[test]
     fn test_eth_events_dequeued_digest() {
-        let (mut shell, _, oracle, _) = setup();
+        let (mut shell, _, oracle, _) = setup_at_height(3);
         let protocol_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
         let address = shell
@@ -1450,7 +1450,7 @@ mod test_finalize_block {
     /// list of events to vote on.
     #[test]
     fn test_eth_events_dequeued_protocol_tx() {
-        let (mut shell, _, oracle, _) = setup();
+        let (mut shell, _, oracle, _) = setup_at_height(3);
         let protocol_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
         let address = shell
@@ -1682,7 +1682,7 @@ mod test_finalize_block {
     /// the DB.
     #[test]
     fn test_finalize_doesnt_commit_db() {
-        let (mut shell, _broadcaster, _, _eth_control) = setup_at_height(1);
+        let (mut shell, _broadcaster, _, _eth_control) = setup();
 
         // Update epoch duration to make sure we go through couple epochs
         let epoch_duration = EpochDuration {
@@ -1823,7 +1823,10 @@ mod test_finalize_block {
         // properly. At the end of the epoch, check that the validator rewards
         // products are appropriately updated.
 
-        let (mut shell, _, _, _) = setup_at_height(4);
+        let (mut shell, _, _, _) = setup_with_cfg(SetupCfg {
+            last_height: 0,
+            num_validators: 4,
+        });
 
         let mut validator_set: BTreeSet<WeightedValidator> =
             read_consensus_validator_set_addresses_with_stake(
@@ -2100,7 +2103,7 @@ mod test_finalize_block {
     /// hash is removed from storage to allow rewrapping it
     #[test]
     fn test_remove_tx_hash() {
-        let (mut shell, _, _, _) = setup_at_height(1);
+        let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
 
         let mut wasm_path = top_level_directory();

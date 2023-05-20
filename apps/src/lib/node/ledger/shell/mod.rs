@@ -1886,13 +1886,12 @@ mod test_mempool_validate {
     use namada::proto::SignedTxData;
     use namada::types::transaction::{Fee, WrapperTx};
 
-    use super::test_utils::TestShell;
-    use super::{MempoolTxType, *};
+    use super::*;
 
     /// Mempool validation must reject unsigned wrappers
     #[test]
     fn test_missing_signature() {
-        let (shell, _) = TestShell::new();
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let keypair = super::test_utils::gen_keypair();
 
@@ -1947,7 +1946,7 @@ mod test_mempool_validate {
     /// Mempool validation must reject wrappers with an invalid signature
     #[test]
     fn test_invalid_signature() {
-        let (shell, _) = TestShell::new();
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let keypair = super::test_utils::gen_keypair();
 
@@ -2028,7 +2027,7 @@ mod test_mempool_validate {
     /// Mempool validation must reject non-wrapper txs
     #[test]
     fn test_wrong_tx_type() {
-        let (shell, _) = TestShell::new();
+        let (shell, _recv, _, _) = test_utils::setup();
 
         // Test Raw TxType
         let tx = Tx::new(
@@ -2050,7 +2049,7 @@ mod test_mempool_validate {
     /// transactions
     #[test]
     fn test_replay_attack() {
-        let (mut shell, _) = TestShell::new();
+        let (mut shell, _recv, _, _) = test_utils::setup();
 
         let keypair = super::test_utils::gen_keypair();
 
@@ -2161,7 +2160,7 @@ mod test_mempool_validate {
     /// Check that a transaction with a wrong chain id gets discarded
     #[test]
     fn test_wrong_chain_id() {
-        let (shell, _) = TestShell::new();
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let keypair = super::test_utils::gen_keypair();
 
@@ -2191,7 +2190,7 @@ mod test_mempool_validate {
     /// Check that an expired transaction gets rejected
     #[test]
     fn test_expired_tx() {
-        let (shell, _) = TestShell::new();
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let keypair = super::test_utils::gen_keypair();
 

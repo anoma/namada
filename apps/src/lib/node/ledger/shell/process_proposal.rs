@@ -940,7 +940,7 @@ mod test_process_proposal {
     use super::*;
     use crate::node::ledger::shell::test_utils::{
         self, deactivate_bridge, gen_keypair, get_bp_bytes_to_sign,
-        setup_at_height, ProcessProposal, TestError, TestShell,
+        ProcessProposal, TestError, TestShell,
     };
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::ProcessedTx;
     #[cfg(feature = "abcipp")]
@@ -991,8 +991,7 @@ mod test_process_proposal {
     #[cfg(feature = "abcipp")]
     fn test_more_than_one_vext_digest_rejected() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
-        let (mut shell, _recv, _, _) = test_utils::setup();
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
+        let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let vote_extension_digest = {
             let validator_addr = wallet::defaults::validator_address();
@@ -1035,7 +1034,7 @@ mod test_process_proposal {
     #[cfg(feature = "abcipp")]
     #[test]
     fn check_multiple_bp_root_vexts_rejected() {
-        let (mut shell, _recv, _, _) = setup_at_height(3u64);
+        let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let vext = shell.extend_vote_with_bp_roots().expect("Test failed");
         let tx =
             ProtocolTxType::BridgePool(MultiSignedVext(HashSet::from([vext])))
@@ -1310,8 +1309,7 @@ mod test_process_proposal {
     #[test]
     fn test_drop_vext_with_invalid_sigs() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
-        let (mut shell, _recv, _, _) = test_utils::setup();
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
+        let (mut shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let addr = wallet::defaults::validator_address();
         let event = EthereumEvent::TransfersToNamada {
@@ -1375,8 +1373,7 @@ mod test_process_proposal {
         const INVALID_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 - 1);
         #[cfg(not(feature = "abcipp"))]
         const INVALID_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 + 1);
-        let (mut shell, _recv, _, _) = test_utils::setup();
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
+        let (mut shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let addr = wallet::defaults::validator_address();
         let event = EthereumEvent::TransfersToNamada {
@@ -1429,8 +1426,7 @@ mod test_process_proposal {
     #[test]
     fn test_drop_vext_with_invalid_validators() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
-        let (mut shell, _recv, _, _) = test_utils::setup();
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
+        let (mut shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
         let (addr, protocol_key) = {
             let bertha_key = wallet::defaults::bertha_keypair();
             let bertha_addr = wallet::defaults::bertha_address();
@@ -2266,7 +2262,7 @@ mod test_process_proposal {
     /// causes the entire block to be rejected
     #[test]
     fn test_wong_chain_id() {
-        let (mut shell, _) = test_utils::setup(1);
+        let (shell, _recv, _, _) = test_utils::setup();
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let tx = Tx::new(
@@ -2328,7 +2324,7 @@ mod test_process_proposal {
     /// rejected without rejecting the entire block
     #[test]
     fn test_decrypted_wong_chain_id() {
-        let (mut shell, _) = test_utils::setup(1);
+        let (shell, _recv, _, _) = test_utils::setup();
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let wrong_chain_id = ChainId("Wrong chain id".to_string());
@@ -2390,7 +2386,7 @@ mod test_process_proposal {
     /// Test that an expired wrapper transaction causes a block rejection
     #[test]
     fn test_expired_wrapper() {
-        let (mut shell, _) = test_utils::setup(1);
+        let (shell, _recv, _, _) = test_utils::setup();
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let tx = Tx::new(
@@ -2435,7 +2431,7 @@ mod test_process_proposal {
     /// without rejecting the entire block
     #[test]
     fn test_expired_decrypted() {
-        let (mut shell, _) = test_utils::setup(1);
+        let (mut shell, _recv, _, _) = test_utils::setup();
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let tx = Tx::new(
