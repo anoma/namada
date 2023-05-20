@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada::core::types::hash::Hash;
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::BlockGasMeter;
@@ -30,9 +31,9 @@ use namada::ledger::pos::namada_proof_of_stake::types::{
 };
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
-    DBIter, Sha256Hasher, Storage, StorageHasher, WlStorage, DB,
+    DBIter, Sha256Hasher, Storage, StorageHasher, TempWlStorage, WlStorage, DB,
 };
-use namada::ledger::storage_api::{self, StorageRead};
+use namada::ledger::storage_api::{self, StorageRead, StorageWrite};
 use namada::ledger::{ibc, pos, protocol, replay_protection};
 use namada::proof_of_stake::{self, read_pos_params, slash};
 use namada::proto::{self, Tx};
@@ -47,7 +48,7 @@ use namada::types::token::{self};
 use namada::types::transaction::MIN_FEE;
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
-    EllipticCurve, PairingEngine, TxType,
+    EllipticCurve, PairingEngine, TxType, WrapperTx,
 };
 use namada::types::{address, hash};
 use namada::vm::wasm::{TxCache, VpCache};
@@ -112,6 +113,8 @@ pub enum Error {
     LoadingWasm(String),
     #[error("Error reading from or writing to storage: {0}")]
     StorageApi(#[from] storage_api::Error),
+    #[error("Transaction replay attempt: {0}")]
+    ReplayAttempt(String),
 }
 
 impl From<Error> for TxResult {
@@ -646,6 +649,55 @@ where
         );
         response.data = root.0;
         response
+    }
+
+    /// Checks that neither the wrapper nor the inner transaction have already
+    /// been applied. Requires a [`TempWlStorage`] to perform the check during
+    /// block construction and validation
+    pub fn replay_protection_checks(
+        &self,
+        wrapper: &WrapperTx,
+        tx_bytes: &[u8],
+        temp_wl_storage: &mut TempWlStorage<D, H>,
+    ) -> Result<()> {
+        let inner_hash_key =
+            replay_protection::get_tx_hash_key(&wrapper.tx_hash);
+        if temp_wl_storage
+            .has_key(&inner_hash_key)
+            .expect("Error while checking inner tx hash key in storage")
+        {
+            return Err(Error::ReplayAttempt(format!(
+                "Inner transaction hash {} already in storage",
+                &wrapper.tx_hash
+            )));
+        }
+
+        // Write inner hash to WAL
+        temp_wl_storage
+            .write(&inner_hash_key, ())
+            .expect("Couldn't write inner transaction hash to write log");
+
+        let tx =
+            Tx::try_from(tx_bytes).expect("Deserialization shouldn't fail");
+        let wrapper_hash = Hash(tx.unsigned_hash());
+        let wrapper_hash_key =
+            replay_protection::get_tx_hash_key(&wrapper_hash);
+        if temp_wl_storage
+            .has_key(&wrapper_hash_key)
+            .expect("Error while checking wrapper tx hash key in storage")
+        {
+            return Err(Error::ReplayAttempt(format!(
+                "Wrapper transaction hash {} already in storage",
+                wrapper_hash
+            )));
+        }
+
+        // Write wrapper hash to WAL
+        temp_wl_storage
+            .write(&wrapper_hash_key, ())
+            .expect("Couldn't write wrapper tx hash to write log");
+
+        Ok(())
     }
 
     /// Validate a transaction request. On success, the transaction will
