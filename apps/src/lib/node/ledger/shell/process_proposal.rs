@@ -2261,7 +2261,7 @@ mod test_process_proposal {
     /// Test that a wrapper or protocol transaction with a mismatching chain id
     /// causes the entire block to be rejected
     #[test]
-    fn test_wong_chain_id() {
+    fn test_wrong_chain_id() {
         let (shell, _recv, _, _) = test_utils::setup();
         let keypair = crate::wallet::defaults::daewon_keypair();
 
@@ -2289,7 +2289,7 @@ mod test_process_proposal {
             .sign(&keypair, wrong_chain_id.clone(), None)
             .expect("Test failed");
 
-        let protocol_tx = ProtocolTxType::EthereumStateUpdate(tx).sign(
+        let protocol_tx = ProtocolTxType::NewDkgKeypair(tx).sign(
             &keypair.ref_to(),
             &keypair,
             wrong_chain_id.clone(),
