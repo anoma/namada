@@ -279,6 +279,7 @@ where
         block_time: DateTimeUtc,
     ) -> (Vec<TxResult>, ValidationMeta) {
         let mut tx_queue_iter = self.wl_storage.storage.tx_queue.iter();
+        let mut temp_wl_storage = TempWlStorage::new(&self.wl_storage.storage);
         let mut metadata = ValidationMeta::from(&self.wl_storage);
         let tx_results: Vec<_> = txs
             .iter()
