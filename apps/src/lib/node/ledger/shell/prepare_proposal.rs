@@ -396,9 +396,7 @@ mod test_prepare_proposal {
     #[cfg(feature = "abcipp")]
     use std::collections::{BTreeSet, HashMap};
 
-    use borsh::BorshDeserialize;
-    #[cfg(feature = "abcipp")]
-    use borsh::BorshSerialize;
+    use borsh::{BorshDeserialize, BorshSerialize};
     use namada::core::ledger::storage_api::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
@@ -509,7 +507,10 @@ mod test_prepare_proposal {
         #[cfg(not(feature = "abcipp"))]
         {
             let tx = ProtocolTxType::EthEventsVext(vext)
-                .sign(shell.mode.get_protocol_key().expect("Test failed"))
+                .sign(
+                    shell.mode.get_protocol_key().expect("Test failed"),
+                    shell.chain_id.clone(),
+                )
                 .to_bytes();
             let rsp = shell.mempool_validate(&tx, Default::default());
             assert!(rsp.code != 0, "{}", rsp.log);
@@ -983,7 +984,7 @@ mod test_prepare_proposal {
             let vote = ProtocolTxType::EthEventsVext(
                 signed_eth_ev_vote_extension.clone(),
             )
-            .sign(&protocol_key)
+            .sign(&protocol_key, shell.chain_id.clone())
             .to_bytes();
             let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
                 txs: vec![vote],

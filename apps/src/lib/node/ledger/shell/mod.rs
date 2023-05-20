@@ -812,7 +812,9 @@ where
                     .expect("Validators should have protocol keys");
 
                 let protocol_txs = iter_protocol_txs(ext).map(|protocol_tx| {
-                    protocol_tx.sign(protocol_key).to_bytes()
+                    protocol_tx
+                        .sign(protocol_key, self.chain_id.clone())
+                        .to_bytes()
                 });
 
                 for tx in protocol_txs {
@@ -1820,7 +1822,7 @@ mod abciplus_mempool_tests {
             }
             .sign(protocol_key),
         )
-        .sign(protocol_key)
+        .sign(protocol_key, shell.chain_id.clone())
         .to_bytes();
 
         let to_sign = test_utils::get_bp_bytes_to_sign();
@@ -1834,7 +1836,7 @@ mod abciplus_mempool_tests {
             }
             .sign(protocol_key),
         )
-        .sign(protocol_key)
+        .sign(protocol_key, shell.chain_id.clone())
         .to_bytes();
         let txs_to_validate = [
             (eth_vext, "Incorrectly validated eth events vext"),
@@ -1873,7 +1875,7 @@ mod abciplus_mempool_tests {
             ext
         };
         let tx = ProtocolTxType::EthEventsVext(ext)
-            .sign(&protocol_key)
+            .sign(&protocol_key, shell.chain_id.clone())
             .to_bytes();
         let rsp = shell.mempool_validate(&tx, Default::default());
         assert_eq!(rsp.code, 0);
@@ -2216,6 +2218,8 @@ mod test_mempool_validate {
         let non_wrapper_tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction_data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
         )
         .to_bytes();
         let rsp = shell.mempool_validate(&non_wrapper_tx, Default::default());
@@ -2231,6 +2235,8 @@ mod test_mempool_validate {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction_data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
         );
         // an unsigned wrapper will cause an error in processing
         let wrapper = Tx::new(
@@ -2252,6 +2258,8 @@ mod test_mempool_validate {
                 .try_to_vec()
                 .expect("Test failed"),
             ),
+            shell.chain_id.clone(),
+            None,
         )
         .to_bytes();
         let rsp = shell.mempool_validate(&wrapper, Default::default());

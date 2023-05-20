@@ -1346,7 +1346,7 @@ mod test_finalize_block {
             signatures: Default::default(),
             events: vec![],
         })
-        .sign(&protocol_key)
+        .sign(&protocol_key, shell.chain_id.clone())
         .to_bytes();
 
         let req = FinalizeBlock {
@@ -1419,7 +1419,7 @@ mod test_finalize_block {
             };
             ProcessedTx {
                 tx: ProtocolTxType::EthereumEvents(digest)
-                    .sign(&protocol_key)
+                    .sign(&protocol_key, shell.chain_id.clone())
                     .to_bytes(),
                 result: TxResult {
                     code: ErrorCodes::Ok.into(),
@@ -1478,7 +1478,7 @@ mod test_finalize_block {
         .sign(&protocol_key);
         let processed_tx = ProcessedTx {
             tx: ProtocolTxType::EthEventsVext(ext)
-                .sign(&protocol_key)
+                .sign(&protocol_key, shell.chain_id.clone())
                 .to_bytes(),
             result: TxResult {
                 code: ErrorCodes::Ok.into(),
@@ -1661,7 +1661,8 @@ mod test_finalize_block {
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
-            let tx = ProtocolTxType::EthEventsVext(ext).sign(&protocol_key);
+            let tx = ProtocolTxType::EthEventsVext(ext)
+                .sign(&protocol_key, shell.chain_id.clone());
             (tx, TestBpAction::CheckNonceIncremented)
         });
     }
@@ -1672,8 +1673,10 @@ mod test_finalize_block {
     fn test_bp_roots_protocol_tx() {
         test_bp(|shell: &mut TestShell| {
             let vext = shell.extend_vote_with_bp_roots().expect("Test failed");
-            let tx = ProtocolTxType::BridgePoolVext(vext)
-                .sign(shell.mode.get_protocol_key().expect("Test failed"));
+            let tx = ProtocolTxType::BridgePoolVext(vext).sign(
+                shell.mode.get_protocol_key().expect("Test failed"),
+                shell.chain_id.clone(),
+            );
             (tx, TestBpAction::VerifySignedRoot)
         });
     }
@@ -2187,7 +2190,7 @@ mod test_finalize_block {
             .wl_storage
             .write(&proposal_execution_key, ())
             .expect("Test failed.");
-        let tx = Tx::new(vec![], None);
+        let tx = Tx::new(vec![], None, shell.chain_id.clone(), None);
         let new_min_confirmations = MinimumConfirmations::from(unsafe {
             NonZeroU64::new_unchecked(42)
         });

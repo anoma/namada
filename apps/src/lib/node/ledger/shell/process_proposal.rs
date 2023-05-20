@@ -968,7 +968,7 @@ mod test_process_proposal {
             },
             events: vec![],
         })
-        .sign(protocol_key)
+        .sign(protocol_key, shell.chain_id.clone())
         .to_bytes()
     }
 
@@ -981,7 +981,10 @@ mod test_process_proposal {
             .compress_bridge_pool_roots(vec![bp_root])
             .expect("Test failed");
         ProtocolTxType::BridgePool(tx)
-            .sign(shell.mode.get_protocol_key().expect("Test failed"))
+            .sign(
+                shell.mode.get_protocol_key().expect("Test failed"),
+                shell.chain_id.clone(),
+            )
             .to_bytes()
     }
 
@@ -1018,7 +1021,7 @@ mod test_process_proposal {
             }
         };
         let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
-            .sign(&protocol_key)
+            .sign(&protocol_key, shell.chain_id.clone())
             .to_bytes();
         let request = ProcessProposal {
             txs: vec![tx.clone(), tx],
@@ -1038,7 +1041,10 @@ mod test_process_proposal {
         let vext = shell.extend_vote_with_bp_roots().expect("Test failed");
         let tx =
             ProtocolTxType::BridgePool(MultiSignedVext(HashSet::from([vext])))
-                .sign(shell.mode.get_protocol_key().expect("Test failed."))
+                .sign(
+                    shell.mode.get_protocol_key().expect("Test failed."),
+                    shell.chain_id.clone(),
+                )
                 .to_bytes();
         assert!(
             shell
@@ -1056,7 +1062,7 @@ mod test_process_proposal {
         protocol_key: common::SecretKey,
     ) {
         let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
-            .sign(&protocol_key)
+            .sign(&protocol_key, shell.chain_id.clone())
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
         let response = if let Err(TestError::RejectProposal(resp)) =
@@ -1095,7 +1101,7 @@ mod test_process_proposal {
         }
         .sign(protocol_key);
         let tx = ProtocolTxType::EthEventsVext(ext)
-            .sign(protocol_key)
+            .sign(protocol_key, shell.chain_id.clone())
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
 
@@ -1149,7 +1155,7 @@ mod test_process_proposal {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         let tx = ProtocolTxType::BridgePoolVext(vote_ext)
-            .sign(protocol_key)
+            .sign(protocol_key, shell.chain_id.clone())
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
 
@@ -1206,7 +1212,7 @@ mod test_process_proposal {
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         let mut txs = vec![
             ProtocolTxType::BridgePool(vote_ext.into())
-                .sign(protocol_key)
+                .sign(protocol_key, shell.chain_id.clone())
                 .to_bytes(),
         ];
 
@@ -1244,7 +1250,7 @@ mod test_process_proposal {
         };
         txs.push(
             ProtocolTxType::EthereumEvents(vote_extension_digest)
-                .sign(protocol_key)
+                .sign(protocol_key, shell.chain_id.clone())
                 .to_bytes(),
         );
         let request = ProcessProposal { txs };
@@ -1284,7 +1290,7 @@ mod test_process_proposal {
         protocol_key: common::SecretKey,
     ) {
         let tx = ProtocolTxType::EthEventsVext(vote_extension)
-            .sign(&protocol_key)
+            .sign(&protocol_key, shell.chain_id.clone())
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
         let response = if let Err(TestError::RejectProposal(resp)) =
@@ -2289,11 +2295,8 @@ mod test_process_proposal {
             .sign(&keypair, wrong_chain_id.clone(), None)
             .expect("Test failed");
 
-        let protocol_tx = ProtocolTxType::NewDkgKeypair(tx).sign(
-            &keypair.ref_to(),
-            &keypair,
-            wrong_chain_id.clone(),
-        );
+        let protocol_tx = ProtocolTxType::NewDkgKeypair(tx)
+            .sign(&keypair, wrong_chain_id.clone());
 
         // Run validation
         let request = ProcessProposal {
@@ -2492,6 +2495,8 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some(b"transaction data".to_vec()),
+            shell.chain_id.clone(),
+            None,
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -2506,7 +2511,7 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair)
+        .sign(&keypair, shell.chain_id.clone(), None)
         .expect("Test failed")
         .to_bytes();
         for height in [1u64, 2] {
