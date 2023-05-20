@@ -99,8 +99,8 @@ pub struct BlockSpaceAllocator<State> {
 impl<D, H, M> From<&WlStorage<D, H>>
     for BlockSpaceAllocator<states::BuildingEncryptedTxBatch<M>>
 where
-    D: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + storage::StorageHasher,
 {
     #[inline]
     fn from(storage: &WlStorage<D, H>) -> Self {

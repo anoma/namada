@@ -68,8 +68,8 @@ pub trait EthBridgeQueries {
 
 impl<D, H> EthBridgeQueries for WlStorage<D, H>
 where
-    D: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + storage::StorageHasher,
 {
     type Storage = Self;
 
@@ -101,8 +101,8 @@ impl<'db, DB> Copy for EthBridgeQueriesHook<'db, DB> {}
 
 impl<'db, D, H> EthBridgeQueriesHook<'db, WlStorage<D, H>>
 where
-    D: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + storage::StorageHasher,
 {
     /// Return a handle to the inner [`WlStorage`].
     #[inline]
@@ -397,8 +397,8 @@ where
 /// validators in Namada, at some given epoch.
 pub struct ConsensusEthAddresses<'db, D, H>
 where
-    D: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + storage::StorageHasher,
 {
     epoch: Epoch,
     wl_storage: &'db WlStorage<D, H>,
@@ -407,8 +407,8 @@ where
 
 impl<'db, D, H> ConsensusEthAddresses<'db, D, H>
 where
-    D: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + storage::StorageHasher,
 {
     /// Iterate over the Ethereum addresses of the set of consensus validators
     /// in Namada, at some given epoch.
