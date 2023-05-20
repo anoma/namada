@@ -285,7 +285,7 @@ pub async fn submit_reveal_pk_aux<
     let addr: Address = public_key.into();
     println!("Submitting a tx to reveal the public key for address {addr}...");
     let tx_data = public_key.try_to_vec().map_err(Error::EncodeKeyFailure)?;
-    let tx_code = args.tx_code_path.clone();
+    let tx_code = args.tx_reveal_code_path.clone();
     let tx = Tx::new(
         tx_code,
         Some(tx_data),

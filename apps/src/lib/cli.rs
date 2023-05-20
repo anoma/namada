@@ -3165,7 +3165,7 @@ pub mod args {
                 gas_limit: self.gas_limit,
                 signing_key: self.signing_key.map(|x| ctx.get_cached(&x)),
                 signer: self.signer.map(|x| ctx.get(&x)),
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_reveal_code_path: ctx.read_wasm(self.tx_reveal_code_path),
                 password: self.password,
                 expiration: self.expiration,
                 chain_id: self.chain_id,
@@ -3251,7 +3251,7 @@ pub mod args {
             let expiration = EXPIRATION_OPT.parse(matches);
             let signing_key = SIGNING_KEY_OPT.parse(matches);
             let signer = SIGNER.parse(matches);
-            let tx_code_path = PathBuf::from(TX_REVEAL_PK);
+            let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;
             Self {
@@ -3268,7 +3268,7 @@ pub mod args {
                 expiration,
                 signing_key,
                 signer,
-                tx_code_path,
+                tx_reveal_code_path,
                 password,
                 chain_id,
             }
