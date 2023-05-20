@@ -3201,6 +3201,9 @@ pub mod args {
                  initialized, the alias will be the prefix of each new \
                  address joined with a number.",
             ))
+            .arg(WALLET_ALIAS_FORCE.def().about(
+                "Override the alias without confirmation if it already exists.",
+            ))
             .arg(GAS_AMOUNT.def().about(
                 "The amount being paid for the inclusion of this transaction",
             ))
@@ -3318,6 +3321,9 @@ pub mod args {
                     .def()
                     .about("An alias to be associated with the new entry."),
             )
+            .arg(ALIAS_FORCE.def().about(
+                "Override the alias without confirmation if it already exists.",
+            ))
             .arg(
                 MASP_VALUE
                     .def()
@@ -3386,6 +3392,9 @@ pub mod args {
                     "An alias to be associated with the payment address.",
                 ),
             )
+            .arg(ALIAS_FORCE.def().about(
+                "Override the alias without confirmation if it already exists.",
+            ))
             .arg(VIEWING_KEY.def().about("The viewing key."))
             .arg(PIN.def().about(
                 "Require that the single transaction to this address be \
@@ -3417,6 +3426,9 @@ pub mod args {
             .arg(ALIAS_OPT.def().about(
                 "The key and address alias. If none provided, the alias will \
                  be the public key hash.",
+            ))
+            .arg(ALIAS_FORCE.def().about(
+                "Override the alias without confirmation if it already exists.",
             ))
             .arg(UNSAFE_DONT_ENCRYPT.def().about(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
@@ -3586,6 +3598,9 @@ pub mod args {
                     .def()
                     .about("An alias to be associated with the address."),
             )
+            .arg(ALIAS_FORCE.def().about(
+                "Override the alias without confirmation if it already exists.",
+            ))
             .arg(
                 RAW_ADDRESS
                     .def()
