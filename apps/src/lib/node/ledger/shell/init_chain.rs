@@ -404,7 +404,7 @@ where
             // Account balance (tokens not staked in PoS)
             credit_tokens(
                 &mut self.wl_storage,
-                &staking_token,
+                staking_token,
                 addr,
                 validator.non_staked_balance,
             )
@@ -446,11 +446,11 @@ where
         );
 
         let total_nam =
-            read_total_supply(&self.wl_storage, &staking_token).unwrap();
+            read_total_supply(&self.wl_storage, staking_token).unwrap();
         // At this stage in the chain genesis, the PoS address balance is the
         // same as the number of staked tokens
         let total_staked_nam =
-            read_balance(&self.wl_storage, &staking_token, &address::POS)
+            read_balance(&self.wl_storage, staking_token, &address::POS)
                 .unwrap();
 
         tracing::info!("Genesis total native tokens: {total_nam}.");
