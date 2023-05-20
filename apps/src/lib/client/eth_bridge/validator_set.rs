@@ -302,6 +302,8 @@ pub async fn submit_validator_set_update(
             .try_to_vec()
             .expect("Could not serialize ProtocolTx"),
         ),
+        ctx.config.ledger.chain_id.clone(),
+        None,
     )
     .sign(&validator_data.keys.protocol_keypair);
 

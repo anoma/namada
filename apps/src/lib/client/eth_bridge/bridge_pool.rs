@@ -60,7 +60,12 @@ pub async fn add_to_eth_bridge_pool(
         },
     };
     let data = transfer.try_to_vec().unwrap();
-    let transfer_tx = Tx::new(tx_code, Some(data));
+    let transfer_tx = Tx::new(
+        tx_code,
+        Some(data),
+        ctx.config.ledger.chain_id.clone(),
+        None,
+    );
     // this should not initialize any new addresses, so we ignore the result.
     process_tx(
         ctx,

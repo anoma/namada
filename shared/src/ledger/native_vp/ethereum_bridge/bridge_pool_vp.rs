@@ -609,7 +609,7 @@ mod test_bridge_pool_vp {
     {
         // setup
         let mut wl_storage = setup_storage();
-        let tx = Tx::new(vec![], None);
+        let tx = Tx::new(vec![], None, ChainId::default(), None);
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {
@@ -954,7 +954,7 @@ mod test_bridge_pool_vp {
     fn test_adding_transfer_twice_fails() {
         // setup
         let mut wl_storage = setup_storage();
-        let tx = Tx::new(vec![], None);
+        let tx = Tx::new(vec![], None, ChainId::default(), None);
 
         // the transfer to be added to the pool
         let transfer = initial_pool();
@@ -1028,7 +1028,7 @@ mod test_bridge_pool_vp {
     fn test_zero_gas_fees_rejected() {
         // setup
         let mut wl_storage = setup_storage();
-        let tx = Tx::new(vec![], None);
+        let tx = Tx::new(vec![], None, ChainId::default(), None);
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {
@@ -1098,7 +1098,7 @@ mod test_bridge_pool_vp {
         let mut wl_storage = setup_storage();
         let eb_account_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
-        let tx = Tx::new(vec![], None);
+        let tx = Tx::new(vec![], None, ChainId::default(), None);
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {
@@ -1189,7 +1189,7 @@ mod test_bridge_pool_vp {
     fn test_reject_mint_wnam() {
         // setup
         let mut wl_storage = setup_storage();
-        let tx = Tx::new(vec![], None);
+        let tx = Tx::new(vec![], None, ChainId::default(), None);
         let eb_account_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
 
@@ -1303,7 +1303,7 @@ mod test_bridge_pool_vp {
             )
             .expect("Test failed");
         wl_storage.write_log.commit_tx();
-        let tx = Tx::new(vec![], None);
+        let tx = Tx::new(vec![], None, ChainId::default(), None);
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {
