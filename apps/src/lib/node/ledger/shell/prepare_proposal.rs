@@ -7,8 +7,8 @@ use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::proto::Tx;
 use namada::types::internal::WrapperTxInQueue;
-use namada::types::time::DateTimeUtc;
 use namada::types::storage::BlockHeight;
+use namada::types::time::DateTimeUtc;
 use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
@@ -403,7 +403,9 @@ mod test_prepare_proposal {
         NestedSubKey, SubKey,
     };
     use namada::ledger::pos::PosQueries;
-    use namada::proof_of_stake::{Epoch, consensus_validator_set_handle};
+    use namada::proof_of_stake::{
+        consensus_validator_set_handle, Epoch, Epoch,
+    };
     #[cfg(feature = "abcipp")]
     use namada::proto::SignableEthMessage;
     use namada::proto::{Signed, SignedTxData};
@@ -413,14 +415,12 @@ mod test_prepare_proposal {
     use namada::types::key::RefTo;
     use namada::types::storage::{BlockHeight, Epoch};
     use namada::types::transaction::protocol::ProtocolTxType;
-    use namada::types::transaction::{Fee, TxType, WrapperTx};
+    use namada::types::transaction::{Fee, TxType, WrapperTx, WrapperTx};
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::bridge_pool_roots;
     use namada::types::vote_extensions::ethereum_events;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::VoteExtension;
-    use namada::proof_of_stake::Epoch;
-    use namada::types::transaction::{Fee, WrapperTx};
 
     use super::*;
     #[cfg(feature = "abcipp")]
@@ -434,11 +434,10 @@ mod test_prepare_proposal {
     #[cfg(feature = "abcipp")]
     use crate::node::ledger::shell::test_utils::setup_at_height;
     use crate::node::ledger::shell::test_utils::{
-        self, gen_keypair, TestShell,
+        self, self, gen_keypair, gen_keypair, TestShell,
     };
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
-    use crate::node::ledger::shell::test_utils::{self, gen_keypair};
 
     #[cfg(feature = "abcipp")]
     fn get_local_last_commit(shell: &TestShell) -> Option<ExtendedCommitInfo> {
@@ -564,17 +563,17 @@ mod test_prepare_proposal {
                     tx,
                     Default::default(),
                     #[cfg(not(feature = "mainnet"))]
-                        None,
+                    None,
                 )
-                    .try_to_vec()
-                    .expect("Test failed"),
+                .try_to_vec()
+                .expect("Test failed"),
             ),
             shell.chain_id.clone(),
             None,
         )
-            .to_bytes();
+        .to_bytes();
         #[allow(clippy::redundant_clone)]
-            let req = RequestPrepareProposal {
+        let req = RequestPrepareProposal {
             txs: vec![wrapper.clone()],
             ..Default::default()
         };
@@ -1119,7 +1118,7 @@ mod test_prepare_proposal {
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
-                None,
+            None,
         );
         let wrapper = wrapper_tx
             .sign(&keypair, shell.chain_id.clone(), Some(tx_time))

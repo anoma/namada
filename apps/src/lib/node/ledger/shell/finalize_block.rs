@@ -17,12 +17,12 @@ use namada::proof_of_stake::{
     validator_commission_rate_handle, validator_rewards_products_handle,
     write_last_block_proposer_address,
 };
-use namada::types::transaction::protocol::ProtocolTxType;
-use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada::types::address::Address;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::types::token::{total_supply_key, Amount};
+use namada::types::transaction::protocol::ProtocolTxType;
+use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use rust_decimal::prelude::Decimal;
 
 use super::governance::execute_governance_proposals;
@@ -948,7 +948,6 @@ mod test_finalize_block {
     use namada::ledger::pos::PosQueries;
     use namada::ledger::storage_api;
     use namada::ledger::storage_api::StorageWrite;
-    use namada::ledger::storage_api;
     use namada::proof_of_stake::btree_set::BTreeSetShims;
     use namada::proof_of_stake::types::WeightedValidator;
     use namada::proof_of_stake::{
@@ -973,8 +972,8 @@ mod test_finalize_block {
     use test_log::test;
 
     use super::*;
-    use crate::node::ledger::oracle::control::Command;
     use crate::facade::tendermint_proto::abci::{Validator, VoteInfo};
+    use crate::node::ledger::oracle::control::Command;
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,

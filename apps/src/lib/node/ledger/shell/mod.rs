@@ -951,7 +951,8 @@ where
         if tx.chain_id != self.chain_id {
             response.code = ErrorCodes::InvalidChainId.into();
             response.log = format!(
-                "{INVALID_MSG}: Tx carries a wrong chain id: expected {}, found {}",
+                "{INVALID_MSG}: Tx carries a wrong chain id: expected {}, \
+                 found {}",
                 self.chain_id, tx.chain_id
             );
             return response;
@@ -964,7 +965,8 @@ where
             if last_block_timestamp > exp {
                 response.code = ErrorCodes::ExpiredTx.into();
                 response.log = format!(
-                    "{INVALID_MSG}: Tx expired at {exp:#?}, last committed block time: {last_block_timestamp:#?}",
+                    "{INVALID_MSG}: Tx expired at {exp:#?}, last committed \
+                     block time: {last_block_timestamp:#?}",
                 );
                 return response;
             }
@@ -986,12 +988,10 @@ where
                 tx: ProtocolTxType::EthEventsVext(ext),
                 ..
             }) => {
-                if let Err(err) = self
-                    .validate_eth_events_vext_and_get_it_back(
-                        ext,
-                        self.wl_storage.storage.last_height,
-                    )
-                {
+                if let Err(err) = self.validate_eth_events_vext_and_get_it_back(
+                    ext,
+                    self.wl_storage.storage.last_height,
+                ) {
                     response.code = 1;
                     response.log = format!(
                         "{INVALID_MSG}: Invalid Ethereum events vote \
@@ -1006,12 +1006,10 @@ where
                 tx: ProtocolTxType::BridgePoolVext(ext),
                 ..
             }) => {
-                if let Err(err) = self
-                    .validate_bp_roots_vext_and_get_it_back(
-                        ext,
-                        self.wl_storage.storage.last_height,
-                    )
-                {
+                if let Err(err) = self.validate_bp_roots_vext_and_get_it_back(
+                    ext,
+                    self.wl_storage.storage.last_height,
+                ) {
                     response.code = 1;
                     response.log = format!(
                         "{INVALID_MSG}: Invalid Brige pool roots vote \
@@ -1026,24 +1024,22 @@ where
                 tx: ProtocolTxType::ValSetUpdateVext(ext),
                 ..
             }) => {
-                if let Err(err) = self
-                    .validate_valset_upd_vext_and_get_it_back(
-                        ext,
-                        // n.b. only accept validator set updates
-                        // issued at the last committed epoch
-                        // (signing off on the validators of the
-                        // next epoch). at the second height
-                        // within an epoch, the new epoch is
-                        // committed to storage, so `last_epoch`
-                        // reflects the current value of the
-                        // epoch.
-                        self.wl_storage.storage.last_epoch,
-                    )
-                {
+                if let Err(err) = self.validate_valset_upd_vext_and_get_it_back(
+                    ext,
+                    // n.b. only accept validator set updates
+                    // issued at the last committed epoch
+                    // (signing off on the validators of the
+                    // next epoch). at the second height
+                    // within an epoch, the new epoch is
+                    // committed to storage, so `last_epoch`
+                    // reflects the current value of the
+                    // epoch.
+                    self.wl_storage.storage.last_epoch,
+                ) {
                     response.code = 1;
                     response.log = format!(
-                        "{INVALID_MSG}: Invalid validator set update \
-                         vote extension: {err}",
+                        "{INVALID_MSG}: Invalid validator set update vote \
+                         extension: {err}",
                     );
                 } else {
                     response.log = String::from(VALID_MSG);
@@ -1055,8 +1051,8 @@ where
             TxType::Protocol(ProtocolTx { .. }) => {
                 response.code = 1;
                 response.log = format!(
-                    "{INVALID_MSG}: The given protocol tx cannot be \
-                     added to the mempool"
+                    "{INVALID_MSG}: The given protocol tx cannot be added to \
+                     the mempool"
                 );
             }
             TxType::Wrapper(wrapper) => {
@@ -1072,15 +1068,15 @@ where
                 {
                     response.code = ErrorCodes::ReplayTx.into();
                     response.log = format!(
-                        "{INVALID_MSG}: Inner transaction hash {} already in storage, replay \
-                         attempt",
+                        "{INVALID_MSG}: Inner transaction hash {} already in \
+                         storage, replay attempt",
                         wrapper.tx_hash
                     );
                     return response;
                 }
 
-                let tx =
-                    Tx::try_from(tx_bytes).expect("Deserialization shouldn't fail");
+                let tx = Tx::try_from(tx_bytes)
+                    .expect("Deserialization shouldn't fail");
                 let wrapper_hash = hash::Hash(tx.unsigned_hash());
                 let wrapper_hash_key =
                     replay_protection::get_tx_hash_key(&wrapper_hash);
@@ -1088,13 +1084,15 @@ where
                     .wl_storage
                     .storage
                     .has_key(&wrapper_hash_key)
-                    .expect("Error while checking wrapper tx hash key in storage")
+                    .expect(
+                        "Error while checking wrapper tx hash key in storage",
+                    )
                     .0
                 {
                     response.code = ErrorCodes::ReplayTx.into();
                     response.log = format!(
-                        "{INVALID_MSG}: Wrapper transaction hash {} already in storage, replay \
-                         attempt",
+                        "{INVALID_MSG}: Wrapper transaction hash {} already \
+                         in storage, replay attempt",
                         wrapper_hash
                     );
                     return response;
@@ -1119,8 +1117,8 @@ where
                 if !has_valid_pow && self.get_wrapper_tx_fees() > balance {
                     response.code = ErrorCodes::InvalidTx.into();
                     response.log = format!(
-                        "{INVALID_MSG}: The given address does not have a sufficient balance to \
-                         pay fee",
+                        "{INVALID_MSG}: The given address does not have a \
+                         sufficient balance to pay fee",
                     );
                     return response;
                 }
@@ -1128,15 +1126,14 @@ where
             TxType::Raw(_) => {
                 response.code = 1;
                 response.log = format!(
-                    "{INVALID_MSG}: Raw transactions cannot be \
-                     accepted into the mempool"
+                    "{INVALID_MSG}: Raw transactions cannot be accepted into \
+                     the mempool"
                 );
             }
             TxType::Decrypted(_) => {
                 response.code = 1;
                 response.log = format!(
-                    "{INVALID_MSG}: Decrypted txs cannot be sent by \
-                     clients"
+                    "{INVALID_MSG}: Decrypted txs cannot be sent by clients"
                 );
             }
         }
@@ -1598,14 +1595,17 @@ mod test_utils {
     ) {
         let (mut test, receiver, eth_receiver, control_receiver) =
             TestShell::new_at_height(height);
-        test.init_chain(RequestInitChain {
-            time: Some(Timestamp {
-                seconds: 0,
-                nanos: 0,
-            }),
-            chain_id: ChainId::default().to_string(),
-            ..Default::default()
-        }, num_validators);
+        test.init_chain(
+            RequestInitChain {
+                time: Some(Timestamp {
+                    seconds: 0,
+                    nanos: 0,
+                }),
+                chain_id: ChainId::default().to_string(),
+                ..Default::default()
+            },
+            num_validators,
+        );
         test.wl_storage.commit_block().expect("Test failed");
         (test, receiver, eth_receiver, control_receiver)
     }

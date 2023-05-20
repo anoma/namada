@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use color_eyre::eyre::Result;
 use namada_apps::cli::cmds::*;
-use namada_apps::client::eth_bridge::{bridge_pool, validator_set};
 use namada_apps::cli::{self, safe_exit};
+use namada_apps::client::eth_bridge::{bridge_pool, validator_set};
 use namada_apps::client::{rpc, tx, utils};
 use namada_apps::facade::tendermint::block::Height;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;

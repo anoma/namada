@@ -8,9 +8,10 @@ use borsh::BorshDeserialize;
 use color_eyre::eyre::{eyre, Result};
 use namada::eth_bridge::oracle;
 use namada::eth_bridge::storage::vote_tallies;
+use namada::ledger::eth_bridge::vp::ADDRESS as BRIDGE_ADDRESS;
 use namada::ledger::eth_bridge::{
     ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
-    UpgradeableContract, vp::ADDRESS as BRIDGE_ADDRESS,
+    UpgradeableContract,
 };
 use namada::types::address::wnam;
 use namada::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;

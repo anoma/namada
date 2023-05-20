@@ -508,9 +508,9 @@ where
                         .unwrap_or_else(|err| TxResult {
                             code: ErrorCodes::InvalidVoteExtension.into(),
                             info: format!(
-                                "Process proposal rejected this proposal because \
-                                 one of the included Ethereum events vote \
-                                 extensions was invalid: {err}"
+                                "Process proposal rejected this proposal \
+                                 because one of the included Ethereum events \
+                                 vote extensions was invalid: {err}"
                             ),
                         }),
                     ProtocolTxType::BridgePoolVext(ext) => self
@@ -526,9 +526,9 @@ where
                         .unwrap_or_else(|err| TxResult {
                             code: ErrorCodes::InvalidVoteExtension.into(),
                             info: format!(
-                                "Process proposal rejected this proposal because \
-                                 one of the included Bridge pool root's vote \
-                                 extensions was invalid: {err}"
+                                "Process proposal rejected this proposal \
+                                 because one of the included Bridge pool \
+                                 root's vote extensions was invalid: {err}"
                             ),
                         }),
                     ProtocolTxType::ValSetUpdateVext(ext) => self
@@ -547,9 +547,9 @@ where
                         .unwrap_or_else(|err| TxResult {
                             code: ErrorCodes::InvalidVoteExtension.into(),
                             info: format!(
-                                "Process proposal rejected this proposal because \
-                                 one of the included validator set update vote \
-                                 extensions was invalid: {err}"
+                                "Process proposal rejected this proposal \
+                                 because one of the included validator set \
+                                 update vote extensions was invalid: {err}"
                             ),
                         }),
                     ProtocolTxType::EthereumEvents(digest) => {
@@ -557,24 +557,26 @@ where
                         {
                             metadata.digests.eth_ev_digest_num += 1;
                         }
-                        let extensions =
-                            digest.decompress(self.wl_storage.storage.last_height);
-                        let valid_extensions =
-                            self.validate_eth_events_vext_list(extensions).map(
-                                |maybe_ext| maybe_ext.ok().map(|(power, _)| power),
-                            );
+                        let extensions = digest
+                            .decompress(self.wl_storage.storage.last_height);
+                        let valid_extensions = self
+                            .validate_eth_events_vext_list(extensions)
+                            .map(|maybe_ext| {
+                                maybe_ext.ok().map(|(power, _)| power)
+                            });
 
-                            self.validate_vexts_in_proposal(valid_extensions)
+                        self.validate_vexts_in_proposal(valid_extensions)
                     }
                     ProtocolTxType::BridgePool(digest) => {
                         #[cfg(feature = "abcipp")]
                         {
                             metadata.digests.bridge_pool_roots += 1;
                         }
-                        let valid_extensions =
-                            self.validate_bp_roots_vext_list(digest).map(
-                                |maybe_ext| maybe_ext.ok().map(|(power, _)| power),
-                            );
+                        let valid_extensions = self
+                            .validate_bp_roots_vext_list(digest)
+                            .map(|maybe_ext| {
+                                maybe_ext.ok().map(|(power, _)| power)
+                            });
                         self.validate_vexts_in_proposal(valid_extensions)
                     }
                     ProtocolTxType::ValidatorSetUpdate(digest) => {
@@ -585,9 +587,9 @@ where
                         {
                             return TxResult {
                                 code: ErrorCodes::InvalidVoteExtension.into(),
-                                info: "Process proposal rejected a validator set \
-                                       update vote extension issued at an invalid \
-                                       block height"
+                                info: "Process proposal rejected a validator \
+                                       set update vote extension issued at an \
+                                       invalid block height"
                                     .into(),
                             };
                         }
@@ -596,15 +598,16 @@ where
                             metadata.digests.valset_upd_digest_num += 1;
                         }
 
-                            let extensions = digest.decompress(
+                        let extensions = digest.decompress(
                             self.wl_storage.storage.get_current_epoch().0,
                         );
-                        let valid_extensions =
-                            self.validate_valset_upd_vext_list(extensions).map(
-                                |maybe_ext| maybe_ext.ok().map(|(power, _)| power),
-                            );
+                        let valid_extensions = self
+                            .validate_valset_upd_vext_list(extensions)
+                            .map(|maybe_ext| {
+                                maybe_ext.ok().map(|(power, _)| power)
+                            });
 
-                            self.validate_vexts_in_proposal(valid_extensions)
+                        self.validate_vexts_in_proposal(valid_extensions)
                     }
                     _ => TxResult {
                         code: ErrorCodes::InvalidTx.into(),
@@ -926,9 +929,8 @@ mod test_process_proposal {
     use namada::types::token;
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
-    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
     use namada::types::transaction::protocol::ProtocolTxType;
-
+    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::bridge_pool_roots::MultiSignedVext;
     #[cfg(feature = "abcipp")]
@@ -2091,10 +2093,11 @@ mod test_process_proposal {
         };
 
         shell.enqueue_tx(wrapper.clone());
-        let mut signed = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
-            #[allow(clippy::redundant_clone)]
-            wrapper.clone(),
-        )));
+        let mut signed =
+            Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
+                #[allow(clippy::redundant_clone)]
+                wrapper.clone(),
+            )));
         signed.chain_id = shell.chain_id.clone();
 
         #[cfg(feature = "abcipp")]
