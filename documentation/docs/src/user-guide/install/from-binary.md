@@ -1,4 +1,4 @@
-# From Binaries
+# Install From Binaries
 
 ```admonish warning
 Prebuilt binaries might not be available for a specific release or architecture, in this case you have to [build from source](./from-source.md).
