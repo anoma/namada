@@ -17,6 +17,8 @@ expand = true
 
 [output.linkcheck]
 
+[output.katex]
+
 [preprocessor.katex]
 
 [preprocessor.admonish]
