@@ -6,11 +6,11 @@ Before describing Namada governance, it is useful to define the concepts of NAM,
 - Namada's economic model is based around a single native token, NAM, which is controlled by the protocol.
 
 *Consensus terminology*
-- A Namada _validator_ is an account with a public consensus key, which may participate in producing blocks and governance activities. A validator may not also be a delegator.
+- A Namada _validator_ is an account with a public consensus key, which may participate in producing blocks and governance activities. Validator accounts cannot also delegate to other validators.
 
 Non-validator addresses on Namada are able to bond their tokens. When they do so, they specify a validator which is now responsible for voting on blocks on the bonder's behalf. When doing so, the validator's voting-power is proportional to the sum of its self-bonded tokens and all the bonded tokens from other addesses to their own address.
 
-When an address bonds tokens, the address is able to specify a *delegate*. The respective validator of that address becomes the default *delegate* (explained below) of that address. Similarly, a delegate's `voting-power` (now in terms of voting on Governance proposals, not blocks) is proportional to the sum of its self-bonded tokens and all the bonded tokens from other addresses to their own address.
+When an address bonds tokens, the address is able to specify a *delegate*. The respective validator of that address becomes the default *delegate* (explained below) of that address. Similarly, a delegate's `voting-power` (now in terms of voting on governance proposals, not blocks) is proportional to the sum of its self-bonded tokens and all the bonded tokens from other addresses to their own address.
 
 *Governance terminology*
 With the above definitions in mind, we can now define the following terms:
@@ -18,9 +18,9 @@ With the above definitions in mind, we can now define the following terms:
 - A Namada _delegator_ is an account that delegates some tokens to a _delegate_ for voting purposes. Any address is either a delegator or a delegate, but not both.
 - A Namada _delegate_ is an account that has been given the right to vote on the behalf of a delegator. A delegate may not also be a delegator.
 
-Namada introduces a governance mechanism to propose and apply protocol changes without the need for a hard fork, and to signal stakeholder approval for potential hard forks. Anyone holding some `NAM` will be able to propose some changes in a proposal for which delegators and validators will cast their `yay` or `nay` votes. It will also be possible to attach some payloads to proposals, in specific cases, to embed additional information. 
+Namada introduces a governance mechanism to propose and apply protocol changes without the need for a hard fork, and to signal stakeholder approval for potential hard forks. Anyone holding some `NAM` will be able to propose some changes in a proposal for which delegators and delegates will cast their `yay` or `nay` votes. It will also be possible to attach some payloads to proposals, in specific cases, to embed additional information. 
 
-Governance on Namada supports both `signaling` and `voting` mechanisms. The signaling mechanism is used for changes which require a hard fork, while the voting mechanism is used for changes which merely alter state. In cases where the chain is not able to produce blocks anymore, Namada relies on [off chain signaling](#off-chain-protocol) to agree on a common move.
+Governance on Namada supports both `signaling` and `voting` mechanisms. The signaling mechanism is used for changes which require a hard fork, while the voting mechanism is used for changes which merely alter state. In cases where the chain is not able to produce blocks anymore, Namada stakeholders can use [off chain signaling](#off-chain-protocol) to agree on a common decision.
 
 Further information about delegators, validators, and NAM can be found in the [economics section](../economics.md).
 
@@ -108,7 +108,7 @@ The governance machinery also relies on a subkey stored under the `NAM` token ad
 ```
 
 This is to leverage the `NAM` VP to check that the funds were correctly locked.
-The governance subkey, `/\$GovernanceAddress/proposal/\$id/funds` will be used after the tally step to know the exact amount of tokens to refund or move to Treasury.
+The governance subkey, `/\$GovernanceAddress/proposal/\$id/funds` will be used after the tally step to know the exact amount of tokens to refund or move to the treasury.
 
 ### Supported proposal types
 
@@ -125,21 +125,21 @@ pub enum ProposalType {
 
 `Default` represents a generic proposal with the following properties:
 
-- Can carry a wasm code to be executed in case the proposal passes
-- Allows both validators and delegators to vote
+- Can carry WASM code to be executed in case the proposal passes
+- Allows delegators, delegates, and validators to vote
 - Requires 2/3 of the total voting power to succeed
 - Doesn't expect any memo attached to the votes
 
 `PGFCouncil` is a specific proposal to elect the council for _Public Goods Funding_:
 
-- Doesn't carry any wasm code
-- Allows both validators and delegators to vote
+- Doesn't carry any WASM code
+- Allows delegators, delegates, and validators to vote
 - Requires 1/3 of the total voting power to vote `Yay`
 - Expect every vote to carry a memo in the form of `Set<(Address, BudgetCap)>`
 
 `ETHBridge` is aimed at regulating actions on the bridge like the update of the Ethereum smart contracts or the withdrawing of all the funds from the `Vault` :
 
-- Doesn't carry any wasm code
+- Doesn't carry any WASM code
 - Allows only validators to vote
 - Requires 2/3 of the total voting power to succeed
 - Expect every vote to carry a memo in the form of a `Signature` over some bytes provided in the proposal 

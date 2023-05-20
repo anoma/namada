@@ -11,6 +11,7 @@ edit-url-template = "https://github.com/anoma/namada/edit/main/documentation/spe
 git-repository-url = "https://github.com/anoma/namada"
 additional-css = ["assets/mdbook-admonish.css"]
 git-branch = "main"
+mathjax-support = true
 
 [output.html.search]
 expand = true
