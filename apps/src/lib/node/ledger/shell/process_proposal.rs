@@ -107,7 +107,8 @@ where
             n_txs = req.txs.len(),
             "Received block proposal",
         );
-        let (tx_results, metadata) = self.check_proposal(&req.txs);
+        let (tx_results, metadata) =
+            self.process_txs(&req.txs, self.get_block_timestamp(req.time));
 
         // We should not have more than one `ethereum_events::VextDigest` in
         // a proposal from some round's leader.
@@ -217,7 +218,8 @@ where
             n_txs = req.txs.len(),
             "Received block proposal",
         );
-        let (tx_results, meta) = self.check_proposal(&req.txs);
+        let (tx_results, meta) =
+            self.process_txs(&req.txs, self.get_block_timestamp(req.time));
 
         // Erroneous transactions were detected when processing
         // the leader's proposal. We allow txs that do not
