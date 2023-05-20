@@ -2847,7 +2847,7 @@ pub async fn submit_validator_commission_change(
 }
 
 /// Capture the result of running a transaction
-enum ProcessTxResponse {
+pub enum ProcessTxResponse {
     /// Result of submitting a transaction to the blockchain
     Applied(TxResponse),
     /// Result of submitting a transaction to the mempool
