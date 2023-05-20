@@ -804,7 +804,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--signer",
                 BERTHA,
                 "--gas-limit",
-                "100",
+                "150",
                 "--node",
                 &validator_one_rpc,
             ],
@@ -1382,7 +1382,7 @@ fn masp_incentives() -> Result<()> {
             "--signer",
             BERTHA,
             "--gas-limit",
-            "100",
+            "150",
             "--node",
             &validator_one_rpc
         ],
@@ -1476,7 +1476,7 @@ fn masp_incentives() -> Result<()> {
             "--signer",
             ALBERT,
             "--gas-limit",
-            "100",
+            "150",
             "--node",
             &validator_one_rpc
         ],
@@ -1636,7 +1636,7 @@ fn masp_incentives() -> Result<()> {
             "--signer",
             BERTHA,
             "--gas-limit",
-            "100",
+            "150",
             "--node",
             &validator_one_rpc
         ],
