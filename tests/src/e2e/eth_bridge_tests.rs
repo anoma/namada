@@ -8,7 +8,6 @@ use borsh::BorshDeserialize;
 use color_eyre::eyre::{eyre, Result};
 use namada::eth_bridge::oracle;
 use namada::eth_bridge::storage::vote_tallies;
-use namada::ledger::eth_bridge::vp::ADDRESS as BRIDGE_ADDRESS;
 use namada::ledger::eth_bridge::{
     ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
     UpgradeableContract,
@@ -41,7 +40,7 @@ use crate::e2e::helpers::{
 };
 use crate::e2e::setup;
 use crate::e2e::setup::constants::{
-    wasm_abs_path, ALBERT, ALBERT_KEY, BERTHA, BERTHA_KEY, NAM, TX_WRITE_WASM,
+    ALBERT, ALBERT_KEY, BERTHA, BERTHA_KEY, NAM,
 };
 use crate::e2e::setup::{Bin, Who};
 use crate::{run, run_as};
