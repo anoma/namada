@@ -61,9 +61,11 @@ impl Display for InternalStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Applied {} transactions, successful txs: {}, rejected txs: {}, \
-             errored txs: {}, vp cache size: {} - {}, tx cache size {} - {}",
+            "Applied {} transactions. Wrappers: {}, successful inner txs: {}, \
+             rejected inner txs: {}, errored inner txs: {}, vp cache size: {} \
+             - {}, tx cache size {} - {}",
             self.successful_tx + self.rejected_txs + self.errored_txs,
+            self.wrapper_txs,
             self.successful_tx,
             self.rejected_txs,
             self.errored_txs,
