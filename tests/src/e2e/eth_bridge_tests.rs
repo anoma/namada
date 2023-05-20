@@ -4,7 +4,7 @@ use std::num::NonZeroU64;
 use std::ops::ControlFlow;
 use std::str::FromStr;
 
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use color_eyre::eyre::{eyre, Result};
 use namada::eth_bridge::oracle;
 use namada::eth_bridge::storage::vote_tallies;
@@ -15,7 +15,7 @@ use namada::ledger::eth_bridge::{
 use namada::types::address::wnam;
 use namada::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
 use namada::types::ethereum_events::EthAddress;
-use namada::types::storage::Epoch;
+use namada::types::storage::{self, Epoch};
 use namada::types::{address, token};
 use namada_apps::config::ethereum_bridge;
 use namada_apps::control_flow::timeouts::SleepStrategy;
@@ -25,6 +25,8 @@ use namada_core::types::ethereum_events::{
     EthereumEvent, TransferToEthereum, TransferToNamada,
 };
 use namada_core::types::token::Amount;
+use namada_test_utils::tx_data::TxWriteData;
+use namada_test_utils::TestWasms;
 use tokio::time::{Duration, Instant};
 
 use super::setup::set_ethereum_bridge_mode;
@@ -1305,4 +1307,73 @@ async fn test_submit_validator_set_udpate() -> Result<()> {
         .await?;
 
     Ok(())
+}
+
+/// Test that a regular transaction cannot modify arbitrary keys of the Ethereum
+/// bridge VP.
+#[test]
+fn test_unauthorized_tx_cannot_write_storage() {
+    const LEDGER_STARTUP_TIMEOUT_SECONDS: u64 = 30;
+    const CLIENT_COMMAND_TIMEOUT_SECONDS: u64 = 30;
+    const SOLE_VALIDATOR: Who = Who::Validator(0);
+
+    let test = setup::single_node_net().unwrap();
+
+    let mut ledger = run_as!(
+        test,
+        SOLE_VALIDATOR,
+        Bin::Node,
+        &["ledger"],
+        Some(LEDGER_STARTUP_TIMEOUT_SECONDS)
+    )
+    .unwrap();
+    ledger.exp_string("Namada ledger node started").unwrap();
+    ledger.exp_string("Tendermint node started").unwrap();
+    ledger.exp_string("Committed block hash").unwrap();
+    let _bg_ledger = ledger.background();
+
+    let tx_data_path = test.test_dir.path().join("arbitrary_storage_key.txt");
+    std::fs::write(
+        &tx_data_path,
+        TxWriteData {
+            key: storage::Key::from_str(&storage_key("arbitrary")).unwrap(),
+            value: b"arbitrary value".to_vec(),
+        }
+        .try_to_vec()
+        .unwrap(),
+    )
+    .unwrap();
+
+    let tx_code_path = TestWasms::TxWriteStorageKey.path();
+
+    let tx_data_path = tx_data_path.to_string_lossy().to_string();
+    let tx_code_path = tx_code_path.to_string_lossy().to_string();
+    let ledger_addr = get_actor_rpc(&test, &SOLE_VALIDATOR);
+    let tx_args = vec![
+        "tx",
+        "--signer",
+        ALBERT,
+        "--code-path",
+        &tx_code_path,
+        "--data-path",
+        &tx_data_path,
+        "--node",
+        &ledger_addr,
+    ];
+
+    let mut client_tx = run!(
+        test,
+        Bin::Client,
+        tx_args,
+        Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
+    )
+    .unwrap();
+
+    client_tx.exp_string("Transaction accepted").unwrap();
+    client_tx.exp_string("Transaction applied").unwrap();
+    client_tx.exp_string("Transaction is invalid").unwrap();
+    client_tx
+        .exp_string(&format!("Rejected: {BRIDGE_ADDRESS}"))
+        .unwrap();
+    client_tx.assert_success();
 }

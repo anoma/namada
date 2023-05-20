@@ -11,6 +11,7 @@ mod test_bridge_pool_vp {
     use namada::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
     use namada::proto::Tx;
     use namada::types::address::{nam, wnam};
+    use namada::types::chain::ChainId;
     use namada::types::eth_bridge_pool::{
         GasFee, PendingTransfer, TransferToEthereum,
     };
@@ -135,7 +136,8 @@ mod test_bridge_pool_vp {
         let data = transfer.try_to_vec().expect("Test failed");
         let code =
             wasm_loader::read_wasm_or_exit(wasm_dir(), ADD_TRANSFER_WASM);
-        let tx = Tx::new(code, Some(data)).sign(&bertha_keypair());
+        let tx = Tx::new(code, Some(data), ChainId::default(), None)
+            .sign(&bertha_keypair());
         validate_tx(tx);
     }
 
@@ -156,7 +158,8 @@ mod test_bridge_pool_vp {
         let data = transfer.try_to_vec().expect("Test failed");
         let code =
             wasm_loader::read_wasm_or_exit(wasm_dir(), ADD_TRANSFER_WASM);
-        let tx = Tx::new(code, Some(data)).sign(&bertha_keypair());
+        let tx = Tx::new(code, Some(data), ChainId::default(), None)
+            .sign(&bertha_keypair());
         validate_tx(tx);
     }
 
@@ -177,7 +180,8 @@ mod test_bridge_pool_vp {
         let data = transfer.try_to_vec().expect("Test failed");
         let code =
             wasm_loader::read_wasm_or_exit(wasm_dir(), ADD_TRANSFER_WASM);
-        let tx = Tx::new(code, Some(data)).sign(&bertha_keypair());
+        let tx = Tx::new(code, Some(data), ChainId::default(), None)
+            .sign(&bertha_keypair());
         validate_tx(tx);
     }
 }

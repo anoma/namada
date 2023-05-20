@@ -3559,7 +3559,8 @@ fn pgf_governance_proposal() -> Result<()> {
 
     // this is valid because the client filter ALBERT delegation and there are
     // none
-    let mut client = run!(test, Bin::Client, submit_proposal_vote, Some(15))?;
+    let mut client =
+        run!(test, Bin::Client, submit_proposal_vote_delagator, Some(15))?;
     client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
