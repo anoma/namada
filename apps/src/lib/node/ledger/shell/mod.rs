@@ -1261,6 +1261,7 @@ mod test_utils {
     use std::ops::{Deref, DerefMut};
     use std::path::PathBuf;
 
+    use namada::core::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::{update_allowed_conversions, Sha256Hasher};
     use namada::ledger::storage_api::StorageWrite;
@@ -1553,6 +1554,37 @@ mod test_utils {
                     #[cfg(not(feature = "mainnet"))]
                     has_valid_pow: false,
                 });
+        }
+
+        /// Start a counter for the next epoch in `num_blocks`.
+        pub fn start_new_epoch_in(&mut self, num_blocks: u64) {
+            self.wl_storage.storage.next_epoch_min_start_height =
+                self.wl_storage.storage.last_height + num_blocks;
+            self.wl_storage.storage.next_epoch_min_start_time =
+                DateTimeUtc::now();
+        }
+
+        /// Simultaneously call the `FinalizeBlock` and
+        /// `Commit` handlers.
+        pub fn finalize_and_commit(&mut self) {
+            let mut req = FinalizeBlock::default();
+            req.header.time = DateTimeUtc::now();
+            self.finalize_block(req).expect("Test failed");
+            self.commit();
+        }
+
+        /// Immediately change to the next epoch.
+        pub fn start_new_epoch(&mut self) -> Epoch {
+            self.start_new_epoch_in(1);
+
+            self.wl_storage.storage.last_height =
+                self.wl_storage.storage.next_epoch_min_start_height;
+            self.finalize_and_commit();
+
+            for _i in 0..EPOCH_SWITCH_BLOCKS_DELAY {
+                self.finalize_and_commit();
+            }
+            self.wl_storage.storage.get_current_epoch().0
         }
     }
 
