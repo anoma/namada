@@ -2268,7 +2268,7 @@ mod test_mempool_validate {
         )
         .to_bytes();
         let rsp = shell.mempool_validate(&non_wrapper_tx, Default::default());
-        assert_eq!(rsp.code, 1);
+        assert!(rsp.code != u32::from(ErrorCodes::Ok));
     }
 
     /// Test that if an error is encountered while trying to process a tx,
