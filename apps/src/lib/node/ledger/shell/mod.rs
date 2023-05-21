@@ -2308,6 +2308,6 @@ mod test_mempool_validate {
         )
         .to_bytes();
         let rsp = shell.mempool_validate(&wrapper, Default::default());
-        assert_eq!(rsp.code, 1);
+        assert_eq!(rsp.code, u32::from(ErrorCodes::InvalidSig));
     }
 }
