@@ -107,13 +107,10 @@ const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
-    let code_path = args.code_path.file_name().unwrap().to_str().unwrap();
-    let tx_code_hash =
-        query_wasm_code_hash(code_path, args.tx.ledger_address.clone())
-            .await
-            .unwrap();
-    let data = args.data_path.map(|data_path| {
-        std::fs::read(data_path).expect("Expected a file at given data path")
+    let tx_code = std::fs::read(args.code_path)
+        .expect("Expected a file at the given path.");
+    let tx_data = args.data_path.map(|data_path| {
+        std::fs::read(data_path).expect("Expected a file at given data path.")
     });
     let timestamp = args.timestamp.unwrap_or_default();
 
@@ -132,12 +129,11 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
         }
     };
 
-    // let address = ctx.get(&args.address);
     let pks_index_map = rpc::get_address_pks_map(&client, &address).await;
 
     let tx = Tx::new_with_timestamp(
-        tx_code_hash.to_vec(),
-        data,
+        tx_code,
+        tx_data,
         timestamp,
         ctx.config.ledger.chain_id.clone(),
         args.tx.expiration,
@@ -153,6 +149,7 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
         false,
     )
     .await;
+
     save_initialized_accounts(ctx, &args.tx, result.initialized_accounts())
         .await;
 }
@@ -163,7 +160,7 @@ pub async fn submit_update_account(
 ) {
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
-    let addr = ctx.get(&args.addr);
+    let addr = ctx.get(&args.address);
 
     // Check that the address is established and exists on chain
     match &addr {
@@ -198,48 +195,80 @@ pub async fn submit_update_account(
         }
     }
 
-    let vp_code_path = args.vp_code_path.unwrap();
-    let vp_code_path = vp_code_path.file_name().unwrap().to_str().unwrap();
-    let vp_code_hash =
-        query_wasm_code_hash(vp_code_path, args.tx.ledger_address.clone())
-            .await
-            .unwrap();
+    let pks_map = rpc::get_address_pks_map(&client, &addr).await;
 
-    let tx_code_hash = query_wasm_code_hash(
-        TX_UPDATE_ACCOUNT_WASM,
-        args.tx.ledger_address.clone(),
-    )
-    .await
-    .unwrap();
-    let public_keys = args
-        .public_keys
-        .iter()
-        .map(|account_key| ctx.get_cached(account_key))
-        .collect();
+    match (args.threshold, args.public_keys.clone()) {
+        (None, Some(public_keys)) => {
+            let current_threshold =
+                rpc::get_address_threshold(&client, &addr).await;
+            if public_keys.len() < current_threshold as usize {
+                eprintln!("The supplied number of public keys ({}) is not greater than the current threshold ({}).", public_keys.len(), current_threshold);
+                safe_exit(1)
+            }
+        }
+        (Some(threshold), None) => {
+            if pks_map.len() < threshold as usize {
+                eprintln!("The supplied threshold ({}) is not greater than the current number of public keys ({}).", threshold, pks_map.len());
+                safe_exit(1)
+            }
+        }
+        (Some(threshold), Some(public_keys)) => {
+            if public_keys.len() < threshold as usize {
+                eprintln!("The supplied threshold ({}) is not greater than the supplied number of public keys ({}).", threshold, public_keys.len());
+                safe_exit(1)
+            }
+        }
+        _ => {
+            if args.vp_code_path.is_none() {
+                eprintln!("At least one argument must be passed.");
+                safe_exit(1)
+            }
+        }
+    };
 
-    let data = UpdateVp {
-        addr: addr.clone(),
+    let vp_code_hash = if let Some(vp_code_path) = args.vp_code_path {
+        let content = std::fs::read(vp_code_path)
+            .expect("Expected a file at the given path.");
+        Some(Hash::try_from(content.as_slice()).unwrap())
+    } else {
+        None
+    };
+
+    let public_keys = if let Some(public_keys) = args.public_keys {
+        public_keys
+            .iter()
+            .map(|account_key| ctx.get_cached(account_key))
+            .collect()
+    } else {
+        vec![]
+    };
+
+    let data = UpdateAccount {
+        address: addr.clone(),
         vp_code_hash,
         public_keys,
         threshold: args.threshold,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let tx = Tx::new(
-        tx_code_hash.to_vec(),
-        Some(data),
-        ctx.config.ledger.chain_id.clone(),
-        args.tx.expiration,
-    );
+    let tx = ctx
+        .build_tx(
+            data,
+            TX_UPDATE_ACCOUNT_WASM,
+            args.tx.ledger_address.clone(),
+            args.tx.expiration.clone(),
+        )
+        .await
+        .unwrap();
 
-    let pks_map = rpc::get_address_pks_map(&client, &addr).await;
+    let default_signer = ctx.default_signing_keys(Some(args.address));
 
     let (_ctx, _initialized_accounts) = process_tx(
         ctx,
         &args.tx,
         tx,
         pks_map,
-        vec![TxSigningKey::WalletAddress(args.addr)],
+        default_signer,
         #[cfg(not(feature = "mainnet"))]
         false,
     )
