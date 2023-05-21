@@ -301,7 +301,6 @@ mod test_bp_vote_extensions {
     use tower_abci_abcipp::request;
 
     use crate::node::ledger::shell::test_utils::*;
-    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet::defaults::{bertha_address, bertha_keypair};
 
     /// Make Bertha a validator.
@@ -354,12 +353,7 @@ mod test_bp_vote_extensions {
         .expect("Test failed");
 
         // we advance forward to the next epoch
-        let mut req = FinalizeBlock::default();
-        req.header.time = namada::types::time::DateTimeUtc::now();
-        shell.wl_storage.storage.last_height = BlockHeight(15);
-        shell.finalize_block(req).expect("Test failed");
-        shell.commit();
-        assert_eq!(shell.wl_storage.storage.get_current_epoch().0.0, 1);
+        assert_eq!(shell.start_new_epoch().0, 1);
 
         // Check that Bertha's vote extensions pass validation.
         let to_sign = get_bp_bytes_to_sign();
