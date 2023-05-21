@@ -184,7 +184,7 @@ test-unit-mainnet:
 
 test-unit-debug:
 	$(debug-cargo) +$(nightly) test \
-		$(TEST_FILTER) -- \
+		$(TEST_FILTER) \
 		-Z unstable-options \
 		-- --skip e2e \
 		--nocapture \
