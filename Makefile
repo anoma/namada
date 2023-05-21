@@ -118,12 +118,24 @@ test-unit-coverage:
 		-Z unstable-options \
 		-- --skip e2e -Z unstable-options --report-time
 
+# NOTE: `TEST_FILTER` is prepended with `e2e::`. Since filters in `cargo test`
+# work with a substring search, TEST_FILTER only works if it contains a string
+# that directly follows `e2e::`, e.g. `TEST_FILTER=multitoken_tests` would run
+# all tests that start with `e2e::multitoken_tests`.
 test-e2e:
-	RUST_BACKTRACE=1 $(cargo) test e2e \
-		-Z unstable-options \
-		-- \
-		--test-threads=1 \
-		-Z unstable-options --report-time
+ifdef NAMADA_E2E_NO_PREBUILT_BINARIES
+	RUST_BACKTRACE=1 $(cargo) +$(nightly) test e2e::$(TEST_FILTER) \
+	-Z unstable-options \
+	-- \
+	--test-threads=1 \
+	-Z unstable-options --report-time
+else
+	NAMADA_E2E_USE_PREBUILT_BINARIES=true RUST_BACKTRACE=1 $(cargo) +$(nightly) test e2e::$(TEST_FILTER) \
+	-Z unstable-options \
+	-- \
+	--test-threads=1 \
+	-Z unstable-options --report-time
+endif
 
 test-unit-abcipp:
 	$(cargo) test \
