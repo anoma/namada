@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## v0.15.4
+
+Namada 0.15.4 is a maintenance release addressing the invalid creation of blocks due to missing replay protection checks during prepare 
+proposal.
+
+### BUG FIXES
+
+- Fixed a bug in `prepare_proposal` causing the creation
+  of blocks containing already applied transactions.
+  ([#1405](https://github.com/anoma/namada/pull/1405))
+
+### IMPROVEMENTS
+
+- Make Tendermint consensus paramenters configurable via Namada configuration.
+  ([#1399](https://github.com/anoma/namada/pull/1399))
+- Improved error logs in `process_proposal` and added more info to
+  `InternalStats` ([#1407](https://github.com/anoma/namada/pull/1407))
+
 ## v0.15.3
 
 Namada 0.15.3 is a maintenance release addressing the creation of
