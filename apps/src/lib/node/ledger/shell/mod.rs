@@ -2077,8 +2077,12 @@ mod test_mempool_validate {
             tx.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::InvalidTx));
-        assert_eq!(result.log, "Unsupported tx type")
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidTx),);
+        assert_eq!(
+            result.log,
+            "Mempool validation failed: Raw transactions cannot be accepted \
+             into the mempool"
+        )
     }
 
     /// Mempool validation must reject already applied wrapper and decrypted
