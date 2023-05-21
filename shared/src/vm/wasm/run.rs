@@ -13,7 +13,7 @@ use super::TxCache;
 use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, Storage, StorageHasher};
-use crate::proto::{CodeHash, Section, Tx};
+use crate::proto::{Commitment, Section, Tx};
 use crate::types::address::Address;
 use crate::types::hash::{Error as TxHashError, Hash};
 use crate::types::internal::HostEnvResult;
@@ -100,10 +100,10 @@ where
         .and_then(Section::code_sec)
         .ok_or(Error::MissingCode)?;
     let (module, store) = match tx_code.code {
-        CodeHash::Hash(code_hash) => {
+        Commitment::Hash(code_hash) => {
             fetch_or_compile(tx_wasm_cache, &code_hash, write_log, storage)?
         }
-        CodeHash::Code(tx_code) => {
+        Commitment::Id(tx_code) => {
             match tx_wasm_cache.compile_or_fetch(tx_code)? {
                 Some((module, store)) => (module, store),
                 None => return Err(Error::NoCompiledWasmCode),

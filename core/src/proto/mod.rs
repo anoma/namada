@@ -4,7 +4,7 @@ pub mod generated;
 mod types;
 
 pub use types::{
-    Code, CodeHash, Data, Dkg, Error, Header, MaspBuilder, Section, Signature,
+    Code, Commitment, Data, Dkg, Error, Header, MaspBuilder, Section, Signature,
     Tx, TxError,
 };
 

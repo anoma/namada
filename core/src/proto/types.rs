@@ -88,7 +88,7 @@ impl Data {
 }
 
 /// Error representing the case where the supplied code has incorrect hash
-pub struct CodeHashError;
+pub struct CommitmentError;
 
 /// Represents either some code bytes or their SHA-256 hash
 #[derive(
@@ -100,48 +100,48 @@ pub struct CodeHashError;
     Serialize,
     Deserialize,
 )]
-pub enum CodeHash {
-    /// Hash commitment to some code
+pub enum Commitment {
+    /// Result of applying hash function to bytes
     Hash(crate::types::hash::Hash),
-    /// Actual code bytes
-    Code(Vec<u8>),
+    /// Result of applying identity function to bytes
+    Id(Vec<u8>),
 }
 
-impl CodeHash {
-    /// Substitute code bytes with their SHA-256 hash
+impl Commitment {
+    /// Substitute bytes with their SHA-256 hash
     pub fn contract(&mut self) {
-        if let Self::Code(code) = self {
+        if let Self::Id(code) = self {
             *self = Self::Hash(hash_tx(code));
         }
     }
 
-    /// Substitute a code hash with the supplied code if the hashes are
+    /// Substitute a code hash with the supplied bytes if the hashes are
     /// consistent, otherwise return an error
     pub fn expand(
         &mut self,
         code: Vec<u8>,
-    ) -> std::result::Result<(), CodeHashError> {
+    ) -> std::result::Result<(), CommitmentError> {
         match self {
-            Self::Code(c) if *c == code => Ok(()),
+            Self::Id(c) if *c == code => Ok(()),
             Self::Hash(hash) if *hash == hash_tx(&code) => {
-                *self = Self::Code(code);
+                *self = Self::Id(code);
                 Ok(())
             }
-            _ => Err(CodeHashError),
+            _ => Err(CommitmentError),
         }
     }
 
     /// Return the contained hash commitment
     pub fn hash(&self) -> crate::types::hash::Hash {
         match self {
-            Self::Code(code) => hash_tx(code),
+            Self::Id(code) => hash_tx(code),
             Self::Hash(hash) => *hash,
         }
     }
 
-    /// Return the contained code if there is any
-    pub fn code(&self) -> Option<Vec<u8>> {
-        if let Self::Code(code) = self {
+    /// Return the result of applying identity function if there is any
+    pub fn id(&self) -> Option<Vec<u8>> {
+        if let Self::Id(code) = self {
             Some(code.clone())
         } else {
             None
@@ -163,7 +163,7 @@ pub struct Code {
     /// Additional random data
     pub salt: [u8; 8],
     /// Actual transaction code
-    pub code: CodeHash,
+    pub code: Commitment,
 }
 
 impl Code {
@@ -171,7 +171,7 @@ impl Code {
     pub fn new(code: Vec<u8>) -> Self {
         Self {
             salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
-            code: CodeHash::Code(code),
+            code: Commitment::Id(code),
         }
     }
 
@@ -179,7 +179,7 @@ impl Code {
     pub fn from_hash(hash: crate::types::hash::Hash) -> Self {
         Self {
             salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
-            code: CodeHash::Hash(hash),
+            code: Commitment::Hash(hash),
         }
     }
 
@@ -607,7 +607,7 @@ impl Section {
     /// Extract the extra data from this section if possible
     pub fn extra_data(&self) -> Option<Vec<u8>> {
         if let Self::ExtraData(data) = self {
-            data.code.code()
+            data.code.id()
         } else {
             None
         }
@@ -625,7 +625,7 @@ impl Section {
     /// Extract the code from this section is possible
     pub fn code(&self) -> Option<Vec<u8>> {
         if let Self::Code(data) = self {
-            data.code.code()
+            data.code.id()
         } else {
             None
         }
@@ -849,7 +849,7 @@ impl Tx {
     /// Get the code designated by the transaction code hash in the header
     pub fn code(&self) -> Option<Vec<u8>> {
         match self.get_section(self.code_sechash()) {
-            Some(Section::Code(section)) => section.code.code(),
+            Some(Section::Code(section)) => section.code.id(),
             _ => None,
         }
     }
