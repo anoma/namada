@@ -11,9 +11,9 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::dec::POS_DECIMAL_PRECISION;
+use crate::ibc::applications::transfer::Amount as IbcAmount;
 use crate::ledger::storage_api::token::read_denom;
 use crate::ledger::storage_api::StorageRead;
-use crate::ibc::applications::transfer::Amount as IbcAmount;
 use crate::types::address::{masp, Address, DecodeError as AddressError};
 use crate::types::dec::Dec;
 use crate::types::storage;

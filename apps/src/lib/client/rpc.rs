@@ -305,9 +305,7 @@ pub async fn query_transparent_balance<
                 ),
             };
             let token_alias = lookup_alias(wallet, &token);
-            match query_storage_value::<C, token::Amount>(&client, &key)
-                .await
-            {
+            match query_storage_value::<C, token::Amount>(&client, &key).await {
                 Some(balance) => {
                     let balance = format_denominated_amount(
                         &client,
@@ -365,7 +363,8 @@ pub async fn query_transparent_balance<
                     query_storage_prefix::<C, token::Amount>(client, &key)
                         .await;
                 if let Some(balances) = balances {
-                    print_balances(wallet, &client, balances, &token, None).await;
+                    print_balances(wallet, &client, balances, &token, None)
+                        .await;
                 }
             }
         }
@@ -522,11 +521,7 @@ pub async fn query_pinned_balance<
     }
 }
 
-
-
-async fn print_balances<
-    C: namada::ledger::queries::Client + Sync,
->(
+async fn print_balances<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     wallet: &Wallet<CliWalletUtils>,
     balances: impl Iterator<Item = (storage::Key, token::Amount)>,

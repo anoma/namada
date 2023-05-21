@@ -121,7 +121,9 @@ where
     ) -> Result<(), Self::Error> {
         let src_owner = is_any_token_balance_key(src);
         let mut src_bal = match src_owner {
-            Some([_, Address::Internal(InternalAddress::IbcMint)]) => Amount::max(),
+            Some([_, Address::Internal(InternalAddress::IbcMint)]) => {
+                Amount::max()
+            }
             Some([_, Address::Internal(InternalAddress::IbcBurn)]) => {
                 unreachable!("Invalid transfer from IBC burn address")
             }

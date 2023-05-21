@@ -52,10 +52,11 @@ use rand_core::{CryptoRng, OsRng, RngCore};
 #[cfg(feature = "masp-tx-gen")]
 use sha2::Digest;
 
-use crate::ledger::queries::Client;
-use crate::ledger::{args, rpc};
 use crate::ledger::args::InputAmount;
+use crate::ledger::queries::Client;
 use crate::ledger::rpc::query_conversion;
+use crate::ledger::tx::token_exists_or_err;
+use crate::ledger::{args, rpc};
 use crate::proto::{SignedTxData, Tx};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
@@ -423,7 +424,7 @@ pub type Conversions =
 pub type TransferDelta = HashMap<Address, MaspChange>;
 
 /// Represents the changes that were made to a list of shielded accounts
-pub type TransactionDelta = HashMap<ViewingKey, Amount>;
+pub type TransactionDelta = HashMap<ViewingKey, MaspAmount>;
 
 /// Represents the current state of the shielded pool from the perspective of
 /// the chosen viewing keys.
@@ -456,7 +457,8 @@ pub struct ShieldedContext<U: ShieldedUtils> {
     /// The set of note positions that have been spent
     pub spents: HashSet<usize>,
     /// Maps asset types to their decodings
-    pub asset_types: HashMap<AssetType, (Address, Option<Key>, MaspDenom, Epoch)>,
+    pub asset_types:
+        HashMap<AssetType, (Address, Option<Key>, MaspDenom, Epoch)>,
     /// Maps note positions to their corresponding viewing keys
     pub vk_map: HashMap<usize, ViewingKey>,
 }
@@ -776,7 +778,11 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// Compute the total unspent notes associated with the viewing key in the
     /// context. If the key is not in the context, then we do not know the
     /// balance and hence we return None.
-    pub async fn compute_shielded_balance(&self, client: &U::C, vk: &ViewingKey) -> Option<Amount> {
+    pub async fn compute_shielded_balance(
+        &self,
+        client: &U::C,
+        vk: &ViewingKey,
+    ) -> Option<Amount> {
         // Cannot query the balance of a key that's not in the map
         if !self.pos_map.contains_key(vk) {
             return None;
@@ -934,7 +940,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     pub async fn compute_exchanged_amount(
         &mut self,
         client: &U::C,
-        mut input: Amount,
+        mut input: MaspAmount,
         target_epoch: Epoch,
         mut conversions: Conversions,
     ) -> (Amount, Conversions) {
@@ -1187,23 +1193,15 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         client: &U::C,
         owner: PaymentAddress,
         viewing_key: &ViewingKey,
-    ) -> Result<(Amount, Epoch), PinnedBalanceError> {
+    ) -> Result<(MaspAmount, Epoch), PinnedBalanceError> {
         // Obtain the balance that will be exchanged
         let (amt, ep) =
-            Self::compute_pinned_balance(client, owner, viewing_key)
-                .await?;
+            Self::compute_pinned_balance(client, owner, viewing_key).await?;
         // Establish connection with which to do exchange rate queries
         let amount = self.decode_all_amounts(&client, amt).await;
-        let token = token_exists_or_err(args.token.clone(), args.tx.force, client).await?;
-        let validated_amount = validate_amount(client, amount, &token, &None);
         // Finally, exchange the balance to the transaction's epoch
         let computed_amount = self
-            .compute_exchanged_amount(
-                client,
-                amount,
-                ep,
-                HashMap::new(),
-            )
+            .compute_exchanged_amount(client, amount, ep, HashMap::new())
             .await
             .0;
         Ok((self.decode_all_amounts(&client, computed_amount).await, ep))
@@ -1327,7 +1325,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             epoch,
             &args.token,
             &args.sub_prefix.as_ref(),
-            amt.amount.clone()
+            amt.amount.clone(),
         );
 
         // Transactions with transparent input and shielded output
@@ -1399,7 +1397,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             let script = TransparentAddress::PublicKey(hash.into()).script();
             epoch_sensitive = true;
 
-            for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter()) {
+            for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter())
+            {
                 builder.add_transparent_input(
                     secp_sk,
                     OutPoint::new([0u8; 32], 0),
@@ -1412,12 +1411,12 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             }
         }
 
-
         // Now handle the outputs of this transaction
         // If there is a shielded output
         if let Some(pa) = payment_address {
             let ovk_opt = spending_key.map(|x| x.expsk.ovk);
-            for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter()) {
+            for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter())
+            {
                 builder.add_sapling_output(
                     ovk_opt,
                     pa.into(),
@@ -1439,7 +1438,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             let hash = ripemd160::Ripemd160::digest(
                 sha2::Sha256::digest(target_enc.as_ref()).as_slice(),
             );
-            for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter()) {
+            for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter())
+            {
                 builder.add_transparent_output(
                     &TransparentAddress::PublicKey(hash.into()),
                     *asset_type,
@@ -1463,30 +1463,32 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 replay_builder.set_fee(Amount::zero())?;
                 let ovk_opt = spending_key.map(|x| x.expsk.ovk);
 
-                for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter()) {
-                    builder.add_transparent_input(
-                        secp_sk,
-                        OutPoint::new([0u8; 32], 0),
-                        TxOut {
-                            asset_type: *asset_type,
-                            value: denom.denominate(&amt),
-                            script_pubkey: script.clone(),
-                        },
+                let token = token_exists_or_err(
+                    args.token.clone(),
+                    args.tx.force,
+                    client,
+                )
+                .await?;
+                let validated_amount =
+                    validate_amount(client, args.amount, &token, &None);
+
+                let (new_asset_type, _) = convert_amount(
+                    new_epoch,
+                    &args.token,
+                    &None,
+                    validated_amount,
+                );
+                for (denom, asset_type) in
+                    MaspDenom::iter().zip(new_asset_type.iter())
+                {
+                    replay_builder.add_sapling_output(
+                        ovk_opt,
+                        payment_address.unwrap().into(),
+                        *asset_type,
+                        validated_amount,
+                        memo.clone(),
                     )?;
                 }
-
-                let token = token_exists_or_err(args.token.clone(), args.tx.force, client).await?;
-                let validated_amount = validate_amount(client, args.amount, &token, &None);
-
-                let (new_asset_type, _) =
-                    convert_amount(new_epoch, &args.token, &None, validated_amount);
-                replay_builder.add_sapling_output(
-                    ovk_opt,
-                    payment_address.unwrap().into(),
-                    new_asset_type,
-                    validated_amount,
-                    memo,
-                )?;
 
                 let secp_sk = secp256k1::SecretKey::from_slice(&[0xcd; 32])
                     .expect("secret key");
@@ -1500,15 +1502,19 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 );
                 let script =
                     TransparentAddress::PublicKey(hash.into()).script();
-                replay_builder.add_transparent_input(
-                    secp_sk,
-                    OutPoint::new([0u8; 32], 0),
-                    TxOut {
-                        asset_type: new_asset_type,
-                        value: amt,
-                        script_pubkey: script,
-                    },
-                )?;
+                for (denom, asset_type) in
+                    MaspDenom::iter().zip(asset_types.iter())
+                {
+                    replay_builder.add_transparent_input(
+                        secp_sk,
+                        OutPoint::new([0u8; 32], 0),
+                        TxOut {
+                            asset_type: *asset_type,
+                            value: denom.denominate(amt),
+                            script_pubkey: script.clone(),
+                        },
+                    )?;
+                }
 
                 let (replay_tx, _) =
                     replay_builder.build(consensus_branch_id, &prover)?;
@@ -1627,7 +1633,6 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                                 },
                             )]);
 
-
                             // No shielded accounts are affected by this
                             // Transfer
                             transfers.insert(
@@ -1720,7 +1725,6 @@ pub fn make_asset_type<T: std::fmt::Display>(
     // Generate the unique asset identifier from the unique token address
     AssetType::new(token_bytes.as_ref()).expect("unable to create asset type")
 }
-
 
 /// Convert Anoma amount and token type to MASP equivalents
 fn convert_amount(

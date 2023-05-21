@@ -88,13 +88,14 @@ pub async fn query_epoch<C: crate::ledger::queries::Client + Sync>(
 /// Query the epoch of the given block height, if it exists.
 /// Will return none if the input block height is greater than
 /// the latest committed block height.
-pub async fn query_epoch_at_height(
+pub async fn query_epoch_at_height<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     height: BlockHeight,
 ) -> Option<Epoch> {
-    unwrap_client_response::<C,_>(RPC.shell().epoch_at_height(client, &height).await)
+    unwrap_client_response::<C, _>(
+        RPC.shell().epoch_at_height(client, &height).await,
+    )
 }
-
 
 /// Query the last committed block
 pub async fn query_block<C: crate::ledger::queries::Client + Sync>(
@@ -656,8 +657,8 @@ pub async fn get_proposal_votes<C: crate::ledger::queries::Client + Sync>(
                 let amount: VotePower =
                     get_validator_stake(client, epoch, &voter_address)
                         .await
-                    .try_into()
-                    .expect("Amount of bonds");
+                        .try_into()
+                        .expect("Amount of bonds");
                 yay_validators.insert(voter_address, (amount, vote));
             } else if !validators.contains(&voter_address) {
                 let validator_address =
@@ -792,15 +793,18 @@ pub async fn query_and_print_unbonds<
         }
     }
     if total_withdrawable != token::Amount::default() {
-        println!("Total withdrawable now: {}.", total_withdrawable.to_string_native());
+        println!(
+            "Total withdrawable now: {}.",
+            total_withdrawable.to_string_native()
+        );
     }
     if !not_yet_withdrawable.is_empty() {
         println!("Current epoch: {current_epoch}.")
     }
     for (withdraw_epoch, amount) in not_yet_withdrawable {
         println!(
-            "Amount {} withdrawable starting from epoch \
-             {withdraw_epoch}.", amount.to_string_native()
+            "Amount {} withdrawable starting from epoch {withdraw_epoch}.",
+            amount.to_string_native()
         );
     }
 }

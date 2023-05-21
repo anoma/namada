@@ -111,7 +111,6 @@ pub enum InputAmount {
     Unvalidated(token::DenominatedAmount),
 }
 
-
 /// IBC transfer transaction arguments
 #[derive(Clone, Debug)]
 pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {

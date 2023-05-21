@@ -7,6 +7,7 @@ use borsh::BorshSerialize;
 use itertools::Either::*;
 use masp_primitives::transaction::builder;
 use namada_core::types::address::{masp, masp_tx_key, Address};
+use namada_core::types::dec::Dec;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::CommissionPair;
 use prost::EncodeError;
@@ -32,7 +33,6 @@ use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::key::*;
 use crate::types::masp::TransferTarget;
-use namada_core::types::dec::Dec;
 use crate::types::storage::{Epoch, RESERVED_ADDRESS_PREFIX};
 use crate::types::time::DateTimeUtc;
 use crate::types::transaction::{pos, InitAccount, UpdateVp};
@@ -119,13 +119,7 @@ pub enum Error {
          transferred and fees. Amount to transfer is {1} {2} and fees are {3} \
          {4}."
     )]
-    NegativeBalanceAfterTransfer(
-        Address,
-        String,
-        Address,
-        String,
-        Address,
-    ),
+    NegativeBalanceAfterTransfer(Address, String, Address, String, Address),
     /// No Balance found for token
     #[error("{0}")]
     MaspError(builder::Error),
@@ -690,13 +684,18 @@ pub async fn submit_unbond<
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
     let bond_amount =
         rpc::query_bond(client, &bond_source, &validator, None).await;
-    println!("Bond amount available for unbonding: {} NAM", bond_amount.to_string_native());
+    println!(
+        "Bond amount available for unbonding: {} NAM",
+        bond_amount.to_string_native()
+    );
 
     if args.amount > bond_amount {
         eprintln!(
             "The total bonds of the source {} is lower than the amount to be \
              unbonded. Amount to unbond is {} and the total bonds is {}.",
-            bond_source, args.amount.to_string_native(), bond_amount.to_string_native()
+            bond_source,
+            args.amount.to_string_native(),
+            bond_amount.to_string_native()
         );
         if !args.tx.force {
             return Err(Error::LowerBondThanUnbond(
@@ -768,21 +767,24 @@ pub async fn submit_unbond<
             std::cmp::Ordering::Equal => {
                 println!(
                     "Amount {} withdrawable starting from epoch {}",
-                    (latest_withdraw_amount_post - latest_withdraw_amount_pre).to_string_native(),
+                    (latest_withdraw_amount_post - latest_withdraw_amount_pre)
+                        .to_string_native(),
                     latest_withdraw_epoch_post
                 );
             }
             std::cmp::Ordering::Greater => {
                 println!(
                     "Amount {} withdrawable starting from epoch {}",
-                    latest_withdraw_amount_post.to_string_native(), latest_withdraw_epoch_post.to_string()
+                    latest_withdraw_amount_post.to_string_native(),
+                    latest_withdraw_epoch_post.to_string()
                 );
             }
         }
     } else {
         println!(
             "Amount {} withdrawable starting from epoch {}",
-            latest_withdraw_amount_post.to_string_native(), latest_withdraw_epoch_post.to_string()
+            latest_withdraw_amount_post.to_string_native(),
+            latest_withdraw_epoch_post.to_string()
         );
     }
 
@@ -994,7 +996,7 @@ pub async fn submit_transfer<
     client: &C,
     wallet: &mut Wallet<V>,
     shielded: &mut ShieldedContext<U>,
-    args: args::TxTransfer,
+    mut args: args::TxTransfer,
 ) -> Result<(), Error> {
     // Check that the source address exists on chain
     let force = args.tx.force;
@@ -1041,7 +1043,7 @@ pub async fn submit_transfer<
         // TODO: Currently multi-tokens cannot be used to pay fees
         &None,
     )
-        .await;
+    .await;
 
     args.amount = InputAmount::Validated(validated_amount);
     args.tx.fee_amount = InputAmount::Validated(validate_fee);
@@ -1050,7 +1052,6 @@ pub async fn submit_transfer<
         address: token.clone(),
         sub_prefix: sub_prefix.clone(),
     };
-
 
     check_balance_too_low_err(
         token,
@@ -1118,7 +1119,6 @@ pub async fn submit_transfer<
         }
         Err(err) => Err(Error::MaspError(err)),
     }?;
-
 
     let transfer = token::Transfer {
         source: source.clone(),
@@ -1381,7 +1381,7 @@ where
 /// Returns the given token if the given address exists on chain
 /// otherwise returns an error, force forces the address through even
 /// if it isn't on chain
-async fn token_exists_or_err<C: crate::ledger::queries::Client + Sync>(
+pub async fn token_exists_or_err<C: crate::ledger::queries::Client + Sync>(
     token: Address,
     force: bool,
     client: &C,
@@ -1459,7 +1459,10 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
                         "The balance of the source {} of token {} is lower \
                          than the amount to be transferred. Amount to \
                          transfer is {} and the balance is {}.",
-                        source, token, amount.to_string_native(), balance.to_string_native()
+                        source,
+                        token,
+                        amount.to_string_native(),
+                        balance.to_string_native()
                     );
                     Ok(())
                 } else {

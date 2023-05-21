@@ -1726,16 +1726,20 @@ pub mod args {
     pub const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
     pub const FORCE: ArgFlag = flag("force");
     pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
-    pub const GAS_AMOUNT: ArgDefault<token::DenominatedAmount> =
-        arg_default("gas-amount", DefaultFn(|| token::DenominatedAmount {
+    pub const GAS_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
+        "gas-amount",
+        DefaultFn(|| token::DenominatedAmount {
             amount: token::Amount::default(),
             denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-        }));
-    pub const GAS_LIMIT: ArgDefault<token::DenominatedAmount> =
-        arg_default("gas-limit", DefaultFn(|| token::DenominatedAmount {
+        }),
+    );
+    pub const GAS_LIMIT: ArgDefault<token::DenominatedAmount> = arg_default(
+        "gas-limit",
+        DefaultFn(|| token::DenominatedAmount {
             amount: token::Amount::default(),
             denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-        }));
+        }),
+    );
     pub const GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".parse().unwrap()));
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
@@ -2056,10 +2060,12 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> TxTransfer<SdkTypes> {
             TxTransfer::<SdkTypes> {
                 tx: match self.tx {
-                    InputAmount::Validated(tx) =>
-                        InputAmount::Validated(tx.to_sdk(ctx)),
-                    InputAmount::Unvalidated(tx) =>
-                        InputAmount::Unvalidated(tx.to_sdk(ctx)),
+                    InputAmount::Validated(tx) => {
+                        InputAmount::Validated(tx.to_sdk(ctx))
+                    }
+                    InputAmount::Unvalidated(tx) => {
+                        InputAmount::Unvalidated(tx.to_sdk(ctx))
+                    }
                 },
                 source: ctx.get_cached(&self.source),
                 target: ctx.get(&self.target),

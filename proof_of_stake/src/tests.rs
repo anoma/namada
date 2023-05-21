@@ -453,7 +453,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     // Unbond the self-bond with an amount that will remove all of the self-bond
     // executed after genesis and some of the genesis bond
     let amount_self_unbond: token::Amount =
-        amount_self_bond + (u64::from(validator.tokens) / 2);
+        amount_self_bond + (validator.tokens / 2);
     // When the difference is 0, only the non-genesis self-bond is unbonded
     let unbonded_genesis_self_bond =
         amount_self_unbond - amount_self_bond != token::Amount::default();
