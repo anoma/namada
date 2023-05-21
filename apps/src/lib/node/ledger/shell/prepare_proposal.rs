@@ -8,6 +8,7 @@ use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::proto::Tx;
 use namada::types::internal::WrapperTxInQueue;
 use namada::types::storage::BlockHeight;
+use namada::types::time::DateTimeUtc;
 use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
@@ -25,6 +26,7 @@ use super::block_space_alloc::{AllocFailure, BlockSpaceAllocator};
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
+use crate::facade::tendermint_proto::google::protobuf::Timestamp;
 #[cfg(feature = "abcipp")]
 use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
 use crate::node::ledger::shell::{process_tx, ShellMode};
@@ -53,7 +55,7 @@ where
 
             // add encrypted txs
             let (encrypted_txs, alloc) =
-                self.build_encrypted_txs(alloc, &req.txs);
+                self.build_encrypted_txs(alloc, &req.txs, req.time);
             let mut txs = encrypted_txs;
 
             // decrypt the wrapper txs included in the previous block
@@ -125,18 +127,29 @@ where
         &self,
         mut alloc: EncryptedTxBatchAllocator,
         txs: &[TxBytes],
+        block_time: Option<Timestamp>,
     ) -> (Vec<TxBytes>, BlockSpaceAllocator<BuildingDecryptedTxBatch>) {
         let pos_queries = self.wl_storage.pos_queries();
+        let block_time = block_time.and_then(|block_time| {
+            // If error in conversion, default to last block datetime, it's
+            // valid because of mempool check
+            TryInto::<DateTimeUtc>::try_into(block_time).ok()
+        });
         let txs = txs
             .iter()
             .filter_map(|tx_bytes| {
-                if let Ok(Ok(TxType::Wrapper(_))) =
-                    Tx::try_from(tx_bytes.as_slice()).map(process_tx)
-                {
-                    Some(tx_bytes.clone())
-                } else {
-                    None
+                if let Ok(tx) = Tx::try_from(tx_bytes.as_slice()) {
+                    // If tx doesn't have an expiration it is valid. If time cannot be
+                    // retrieved from block default to last block datetime which has
+                    // already been checked by mempool_validate, so it's valid
+                    if let (Some(block_time), Some(exp)) = (block_time.as_ref(), &tx.expiration) {
+                        if block_time > exp { return None }
+                    }
+                    if let Ok(TxType::Wrapper(_)) = process_tx(tx) {
+                        return Some(tx_bytes.clone());
+                    }
                 }
+                None
             })
             .take_while(|tx_bytes| {
                 alloc.try_alloc(&tx_bytes[..])
@@ -409,7 +422,6 @@ mod test_prepare_proposal {
     use namada::types::key::common;
     use namada::types::key::RefTo;
     use namada::types::storage::BlockHeight;
-    use namada::types::time::DateTimeUtc;
     use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::transaction::{Fee, TxType, WrapperTx};
     #[cfg(feature = "abcipp")]
