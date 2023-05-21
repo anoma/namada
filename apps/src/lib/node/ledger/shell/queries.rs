@@ -136,13 +136,13 @@ where
 #[cfg(test)]
 #[cfg(not(feature = "abcipp"))]
 mod test_queries {
+    use namada::core::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
     use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
     use namada::ledger::pos::PosQueries;
     use namada::types::storage::Epoch;
 
     use super::*;
     use crate::node::ledger::shell::test_utils;
-    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
     macro_rules! test_must_send_valset_upd {
         (epoch_assertions: $epoch_assertions:expr $(,)?) => {
@@ -150,15 +150,24 @@ mod test_queries {
             /// expected.
             #[test]
             fn test_must_send_valset_upd() {
+                const EPOCH_NUM_BLOCKS: u64 =
+                    10 - EPOCH_SWITCH_BLOCKS_DELAY as u64;
+
                 let (mut shell, _recv, _, _oracle_control_recv) =
                     test_utils::setup_at_height(0u64);
 
                 let epoch_assertions = $epoch_assertions;
 
+                let mut prev_epoch = None;
+
                 // test `SendValsetUpd::Now`  and `SendValsetUpd::AtPrevHeight`
                 for (curr_epoch, curr_block_height, can_send) in
                     epoch_assertions
                 {
+                    if prev_epoch != Some(curr_epoch) {
+                        prev_epoch = Some(curr_epoch);
+                        shell.start_new_epoch_in(EPOCH_NUM_BLOCKS);
+                    }
                     shell.wl_storage.storage.last_height =
                         BlockHeight(curr_block_height - 1);
                     assert_eq!(
@@ -204,12 +213,7 @@ mod test_queries {
                     //     );
                     // }
                     // ```
-                    let time = namada::types::time::DateTimeUtc::now();
-                    let mut req = FinalizeBlock::default();
-                    req.header.time = time;
-                    shell.finalize_block(req).expect("Test failed");
-                    shell.commit();
-                    shell.wl_storage.storage.next_epoch_min_start_time = time;
+                    shell.finalize_and_commit();
                 }
             }
         };
