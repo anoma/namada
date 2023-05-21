@@ -41,6 +41,8 @@ pub enum Error {
     GasError(gas::Error),
     #[error("Insufficient balance to pay fee")]
     FeeError,
+    #[error("Error unshielding funds for fee payment: {0}")]
+    FeeUnshieldingError(String),
     #[error("Error executing VP for addresses: {0:?}")]
     VpRunnerError(vm::wasm::run::Error),
     #[error("The address {0} doesn't exist")]
@@ -68,11 +70,11 @@ pub enum Error {
     #[error("Access to an internal address {0} is forbidden")]
     AccessForbidden(InternalAddress),
     #[error("Error while converting the transaction code's hash")]
-    TxCodeHashConversion,
+    TxCodeHashConversion, //FIXME: need this error?
     #[error("Could not retrieve wasm code from storage for hash {0}")]
-    MissingWasmCodeInStorage(Hash),
+    MissingWasmCodeInStorage(Hash), //FIXME: need this error?
     #[error("Failed type conversion: {0}")]
-    ConversionError(String),
+    ConversionError(String), //FIXME: need this error?
 }
 
 /// Result of applying a transaction

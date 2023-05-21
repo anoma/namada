@@ -228,6 +228,9 @@ where
             }
         }
 
+        let tx_chain_id = tx.chain_id.clone();
+        let tx_expiration = tx.expiration;
+
         if let TxType::Wrapper(wrapper) = process_tx(tx).map_err(|_| ())? {
             // Check tx gas limit
             let mut tx_gas_meter =
@@ -240,7 +243,9 @@ where
 
             // Check fees
             self.wrapper_fee_check(
-                wrapper,
+                &wrapper,
+                tx_chain_id,
+                tx_expiration,
                 temp_wl_storage,
                 Some(Cow::Borrowed(gas_table)),
                 vp_wasm_cache,

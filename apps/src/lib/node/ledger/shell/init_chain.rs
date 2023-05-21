@@ -143,12 +143,14 @@ where
                 }
 
                 let code_key = Key::wasm_code(&code_hash);
-                self.wl_storage.write_bytes(&code_key, code)?;
-
+                let code_name_key = Key::wasm_code_name(name.clone());
                 let code_len_key = Key::wasm_code_len(&code_hash);
-                self.wl_storage.write(&code_len_key, code_len)?;
-
                 let hash_key = Key::wasm_hash(name);
+
+                self.wl_storage.write_bytes(&code_key, code)?;
+                self.wl_storage
+                    .write_bytes(&code_name_key, code_hash.clone())?;
+                self.wl_storage.write(&code_len_key, code_len)?;
                 self.wl_storage.write_bytes(&hash_key, code_hash)?;
             } else {
                 tracing::warn!("The wasm {name} isn't whitelisted.");

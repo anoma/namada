@@ -12,6 +12,7 @@ use namada::types::token;
 use namada::types::token::Amount;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx, MIN_FEE};
 
+use super::tx::gen_shielded_transfer;
 use super::{rpc, tx};
 use crate::cli::context::{FromContext, WalletAddress, WalletKeypair};
 use crate::cli::{self, args, Context};
@@ -145,6 +146,8 @@ pub async fn tx_signer(
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
+///
+/// If the tx fee is to be unshielded, it also returns the unshielding epoch.
 pub async fn sign_tx(
     ctx: &mut Context,
     tx: Tx,
@@ -272,24 +275,14 @@ pub async fn sign_wrapper(
                     sub_prefix: None,
                     amount: diff,
                 };
-                let transfer =
-                    tx::build_transfer(ctx, &transfer_args, &client).await;
-                let (unsigned_tx, unshielding_epoch) = tx::build_shielded_part(
-                    ctx,
-                    &transfer_args,
-                    &client,
-                    transfer,
-                )
-                .await;
+                let (transaction, _data, unshielding_epoch) =
+                    gen_shielded_transfer(ctx, &client, &transfer_args)
+                        .await
+                        .unwrap()
+                        .unwrap();
 
                 balance += diff;
-                let masp_key = find_keypair(
-                    &mut ctx.wallet,
-                    &address::masp(),
-                    args.ledger_address.clone(),
-                )
-                .await;
-                (Some(unsigned_tx.sign(&masp_key)), unshielding_epoch)
+                (Some(transaction), Some(unshielding_epoch))
             } else {
                 eprintln!(
                     "The wrapper transaction source doesn't have enough \

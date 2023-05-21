@@ -594,7 +594,7 @@ where
                         .write(&wrapper_hash_key, vec![])
                         .expect("Couldn't write wrapper tx hash to write log");
 
-                    // check that the fee payer has sufficient balance
+                    // Check that the fee payer has sufficient balance.
                     // The temporary write log is populated by now. We need a
                     // new, empty one, to simulate the unshielding tx (to
                     // prevent the already written keys from being
@@ -605,7 +605,9 @@ where
                     let mut clone_wl_storage =
                         TempWlStorage::new(&self.wl_storage.storage);
                     match self.wrapper_fee_check(
-                        wrapper,
+                        &wrapper,
+                        tx_chain_id,
+                        tx_expiration,
                         &mut clone_wl_storage,
                         Some(Cow::Borrowed(gas_table)),
                         vp_wasm_cache,

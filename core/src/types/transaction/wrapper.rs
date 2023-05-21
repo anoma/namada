@@ -10,12 +10,14 @@ pub mod wrapper_tx {
     pub use ark_bls12_381::Bls12_381 as EllipticCurve;
     pub use ark_ec::{AffineCurve, PairingEngine};
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+    use masp_primitives::transaction::Transaction;
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
 
-    use crate::proto::{SignedTxData, Tx};
-    use crate::types::address::{self, Address};
+    use crate::proto::Tx;
+    use crate::types::address::{masp, Address};
     use crate::types::chain::ChainId;
+    use crate::types::key::common::SecretKey;
     use crate::types::key::*;
     use crate::types::storage::Epoch;
     use crate::types::time::DateTimeUtc;
@@ -47,7 +49,7 @@ pub mod wrapper_tx {
         )]
         InvalidKeyPair,
         #[error("The provided unshielding tx is invalid: {0}")]
-        InvalidUnshieldTx(String),
+        InvalidUnshield(String),
     }
 
     /// A fee is an amount of a specified token
@@ -173,8 +175,8 @@ pub mod wrapper_tx {
         pub epoch: Epoch,
         /// Max amount of gas that can be used when executing the inner tx
         pub gas_limit: GasLimit,
-        /// The optional, unencrypted, unshielding tx for fee payment
-        pub unshield: Option<Tx>,
+        /// The optional, unencrypted, unshielding transaction for fee payment
+        pub unshield: Option<Transaction>,
         /// the encrypted payload
         pub inner_tx: EncryptedTx,
         /// sha-2 hash of the inner transaction acting as a commitment
@@ -201,7 +203,7 @@ pub mod wrapper_tx {
             #[cfg(not(feature = "mainnet"))] pow_solution: Option<
                 crate::ledger::testnet_pow::Solution,
             >,
-            unshield: Option<Tx>,
+            unshield: Option<Transaction>,
         ) -> WrapperTx {
             let inner_tx = EncryptedTx::encrypt(&tx.to_bytes(), encryption_key);
             Self {
@@ -290,73 +292,61 @@ pub mod wrapper_tx {
                 })
         }
 
-        /// Static checks on the optional unshielding transaction:
-        ///
-        /// - tx is signed
-        /// - tx encodes a [`Transfer`]
-        /// - shielded field of the transfer must be set to Some
-        /// - source address must be the masp
-        /// - target address must be that of the wrapper's signer
-        /// - token must match the one in the [`Fee`] struct
-        /// - amount must be the minimum required to match the required fee
-        ///
-        /// Returns [`Ok`] if unshield is not required
-        pub fn validate_fee_unshielding(
+        /// Performs validation on the fee unshielding transaction carried by the wrapper and generates the tx for execution. The provided `expiration` and `chain_id` should be the same as the wrapper for safety reasons.
+        pub fn check_and_generate_fee_unshielding(
             &self,
-            unshielded_balance: Amount,
-        ) -> Result<(), WrapperTxErr> {
-            let transfer = match &self.unshield {
-                Some(unshield_tx) => match &unshield_tx.data {
-                    Some(d) => SignedTxData::try_from_slice(d)
-                        .and_then(|signed| {
-                            Transfer::try_from_slice(
-                                &signed.data.unwrap_or_default(),
-                            )
-                        })
-                        .map_err(|e| {
-                            WrapperTxErr::InvalidUnshieldTx(e.to_string())
-                        }),
-                    None => Err(WrapperTxErr::InvalidUnshieldTx(
-                        "Missing unshielding tx data".to_string(),
-                    )),
-                },
-                None => return Ok(()),
-            }?;
+            transparent_balance: Amount,
+            chain_id: ChainId,
+            expiration: Option<DateTimeUtc>,
+            transfer_code: Vec<u8>,
+        ) -> Result<Tx, WrapperTxErr> {
+            //FIXME: check the limit of spending keys
+            let amount = self.fee.amount.checked_sub(transparent_balance).ok_or(WrapperTxErr::InvalidUnshield(format!("The transparent balance of the fee payer is enough to pay fees, no need for unshielding")))?;
 
-            if transfer.shielded.is_none() {
-                return Err(WrapperTxErr::InvalidUnshieldTx(
-                    "Shielded field of Transfer is None".to_string(),
-                ));
-            }
+            self.generate_fee_unshielding(
+                amount,
+                chain_id,
+                expiration,
+                transfer_code,
+            )
+        }
 
-            if transfer.source != address::masp() {
-                return Err(WrapperTxErr::InvalidUnshieldTx(
-                    "Source of unshielding is not the masp address".to_string(),
-                ));
-            }
+        /// Generates the fee unshielding tx for execution. The provided `expiration` and `chain_id` should be the same as the wrapper for safety reasons.
+        pub fn generate_fee_unshielding(
+            &self,
+            amount: Amount,
+            chain_id: ChainId,
+            expiration: Option<DateTimeUtc>,
+            transfer_code: Vec<u8>,
+        ) -> Result<Tx, WrapperTxErr> {
+            let transfer = Transfer {
+                source: masp(),
+                target: self.fee_payer(),
+                token: self.fee.token.clone(),
+                sub_prefix: None,
+                amount,
+                key: None,
+                shielded: self.unshield.clone(),
+            };
 
-            if transfer.target != self.fee_payer() {
-                return Err(WrapperTxErr::InvalidUnshieldTx(
-                    "Target of unshielding is not the fee payer".to_string(),
-                ));
-            }
+            let tx = Tx::new(
+                transfer_code,
+                Some(transfer.try_to_vec().map_err(|_| {
+                    WrapperTxErr::InvalidUnshield(
+                        "Error while serializing the unshield transfer data"
+                            .to_string(),
+                    )
+                })?),
+                chain_id,
+                expiration,
+            );
 
-            if transfer.token != self.fee.token {
-                return Err(WrapperTxErr::InvalidUnshieldTx(
-                    "Token of the unshielding tx doesn't match the fee token"
-                        .to_string(),
-                ));
-            }
+            // Mock a signature. We don't have the signign key of masp in the ledger but the masp vp does not check it
+            let mock_sigkey = SecretKey::Ed25519(ed25519::SecretKey(Box::new(
+                [0; 32].into(),
+            )));
 
-            match unshielded_balance.checked_add(transfer.amount) {
-                Some(v) if v == self.fee.amount => Ok(()),
-                _ => Err(WrapperTxErr::InvalidUnshieldTx(format!(
-                    "The unshielded amount is not the minimum required for \
-                     fee payment: required {}, found: {}",
-                    self.fee.amount - unshielded_balance,
-                    transfer.amount
-                ))),
-            }
+            Ok(tx.sign(&mock_sigkey))
         }
     }
 
@@ -429,6 +419,7 @@ pub mod wrapper_tx {
         use crate::types::address::nam;
 
         fn gen_keypair() -> common::SecretKey {
+            use crate::types::key::SecretKey;
             use rand::prelude::ThreadRng;
             use rand::thread_rng;
 

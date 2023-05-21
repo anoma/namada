@@ -58,6 +58,8 @@ use num_traits::{FromPrimitive, ToPrimitive};
 use thiserror::Error;
 use tokio::sync::mpsc::UnboundedSender;
 
+use crate::client::rpc::query_wasm_code_hash;
+use crate::client::tx::TX_TRANSFER_WASM;
 use crate::config::{genesis, TendermintMode};
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
@@ -108,7 +110,7 @@ pub enum Error {
     #[error("Error reading wasm: {0}")]
     ReadingWasm(#[from] eyre::Error),
     #[error("Error loading wasm: {0}")]
-    LoadingWasm(String),
+    LoadingWasm(String), //FIXME: need this? Remove if possible
     #[error("Error reading from or writing to storage: {0}")]
     StorageApi(#[from] storage_api::Error),
 }
@@ -673,18 +675,21 @@ where
             }
         };
 
+        let tx_chain_id = tx.chain_id.clone();
+        let tx_expiration = tx.expiration.clone();
+
         // Tx chain id
-        if tx.chain_id != self.chain_id {
+        if tx_chain_id != self.chain_id {
             response.code = ErrorCodes::InvalidChainId.into();
             response.log = format!(
                 "Tx carries a wrong chain id: expected {}, found {}",
-                self.chain_id, tx.chain_id
+                self.chain_id, tx_chain_id
             );
             return response;
         }
 
         // Tx expiration
-        if let Some(exp) = tx.expiration {
+        if let Some(exp) = tx_expiration {
             let last_block_timestamp = self.get_block_timestamp(None);
 
             if last_block_timestamp > exp {
@@ -775,7 +780,9 @@ where
 
             // check that the fee payer has sufficient balance
             if let Err(e) = self.wrapper_fee_check(
-                wrapper,
+                &wrapper,
+                tx_chain_id,
+                tx_expiration,
                 &mut TempWlStorage::new(&self.wl_storage.storage),
                 None,
                 &mut self.vp_wasm_cache.clone(),
@@ -943,16 +950,40 @@ where
         false
     }
 
-    /// Check that the Wrapper's signer has enough funds to pay fees. This
-    /// method consumes the provided wrapper.
+    /// Load the wasm code for a transfer from storage.
+    ///
+    /// # Panics
+    /// If the transaction hash or code is not found in storage
+    pub fn load_transfer_code_from_storage(&self) -> Vec<u8> {
+        let transfer_code_name_key =
+            Key::wasm_code_name("tx_transfer.wasm".to_string());
+        let transfer_hash: hash::Hash = self
+            .wl_storage
+            .read(&transfer_code_name_key)
+            .expect("Could not read the storage")
+            .expect("Expected tx transfer hash in storage");
+        let transfer_code_key = Key::wasm_code(&transfer_hash);
+
+        self.wl_storage
+            .read(&transfer_code_key)
+            .expect("Could not read the storage")
+            .expect("Expected tx transfer code in storage")
+    }
+
+    /// Check that the Wrapper's signer has enough funds to pay fees.
+    ///
+    /// For security reasons, the `chain_id` and `expiration` fields should come from the serialized wrapper, not from the Shell.
     pub fn wrapper_fee_check<CA>(
         &self,
-        mut wrapper: WrapperTx,
-        wl_storage: &mut TempWlStorage<D, H>,
+        wrapper: &WrapperTx,
+        chain_id: ChainId,
+        expiration: Option<DateTimeUtc>,
+        temp_wl_storage: &mut TempWlStorage<D, H>,
         gas_table: Option<Cow<BTreeMap<String, u64>>>,
         vp_wasm_cache: &mut VpCache<CA>,
         tx_wasm_cache: &mut TxCache<CA>,
     ) -> std::result::Result<(), String>
+    //FIXME: cannot use the result of this module?
     where
         CA: 'static + WasmCacheAccess + Sync,
     {
@@ -964,23 +995,27 @@ where
         }
 
         let mut balance = storage_api::token::read_balance(
-            wl_storage,
+            temp_wl_storage,
             &wrapper.fee.token,
             &wrapper.fee_payer(),
         )
         .expect("Token balance read in the protocol must not fail");
 
-        if let Some(unshield) = wrapper.unshield.take() {
-            // Static checks
-            wrapper.validate_fee_unshielding(balance).map_err(|e| {
-                format!(
-                    "The unshielding tx is invalid, failed static check: {}",
-                    e
+        if wrapper.unshield.is_some() {
+            // Validate data and generate unshielding tx
+            let transfer_code = self.load_transfer_code_from_storage();
+
+            let unshield = wrapper
+                .check_and_generate_fee_unshielding(
+                    balance,
+                    chain_id,
+                    expiration,
+                    transfer_code,
                 )
-            })?;
+                .map_err(|e| e.to_string())?;
 
             let gas_table = gas_table.unwrap_or_else(|| {
-                wl_storage
+                temp_wl_storage
                     .read(&parameters::storage::get_gas_table_storage_key())
                     .expect("Error while reading from storage")
                     .expect("Missing gas table in storage")
@@ -994,10 +1029,10 @@ where
                     has_valid_pow: false,
                 }),
                 TxIndex::default(),
-                &mut TxGasMeter::new(u64::MAX),
+                &mut TxGasMeter::new(u64::MAX), //FIXME: actual gas limit
                 &gas_table,
-                &mut wl_storage.write_log,
-                wl_storage.storage,
+                &mut temp_wl_storage.write_log,
+                temp_wl_storage.storage,
                 vp_wasm_cache,
                 tx_wasm_cache,
             ) {
@@ -1005,7 +1040,7 @@ where
                     if result.is_accepted() {
                         // Update the balance
                         balance = storage_api::token::read_balance(
-                            wl_storage,
+                            temp_wl_storage,
                             &wrapper.fee.token,
                             &wrapper.fee_payer(),
                         )

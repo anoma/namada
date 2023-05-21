@@ -850,7 +850,14 @@ where
         if let Some(unshield) = &wrapper.unshield {
             // The unshielding tx does not charge gas, instantiate a limitless
             // custom gas meter for this step
-            let mut gas_meter = TxGasMeter::new(u64::MAX);
+            let mut gas_meter = TxGasMeter::new(u64::MAX); //FIXME: actual gas limit
+
+            let unshield_amount = storage_api::token::read_balance(
+                //FIXME: correct to compute it like this?
+                &self.wl_storage,
+                &wrapper.fee.token,
+                &wrapper.fee_payer(),
+            )?;
 
             // NOTE: given the checks in process_proposal, a failure in the
             // unshielding tx should not happen. If it does, do not return early
@@ -858,7 +865,21 @@ where
             // balance
             match apply_tx(
                 TxType::Decrypted(DecryptedTx::Decrypted {
-                    tx: unshield.to_owned(),
+                    tx: wrapper
+                        .generate_fee_unshielding(
+                            unshield_amount,
+                            // By this time we've already validated the chain id and expiration, we don't need the correct values anymore
+                            self.chain_id.clone(),
+                            None,
+                            self.load_transfer_code_from_storage(),
+                        )
+                        .map_err(|e| {
+                            Error::TxApply(
+                                protocol::Error::FeeUnshieldingError(
+                                    e.to_string(),
+                                ),
+                            )
+                        })?,
                     has_valid_pow: false,
                 }),
                 TxIndex::default(),
@@ -1658,11 +1679,9 @@ mod test_finalize_block {
         // won't receive votes from TM since we receive votes at a 1-block
         // delay, so votes will be empty here
         next_block_for_inflation(&mut shell, pkh1.clone(), vec![]);
-        assert!(
-            rewards_accumulator_handle()
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
+        assert!(rewards_accumulator_handle()
+            .is_empty(&shell.wl_storage)
+            .unwrap());
 
         // FINALIZE BLOCK 2. Tell Namada that val1 is the block proposer.
         // Include votes that correspond to block 1. Make val2 the next block's
@@ -1672,11 +1691,9 @@ mod test_finalize_block {
         assert!(rewards_prod_2.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_4.is_empty(&shell.wl_storage).unwrap());
-        assert!(
-            !rewards_accumulator_handle()
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
+        assert!(!rewards_accumulator_handle()
+            .is_empty(&shell.wl_storage)
+            .unwrap());
         // Val1 was the proposer, so its reward should be larger than all
         // others, which should themselves all be equal
         let acc_sum = get_rewards_sum(&shell.wl_storage);
@@ -1777,11 +1794,9 @@ mod test_finalize_block {
             );
             next_block_for_inflation(&mut shell, pkh1.clone(), votes.clone());
         }
-        assert!(
-            rewards_accumulator_handle()
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
+        assert!(rewards_accumulator_handle()
+            .is_empty(&shell.wl_storage)
+            .unwrap());
         let rp1 = rewards_prod_1
             .get(&shell.wl_storage, &Epoch::default())
             .unwrap()
@@ -1908,12 +1923,10 @@ mod test_finalize_block {
         let code = event.attributes.get("code").expect("Testfailed").as_str();
         assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
 
-        assert!(
-            !shell
-                .wl_storage
-                .has_key(&inner_hash_key)
-                .expect("Test failed")
-        )
+        assert!(!shell
+            .wl_storage
+            .has_key(&inner_hash_key)
+            .expect("Test failed"))
     }
 
     /// Test that a wrapper transaction rejected by [`process_proposal`] because
