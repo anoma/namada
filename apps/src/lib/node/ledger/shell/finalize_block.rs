@@ -1825,7 +1825,7 @@ mod test_finalize_block {
         // properly. At the end of the epoch, check that the validator rewards
         // products are appropriately updated.
 
-        let (mut shell, _, _, _) = setup_with_cfg(SetupCfg {
+        let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
             last_height: 0,
             num_validators: 4,
         });
