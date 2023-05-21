@@ -19,7 +19,6 @@ interaction with the protocol.
 
 ## 📓 Docs
 
-* user docs: built from [docs mdBook](./documentation/docs/)
 * dev docs: built from [dev mdBook](./documentation/dev/)
 
 ## Warning

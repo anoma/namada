@@ -36,13 +36,6 @@ jobs:
         mdbook_katex: [lzanini/mdbook-katex@v0.4.0]
         mdbook_pagetoc: [slowsage/mdbook-pagetoc@v0.1.7]
         make:
-          - name: Build docs
-            folder: documentation/docs
-            bucket: namada-docs-static-website
-            command: cd documentation/docs && mdbook build
-            cache_subkey: docs
-            cache_version: v1
-            distribution_id: E2T9UML53913RV
           - name: Build development docs
             folder: documentation/dev
             bucket: namada-dev-static-website
