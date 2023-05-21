@@ -1528,25 +1528,29 @@ mod test_process_proposal {
                     get_bp_roots_vext(&shell),
                 ],
             };
-            if let [resp, _, _] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp, _, _] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
-                panic!("Test failed");
+                panic!("Test failed")
             }
         };
         #[cfg(not(feature = "abcipp"))]
         let response = {
             let request = ProcessProposal { txs: vec![tx] };
-            if let [resp] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
                 panic!("Test failed")
             }
@@ -1635,15 +1639,16 @@ mod test_process_proposal {
                     get_bp_roots_vext(&shell),
                 ],
             };
-
-            if let [resp, _, _] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp, _, _] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
-                panic!("Test failed");
+                panic!("Test failed")
             }
         };
         #[cfg(not(feature = "abcipp"))]
@@ -1651,12 +1656,14 @@ mod test_process_proposal {
             let request = ProcessProposal {
                 txs: vec![new_tx.to_bytes()],
             };
-            if let [resp] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
                 panic!("Test failed")
             }
@@ -1715,14 +1722,16 @@ mod test_process_proposal {
                     get_bp_roots_vext(&shell),
                 ],
             };
-            if let [resp, _, _] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp, _, _] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
-                panic!("Test failed");
+                panic!("Test failed")
             }
         };
         #[cfg(not(feature = "abcipp"))]
@@ -1730,12 +1739,14 @@ mod test_process_proposal {
             let request = ProcessProposal {
                 txs: vec![wrapper.to_bytes()],
             };
-            if let [resp] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
                 panic!("Test failed")
             }
@@ -1805,14 +1816,16 @@ mod test_process_proposal {
                     get_bp_roots_vext(&shell),
                 ],
             };
-            if let [resp, _, _] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp, _, _] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
-                panic!("Test failed");
+                panic!("Test failed")
             }
         };
         #[cfg(not(feature = "abcipp"))]
@@ -1820,12 +1833,14 @@ mod test_process_proposal {
             let request = ProcessProposal {
                 txs: vec![wrapper.to_bytes()],
             };
-            if let [resp] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
                 panic!("Test failed")
             }
@@ -1964,14 +1979,16 @@ mod test_process_proposal {
                     get_bp_roots_vext(&shell),
                 ],
             };
-            if let [resp, _, _] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp, _, _] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
-                panic!("Test failed");
+                panic!("Test failed")
             }
         };
         #[cfg(not(feature = "abcipp"))]
@@ -1979,12 +1996,14 @@ mod test_process_proposal {
             let request = ProcessProposal {
                 txs: vec![tx.to_bytes()],
             };
-            if let [resp] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
                 panic!("Test failed")
             }
@@ -2206,14 +2225,16 @@ mod test_process_proposal {
                     get_bp_roots_vext(&shell),
                 ],
             };
-            if let [resp, _, _] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp, _, _] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
-                panic!("Test failed");
+                panic!("Test failed")
             }
         };
         #[cfg(not(feature = "abcipp"))]
@@ -2221,12 +2242,14 @@ mod test_process_proposal {
             let request = ProcessProposal {
                 txs: vec![tx.to_bytes()],
             };
-            if let [resp] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
                 panic!("Test failed")
             }
