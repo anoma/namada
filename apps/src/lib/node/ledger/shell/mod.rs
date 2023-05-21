@@ -57,6 +57,7 @@ use num_traits::{FromPrimitive, ToPrimitive};
 use thiserror::Error;
 use tokio::sync::mpsc::UnboundedSender;
 
+use crate::config;
 use crate::config::{genesis, TendermintMode};
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
@@ -71,7 +72,6 @@ use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{storage, tendermint_node};
 #[allow(unused_imports)]
 use crate::wallet::ValidatorData;
-use crate::{config, wallet};
 
 fn key_to_tendermint(
     pk: &common::PublicKey,
@@ -331,7 +331,7 @@ where
                         "{}",
                         wallet_path.as_path().to_str().unwrap()
                     );
-                    let wallet = wallet::Wallet::load_or_new_from_genesis(
+                    let mut wallet = crate::wallet::load_or_new_from_genesis(
                         wallet_path,
                         genesis::genesis_config::open_genesis_config(
                             genesis_path,
@@ -341,7 +341,7 @@ where
                     wallet
                         .take_validator_data()
                         .map(|data| ShellMode::Validator {
-                            data,
+                            data: data.clone(),
                             broadcast_sender,
                         })
                         .expect(
@@ -351,11 +351,13 @@ where
                 }
                 #[cfg(feature = "dev")]
                 {
-                    let validator_keys = wallet::defaults::validator_keys();
+                    let validator_keys =
+                        crate::wallet::defaults::validator_keys();
                     ShellMode::Validator {
-                        data: wallet::ValidatorData {
-                            address: wallet::defaults::validator_address(),
-                            keys: wallet::ValidatorKeys {
+                        data: crate::wallet::ValidatorData {
+                            address: crate::wallet::defaults::validator_address(
+                            ),
+                            keys: crate::wallet::ValidatorKeys {
                                 protocol_keypair: validator_keys.0,
                                 dkg_keypair: Some(validator_keys.1),
                             },
@@ -833,7 +835,7 @@ where
         let genesis_path = &self
             .base_dir
             .join(format!("{}.toml", self.chain_id.as_str()));
-        let mut wallet = wallet::Wallet::load_or_new_from_genesis(
+        let mut wallet = crate::wallet::load_or_new_from_genesis(
             wallet_path,
             genesis::genesis_config::open_genesis_config(genesis_path).unwrap(),
         );
@@ -850,7 +852,7 @@ where
                      it's established account",
                 );
             let pk = sk.ref_to();
-            wallet.find_key_by_pk(&pk).expect(
+            wallet.find_key_by_pk(&pk, None).expect(
                 "A validator's established keypair should be stored in its \
                  wallet",
             )

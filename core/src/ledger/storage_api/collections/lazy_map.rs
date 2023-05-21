@@ -178,6 +178,21 @@ where
         }
     }
 
+    fn is_data_sub_key(&self, key: &storage::Key) -> bool {
+        let sub_key = self.is_valid_sub_key(key);
+        match sub_key {
+            Ok(Some(NestedSubKey::Data {
+                key: parsed_key,
+                nested_sub_key: _,
+            })) => {
+                let sub = self.at(&parsed_key);
+                // Check in the nested collection
+                sub.is_data_sub_key(key)
+            }
+            _ => false,
+        }
+    }
+
     fn read_sub_key_data<ENV>(
         env: &ENV,
         storage_key: &storage::Key,
@@ -303,6 +318,10 @@ where
         }
     }
 
+    fn is_data_sub_key(&self, key: &storage::Key) -> bool {
+        matches!(self.is_valid_sub_key(key), Ok(Some(_)))
+    }
+
     fn read_sub_key_data<ENV>(
         env: &ENV,
         storage_key: &storage::Key,
@@ -392,7 +411,11 @@ where
             )>,
         > + 'iter,
     > {
-        let iter = storage_api::iter_prefix(storage, &self.get_data_prefix())?;
+        let iter = storage_api::iter_prefix_with_filter(
+            storage,
+            &self.get_data_prefix(),
+            |key| self.is_data_sub_key(key),
+        )?;
         Ok(iter.map(|key_val_res| {
             let (key, val) = key_val_res?;
             let sub_key = LazyCollection::is_valid_sub_key(self, &key)?

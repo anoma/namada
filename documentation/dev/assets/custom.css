@@ -8,3 +8,9 @@ footer {
 	border-top: 1px solid black;
 	padding: 10px 0;
 }
+
+/* Hide page table-of-contents when there's only one heading
+   https://github.com/slowsage/mdbook-pagetoc#configuration */
+a[class^='pagetoc-H']:only-child {
+	display: none;
+}

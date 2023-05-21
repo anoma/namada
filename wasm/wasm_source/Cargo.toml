@@ -4,7 +4,7 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada_wasm"
 resolver = "2"
-version = "0.15.1"
+version = "0.16.0"
 
 [lib]
 crate-type = ["cdylib"]
@@ -37,7 +37,7 @@ namada_tx_prelude = {path = "../../tx_prelude", optional = true}
 namada_vp_prelude = {path = "../../vp_prelude", optional = true}
 borsh = "0.9.0"
 once_cell = {version = "1.8.0", optional = true}
-rust_decimal = {version = "1.26.1", optional = true}
+rust_decimal = {version = "=1.26.1", optional = true}
 wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
 # branch = "murisi/namada-integration"
@@ -51,7 +51,7 @@ namada_test_utils = {path = "../../test_utils"}
 namada_tx_prelude = {path = "../../tx_prelude"}
 namada_vp_prelude = {path = "../../vp_prelude"}
 # A fork with state machine testing
-proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
+proptest = {git = "https://github.com/heliaxdev/proptest", rev = "8f1b4abe7ebd35c0781bf9a00a4ee59833ffa2a1"}
 tracing = "0.1.30"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
 rust_decimal = "1.26.1"

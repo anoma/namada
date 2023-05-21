@@ -7,7 +7,8 @@ use super::storage_api::{self, StorageRead};
 use crate::proto::Tx;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
-use crate::types::storage::{BlockHash, BlockHeight, Epoch, Key, TxIndex};
+use crate::types::storage::{BlockHash, BlockHeight, Epoch, Header, Key, TxIndex};
+use crate::types::key::common;
 
 /// Validity predicate's environment is available for native VPs and WASM VPs
 pub trait VpEnv<'view>
@@ -52,6 +53,12 @@ where
     /// Getting the block height. The height is that of the block to which the
     /// current transaction is being applied.
     fn get_block_height(&self) -> Result<BlockHeight, storage_api::Error>;
+
+    /// Getting the block header.
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, storage_api::Error>;
 
     /// Getting the block hash. The height is that of the block to which the
     /// current transaction is being applied.

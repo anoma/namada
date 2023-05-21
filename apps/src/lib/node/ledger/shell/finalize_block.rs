@@ -363,7 +363,7 @@ where
                                 .results
                                 .accept(tx_index);
                         }
-                        if let Some(ibc_event) = &result.ibc_event {
+                        for ibc_event in &result.ibc_events {
                             // Add the IBC event besides the tx_event
                             let event = Event::from(ibc_event.clone());
                             response.events.push(event);

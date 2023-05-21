@@ -44,7 +44,7 @@ NAMADA_BASE_DIR=${NAMADA_GENESIS_FILE%.toml}
 
 cp wasm/*.wasm $NAMADA_BASE_DIR/wasm/
 
-cp wasm/*.wasm $NAMADA_BASE_DIR/setup/validator-0/$NAMADA_BASE_DIR/wasm/
+cp wasm/*.wasm $NAMADA_BASE_DIR/setup/validator-0/.namada/$(basename $NAMADA_BASE_DIR)/wasm/
 
 cp $NAMADA_BASE_DIR/setup/other/wallet.toml $NAMADA_BASE_DIR/wallet.toml
 

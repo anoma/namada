@@ -29,7 +29,7 @@ use namada_core::types::chain::CHAIN_ID_LENGTH;
 use namada_core::types::hash::{Hash, HASH_LENGTH};
 use namada_core::types::internal::HostEnvResult;
 use namada_core::types::storage::{
-    BlockHash, BlockHeight, Epoch, TxIndex, BLOCK_HASH_LENGTH,
+    BlockHash, BlockHeight, Epoch, Header, TxIndex, BLOCK_HASH_LENGTH,
 };
 pub use namada_core::types::*;
 pub use namada_macros::validity_predicate;
@@ -242,6 +242,14 @@ impl<'view> VpEnv<'view> for Ctx {
         get_block_height()
     }
 
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, Error> {
+        // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
+        get_block_header(height)
+    }
+
     fn get_block_hash(&self) -> Result<BlockHash, Error> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_block_hash()
@@ -351,6 +359,13 @@ impl StorageRead for CtxPreStorageRead<'_> {
         get_block_height()
     }
 
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, Error> {
+        get_block_header(height)
+    }
+
     fn get_block_hash(&self) -> Result<BlockHash, Error> {
         get_block_hash()
     }
@@ -414,6 +429,13 @@ impl StorageRead for CtxPostStorageRead<'_> {
         get_block_height()
     }
 
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, Error> {
+        get_block_header(height)
+    }
+
     fn get_block_hash(&self) -> Result<BlockHash, Error> {
         get_block_hash()
     }
@@ -466,6 +488,17 @@ fn get_chain_id() -> Result<String, Error> {
 
 fn get_block_height() -> Result<BlockHeight, Error> {
     Ok(BlockHeight(unsafe { namada_vp_get_block_height() }))
+}
+
+fn get_block_header(height: BlockHeight) -> Result<Option<Header>, Error> {
+    let read_result = unsafe { namada_vp_get_block_header(height.0) };
+    match read_from_buffer(read_result, namada_vp_result_buffer) {
+        Some(value) => Ok(Some(
+            Header::try_from_slice(&value[..])
+                .expect("The conversion shouldn't fail"),
+        )),
+        None => Ok(None),
+    }
 }
 
 fn get_block_hash() -> Result<BlockHash, Error> {

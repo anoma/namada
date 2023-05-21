@@ -53,8 +53,8 @@ pub struct TxResult {
     pub vps_result: VpsResult,
     /// New established addresses created by the transaction
     pub initialized_accounts: Vec<Address>,
-    /// Optional IBC event emitted by the transaction
-    pub ibc_event: Option<IbcEvent>,
+    /// IBC events emitted by the transaction
+    pub ibc_events: BTreeSet<IbcEvent>,
 }
 
 impl TxResult {

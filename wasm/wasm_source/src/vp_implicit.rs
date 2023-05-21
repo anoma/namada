@@ -870,7 +870,7 @@ mod tests {
         tx_env.store_wasm_code(vp_code);
 
         // hardcoded hash of VP_ALWAYS_TRUE_WASM
-        tx_env.init_parameters(None, None, Some(vec!["15A0D166B1989F6CE9723A141E11002A5DF6DD024880681E23FDA2CF2D85281A".to_string()]));
+        tx_env.init_parameters(None, None, Some(vec!["C668E38915226859099F102F3BD98115764DB7530504EA3FE0BB91A098DFEC40".to_string()]));
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);

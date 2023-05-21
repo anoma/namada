@@ -149,7 +149,7 @@ mod tests {
     use namada_tx_prelude::Address;
     use proptest::prelude::*;
     use proptest::prop_state_machine;
-    use proptest::state_machine::{AbstractStateMachine, StateMachineTest};
+    use proptest::state_machine::{ReferenceStateMachine, StateMachineTest};
     use proptest::test_runner::Config;
     use test_log::test;
 
@@ -170,6 +170,7 @@ mod tests {
             // Additionally, more cases will be explored every time this test is
             // executed in the CI.
             cases: 5,
+            verbose: 1,
             .. Config::default()
         })]
         #[test]
@@ -223,21 +224,21 @@ mod tests {
     }
 
     impl StateMachineTest for ConcretePosState {
-        type Abstract = AbstractPosState;
-        type ConcreteState = Self;
+        type Reference = AbstractPosState;
+        type SystemUnderTest = Self;
 
         fn init_test(
-            initial_state: <Self::Abstract as AbstractStateMachine>::State,
-        ) -> Self::ConcreteState {
+            initial_state: &<Self::Reference as ReferenceStateMachine>::State,
+        ) -> Self::SystemUnderTest {
             println!();
             println!("New test case");
             // Initialize the transaction env
             init_pos(&[], &initial_state.params, initial_state.epoch);
 
             // The "genesis" block state
-            for change in initial_state.committed_valid_actions {
+            for change in &initial_state.committed_valid_actions {
                 println!("Apply init state change {:#?}", change);
-                change.apply(true)
+                change.clone().apply(true)
             }
             // Commit the genesis block
             tx_host_env::commit_tx_and_block();
@@ -248,10 +249,11 @@ mod tests {
             }
         }
 
-        fn apply_concrete(
-            mut test_state: Self::ConcreteState,
-            transition: <Self::Abstract as AbstractStateMachine>::Transition,
-        ) -> Self::ConcreteState {
+        fn apply(
+            mut test_state: Self::SystemUnderTest,
+            _ref_state: &<Self::Reference as ReferenceStateMachine>::State,
+            transition: <Self::Reference as ReferenceStateMachine>::Transition,
+        ) -> Self::SystemUnderTest {
             match transition {
                 Transition::CommitTx => {
                     if !test_state.is_current_tx_valid {
@@ -314,24 +316,9 @@ mod tests {
 
             test_state
         }
-
-        fn test_sequential(
-            initial_state: <Self::Abstract as AbstractStateMachine>::State,
-            transitions: Vec<
-                <Self::Abstract as AbstractStateMachine>::Transition,
-            >,
-        ) {
-            let mut state = Self::init_test(initial_state);
-            println!("Transitions {}", transitions.len());
-            for (i, transition) in transitions.into_iter().enumerate() {
-                println!("Apply transition {}: {:#?}", i, transition);
-                state = Self::apply_concrete(state, transition);
-                Self::invariants(&state);
-            }
-        }
     }
 
-    impl AbstractStateMachine for AbstractPosState {
+    impl ReferenceStateMachine for AbstractPosState {
         type State = Self;
         type Transition = Transition;
 
@@ -368,7 +355,7 @@ mod tests {
             .boxed()
         }
 
-        fn apply_abstract(
+        fn apply(
             mut state: Self::State,
             transition: &Self::Transition,
         ) -> Self::State {

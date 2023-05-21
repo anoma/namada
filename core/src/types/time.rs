@@ -206,7 +206,7 @@ impl From<DateTime<Utc>> for DateTimeUtc {
 }
 
 impl TryFrom<prost_types::Timestamp> for DateTimeUtc {
-    type Error = prost_types::TimestampOutOfSystemRangeError;
+    type Error = prost_types::TimestampError;
 
     fn try_from(
         timestamp: prost_types::Timestamp,
@@ -228,7 +228,7 @@ impl From<DateTimeUtc> for prost_types::Timestamp {
 impl TryFrom<crate::tendermint_proto::google::protobuf::Timestamp>
     for DateTimeUtc
 {
-    type Error = prost_types::TimestampOutOfSystemRangeError;
+    type Error = prost_types::TimestampError;
 
     fn try_from(
         timestamp: crate::tendermint_proto::google::protobuf::Timestamp,
