@@ -528,6 +528,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "349a06037c7bf932dd7e7d1f653678b2038b9ad46a74102f1fc7bd7872678cce"
 
 [[package]]
+name = "base58"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5024ee8015f02155eee35c711107ddd9a9bf3cb689cf2a9089c97e79b6e1ae83"
+
+[[package]]
+name = "base58"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6107fe1be6682a68940da878d9e9f5e90ca5745b3dec9fd1bb393c8777d4f581"
+
+[[package]]
 name = "base64"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -594,7 +606,7 @@ dependencies = [
  "pairing",
  "rand_core 0.6.4",
  "rayon",
- "subtle",
+ "subtle 2.4.1",
 ]
 
 [[package]]
@@ -883,7 +895,7 @@ dependencies = [
  "group",
  "pairing",
  "rand_core 0.6.4",
- "subtle",
+ "subtle 2.4.1",
 ]
 
 [[package]]
@@ -1535,7 +1547,7 @@ checksum = "03c6a1d5fa1de37e071642dfa44ec552ca5b299adb128fab16138e24b548fd21"
 dependencies = [
  "generic-array 0.14.7",
  "rand_core 0.6.4",
- "subtle",
+ "subtle 2.4.1",
  "zeroize",
 ]
 
@@ -1551,12 +1563,22 @@ dependencies = [
 
 [[package]]
 name = "crypto-mac"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4434400df11d95d556bac068ddfedd482915eb18fe8bea89bc80b6e4b1c179e5"
+dependencies = [
+ "generic-array 0.12.4",
+ "subtle 1.0.0",
+]
+
+[[package]]
+name = "crypto-mac"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b584a330336237c1eecd3e94266efb216c56ed91225d634cb2991c5f3fd1aeab"
 dependencies = [
  "generic-array 0.14.7",
- "subtle",
+ "subtle 2.4.1",
 ]
 
 [[package]]
@@ -1566,7 +1588,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1d1a86f49236c215f271d40892d5fc950490551400b02ef360692c29815c714"
 dependencies = [
  "generic-array 0.14.7",
- "subtle",
+ "subtle 2.4.1",
 ]
 
 [[package]]
@@ -1624,7 +1646,7 @@ dependencies = [
  "byteorder",
  "digest 0.9.0",
  "rand_core 0.5.1",
- "subtle",
+ "subtle 2.4.1",
  "zeroize",
 ]
 
@@ -1756,7 +1778,7 @@ checksum = "8168378f4e5023e7218c89c891c0fd8ecdb5e5e4f18cb78f38cf245dd021e76f"
 dependencies = [
  "block-buffer 0.10.4",
  "crypto-common",
- "subtle",
+ "subtle 2.4.1",
 ]
 
 [[package]]
@@ -1940,7 +1962,7 @@ dependencies = [
  "group",
  "rand_core 0.6.4",
  "sec1",
- "subtle",
+ "subtle 2.4.1",
  "zeroize",
 ]
 
@@ -2136,7 +2158,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "subproductdomain",
- "subtle",
+ "subtle 2.4.1",
  "zeroize",
 ]
 
@@ -2161,7 +2183,7 @@ checksum = "131655483be284720a17d74ff97592b8e76576dc25563148601df2d7c9080924"
 dependencies = [
  "bitvec 0.22.3",
  "rand_core 0.6.4",
- "subtle",
+ "subtle 2.4.1",
 ]
 
 [[package]]
@@ -2454,8 +2476,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fc3cb4d91f53b50155bdcfd23f6a4c39ae1969c2ae85982b135750cccaf5fce"
 dependencies = [
  "cfg-if 1.0.0",
+ "js-sys",
  "libc",
  "wasi 0.9.0+wasi-snapshot-preview1",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -2528,7 +2552,7 @@ dependencies = [
  "byteorder",
  "ff",
  "rand_core 0.6.4",
- "subtle",
+ "subtle 2.4.1",
 ]
 
 [[package]]
@@ -2723,6 +2747,16 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hmac"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5dcb5e64cda4c23119ab41ba960d1e170a774c8e4b9d9e6a9bc18aabf5e59695"
+dependencies = [
+ "crypto-mac 0.7.0",
+ "digest 0.8.1",
+]
+
+[[package]]
+name = "hmac"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "126888268dcc288495a26bf004b38c5fdbb31682f992c84ceb046a1f0fe38840"
@@ -2752,6 +2786,17 @@ dependencies = [
 
 [[package]]
 name = "hmac-drbg"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6e570451493f10f6581b48cdd530413b63ea9e780f544bfd3bdcaa0d89d1a7b"
+dependencies = [
+ "digest 0.8.1",
+ "generic-array 0.12.4",
+ "hmac 0.7.1",
+]
+
+[[package]]
+name = "hmac-drbg"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "17ea0a1394df5b6574da6e0c1ade9e78868c9fb0a4e5ef4428e32da4676b85b1"
@@ -2760,6 +2805,12 @@ dependencies = [
  "generic-array 0.14.7",
  "hmac 0.8.1",
 ]
+
+[[package]]
+name = "hmac-sha512"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77e806677ce663d0a199541030c816847b36e8dc095f70dae4a4f4ad63da5383"
 
 [[package]]
 name = "http"
@@ -3085,7 +3136,7 @@ dependencies = [
  "tendermint-proto 0.23.6",
  "tendermint-rpc 0.23.6",
  "thiserror",
- "tiny-bip39",
+ "tiny-bip39 1.0.0",
  "tiny-keccak",
  "tokio",
  "toml",
@@ -3321,7 +3372,7 @@ dependencies = [
  "ff",
  "group",
  "rand_core 0.6.4",
- "subtle",
+ "subtle 2.4.1",
 ]
 
 [[package]]
@@ -3456,13 +3507,29 @@ dependencies = [
 
 [[package]]
 name = "libsecp256k1"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fc1e2c808481a63dc6da2074752fdd4336a3c8fcc68b83db6f1fd5224ae7962"
+dependencies = [
+ "arrayref",
+ "crunchy 0.2.2",
+ "digest 0.8.1",
+ "hmac-drbg 0.2.0",
+ "rand 0.7.3",
+ "sha2 0.8.2",
+ "subtle 2.4.1",
+ "typenum",
+]
+
+[[package]]
+name = "libsecp256k1"
 version = "0.7.0"
 source = "git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
 dependencies = [
  "arrayref",
  "base64 0.13.1",
  "digest 0.9.0",
- "hmac-drbg",
+ "hmac-drbg 0.3.0",
  "libsecp256k1-core",
  "libsecp256k1-gen-ecmult",
  "libsecp256k1-gen-genmult",
@@ -3479,7 +3546,7 @@ source = "git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d
 dependencies = [
  "crunchy 0.2.2",
  "digest 0.9.0",
- "subtle",
+ "subtle 2.4.1",
 ]
 
 [[package]]
@@ -3649,7 +3716,7 @@ dependencies = [
  "secp256k1 0.20.3",
  "serde 1.0.163",
  "sha2 0.9.9",
- "subtle",
+ "subtle 2.4.1",
  "zcash_encoding",
  "zcash_primitives",
 ]
@@ -3755,6 +3822,12 @@ checksum = "2145869435ace5ea6ea3d35f59be559317ec9a0d04e1812d5f185a87b6d36f1a"
 dependencies = [
  "nonempty",
 ]
+
+[[package]]
+name = "memzero"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93c0d11ac30a033511ae414355d80f70d9f29a44a49140face477117a1ee90db"
 
 [[package]]
 name = "merlin"
@@ -3921,6 +3994,7 @@ dependencies = [
  "assert_matches",
  "async-std",
  "async-trait",
+ "base58 0.2.0",
  "bellman",
  "bimap",
  "bls12_381",
@@ -3929,13 +4003,15 @@ dependencies = [
  "circular-queue",
  "clru",
  "data-encoding",
+ "derivation-path",
  "derivative",
+ "hex",
  "ibc 0.36.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=2d7edc16412b60cabf78163fe24a6264e11f77a9)",
  "ibc 0.36.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=db14744bfba6239cc5f58345ff90f8b7d42637d6)",
  "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=7e527b5b8c95d83351e93ceafc14ac853224283f)",
  "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs?rev=dd8ba23110a144ffe2074a0b889676468266435a)",
  "itertools",
- "libsecp256k1",
+ "libsecp256k1 0.7.0",
  "loupe",
  "masp_primitives",
  "masp_proofs",
@@ -3957,12 +4033,15 @@ dependencies = [
  "serde 1.0.163",
  "serde_json",
  "sha2 0.9.9",
+ "slip10_ed25519",
  "tempfile",
  "tendermint 0.23.6",
  "tendermint-proto 0.23.6",
  "tendermint-rpc 0.23.6",
  "test-log",
  "thiserror",
+ "tiny-bip39 0.8.2",
+ "tiny-hderive",
  "tokio",
  "toml",
  "tracing 0.1.37",
@@ -4049,6 +4128,7 @@ dependencies = [
  "tendermint-rpc 0.23.6",
  "test-log",
  "thiserror",
+ "tiny-bip39 0.8.2",
  "tokio",
  "tokio-test",
  "toml",
@@ -4061,6 +4141,7 @@ dependencies = [
  "tracing-subscriber 0.3.17",
  "websocket",
  "winapi 0.3.9",
+ "zeroize",
 ]
 
 [[package]]
@@ -4088,7 +4169,7 @@ dependencies = [
  "ics23",
  "index-set",
  "itertools",
- "libsecp256k1",
+ "libsecp256k1 0.7.0",
  "masp_primitives",
  "namada_macros",
  "pretty_assertions",
@@ -4564,7 +4645,7 @@ dependencies = [
  "rand 0.8.5",
  "reddsa",
  "serde 1.0.163",
- "subtle",
+ "subtle 2.4.1",
  "zcash_note_encryption 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -4576,7 +4657,7 @@ checksum = "c6624905ddd92e460ff0685567539ed1ac985b2dee4c92c7edcd64fce905b00c"
 dependencies = [
  "ct-codecs",
  "getrandom 0.2.9",
- "subtle",
+ "subtle 2.4.1",
  "zeroize",
 ]
 
@@ -4711,7 +4792,7 @@ checksum = "1d791538a6dcc1e7cb7fe6f6b58aca40e7f79403c45b2bc274008b5e647af1d8"
 dependencies = [
  "base64ct",
  "rand_core 0.6.4",
- "subtle",
+ "subtle 2.4.1",
 ]
 
 [[package]]
@@ -4726,7 +4807,7 @@ dependencies = [
  "lazy_static",
  "rand 0.8.5",
  "static_assertions",
- "subtle",
+ "subtle 2.4.1",
 ]
 
 [[package]]
@@ -4734,6 +4815,15 @@ name = "paste"
 version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f746c4065a8fa3fe23974dd82f15431cc8d40779821001404d10d2e79ca7d79"
+
+[[package]]
+name = "pbkdf2"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "216eaa586a190f0a738f2f918511eecfa90f13295abec0e457cdebcceda80cbd"
+dependencies = [
+ "crypto-mac 0.8.0",
+]
 
 [[package]]
 name = "pbkdf2"
@@ -5981,7 +6071,7 @@ checksum = "08da66b8b0965a5555b6bd6639e68ccba85e1e2506f5fbb089e93f8a04e1a2d1"
 dependencies = [
  "der",
  "generic-array 0.14.7",
- "subtle",
+ "subtle 2.4.1",
  "zeroize",
 ]
 
@@ -6230,6 +6320,18 @@ dependencies = [
 
 [[package]]
 name = "sha2"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a256f46ea78a0c0d9ff00077504903ac881a1dafdc20da66545699e7776b3e69"
+dependencies = [
+ "block-buffer 0.7.3",
+ "digest 0.8.1",
+ "fake-simd",
+ "opaque-debug 0.2.3",
+]
+
+[[package]]
+name = "sha2"
 version = "0.9.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4d58a1e1bf39749807d89cf2d98ac2dfa0ff1cb3faa38fbb64dd88ac8013d800"
@@ -6343,6 +6445,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "slip10_ed25519"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4be0ff28bf14f9610a342169084e87a4f435ad798ec528dc7579a3678fa9dc9a"
+dependencies = [
+ "hmac-sha512",
+]
+
+[[package]]
 name = "smallvec"
 version = "0.6.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6437,6 +6548,12 @@ dependencies = [
  "ark-serialize",
  "ark-std",
 ]
+
+[[package]]
+name = "subtle"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d67a5a62ba6e01cb2192ff309324cb4875d0c451d55fe2319433abe7a05a8ee"
 
 [[package]]
 name = "subtle"
@@ -6564,7 +6681,7 @@ dependencies = [
  "serde_repr",
  "sha2 0.9.9",
  "signature",
- "subtle",
+ "subtle 2.4.1",
  "subtle-encoding",
  "tendermint-proto 0.23.5",
  "time 0.3.17",
@@ -6594,7 +6711,7 @@ dependencies = [
  "serde_repr",
  "sha2 0.9.9",
  "signature",
- "subtle",
+ "subtle 2.4.1",
  "subtle-encoding",
  "tendermint-proto 0.23.6",
  "time 0.3.17",
@@ -6907,6 +7024,25 @@ dependencies = [
 
 [[package]]
 name = "tiny-bip39"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffc59cb9dfc85bb312c3a78fd6aa8a8582e310b0fa885d5bb877f6dcc601839d"
+dependencies = [
+ "anyhow",
+ "hmac 0.8.1",
+ "once_cell",
+ "pbkdf2 0.4.0",
+ "rand 0.7.3",
+ "rustc-hash",
+ "sha2 0.9.9",
+ "thiserror",
+ "unicode-normalization",
+ "wasm-bindgen",
+ "zeroize",
+]
+
+[[package]]
+name = "tiny-bip39"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62cc94d358b5a1e84a5cb9109f559aa3c4d634d2b1b4de3d0fa4adc7c78e2861"
@@ -6922,6 +7058,19 @@ dependencies = [
  "unicode-normalization",
  "wasm-bindgen",
  "zeroize",
+]
+
+[[package]]
+name = "tiny-hderive"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01b874a4992538d4b2f4fbbac11b9419d685f4b39bdc3fed95b04e07bfd76040"
+dependencies = [
+ "base58 0.1.0",
+ "hmac 0.7.1",
+ "libsecp256k1 0.3.5",
+ "memzero",
+ "sha2 0.8.2",
 ]
 
 [[package]]
@@ -7612,7 +7761,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f214e8f697e925001e66ec2c6e37a4ef93f0f78c2eed7814394e10c62025b05"
 dependencies = [
  "generic-array 0.14.7",
- "subtle",
+ "subtle 2.4.1",
 ]
 
 [[package]]
@@ -8578,7 +8727,7 @@ dependencies = [
  "chacha20",
  "chacha20poly1305",
  "rand_core 0.6.4",
- "subtle",
+ "subtle 2.4.1",
 ]
 
 [[package]]
@@ -8589,7 +8738,7 @@ dependencies = [
  "chacha20",
  "chacha20poly1305",
  "rand_core 0.6.4",
- "subtle",
+ "subtle 2.4.1",
 ]
 
 [[package]]
@@ -8619,7 +8768,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "sha2 0.9.9",
- "subtle",
+ "subtle 2.4.1",
  "zcash_encoding",
  "zcash_note_encryption 0.1.0 (git+https://github.com/zcash/librustzcash?rev=2425a08)",
 ]

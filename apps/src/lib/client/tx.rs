@@ -38,7 +38,9 @@ use crate::client::rpc::query_wasm_code_hash;
 use crate::client::signing::find_keypair;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::node::ledger::tendermint_node;
-use crate::wallet::{gen_validator_keys, read_and_confirm_pwd, CliWalletUtils};
+use crate::wallet::{
+    gen_validator_keys, read_and_confirm_encryption_password, CliWalletUtils,
+};
 
 pub async fn submit_custom<C: namada::ledger::queries::Client + Sync>(
     client: &C,
@@ -112,14 +114,17 @@ pub async fn submit_init_validator<
     let consensus_key_alias = format!("{}-consensus-key", alias);
     let account_key = account_key.unwrap_or_else(|| {
         println!("Generating validator account key...");
-        let password = read_and_confirm_pwd(unsafe_dont_encrypt);
+        let password =
+            read_and_confirm_encryption_password(unsafe_dont_encrypt);
         ctx.wallet
             .gen_key(
                 scheme,
                 Some(validator_key_alias.clone()),
-                password,
                 tx_args.wallet_alias_force,
+                password,
+                None,
             )
+            .expect("Key generation should not fail.")
             .1
             .ref_to()
     });
@@ -134,15 +139,18 @@ pub async fn submit_init_validator<
         })
         .unwrap_or_else(|| {
             println!("Generating consensus key...");
-            let password = read_and_confirm_pwd(unsafe_dont_encrypt);
+            let password =
+                read_and_confirm_encryption_password(unsafe_dont_encrypt);
             ctx.wallet
                 .gen_key(
                     // Note that TM only allows ed25519 for consensus key
                     SchemeType::Ed25519,
                     Some(consensus_key_alias.clone()),
-                    password,
                     tx_args.wallet_alias_force,
+                    password,
+                    None,
                 )
+                .expect("Key generation should not fail.")
                 .1
         });
 
