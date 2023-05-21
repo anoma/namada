@@ -130,7 +130,7 @@ ifdef NAMADA_E2E_NO_PREBUILT_BINARIES
 	--test-threads=1 \
 	-Z unstable-options --report-time
 else
-	NAMADA_E2E_USE_PREBUILT_BINARIES=true RUST_BACKTRACE=1 $(cargo) +$(nightly) test e2e::$(TEST_FILTER) \
+	NAMADA_E2E_DEBUG=true NAMADA_E2E_USE_PREBUILT_BINARIES=true RUST_BACKTRACE=1 $(cargo) +$(nightly) test e2e::$(TEST_FILTER) \
 	-Z unstable-options \
 	-- \
 	--test-threads=1 \
