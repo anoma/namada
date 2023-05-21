@@ -4,7 +4,6 @@
 use data_encoding::HEXUPPER;
 use namada::core::hints;
 use namada::core::ledger::storage::WlStorage;
-use namada::core::types::hash::Hash;
 use namada::ledger::storage::TempWlStorage;
 use namada::proof_of_stake::pos_queries::PosQueries;
 use namada::types::internal::WrapperTxInQueue;
@@ -149,11 +148,16 @@ where
                     &mut temp_wl_storage,
                     block_time,
                 );
-                if let ErrorCodes::Ok =
-                    ErrorCodes::from_u32(result.code).unwrap()
-                {
+                let error_code = ErrorCodes::from_u32(result.code).unwrap();
+                if let ErrorCodes::Ok = error_code {
                     temp_wl_storage.write_log.commit_tx();
                 } else {
+                    tracing::info!(
+                        "Process proposal rejected an invalid tx. Error code: \
+                         {:?}, info: {}",
+                        error_code,
+                        result.info
+                    );
                     temp_wl_storage.write_log.drop_tx();
                 }
                 result
@@ -429,53 +433,16 @@ where
                     }
                 } else {
                     // Replay protection checks
-                    let inner_hash_key =
-                        replay_protection::get_tx_hash_key(&wrapper.tx_hash);
-                    if temp_wl_storage.has_key(&inner_hash_key).expect(
-                        "Error while checking inner tx hash key in storage",
+                    if let Err(e) = self.replay_protection_checks(
+                        &wrapper,
+                        tx_bytes,
+                        temp_wl_storage,
                     ) {
                         return TxResult {
                             code: ErrorCodes::ReplayTx.into(),
-                            info: format!(
-                                "Inner transaction hash {} already in \
-                                 storage, replay attempt",
-                                &wrapper.tx_hash
-                            ),
+                            info: e.to_string(),
                         };
                     }
-
-                    // Write inner hash to WAL
-                    temp_wl_storage
-                        .write_log
-                        .write(&inner_hash_key, vec![])
-                        .expect(
-                            "Couldn't write inner transaction hash to write \
-                             log",
-                        );
-
-                    let tx = Tx::try_from(tx_bytes)
-                        .expect("Deserialization shouldn't fail");
-                    let wrapper_hash = Hash(tx.unsigned_hash());
-                    let wrapper_hash_key =
-                        replay_protection::get_tx_hash_key(&wrapper_hash);
-                    if temp_wl_storage.has_key(&wrapper_hash_key).expect(
-                        "Error while checking wrapper tx hash key in storage",
-                    ) {
-                        return TxResult {
-                            code: ErrorCodes::ReplayTx.into(),
-                            info: format!(
-                                "Wrapper transaction hash {} already in \
-                                 storage, replay attempt",
-                                wrapper_hash
-                            ),
-                        };
-                    }
-
-                    // Write wrapper hash to WAL
-                    temp_wl_storage
-                        .write_log
-                        .write(&wrapper_hash_key, vec![])
-                        .expect("Couldn't write wrapper tx hash to write log");
 
                     // If the public key corresponds to the MASP sentinel
                     // transaction key, then the fee payer is effectively
@@ -1168,8 +1135,8 @@ mod test_process_proposal {
                 assert_eq!(
                     response[0].result.info,
                     format!(
-                        "Wrapper transaction hash {} already in storage, \
-                         replay attempt",
+                        "Transaction replay attempt: Wrapper transaction hash \
+                         {} already in storage",
                         wrapper_unsigned_hash
                     )
                 );
@@ -1236,8 +1203,8 @@ mod test_process_proposal {
                 assert_eq!(
                     response[1].result.info,
                     format!(
-                        "Inner transaction hash {} already in storage, replay \
-                         attempt",
+                        "Transaction replay attempt: Inner transaction hash \
+                         {} already in storage",
                         wrapper.tx_hash
                     )
                 );
@@ -1299,8 +1266,8 @@ mod test_process_proposal {
                 assert_eq!(
                     response[0].result.info,
                     format!(
-                        "Inner transaction hash {} already in storage, replay \
-                         attempt",
+                        "Transaction replay attempt: Inner transaction hash \
+                         {} already in storage",
                         inner_unsigned_hash
                     )
                 );
@@ -1395,8 +1362,8 @@ mod test_process_proposal {
                 assert_eq!(
                     response[1].result.info,
                     format!(
-                        "Inner transaction hash {} already in storage, replay \
-                         attempt",
+                        "Transaction replay attempt: Inner transaction hash \
+                         {} already in storage",
                         inner_unsigned_hash
                     )
                 );
@@ -1407,7 +1374,7 @@ mod test_process_proposal {
     /// Test that a wrapper or protocol transaction with a mismatching chain id
     /// causes the entire block to be rejected
     #[test]
-    fn test_wong_chain_id() {
+    fn test_wrong_chain_id() {
         let (mut shell, _) = test_utils::setup(1);
         let keypair = crate::wallet::defaults::daewon_keypair();
 
@@ -1469,7 +1436,7 @@ mod test_process_proposal {
     /// Test that a decrypted transaction with a mismatching chain id gets
     /// rejected without rejecting the entire block
     #[test]
-    fn test_decrypted_wong_chain_id() {
+    fn test_decrypted_wrong_chain_id() {
         let (mut shell, _) = test_utils::setup(1);
         let keypair = crate::wallet::defaults::daewon_keypair();
 

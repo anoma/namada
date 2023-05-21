@@ -200,6 +200,7 @@ where
 
             let (mut tx_event, tx_unsigned_hash) = match &tx_type {
                 TxType::Wrapper(wrapper) => {
+                    stats.increment_wrapper_txs();
                     let mut tx_event = Event::new_tx_event(&tx_type, height.0);
 
                     // Writes both txs hash to storage
