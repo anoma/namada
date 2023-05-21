@@ -7,7 +7,7 @@ resolver = "2"
 version = "0.16.0"
 
 [features]
-default = []
+default = ["multicore"]
 mainnet = []
 ferveo-tpke = [
   "ferveo",
@@ -42,9 +42,14 @@ ibc-mocks = [
   "ibc/mocks",
   "ibc/std",
 ]
+
 ibc-mocks-abcipp = [
   "ibc-abcipp/mocks",
   "ibc-abcipp/std",
+]
+
+multicore = [
+  "bellman/multicore"
 ]
 
 # for integration tests and test utilies
@@ -63,7 +68,7 @@ ark-serialize = {version = "0.3"}
 # branch = "bat/arse-merkle-tree"
 arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "e086b235ed6e68929bf73f617dd61cd17b000a56", default-features = false, features = ["std", "borsh"]}
 bech32 = "0.8.0"
-bellman = "0.11.2"
+bellman = { version = "0.11.2", default-features = false, features = ["groth16"] }
 borsh = "0.9.0"
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
 data-encoding = "2.3.2"
@@ -81,7 +86,7 @@ ics23 = "0.9.0"
 index-set = {git = "https://github.com/heliaxdev/index-set", tag = "v0.7.1", features = ["serialize-borsh", "serialize-serde"]}
 itertools = "0.10.0"
 libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "4274fc0bf300bcdae4f186fba134bab8af83ae93" }
 proptest = {git = "https://github.com/heliaxdev/proptest", rev = "8f1b4abe7ebd35c0781bf9a00a4ee59833ffa2a1", optional = true}
 prost = "0.11.6"
 prost-types = "0.11.6"

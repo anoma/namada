@@ -239,12 +239,20 @@ impl Store {
         let address = Address::Implicit(ImplicitAddress(pkh.clone()));
         let alias: Alias = alias.unwrap_or_else(|| pkh.clone().into()).into();
         if self
-            .insert_keypair::<U>(alias.clone(), keypair_to_store, pkh, force_alias)
+            .insert_keypair::<U>(
+                alias.clone(),
+                keypair_to_store,
+                pkh,
+                force_alias,
+            )
             .is_none()
         {
             panic!("Action cancelled, no changes persisted.");
         }
-        if self.insert_address::<U>(alias.clone(), address, force_alias).is_none() {
+        if self
+            .insert_address::<U>(alias.clone(), address, force_alias)
+            .is_none()
+        {
             panic!("Action cancelled, no changes persisted.");
         }
         (alias, raw_keypair)
@@ -263,7 +271,12 @@ impl Store {
             StoredKeypair::new(spendkey, password);
         let alias = Alias::from(alias);
         if self
-            .insert_spending_key::<U>(alias.clone(), spendkey_to_store, viewkey, force_alias)
+            .insert_spending_key::<U>(
+                alias.clone(),
+                spendkey_to_store,
+                viewkey,
+                force_alias,
+            )
             .is_none()
         {
             panic!("Action cancelled, no changes persisted.");
@@ -319,7 +332,8 @@ impl Store {
                     // terminates with a cancellation
                     counterpart_address
                         .map(|x| self.addresses.insert(alias.clone(), x.1));
-                    return self.insert_keypair::<U>(new_alias, keypair, pkh, false);
+                    return self
+                        .insert_keypair::<U>(new_alias, keypair, pkh, false);
                 }
                 ConfirmationResponse::Skip => {
                     // Restore the removed address since this insertion action
@@ -384,7 +398,8 @@ impl Store {
             match U::show_overwrite_confirmation(&alias, "a viewing key") {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {
-                    return self.insert_viewing_key::<U>(new_alias, viewkey, false);
+                    return self
+                        .insert_viewing_key::<U>(new_alias, viewkey, false);
                 }
                 ConfirmationResponse::Skip => return None,
             }
@@ -428,8 +443,11 @@ impl Store {
             match U::show_overwrite_confirmation(&alias, "a payment address") {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {
-                    return self
-                        .insert_payment_addr::<U>(new_alias, payment_addr, false);
+                    return self.insert_payment_addr::<U>(
+                        new_alias,
+                        payment_addr,
+                        false,
+                    );
                 }
                 ConfirmationResponse::Skip => return None,
             }

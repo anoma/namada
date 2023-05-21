@@ -502,8 +502,12 @@ pub fn init_network(
             let alias = format!("{}-consensus-key", name);
             println!("Generating validator {} consensus key...", name);
             let password = read_and_confirm_pwd(unsafe_dont_encrypt);
-            let (_alias, keypair) =
-                wallet.gen_key(SchemeType::Ed25519, Some(alias), password, true);
+            let (_alias, keypair) = wallet.gen_key(
+                SchemeType::Ed25519,
+                Some(alias),
+                password,
+                true,
+            );
 
             // Write consensus key for Tendermint
             tendermint_node::write_validator_key(&tm_home_dir, &keypair);
@@ -519,8 +523,12 @@ pub fn init_network(
             let alias = format!("{}-account-key", name);
             println!("Generating validator {} account key...", name);
             let password = read_and_confirm_pwd(unsafe_dont_encrypt);
-            let (_alias, keypair) =
-                wallet.gen_key(SchemeType::Ed25519, Some(alias), password, true);
+            let (_alias, keypair) = wallet.gen_key(
+                SchemeType::Ed25519,
+                Some(alias),
+                password,
+                true,
+            );
             keypair.ref_to()
         });
 
@@ -532,8 +540,12 @@ pub fn init_network(
             let alias = format!("{}-protocol-key", name);
             println!("Generating validator {} protocol signing key...", name);
             let password = read_and_confirm_pwd(unsafe_dont_encrypt);
-            let (_alias, keypair) =
-                wallet.gen_key(SchemeType::Ed25519, Some(alias), password, true);
+            let (_alias, keypair) = wallet.gen_key(
+                SchemeType::Ed25519,
+                Some(alias),
+                password,
+                true,
+            );
             keypair.ref_to()
         });
 
