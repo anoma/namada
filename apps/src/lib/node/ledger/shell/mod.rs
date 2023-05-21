@@ -2140,8 +2140,8 @@ mod test_mempool_validate {
         assert_eq!(
             result.log,
             format!(
-                "Wrapper transaction hash {} already in storage, replay \
-                 attempt",
+                "Mempool validation failed: Wrapper transaction hash {} \
+                 already in storage, replay attempt",
                 wrapper_hash
             )
         );
@@ -2154,8 +2154,8 @@ mod test_mempool_validate {
         assert_eq!(
             result.log,
             format!(
-                "Wrapper transaction hash {} already in storage, replay \
-                 attempt",
+                "Mempool validation failed: Wrapper transaction hash {} \
+                 already in storage, replay attempt",
                 wrapper_hash
             )
         );
@@ -2178,7 +2178,8 @@ mod test_mempool_validate {
         assert_eq!(
             result.log,
             format!(
-                "Inner transaction hash {} already in storage, replay attempt",
+                "Mempool validation failed: Inner transaction hash {} already \
+                 in storage, replay attempt",
                 tx_type.tx_hash
             )
         );
@@ -2191,7 +2192,8 @@ mod test_mempool_validate {
         assert_eq!(
             result.log,
             format!(
-                "Inner transaction hash {} already in storage, replay attempt",
+                "Mempool validation failed: Inner transaction hash {} already \
+                 in storage, replay attempt",
                 tx_type.tx_hash
             )
         )
