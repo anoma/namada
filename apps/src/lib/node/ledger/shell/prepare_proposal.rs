@@ -432,7 +432,6 @@ mod test_prepare_proposal {
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, TestShell,
     };
-    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
     #[cfg(feature = "abcipp")]
@@ -906,12 +905,7 @@ mod test_prepare_proposal {
                 .expect("Test failed");
         }
 
-        let mut req = FinalizeBlock::default();
-        req.header.time = DateTimeUtc::now();
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
-        shell.finalize_block(req).expect("Test failed");
-        shell.commit();
-
+        shell.start_new_epoch();
         assert_eq!(
             shell.wl_storage.pos_queries().get_epoch(
                 shell.wl_storage.pos_queries().get_current_decision_height()
