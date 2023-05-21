@@ -1797,7 +1797,8 @@ pub mod args {
     const TOKEN: Arg<WalletAddress> = arg("token");
     const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
-    const THRESHOLD: ArgOpt<u64> = arg_opt("threshold");
+    const THRESHOLD: Arg<u64> = arg("threshold");
+    const THRESHOLD_OPT: ArgOpt<u64> = THRESHOLD.opt();
     const TX_HASH: Arg<String> = arg("tx-hash");
     const TX_TIMESTAMP: ArgOpt<DateTimeUtc> = arg_opt("timestamp");
     const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
@@ -2235,7 +2236,8 @@ pub mod args {
             let source = SOURCE_OPT.parse(matches);
             let vp_code_path = CODE_PATH_OPT.parse(matches);
             let public_keys = PUBLIC_KEYS.parse(matches);
-            let threshold = THRESHOLD.parse(matches);
+            let threshold = THRESHOLD_OPT.parse(matches);
+
             Self {
                 tx,
                 source,
@@ -2272,7 +2274,7 @@ pub mod args {
                         .required(true)
                         .min_values(1),
                 )
-                .arg(THRESHOLD.def().about("Multisgnature threshold."))
+                .arg(THRESHOLD_OPT.def().about("Multisgnature threshold."))
         }
     }
 
@@ -2316,7 +2318,7 @@ pub mod args {
                 commission_rate,
                 max_commission_rate_change,
                 validator_vp_code_path,
-                threshold,
+                threshold: Some(threshold),
                 unsafe_dont_encrypt,
             }
         }
@@ -2376,11 +2378,11 @@ pub mod args {
         /// Path to the VP WASM code file
         pub vp_code_path: Option<PathBuf>,
         /// New set of public keys to associate with the account
-        pub public_keys: Vec<WalletPublicKey>,
+        pub public_keys: Option<Vec<WalletPublicKey>>,
         /// The new account threshold
         pub threshold: Option<u64>,
         /// Address of the account whose VP is to be updated
-        pub addr: WalletAddress,
+        pub address: WalletAddress,
     }
 
     impl Args for TxUpdateAccount {
@@ -2388,21 +2390,28 @@ pub mod args {
             let tx = Tx::parse(matches);
             let vp_code_path = CODE_PATH_OPT.parse(matches);
             let public_keys = PUBLIC_KEYS.parse(matches);
-            let threshold = THRESHOLD.parse(matches);
-            let addr = ADDRESS.parse(matches);
+            let threshold = THRESHOLD_OPT.parse(matches);
+            let address = ADDRESS.parse(matches);
+
+            let public_keys_opt = if public_keys.is_empty() {
+                None
+            } else {
+                Some(public_keys)
+            };
+
             Self {
                 tx,
                 vp_code_path,
-                public_keys,
+                public_keys: public_keys_opt,
                 threshold,
-                addr,
+                address,
             }
         }
 
         fn def(app: App) -> App {
             app.add_args::<Tx>()
                 .arg(
-                    CODE_PATH.def().about(
+                    CODE_PATH_OPT.def().about(
                         "The path to the new validity predicate WASM code.",
                     ),
                 )
@@ -2410,7 +2419,7 @@ pub mod args {
                     "The new set of public keys to associate with the account.",
                 ))
                 .arg(
-                    THRESHOLD
+                    THRESHOLD_OPT
                         .def()
                         .about("The new account multisig threshold."),
                 )

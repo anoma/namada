@@ -142,7 +142,7 @@ fn iterable_to_string<T: fmt::Display>(
 )]
 pub struct UpdateVp {
     /// An address of the account
-    pub addr: Address,
+    pub address: Address,
     /// The new VP code hash
     pub vp_code_hash: Hash,
     /// Public keys
