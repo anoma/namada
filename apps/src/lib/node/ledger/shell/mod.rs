@@ -1826,6 +1826,7 @@ mod abciplus_mempool_tests {
     use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
 
+    use super::*;
     use crate::node::ledger::shell::test_utils;
     use crate::wallet;
 
@@ -1877,7 +1878,10 @@ mod abciplus_mempool_tests {
         ];
         for (tx_bytes, err_msg) in txs_to_validate {
             let rsp = shell.mempool_validate(&tx_bytes, Default::default());
-            assert!(rsp.code == 1, "{err_msg}");
+            assert!(
+                rsp.code == u32::from(ErrorCodes::InvalidVoteExtension),
+                "{err_msg}"
+            );
         }
     }
 
