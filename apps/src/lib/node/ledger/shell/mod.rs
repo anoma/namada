@@ -2215,7 +2215,8 @@ mod test_mempool_validate {
         assert_eq!(
             result.log,
             format!(
-                "Tx carries a wrong chain id: expected {}, found {}",
+                "Mempool validation failed: Tx carries a wrong chain id: \
+                 expected {}, found {}",
                 shell.chain_id, wrong_chain_id
             )
         )
