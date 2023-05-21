@@ -22,6 +22,7 @@ use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::Key;
 use namada_proof_of_stake::read_pos_params;
 use thiserror::Error;
+use namada_core::types::dec::Dec;
 pub use token::{Error as IbcTokenError, IbcToken};
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
@@ -236,8 +237,8 @@ pub fn get_dummy_genesis_validator()
     let consensus_sk = common_sk_from_simple_seed(0);
     let consensus_key = consensus_sk.to_public();
 
-    let commission_rate = Decimal::new(1, 1);
-    let max_commission_rate_change = Decimal::new(1, 1);
+    let commission_rate = Dec::new(1, -1);
+    let max_commission_rate_change = Dec::new(1, -1);
     namada_proof_of_stake::types::GenesisValidator {
         address,
         tokens,
@@ -1987,7 +1988,7 @@ mod tests {
         // init balance
         let sender = established_address_1();
         let balance_key = balance_key(&nam(), &sender);
-        let amount = Amount::whole(100);
+        let amount = Amount::native_whole(100);
         wl_storage
             .write_log
             .write(&balance_key, amount.try_to_vec().unwrap())
@@ -2449,7 +2450,7 @@ mod tests {
         // init the escrow balance
         let balance_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::IbcEscrow));
-        let amount = Amount::whole(100);
+        let amount = Amount::native_whole(100);
         wl_storage
             .write_log
             .write(&balance_key, amount.try_to_vec().unwrap())
@@ -2601,7 +2602,7 @@ mod tests {
         // init the escrow balance
         let balance_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::IbcEscrow));
-        let amount = Amount::whole(100);
+        let amount = Amount::native_whole(100);
         wl_storage
             .write_log
             .write(&balance_key, amount.try_to_vec().unwrap())

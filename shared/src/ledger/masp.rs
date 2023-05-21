@@ -54,6 +54,8 @@ use sha2::Digest;
 
 use crate::ledger::queries::Client;
 use crate::ledger::{args, rpc};
+use crate::ledger::args::InputAmount;
+use crate::ledger::rpc::query_conversion;
 use crate::proto::{SignedTxData, Tx};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
@@ -890,6 +892,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// the trace amount that could not be converted is moved from input to
     /// output.
     async fn apply_conversion(
+        &mut self,
         conv: AllowedConversion,
         client: &U::C,
         asset_type: AssetType,
@@ -1187,15 +1190,16 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     ) -> Result<(Amount, Epoch), PinnedBalanceError> {
         // Obtain the balance that will be exchanged
         let (amt, ep) =
-            Self::compute_pinned_balance(ledger_address, owner, viewing_key)
+            Self::compute_pinned_balance(client, owner, viewing_key)
                 .await?;
         // Establish connection with which to do exchange rate queries
-        let client = HttpClient::new(ledger_address.clone()).unwrap();
         let amount = self.decode_all_amounts(&client, amt).await;
+        let token = token_exists_or_err(args.token.clone(), args.tx.force, client).await?;
+        let validated_amount = validate_amount(client, amount, &token, &None);
         // Finally, exchange the balance to the transaction's epoch
         let computed_amount = self
             .compute_exchanged_amount(
-                client.clone(),
+                client,
                 amount,
                 ep,
                 HashMap::new(),
@@ -1322,8 +1326,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let (asset_types, amount) = convert_amount(
             epoch,
             &args.token,
-            &args.sub_prefix,
-            &amt.amount
+            &args.sub_prefix.as_ref(),
+            amt.amount.clone()
         );
 
         // Transactions with transparent input and shielded output
@@ -1471,13 +1475,16 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     )?;
                 }
 
+                let token = token_exists_or_err(args.token.clone(), args.tx.force, client).await?;
+                let validated_amount = validate_amount(client, args.amount, &token, &None);
+
                 let (new_asset_type, _) =
-                    convert_amount(new_epoch, &args.token, args.amount);
+                    convert_amount(new_epoch, &args.token, &None, validated_amount);
                 replay_builder.add_sapling_output(
                     ovk_opt,
                     payment_address.unwrap().into(),
                     new_asset_type,
-                    amt,
+                    validated_amount,
                     memo,
                 )?;
 

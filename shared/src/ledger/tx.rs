@@ -61,7 +61,7 @@ pub enum Error {
     TxBroadcast(RpcError),
     /// Invalid comission rate set
     #[error("Invalid new commission rate, received {0}")]
-    InvalidCommisionRate(Decimal),
+    InvalidCommisionRate(Dec),
     /// Invalid validator address
     #[error("The address {0} doesn't belong to any known validator account.")]
     InvalidValidatorAddress(Address),
@@ -70,7 +70,7 @@ pub enum Error {
         "New rate, {0}, is too large of a change with respect to the \
          predecessor epoch in which the rate will take effect."
     )]
-    TooLargeOfChange(Decimal),
+    TooLargeOfChange(Dec),
     /// Error retrieving from storage
     #[error("Error retrieving from storage")]
     Retrival,
@@ -89,15 +89,15 @@ pub enum Error {
     /// Lower bond amount than the unbond
     #[error(
         "The total bonds of the source {0} is lower than the amount to be \
-         unbonded. Amount to unbond is {1.to_string_native()} and the total bonds is {2.to_string_native()}."
+         unbonded. Amount to unbond is {1} and the total bonds is {2}."
     )]
-    LowerBondThanUnbond(Address, token::Amount, token::Amount),
+    LowerBondThanUnbond(Address, String, String),
     /// Balance is too low
     #[error(
         "The balance of the source {0} of token {1} is lower than the amount \
-         to be transferred. Amount to transfer is {2.to_string_native()} and the balance is {3.to_string_native()}."
+         to be transferred. Amount to transfer is {2} and the balance is {3}."
     )]
-    BalanceTooLow(Address, Address, token::Amount, token::Amount),
+    BalanceTooLow(Address, Address, String, String),
     /// Token Address does not exist on chain
     #[error("The token address {0} doesn't exist on chain.")]
     TokenDoesNotExist(Address),
@@ -116,14 +116,14 @@ pub enum Error {
     /// Negative balance after transfer
     #[error(
         "The balance of the source {0} is lower than the amount to be \
-         transferred and fees. Amount to transfer is {1.to_string_native()} {2} and fees are {3.to_string_native()} \
+         transferred and fees. Amount to transfer is {1} {2} and fees are {3} \
          {4}."
     )]
     NegativeBalanceAfterTransfer(
         Address,
-        token::Amount,
+        String,
         Address,
-        token::Amount,
+        String,
         Address,
     ),
     /// No Balance found for token
@@ -554,7 +554,7 @@ pub async fn submit_validator_commission_change<
                 commission_rate,
                 max_commission_change_per_epoch,
             }) => {
-                if args.rate.abs_diff(&comission_rate)
+                if args.rate.abs_diff(&commission_rate)
                     > max_commission_change_per_epoch
                 {
                     eprintln!(

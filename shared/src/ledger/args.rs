@@ -1,7 +1,7 @@
 //! Structures encapsulating SDK arguments
 use namada_core::types::chain::ChainId;
+use namada_core::types::dec::Dec;
 use namada_core::types::time::DateTimeUtc;
-use rust_decimal::Decimal;
 
 use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
 use crate::types::address::Address;
