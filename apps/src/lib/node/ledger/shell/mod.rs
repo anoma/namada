@@ -995,7 +995,7 @@ where
                     ext,
                     self.wl_storage.storage.last_height,
                 ) {
-                    response.code = 1;
+                    response.code = ErrorCodes::InvalidVoteExtension.into();
                     response.log = format!(
                         "{INVALID_MSG}: Invalid Ethereum events vote \
                          extension: {err}",
@@ -1013,7 +1013,7 @@ where
                     ext,
                     self.wl_storage.storage.last_height,
                 ) {
-                    response.code = 1;
+                    response.code = ErrorCodes::InvalidVoteExtension.into();
                     response.log = format!(
                         "{INVALID_MSG}: Invalid Brige pool roots vote \
                          extension: {err}",
@@ -1039,7 +1039,7 @@ where
                     // epoch.
                     self.wl_storage.storage.last_epoch,
                 ) {
-                    response.code = 1;
+                    response.code = ErrorCodes::InvalidVoteExtension.into();
                     response.log = format!(
                         "{INVALID_MSG}: Invalid validator set update vote \
                          extension: {err}",
@@ -1052,7 +1052,7 @@ where
                 }
             }
             TxType::Protocol(ProtocolTx { .. }) => {
-                response.code = 1;
+                response.code = ErrorCodes::InvalidTx.into();
                 response.log = format!(
                     "{INVALID_MSG}: The given protocol tx cannot be added to \
                      the mempool"
@@ -1127,21 +1127,23 @@ where
                 }
             }
             TxType::Raw(_) => {
-                response.code = 1;
+                response.code = ErrorCodes::InvalidTx.into();
                 response.log = format!(
                     "{INVALID_MSG}: Raw transactions cannot be accepted into \
                      the mempool"
                 );
             }
             TxType::Decrypted(_) => {
-                response.code = 1;
+                response.code = ErrorCodes::InvalidTx.into();
                 response.log = format!(
                     "{INVALID_MSG}: Decrypted txs cannot be sent by clients"
                 );
             }
         }
 
-        response.log = VALID_MSG.into();
+        if response.code == u32::from(ErrorCodes::Ok) {
+            response.log = VALID_MSG.into();
+        }
         response
     }
 
