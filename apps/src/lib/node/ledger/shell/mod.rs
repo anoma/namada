@@ -1016,13 +1016,13 @@ where
                 )
                 .map_err(|e| {
                     Error::TxApply(protocol::Error::FeeUnshieldingError(
-                        e.to_string(),
+                        e,
                     ))
                 })?
                 .ok_or_else(|| {
-                    Error::TxApply(protocol::Error::FeeUnshieldingError(
+                    Error::TxApply(protocol::Error::FeeUnshieldingError(namada::types::transaction::WrapperTxErr::InvalidUnshield(
                         "Missing expected fee unshielding tx".to_string(),
-                    ))
+                    )))
                 })?;
 
             let gas_table = gas_table.unwrap_or_else(|| {
@@ -1065,20 +1065,19 @@ where
                         );
                     } else {
                         return Err(Error::TxApply(
-                            protocol::Error::FeeUnshieldingError(format!(
-                            "The unshielding tx is invalid, some VPs rejected \
-                             it: {:#?}",
+                            protocol::Error::FeeUnshieldingError(namada::types::transaction::WrapperTxErr::InvalidUnshield(format!(
+                            "Some VPs rejected fee unshielding: {:#?}",
                             result.vps_result.rejected_vps
-                        )),
+                        ))),
                         ));
                     }
                 }
                 Err(e) => {
                     return Err(Error::TxApply(
-                        protocol::Error::FeeUnshieldingError(format!(
-                        "The unshielding tx is invalid, wasm run failed: {}",
+                        protocol::Error::FeeUnshieldingError(namada::types::transaction::WrapperTxErr::InvalidUnshield(format!(
+                        "Wasm run failed: {}",
                         e
-                    )),
+                    ))),
                     ));
                 }
             }
@@ -1087,11 +1086,7 @@ where
         if balance >= self.get_wrapper_tx_fees() {
             Ok(())
         } else {
-            Err(Error::TxApply(protocol::Error::FeeUnshieldingError(
-                "The given address does not have a sufficient balance to pay \
-                 fee"
-                .to_string(),
-            )))
+            Err(Error::TxApply(protocol::Error::FeeError))
         }
     }
 }

@@ -41,8 +41,8 @@ pub enum Error {
     GasError(gas::Error),
     #[error("Insufficient balance to pay fee")]
     FeeError,
-    #[error("Error unshielding funds for fee payment: {0}")]
-    FeeUnshieldingError(String),
+    #[error("{0}")]
+    FeeUnshieldingError(crate::types::transaction::WrapperTxErr),
     #[error("Error executing VP for addresses: {0:?}")]
     VpRunnerError(vm::wasm::run::Error),
     #[error("The address {0} doesn't exist")]

@@ -882,17 +882,15 @@ where
                         )
                         .map_err(|e| {
                             Error::TxApply(
-                                protocol::Error::FeeUnshieldingError(
-                                    e.to_string(),
-                                ),
+                                protocol::Error::FeeUnshieldingError(e),
                             )
                         })?
                         .ok_or(Error::TxApply(
-                            protocol::Error::FeeUnshieldingError(
+                            protocol::Error::FeeUnshieldingError(namada::types::transaction::WrapperTxErr::InvalidUnshield(
                                 "Missing expected fee unshielding tx"
                                     .to_string(),
                             ),
-                        ))?,
+                        )))?,
                     has_valid_pow: false,
                 }),
                 TxIndex::default(),
