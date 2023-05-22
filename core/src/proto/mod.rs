@@ -21,7 +21,7 @@ mod tests {
     #[test]
     fn encoding_round_trip() {
         let tx = Tx {
-            code: "wasm code".as_bytes().to_owned(),
+            code_or_hash: "wasm code".as_bytes().to_owned(),
             data: Some("arbitrary data".as_bytes().to_owned()),
             timestamp: Some(SystemTime::now().into()),
             chain_id: ChainId::default().0,

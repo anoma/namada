@@ -61,6 +61,12 @@ pub const RESERVED_ADDRESS_PREFIX: char = '#';
 pub const VP_KEY_PREFIX: char = '?';
 /// The reserved storage key for validity predicates
 pub const RESERVED_VP_KEY: &str = "?";
+/// The reserved storage key prefix for wasm codes
+pub const WASM_KEY_PREFIX: &str = "wasm";
+/// The reserved storage key prefix for wasm codes
+pub const WASM_CODE_PREFIX: &str = "code";
+/// The reserved storage key prefix for wasm code hashes
+pub const WASM_HASH_PREFIX: &str = "hash";
 
 /// Transaction index within block.
 #[derive(
@@ -526,6 +532,24 @@ impl Key {
     pub fn split_last(&self) -> Option<(KeyRef<'_>, &DbKeySeg)> {
         let (last, prefix) = self.segments.split_last()?;
         Some((KeyRef { segments: prefix }, last))
+    }
+
+    /// Returns a key of the wasm code of the given hash
+    pub fn wasm_code(code_hash: &Hash) -> Self {
+        let mut segments =
+            Self::from(WASM_KEY_PREFIX.to_owned().to_db_key()).segments;
+        segments.push(DbKeySeg::StringSeg(WASM_CODE_PREFIX.to_owned()));
+        segments.push(DbKeySeg::StringSeg(code_hash.to_string()));
+        Key { segments }
+    }
+
+    /// Returns a key of the wasm code hash of the given code path
+    pub fn wasm_hash(code_path: impl AsRef<str>) -> Self {
+        let mut segments =
+            Self::from(WASM_KEY_PREFIX.to_owned().to_db_key()).segments;
+        segments.push(DbKeySeg::StringSeg(WASM_HASH_PREFIX.to_owned()));
+        segments.push(DbKeySeg::StringSeg(code_path.as_ref().to_string()));
+        Key { segments }
     }
 
     /// Returns a key of the validity predicate of the given address

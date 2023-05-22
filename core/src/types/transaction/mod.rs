@@ -51,8 +51,8 @@ pub struct TxResult {
     pub vps_result: VpsResult,
     /// New established addresses created by the transaction
     pub initialized_accounts: Vec<Address>,
-    /// Optional IBC event emitted by the transaction
-    pub ibc_event: Option<IbcEvent>,
+    /// IBC events emitted by the transaction
+    pub ibc_events: BTreeSet<IbcEvent>,
 }
 
 impl TxResult {
@@ -143,8 +143,8 @@ fn iterable_to_string<T: fmt::Display>(
 pub struct UpdateVp {
     /// An address of the account
     pub addr: Address,
-    /// The new VP code
-    pub vp_code: Vec<u8>,
+    /// The new VP code hash
+    pub vp_code_hash: Hash,
 }
 
 /// A tx data type to initialize a new established account
@@ -163,8 +163,8 @@ pub struct InitAccount {
     /// for signature verification of transactions for the newly created
     /// account.
     pub public_key: common::PublicKey,
-    /// The VP code
-    pub vp_code: Vec<u8>,
+    /// The VP code hash
+    pub vp_code_hash: Hash,
 }
 
 /// A tx data type to initialize a new validator account.
@@ -200,7 +200,7 @@ pub struct InitValidator {
     /// immutable once set here.
     pub max_commission_rate_change: Decimal,
     /// The VP code for validator account
-    pub validator_vp_code: Vec<u8>,
+    pub validator_vp_code_hash: Hash,
 }
 
 /// Module that includes helper functions for classifying
@@ -307,7 +307,7 @@ pub mod tx_types {
             .map(|data| SignedTxData::try_from_slice(&data[..]))
         {
             let signed_hash = Tx {
-                code: tx.code,
+                code_or_hash: tx.code_or_hash,
                 data: Some(data.clone()),
                 timestamp: tx.timestamp,
                 chain_id: tx.chain_id.clone(),
@@ -315,7 +315,7 @@ pub mod tx_types {
             }
             .hash();
             match TxType::try_from(Tx {
-                code: vec![],
+                code_or_hash: vec![],
                 data: Some(data),
                 timestamp: tx.timestamp,
                 chain_id: tx.chain_id,

@@ -850,7 +850,10 @@ pub mod cmds {
                     .or(rollback)
                     .or(run_until)
                     // The `run` command is the default if no sub-command given
-                    .or(Some(Self::Run(LedgerRun(args::LedgerRun(None)))))
+                    .or(Some(Self::Run(LedgerRun(args::LedgerRun {
+                        start_time: None,
+                        tx_index: false,
+                    }))))
             })
         }
 
@@ -1590,6 +1593,7 @@ pub mod cmds {
         FetchWasms(FetchWasms),
         InitNetwork(InitNetwork),
         InitGenesisValidator(InitGenesisValidator),
+        PkToTmAddress(PkToTmAddress),
     }
 
     impl SubCmd for Utils {
@@ -1604,10 +1608,13 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::InitNetwork);
                 let init_genesis =
                     SubCmd::parse(matches).map(Self::InitGenesisValidator);
+                let pk_to_tm_address =
+                    SubCmd::parse(matches).map(Self::PkToTmAddress);
                 join_network
                     .or(fetch_wasms)
                     .or(init_network)
                     .or(init_genesis)
+                    .or(pk_to_tm_address)
             })
         }
 
@@ -1618,6 +1625,7 @@ pub mod cmds {
                 .subcommand(FetchWasms::def())
                 .subcommand(InitNetwork::def())
                 .subcommand(InitGenesisValidator::def())
+                .subcommand(PkToTmAddress::def())
                 .setting(AppSettings::SubcommandRequiredElseHelp)
         }
     }
@@ -2059,6 +2067,28 @@ pub mod cmds {
                 .add_args::<args::ValidatorSetUpdateRelay>()
         }
     }
+
+    #[derive(Clone, Debug)]
+    pub struct PkToTmAddress(pub args::PkToTmAddress);
+
+    impl SubCmd for PkToTmAddress {
+        const CMD: &'static str = "pk-to-tm";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::PkToTmAddress::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Convert a validator's consensus public key to a \
+                     Tendermint address.",
+                )
+                .add_args::<args::PkToTmAddress>()
+        }
+    }
 }
 
 pub mod args {
@@ -2087,8 +2117,7 @@ pub mod args {
     use super::context::*;
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
-    use crate::config;
-    use crate::config::{Action, ActionAtHeight, TendermintMode};
+    use crate::config::{self, Action, ActionAtHeight, TendermintMode};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
@@ -2103,7 +2132,7 @@ pub mod args {
         "base-dir",
         DefaultFn(|| match env::var("NAMADA_BASE_DIR") {
             Ok(dir) => dir.into(),
-            Err(_) => config::DEFAULT_BASE_DIR.into(),
+            Err(_) => config::get_default_namada_folder(),
         }),
     );
     const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
@@ -2197,7 +2226,8 @@ pub mod args {
     const PROPOSAL_VOTE: Arg<String> = arg("vote");
     const RAW_ADDRESS: Arg<Address> = arg("address");
     const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
-    const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
+    const RAW_PUBLIC_KEY: Arg<common::PublicKey> = arg("public-key");
+    const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = RAW_PUBLIC_KEY.opt();
     const RECEIVER: Arg<String> = arg("receiver");
     const RELAYER: Arg<Address> = arg("relayer");
     const SAFE_MODE: ArgFlag = flag("safe-mode");
@@ -2211,6 +2241,7 @@ pub mod args {
     const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
     const SUSPEND_ACTION: ArgFlag = flag("suspend");
+    const TENDERMINT_TX_INDEX: ArgFlag = flag("tx-index");
     const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
     const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
@@ -2281,7 +2312,10 @@ pub mod args {
                      configuration and state is stored. This value can also \
                      be set via `NAMADA_BASE_DIR` environment variable, but \
                      the argument takes precedence, if specified. Defaults to \
-                     `.namada`.",
+                     `$XDG_DATA_HOME/namada` (`$HOME/.local/share/namada` \
+                     where `XDG_DATA_HOME` is unset) on \
+                     Unix,`$HOME/Library/Application Support/Namada` on \
+                     Mac,and `%AppData%\\Namada` on Windows.",
                 ))
                 .arg(WASM_DIR.def().about(
                     "Directory with built WASM validity predicates, \
@@ -2297,12 +2331,19 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
-    pub struct LedgerRun(pub Option<DateTimeUtc>);
+    pub struct LedgerRun {
+        pub start_time: Option<DateTimeUtc>,
+        pub tx_index: bool,
+    }
 
     impl Args for LedgerRun {
         fn parse(matches: &ArgMatches) -> Self {
-            let time = NAMADA_START_TIME.parse(matches);
-            Self(time)
+            let start_time = NAMADA_START_TIME.parse(matches);
+            let tx_index = TENDERMINT_TX_INDEX.parse(matches);
+            Self {
+                start_time,
+                tx_index,
+            }
         }
 
         fn def(app: App) -> App {
@@ -2314,6 +2355,11 @@ pub mod args {
                  equivalent:\n2023-01-20T12:12:12Z\n2023-01-20 \
                  12:12:12Z\n2023-  01-20T12:  12:12Z",
             ))
+            .arg(
+                TENDERMINT_TX_INDEX
+                    .def()
+                    .about("Enable Tendermint tx indexing."),
+            )
         }
     }
 
@@ -4491,6 +4537,25 @@ pub mod args {
                 .arg(PRE_GENESIS_PATH.def().about("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\"."))
             .arg(DONT_PREFETCH_WASM.def().about(
                 "Do not pre-fetch WASM.",
+            ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct PkToTmAddress {
+        pub public_key: common::PublicKey,
+    }
+
+    impl Args for PkToTmAddress {
+        fn parse(matches: &ArgMatches) -> Self {
+            let public_key = RAW_PUBLIC_KEY.parse(matches);
+            Self { public_key }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(RAW_PUBLIC_KEY.def().about(
+                "The consensus public key to be converted to Tendermint \
+                 address.",
             ))
         }
     }

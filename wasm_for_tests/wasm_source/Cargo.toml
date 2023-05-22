@@ -4,7 +4,7 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada_wasm_for_tests"
 resolver = "2"
-version = "0.15.0"
+version = "0.15.3"
 
 [lib]
 crate-type = ["cdylib"]
@@ -39,18 +39,16 @@ borsh-derive = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223
 borsh-derive-internal = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
 borsh-schema-derive-internal = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
 # patched to a commit on the `eth-bridge-integration+consensus-timeout` branch of our fork
-tendermint = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "c364f4d0c3bb6f357ea48549e7a5b1cb49dbc2b4"}
-tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "c364f4d0c3bb6f357ea48549e7a5b1cb49dbc2b4"}
-tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "c364f4d0c3bb6f357ea48549e7a5b1cb49dbc2b4"}
-tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "c364f4d0c3bb6f357ea48549e7a5b1cb49dbc2b4"}
-tendermint-testgen = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "c364f4d0c3bb6f357ea48549e7a5b1cb49dbc2b4"}
-tendermint-light-client = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "c364f4d0c3bb6f357ea48549e7a5b1cb49dbc2b4"}
-tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "c364f4d0c3bb6f357ea48549e7a5b1cb49dbc2b4"}
+tendermint = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "cf4dd4ccb64c12485ff764c10888237cf87396bc"}
+tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "cf4dd4ccb64c12485ff764c10888237cf87396bc"}
+tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "cf4dd4ccb64c12485ff764c10888237cf87396bc"}
+tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "cf4dd4ccb64c12485ff764c10888237cf87396bc"}
+tendermint-testgen = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "cf4dd4ccb64c12485ff764c10888237cf87396bc"}
+tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "cf4dd4ccb64c12485ff764c10888237cf87396bc"}
 
 # patched to a commit on the `eth-bridge-integration` branch of our fork
-ibc = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "9a79bc0dce207fd7d3477ebd2197fe79a4d5eb8a"}
-ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "9a79bc0dce207fd7d3477ebd2197fe79a4d5eb8a"}
-ibc-relayer = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "9a79bc0dce207fd7d3477ebd2197fe79a4d5eb8a"}
+ibc = {git = "https://github.com/heliaxdev/cosmos-ibc-rs.git", rev = "17c6d16e6e32c5db96f1d9026ce6beb019cdc7c4"}
+ibc-proto = {git = "https://github.com/heliaxdev/ibc-proto-rs.git", rev = "e50ec3c3c1a9a0bcc3cd59516645ff5b4e1db281"}
 
 [dev-dependencies]
 namada_tests = {path = "../../tests"}

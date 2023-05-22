@@ -38,6 +38,8 @@ use crate::types::address::{
     masp, Address, EstablishedAddressGen, InternalAddress,
 };
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
+use crate::types::hash::{Error as HashError, Hash};
+// TODO
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::internal::TxQueue;
 use crate::types::storage::{
@@ -152,6 +154,8 @@ pub enum Error {
     BorshCodingError(std::io::Error),
     #[error("Merkle tree at the height {height} is not stored")]
     NoMerkleTree { height: BlockHeight },
+    #[error("Code hash error: {0}")]
+    InvalidCodeHash(HashError),
 }
 
 /// The block's state as stored in the database.
@@ -240,6 +244,7 @@ pub trait DB: std::fmt::Debug {
     fn write_block(
         &mut self,
         state: BlockStateWrite,
+        batch: &mut Self::WriteBatch,
         is_full_commit: bool,
     ) -> Result<()>;
 
@@ -315,6 +320,7 @@ pub trait DB: std::fmt::Debug {
     /// Prune Merkle tree stores at the given epoch
     fn prune_merkle_tree_stores(
         &mut self,
+        batch: &mut Self::WriteBatch,
         pruned_epoch: Epoch,
         pred_epochs: &Epochs,
     ) -> Result<()>;
@@ -344,17 +350,7 @@ pub trait DBIter<'iter> {
 }
 
 /// Atomic batch write.
-pub trait DBWriteBatch {
-    /// Insert a value into the database under the given key.
-    fn put<K, V>(&mut self, key: K, value: V)
-    where
-        K: AsRef<[u8]>,
-        V: AsRef<[u8]>;
-
-    /// Removes the database entry for key. Does nothing if the key was not
-    /// found.
-    fn delete<K: AsRef<[u8]>>(&mut self, key: K);
-}
+pub trait DBWriteBatch {}
 
 impl<D, H> Storage<D, H>
 where
@@ -474,7 +470,7 @@ where
     }
 
     /// Persist the current block's state to the database
-    pub fn commit_block(&mut self) -> Result<()> {
+    pub fn commit_block(&mut self, mut batch: D::WriteBatch) -> Result<()> {
         // All states are written only when the first height or a new epoch
         let is_full_commit =
             self.block.height.0 == 1 || self.last_epoch != self.block.epoch;
@@ -494,15 +490,15 @@ where
             ethereum_height: self.ethereum_height.as_ref(),
             eth_events_queue: &self.eth_events_queue,
         };
-        self.db.write_block(state, is_full_commit)?;
+        self.db.write_block(state, &mut batch, is_full_commit)?;
         self.last_height = self.block.height;
         self.last_epoch = self.block.epoch;
         self.header = None;
         if is_full_commit {
             // prune old merkle tree stores
-            self.prune_merkle_tree_stores()?;
+            self.prune_merkle_tree_stores(&mut batch)?;
         }
-        Ok(())
+        self.db.exec_batch(batch)
     }
 
     /// Find the root hash of the merkle tree
@@ -637,18 +633,25 @@ where
         Ok(())
     }
 
-    /// Get a validity predicate for the given account address and the gas cost
-    /// for reading it.
+    /// Get the hash of a validity predicate for the given account address and
+    /// the gas cost for reading it.
     pub fn validity_predicate(
         &self,
         addr: &Address,
-    ) -> Result<(Option<Vec<u8>>, u64)> {
+    ) -> Result<(Option<Hash>, u64)> {
         let key = if let Address::Implicit(_) = addr {
             parameters::storage::get_implicit_vp_key()
         } else {
             Key::validity_predicate(addr)
         };
-        self.read(&key)
+        match self.read(&key)? {
+            (Some(value), gas) => {
+                let vp_code_hash = Hash::try_from(&value[..])
+                    .map_err(Error::InvalidCodeHash)?;
+                Ok((Some(vp_code_hash), gas))
+            }
+            (None, gas) => Ok((None, gas)),
+        }
     }
 
     #[allow(dead_code)]
@@ -948,7 +951,10 @@ where
 
     // Prune merkle tree stores. Use after updating self.block.height in the
     // commit.
-    fn prune_merkle_tree_stores(&mut self) -> Result<()> {
+    fn prune_merkle_tree_stores(
+        &mut self,
+        batch: &mut D::WriteBatch,
+    ) -> Result<()> {
         if let Some(limit) = self.storage_read_past_height_limit {
             if self.last_height.0 <= limit {
                 return Ok(());
@@ -964,6 +970,7 @@ where
                     // height of the epoch would be used
                     // to restore stores at a height (> min_height) in the epoch
                     self.db.prune_merkle_tree_stores(
+                        batch,
                         epoch.prev(),
                         &self.block.pred_epochs,
                     )?;
@@ -1133,7 +1140,7 @@ mod tests {
                 max_expected_time_per_block: Duration::seconds(max_expected_time_per_block).into(),
                 vp_whitelist: vec![],
                 tx_whitelist: vec![],
-                implicit_vp: vec![],
+                implicit_vp_code_hash: Hash::zero(),
                 epochs_per_year: 100,
                 pos_gain_p: dec!(0.1),
                 pos_gain_d: dec!(0.1),

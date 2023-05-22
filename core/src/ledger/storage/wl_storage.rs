@@ -143,10 +143,11 @@ where
     /// Commit the current block's write log to the storage and commit the block
     /// to DB. Starts a new block write log.
     pub fn commit_block(&mut self) -> storage_api::Result<()> {
+        let mut batch = D::batch();
         self.write_log
-            .commit_block(&mut self.storage)
+            .commit_block(&mut self.storage, &mut batch)
             .into_storage_result()?;
-        self.storage.commit_block().into_storage_result()
+        self.storage.commit_block(batch).into_storage_result()
     }
 
     /// Initialize a new epoch when the current epoch is finished. Returns
@@ -324,10 +325,10 @@ where
                                 return Some((key, value, gas));
                             }
                             write_log::StorageModification::InitAccount {
-                                vp,
+                                vp_code_hash,
                             } => {
-                                let gas = vp.len() as u64;
-                                return Some((key, vp, gas));
+                                let gas = vp_code_hash.len() as u64;
+                                return Some((key, vp_code_hash.to_vec(), gas));
                             }
                             write_log::StorageModification::Delete => {
                                 continue;
@@ -365,9 +366,8 @@ where
             }
             Some(&write_log::StorageModification::Delete) => Ok(None),
             Some(&write_log::StorageModification::InitAccount {
-                ref vp,
-                ..
-            }) => Ok(Some(vp.clone())),
+                ref vp_code_hash,
+            }) => Ok(Some(vp_code_hash.to_vec())),
             Some(&write_log::StorageModification::Temp { ref value }) => {
                 Ok(Some(value.clone()))
             }
@@ -423,6 +423,16 @@ where
         &self,
     ) -> std::result::Result<storage::BlockHeight, storage_api::Error> {
         Ok(self.storage().block.height)
+    }
+
+    fn get_block_header(
+        &self,
+        height: storage::BlockHeight,
+    ) -> std::result::Result<Option<storage::Header>, storage_api::Error> {
+        self.storage()
+            .db
+            .read_block_header(height)
+            .into_storage_result()
     }
 
     fn get_block_hash(

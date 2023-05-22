@@ -11,6 +11,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use directories::ProjectDirs;
 use namada::types::chain::ChainId;
 use namada::types::storage::BlockHeight;
 use namada::types::time::Rfc3339String;
@@ -144,6 +145,8 @@ pub struct Tendermint {
     pub instrumentation_prometheus: bool,
     pub instrumentation_prometheus_listen_addr: SocketAddr,
     pub instrumentation_namespace: String,
+    /// Toggle to enable tx indexing
+    pub tx_index: bool,
 }
 
 impl Ledger {
@@ -191,6 +194,7 @@ impl Ledger {
                     26661,
                 ),
                 instrumentation_namespace: "namadan_tm".to_string(),
+                tx_index: false,
             },
             ethereum_bridge: ethereum_bridge::ledger::Config::default(),
         }
@@ -373,6 +377,14 @@ impl Config {
     ) -> PathBuf {
         // Join base dir to the chain ID
         base_dir.as_ref().join(chain_id.to_string()).join(FILENAME)
+    }
+}
+
+pub fn get_default_namada_folder() -> PathBuf {
+    if let Some(project_dir) = ProjectDirs::from("", "", "Namada") {
+        project_dir.data_local_dir().to_path_buf()
+    } else {
+        DEFAULT_BASE_DIR.into()
     }
 }
 

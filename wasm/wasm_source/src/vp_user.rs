@@ -157,14 +157,15 @@ fn validate_tx(
                 let has_post: bool = ctx.has_key_post(key)?;
                 if owner == &addr {
                     if has_post {
-                        let vp: Vec<u8> = ctx.read_bytes_post(key)?.unwrap();
-                        *valid_sig && is_vp_whitelisted(ctx, &vp)?
+                        let vp_hash: Vec<u8> =
+                            ctx.read_bytes_post(key)?.unwrap();
+                        *valid_sig && is_vp_whitelisted(ctx, &vp_hash)?
                     } else {
                         false
                     }
                 } else {
-                    let vp: Vec<u8> = ctx.read_bytes_post(key)?.unwrap();
-                    is_vp_whitelisted(ctx, &vp)?
+                    let vp_hash: Vec<u8> = ctx.read_bytes_post(key)?.unwrap();
+                    is_vp_whitelisted(ctx, &vp_hash)?
                 }
             }
             KeyType::Masp => true,
@@ -668,6 +669,9 @@ mod tests {
 
         let vp_owner = address::testing::established_address_1();
         let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
+        let vp_hash = sha256(&vp_code);
+        // for the update
+        tx_env.store_wasm_code(vp_code);
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
@@ -676,7 +680,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_code)
+                .update_validity_predicate(address, &vp_hash)
                 .unwrap();
         });
 
@@ -704,6 +708,9 @@ mod tests {
         let keypair = key::testing::keypair_1();
         let public_key = keypair.ref_to();
         let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
+        let vp_hash = sha256(&vp_code);
+        // for the update
+        tx_env.store_wasm_code(vp_code);
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
@@ -714,7 +721,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_code)
+                .update_validity_predicate(address, &vp_hash)
                 .unwrap();
         });
 
@@ -744,6 +751,9 @@ mod tests {
         let keypair = key::testing::keypair_1();
         let public_key = keypair.ref_to();
         let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
+        let vp_hash = sha256(&vp_code);
+        // for the update
+        tx_env.store_wasm_code(vp_code);
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
@@ -754,7 +764,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_code)
+                .update_validity_predicate(address, &vp_hash)
                 .unwrap();
         });
 
@@ -783,8 +793,10 @@ mod tests {
         let keypair = key::testing::keypair_1();
         let public_key = keypair.ref_to();
         let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
-
         let vp_hash = sha256(&vp_code);
+        // for the update
+        tx_env.store_wasm_code(vp_code);
+
         tx_env.init_parameters(None, Some(vec![vp_hash.to_string()]), None);
 
         // Spawn the accounts to be able to modify their storage
@@ -796,7 +808,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_code)
+                .update_validity_predicate(address, &vp_hash)
                 .unwrap();
         });
 
@@ -825,8 +837,10 @@ mod tests {
         let keypair = key::testing::keypair_1();
         let public_key = keypair.ref_to();
         let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
-
         let vp_hash = sha256(&vp_code);
+        // for the update
+        tx_env.store_wasm_code(vp_code);
+
         tx_env.init_parameters(
             None,
             Some(vec![vp_hash.to_string()]),
@@ -842,7 +856,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_code)
+                .update_validity_predicate(address, &vp_hash)
                 .unwrap();
         });
 
@@ -870,6 +884,9 @@ mod tests {
         let keypair = key::testing::keypair_1();
         let public_key = keypair.ref_to();
         let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
+        let vp_hash = sha256(&vp_code);
+        // for the update
+        tx_env.store_wasm_code(vp_code);
 
         // hardcoded hash of VP_ALWAYS_TRUE_WASM
         tx_env.init_parameters(None, None, Some(vec!["E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855".to_string()]));
@@ -883,7 +900,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_code)
+                .update_validity_predicate(address, &vp_hash)
                 .unwrap();
         });
 

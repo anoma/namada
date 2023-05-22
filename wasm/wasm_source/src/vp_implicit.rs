@@ -776,6 +776,9 @@ mod tests {
         let public_key = secret_key.ref_to();
         let vp_owner: Address = (&public_key).into();
         let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
+        let vp_hash = sha256(&vp_code);
+        // for the update
+        tx_env.store_wasm_code(vp_code);
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
@@ -784,7 +787,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_code)
+                .update_validity_predicate(address, &vp_hash)
                 .unwrap();
         });
 
@@ -810,8 +813,10 @@ mod tests {
         let public_key = secret_key.ref_to();
         let vp_owner: Address = (&public_key).into();
         let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
-
         let vp_hash = sha256(&vp_code);
+        // for the update
+        tx_env.store_wasm_code(vp_code);
+
         tx_env.init_parameters(
             None,
             Some(vec![vp_hash.to_string()]),
@@ -827,7 +832,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_code)
+                .update_validity_predicate(address, &vp_hash)
                 .unwrap();
         });
 
@@ -855,6 +860,9 @@ mod tests {
         let public_key = secret_key.ref_to();
         let vp_owner: Address = (&public_key).into();
         let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
+        let vp_hash = sha256(&vp_code);
+        // for the update
+        tx_env.store_wasm_code(vp_code);
 
         // hardcoded hash of VP_ALWAYS_TRUE_WASM
         tx_env.init_parameters(None, None, Some(vec!["E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855".to_string()]));
@@ -868,7 +876,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_code)
+                .update_validity_predicate(address, &vp_hash)
                 .unwrap();
         });
 

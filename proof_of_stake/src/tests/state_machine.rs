@@ -11,7 +11,7 @@ use namada_core::types::key::common::PublicKey;
 use namada_core::types::storage::Epoch;
 use proptest::prelude::*;
 use proptest::prop_state_machine;
-use proptest::state_machine::{AbstractStateMachine, StateMachineTest};
+use proptest::state_machine::{ReferenceStateMachine, StateMachineTest};
 use proptest::test_runner::Config;
 use rust_decimal::Decimal;
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see
@@ -29,6 +29,7 @@ use crate::types::{
 prop_state_machine! {
     #![proptest_config(Config {
         cases: 5,
+        verbose: 1,
         .. Config::default()
     })]
     #[test]
@@ -99,12 +100,12 @@ enum Transition {
 }
 
 impl StateMachineTest for ConcretePosState {
-    type Abstract = AbstractPosState;
-    type ConcreteState = Self;
+    type Reference = AbstractPosState;
+    type SystemUnderTest = Self;
 
     fn init_test(
-        initial_state: <Self::Abstract as AbstractStateMachine>::State,
-    ) -> Self::ConcreteState {
+        initial_state: &<Self::Reference as ReferenceStateMachine>::State,
+    ) -> Self::SystemUnderTest {
         println!();
         println!("New test case");
         println!(
@@ -126,10 +127,11 @@ impl StateMachineTest for ConcretePosState {
         Self { s }
     }
 
-    fn apply_concrete(
-        mut state: Self::ConcreteState,
-        transition: <Self::Abstract as AbstractStateMachine>::Transition,
-    ) -> Self::ConcreteState {
+    fn apply(
+        mut state: Self::SystemUnderTest,
+        _ref_state: &<Self::Reference as ReferenceStateMachine>::State,
+        transition: <Self::Reference as ReferenceStateMachine>::Transition,
+    ) -> Self::SystemUnderTest {
         let params = crate::read_pos_params(&state.s).unwrap();
         match transition {
             Transition::NextEpoch => {
@@ -355,25 +357,10 @@ impl StateMachineTest for ConcretePosState {
         state
     }
 
-    fn invariants(_state: &Self::ConcreteState) {}
-
-    // Overridden to add some logging, but same behavior as original
-    fn test_sequential(
-        initial_state: <Self::Abstract as AbstractStateMachine>::State,
-        transitions: Vec<<Self::Abstract as AbstractStateMachine>::Transition>,
+    fn check_invariants(
+        _state: &Self::SystemUnderTest,
+        _ref_state: &<Self::Reference as ReferenceStateMachine>::State,
     ) {
-        let mut state = Self::init_test(initial_state);
-        println!("Transitions {}", transitions.len());
-        for (i, transition) in transitions.into_iter().enumerate() {
-            println!(
-                "Apply transition {} in epoch {}: {:#?}",
-                i,
-                state.current_epoch(),
-                transition
-            );
-            state = Self::apply_concrete(state, transition);
-            Self::invariants(&state);
-        }
     }
 }
 
@@ -634,7 +621,7 @@ impl ConcretePosState {
     }
 }
 
-impl AbstractStateMachine for AbstractPosState {
+impl ReferenceStateMachine for AbstractPosState {
     type State = Self;
     type Transition = Transition;
 
@@ -794,7 +781,7 @@ impl AbstractStateMachine for AbstractPosState {
         }
     }
 
-    fn apply_abstract(
+    fn apply(
         mut state: Self::State,
         transition: &Self::Transition,
     ) -> Self::State {

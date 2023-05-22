@@ -3,7 +3,7 @@
 use std::convert::TryInto;
 use std::fmt;
 
-use arse_merkle_tree::traits::{Hasher, Value};
+use arse_merkle_tree::traits::Hasher;
 use arse_merkle_tree::{Key as TreeKey, H256};
 use borsh::{BorshDeserialize, BorshSerialize};
 use ics23::commitment_proof::Proof as Ics23Proof;
@@ -307,7 +307,7 @@ impl Value for TreeBytes {
 }
 
 /// The storage hasher used for the merkle tree.
-pub trait StorageHasher: Hasher + Default {
+pub trait StorageHasher: Hasher + fmt::Debug + Default {
     /// Hash the value to store
     fn hash(value: impl AsRef<[u8]>) -> H256;
 }

@@ -20,6 +20,7 @@ use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, WlStorage, DB};
 use crate::proto::{self, Tx};
 use crate::types::address::{Address, InternalAddress};
+use crate::types::hash::Hash;
 use crate::types::storage;
 use crate::types::storage::TxIndex;
 use crate::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
@@ -144,13 +145,19 @@ where
         }
         TxType::Wrapper(_)
         | TxType::Decrypted(DecryptedTx::Undecryptable(_)) => {
-            // do nothing.
+            // do not apply db updates, but charge gas anyway.
             // 1) we can only apply state updates on encrypted txs
             // at the next block height
             // 2) undecryptable txs should not perform any state
             // updates either. errors are emitted at a layer above,
             // in `Shell::finalize_block()`.
-            Ok(TxResult::default())
+            let gas_used = block_gas_meter
+                .finalize_transaction()
+                .map_err(Error::GasError)?;
+            Ok(TxResult {
+                gas_used,
+                ..Default::default()
+            })
         }
     }
 }
@@ -230,14 +237,14 @@ where
         .map_err(Error::GasError)?;
     let initialized_accounts = write_log.get_initialized_accounts();
     let changed_keys = write_log.get_keys();
-    let ibc_event = write_log.take_ibc_event();
+    let ibc_events = write_log.take_ibc_events();
 
     Ok(TxResult {
         gas_used,
         changed_keys,
         vps_result,
         initialized_accounts,
-        ibc_event,
+        ibc_events,
     })
 }
 
@@ -325,9 +332,6 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    gas_meter
-        .add_compiling_fee(tx.code.len())
-        .map_err(Error::GasError)?;
     let empty = vec![];
     let tx_data = tx.data.as_ref().unwrap_or(&empty);
     wasm::run::tx(
@@ -335,7 +339,7 @@ where
         write_log,
         gas_meter,
         tx_index,
-        &tx.code,
+        &tx.code_or_hash,
         tx_data,
         vp_wasm_cache,
         tx_wasm_cache,
@@ -432,19 +436,20 @@ where
             let mut gas_meter = VpGasMeter::new(initial_gas);
             let accept = match &addr {
                 Address::Implicit(_) | Address::Established(_) => {
-                    let (vp, gas) = storage
+                    let (vp_hash, gas) = storage
                         .validity_predicate(addr)
                         .map_err(Error::StorageError)?;
                     gas_meter.add(gas).map_err(Error::GasError)?;
-                    let vp =
-                        vp.ok_or_else(|| Error::MissingAddress(addr.clone()))?;
-
-                    gas_meter
-                        .add_compiling_fee(vp.len())
-                        .map_err(Error::GasError)?;
+                    let vp_code_hash = match vp_hash {
+                        Some(v) => Hash::try_from(&v[..])
+                            .map_err(|_| Error::MissingAddress(addr.clone()))?,
+                        None => {
+                            return Err(Error::MissingAddress(addr.clone()));
+                        }
+                    };
 
                     wasm::run::vp(
-                        vp,
+                        &vp_code_hash,
                         tx,
                         tx_index,
                         addr,

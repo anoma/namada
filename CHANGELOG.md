@@ -1,5 +1,59 @@
 # CHANGELOG
 
+## v0.15.3
+
+Namada 0.15.3 is a maintenance release addressing the creation of
+incorrect data directories on Mac and Windows platforms.
+
+### BUG FIXES
+
+- Place the default data directory in the local rather than the roaming profile
+  on Windows. ([#1368](https://github.com/anoma/namada/pull/1368))
+- Use blank qualifier and organization, and upcased Namada, to
+  construct default base directories on Mac and Windows platforms.
+  ([#1369](https://github.com/anoma/namada/pull/1369))
+
+## v0.15.2
+
+Namada 0.15.2 is a bugfix release containing various fixes, including
+a major improvement to storage usage.
+
+### BUG FIXES
+
+- Fixed an issue with the iterator of LazyMap with a nested LazyVec collection
+  that would match non-data keys and fail to decode those with the data decoder.
+  ([#1218](https://github.com/anoma/namada/pull/1218))
+- PoS: fixed a function for clearing of historical epoched data
+  ([\#1325](https://github.com/anoma/namada/pull/1325))
+
+### FEATURES
+
+- Added a utility command to the CLI to compute a tendermint address from a
+  namada public key. ([#1152](https://github.com/anoma/namada/pull/1152))
+
+### IMPROVEMENTS
+
+- Changed the default base directory. On linux, the default path will be `$XDG_DATA_HOME/com.heliax.namada`, on OSX it will be `$HOME/.local/share/com.heliax.namada`.
+  ([#1138](https://github.com/anoma/namada/pull/1138))
+- RocksDB optimization to reduce the storage usage
+  ([#1333](https://github.com/anoma/namada/issues/1333))
+
+### MISCELLANEOUS
+
+- Enabled integer overflow checks in release build.
+  ([#1295](https://github.com/anoma/namada/pull/1295))
+
+## v0.15.1
+
+Namada 0.15.1 is a patch release addressing issues with high storage
+usage due to duplicative storage of wasm code.
+
+### IMPROVEMENTS
+
+- Disable Tendermint tx_index as default
+  ([#1278](https://github.com/anoma/namada/issues/1278))
+- Remove wasm code from tx ([#1297](https://github.com/anoma/namada/issues/1297))
+
 ## v0.15.0
 
 Namada 0.15.0 is a regular minor release featuring various

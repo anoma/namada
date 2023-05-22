@@ -60,6 +60,7 @@ mod tests {
     };
     use namada::ledger::storage_api::{self, StorageWrite};
     use namada::types::chain::ChainId;
+    use namada::types::hash::Hash;
     use namada::types::storage::{BlockHash, BlockHeight, Key};
     use namada::types::{address, storage};
     use proptest::collection::vec;
@@ -202,7 +203,8 @@ mod tests {
                 .expect("write failed");
             expected.push((key.to_string(), value_bytes));
         }
-        storage.commit_block().expect("commit failed");
+        let batch = PersistentStorage::batch();
+        storage.commit_block(batch).expect("commit failed");
 
         let (iter, gas) = storage.iter_prefix(&prefix);
         assert_eq!(gas, prefix.len() as u64);
@@ -244,13 +246,13 @@ mod tests {
         assert_eq!(gas, key.len() as u64);
 
         // insert
-        let vp1 = "vp1".as_bytes().to_vec();
+        let vp1 = Hash::sha256("vp1".as_bytes());
         storage.write(&key, vp1.clone()).expect("write failed");
 
         // check
-        let (vp, gas) =
+        let (vp_code_hash, gas) =
             storage.validity_predicate(&addr).expect("VP load failed");
-        assert_eq!(vp.expect("no VP"), vp1);
+        assert_eq!(vp_code_hash.expect("no VP"), vp1);
         assert_eq!(gas, (key.len() + vp1.len()) as u64);
     }
 
@@ -324,7 +326,8 @@ mod tests {
             } else {
                 storage.delete(&key)?;
             }
-            storage.commit_block()?;
+            let batch = PersistentStorage::batch();
+            storage.commit_block(batch)?;
         }
 
         // 2. We try to read from these heights to check that we get back
@@ -407,8 +410,8 @@ mod tests {
         // Update and commit
         let hash = BlockHash::default();
         storage.begin_block(hash, BlockHeight(1))?;
+        let mut batch = PersistentStorage::batch();
         for (height, key, write_type) in blocks_write_type.clone() {
-            let mut batch = PersistentStorage::batch();
             if height != storage.block.height {
                 // to check the root later
                 roots.insert(storage.block.height, storage.merkle_root());
@@ -420,10 +423,11 @@ mod tests {
                         .pred_epochs
                         .new_epoch(storage.block.height, 1000);
                 }
-                storage.commit_block()?;
+                storage.commit_block(batch)?;
                 let hash = BlockHash::default();
                 storage
                     .begin_block(hash, storage.block.height.next_height())?;
+                batch = PersistentStorage::batch();
             }
             match write_type {
                 0 => {
@@ -448,10 +452,9 @@ mod tests {
                     )?;
                 }
             }
-            storage.exec_batch(batch)?;
         }
         roots.insert(storage.block.height, storage.merkle_root());
-        storage.commit_block()?;
+        storage.commit_block(batch)?;
 
         let mut current_state = HashMap::new();
         for i in 0..num_keys {
@@ -508,7 +511,8 @@ mod tests {
 
         storage.block.epoch = storage.block.epoch.next();
         storage.block.pred_epochs.new_epoch(BlockHeight(1), 1000);
-        storage.commit_block().expect("commit failed");
+        let batch = PersistentStorage::batch();
+        storage.commit_block(batch).expect("commit failed");
 
         storage
             .begin_block(BlockHash::default(), BlockHeight(6))
@@ -522,7 +526,8 @@ mod tests {
 
         storage.block.epoch = storage.block.epoch.next();
         storage.block.pred_epochs.new_epoch(BlockHeight(6), 1000);
-        storage.commit_block().expect("commit failed");
+        let batch = PersistentStorage::batch();
+        storage.commit_block(batch).expect("commit failed");
 
         let result = storage.get_merkle_tree(1.into());
         assert!(result.is_ok(), "The tree at Height 1 should be restored");
@@ -532,7 +537,8 @@ mod tests {
             .expect("begin_block failed");
         storage.block.epoch = storage.block.epoch.next();
         storage.block.pred_epochs.new_epoch(BlockHeight(11), 1000);
-        storage.commit_block().expect("commit failed");
+        let batch = PersistentStorage::batch();
+        storage.commit_block(batch).expect("commit failed");
 
         let result = storage.get_merkle_tree(1.into());
         assert!(result.is_err(), "The tree at Height 1 should be pruned");

@@ -14,7 +14,8 @@ pub fn main() -> Result<()> {
         cmds::NamadaNode::Ledger(sub) => match sub {
             cmds::Ledger::Run(cmds::LedgerRun(args)) => {
                 let wasm_dir = ctx.wasm_dir();
-                sleep_until(args.0);
+                sleep_until(args.start_time);
+                ctx.config.ledger.tendermint.tx_index = args.tx_index;
                 ledger::run(ctx.config.ledger, wasm_dir);
             }
             cmds::Ledger::RunUntil(cmds::LedgerRunUntil(args)) => {
