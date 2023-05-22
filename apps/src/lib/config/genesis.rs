@@ -269,15 +269,15 @@ pub mod genesis_config {
         pub pos_gain_p: Decimal,
         /// PoS gain d
         pub pos_gain_d: Decimal,
+        /// Fee unshielding gas limit
+        pub fee_unshielding_gas_limit: u64,
+        /// Fee unshielding descriptions limit
+        pub fee_unshielding_descriptions_limit: u64,
         #[cfg(not(feature = "mainnet"))]
         /// Fix wrapper tx fees
         pub wrapper_tx_fees: Option<token::Amount>,
         /// Gas table
         pub gas_table: Option<BTreeMap<String, u64>>,
-        /// Fee unshielding gas limit
-        pub fee_unshielding_gas_limit: u64,
-        /// Fee unshielding descriptions limit
-        pub fee_unshielding_descriptions_limit: u64,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -894,15 +894,15 @@ pub struct Parameters {
     pub staked_ratio: Decimal,
     /// PoS inflation amount from the last epoch (read + write for every epoch)
     pub pos_inflation_amount: u64,
+    /// Fee unshielding gas limit
+    pub fee_unshielding_gas_limit: u64,
+    /// Fee unshielding descriptions limit
+    pub fee_unshielding_descriptions_limit: u64,
     /// Fixed Wrapper tx fees
     #[cfg(not(feature = "mainnet"))]
     pub wrapper_tx_fees: Option<token::Amount>,
     /// Gas table
     pub gas_table: BTreeMap<String, u64>,
-    /// Fee unshielding gas limit
-    pub fee_unshielding_gas_limit: u64,
-    /// Fee unshielding descriptions limit
-    pub fee_unshielding_descriptions_limit: u64,
 }
 
 #[cfg(not(feature = "dev"))]
@@ -1002,7 +1002,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         pos_inflation_amount: 0,
         wrapper_tx_fees: Some(token::Amount::whole(100)),
         gas_table: BTreeMap::default(),
-        fee_unshielding_gas_limit: 150,
+        fee_unshielding_gas_limit: 150000000,
         fee_unshielding_descriptions_limit: 10,
     };
     let albert = EstablishedAccount {

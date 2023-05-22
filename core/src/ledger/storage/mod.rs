@@ -1094,7 +1094,7 @@ mod tests {
                 #[cfg(not(feature = "mainnet"))]
                 wrapper_tx_fees: None,
                 gas_table: BTreeMap::default(),
-                fee_unshielding_gas_limit: 150,
+                fee_unshielding_gas_limit: 150000000,
                 fee_unshielding_descriptions_limit: 15
             };
             parameters.init_storage(&mut wl_storage).unwrap();

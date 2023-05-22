@@ -59,15 +59,15 @@ pub struct Parameters {
     #[cfg(not(feature = "mainnet"))]
     /// Faucet account for free token withdrawal
     pub faucet_account: Option<Address>,
+    /// Fee unshielding gas limit
+    pub fee_unshielding_gas_limit: u64,
+    /// Fee unshielding descriptions limit
+    pub fee_unshielding_descriptions_limit: u64,
     #[cfg(not(feature = "mainnet"))]
     /// Fixed fees for a wrapper tx to be accepted
     pub wrapper_tx_fees: Option<token::Amount>,
     /// Gas table
     pub gas_table: BTreeMap<String, u64>,
-    /// Fee unshielding gas limit
-    pub fee_unshielding_gas_limit: u64,
-    /// Fee unshielding descriptions limit
-    pub fee_unshielding_descriptions_limit: u64,
 }
 
 /// Epoch duration. A new epoch begins as soon as both the `min_num_of_blocks`
