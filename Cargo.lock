@@ -4128,7 +4128,6 @@ dependencies = [
  "tendermint-rpc 0.23.6",
  "test-log",
  "thiserror",
- "tiny-bip39 0.8.2",
  "tokio",
  "tokio-test",
  "toml",
@@ -7025,8 +7024,7 @@ dependencies = [
 [[package]]
 name = "tiny-bip39"
 version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ffc59cb9dfc85bb312c3a78fd6aa8a8582e310b0fa885d5bb877f6dcc601839d"
+source = "git+https://github.com/anoma/tiny-bip39.git?rev=bf0f6d8713589b83af7a917366ec31f5275c0e57#bf0f6d8713589b83af7a917366ec31f5275c0e57"
 dependencies = [
  "anyhow",
  "hmac 0.8.1",

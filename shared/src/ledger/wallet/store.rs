@@ -12,6 +12,7 @@ use masp_primitives::zip32::ExtendedFullViewingKey;
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 use slip10_ed25519;
+use zeroize::Zeroizing;
 
 use super::alias::{self, Alias};
 use super::derivation_path::DerivationPath;
@@ -240,7 +241,7 @@ impl Store {
         alias: Option<String>,
         alias_force: bool,
         seed_and_derivation_path: Option<(Seed, DerivationPath)>,
-        encryption_password: Option<String>,
+        password: Option<Zeroizing<String>>,
     ) -> (Alias, common::SecretKey) {
         let sk = if let Some((seed, derivation_path)) = seed_and_derivation_path
         {
@@ -253,8 +254,7 @@ impl Store {
             gen_sk_rng(scheme)
         };
         let pkh: PublicKeyHash = PublicKeyHash::from(&sk.ref_to());
-        let (keypair_to_store, raw_keypair) =
-            StoredKeypair::new(sk, encryption_password);
+        let (keypair_to_store, raw_keypair) = StoredKeypair::new(sk, password);
         let address = Address::Implicit(ImplicitAddress(pkh.clone()));
         let alias: Alias = alias.unwrap_or_else(|| pkh.clone().into()).into();
         if self
@@ -281,7 +281,7 @@ impl Store {
     pub fn gen_spending_key<U: WalletUtils>(
         &mut self,
         alias: String,
-        password: Option<String>,
+        password: Option<Zeroizing<String>>,
         force_alias: bool,
     ) -> (Alias, ExtendedSpendingKey) {
         let spendkey = Self::generate_spending_key();
