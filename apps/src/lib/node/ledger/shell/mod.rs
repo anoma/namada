@@ -1005,14 +1005,20 @@ where
             // Validate data and generate unshielding tx
             let transfer_code = self.load_transfer_code_from_storage();
 
+            let descriptions_limit = self.wl_storage.read(&parameters::storage::get_fee_unshielding_descriptions_limit_key()).expect("Error reading the storage").expect("Missing fee unshielding descriptions limit param in storage");
+
             let unshield = wrapper
                 .check_and_generate_fee_unshielding(
                     balance,
                     chain_id,
                     expiration,
                     transfer_code,
+                    descriptions_limit,
                 )
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| {
+                    "Missing expected fee unshielding tx".to_string()
+                })?;
 
             let gas_table = gas_table.unwrap_or_else(|| {
                 temp_wl_storage

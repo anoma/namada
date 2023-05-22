@@ -24,6 +24,7 @@ struct Keys {
     wrapper_tx_fees: &'static str,
     gas_table: &'static str,
     fee_unshielding_gas_limit: &'static str,
+    fee_unshielding_descriptions_limit: &'static str
 }
 
 /// Returns if the key is a parameter key.
@@ -180,6 +181,18 @@ pub fn get_fee_unshielding_gas_limit_key() -> Key {
             DbKeySeg::StringSeg(
                 Keys::VALUES.fee_unshielding_gas_limit.to_string(),
             ),
+        ],
+    }
+}
+
+/// Storage key used for the fee unshielding descriptions limit
+pub fn get_fee_unshielding_descriptions_limit_key() -> Key{
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(
+                Keys::VALUES.fee_unshielding_descriptions_limit.to_string(),
+          ),
         ],
     }
 }

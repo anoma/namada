@@ -91,6 +91,7 @@ where
             wrapper_tx_fees,
             gas_table,
             fee_unshielding_gas_limit,
+            fee_unshielding_descriptions_limit,
         } = genesis.parameters;
         #[cfg(not(feature = "mainnet"))]
         // Try to find a faucet account
@@ -198,6 +199,7 @@ where
             wrapper_tx_fees,
             gas_table,
             fee_unshielding_gas_limit,
+            fee_unshielding_descriptions_limit,
         };
         parameters
             .init_storage(&mut self.wl_storage)

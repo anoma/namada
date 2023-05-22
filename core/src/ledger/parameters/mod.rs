@@ -66,6 +66,8 @@ pub struct Parameters {
     pub gas_table: BTreeMap<String, u64>,
     /// Fee unshielding gas limit
     pub fee_unshielding_gas_limit: u64,
+    /// Fee unshielding descriptions limit
+    pub fee_unshielding_descriptions_limit: u64,
 }
 
 /// Epoch duration. A new epoch begins as soon as both the `min_num_of_blocks`
@@ -134,6 +136,7 @@ impl Parameters {
             wrapper_tx_fees,
             gas_table,
             fee_unshielding_gas_limit,
+            fee_unshielding_descriptions_limit,
         } = self;
 
         // write max proposal bytes parameter
@@ -161,6 +164,14 @@ impl Parameters {
             storage::get_fee_unshielding_gas_limit_key();
         storage
             .write(&fee_unshielding_gas_limit_key, fee_unshielding_gas_limit)?;
+
+        // write fee unshielding descriptions limit
+        let fee_unshielding_descriptions_limit_key =
+            storage::get_fee_unshielding_descriptions_limit_key();
+        storage.write(
+            &fee_unshielding_descriptions_limit_key,
+            fee_unshielding_descriptions_limit,
+        )?;
 
         // write vp whitelist parameter
         let vp_whitelist_key = storage::get_vp_whitelist_storage_key();
@@ -478,6 +489,14 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
+    // reaf fee unshielding descriptions limit
+    let fee_unshielding_descriptions_limit_key =
+        storage::get_fee_unshielding_descriptions_limit_key();
+    let value = storage.read(&fee_unshielding_descriptions_limit_key)?;
+    let fee_unshielding_descriptions_limit: u64 = value
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()?;
+
     // read epochs per year
     let epochs_per_year_key = storage::get_epochs_per_year_key();
     let value = storage.read(&epochs_per_year_key)?;
@@ -540,5 +559,6 @@ where
         wrapper_tx_fees,
         gas_table,
         fee_unshielding_gas_limit,
+        fee_unshielding_descriptions_limit,
     })
 }

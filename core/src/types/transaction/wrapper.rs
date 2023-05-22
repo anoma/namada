@@ -292,22 +292,51 @@ pub mod wrapper_tx {
                 })
         }
 
-        /// Performs validation on the fee unshielding transaction carried by the wrapper and generates the tx for execution. The provided `expiration` and `chain_id` should be the same as the wrapper for safety reasons.
+        /// Performs validation on the optional fee unshielding data carried by the wrapper and generates the tx for execution. The provided `expiration` and `chain_id` should be the same as the wrapper for safety reasons.
         pub fn check_and_generate_fee_unshielding(
             &self,
             transparent_balance: Amount,
             chain_id: ChainId,
             expiration: Option<DateTimeUtc>,
             transfer_code: Vec<u8>,
-        ) -> Result<Tx, WrapperTxErr> {
-            //FIXME: check the limit of spending keys
+            descriptions_limit: u64,
+        ) -> Result<Option<Tx>, WrapperTxErr> {
+            // Check that the number of descriptions is within a certain limit to avoid a possible DOS vector
+            if let Some(ref unshield) = self.unshield {
+                let spends = unshield.shielded_spends.len();
+                let converts = unshield.shielded_converts.len();
+                let outs = unshield.shielded_outputs.len();
 
-            self.generate_fee_unshielding(
-                transparent_balance,
-                chain_id,
-                expiration,
-                transfer_code,
-            )
+                let descriptions = spends
+                    .checked_add(converts)
+                    .ok_or(WrapperTxErr::InvalidUnshield(
+                        "Descriptions overflow".to_string(),
+                    ))?
+                    .checked_add(outs)
+                    .ok_or(WrapperTxErr::InvalidUnshield(
+                        "Descriptions overflow".to_string(),
+                    ))?;
+
+                if u64::try_from(descriptions)
+                    .map_err(|e| WrapperTxErr::InvalidUnshield(e.to_string()))?
+                    > descriptions_limit
+                {
+                    return Err(WrapperTxErr::InvalidUnshield(
+                        "Descriptions exceed the maximum amount allowed"
+                            .to_string(),
+                    ));
+                }
+                return self
+                    .generate_fee_unshielding(
+                        transparent_balance,
+                        chain_id,
+                        expiration,
+                        transfer_code,
+                    )
+                    .map(|tx| Some(tx));
+            }
+
+            Ok(None)
         }
 
         /// Generates the fee unshielding tx for execution. The provided `expiration` and `chain_id` should be the same as the wrapper for safety reasons.
