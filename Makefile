@@ -41,15 +41,6 @@ check:
 	make -C $(wasms_for_tests) check && \
 	$(foreach wasm,$(wasm_templates),$(check-wasm) && ) true
 
-check-abcipp:
-	$(cargo) +$(nightly) check \
-		--workspace \
-		--exclude namada_tests \
-		--all-targets \
-		--no-default-features \
-		--features "abcipp ibc-mocks-abcipp testing" \
-		-Z unstable-options
-
 check-mainnet:
 	$(cargo) check --workspace --features "mainnet"
 
@@ -59,25 +50,6 @@ clippy:
 	NAMADA_DEV=false $(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
 	make -C $(wasms) clippy && \
 	make -C $(wasms_for_tests) clippy && \
-	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
-
-clippy-abcipp:
-	NAMADA_DEV=false $(cargo) +$(nightly) clippy --all-targets \
-		--manifest-path ./apps/Cargo.toml \
-		--no-default-features \
-		--features "std testing abcipp" && \
-	$(cargo) +$(nightly) clippy --all-targets \
-		--manifest-path ./proof_of_stake/Cargo.toml \
-		--features "testing" && \
-	$(cargo) +$(nightly) clippy --all-targets \
-		--manifest-path ./shared/Cargo.toml \
-		--no-default-features \
-		--features "testing wasm-runtime abcipp ibc-mocks-abcipp ferveo-tpke" && \
-	$(cargo) +$(nightly) clippy \
-		--all-targets \
-		--manifest-path ./vm_env/Cargo.toml \
-		--no-default-features && \
-	make -C $(wasms) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
 
 clippy-mainnet:
@@ -118,42 +90,24 @@ test-unit-coverage:
 		-Z unstable-options \
 		-- --skip e2e -Z unstable-options --report-time
 
+# NOTE: `TEST_FILTER` is prepended with `e2e::`. Since filters in `cargo test`
+# work with a substring search, TEST_FILTER only works if it contains a string
+# that directly follows `e2e::`, e.g. `TEST_FILTER=multitoken_tests` would run
+# all tests that start with `e2e::multitoken_tests`.
 test-e2e:
-	RUST_BACKTRACE=1 $(cargo) test e2e \
-		-Z unstable-options \
-		-- \
-		--test-threads=1 \
-		-Z unstable-options --report-time
-
-test-unit-abcipp:
-	$(cargo) test \
-		--manifest-path ./apps/Cargo.toml \
-		--no-default-features \
-		--features "testing std abcipp" \
-		-Z unstable-options \
-		$(TEST_FILTER) -- \
-		-Z unstable-options --report-time && \
-	$(cargo) test \
-		--manifest-path \
-		./proof_of_stake/Cargo.toml \
-		--features "testing" \
-		-Z unstable-options \
-		$(TEST_FILTER) -- \
-		-Z unstable-options --report-time && \
-	$(cargo) test \
-		--manifest-path ./shared/Cargo.toml \
-		--no-default-features \
-		--features "testing wasm-runtime abcipp ibc-mocks-abcipp" \
-		-Z unstable-options \
-		$(TEST_FILTER) -- \
-		-Z unstable-options --report-time && \
-	$(cargo) test \
-		--manifest-path ./vm_env/Cargo.toml \
-		--no-default-features \
-		--features "abcipp" \
-		-Z unstable-options \
-		$(TEST_FILTER) -- \
-		-Z unstable-options --report-time
+ifdef NAMADA_E2E_NO_PREBUILT_BINARIES
+	RUST_BACKTRACE=1 $(cargo) +$(nightly) test e2e::$(TEST_FILTER) \
+	-Z unstable-options \
+	-- \
+	--test-threads=1 \
+	-Z unstable-options --report-time
+else
+	NAMADA_E2E_USE_PREBUILT_BINARIES=true RUST_BACKTRACE=1 $(cargo) +$(nightly) test e2e::$(TEST_FILTER) \
+	-Z unstable-options \
+	-- \
+	--test-threads=1 \
+	-Z unstable-options --report-time
+endif
 
 test-unit:
 	$(cargo) +$(nightly) test \
@@ -266,4 +220,4 @@ test-miri:
 	MIRIFLAGS="-Zmiri-disable-isolation" $(cargo) +$(nightly) miri test
 
 
-.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker debug-wasm-scripts-docker build-wasm-scripts debug-wasm-scripts clean-wasm-scripts dev-deps test-miri test-unit test-unit-abcipp clippy-abcipp
+.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker debug-wasm-scripts-docker build-wasm-scripts debug-wasm-scripts clean-wasm-scripts dev-deps test-miri test-unit
