@@ -451,7 +451,7 @@ mod tests {
         assert!(tx_result.vps_result.rejected_vps.is_empty());
         assert!(tx_result.vps_result.errors.is_empty());
         assert!(tx_result.initialized_accounts.is_empty());
-        assert!(tx_result.ibc_event.is_none());
+        assert!(tx_result.ibc_events.is_empty());
     }
 
     /// Test calling apply_derived_tx for an event that isn't backed by enough
