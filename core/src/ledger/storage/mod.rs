@@ -12,6 +12,7 @@ pub mod write_log;
 
 use core::fmt::Debug;
 use std::cmp::Ordering;
+use std::format;
 
 pub use merkle_tree::{
     MembershipProof, MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite,
@@ -31,6 +32,7 @@ use crate::ledger::parameters::{self, EpochDuration, Parameters};
 use crate::ledger::storage::merkle_tree::{
     Error as MerkleTreeError, MerkleRoot,
 };
+use crate::ledger::storage::mockdb::{MockIterator, MockPrefixIterator};
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint::merkle::proof::Proof;
 use crate::types::address::{
@@ -321,7 +323,20 @@ pub trait DBIter<'iter> {
     ///
     /// Read account subspace key value pairs with the given prefix from the DB,
     /// ordered by the storage keys.
-    fn iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter;
+    fn iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter {
+        self.iter_optional_prefix(Some(prefix))
+    }
+
+    /// Iterate over all keys
+    fn iter_all(&'iter self) -> Self::PrefixIter {
+        self.iter_optional_prefix(None)
+    }
+
+    /// Iterate over subspace keys, with optional prefix
+    fn iter_optional_prefix(
+        &'iter self,
+        prefix: Option<&Key>,
+    ) -> Self::PrefixIter;
 
     /// Read results subspace key value pairs from the DB
     fn iter_results(&'iter self) -> Self::PrefixIter;

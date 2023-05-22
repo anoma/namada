@@ -24,7 +24,10 @@ use namada::ledger::args::InputAmount;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
-use namada::ledger::masp::{Conversions, MaspAmount, MaspChange, PinnedBalanceError, ShieldedContext, ShieldedUtils};
+use namada::ledger::masp::{
+    Conversions, MaspAmount, MaspChange, PinnedBalanceError, ShieldedContext,
+    ShieldedUtils,
+};
 use namada::ledger::native_vp::governance::utils::{self, Votes};
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::{
@@ -43,8 +46,10 @@ use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
+use namada::types::token::{
+    Change, DenominatedAmount, Denomination, MaspDenom, TokenAddress,
+};
 use namada::types::{storage, token};
-use namada::types::token::{Change, DenominatedAmount, Denomination, MaspDenom, TokenAddress};
 
 use crate::cli::{self, args};
 use crate::facade::tendermint::merkle::proof::Proof;
@@ -1016,7 +1021,9 @@ pub async fn query_shielded_balance<
     }
 }
 
-pub async fn print_decoded_balance<C: namada::ledger::queries::Client + Sync>(
+pub async fn print_decoded_balance<
+    C: namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
     decoded_balance: MaspAmount,
@@ -1031,8 +1038,10 @@ pub async fn print_decoded_balance<C: namada::ledger::queries::Client + Sync>(
         {
             println!(
                 "{} : {}",
-                token_addr
-                    .format_with_alias(&lookup_alias(wallet, &token_addr.address)),
+                token_addr.format_with_alias(&lookup_alias(
+                    wallet,
+                    &token_addr.address
+                )),
                 format_denominated_amount(client, token_addr, (*amount).into())
                     .await,
             );
@@ -1040,7 +1049,9 @@ pub async fn print_decoded_balance<C: namada::ledger::queries::Client + Sync>(
     }
 }
 
-pub async fn print_decoded_balance_with_epoch<C: namada::ledger::queries::Client + Sync>(
+pub async fn print_decoded_balance_with_epoch<
+    C: namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
     decoded_balance: MaspAmount,
@@ -2263,7 +2274,9 @@ fn unwrap_client_response<C: namada::ledger::queries::Client, T>(
 
 /// Look up the denomination of a token in order to format it
 /// correctly as a string.
-pub(super) async fn format_denominated_amount<C: namada::ledger::queries::Client + Sync>(
+pub(super) async fn format_denominated_amount<
+    C: namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     token: &TokenAddress,
     amount: token::Amount,

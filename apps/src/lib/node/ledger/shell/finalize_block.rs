@@ -1341,12 +1341,11 @@ mod test_finalize_block {
 
         // Collect all storage key-vals into a sorted map
         let store_block_state = |shell: &TestShell| -> BTreeMap<_, _> {
-            let prefix: Key = FromStr::from_str("").unwrap();
             shell
                 .wl_storage
                 .storage
                 .db
-                .iter_prefix(&prefix)
+                .iter_optional_prefix(None)
                 .map(|(key, val, _gas)| (key, val))
                 .collect()
         };

@@ -1072,8 +1072,10 @@ mod test_tx {
     #[test]
     fn test_masp_add_amount() {
         let address_1 = gen_established_address();
-        let prefix_1: Key = DbKeySeg::StringSeg("eth_seg".parse().unwrap()).into();
-        let prefix_2: Key = DbKeySeg::StringSeg("crypto_kitty".parse().unwrap()).into();
+        let prefix_1: Key =
+            DbKeySeg::StringSeg("eth_seg".parse().unwrap()).into();
+        let prefix_2: Key =
+            DbKeySeg::StringSeg("crypto_kitty".parse().unwrap()).into();
         let denom_1 = MaspDenom::One;
         let denom_2 = MaspDenom::Three;
         let epoch = Epoch::default();
