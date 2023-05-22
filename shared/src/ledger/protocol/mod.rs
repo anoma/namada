@@ -69,12 +69,6 @@ pub enum Error {
     ),
     #[error("Access to an internal address {0} is forbidden")]
     AccessForbidden(InternalAddress),
-    #[error("Error while converting the transaction code's hash")]
-    TxCodeHashConversion, //FIXME: need this error?
-    #[error("Could not retrieve wasm code from storage for hash {0}")]
-    MissingWasmCodeInStorage(Hash), //FIXME: need this error?
-    #[error("Failed type conversion: {0}")]
-    ConversionError(String), //FIXME: need this error?
 }
 
 /// Result of applying a transaction
