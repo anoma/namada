@@ -110,7 +110,7 @@ pub enum Error {
     #[error("Error reading wasm: {0}")]
     ReadingWasm(#[from] eyre::Error),
     #[error("Error loading wasm: {0}")]
-    LoadingWasm(String), //FIXME: need this? Remove if possible
+    LoadingWasm(String),
     #[error("Error reading from or writing to storage: {0}")]
     StorageApi(#[from] storage_api::Error),
 }
@@ -953,7 +953,7 @@ where
     /// Load the wasm code for a transfer from storage.
     ///
     /// # Panics
-    /// If the transaction hash or code is not found in storage
+    /// If the transaction hash or code are not found in storage
     pub fn load_transfer_code_from_storage(&self) -> Vec<u8> {
         let transfer_code_name_key =
             Key::wasm_code_name("tx_transfer.wasm".to_string());
@@ -962,10 +962,10 @@ where
             .read(&transfer_code_name_key)
             .expect("Could not read the storage")
             .expect("Expected tx transfer hash in storage");
-        let transfer_code_key = Key::wasm_code(&transfer_hash);
 
+        let transfer_code_key = Key::wasm_code(&transfer_hash);
         self.wl_storage
-            .read(&transfer_code_key)
+            .read_bytes(&transfer_code_key)
             .expect("Could not read the storage")
             .expect("Expected tx transfer code in storage")
     }
