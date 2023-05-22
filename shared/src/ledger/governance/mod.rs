@@ -667,19 +667,16 @@ where
         let delegator_address =
             gov_storage::get_delegator_address_from_delegation(key);
         let delegate_address = gov_storage::get_delegate_address(key);
+
         match (delegate_address, delegator_address) {
             (Some(delegate_address), Some(delegator_address)) => {
                 let inv_delegation_key =
                     gov_storage::get_inverse_delegation(delegator_address);
                 let is_valid_inv_delegation =
-                    self.ctx.has_key_post(&inv_delegation_key)?;
+                    self.ctx.has_key_post(&inv_delegation_key)? && !self.ctx.has_key_pre(&inv_delegation_key)?;
                 let delegate_key =
                     gov_storage::get_delegate_key(&delegate_address);
                 let is_valid_delegate = self.ctx.has_key_pre(&delegate_key)?;
-
-                println!("{}", is_valid_inv_delegation);
-                println!("{}", is_valid_delegate);
-                println!("{}", verifiers.contains(delegator_address));
 
                 Ok(is_valid_inv_delegation
                     && is_valid_delegate
@@ -699,6 +696,12 @@ where
         let delegate_address: Option<Address> = self.ctx.read_post(&key)?;
         let delegator_address =
             gov_storage::get_delegator_address_from_inv_delegation(&key);
+
+        let has_already_delegation = self.ctx.has_key_pre(&key)?;
+        if has_already_delegation {
+            return Ok(false)
+        }
+
         match (delegate_address, delegator_address) {
             (Some(delegate_address), Some(delegator_address)) => {
                 let delegation_key = gov_storage::get_delegation_key(
@@ -711,10 +714,6 @@ where
                 let delegate_key =
                     gov_storage::get_delegate_key(&delegate_address);
                 let is_delegate = self.ctx.has_key_pre(&delegate_key)?;
-                
-                println!("{}", is_valid_delegation);
-                println!("{}", is_delegate);
-                println!("{}", verifiers.contains(delegator_address));
 
                 Ok(is_valid_delegation
                     && is_delegate
