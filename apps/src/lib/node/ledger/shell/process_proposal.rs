@@ -877,9 +877,8 @@ mod test_process_proposal {
                 );
                 assert_eq!(
                     response[0].result.info,
-                    "The given address does not have a sufficient balance to \
-                     pay fee"
-                        .to_string(),
+
+"Error trying to apply a transaction: Insufficient balance to pay fee".to_string()
                 );
             }
         }
@@ -943,10 +942,7 @@ mod test_process_proposal {
                 );
                 assert_eq!(
                     response[0].result.info,
-                    String::from(
-                        "The given address does not have a sufficient balance \
-                         to pay fee"
-                    )
+"Error trying to apply a transaction: Insufficient balance to pay fee".to_string()
                 );
             }
         }
