@@ -50,17 +50,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ahash"
-version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c99f64d1e06488f620f932677e24bc6e2897582980441ae90a671415bd7ec2f"
-dependencies = [
- "cfg-if 1.0.0",
- "once_cell",
- "version_check 0.9.4",
-]
-
-[[package]]
 name = "aho-corasick"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -891,40 +880,17 @@ name = "borsh"
 version = "0.9.4"
 source = "git+https://github.com/heliaxdev/borsh-rs.git?rev=cd5223e5103c4f139e0c54cf8259b7ec5ec4073a#cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"
 dependencies = [
- "borsh-derive 0.9.4",
+ "borsh-derive",
  "hashbrown 0.11.2",
 ]
 
 [[package]]
-name = "borsh"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4114279215a005bc675e386011e594e1d9b800918cea18fcadadcce864a2046b"
-dependencies = [
- "borsh-derive 0.10.3",
- "hashbrown 0.13.2",
-]
-
-[[package]]
 name = "borsh-derive"
 version = "0.9.4"
 source = "git+https://github.com/heliaxdev/borsh-rs.git?rev=cd5223e5103c4f139e0c54cf8259b7ec5ec4073a#cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"
 dependencies = [
- "borsh-derive-internal 0.9.4",
- "borsh-schema-derive-internal 0.9.4",
- "proc-macro-crate 0.1.5",
- "proc-macro2",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "borsh-derive"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0754613691538d51f329cce9af41d7b7ca150bc973056f1156611489475f54f7"
-dependencies = [
- "borsh-derive-internal 0.10.3",
- "borsh-schema-derive-internal 0.10.3",
+ "borsh-derive-internal",
+ "borsh-schema-derive-internal",
  "proc-macro-crate 0.1.5",
  "proc-macro2",
  "syn 1.0.109",
@@ -941,31 +907,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "borsh-derive-internal"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afb438156919598d2c7bad7e1c0adf3d26ed3840dbc010db1a882a65583ca2fb"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "borsh-schema-derive-internal"
 version = "0.9.4"
 source = "git+https://github.com/heliaxdev/borsh-rs.git?rev=cd5223e5103c4f139e0c54cf8259b7ec5ec4073a#cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "borsh-schema-derive-internal"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "634205cc43f74a1b9046ef87c4540ebda95696ec0f315024860cad7c5b0f5ccd"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2119,7 +2063,7 @@ dependencies = [
  "bincode",
  "blake2",
  "blake2b_simd 1.0.1",
- "borsh 0.9.4",
+ "borsh",
  "digest 0.10.6",
  "ed25519-dalek",
  "either",
@@ -2620,7 +2564,7 @@ version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
 dependencies = [
- "ahash 0.7.6",
+ "ahash",
 ]
 
 [[package]]
@@ -2629,16 +2573,7 @@ version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 dependencies = [
- "ahash 0.7.6",
-]
-
-[[package]]
-name = "hashbrown"
-version = "0.13.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43a3c133739dddd0d2990f9a4bdf8eb4b21ef50e4851ca85ab661199821d510e"
-dependencies = [
- "ahash 0.8.3",
+ "ahash",
 ]
 
 [[package]]
@@ -2942,38 +2877,6 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.36.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=db14744bfba6239cc5f58345ff90f8b7d42637d6#db14744bfba6239cc5f58345ff90f8b7d42637d6"
-dependencies = [
- "bytes 1.4.0",
- "cfg-if 1.0.0",
- "derive_more",
- "displaydoc",
- "dyn-clone",
- "erased-serde",
- "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs?rev=dd8ba23110a144ffe2074a0b889676468266435a)",
- "ics23",
- "num-traits 0.2.15",
- "parking_lot 0.12.1",
- "primitive-types",
- "prost",
- "safe-regex",
- "serde 1.0.163",
- "serde_derive",
- "serde_json",
- "sha2 0.10.6",
- "subtle-encoding",
- "tendermint 0.23.5",
- "tendermint-light-client-verifier 0.23.5",
- "tendermint-proto 0.23.5",
- "tendermint-testgen 0.23.5",
- "time 0.3.17",
- "tracing 0.1.37",
- "uint",
-]
-
-[[package]]
-name = "ibc"
-version = "0.36.0"
 source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=e71bc2cc79f8c2b32e970d95312f251398c93d9e#e71bc2cc79f8c2b32e970d95312f251398c93d9e"
 dependencies = [
  "bytes 1.4.0",
@@ -2982,7 +2885,7 @@ dependencies = [
  "displaydoc",
  "dyn-clone",
  "erased-serde",
- "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=6f4038fcf4981f1ed70771d1cd89931267f917af)",
+ "ibc-proto",
  "ics23",
  "num-traits 0.2.15",
  "parking_lot 0.12.1",
@@ -2994,10 +2897,10 @@ dependencies = [
  "serde_json",
  "sha2 0.10.6",
  "subtle-encoding",
- "tendermint 0.23.6",
- "tendermint-light-client-verifier 0.23.6",
- "tendermint-proto 0.23.6",
- "tendermint-testgen 0.23.6",
+ "tendermint",
+ "tendermint-light-client-verifier",
+ "tendermint-proto",
+ "tendermint-testgen",
  "time 0.3.17",
  "tracing 0.1.37",
  "uint",
@@ -3014,25 +2917,8 @@ dependencies = [
  "prost",
  "serde 1.0.163",
  "subtle-encoding",
- "tendermint-proto 0.23.6",
+ "tendermint-proto",
  "tonic",
-]
-
-[[package]]
-name = "ibc-proto"
-version = "0.26.0"
-source = "git+https://github.com/heliaxdev/ibc-proto-rs?rev=dd8ba23110a144ffe2074a0b889676468266435a#dd8ba23110a144ffe2074a0b889676468266435a"
-dependencies = [
- "base64 0.13.1",
- "borsh 0.10.3",
- "bytes 1.4.0",
- "flex-error",
- "parity-scale-codec",
- "prost",
- "scale-info",
- "serde 1.0.163",
- "subtle-encoding",
- "tendermint-proto 0.23.5",
 ]
 
 [[package]]
@@ -3060,7 +2946,7 @@ dependencies = [
  "http",
  "humantime",
  "humantime-serde",
- "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=6f4038fcf4981f1ed70771d1cd89931267f917af)",
+ "ibc-proto",
  "ibc-relayer-types",
  "itertools",
  "moka",
@@ -3079,11 +2965,11 @@ dependencies = [
  "signature",
  "strum",
  "subtle-encoding",
- "tendermint 0.23.6",
+ "tendermint",
  "tendermint-light-client",
- "tendermint-light-client-verifier 0.23.6",
- "tendermint-proto 0.23.6",
- "tendermint-rpc 0.23.6",
+ "tendermint-light-client-verifier",
+ "tendermint-proto",
+ "tendermint-rpc",
  "thiserror",
  "tiny-bip39",
  "tiny-keccak",
@@ -3104,7 +2990,7 @@ dependencies = [
  "dyn-clone",
  "erased-serde",
  "flex-error",
- "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=6f4038fcf4981f1ed70771d1cd89931267f917af)",
+ "ibc-proto",
  "ics23",
  "itertools",
  "num-rational",
@@ -3115,11 +3001,11 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "subtle-encoding",
- "tendermint 0.23.6",
- "tendermint-light-client-verifier 0.23.6",
- "tendermint-proto 0.23.6",
- "tendermint-rpc 0.23.6",
- "tendermint-testgen 0.23.6",
+ "tendermint",
+ "tendermint-light-client-verifier",
+ "tendermint-proto",
+ "tendermint-rpc",
+ "tendermint-testgen",
  "time 0.3.17",
  "uint",
 ]
@@ -3215,7 +3101,7 @@ name = "index-set"
 version = "0.7.1"
 source = "git+https://github.com/heliaxdev/index-set?tag=v0.7.1#dc24cdbbe3664514d59f1a4c4031863fc565f1c2"
 dependencies = [
- "borsh 0.9.4",
+ "borsh",
  "serde 1.0.163",
 ]
 
@@ -3632,7 +3518,7 @@ dependencies = [
  "blake2b_simd 1.0.1",
  "blake2s_simd 1.0.1",
  "bls12_381",
- "borsh 0.9.4",
+ "borsh",
  "byteorder",
  "chacha20poly1305",
  "crypto_api_chachapoly",
@@ -3924,16 +3810,14 @@ dependencies = [
  "bellman",
  "bimap",
  "bls12_381",
- "borsh 0.9.4",
+ "borsh",
  "byte-unit",
  "circular-queue",
  "clru",
  "data-encoding",
  "derivative",
- "ibc 0.36.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=db14744bfba6239cc5f58345ff90f8b7d42637d6)",
- "ibc 0.36.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=e71bc2cc79f8c2b32e970d95312f251398c93d9e)",
- "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=6f4038fcf4981f1ed70771d1cd89931267f917af)",
- "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs?rev=dd8ba23110a144ffe2074a0b889676468266435a)",
+ "ibc",
+ "ibc-proto",
  "itertools",
  "libsecp256k1",
  "loupe",
@@ -3958,9 +3842,9 @@ dependencies = [
  "serde_json",
  "sha2 0.9.9",
  "tempfile",
- "tendermint 0.23.6",
- "tendermint-proto 0.23.6",
- "tendermint-rpc 0.23.6",
+ "tendermint",
+ "tendermint-proto",
+ "tendermint-rpc",
  "test-log",
  "thiserror",
  "tokio",
@@ -3991,7 +3875,7 @@ dependencies = [
  "bimap",
  "bit-set",
  "blake2b-rs",
- "borsh 0.9.4",
+ "borsh",
  "byte-unit",
  "byteorder",
  "clap",
@@ -4043,10 +3927,10 @@ dependencies = [
  "sysinfo",
  "tar",
  "tempfile",
- "tendermint 0.23.6",
- "tendermint-config 0.23.6",
- "tendermint-proto 0.23.6",
- "tendermint-rpc 0.23.6",
+ "tendermint",
+ "tendermint-config",
+ "tendermint-proto",
+ "tendermint-rpc",
  "test-log",
  "thiserror",
  "tokio",
@@ -4054,8 +3938,7 @@ dependencies = [
  "toml",
  "tonic",
  "tower",
- "tower-abci 0.1.0 (git+https://github.com/heliaxdev/tower-abci.git?rev=367d8d958b83c501ed2c09e9c4595f8bf75a0b01)",
- "tower-abci 0.1.0 (git+https://github.com/heliaxdev/tower-abci?rev=a31ce06533f5fbd943508676059d44de27395792)",
+ "tower-abci",
  "tracing 0.1.37",
  "tracing-log",
  "tracing-subscriber 0.3.17",
@@ -4073,7 +3956,7 @@ dependencies = [
  "assert_matches",
  "bech32 0.8.1",
  "bellman",
- "borsh 0.9.4",
+ "borsh",
  "chrono",
  "data-encoding",
  "derivative",
@@ -4081,10 +3964,8 @@ dependencies = [
  "ferveo",
  "ferveo-common",
  "group-threshold-cryptography",
- "ibc 0.36.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=db14744bfba6239cc5f58345ff90f8b7d42637d6)",
- "ibc 0.36.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=e71bc2cc79f8c2b32e970d95312f251398c93d9e)",
- "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=6f4038fcf4981f1ed70771d1cd89931267f917af)",
- "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs?rev=dd8ba23110a144ffe2074a0b889676468266435a)",
+ "ibc",
+ "ibc-proto",
  "ics23",
  "index-set",
  "itertools",
@@ -4104,8 +3985,8 @@ dependencies = [
  "serde_json",
  "sha2 0.9.9",
  "sparse-merkle-tree",
- "tendermint 0.23.6",
- "tendermint-proto 0.23.6",
+ "tendermint",
+ "tendermint-proto",
  "test-log",
  "thiserror",
  "tonic-build",
@@ -4118,7 +3999,7 @@ dependencies = [
 name = "namada_encoding_spec"
 version = "0.16.0"
 dependencies = [
- "borsh 0.9.4",
+ "borsh",
  "itertools",
  "lazy_static",
  "madato",
@@ -4138,7 +4019,7 @@ dependencies = [
 name = "namada_proof_of_stake"
 version = "0.16.0"
 dependencies = [
- "borsh 0.9.4",
+ "borsh",
  "data-encoding",
  "derivative",
  "hex",
@@ -4158,7 +4039,7 @@ dependencies = [
 name = "namada_test_utils"
 version = "0.16.0"
 dependencies = [
- "borsh 0.9.4",
+ "borsh",
  "namada_core",
  "strum",
 ]
@@ -4168,7 +4049,7 @@ name = "namada_tests"
 version = "0.16.0"
 dependencies = [
  "assert_cmd",
- "borsh 0.9.4",
+ "borsh",
  "chrono",
  "color-eyre",
  "concat-idents",
@@ -4198,10 +4079,10 @@ dependencies = [
  "serde_json",
  "sha2 0.9.9",
  "tempfile",
- "tendermint 0.23.6",
- "tendermint-config 0.23.6",
- "tendermint-proto 0.23.6",
- "tendermint-rpc 0.23.6",
+ "tendermint",
+ "tendermint-config",
+ "tendermint-proto",
+ "tendermint-rpc",
  "test-log",
  "tokio",
  "toml",
@@ -4213,7 +4094,7 @@ dependencies = [
 name = "namada_tx_prelude"
 version = "0.16.0"
 dependencies = [
- "borsh 0.9.4",
+ "borsh",
  "masp_primitives",
  "namada_core",
  "namada_macros",
@@ -4228,7 +4109,7 @@ dependencies = [
 name = "namada_vm_env"
 version = "0.16.0"
 dependencies = [
- "borsh 0.9.4",
+ "borsh",
  "hex",
  "masp_primitives",
  "masp_proofs",
@@ -4239,7 +4120,7 @@ dependencies = [
 name = "namada_vp_prelude"
 version = "0.16.0"
 dependencies = [
- "borsh 0.9.4",
+ "borsh",
  "namada_core",
  "namada_macros",
  "namada_proof_of_stake",
@@ -5681,7 +5562,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee9164faf726e4f3ece4978b25ca877ddc6802fa77f38cdccb32c7f805ecd70c"
 dependencies = [
  "arrayvec 0.7.2",
- "borsh 0.9.4",
+ "borsh",
  "num-traits 0.2.15",
  "serde 1.0.163",
 ]
@@ -5897,30 +5778,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
-]
-
-[[package]]
-name = "scale-info"
-version = "2.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfdef77228a4c05dc94211441595746732131ad7f6530c6c18f045da7b7ab937"
-dependencies = [
- "cfg-if 1.0.0",
- "derive_more",
- "parity-scale-codec",
- "scale-info-derive",
-]
-
-[[package]]
-name = "scale-info-derive"
-version = "2.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53012eae69e5aa5c14671942a5dd47de59d4cdcff8532a6dd0e081faf1119482"
-dependencies = [
- "proc-macro-crate 1.3.1",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -6373,7 +6230,7 @@ version = "0.3.1-pre"
 source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=e086b235ed6e68929bf73f617dd61cd17b000a56#e086b235ed6e68929bf73f617dd61cd17b000a56"
 dependencies = [
  "blake2b-rs",
- "borsh 0.9.4",
+ "borsh",
  "cfg-if 1.0.0",
  "ics23",
  "sha2 0.9.9",
@@ -6545,34 +6402,6 @@ dependencies = [
 
 [[package]]
 name = "tendermint"
-version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?rev=a3a0ad5f07d380976bbd5321239aec9cc3a8f916#a3a0ad5f07d380976bbd5321239aec9cc3a8f916"
-dependencies = [
- "async-trait",
- "bytes 1.4.0",
- "ed25519",
- "ed25519-dalek",
- "flex-error",
- "futures 0.3.28",
- "num-traits 0.2.15",
- "once_cell",
- "prost",
- "prost-types",
- "serde 1.0.163",
- "serde_bytes",
- "serde_json",
- "serde_repr",
- "sha2 0.9.9",
- "signature",
- "subtle",
- "subtle-encoding",
- "tendermint-proto 0.23.5",
- "time 0.3.17",
- "zeroize",
-]
-
-[[package]]
-name = "tendermint"
 version = "0.23.6"
 source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=02b256829e80f8cfecf3fa0d625c2a76c79cd043#02b256829e80f8cfecf3fa0d625c2a76c79cd043"
 dependencies = [
@@ -6596,22 +6425,9 @@ dependencies = [
  "signature",
  "subtle",
  "subtle-encoding",
- "tendermint-proto 0.23.6",
+ "tendermint-proto",
  "time 0.3.17",
  "zeroize",
-]
-
-[[package]]
-name = "tendermint-config"
-version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?rev=a3a0ad5f07d380976bbd5321239aec9cc3a8f916#a3a0ad5f07d380976bbd5321239aec9cc3a8f916"
-dependencies = [
- "flex-error",
- "serde 1.0.163",
- "serde_json",
- "tendermint 0.23.5",
- "toml",
- "url 2.3.1",
 ]
 
 [[package]]
@@ -6622,7 +6438,7 @@ dependencies = [
  "flex-error",
  "serde 1.0.163",
  "serde_json",
- "tendermint 0.23.6",
+ "tendermint",
  "toml",
  "url 2.3.1",
 ]
@@ -6641,52 +6457,22 @@ dependencies = [
  "serde_cbor",
  "serde_derive",
  "static_assertions",
- "tendermint 0.23.6",
- "tendermint-light-client-verifier 0.23.6",
- "tendermint-rpc 0.23.6",
+ "tendermint",
+ "tendermint-light-client-verifier",
+ "tendermint-rpc",
  "time 0.3.17",
  "tokio",
 ]
 
 [[package]]
 name = "tendermint-light-client-verifier"
-version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?rev=a3a0ad5f07d380976bbd5321239aec9cc3a8f916#a3a0ad5f07d380976bbd5321239aec9cc3a8f916"
-dependencies = [
- "derive_more",
- "flex-error",
- "serde 1.0.163",
- "tendermint 0.23.5",
- "tendermint-rpc 0.23.5",
- "time 0.3.17",
-]
-
-[[package]]
-name = "tendermint-light-client-verifier"
 version = "0.23.6"
 source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=02b256829e80f8cfecf3fa0d625c2a76c79cd043#02b256829e80f8cfecf3fa0d625c2a76c79cd043"
 dependencies = [
  "derive_more",
  "flex-error",
  "serde 1.0.163",
- "tendermint 0.23.6",
- "time 0.3.17",
-]
-
-[[package]]
-name = "tendermint-proto"
-version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?rev=a3a0ad5f07d380976bbd5321239aec9cc3a8f916#a3a0ad5f07d380976bbd5321239aec9cc3a8f916"
-dependencies = [
- "bytes 1.4.0",
- "flex-error",
- "num-derive",
- "num-traits 0.2.15",
- "prost",
- "prost-types",
- "serde 1.0.163",
- "serde_bytes",
- "subtle-encoding",
+ "tendermint",
  "time 0.3.17",
 ]
 
@@ -6705,30 +6491,6 @@ dependencies = [
  "serde_bytes",
  "subtle-encoding",
  "time 0.3.17",
-]
-
-[[package]]
-name = "tendermint-rpc"
-version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?rev=a3a0ad5f07d380976bbd5321239aec9cc3a8f916#a3a0ad5f07d380976bbd5321239aec9cc3a8f916"
-dependencies = [
- "bytes 1.4.0",
- "flex-error",
- "getrandom 0.2.9",
- "peg",
- "pin-project",
- "serde 1.0.163",
- "serde_bytes",
- "serde_json",
- "subtle-encoding",
- "tendermint 0.23.5",
- "tendermint-config 0.23.5",
- "tendermint-proto 0.23.5",
- "thiserror",
- "time 0.3.17",
- "url 2.3.1",
- "uuid 0.8.2",
- "walkdir",
 ]
 
 [[package]]
@@ -6752,9 +6514,9 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "subtle-encoding",
- "tendermint 0.23.6",
- "tendermint-config 0.23.6",
- "tendermint-proto 0.23.6",
+ "tendermint",
+ "tendermint-config",
+ "tendermint-proto",
  "thiserror",
  "time 0.3.17",
  "tokio",
@@ -6762,21 +6524,6 @@ dependencies = [
  "url 2.3.1",
  "uuid 0.8.2",
  "walkdir",
-]
-
-[[package]]
-name = "tendermint-testgen"
-version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?rev=a3a0ad5f07d380976bbd5321239aec9cc3a8f916#a3a0ad5f07d380976bbd5321239aec9cc3a8f916"
-dependencies = [
- "ed25519-dalek",
- "gumdrop",
- "serde 1.0.163",
- "serde_json",
- "simple-error",
- "tempfile",
- "tendermint 0.23.5",
- "time 0.3.17",
 ]
 
 [[package]]
@@ -6790,7 +6537,7 @@ dependencies = [
  "serde_json",
  "simple-error",
  "tempfile",
- "tendermint 0.23.6",
+ "tendermint",
  "time 0.3.17",
 ]
 
@@ -7274,25 +7021,7 @@ dependencies = [
  "futures 0.3.28",
  "pin-project",
  "prost",
- "tendermint-proto 0.23.6",
- "tokio",
- "tokio-stream",
- "tokio-util 0.6.10",
- "tower",
- "tracing 0.1.30",
- "tracing-tower",
-]
-
-[[package]]
-name = "tower-abci"
-version = "0.1.0"
-source = "git+https://github.com/heliaxdev/tower-abci?rev=a31ce06533f5fbd943508676059d44de27395792#a31ce06533f5fbd943508676059d44de27395792"
-dependencies = [
- "bytes 1.4.0",
- "futures 0.3.28",
- "pin-project",
- "prost",
- "tendermint-proto 0.23.5",
+ "tendermint-proto",
  "tokio",
  "tokio-stream",
  "tokio-util 0.6.10",
