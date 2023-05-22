@@ -301,10 +301,9 @@ pub mod wrapper_tx {
             transfer_code: Vec<u8>,
         ) -> Result<Tx, WrapperTxErr> {
             //FIXME: check the limit of spending keys
-            let amount = self.fee.amount.checked_sub(transparent_balance).ok_or(WrapperTxErr::InvalidUnshield(format!("The transparent balance of the fee payer is enough to pay fees, no need for unshielding")))?;
 
             self.generate_fee_unshielding(
-                amount,
+                transparent_balance,
                 chain_id,
                 expiration,
                 transfer_code,
@@ -314,11 +313,13 @@ pub mod wrapper_tx {
         /// Generates the fee unshielding tx for execution. The provided `expiration` and `chain_id` should be the same as the wrapper for safety reasons.
         pub fn generate_fee_unshielding(
             &self,
-            amount: Amount,
+            transparent_balance: Amount,
             chain_id: ChainId,
             expiration: Option<DateTimeUtc>,
             transfer_code: Vec<u8>,
         ) -> Result<Tx, WrapperTxErr> {
+            let amount = self.fee.amount.checked_sub(transparent_balance).ok_or(WrapperTxErr::InvalidUnshield(format!("The transparent balance of the fee payer is enough to pay fees, no need for unshielding")))?;
+
             let transfer = Transfer {
                 source: masp(),
                 target: self.fee_payer(),

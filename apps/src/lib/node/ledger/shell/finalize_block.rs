@@ -847,13 +847,13 @@ where
         #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     ) -> Result<()> {
         // Unshield funds if requested
-        if let Some(unshield) = &wrapper.unshield {
+        if wrapper.unshield.is_some() {
+            //FIXME: multiple spending notes in the client
             // The unshielding tx does not charge gas, instantiate a limitless
             // custom gas meter for this step
             let mut gas_meter = TxGasMeter::new(u64::MAX); //FIXME: actual gas limit
 
-            let unshield_amount = storage_api::token::read_balance(
-                //FIXME: correct to compute it like this?
+            let transparent_balance = storage_api::token::read_balance(
                 &self.wl_storage,
                 &wrapper.fee.token,
                 &wrapper.fee_payer(),
@@ -867,7 +867,7 @@ where
                 TxType::Decrypted(DecryptedTx::Decrypted {
                     tx: wrapper
                         .generate_fee_unshielding(
-                            unshield_amount,
+                            transparent_balance,
                             // By this time we've already validated the chain id and expiration, we don't need the correct values anymore
                             self.chain_id.clone(),
                             None,
