@@ -789,7 +789,7 @@ where
                 &mut self.tx_wasm_cache.clone(),
             ) {
                 response.code = ErrorCodes::InvalidTx.into();
-                response.log = e;
+                response.log = e.to_string();
                 return response;
             }
         } else {
@@ -982,8 +982,7 @@ where
         gas_table: Option<Cow<BTreeMap<String, u64>>>,
         vp_wasm_cache: &mut VpCache<CA>,
         tx_wasm_cache: &mut TxCache<CA>,
-    ) -> std::result::Result<(), String>
-    //FIXME: cannot use the result of this module?
+    ) -> Result<()>
     where
         CA: 'static + WasmCacheAccess + Sync,
     {
@@ -1015,9 +1014,15 @@ where
                     transfer_code,
                     descriptions_limit,
                 )
-                .map_err(|e| e.to_string())?
+                .map_err(|e| {
+                    Error::TxApply(protocol::Error::FeeUnshieldingError(
+                        e.to_string(),
+                    ))
+                })?
                 .ok_or_else(|| {
-                    "Missing expected fee unshielding tx".to_string()
+                    Error::TxApply(protocol::Error::FeeUnshieldingError(
+                        "Missing expected fee unshielding tx".to_string(),
+                    ))
                 })?;
 
             let gas_table = gas_table.unwrap_or_else(|| {
@@ -1059,17 +1064,21 @@ where
                             "Token balance read in the protocol must not fail",
                         );
                     } else {
-                        return Err(format!(
+                        return Err(Error::TxApply(
+                            protocol::Error::FeeUnshieldingError(format!(
                             "The unshielding tx is invalid, some VPs rejected \
                              it: {:#?}",
                             result.vps_result.rejected_vps
+                        )),
                         ));
                     }
                 }
                 Err(e) => {
-                    return Err(format!(
+                    return Err(Error::TxApply(
+                        protocol::Error::FeeUnshieldingError(format!(
                         "The unshielding tx is invalid, wasm run failed: {}",
                         e
+                    )),
                     ));
                 }
             }
@@ -1078,11 +1087,11 @@ where
         if balance >= self.get_wrapper_tx_fees() {
             Ok(())
         } else {
-            Err(
+            Err(Error::TxApply(protocol::Error::FeeUnshieldingError(
                 "The given address does not have a sufficient balance to pay \
                  fee"
                 .to_string(),
-            )
+            )))
         }
     }
 }

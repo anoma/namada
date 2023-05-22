@@ -626,7 +626,7 @@ where
                         }
                         Err(e) => TxResult {
                             code: ErrorCodes::InvalidTx.into(),
-                            info: e,
+                            info: e.to_string(),
                         },
                     }
                 }
