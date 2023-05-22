@@ -618,7 +618,7 @@ fn wrapper_fee_unshielding() -> Result<()> {
                 "--ledger-address",
                 &validator_one_rpc,
             ],
-            "is lower than the amount to be transferred and fees",
+            "Error in fee unshielding",
         ),
         // 3. Valid unshielding
         (
