@@ -14,8 +14,8 @@ use namada::ledger::storage::{DBIter, DB};
 use namada::ledger::storage_api::token::{
     credit_tokens, read_balance, read_total_supply,
 };
-use namada::ledger::{ibc, pos};
 use namada::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
+use namada::ledger::{ibc, pos};
 use namada::types::hash::Hash as CodeHash;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
