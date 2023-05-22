@@ -1061,25 +1061,6 @@ pub async fn submit_tx<C: namada::ledger::queries::Client + Sync>(
     tx::submit_tx(client, to_broadcast).await
 }
 
-fn decode_component<K, F>(
-    (addr, sub, denom, epoch): (Address, Option<Key>, MaspDenom, Epoch),
-    val: i64,
-    res: &mut HashMap<K, token::Amount>,
-    mk_key: F,
-) where
-    F: FnOnce(Address, Option<Key>, Epoch) -> K,
-    K: Eq + std::hash::Hash,
-{
-    let decoded_amount = token::Amount::from_uint(
-        u64::try_from(val).expect("negative cash does not exist"),
-        denom as u8,
-    )
-    .unwrap();
-    res.entry(mk_key(addr, sub, epoch))
-        .and_modify(|val| *val += decoded_amount)
-        .or_insert(decoded_amount);
-}
-
 #[cfg(test)]
 mod test_tx {
 

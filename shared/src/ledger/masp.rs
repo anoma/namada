@@ -54,8 +54,8 @@ use sha2::Digest;
 
 use crate::ledger::args::InputAmount;
 use crate::ledger::queries::Client;
-use crate::ledger::rpc::query_conversion;
-use crate::ledger::tx::token_exists_or_err;
+use crate::ledger::rpc::{query_conversion, validate_amount};
+use crate::ledger::tx::{decode_component, token_exists_or_err};
 use crate::ledger::{args, rpc};
 use crate::proto::{SignedTxData, Tx};
 use crate::tendermint_rpc::query::Query;
@@ -677,7 +677,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
 
             let mut pos_map = HashMap::new();
             std::mem::swap(&mut pos_map, &mut self.pos_map);
-            for (vk, notes) in self.pos_map.iter_mut() {
+            for (vk, notes) in pos_map.iter_mut() {
                 let decres = try_sapling_note_decryption::<TestNetwork>(
                     0,
                     &vk.ivk().0,
@@ -779,10 +779,10 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// context. If the key is not in the context, then we do not know the
     /// balance and hence we return None.
     pub async fn compute_shielded_balance(
-        &self,
+        &mut self,
         client: &U::C,
         vk: &ViewingKey,
-    ) -> Option<Amount> {
+    ) -> Option<MaspAmount> {
         // Cannot query the balance of a key that's not in the map
         if !self.pos_map.contains_key(vk) {
             return None;
@@ -904,7 +904,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         asset_type: AssetType,
         value: i64,
         usage: &mut i64,
-        input: &mut Amount,
+        input: &mut MaspAmount,
         output: &mut Amount,
     ) {
         // If conversion if possible, accumulate the exchanged amount
@@ -986,8 +986,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     // current asset type to the latest
                     // asset type.
                     self.apply_conversion(
-                        &client,
                         conv.clone(),
+                        &client,
                         target_asset_type,
                         denom_value,
                         usage,
@@ -1015,8 +1015,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     // from latest asset type to the target
                     // asset type.
                     self.apply_conversion(
-                        &client,
                         conv.clone(),
+                        &client,
                         target_asset_type,
                         denom_value,
                         usage,
@@ -1080,10 +1080,11 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 // The amount contributed by this note before conversion
                 let pre_contr = Amount::from_pair(note.asset_type, note.value)
                     .expect("received note has invalid value or asset type");
+                let input = self.decode_all_amounts(client, pre_contr).await;
                 let (contr, proposed_convs) = self
                     .compute_exchanged_amount(
                         client,
-                        pre_contr,
+                        input,
                         target_epoch,
                         conversions.clone(),
                     )
@@ -1249,7 +1250,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         client: &U::C,
         amt: Amount,
     ) -> MaspAmount {
-        let mut res = HashMap::default();
+        let mut res: HashMap<(Epoch, TokenAddress), token::Amount> =
+            HashMap::default();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
             if let Some(decoded) =
@@ -1340,7 +1342,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             // Transaction fees need to match the amount in the wrapper Transfer
             // when MASP source is used
             let (_, shielded_fee) =
-                convert_amount(epoch, &args.tx.fee_token, &None, &fee.amount);
+                convert_amount(epoch, &args.tx.fee_token, &None, fee.amount);
 
             builder.set_fee(shielded_fee.clone())?;
             let required_amt = if shielded_gas {
@@ -1468,15 +1470,18 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     args.tx.force,
                     client,
                 )
-                .await?;
+                .await.expect("expected token to exist");
+
                 let validated_amount =
-                    validate_amount(client, args.amount, &token, &None);
+                    validate_amount(client, args.amount, &token, &None)
+                        .await
+                        .expect("expected to be able to validate amount");
 
                 let (new_asset_type, _) = convert_amount(
                     new_epoch,
                     &args.token,
                     &None,
-                    validated_amount,
+                    validated_amount.amount,
                 );
                 for (denom, asset_type) in
                     MaspDenom::iter().zip(new_asset_type.iter())
@@ -1485,7 +1490,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                         ovk_opt,
                         payment_address.unwrap().into(),
                         *asset_type,
-                        validated_amount,
+                        denom.denominate(&amt),
                         memo.clone(),
                     )?;
                 }
@@ -1510,21 +1515,23 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                         OutPoint::new([0u8; 32], 0),
                         TxOut {
                             asset_type: *asset_type,
-                            value: denom.denominate(amt),
+                            value: denom.denominate(&amt),
                             script_pubkey: script.clone(),
                         },
                     )?;
+
+                    let (replay_tx, _) =
+                        replay_builder.build(consensus_branch_id, &prover)?;
+                    tx = tx.map(|(t, tm)| {
+                        let mut temp = t.deref().clone();
+                        temp.shielded_outputs = replay_tx.shielded_outputs.clone();
+                        temp.value_balance = temp.value_balance.reject(*asset_type)
+                            - Amount::from_pair(new_asset_type, denom.denominate(&amt)).unwrap();
+                        (temp.freeze().unwrap(), tm)
+                    });
                 }
 
-                let (replay_tx, _) =
-                    replay_builder.build(consensus_branch_id, &prover)?;
-                tx = tx.map(|(t, tm)| {
-                    let mut temp = t.deref().clone();
-                    temp.shielded_outputs = replay_tx.shielded_outputs.clone();
-                    temp.value_balance = temp.value_balance.reject(asset_type)
-                        - Amount::from_pair(new_asset_type, amt).unwrap();
-                    (temp.freeze().unwrap(), tm)
-                });
+
             }
         }
 

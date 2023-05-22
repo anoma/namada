@@ -1,6 +1,6 @@
 //! SDK functions to construct different types of transactions
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 
 use borsh::BorshSerialize;
@@ -8,6 +8,8 @@ use itertools::Either::*;
 use masp_primitives::transaction::builder;
 use namada_core::types::address::{masp, masp_tx_key, Address};
 use namada_core::types::dec::Dec;
+use namada_core::types::storage::Key;
+use namada_core::types::token::{MaspDenom, TokenAddress};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::CommissionPair;
 use prost::EncodeError;
@@ -25,7 +27,7 @@ use crate::ibc_proto::cosmos::base::v1beta1::Coin;
 use crate::ledger::args::{self, InputAmount};
 use crate::ledger::governance::storage as gov_storage;
 use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
-use crate::ledger::rpc::{self, TxBroadcastData, TxResponse};
+use crate::ledger::rpc::{self, validate_amount, TxBroadcastData, TxResponse};
 use crate::ledger::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::Tx;
@@ -449,6 +451,25 @@ pub async fn submit_tx<C: crate::ledger::queries::Client + Sync>(
     parsed
 }
 
+pub fn decode_component<K, F>(
+    (addr, sub, denom, epoch): (Address, Option<Key>, MaspDenom, Epoch),
+    val: i64,
+    res: &mut HashMap<K, token::Amount>,
+    mk_key: F,
+) where
+    F: FnOnce(Address, Option<Key>, Epoch) -> K,
+    K: Eq + std::hash::Hash,
+{
+    let decoded_amount = token::Amount::from_uint(
+        u64::try_from(val).expect("negative cash does not exist"),
+        denom as u8,
+    )
+    .unwrap();
+    res.entry(mk_key(addr, sub, epoch))
+        .and_modify(|val| *val += decoded_amount)
+        .or_insert(decoded_amount);
+}
+
 /// Save accounts initialized from a tx into the wallet, if any.
 pub async fn save_initialized_accounts<U: WalletUtils>(
     wallet: &mut Wallet<U>,
@@ -700,8 +721,8 @@ pub async fn submit_unbond<
         if !args.tx.force {
             return Err(Error::LowerBondThanUnbond(
                 bond_source,
-                args.amount,
-                bond_amount,
+                args.amount.to_string_native(),
+                bond_amount.to_string_native(),
             ));
         }
     }
@@ -1035,15 +1056,17 @@ pub async fn submit_transfer<
 
     // validate the amount given
     let validated_amount =
-        validate_amount(&client, args.amount, &token, &sub_prefix).await;
+        validate_amount(client, args.amount, &token, &sub_prefix)
+            .await
+            .expect("expected to validate amount");
     let validate_fee = validate_amount(
-        &client,
+        client,
         args.tx.fee_amount,
         &fee_token,
         // TODO: Currently multi-tokens cannot be used to pay fees
         &None,
     )
-    .await;
+    .await.expect("expected to be able to validate fee");
 
     args.amount = InputAmount::Validated(validated_amount);
     args.tx.fee_amount = InputAmount::Validated(validate_fee);
@@ -1111,9 +1134,9 @@ pub async fn submit_transfer<
         Err(builder::Error::ChangeIsNegative(_)) => {
             Err(Error::NegativeBalanceAfterTransfer(
                 source.clone(),
-                validated_amount.amount,
+                validated_amount.amount.to_string_native(),
                 token.clone(),
-                validate_fee.amount,
+                validate_fee.amount.to_string_native(),
                 args.tx.fee_token.clone(),
             ))
         }
@@ -1469,8 +1492,8 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
                     Err(Error::BalanceTooLow(
                         source.clone(),
                         token.clone(),
-                        amount,
-                        balance,
+                        amount.to_string_native(),
+                        balance.to_string_native(),
                     ))
                 }
             } else {

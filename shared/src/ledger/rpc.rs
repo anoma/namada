@@ -8,11 +8,12 @@ use masp_primitives::sapling::Node;
 use namada_core::ledger::testnet_pow;
 use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
-use namada_core::types::token::{Amount, MaspDenom};
+use namada_core::types::token::{Amount, Denomination, MaspDenom};
 use namada_proof_of_stake::types::CommissionPair;
 use serde::Serialize;
 use tokio::time::Duration;
 
+use crate::ledger::args::InputAmount;
 use crate::ledger::events::Event;
 use crate::ledger::governance::parameters::GovParams;
 use crate::ledger::governance::storage as gov_storage;
@@ -903,4 +904,29 @@ pub async fn get_bond_amount_at<C: crate::ledger::queries::Client + Sync>(
             .await,
     );
     Some(total_active)
+}
+
+/// Get the correct representation of the amount given the token type.
+pub async fn validate_amount<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    amount: InputAmount,
+    token: &Address,
+    sub_prefix: &Option<Key>,
+) -> Option<token::DenominatedAmount> {
+    let input_amount = match amount {
+        InputAmount::Unvalidated(amt) => amt.canonical(),
+        InputAmount::Validated(amt) => return Some(amt),
+    };
+    let denom = unwrap_client_response::<C, Option<Denomination>>(
+        RPC.vp()
+            .token()
+            .denomination(client, token, sub_prefix)
+            .await,
+    )
+    .unwrap();
+    if denom < input_amount.denom {
+        None
+    } else {
+        Some(input_amount.increase_precision(denom).unwrap())
+    }
 }
