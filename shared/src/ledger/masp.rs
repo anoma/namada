@@ -333,12 +333,16 @@ pub enum PinnedBalanceError {
 //     pub amount: token::Amount,
 // }
 
+/// a masp change
 #[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
 pub struct MaspChange {
+    /// the token address
     pub asset: TokenAddress,
+    /// the change in the token
     pub change: token::Change,
 }
 
+/// a masp amount
 #[derive(
     BorshSerialize, BorshDeserialize, Debug, Clone, Default, PartialEq, Eq,
 )]
@@ -1315,7 +1319,6 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
 
         // Now we build up the transaction within this object
         let mut builder = Builder::<TestNetwork, OsRng>::new(0u32);
-        let prover = self.utils.local_tx_prover();
 
         // break up a transfer into a number of transfers with suitable
         // denominations
@@ -1470,7 +1473,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     args.tx.force,
                     client,
                 )
-                .await.expect("expected token to exist");
+                .await
+                .expect("expected token to exist");
 
                 let validated_amount =
                     validate_amount(client, args.amount, &token, &None)
@@ -1508,7 +1512,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 let script =
                     TransparentAddress::PublicKey(hash.into()).script();
                 for (denom, asset_type) in
-                    MaspDenom::iter().zip(asset_types.iter())
+                    MaspDenom::iter().zip(new_asset_type.iter())
                 {
                     replay_builder.add_transparent_input(
                         secp_sk,
@@ -1519,19 +1523,28 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                             script_pubkey: script.clone(),
                         },
                     )?;
+                }
 
-                    let (replay_tx, _) =
-                        replay_builder.build(consensus_branch_id, &prover)?;
+                let (replay_tx, _) =
+                    replay_builder.build(consensus_branch_id, &prover)?;
+
+                for (denom, asset_type) in
+                    MaspDenom::iter().zip(new_asset_type.iter())
+                {
                     tx = tx.map(|(t, tm)| {
                         let mut temp = t.deref().clone();
-                        temp.shielded_outputs = replay_tx.shielded_outputs.clone();
-                        temp.value_balance = temp.value_balance.reject(*asset_type)
-                            - Amount::from_pair(new_asset_type, denom.denominate(&amt)).unwrap();
+                        temp.shielded_outputs =
+                            replay_tx.shielded_outputs.clone();
+                        temp.value_balance =
+                            temp.value_balance.reject(*asset_type)
+                                - Amount::from_pair(
+                                    *asset_type,
+                                    denom.denominate(&amt),
+                                )
+                                .unwrap();
                         (temp.freeze().unwrap(), tm)
                     });
                 }
-
-
             }
         }
 

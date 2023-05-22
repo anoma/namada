@@ -9,7 +9,7 @@ use masp_primitives::transaction::builder;
 use namada_core::types::address::{masp, masp_tx_key, Address};
 use namada_core::types::dec::Dec;
 use namada_core::types::storage::Key;
-use namada_core::types::token::{MaspDenom, TokenAddress};
+use namada_core::types::token::MaspDenom;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::CommissionPair;
 use prost::EncodeError;
@@ -451,6 +451,7 @@ pub async fn submit_tx<C: crate::ledger::queries::Client + Sync>(
     parsed
 }
 
+/// decode components of a masp note
 pub fn decode_component<K, F>(
     (addr, sub, denom, epoch): (Address, Option<Key>, MaspDenom, Epoch),
     val: i64,
@@ -1062,19 +1063,15 @@ pub async fn submit_transfer<
     let validate_fee = validate_amount(
         client,
         args.tx.fee_amount,
-        &fee_token,
+        &args.tx.fee_token,
         // TODO: Currently multi-tokens cannot be used to pay fees
         &None,
     )
-    .await.expect("expected to be able to validate fee");
+    .await
+    .expect("expected to be able to validate fee");
 
     args.amount = InputAmount::Validated(validated_amount);
     args.tx.fee_amount = InputAmount::Validated(validate_fee);
-
-    let token_addr = TokenAddress {
-        address: token.clone(),
-        sub_prefix: sub_prefix.clone(),
-    };
 
     check_balance_too_low_err(
         token,
@@ -1092,7 +1089,7 @@ pub async fn submit_transfer<
     // signer. Also, if the transaction is shielded, redact the amount and token
     // types by setting the transparent value to 0 and token type to a constant.
     // This has no side-effect because transaction is to self.
-    let (default_signer, amount, token) =
+    let (default_signer, _amount, token) =
         if source == masp_addr && target == masp_addr {
             // TODO Refactor me, we shouldn't rely on any specific token here.
             (
