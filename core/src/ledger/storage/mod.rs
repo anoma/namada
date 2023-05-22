@@ -32,7 +32,6 @@ use crate::ledger::parameters::{self, EpochDuration, Parameters};
 use crate::ledger::storage::merkle_tree::{
     Error as MerkleTreeError, MerkleRoot,
 };
-use crate::ledger::storage::mockdb::{MockIterator, MockPrefixIterator};
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint::merkle::proof::Proof;
 use crate::types::address::{

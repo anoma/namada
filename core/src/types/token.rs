@@ -711,10 +711,11 @@ impl TryFrom<IbcAmount> for Amount {
 
     fn try_from(amount: IbcAmount) -> Result<Self, Self::Error> {
         // TODO: https://github.com/anoma/namada/issues/1089
-        if amount > u64::MAX.into() {
-            return Err(AmountParseError::InvalidRange);
-        }
-        Self::from_str(&amount.to_string(), 6)
+        // TODO: OVERFLOW CHECK PLEASE (PATCH IBC TO ALLOW GETTING IBCAMOUNT::MAX OR SIMILAR)
+        //if amount > u64::MAX.into() {
+        //    return Err(AmountParseError::InvalidRange);
+        //}
+        DenominatedAmount::from_str(&amount.to_string()).map(|a| a.amount)
     }
 }
 
