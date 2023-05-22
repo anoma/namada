@@ -275,14 +275,30 @@ pub async fn sign_wrapper(
                     sub_prefix: None,
                     amount: diff,
                 };
-                let (transaction, _data, unshielding_epoch) =
-                    gen_shielded_transfer(ctx, &client, &transfer_args)
-                        .await
-                        .unwrap()
-                        .unwrap();
 
-                balance += diff;
-                (Some(transaction), Some(unshielding_epoch))
+                match gen_shielded_transfer(ctx, &client, &transfer_args).await
+                {
+                    Ok(Some((transaction, _data, unshielding_epoch))) => {
+                        balance += diff;
+                        (Some(transaction), Some(unshielding_epoch))
+                    }
+                    Ok(None) => {
+                        eprintln!("Missing unshielding transaction");
+                        if !args.force && cfg!(feature = "mainnet") {
+                            cli::safe_exit(1);
+                        }
+
+                        (None, None)
+                    }
+                    Err(e) => {
+                        eprintln!("Error in fee unshielding generation: {}", e);
+                        if !args.force && cfg!(feature = "mainnet") {
+                            cli::safe_exit(1);
+                        }
+
+                        (None, None)
+                    }
+                }
             } else {
                 eprintln!(
                     "The wrapper transaction source doesn't have enough \
