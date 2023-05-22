@@ -326,57 +326,59 @@ pub mod wrapper_tx {
                             .to_string(),
                     ));
                 }
-                return self
-                    .generate_fee_unshielding(
-                        transparent_balance,
-                        chain_id,
-                        expiration,
-                        transfer_code,
-                    )
-                    .map(|tx| Some(tx));
+                return self.generate_fee_unshielding(
+                    transparent_balance,
+                    chain_id,
+                    expiration,
+                    transfer_code,
+                );
             }
 
             Ok(None)
         }
 
-        /// Generates the fee unshielding tx for execution. The provided `expiration` and `chain_id` should be the same as the wrapper for safety reasons.
+        /// Generates the optional fee unshielding tx for execution. The provided `expiration` and `chain_id` should be the same as the wrapper for safety reasons.
         pub fn generate_fee_unshielding(
             &self,
             transparent_balance: Amount,
             chain_id: ChainId,
             expiration: Option<DateTimeUtc>,
             transfer_code: Vec<u8>,
-        ) -> Result<Tx, WrapperTxErr> {
-            let amount = self.fee.amount.checked_sub(transparent_balance).ok_or(WrapperTxErr::InvalidUnshield(format!("The transparent balance of the fee payer is enough to pay fees, no need for unshielding")))?;
+        ) -> Result<Option<Tx>, WrapperTxErr> {
+            if self.unshield.is_some() {
+                let amount = self.fee.amount.checked_sub(transparent_balance).ok_or(WrapperTxErr::InvalidUnshield("The transparent balance of the fee payer is enough to pay fees, no need for unshielding".to_string()))?;
 
-            let transfer = Transfer {
-                source: masp(),
-                target: self.fee_payer(),
-                token: self.fee.token.clone(),
-                sub_prefix: None,
-                amount,
-                key: None,
-                shielded: self.unshield.clone(),
-            };
+                let transfer = Transfer {
+                    source: masp(),
+                    target: self.fee_payer(),
+                    token: self.fee.token.clone(),
+                    sub_prefix: None,
+                    amount,
+                    key: None,
+                    shielded: self.unshield.clone(),
+                };
 
-            let tx = Tx::new(
-                transfer_code,
-                Some(transfer.try_to_vec().map_err(|_| {
-                    WrapperTxErr::InvalidUnshield(
+                let tx = Tx::new(
+                    transfer_code,
+                    Some(transfer.try_to_vec().map_err(|_| {
+                        WrapperTxErr::InvalidUnshield(
                         "Error while serializing the unshield transfer data"
                             .to_string(),
                     )
-                })?),
-                chain_id,
-                expiration,
-            );
+                    })?),
+                    chain_id,
+                    expiration,
+                );
 
-            // Mock a signature. We don't have the signign key of masp in the ledger but the masp vp does not check it
-            let mock_sigkey = SecretKey::Ed25519(ed25519::SecretKey(Box::new(
-                [0; 32].into(),
-            )));
+                // Mock a signature. We don't have the signign key of masp in the ledger but the masp vp does not check it
+                let mock_sigkey = SecretKey::Ed25519(ed25519::SecretKey(
+                    Box::new([0; 32].into()),
+                ));
 
-            Ok(tx.sign(&mock_sigkey))
+                return Ok(Some(tx.sign(&mock_sigkey)));
+            }
+
+            Ok(None)
         }
     }
 

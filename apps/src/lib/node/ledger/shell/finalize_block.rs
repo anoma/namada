@@ -886,7 +886,13 @@ where
                                     e.to_string(),
                                 ),
                             )
-                        })?,
+                        })?
+                        .ok_or(Error::TxApply(
+                            protocol::Error::FeeUnshieldingError(
+                                "Missing expected fee unshielding tx"
+                                    .to_string(),
+                            ),
+                        ))?,
                     has_valid_pow: false,
                 }),
                 TxIndex::default(),
