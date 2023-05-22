@@ -4,6 +4,8 @@ use namada_core::types::token::{self, Amount};
 use namada_core::types::transaction::{pos, MIN_FEE};
 use namada_core::types::address::masp;
 use std::env;
+use crate::ibc_proto::google::protobuf::Any;
+use prost::Message;
 
 use crate::ledger::rpc::TxBroadcastData;
 use crate::ledger::tx::Error;
@@ -15,10 +17,14 @@ use crate::types::storage::Epoch;
 use crate::types::transaction::{hash_tx, Fee, WrapperTx};
 use crate::types::transaction::TxType;
 use crate::ledger::rpc::query_wasm_code_hash;
+use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::{ErrorKind, Write};
+use crate::ibc::applications::transfer::msgs::transfer::{
+    TYPE_URL as MSG_TRANSFER_TYPE_URL,
+};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
@@ -27,9 +33,7 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::components::sapling::fees::{
     InputView, OutputView,
 };
-//use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use crate::ledger::parameters::storage as parameter_storage;
-//use crate::types::ibc::data::IbcMessage;
 use crate::types::key::*;
 use crate::types::masp::{ExtendedViewingKey, PaymentAddress};
 use crate::types::token::Transfer;
@@ -874,8 +878,8 @@ async fn to_ledger_vector<
             format!("Token : {}", transfer.token),
             format!("Amount : {}", transfer.amount),
         ]);
-    } /*else if code_hash == ibc_hash {
-        let msg = IbcMessage::decode(
+    } else if code_hash == ibc_hash {
+        let msg = Any::decode(
             tx.data()
                 .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?
                 .as_ref(),
@@ -885,38 +889,39 @@ async fn to_ledger_vector<
         tv.name = "IBC 0".to_string();
         tv.output.push("Type : IBC".to_string());
 
-        if let Ics26Envelope::Ics20Msg(transfer) = msg.0 {
-            let transfer_token = transfer
-                .token
-                .as_ref()
-                .map(|x| format!("{} {}", x.amount, x.denom))
-                .unwrap_or_else(|| "(none)".to_string());
-            tv.output.extend(vec![
-                format!("Source port : {}", transfer.source_port),
-                format!("Source channel : {}", transfer.source_channel),
-                format!("Token : {}", transfer_token),
-                format!("Sender : {}", transfer.sender),
-                format!("Receiver : {}", transfer.receiver),
-                format!("Timeout height : {}", transfer.timeout_height),
-                format!("Timeout timestamp : {}", transfer.timeout_timestamp),
-            ]);
-            tv.output_expert.extend(vec![
-                format!("Source port : {}", transfer.source_port),
-                format!("Source channel : {}", transfer.source_channel),
-                format!("Token : {}", transfer_token),
-                format!("Sender : {}", transfer.sender),
-                format!("Receiver : {}", transfer.receiver),
-                format!("Timeout height : {}", transfer.timeout_height),
-                format!("Timeout timestamp : {}", transfer.timeout_timestamp),
-            ]);
-        } else {
-            for line in format!("{:#?}", msg).split('\n') {
-                let stripped = line.trim_start();
-                tv.output.push(format!("Part : {}", stripped));
-                tv.output_expert.push(format!("Part : {}", stripped));
+        match msg.type_url.as_str() {
+            MSG_TRANSFER_TYPE_URL => {
+                let transfer =
+                    MsgTransfer::try_from(msg).map_err(|_| std::io::Error::from(ErrorKind::InvalidData))?;
+                let transfer_token = format!("{} {}", transfer.token.amount, transfer.token.denom);
+                tv.output.extend(vec![
+                    format!("Source port : {}", transfer.port_id_on_a),
+                    format!("Source channel : {}", transfer.chan_id_on_a),
+                    format!("Token : {}", transfer_token),
+                    format!("Sender : {}", transfer.sender),
+                    format!("Receiver : {}", transfer.receiver),
+                    format!("Timeout height : {}", transfer.timeout_height_on_b),
+                    format!("Timeout timestamp : {}", transfer.timeout_timestamp_on_b),
+                ]);
+                tv.output_expert.extend(vec![
+                    format!("Source port : {}", transfer.port_id_on_a),
+                    format!("Source channel : {}", transfer.chan_id_on_a),
+                    format!("Token : {}", transfer_token),
+                    format!("Sender : {}", transfer.sender),
+                    format!("Receiver : {}", transfer.receiver),
+                    format!("Timeout height : {}", transfer.timeout_height_on_b),
+                    format!("Timeout timestamp : {}", transfer.timeout_timestamp_on_b),
+                ]);
+            }
+            _ => {
+                for line in format!("{:#?}", msg).split('\n') {
+                    let stripped = line.trim_start();
+                    tv.output.push(format!("Part : {}", stripped));
+                    tv.output_expert.push(format!("Part : {}", stripped));
+                }
             }
         }
-    }*/ else if code_hash == bond_hash {
+    } else if code_hash == bond_hash {
         let bond = pos::Bond::try_from_slice(
             &tx.data()
                 .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?,

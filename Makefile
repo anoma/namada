@@ -119,7 +119,7 @@ test-unit-coverage:
 		-- --skip e2e -Z unstable-options --report-time
 
 test-e2e:
-	RUST_BACKTRACE=1 $(cargo) +$(nightly) test e2e \
+	RUST_BACKTRACE=1 $(cargo) test e2e \
 		-Z unstable-options \
 		-- \
 		--test-threads=1 \
