@@ -357,6 +357,12 @@ impl fmt::Debug for Sha256Hasher {
 /// A Keccak hasher algorithm.
 pub struct KeccakHasher(tiny_keccak::Keccak);
 
+impl fmt::Debug for KeccakHasher {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "KeccakHasher")
+    }
+}
+
 impl Default for KeccakHasher {
     fn default() -> Self {
         Self(tiny_keccak::Keccak::v256())
@@ -387,6 +393,7 @@ impl Hasher for KeccakHasher {
 }
 
 /// A [`StorageHasher`] which can never be called.
+#[derive(Debug)]
 pub enum DummyHasher {}
 
 const DUMMY_HASHER_PANIC_MSG: &str = "A storage hasher was called, which \
