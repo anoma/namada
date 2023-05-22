@@ -11,7 +11,7 @@ The data relevant to the PoS system in the ledger's state are epoched. Each data
 - [Validators' consensus key, state and total bonded tokens](#validator). Identified by the validator's address.
 - [Bonds](#bonds) are created by self-bonding and delegations. They are identified by the pair of source address and the validator's address.
 
-Changes to the epoched data do not take effect immediately. Instead, changes in epoch `n` are queued to take effect in the epoch `n + pipeline_length` for most cases and `n + pipeline_length + unbonding_length` for [unbonding](#unbond) actions. Should the same validator's data or same bonds (i.e. with the same identity) be updated more than once in the same epoch, the later update overrides the previously queued-up update. For bonds, the token amounts are added up. Once the epoch `n` has ended, the queued-up updates for epoch `n + pipeline_length` are final and the values become immutable.
+Changes to the epoched data do not take effect immediately. Instead, changes in epoch `n` are queued to take effect in the epoch `n + pipeline_length` for most cases and `n + pipeline_length + unbonding_length + cubic_slash_window_width` for [unbonding](#unbond) actions. Should the same validator's data or same bonds (i.e. with the same identity) be updated more than once in the same epoch, the later update overrides the previously queued-up update. For bonds and unbonds, the token amounts are added up. Once the epoch `n` has ended, the queued-up updates for epoch `n + pipeline_length` are final and the values become immutable.
 
 Additionally, any account may submit evidence for [a slashable misbehaviour](#slashing).
 
@@ -84,26 +84,26 @@ The tokens put into a bond are immediately deducted from the source account.
 
 ### Unbond
 
-An unbonding action (validator *unbond* or delegator *undelegate*) requested by the bond's source account in epoch `n` creates an "unbond" with epoch set to `n + pipeline_length + unbounding_length`. We also store the epoch of the bond(s) from which the unbond is created in order to determine if the unbond should be slashed if a fault occurred within the range of bond epoch (inclusive) and unbond epoch (exclusive). The "bond" from which the tokens are being unbonded is decremented in-place (in whatever epoch it was created in).
+An unbonding action (validator *unbond* or delegator *undelegate*) requested by the bond's source account in epoch `n` creates an "unbond" with withdrawable epoch set to `n + pipeline_length + unbounding_length + cubic_slash_window_width`. We also store the epoch of the bond(s) from which the unbond is created in order to determine if the unbond should be slashed if a fault occurred within the range of bond epoch (inclusive) and withdrawable epoch (exclusive). The "bond" from which the tokens are being unbonded is decremented in-place (in whatever epoch it was created in).
 
-Any unbonds created in epoch `n` decrements the bond's validator's total bonded tokens by the bond's token amount and update the voting power for epoch `n + pipeline_length`.
+Any unbond that is initiated in epoch `n` decrements the bond validator's stake (voting power) starting at epoch `n + pipeline_length`, with slashing applied. The token amount that is decremented is equal to the unbonded token amount, minus the amount of tokens that has already been previously slashed.
 
-An "unbond" with epoch set to `n` may be withdrawn by the bond's source address in or any time after the epoch `n`. Once withdrawn, the unbond is deleted and the tokens are credited to the source account.
+An "unbond" with withdrawable epoch set to `n` may be withdrawn by the bond's source address in or any time after the epoch `n`. Once withdrawn, the unbond is deleted and the tokens are credited to the source account. Slashed tokens for the relevant unbond are also recomputed during withdrawing, as it is possible that new slashes that affect the unbond were discovered after the initialization of the unbond. After computing the number of tokens to be slashed from the total unbonded token amount, the slashed token amount is transferred from the PoS address to the slash pool address, while the remaining token amount is transferred from the PoS address to the bond's source address.
 
-Note that unlike bonding and unbonding where token changes are delayed to some future epochs (pipeline or unbonding offset), the token withdrawal applies immediately. This because when the tokens are withdrawable, they are already "unlocked" from the PoS system and do not contribute to voting power.
+Unlike bonding and unbonding where token changes are delayed to some future epochs (pipeline or unbonding offset), the token withdrawal applies immediately, as these withdrawable tokens are no longer contributing to any validator's stake at this point.
 
 ### Slashing
 
-An important part of the security model of Namada is based on making attacking the system very expensive. To this end, the validator who has bonded stake will be slashed once an offense has been detected.
+An important part of the security model of Namada is based on making attacking the system very expensive. To this end, the validator who has bonded stake will eventually be slashed once an offense has been detected.
 
 These are the types of offenses:
 
 - Equivocation in consensus
-  - voting: meaning that a validator has submitted two votes that are conflicting
+  - voting: a validator has submitted two votes that are conflicting
   - block production: a block producer has created two different blocks for the same height
 - Invalidity:
-  - block production: a block producer has produced invalid block
   - voting: validators have voted on invalid block
+  - block production: a block producer has produced invalid block
 
 Unavailability is not considered an offense, but a validator who hasn't voted will not receive rewards.
 
@@ -137,6 +137,7 @@ The default values that are relative to epoch duration assume that an epoch last
 - `min_validator_stake`: Minimum stake of a validator that allows the validator to enter the `consensus` or `below_capacity` [sets](#validator-sets), in number of native tokens. Because the [inflation system](../inflation-system.md#proof-of-stake-rewards) targets a bonding ratio of 2/3, the minimum should be somewhere around `total_supply * 2/3 / max_validator_slots`, but it can and should be much lower to lower the entry cost, as long as it's enough to prevent validation account creation spam that could slow down PoS system update on epoch change
 - `pipeline_len`: Pipeline length in number of epochs, default `2` (see <https://github.com/cosmos/cosmos-sdk/blob/019444ae4328beaca32f2f8416ee5edbac2ef30b/docs/architecture/adr-039-epoched-staking.md#pipelining-the-epochs>)
 - `unboding_len`: Unbonding duration in number of epochs, default `6`
+- `cubic_slash_window_width`: The number of epochs above and below the current one in which to collect misbehaviors for use in computing the cubic slash rate, default `1`.
 - `votes_per_token`: Used in validators' voting power calculation, default 100‱ (1 voting power unit per 1000 tokens)
 - `duplicate_vote_slash_rate`: Portion of validator's stake that should be slashed on a duplicate vote
 - `light_client_attack_slash_rate`: Portion of validator's stake that should be slashed on a light client attack
@@ -314,14 +315,13 @@ struct Unbond {
 }
 ```
 
-For slashes, we store the epoch and block height at which the fault occurred, slash rate and the slash type:
+For slashes, we store the epoch and block height at which the fault occurred, the slash rate as a fixed-precision decimal type, and the slash type (noted in the [system parameters](#system-parameters)):
 
 ```rust,ignore
 struct Slash {
   epoch: Epoch,
   block_height: u64,
-  /// slash token amount ‱ (per ten thousand)
-  rate: u8,
+  rate: Dec,
   r#type: SlashType,
 }
 ```

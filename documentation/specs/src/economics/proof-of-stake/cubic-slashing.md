@@ -1,15 +1,15 @@
 # Cubic slashing
 
-Namada implements a slashing scheme that is called cubic slashing: the amount of a slash is proportional to the cube of the voting power committing infractions within a particular interval. This is designed to make it riskier to operate larger or similarly configured validators, and thus the scheme encourages network resilience. To further deter misbehavior from such correlated validators, the amount slashed for a given misbehavior increases with the existence of other misbehaviors committed in the same or nearby epochs by any validator.
+Namada implements a slashing scheme, coined "cubic slashing," in which the amount of slashed tokens is proportional to the cube of the voting power committing infractions within a particular interval. This is designed to make it riskier to operate larger or similarly configured validators, and thus the scheme encourages network resilience. To further deter misbehavior from such correlated validators, the amount slashed for a given misbehavior increases with the existence of other misbehaviors committed in the same or nearby epochs by any validator.
 
-Because the cubic slash rate is a function of all infractions in a given epoch and its neighboring epochs, the cubic slash rate is the same for any infraction within a given epoch. The slash rate is determined as follows: 
+The cubic slash rate is a function of all infractions in a given epoch and its neighboring epochs. Therefore, the cubic slash rate is the same for any infraction within a given epoch. The slash rate is determined as follows:
 1. Collect all known infractions committed within a range of `[- window_width, + window_width]` epochs around the infraction in question. By default, `window_width = 1`.
-2. Sum the fractional voting powers (relative to the total PoS voting power) of the misbehaving validator for each of the collected infractions. <!-- The total voting powers include all validators in one of the validator sets and all jailed validators (more on this later). -->
+2. Sum the fractional voting powers (relative to the total voting power of all consensus validators) of the misbehaving validator for each of the collected infractions. <!-- The total voting powers include all validators in one of the validator sets and all jailed validators (more on this later). -->
 3. The cubic slash rate is then proportional to this sum. Using $\text{vp}$ to indicate voting power, the cubic rate is expressed as:
 
 $$  9*\big(\sum_{i \in \text{infractions}}\frac{\text{vp}_i}{\text{vp}_{\text{tot}}}\big)^2. $$
 
-For each individual slash, the rate is ultimately determined as the maximum of the cubic slash rate and some nominal minimum rate that is dependent on the infraction type (light client attack v. duplicate vote, reference Tendermint) and is capped at 1.0. The amount of slashed tokens is the rate multiplied by the stake (voting power) used to commit the infraction. The "cubic" in cubic slashing thus comes from the product of the rate, which is quadratic in the voting power, and the voting power itself.
+For each individual slash, the rate is ultimately determined as the maximum of the cubic slash rate and some nominal minimum rate that is dependent on the infraction type (see [system parameters](./bonding-mechanism.md#system-parameters)) and is capped at 1.0. The amount of slashed tokens is the rate multiplied by the stake (voting power) used to commit the infraction. The "cubic" in cubic slashing thus comes from the product of the rate, which is quadratic in the voting power, and the voting power itself.
 
 Expressed in pseudocode:
 <!-- I want to make these two code blocks toggleable as in  https://rdmd.readme.io/docs/code-blocks#tabbed-code-blocks but can't seem to get it to work-->
