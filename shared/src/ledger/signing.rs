@@ -4,6 +4,7 @@ use namada_core::ledger::parameters::storage as parameter_storage;
 use namada_core::types::address::{Address, ImplicitAddress};
 use namada_core::types::token::{self, Amount};
 use namada_core::types::transaction::MIN_FEE;
+use zeroize::Zeroizing;
 
 use crate::ledger::rpc::TxBroadcastData;
 use crate::ledger::tx::Error;
@@ -25,7 +26,7 @@ pub async fn find_keypair<
     client: &C,
     wallet: &mut Wallet<U>,
     addr: &Address,
-    password: Option<String>,
+    password: Option<Zeroizing<String>>,
 ) -> Result<common::SecretKey, Error> {
     match addr {
         Address::Established(_) => {

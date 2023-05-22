@@ -7,7 +7,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-use bip39::{Language, Mnemonic};
+use namada::bip39::{Language, Mnemonic};
 pub use namada::ledger::wallet::alias::Alias;
 use namada::ledger::wallet::{
     ConfirmationResponse, FindKeyError, GenRestoreKeyError, Wallet, WalletUtils,
@@ -28,27 +28,32 @@ impl WalletUtils for CliWalletUtils {
     type Rng = OsRng;
     type Storage = PathBuf;
 
-    fn read_decryption_password() -> String {
+    fn read_decryption_password() -> Zeroizing<String> {
         match env::var("NAMADA_WALLET_PASSWORD_FILE") {
-            Ok(path) => fs::read_to_string(path)
-                .expect("Something went wrong reading the file"),
+            Ok(path) => Zeroizing::new(
+                fs::read_to_string(path)
+                    .expect("Something went wrong reading the file"),
+            ),
             Err(_) => match env::var("NAMADA_WALLET_PASSWORD") {
-                Ok(password) => password,
+                Ok(password) => Zeroizing::new(password),
                 Err(_) => {
                     let prompt = "Enter your decryption password: ";
                     rpassword::read_password_from_tty(Some(prompt))
+                        .map(Zeroizing::new)
                         .expect("Failed reading password from tty.")
                 }
             },
         }
     }
 
-    fn read_encryption_password() -> String {
+    fn read_encryption_password() -> Zeroizing<String> {
         let pwd = match env::var("NAMADA_WALLET_PASSWORD_FILE") {
-            Ok(path) => fs::read_to_string(path)
-                .expect("Something went wrong reading the file"),
+            Ok(path) => Zeroizing::new(
+                fs::read_to_string(path)
+                    .expect("Something went wrong reading the file"),
+            ),
             Err(_) => match env::var("NAMADA_WALLET_PASSWORD") {
-                Ok(password) => password,
+                Ok(password) => Zeroizing::new(password),
                 Err(_) => {
                     let prompt = "Enter your encryption password: ";
                     read_and_confirm_passphrase_tty(prompt).unwrap_or_else(
@@ -63,7 +68,7 @@ impl WalletUtils for CliWalletUtils {
                 }
             },
         };
-        if pwd.is_empty() {
+        if pwd.as_str().is_empty() {
             eprintln!("Password cannot be empty");
             eprintln!("Action cancelled, no changes persisted.");
             cli::safe_exit(1)
@@ -86,12 +91,12 @@ impl WalletUtils for CliWalletUtils {
             .map_err(|_| GenRestoreKeyError::MnemonicInputError)
     }
 
-    fn read_mnemonic_passphrase(confirm: bool) -> String {
+    fn read_mnemonic_passphrase(confirm: bool) -> Zeroizing<String> {
         let prompt = "Enter BIP39 passphrase (empty for none): ";
         let result = if confirm {
             read_and_confirm_passphrase_tty(prompt)
         } else {
-            rpassword::read_password_from_tty(Some(prompt))
+            rpassword::read_password_from_tty(Some(prompt)).map(Zeroizing::new)
         };
         result.unwrap_or_else(|e| {
             eprintln!("{}", e);
@@ -153,19 +158,21 @@ where
     print!("{} ", request);
     std::io::stdout().flush()?;
 
-    let mut response = String::new();
+    let mut response = Zeroizing::default();
     std::io::stdin().read_line(&mut response)?;
-    Ok(Zeroizing::new(response))
+    Ok(response)
 }
 
 pub fn read_and_confirm_passphrase_tty(
     prompt: &str,
-) -> Result<String, std::io::Error> {
-    let passphrase = rpassword::read_password_from_tty(Some(prompt))?;
+) -> Result<Zeroizing<String>, std::io::Error> {
+    let passphrase =
+        rpassword::read_password_from_tty(Some(prompt)).map(Zeroizing::new)?;
     if !passphrase.is_empty() {
         let confirmed = rpassword::read_password_from_tty(Some(
             "Enter same passphrase again: ",
-        ))?;
+        ))
+        .map(Zeroizing::new)?;
         if confirmed != passphrase {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -262,7 +269,7 @@ pub fn load_or_new_from_genesis(
 /// confirmation if read from stdin.
 pub fn read_and_confirm_encryption_password(
     unsafe_dont_encrypt: bool,
-) -> Option<String> {
+) -> Option<Zeroizing<String>> {
     if unsafe_dont_encrypt {
         println!("Warning: The keypair will NOT be encrypted.");
         None
@@ -273,7 +280,7 @@ pub fn read_and_confirm_encryption_password(
 
 #[cfg(test)]
 mod tests {
-    use bip39::MnemonicType;
+    use namada::bip39::MnemonicType;
     use namada::ledger::wallet::WalletUtils;
     use rand_core;
 
