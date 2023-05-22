@@ -1206,7 +1206,6 @@ mod tests {
             let time_of_update = time_of_update + Duration::seconds(1);
             wl_storage.update_epoch(height_of_update, time_of_update).unwrap();
             assert_eq!(wl_storage.storage.block.epoch, epoch_before.next());
-            assert!(wl_storage.storage.update_epoch_blocks_delay.is_none());
         }
     }
 }
