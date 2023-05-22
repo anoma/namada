@@ -20,7 +20,6 @@ use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, WlStorage, DB};
 use crate::proto::{self, Tx};
 use crate::types::address::{Address, InternalAddress};
-use crate::types::hash::Hash;
 use crate::types::storage;
 use crate::types::storage::TxIndex;
 use crate::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
@@ -440,12 +439,8 @@ where
                         .validity_predicate(addr)
                         .map_err(Error::StorageError)?;
                     gas_meter.add(gas).map_err(Error::GasError)?;
-                    let vp_code_hash = match vp_hash {
-                        Some(v) => Hash::try_from(&v[..])
-                            .map_err(|_| Error::MissingAddress(addr.clone()))?,
-                        None => {
-                            return Err(Error::MissingAddress(addr.clone()));
-                        }
+                    let Some(vp_code_hash) = vp_hash else {
+                        return Err(Error::MissingAddress(addr.clone()));
                     };
 
                     wasm::run::vp(
