@@ -9,14 +9,6 @@ version = "0.11.0"
 [features]
 default = ["abciplus"]
 
-abcipp = [
-    "tendermint-abcipp",
-    "tendermint-rpc-abcipp",
-    "tendermint-proto-abcipp",
-    "namada_core/abcipp",
-    "namada_proof_of_stake/abcipp"
-]
-
 abciplus = [
     "tendermint",
     "tendermint-rpc",
@@ -44,9 +36,6 @@ serde_json = "1.0.62"
 rand = {version = "0.8", default-features = false, optional = true}
 rust_decimal = { version = "1.26.1", features = ["borsh"] }
 rust_decimal_macros = "1.26.1"
-tendermint-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
-tendermint-rpc-abcipp = {package = "tendermint-rpc", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", features = ["http-client"], optional = true}
-tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
 tendermint = {version = "0.23.6", optional = true}
 tendermint-rpc = {version = "0.23.6", features = ["http-client"], optional = true}
 tendermint-proto = {version = "0.23.6", optional = true}

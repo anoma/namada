@@ -10,13 +10,8 @@ version = "0.15.3"
 
 [features]
 default = ["abciplus"]
-abcipp = [
-  "namada_core/abcipp",
-  "tendermint-proto-abcipp",
-]
 abciplus = [
   "namada_core/abciplus",
-  "tendermint-proto",
 ]
 # testing helpers
 testing = ["proptest"]

@@ -25,13 +25,6 @@ secp256k1-sign-verify = [
   "libsecp256k1/hmac",
 ]
 
-abcipp = [
-  "ibc-proto-abcipp",
-  "ibc-abcipp",
-  "tendermint-abcipp",
-  "tendermint-proto-abcipp",
-  "namada_tests/abcipp"
-]
 abciplus = [
   "ibc",
   "ibc-proto",
@@ -43,10 +36,6 @@ abciplus = [
 ibc-mocks = [
   "ibc/mocks",
   "ibc/std",
-]
-ibc-mocks-abcipp = [
-  "ibc-abcipp/mocks",
-  "ibc-abcipp/std",
 ]
 
 ethers-derive = [
@@ -84,8 +73,6 @@ tpke = {package = "group-threshold-cryptography", optional = true, git = "https:
 # TODO using the same version of tendermint-rs as we do here.
 ibc = {version = "0.36.0", default-features = false, features = ["serde"], optional = true}
 ibc-proto = {version = "0.26.0", default-features = false, optional = true}
-ibc-abcipp = {package = "ibc", git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "db14744bfba6239cc5f58345ff90f8b7d42637d6", default-features = false, features = ["serde"], optional = true}
-ibc-proto-abcipp = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-proto-rs", rev = "dd8ba23110a144ffe2074a0b889676468266435a", default-features = false, optional = true}
 ics23 = "0.9.0"
 index-set = {git = "https://github.com/heliaxdev/index-set", tag = "v0.7.1", features = ["serialize-borsh", "serialize-serde"]}
 itertools = "0.10.0"
@@ -107,8 +94,6 @@ serde_json = "1.0.62"
 sha2 = "0.9.3"
 tendermint = {version = "0.23.6", optional = true}
 tendermint-proto = {version = "0.23.6", optional = true}
-tendermint-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "a3a0ad5f07d380976bbd5321239aec9cc3a8f916", optional = true}
-tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", rev = "a3a0ad5f07d380976bbd5321239aec9cc3a8f916", optional = true}
 thiserror = "1.0.38"
 tiny-keccak = {version = "2.0.2", features = ["keccak"]}
 tracing = "0.1.30"
