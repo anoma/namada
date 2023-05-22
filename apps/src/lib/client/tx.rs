@@ -10,7 +10,6 @@ use async_std::io::prelude::WriteExt;
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER_PERMISSIVE;
 use masp_proofs::prover::LocalTxProver;
-use namada::core::types::uint::Uint;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::rpc::{TxBroadcastData, TxResponse};
 use namada::ledger::signing::TxSigningKey;
@@ -32,7 +31,6 @@ use namada::types::transaction::InitValidator;
 use tendermint_rpc::HttpClient;
 
 use super::rpc;
-use crate::cli::args::InputAmount;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::query_wasm_code_hash;
@@ -1063,17 +1061,19 @@ pub async fn submit_tx<C: namada::ledger::queries::Client + Sync>(
 
 #[cfg(test)]
 mod test_tx {
-
+    use masp_primitives::transaction::components::Amount;
+    use namada::ledger::masp::{make_asset_type, MaspAmount};
     use namada::types::address::testing::gen_established_address;
     use namada::types::storage::DbKeySeg;
+    use namada::types::token::MaspDenom;
 
     use super::*;
 
     #[test]
     fn test_masp_add_amount() {
         let address_1 = gen_established_address();
-        let prefix_1: Key = DbKeySeg::StringSeg("eth_seg".into()).into();
-        let prefix_2: Key = DbKeySeg::StringSeg("crypto_kitty".into()).into();
+        let prefix_1: Key = DbKeySeg::StringSeg("eth_seg".parse().unwrap()).into();
+        let prefix_2: Key = DbKeySeg::StringSeg("crypto_kitty".parse().unwrap()).into();
         let denom_1 = MaspDenom::One;
         let denom_2 = MaspDenom::Three;
         let epoch = Epoch::default();

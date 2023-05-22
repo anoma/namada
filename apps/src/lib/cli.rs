@@ -1663,7 +1663,6 @@ pub mod args {
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
     use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
-    use namada::types::transaction::GasLimit;
 
     use super::context::*;
     use super::utils::*;
@@ -2059,14 +2058,7 @@ pub mod args {
     impl CliToSdk<TxTransfer<SdkTypes>> for TxTransfer<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> TxTransfer<SdkTypes> {
             TxTransfer::<SdkTypes> {
-                tx: match self.tx {
-                    InputAmount::Validated(tx) => {
-                        InputAmount::Validated(tx.to_sdk(ctx))
-                    }
-                    InputAmount::Unvalidated(tx) => {
-                        InputAmount::Unvalidated(tx.to_sdk(ctx))
-                    }
-                },
+                tx: self.tx.to_sdk(ctx),
                 source: ctx.get_cached(&self.source),
                 target: ctx.get(&self.target),
                 token: ctx.get(&self.token),

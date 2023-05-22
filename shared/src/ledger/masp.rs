@@ -319,7 +319,7 @@ fn cloned_pair<T: Clone, U: Clone>((a, b): (&T, &U)) -> (T, U) {
 }
 
 /// Errors that can occur when trying to retrieve pinned transaction
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Copy, Clone)]
 pub enum PinnedBalanceError {
     /// No transaction has yet been pinned to the given payment address
     NoTransactionPinned,

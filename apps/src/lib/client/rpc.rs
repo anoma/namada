@@ -20,12 +20,11 @@ use masp_primitives::primitives::ViewingKey;
 use masp_primitives::sapling::Node;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::core::types::transaction::governance::ProposalType;
+use namada::ledger::args::InputAmount;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
-use namada::ledger::masp::{
-    Conversions, PinnedBalanceError, ShieldedContext, ShieldedUtils,
-};
+use namada::ledger::masp::{Conversions, MaspAmount, MaspChange, PinnedBalanceError, ShieldedContext, ShieldedUtils};
 use namada::ledger::native_vp::governance::utils::{self, Votes};
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::{
@@ -45,6 +44,7 @@ use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
 use namada::types::{storage, token};
+use namada::types::token::{Change, DenominatedAmount, Denomination, MaspDenom, TokenAddress};
 
 use crate::cli::{self, args};
 use crate::facade::tendermint::merkle::proof::Proof;
@@ -102,7 +102,7 @@ pub async fn query_transfers<
     args: args::QueryTransfers,
 ) {
     let query_token = args.token;
-    let sub_prefix = args.sub_prefix;
+    let sub_prefix = args.sub_prefix.map(|s| Key::parse(s).unwrap());
     let query_owner = args.owner.map_or_else(
         || Either::Right(wallet.get_addresses().into_values().collect()),
         Either::Left,
@@ -181,7 +181,7 @@ pub async fn query_transfers<
         for (account, MaspChange { ref asset, change }) in tfer_delta {
             if account != masp() {
                 print!("  {}:", account);
-                let token_alias = lookup_alias(&ctx, &asset.address);
+                let token_alias = lookup_alias(wallet, &asset.address);
                 let sign = match change.cmp(&Change::zero()) {
                     Ordering::Greater => "+",
                     Ordering::Less => "-",
@@ -190,7 +190,7 @@ pub async fn query_transfers<
                 print!(
                     " {}{} {}",
                     sign,
-                    format_denominated_amount(&client, asset, change.into(),)
+                    format_denominated_amount(client, asset, change.into(),)
                         .await,
                     asset.format_with_alias(&token_alias)
                 );
@@ -213,7 +213,7 @@ pub async fn query_transfers<
                     print!(
                         " {}{} {}",
                         sign,
-                        format_denominated_amount(&client, &token_addr, val,)
+                        format_denominated_amount(client, &token_addr, val,)
                             .await,
                         token_addr.format_with_alias(&token_alias),
                     );
@@ -286,7 +286,7 @@ pub async fn query_transparent_balance<
     let tokens = wallet.get_addresses_with_vp_type(AddressVpType::Token);
     match (args.token, args.owner) {
         (Some(token), Some(owner)) => {
-            let (balance_key, sub_prefix) = match &args.sub_prefix {
+            let (_balance_key, sub_prefix) = match &args.sub_prefix {
                 Some(sub_prefix) => {
                     let sub_prefix = Key::parse(sub_prefix).unwrap();
                     let prefix =
@@ -305,10 +305,11 @@ pub async fn query_transparent_balance<
                 ),
             };
             let token_alias = lookup_alias(wallet, &token);
+            let key = token::balance_key(&token, &owner.address().unwrap());
             match query_storage_value::<C, token::Amount>(&client, &key).await {
                 Some(balance) => {
                     let balance = format_denominated_amount(
-                        &client,
+                        client,
                         &TokenAddress {
                             address: token,
                             sub_prefix,
@@ -339,6 +340,7 @@ pub async fn query_transparent_balance<
                         .await;
                 if let Some(balances) = balances {
                     print_balances(
+                        client,
                         wallet,
                         balances,
                         &token,
@@ -353,7 +355,7 @@ pub async fn query_transparent_balance<
             let balances =
                 query_storage_prefix::<C, token::Amount>(client, &prefix).await;
             if let Some(balances) = balances {
-                print_balances(wallet, &client, balances, &token, None).await;
+                print_balances(client, wallet, balances, &token, None).await;
             }
         }
         (None, None) => {
@@ -363,7 +365,7 @@ pub async fn query_transparent_balance<
                     query_storage_prefix::<C, token::Amount>(client, &key)
                         .await;
                 if let Some(balances) = balances {
-                    print_balances(wallet, &client, balances, &token, None)
+                    print_balances(client, wallet, balances, &token, None)
                         .await;
                 }
             }
@@ -443,7 +445,7 @@ pub async fn query_pinned_balance<
                 println!("Payment address {} has not yet been consumed.", owner)
             }
             (Ok((balance, epoch)), Some(token), sub_prefix) => {
-                let token_alias = lookup_alias(client, &token);
+                let token_alias = lookup_alias(wallet, &token);
 
                 let token_address = TokenAddress {
                     address: token.clone(),
@@ -463,7 +465,7 @@ pub async fn query_pinned_balance<
                     );
                 } else {
                     let formatted = format_denominated_amount(
-                        &client,
+                        client,
                         &token_address,
                         total_balance.into(),
                     )
@@ -494,7 +496,7 @@ pub async fn query_pinned_balance<
                         found_any = true;
                     }
                     let formatted = format_denominated_amount(
-                        &client,
+                        client,
                         token_addr,
                         (*value).into(),
                     )
@@ -550,7 +552,7 @@ async fn print_balances<C: namada::ledger::queries::Client + Sync>(
                         balance
                     )
                     .await,
-                    lookup_alias(ctx, owner)
+                    lookup_alias(wallet, owner)
                 ),
             ),
             None => {
@@ -768,8 +770,6 @@ pub async fn query_shielded_balance<
     match (args.token, owner.is_some()) {
         // Here the user wants to know the balance for a specific token
         (Some(token), true) => {
-            let token = ctx.get(&token);
-
             // Query the multi-asset balance at the given spending key
             let viewing_key =
                 ExtendedFullViewingKey::from(viewing_keys[0]).fvk.vk;
@@ -785,7 +785,7 @@ pub async fn query_shielded_balance<
                     .expect("context should contain viewing key")
             };
 
-            let token_alias = lookup_alias(client, &token);
+            let token_alias = lookup_alias(wallet, &token);
 
             let token_address = TokenAddress {
                 address: token,
@@ -803,7 +803,7 @@ pub async fn query_shielded_balance<
                     "{}: {}",
                     token_address.format_with_alias(&token_alias),
                     format_denominated_amount(
-                        &client,
+                        client,
                         &token_address,
                         token::Amount::from(total_balance)
                     )
@@ -888,7 +888,7 @@ pub async fn query_shielded_balance<
                     token_address.format_with_alias(&alias),
                 );
                 let formatted = format_denominated_amount(
-                    &client,
+                    client,
                     &token_address,
                     token_balance.into(),
                 )
@@ -898,7 +898,7 @@ pub async fn query_shielded_balance<
             // Print zero balances for remaining assets
             for token in tokens {
                 if let Some(sub_addrs) = read_tokens.get(&token) {
-                    let token_alias = lookup_alias(client, &token);
+                    let token_alias = lookup_alias(wallet, &token);
                     for sub_addr in sub_addrs {
                         match sub_addr {
                             // abstract out these prints
@@ -931,7 +931,7 @@ pub async fn query_shielded_balance<
         (Some(token), false) => {
             // Compute the unique asset identifier from the token address
             let token = token;
-            let asset_type = AssetType::new(
+            let _asset_type = AssetType::new(
                 (token.clone(), epoch.0)
                     .try_to_vec()
                     .expect("token addresses should serialize")
@@ -941,7 +941,7 @@ pub async fn query_shielded_balance<
             let token_alias = lookup_alias(wallet, &token);
             println!("Shielded Token {}:", token_alias);
             let mut found_any = false;
-            let token_alias = lookup_alias(ctx, &token);
+            let token_alias = lookup_alias(wallet, &token);
             let token_address = TokenAddress {
                 address: token.clone(),
                 sub_prefix: args
@@ -973,7 +973,7 @@ pub async fn query_shielded_balance<
                         found_any = true;
                     }
                     let formatted = format_denominated_amount(
-                        &client,
+                        client,
                         address,
                         (*val).into(),
                     )
@@ -999,7 +999,7 @@ pub async fn query_shielded_balance<
                     .await
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
-                print_decoded_balance_with_epoch(wallet, balance, epoch).await;
+                print_decoded_balance_with_epoch(client, wallet, balance).await;
             } else {
                 let balance = shielded
                     .compute_exchanged_balance(
@@ -1010,13 +1010,14 @@ pub async fn query_shielded_balance<
                     .await
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
-                print_decoded_balance(wallet, balance, epoch).await;
+                print_decoded_balance(client, wallet, balance, epoch).await;
             }
         }
     }
 }
 
-pub fn print_decoded_balance(
+pub async fn print_decoded_balance<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
     decoded_balance: MaspAmount,
     epoch: Epoch,
@@ -1031,7 +1032,7 @@ pub fn print_decoded_balance(
             println!(
                 "{} : {}",
                 token_addr
-                    .format_with_alias(&lookup_alias(ctx, &token_addr.address)),
+                    .format_with_alias(&lookup_alias(wallet, &token_addr.address)),
                 format_denominated_amount(client, token_addr, (*amount).into())
                     .await,
             );
@@ -1039,7 +1040,8 @@ pub fn print_decoded_balance(
     }
 }
 
-pub fn print_decoded_balance_with_epoch(
+pub async fn print_decoded_balance_with_epoch<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
     decoded_balance: MaspAmount,
 ) {
@@ -1584,7 +1586,7 @@ pub async fn query_bonded_stake<C: namada::ledger::queries::Client + Sync>(
         }
     }
 
-    let total_staked_tokens = get_total_staked_tokens(&client, epoch).await;
+    let total_staked_tokens = get_total_staked_tokens(client, epoch).await;
     println!(
         "Total bonded stake: {}",
         total_staked_tokens.to_string_native()
@@ -2254,19 +2256,19 @@ fn unwrap_client_response<C: namada::ledger::queries::Client, T>(
     response: Result<T, C::Error>,
 ) -> T {
     response.unwrap_or_else(|_err| {
-        eprintln!("Error in the query {}", err);
+        eprintln!("Error in the query");
         cli::safe_exit(1)
     })
 }
 
 /// Look up the denomination of a token in order to format it
 /// correctly as a string.
-pub(super) async fn format_denominated_amount(
-    client: &HttpClient,
+pub(super) async fn format_denominated_amount<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
     token: &TokenAddress,
     amount: token::Amount,
 ) -> String {
-    let denom = unwrap_client_response(
+    let denom = unwrap_client_response::<C, Option<Denomination>>(
         RPC.vp()
             .token()
             .denomination(client, &token.address, &token.sub_prefix)
@@ -2283,8 +2285,8 @@ pub(super) async fn format_denominated_amount(
 }
 
 /// Get the correct representation of the amount given the token type.
-pub async fn validate_amount(
-    client: &HttpClient,
+pub async fn validate_amount<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
     amount: InputAmount,
     token: &Address,
     sub_prefix: &Option<Key>,
@@ -2293,7 +2295,7 @@ pub async fn validate_amount(
         InputAmount::Unvalidated(amt) => amt.canonical(),
         InputAmount::Validated(amt) => return amt,
     };
-    let denom = unwrap_client_response(
+    let denom = unwrap_client_response::<C, Option<Denomination>>(
         RPC.vp()
             .token()
             .denomination(client, token, sub_prefix)
