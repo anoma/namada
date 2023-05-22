@@ -229,13 +229,26 @@ pub fn get_dummy_genesis_validator()
     use rust_decimal::prelude::Decimal;
 
     use crate::core::types::address::testing::established_address_1;
-    use crate::types::key::testing::common_sk_from_simple_seed;
+    use crate::types::key;
     use crate::types::token::Amount;
 
     let address = established_address_1();
     let tokens = Amount::whole(1);
-    let consensus_sk = common_sk_from_simple_seed(0);
+
+    let consensus_sk = key::testing::common_sk_from_simple_seed(0);
     let consensus_key = consensus_sk.to_public();
+
+    let eth_hot_sk =
+        key::common::SecretKey::Secp256k1(key::testing::gen_keypair::<
+            key::secp256k1::SigScheme,
+        >());
+    let eth_hot_key = eth_hot_sk.to_public();
+
+    let eth_cold_sk =
+        key::common::SecretKey::Secp256k1(key::testing::gen_keypair::<
+            key::secp256k1::SigScheme,
+        >());
+    let eth_cold_key = eth_cold_sk.to_public();
 
     let commission_rate = Decimal::new(1, 1);
     let max_commission_rate_change = Decimal::new(1, 1);
@@ -243,6 +256,8 @@ pub fn get_dummy_genesis_validator()
         address,
         tokens,
         consensus_key,
+        eth_cold_key,
+        eth_hot_key,
         commission_rate,
         max_commission_rate_change,
     }
