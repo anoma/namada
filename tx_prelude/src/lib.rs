@@ -34,7 +34,6 @@ use namada_core::types::storage::TxIndex;
 pub use namada_core::types::storage::{
     self, BlockHash, BlockHeight, Epoch, Header, BLOCK_HASH_LENGTH,
 };
-use namada_core::types::time::Rfc3339String;
 pub use namada_core::types::{eth_bridge_pool, *};
 pub use namada_macros::transaction;
 use namada_vm_env::tx::*;
