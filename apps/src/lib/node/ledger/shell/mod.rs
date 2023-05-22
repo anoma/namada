@@ -1017,9 +1017,14 @@ where
             let gas_table = gas_table.unwrap_or_else(|| {
                 temp_wl_storage
                     .read(&parameters::storage::get_gas_table_storage_key())
-                    .expect("Error while reading from storage")
+                    .expect("Error reading from storage")
                     .expect("Missing gas table in storage")
             });
+
+            let fee_unshielding_gas_limit = temp_wl_storage
+                .read(&parameters::storage::get_fee_unshielding_gas_limit_key())
+                .expect("Error reading from storage")
+                .expect("Missing fee unshielding gas limit in storage");
 
             // Runtime check
             match apply_tx(
@@ -1029,7 +1034,7 @@ where
                     has_valid_pow: false,
                 }),
                 TxIndex::default(),
-                &mut TxGasMeter::new(u64::MAX), //FIXME: actual gas limit
+                &mut TxGasMeter::new(fee_unshielding_gas_limit),
                 &gas_table,
                 &mut temp_wl_storage.write_log,
                 temp_wl_storage.storage,

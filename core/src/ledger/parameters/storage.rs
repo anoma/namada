@@ -23,6 +23,7 @@ struct Keys {
     faucet_account: &'static str,
     wrapper_tx_fees: &'static str,
     gas_table: &'static str,
+    fee_unshielding_gas_limit: &'static str,
 }
 
 /// Returns if the key is a parameter key.
@@ -167,6 +168,18 @@ pub fn get_gas_table_storage_key() -> Key {
         segments: vec![
             DbKeySeg::AddressSeg(ADDRESS),
             DbKeySeg::StringSeg(Keys::VALUES.gas_table.to_string()),
+        ],
+    }
+}
+
+/// Storage key used for the fee unshielding gas limit
+pub fn get_fee_unshielding_gas_limit_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(
+                Keys::VALUES.fee_unshielding_gas_limit.to_string(),
+            ),
         ],
     }
 }

@@ -1093,7 +1093,8 @@ mod tests {
                 faucet_account: None,
                 #[cfg(not(feature = "mainnet"))]
                 wrapper_tx_fees: None,
-                gas_table: BTreeMap::default()
+                gas_table: BTreeMap::default(),
+                fee_unshielding_gas_limit: 150
             };
             parameters.init_storage(&mut wl_storage).unwrap();
 

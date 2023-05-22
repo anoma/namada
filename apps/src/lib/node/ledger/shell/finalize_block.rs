@@ -848,10 +848,17 @@ where
     ) -> Result<()> {
         // Unshield funds if requested
         if wrapper.unshield.is_some() {
-            //FIXME: multiple spending notes in the client
-            // The unshielding tx does not charge gas, instantiate a limitless
+            // The unshielding tx does not charge gas, instantiate a
             // custom gas meter for this step
-            let mut gas_meter = TxGasMeter::new(u64::MAX); //FIXME: actual gas limit
+            let mut gas_meter = TxGasMeter::new(
+                self.wl_storage
+                    .read(
+                        &parameters::storage::get_fee_unshielding_gas_limit_key(
+                        ),
+                    )
+                    .expect("Error reading the storage")
+                    .expect("Missing fee unshielding gas limit in storage"),
+            );
 
             let transparent_balance = storage_api::token::read_balance(
                 &self.wl_storage,

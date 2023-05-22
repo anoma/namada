@@ -90,6 +90,7 @@ where
             pos_inflation_amount,
             wrapper_tx_fees,
             gas_table,
+            fee_unshielding_gas_limit,
         } = genesis.parameters;
         #[cfg(not(feature = "mainnet"))]
         // Try to find a faucet account
@@ -196,6 +197,7 @@ where
             #[cfg(not(feature = "mainnet"))]
             wrapper_tx_fees,
             gas_table,
+            fee_unshielding_gas_limit,
         };
         parameters
             .init_storage(&mut self.wl_storage)

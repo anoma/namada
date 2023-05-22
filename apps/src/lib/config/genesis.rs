@@ -274,6 +274,8 @@ pub mod genesis_config {
         pub wrapper_tx_fees: Option<token::Amount>,
         /// Gas table
         pub gas_table: Option<BTreeMap<String, u64>>,
+        /// Fee unshielding gas limit
+        pub fee_unshielding_gas_limit: u64,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -624,6 +626,7 @@ pub mod genesis_config {
             pos_inflation_amount: 0,
             wrapper_tx_fees: parameters.wrapper_tx_fees,
             gas_table: parameters.gas_table.unwrap_or_default(),
+            fee_unshielding_gas_limit: parameters.fee_unshielding_gas_limit,
         };
 
         // Check validity of gas table
@@ -892,6 +895,8 @@ pub struct Parameters {
     pub wrapper_tx_fees: Option<token::Amount>,
     /// Gas table
     pub gas_table: BTreeMap<String, u64>,
+    /// Fee unshielding gas limit
+    pub fee_unshielding_gas_limit: u64,
 }
 
 #[cfg(not(feature = "dev"))]
@@ -991,6 +996,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         pos_inflation_amount: 0,
         wrapper_tx_fees: Some(token::Amount::whole(100)),
         gas_table: BTreeMap::default(),
+        fee_unshielding_gas_limit: 150,
     };
     let albert = EstablishedAccount {
         address: wallet::defaults::albert_address(),

@@ -157,6 +157,8 @@ max_expected_time_per_block = 30
 max_proposal_bytes = 22020096
 # Max amount of gas per block 
 max_block_gas = 1000000000 
+# Fee unshielding gas limit
+fee_unshielding_gas_limit = 150
 # Gas table
 gas_table = {}
 # vp whitelist
