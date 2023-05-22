@@ -567,6 +567,7 @@ mod test_ethbridge_router {
     use namada_core::ledger::eth_bridge::storage::bridge_pool::{
         get_pending_key, get_signed_root_key, BridgePoolTree,
     };
+    use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
     use namada_core::ledger::storage_api::StorageWrite;
     use namada_core::types::address::testing::established_address_1;
     use namada_core::types::storage::BlockHeight;
@@ -606,7 +607,7 @@ mod test_ethbridge_router {
         client
             .wl_storage
             .storage
-            .commit_block()
+            .commit_block(MockDBWriteBatch)
             .expect("Test failed");
 
         // check the response
@@ -667,7 +668,7 @@ mod test_ethbridge_router {
         client
             .wl_storage
             .storage
-            .commit_block()
+            .commit_block(MockDBWriteBatch)
             .expect("Test failed");
 
         // check the response
@@ -720,7 +721,7 @@ mod test_ethbridge_router {
         client
             .wl_storage
             .storage
-            .commit_block()
+            .commit_block(MockDBWriteBatch)
             .expect("Test failed");
 
         // check the response
@@ -761,7 +762,7 @@ mod test_ethbridge_router {
         client
             .wl_storage
             .storage
-            .commit_block()
+            .commit_block(MockDBWriteBatch)
             .expect("Test failed");
 
         // check the response
@@ -1030,7 +1031,7 @@ mod test_ethbridge_router {
         client
             .wl_storage
             .storage
-            .commit_block()
+            .commit_block(MockDBWriteBatch)
             .expect("Test failed");
         client.wl_storage.storage.block.height += 1;
 
@@ -1058,7 +1059,7 @@ mod test_ethbridge_router {
         client
             .wl_storage
             .storage
-            .commit_block()
+            .commit_block(MockDBWriteBatch)
             .expect("Test failed");
         client.wl_storage.storage.block.height += 1;
 
@@ -1222,7 +1223,7 @@ mod test_ethbridge_router {
         client
             .wl_storage
             .storage
-            .commit_block()
+            .commit_block(MockDBWriteBatch)
             .expect("Test failed");
         client.wl_storage.storage.block.height += 1;
 
@@ -1241,7 +1242,7 @@ mod test_ethbridge_router {
         client
             .wl_storage
             .storage
-            .commit_block()
+            .commit_block(MockDBWriteBatch)
             .expect("Test failed");
         client.wl_storage.storage.block.height += 1;
         let resp = RPC
@@ -1377,7 +1378,7 @@ mod test_ethbridge_router {
         client
             .wl_storage
             .storage
-            .commit_block()
+            .commit_block(MockDBWriteBatch)
             .expect("Test failed");
 
         // check that reading wrapped NAM fails

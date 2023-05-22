@@ -5,6 +5,7 @@ use std::num::NonZeroU64;
 
 use borsh::BorshSerialize;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
+use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
 use namada_core::ledger::storage::testing::{TestStorage, TestWlStorage};
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::address::{self, wnam, Address};
@@ -210,6 +211,6 @@ pub fn commit_bridge_pool_root_at_height(
         .update(&get_key_from_hash(root), value)
         .unwrap();
     storage.block.height = height;
-    storage.commit_block().unwrap();
+    storage.commit_block(MockDBWriteBatch).unwrap();
     storage.block.tree.delete(&get_key_from_hash(root)).unwrap();
 }

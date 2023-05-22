@@ -533,6 +533,7 @@ mod tests {
     use namada_core::ledger::parameters::{
         update_epoch_parameter, EpochDuration,
     };
+    use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
     use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::ledger::storage::types::encode;
     use namada_core::types::address::gen_established_address;
@@ -889,7 +890,10 @@ mod tests {
         // Height 0
         let pending_transfers = init_bridge_pool(&mut wl_storage);
         init_balance(&mut wl_storage, &pending_transfers);
-        wl_storage.storage.commit_block().expect("Test failed");
+        wl_storage
+            .storage
+            .commit_block(MockDBWriteBatch)
+            .expect("Test failed");
         // pending transfers time out
         wl_storage.storage.block.height += 10 + 1;
         // new pending transfer
@@ -910,7 +914,10 @@ mod tests {
             .storage
             .write(&key, transfer.try_to_vec().expect("Test failed"))
             .expect("Test failed");
-        wl_storage.storage.commit_block().expect("Test failed");
+        wl_storage
+            .storage
+            .commit_block(MockDBWriteBatch)
+            .expect("Test failed");
         wl_storage.storage.block.height += 1;
 
         // This should only refund
