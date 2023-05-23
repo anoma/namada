@@ -199,7 +199,7 @@ where
                         .expect("Error while deleting tx hash from storage");
                 }
 
-                #[cfg(not(feature = "abcipp"))]
+                #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
                 if let TxType::Wrapper(wrapper) = &tx_type {
                     // Charge fee if wrapper transaction went out of gas
                     if ErrorCodes::from_u32(processed_tx.result.code).unwrap()
