@@ -279,6 +279,65 @@ pub async fn sign_wrapper(
                 match gen_shielded_transfer(ctx, &client, &transfer_args).await
                 {
                     Ok(Some((transaction, _data, unshielding_epoch))) => {
+                        let spends = transaction.shielded_spends.len();
+                        let converts = transaction.shielded_converts.len();
+                        let outs = transaction.shielded_outputs.len();
+
+                        let mut descriptions =
+                            spends.checked_add(converts).unwrap_or_else(|| {
+                                if !args.force && cfg!(feature = "mainnet") {
+                                    eprintln!(
+                                        "Overflow in fee unshielding \
+                                         descriptions"
+                                    );
+                                    cli::safe_exit(1)
+                                } else {
+                                    usize::MAX
+                                }
+                            });
+
+                        descriptions = descriptions
+                            .checked_add(outs)
+                            .unwrap_or_else(|| {
+                                if !args.force && cfg!(feature = "mainnet") {
+                                    eprintln!(
+                                        "Overflow in fee unshielding \
+                                         descriptions"
+                                    );
+                                    cli::safe_exit(1);
+                                } else {
+                                    usize::MAX
+                                }
+                            });
+
+                        let descriptions_limit_key=  parameter_storage::get_fee_unshielding_descriptions_limit_key();
+                        let descriptions_limit =
+                            rpc::query_storage_value::<u64>(
+                                &client,
+                                &descriptions_limit_key,
+                            )
+                            .await
+                            .unwrap();
+
+                        if u64::try_from(descriptions).unwrap_or_else(|_| {
+                            if !args.force && cfg!(feature = "mainnet") {
+                                eprintln!(
+                                    "Overflow in fee unshielding descriptions"
+                                );
+                                cli::safe_exit(1);
+                            } else {
+                                u64::MAX
+                            }
+                        }) > descriptions_limit
+                            && !args.force
+                            && cfg!(feature = "mainnet")
+                        {
+                            eprintln!(
+                                "Fee unshielding descriptions exceed the limit"
+                            );
+                            cli::safe_exit(1);
+                        }
+
                         balance += diff;
                         (Some(transaction), Some(unshielding_epoch))
                     }
