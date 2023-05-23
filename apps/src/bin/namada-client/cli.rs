@@ -179,7 +179,7 @@ async fn wait_until_node_is_synched(ledger_address: &TendermintAddress) {
                 if is_at_least_height_one && !is_catching_up {
                     return;
                 } else {
-                    if try_count > MAX_TRIES {
+                    if try_count == MAX_TRIES {
                         println!(
                             "Node is still catching up, wait for it to finish \
                              synching."
