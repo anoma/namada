@@ -5,10 +5,9 @@
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
-    let signed = SignedTxData::try_from_slice(&tx_data[..])
-        .wrap_err("failed to decode SignedTxData")?;
-    let data = signed.data.ok_or_err_msg("Missing data")?;
+fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
+    let signed = tx_data;
+    let data = signed.data().ok_or_err_msg("Missing data")?;
     let transfer = token::Transfer::try_from_slice(&data[..])
         .wrap_err("failed to decode token::Transfer")?;
     debug_log!("apply_tx called with transfer: {:#?}", transfer);
@@ -19,9 +18,26 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
         sub_prefix,
         amount,
         key,
-        shielded,
+        shielded: shielded_hash,
     } = transfer;
+    let shielded = shielded_hash
+        .as_ref()
+        .map(|hash| {
+            signed
+                .get_section(hash)
+                .and_then(Section::masp_tx)
+                .ok_or_err_msg("unable to find shielded section")
+        })
+        .transpose()?;
     token::transfer(
-        ctx, &source, &target, &token, sub_prefix, amount, &key, &shielded,
+        ctx,
+        &source,
+        &target,
+        &token,
+        sub_prefix,
+        amount,
+        &key,
+        &shielded_hash,
+        &shielded,
     )
 }

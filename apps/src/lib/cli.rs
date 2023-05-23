@@ -3239,9 +3239,14 @@ pub mod args {
                     .about("Simulate the transaction application."),
             )
             .arg(DUMP_TX.def().about("Dump transaction bytes to a file."))
-            .arg(FORCE.def().about(
-                "Submit the transaction even if it doesn't pass client checks.",
-            ))
+            .arg(
+                FORCE
+                    .def()
+                    .about(
+                        "Submit the transaction even if it doesn't pass \
+                         client checks.",
+                    )
+            )
             .arg(BROADCAST_ONLY.def().about(
                 "Do not wait for the transaction to be applied. This will \
                  return once the transaction is added to the mempool.",

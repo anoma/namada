@@ -103,6 +103,7 @@ proptest = {git = "https://github.com/heliaxdev/proptest", rev = "8f1b4abe7ebd35
 prost = "0.11.6"
 pwasm-utils = {git = "https://github.com/heliaxdev/wasm-utils", tag = "v0.20.0", features = ["sign_ext"], optional = true}
 rayon = {version = "=1.5.3", optional = true}
+ripemd = "0.1"
 rust_decimal = "=1.26.1"
 rust_decimal_macros = "=1.26.1"
 serde = {version = "1.0.125", features = ["derive"]}
@@ -125,9 +126,9 @@ wasmer-engine-dylib = {version = "=2.2.0", optional = true}
 wasmer-engine-universal = {version = "=2.2.0", optional = true}
 wasmer-vm = {version = "2.2.0", optional = true}
 wasmparser = "0.83.0"
-#libmasp = { git = "https://github.com/anoma/masp", branch = "murisi/masp-incentive" }
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "4274fc0bf300bcdae4f186fba134bab8af83ae93" }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "4274fc0bf300bcdae4f186fba134bab8af83ae93", default-features = false, features = ["local-prover"] }
+# branch = "murisi/namada-integration"
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "cfea8c95d3f73077ca3e25380fd27e5b46e828fd" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "cfea8c95d3f73077ca3e25380fd27e5b46e828fd", default-features = false, features = ["local-prover"] }
 rand = {version = "0.8", default-features = false, optional = true}
 rand_core = {version = "0.6", default-features = false, optional = true}
 zeroize = "1.5.5"

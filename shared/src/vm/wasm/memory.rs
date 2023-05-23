@@ -15,6 +15,7 @@ use wasmer_vm::{
     MemoryStyle, TableStyle, VMMemoryDefinition, VMTableDefinition,
 };
 
+use crate::proto::Tx;
 use crate::vm::memory::VmMemory;
 use crate::vm::types::VpInput;
 
@@ -81,10 +82,11 @@ pub struct TxCallInput {
 /// Write transaction inputs into wasm memory
 pub fn write_tx_inputs(
     memory: &wasmer::Memory,
-    tx_data_bytes: impl AsRef<[u8]>,
+    tx_data: &Tx,
 ) -> Result<TxCallInput> {
     let tx_data_ptr = 0;
-    let tx_data_len = tx_data_bytes.as_ref().len() as _;
+    let tx_data_bytes = tx_data.try_to_vec().map_err(Error::EncodingError)?;
+    let tx_data_len = tx_data_bytes.len() as _;
 
     write_memory_bytes(memory, tx_data_ptr, tx_data_bytes)?;
 
@@ -129,8 +131,9 @@ pub fn write_vp_inputs(
     let addr_bytes = addr.try_to_vec().map_err(Error::EncodingError)?;
     let addr_len = addr_bytes.len() as _;
 
+    let data_bytes = data.try_to_vec().map_err(Error::EncodingError)?;
     let data_ptr = addr_ptr + addr_len;
-    let data_len = data.len() as _;
+    let data_len = data_bytes.len() as _;
 
     let keys_changed_bytes =
         keys_changed.try_to_vec().map_err(Error::EncodingError)?;
@@ -144,7 +147,7 @@ pub fn write_vp_inputs(
 
     let bytes = [
         &addr_bytes[..],
-        data,
+        &data_bytes[..],
         &keys_changed_bytes[..],
         &verifiers_bytes[..],
     ]
