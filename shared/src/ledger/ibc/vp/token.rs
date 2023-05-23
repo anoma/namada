@@ -3,6 +3,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use borsh::BorshDeserialize;
+use namada_core::ledger::ibc::storage;
 use prost::Message;
 use thiserror::Error;
 
@@ -267,6 +268,8 @@ where
             .map_err(|e| Error::Denom(e.to_string()))?;
         let amount =
             Amount::try_from(data.token.amount).map_err(Error::Amount)?;
+        let prefix = storage::ibc_token_prefix(&data.token.denom.to_string())
+            .map_err(|e| Error::Denom(e.to_string()))?;
 
         let change = if is_receiver_chain_source(
             packet.port_id_on_a.clone(),
@@ -290,8 +293,8 @@ where
         } else {
             // the sender is the source
             // check the amount of the token has been minted
-            let source_key = token::balance_key(
-                &token,
+            let source_key = token::multitoken_balance_key(
+                &prefix,
                 &Address::Internal(InternalAddress::IbcMint),
             );
             let post = try_decode_token_amount(

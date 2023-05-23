@@ -5,6 +5,10 @@ use std::fmt::Debug;
 use std::rc::Rc;
 use std::str::FromStr;
 
+use ethabi::Token;
+use ethabi::Token::Int;
+use masp_primitives::zcash_primitives::zip32::AccountId;
+
 use super::common::IbcCommonContext;
 use crate::ibc::applications::transfer::coin::PrefixedCoin;
 use crate::ibc::applications::transfer::context::{
@@ -49,6 +53,7 @@ use crate::ibc::events::IbcEvent;
 use crate::ibc::signer::Signer;
 use crate::ledger::ibc::storage;
 use crate::types::address::{Address, InternalAddress};
+use crate::types::storage::Key;
 use crate::types::token;
 
 /// IBC module wrapper for getting the reference of the module
@@ -82,6 +87,34 @@ where
     /// Get the module ID
     pub fn module_id(&self) -> ModuleId {
         ModuleId::from_str(MODULE_ID_STR).expect("should be parsable")
+    }
+
+    // returns source and dest for burn, dest and source for mint
+    fn burn_and_mint_coins_addresses(
+        &mut self,
+        account: &Address,
+        coin: &PrefixedCoin,
+        token: &Address,
+        mode: InternalAddress,
+    ) -> Result<[Key; 2], TokenTransferError> {
+        if coin.denom.trace_path.is_empty() {
+            Ok([
+                token::balance_key(token, account),
+                token::balance_key(token, &Address::Internal(mode)),
+            ])
+        } else {
+            let prefix = storage::ibc_token_prefix(coin.denom.to_string())
+                .map_err(|_| TokenTransferError::InvalidCoin {
+                    coin: coin.to_string(),
+                })?;
+            Ok([
+                token::multitoken_balance_key(&prefix, account),
+                token::multitoken_balance_key(
+                    &prefix,
+                    &Address::Internal(mode),
+                ),
+            ])
+        }
     }
 }
 
@@ -446,10 +479,7 @@ where
         // has no prefix
         let (token, amount) = get_token_amount(coin)?;
 
-        let src = if coin.denom.trace_path.is_empty()
-            || *from == Address::Internal(InternalAddress::IbcEscrow)
-            || *from == Address::Internal(InternalAddress::IbcMint)
-        {
+        let src = if coin.denom.trace_path.is_empty() {
             token::balance_key(&token, from)
         } else {
             let prefix = storage::ibc_token_prefix(coin.denom.to_string())
@@ -459,10 +489,7 @@ where
             token::multitoken_balance_key(&prefix, from)
         };
 
-        let dest = if coin.denom.trace_path.is_empty()
-            || *to == Address::Internal(InternalAddress::IbcEscrow)
-            || *to == Address::Internal(InternalAddress::IbcBurn)
-        {
+        let dest = if coin.denom.trace_path.is_empty() {
             token::balance_key(&token, to)
         } else {
             let prefix = storage::ibc_token_prefix(coin.denom.to_string())
@@ -496,20 +523,12 @@ where
     ) -> Result<(), TokenTransferError> {
         let (token, amount) = get_token_amount(coin)?;
 
-        let src = token::balance_key(
+        let [dest, src] = self.burn_and_mint_coins_addresses(
+            account,
+            coin,
             &token,
-            &Address::Internal(InternalAddress::IbcMint),
-        );
-
-        let dest = if coin.denom.trace_path.is_empty() {
-            token::balance_key(&token, account)
-        } else {
-            let prefix = storage::ibc_token_prefix(coin.denom.to_string())
-                .map_err(|_| TokenTransferError::InvalidCoin {
-                    coin: coin.to_string(),
-                })?;
-            token::multitoken_balance_key(&prefix, account)
-        };
+            InternalAddress::IbcMint,
+        )?;
 
         self.ctx
             .borrow_mut()
@@ -535,20 +554,12 @@ where
     ) -> Result<(), TokenTransferError> {
         let (token, amount) = get_token_amount(coin)?;
 
-        let src = if coin.denom.trace_path.is_empty() {
-            token::balance_key(&token, account)
-        } else {
-            let prefix = storage::ibc_token_prefix(coin.denom.to_string())
-                .map_err(|_| TokenTransferError::InvalidCoin {
-                    coin: coin.to_string(),
-                })?;
-            token::multitoken_balance_key(&prefix, account)
-        };
-
-        let dest = token::balance_key(
+        let [src, dest] = self.burn_and_mint_coins_addresses(
+            account,
+            coin,
             &token,
-            &Address::Internal(InternalAddress::IbcBurn),
-        );
+            InternalAddress::IbcBurn,
+        )?;
 
         self.ctx
             .borrow_mut()

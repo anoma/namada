@@ -140,7 +140,7 @@ pub fn transfer_with_keys(
     dest_key: &storage::Key,
     amount: Amount,
 ) -> TxResult {
-    let src_owner = is_any_token_balance_key(src_key);
+    let src_owner = is_any_token_or_multitoken_balance_key(src_key);
     let src_bal: Option<Amount> = match src_owner {
         Some([_, Address::Internal(InternalAddress::IbcMint)]) => {
             Some(Amount::max_signed())

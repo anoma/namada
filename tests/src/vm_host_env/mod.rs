@@ -1296,8 +1296,8 @@ mod tests {
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
         // Check if the token was minted
-        let mint = token::balance_key(
-            &token,
+        let mint = token::multitoken_balance_key(
+            &key_prefix,
             &address::Address::Internal(address::InternalAddress::IbcMint),
         );
         let result = ibc::validate_token_vp_from_tx(&env, &tx, &mint);

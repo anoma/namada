@@ -711,8 +711,8 @@ impl TryFrom<IbcAmount> for Amount {
 
     fn try_from(amount: IbcAmount) -> Result<Self, Self::Error> {
         // TODO: https://github.com/anoma/namada/issues/1089
-        // TODO: OVERFLOW CHECK PLEASE (PATCH IBC TO ALLOW GETTING IBCAMOUNT::MAX OR SIMILAR)
-        //if amount > u64::MAX.into() {
+        // TODO: OVERFLOW CHECK PLEASE (PATCH IBC TO ALLOW GETTING
+        // IBCAMOUNT::MAX OR SIMILAR) if amount > u64::MAX.into() {
         //    return Err(AmountParseError::InvalidRange);
         //}
         DenominatedAmount::from_str(&amount.to_string()).map(|a| a.amount)
@@ -912,6 +912,14 @@ pub fn is_any_multitoken_balance_key(
             .map(|(sub, owner)| (sub, [token, owner])),
         _ => None,
     }
+}
+
+pub fn is_any_token_or_multitoken_balance_key(
+    key: &Key,
+) -> Option<[&Address; 2]> {
+    is_any_multitoken_balance_key(key)
+        .map(|a| a.1)
+        .or_else(|| is_any_token_balance_key(key))
 }
 
 fn multitoken_balance_owner(key: &Key) -> Option<(Key, &Address)> {

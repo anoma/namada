@@ -11,7 +11,9 @@ use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::ibc::IbcEvent;
 use namada_core::types::storage::{BlockHeight, Header, Key};
-use namada_core::types::token::{is_any_token_balance_key, Amount};
+use namada_core::types::token::{
+    is_any_token_balance_key, is_any_token_or_multitoken_balance_key, Amount,
+};
 
 use super::Error;
 use crate::ledger::native_vp::CtxPreStorageRead;
@@ -119,7 +121,7 @@ where
         dest: &Key,
         amount: Amount,
     ) -> Result<(), Self::Error> {
-        let src_owner = is_any_token_balance_key(src);
+        let src_owner = is_any_token_or_multitoken_balance_key(src);
         let mut src_bal = match src_owner {
             Some([_, Address::Internal(InternalAddress::IbcMint)]) => {
                 Amount::max()
