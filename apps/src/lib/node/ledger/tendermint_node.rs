@@ -347,6 +347,8 @@ pub fn write_validator_state(home_dir: impl AsRef<Path>) {
         .expect("Couldn't write private validator state file");
 }
 
+pub struct CorsOrigin2(String);
+
 async fn update_tendermint_config(
     home_dir: impl AsRef<Path>,
     tendermint_config: config::Tendermint,
@@ -383,10 +385,14 @@ async fn update_tendermint_config(
     // quite large
     config.rpc.max_body_bytes = 2_000_000;
 
-    let mock_toml = "cors_allowed_origins = [\"*\"]";
-    let mock_config: Vec<CorsOrigin> = toml::from_str(mock_toml).unwrap();
+    
+    // let mock_toml = "[\"*\"]";
+    // let mock_config: CorsOrigin = toml::from_str(mock_toml).unwrap();
+    // config.rpc.cors_allowed_origins = vec![mock_config];
 
-    config.rpc.cors_allowed_origins = vec![mock_config[0].clone()];
+    config.rpc.cors_allowed_origins = vec![unsafe {
+        std::mem::transmute(CorsOrigin2("*".to_owned()))
+    }];
 
     config.instrumentation.prometheus =
         tendermint_config.instrumentation_prometheus;
