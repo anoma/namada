@@ -52,6 +52,7 @@ use namada::types::storage::{
     self, BlockHeight, Epoch, Key, KeySeg, TxIndex, RESERVED_ADDRESS_PREFIX,
 };
 use namada::types::time::DateTimeUtc;
+use namada::types::token;
 use namada::types::token::{
     Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
@@ -59,8 +60,6 @@ use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
 };
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
-use namada::types::{storage, token};
-use namada::vm;
 use rand_core::{CryptoRng, OsRng, RngCore};
 use rust_decimal::Decimal;
 use sha2::Digest;
