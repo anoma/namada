@@ -29,6 +29,8 @@ const ENQUEUED_SLASHES_KEY: &str = "enqueued_slashes";
 const VALIDATOR_LAST_SLASH_EPOCH: &str = "last_slash_epoch";
 const BOND_STORAGE_KEY: &str = "bond";
 const UNBOND_STORAGE_KEY: &str = "unbond";
+const GLOBAL_BOND_STORAGE_KEY: &str = "global_bonds";
+const GLOBAL_UNBOND_STORAGE_KEY: &str = "global_unbonds";
 const VALIDATOR_TOTAL_UNBONDED_STORAGE_KEY: &str = "total_unbonded";
 const VALIDATOR_SETS_STORAGE_PREFIX: &str = "validator_sets";
 const CONSENSUS_VALIDATOR_SET_STORAGE_KEY: &str = "consensus";
@@ -426,6 +428,15 @@ pub fn is_bond_key(key: &Key) -> Option<(BondId, Epoch)> {
     }
 }
 
+/// Storage key for global bonds for a given validator.
+pub fn global_bonds_key(validator: &Address) -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&GLOBAL_BOND_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&validator.to_db_key())
+        .expect("Cannot obtain a storage key")
+}
+
 /// Storage key prefix for all unbonds.
 pub fn unbonds_prefix() -> Key {
     Key::from(ADDRESS.to_db_key())
@@ -482,6 +493,15 @@ pub fn is_unbond_key(key: &Key) -> Option<(BondId, Epoch, Epoch)> {
     } else {
         None
     }
+}
+
+/// Storage key for global unbonds for a given validator.
+pub fn global_unbonds_key(validator: &Address) -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&GLOBAL_UNBOND_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&validator.to_db_key())
+        .expect("Cannot obtain a storage key")
 }
 
 /// Storage key for validator's total-unbonded amount to track for slashing
