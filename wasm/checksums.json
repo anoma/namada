@@ -1,74 +1,74 @@
 {
     "tx_bond.wasm": {
         "gas": "160",
-        "hash": "2c7bee49a52513a403fb35694ebfd238b9d4b96aeaa6d43cc67f5a81d378e080"
+        "hash": "6e781606b2d46968e144f03c96b5fcf3ff4aef62952068588327f6e0d4dbd1e8"
     },
     "tx_change_validator_commission.wasm": {
         "gas": "220",
-        "hash": "149ad6f2ad711282b043f36727fe4af9c0d3a51887e683c2b3032fe4ce34281b"
+        "hash": "69ac743a652ecd0eaab7c1ae50b36b9644e5c762335aa4554e1069cd13366beb"
     },
     "tx_ibc.wasm": {
         "gas": "1240",
-        "hash": "74c8041170ef6944c9e2fa3bf87cdccdd1c80108e6f7108277c521f25e422aba"
+        "hash": "a04d9f531b4b647d3ad47168f239de20990c2c34e6db4dda10ed2bfea882a011"
     },
     "tx_init_account.wasm": {
         "gas": "230",
-        "hash": "4d975d0f4c7959a4906c47f98d257d003a034074f6af52791e737bfb3b469ef2"
+        "hash": "748955654cb5b64d7b1215416c382c7c57d07ae42b3617a96b528e9b8cc8f301"
     },
     "tx_init_proposal.wasm": {
         "gas": "40",
-        "hash": "508b7acdb8e4031d339adc70cca707fc8318481a2f63178b1c865d28d153c82d"
+        "hash": "81625df4fe0b0354e236a7ff6a52150c60c2bb445feab2129d3902bce9ef47f5"
     },
     "tx_init_validator.wasm": {
         "gas": "730",
-        "hash": "eb8a6c44d87c330f78cb552fd3a6778831964d76c2780f9bfe52fd52be27a71f"
+        "hash": "d99920ec0ed6ff307e741a4e5aafbf0b58286ba0e0072a4d7d659e5d0b311b54"
     },
     "tx_reveal_pk.wasm": {
         "gas": "170",
-        "hash": "be878e819c5a50a057818ca36f9f803967f2750e9defeb1122c6a07292c4f10b"
+        "hash": "ddad5b301e324d6290690782a93889b40f058b4b809eac73e299c22b582a47f7"
     },
     "tx_transfer.wasm": {
         "gas": "110",
-        "hash": "22e7ee45debf9e826058090665373a77d6df6d4739116692c86a2f7e4d879703"
+        "hash": "bbddd5216a8b1fcb781bf25107e1ef855b178bbf8df951eff83505902a59327c"
     },
     "tx_unbond.wasm": {
         "gas": "430",
-        "hash": "a1ccdf15828ed0de597528e0cedfcc1572f824310b60cbd564ec4ff13f8c16b1"
+        "hash": "dc8cf553423c4f4e2019b6800af15f6fd38b25e8bb90541721b19a32c2264573"
     },
     "tx_update_vp.wasm": {
         "gas": "140",
-        "hash": "000833cf971f5e9d5d7842ad474b6ae939e46d20b18924af116b54af7433cd64"
+        "hash": "468cc8579779c67b6cc0d79ee83fb61419eabfa2766f8f755f789922f94a00b8"
     },
     "tx_vote_proposal.wasm": {
         "gas": "120",
-        "hash": "636e971ecbd6ed708ee6e69d15020b2f08a6794d8b2ddabf7c64c7406be235ca"
+        "hash": "1ba563f2eb68140f7c3332e417558fc15228c522afde7fd73bb1b799f93757a0"
     },
     "tx_withdraw.wasm": {
         "gas": "260",
-        "hash": "a88f0fe4fbcad6dc0ae27fba8b5fd6fb415e074252f778aa93306a58041e865f"
+        "hash": "59e95cd6256526251ba9c068ce21afb95814bda7eaf00b054ac1735a630bd758"
     },
     "vp_implicit.wasm": {
         "gas": "40",
-        "hash": "186f8912945cb9c5f36dbda8402bcef0073e714bf89e229a9e2ed26de8401cb9"
+        "hash": "9645af751ecb888ee3251674c62f7bcec0430154cb301ea502d6502c92d7efb2"
     },
     "vp_masp.wasm": {
         "gas": "8030",
-        "hash": "e50ca2a72df71bb71d0e405a003aa4f7210f3c336f7d3310089cf4e87ebbea30"
+        "hash": "e739eac7efb5e7c8db9620309598d1a113c7105130ef5824d0b462a6f9d12272"
     },
     "vp_testnet_faucet.wasm": {
         "gas": "0",
-        "hash": "a26ae96c2700063c043fc180aaf6114a3f2621759b3518193f374ac5beebe6c4"
+        "hash": "ba583fc27664cdc0358ae2983e25cf23979d82358d221dfd20c79f8ec206c3b1"
     },
     "vp_token.wasm": {
         "gas": "30",
-        "hash": "f5dd59c0c21e4e0bbfa22a87a556a0d0178b1ec33aa357641ab25215d2fd8813"
+        "hash": "47e81c8b344d5e5debcbc79d0e2ffd88d879390886c3dfb3e615ebff9bf2604a"
     },
     "vp_user.wasm": {
         "gas": "60",
-        "hash": "ea9589a9ef40fd0f94dfc0b081e37efc0d9e91b6f7ba34153d61f02f372c4650"
+        "hash": "4c9b7a9f7e6e181bd402a238e3a09514d9f245304684d5075abb07987ffaf22c"
     },
     "vp_validator.wasm": {
         "gas": "50",
-        "hash": "98c2ded76ae76eb0ec25980a7fbd9c827a8a2e2186532f1c03edb4a469eff671"
+        "hash": "41432a1a62d77f626521f840f6b91f435e03c218911ec523083080ff478c1362"
     }
 }
