@@ -437,6 +437,11 @@ where
             delta,
             current_epoch,
         )?;
+        global_bond_handle(&address).init_at_genesis(
+            storage,
+            delta,
+            current_epoch,
+        )?;
         validator_commission_rate_handle(&address).init_at_genesis(
             storage,
             commission_rate,
