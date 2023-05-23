@@ -292,14 +292,18 @@ pub fn validator_commission_rate_handle(
 }
 
 /// Get the storage handle to a bond
-/// TODO: remove `get_remaining` and the unused storage (maybe just call it
-/// `storage::bond_key`)
 pub fn bond_handle(source: &Address, validator: &Address) -> Bonds {
     let bond_id = BondId {
         source: source.clone(),
         validator: validator.clone(),
     };
     let key = storage::bond_key(&bond_id);
+    Bonds::open(key)
+}
+
+/// Get the storage handle to a validator's global bonds
+pub fn global_bond_handle(validator: &Address) -> Bonds {
+    let key = storage::global_bonds_key(validator);
     Bonds::open(key)
 }
 
@@ -429,6 +433,11 @@ where
             current_epoch,
         )?;
         bond_handle(&address, &address).init_at_genesis(
+            storage,
+            delta,
+            current_epoch,
+        )?;
+        global_bond_handle(&address).init_at_genesis(
             storage,
             delta,
             current_epoch,
@@ -876,6 +885,7 @@ where
 
     let source = source.unwrap_or(validator);
     let bond_handle = bond_handle(source, validator);
+    let global_bond_handle = global_bond_handle(validator);
 
     // Check that validator is not inactive at anywhere between the current
     // epoch and pipeline offset
@@ -903,6 +913,15 @@ where
         .get_delta_val(storage, current_epoch + offset, &params)?
         .unwrap_or_default();
     bond_handle.set(storage, cur_remain + amount, current_epoch, offset)?;
+    let cur_remain_global = global_bond_handle
+        .get_delta_val(storage, current_epoch + offset, &params)?
+        .unwrap_or_default();
+    global_bond_handle.set(
+        storage,
+        cur_remain_global + amount,
+        current_epoch,
+        offset,
+    )?;
 
     println!("\nBonds after incrementing:");
     for ep in Epoch::default().iter_range(current_epoch.0 + 3) {
@@ -1487,6 +1506,15 @@ where
     Ok(())
 }
 
+/// Used below in `fn unbond_tokens` to update the bond and unbond amounts
+#[derive(Eq, Hash, PartialEq)]
+struct BondAndUnbondUpdates {
+    bond_start: Epoch,
+    new_bond_value: token::Change,
+    new_global_bond_value: token::Change,
+    unbond_value: token::Change,
+}
+
 /// Unbond tokens that are bonded between a validator and a source (self or
 /// delegator)
 pub fn unbond_tokens<S>(
@@ -1543,6 +1571,7 @@ where
 
     let source = source.unwrap_or(validator);
     let bonds_handle = bond_handle(source, validator);
+    let global_bonds_handle = global_bond_handle(validator);
 
     println!("\nBonds before decrementing:");
     for ep in Epoch::default().iter_range(current_epoch.0 + 3) {
@@ -1573,7 +1602,7 @@ where
         + params.unbonding_len
         + params.cubic_slashing_window_length;
 
-    let mut remaining = token::Amount::from_change(amount);
+    let mut remaining = amount;
     let mut amount_after_slashing = token::Change::default();
 
     // Iterate thru bonds, find non-zero delta entries starting from
@@ -1585,25 +1614,29 @@ where
         bonds_handle.get_data_handler().iter(storage)?.collect();
 
     let mut bond_iter = bonds.into_iter().rev();
+    let mut new_bond_values = HashSet::<BondAndUnbondUpdates>::new();
 
-    // Map: { bond start epoch, (new bond value, unbond value) }
-    let mut new_bond_values_map =
-        HashMap::<Epoch, (token::Amount, token::Amount)>::new();
-
-    while remaining > token::Amount::default() {
+    while remaining > token::Change::default() {
         let bond = bond_iter.next().transpose()?;
         if bond.is_none() {
             continue;
         }
-        let (bond_epoch, bond_amnt) = bond.unwrap();
-        println!("\nBond (epoch, amnt) = ({}, {})", bond_epoch, bond_amnt);
+        let (bond_epoch, bond_amount) = bond.unwrap();
+        println!("\nBond (epoch, amnt) = ({}, {})", bond_epoch, bond_amount);
         println!("remaining = {}", remaining);
 
-        let bond_amount = token::Amount::from_change(bond_amnt);
+        let global_bond_amount =
+            global_bonds_handle.get_delta_val(storage, bond_epoch, &params)?;
+        debug_assert!(global_bond_amount.is_some());
+        let global_bond_amount = global_bond_amount.unwrap_or_default();
 
         let to_unbond = cmp::min(bond_amount, remaining);
-        let new_bond_amount = bond_amount - to_unbond;
-        new_bond_values_map.insert(bond_epoch, (new_bond_amount, to_unbond));
+        new_bond_values.insert(BondAndUnbondUpdates {
+            bond_start: bond_epoch,
+            new_bond_value: bond_amount - to_unbond,
+            new_global_bond_value: global_bond_amount - to_unbond,
+            unbond_value: to_unbond,
+        });
         println!("to_unbond (init) = {}", to_unbond);
 
         let mut slashes_for_this_bond = BTreeMap::<Epoch, Decimal>::new();
@@ -1620,8 +1653,11 @@ where
             }
         }
 
-        amount_after_slashing +=
-            get_slashed_amount(&params, to_unbond, &slashes_for_this_bond)?;
+        amount_after_slashing += get_slashed_amount(
+            &params,
+            token::Amount::from_change(to_unbond),
+            &slashes_for_this_bond,
+        )?;
         println!("Cur amnt after slashing = {}", &amount_after_slashing);
 
         // Update the unbond records
@@ -1631,23 +1667,37 @@ where
             .unwrap_or_default();
         unbond_records_handle(validator)
             .at(&pipeline_epoch)
-            .insert(storage, bond_epoch, cur_amnt + to_unbond)?;
+            .insert(
+                storage,
+                bond_epoch,
+                cur_amnt + token::Amount::from_change(to_unbond),
+            )?;
 
         remaining -= to_unbond;
     }
     drop(bond_iter);
 
     // Write the in-memory bond and unbond values back to storage
-    for (bond_epoch, (new_bond_amount, unbond_amount)) in
-        new_bond_values_map.into_iter()
+    for BondAndUnbondUpdates {
+        bond_start,
+        new_bond_value,
+        new_global_bond_value,
+        unbond_value,
+    } in new_bond_values.into_iter()
     {
-        bonds_handle.set(storage, new_bond_amount.into(), bond_epoch, 0)?;
+        bonds_handle.set(storage, new_bond_value, bond_start, 0)?;
+        global_bonds_handle.set(
+            storage,
+            new_global_bond_value,
+            bond_start,
+            0,
+        )?;
         update_unbond(
             &unbonds,
             storage,
             &withdrawable_epoch,
-            &bond_epoch,
-            unbond_amount,
+            &bond_start,
+            token::Amount::from_change(unbond_value),
         )?;
     }
 
@@ -3677,29 +3727,17 @@ fn get_validator_bond_sums<S>(
 where
     S: StorageRead,
 {
-    let prefix = bonds_prefix();
-    // We have to iterate raw bytes, cause the epoched data `last_update` field
-    // gets matched here too
-    let raw_bonds = storage_api::iter_prefix_bytes(storage, &prefix)?
-        .filter_map(|result| {
-            if let Ok((key, val_bytes)) = result {
-                if let Some((bond_id, start)) = is_bond_key(&key) {
-                    if start < start_epoch || start > end_epoch {
-                        return None;
-                    }
-                    if validator.clone() != bond_id.validator {
-                        return None;
-                    }
-
-                    let change: token::Change =
-                        BorshDeserialize::try_from_slice(&val_bytes).ok()?;
-                    println!("Bond start, amnt = ({}, {})", start, change);
-                    return Some(change);
+    let bond_iter = global_bond_handle(validator)
+        .get_data_handler()
+        .iter(storage)?
+        .filter_map(|bond| {
+            if let Ok((epoch, delta)) = bond {
+                if epoch < start_epoch || epoch > end_epoch {
+                    return None;
                 }
+                return Some(token::Amount::from_change(delta));
             }
             None
         });
-    Ok(raw_bonds.fold(token::Amount::default(), |acc, delta| {
-        acc + token::Amount::from_change(delta)
-    }))
+    Ok(bond_iter.sum::<token::Amount>())
 }
