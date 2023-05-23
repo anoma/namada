@@ -385,11 +385,7 @@ async fn update_tendermint_config(
     // quite large
     config.rpc.max_body_bytes = 2_000_000;
 
-    
-    // let mock_toml = "[\"*\"]";
-    // let mock_config: CorsOrigin = toml::from_str(mock_toml).unwrap();
-    // config.rpc.cors_allowed_origins = vec![mock_config];
-
+    /// XXX: Super dumb hack - fix the config file
     config.rpc.cors_allowed_origins = vec![unsafe {
         std::mem::transmute(CorsOrigin2("*".to_owned()))
     }];
