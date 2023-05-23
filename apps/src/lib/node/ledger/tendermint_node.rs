@@ -382,7 +382,11 @@ async fn update_tendermint_config(
     // Bumped from the default `1_000_000`, because some WASMs can be
     // quite large
     config.rpc.max_body_bytes = 2_000_000;
-    config.rpc.cors_allowed_headers = vec![CorsOrigin::from_str("*").unwrap()];
+
+    let mock_toml = "cors_allowed_origins = [\"*\"]";
+    let mock_config: Vec<CorsOrigin> = toml::from_str(mock_toml).unwrap();
+
+    config.rpc.cors_allowed_origins = vec![mock_config[0].clone()];
 
     config.instrumentation.prometheus =
         tendermint_config.instrumentation_prometheus;
