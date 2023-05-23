@@ -4,6 +4,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::super::cli::onchain::ProposalVote;
 use super::proposal::ProposalType;
+use crate::ledger::governance::utils::VotePower;
+use crate::types::address::Address;
 use crate::types::key::common::{self, Signature};
 use crate::types::key::SigScheme;
 
@@ -20,35 +22,43 @@ pub enum VoteType {
     ETHBridge(Signature),
 }
 
+/// The storage vote wrapper for governance proposals
+#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize, Eq)]
+pub struct StorageVoteWrapper {
+    pub vote: StorageVote,
+    pub voting_power: VotePower,
+    pub delegator: Option<Address>
+}
+
 #[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize, Eq)]
 /// The vote for a proposal
-pub enum StorageProposalVote {
+pub enum StorageVote {
     /// Yes
     Yay(VoteType),
     /// No
     Nay,
 }
 
-impl StorageProposalVote {
+impl StorageVote {
     /// Check if a vote is yay
     pub fn is_yay(&self) -> bool {
-        matches!(self, StorageProposalVote::Yay(_))
+        matches!(self, Self::Yay(_))
     }
 
     /// Check if vote is of type default
     pub fn is_default_vote(&self) -> bool {
         matches!(
             self,
-            StorageProposalVote::Yay(VoteType::Default)
-                | StorageProposalVote::Nay
+            Self::Yay(VoteType::Default)
+                | Self::Nay
         )
     }
 
     /// Check if a vote is compatible with a proposal
     pub fn is_compatible(&self, proposal_type: &ProposalType) -> bool {
         match self {
-            StorageProposalVote::Yay(vote_type) => proposal_type.eq(vote_type),
-            StorageProposalVote::Nay => true,
+            Self::Yay(vote_type) => proposal_type.eq(vote_type),
+            Self::Nay => true,
         }
     }
 
@@ -60,18 +70,18 @@ impl StorageProposalVote {
     ) -> Option<Self> {
         match (proposal_vote, proposal_type) {
             (ProposalVote::Yay, ProposalType::Default(_)) => {
-                Some(StorageProposalVote::Yay(VoteType::Default))
+                Some(Self::Yay(VoteType::Default))
             }
             (ProposalVote::Yay, ProposalType::PGFSteward(_)) => {
-                Some(StorageProposalVote::Yay(VoteType::PGFSteward))
+                Some(Self::Yay(VoteType::PGFSteward))
             }
             (ProposalVote::Yay, ProposalType::PGFPayment(_)) => {
-                Some(StorageProposalVote::Yay(VoteType::PGFPayment))
+                Some(Self::Yay(VoteType::PGFPayment))
             }
             (ProposalVote::Yay, ProposalType::ETHBridge(data)) => {
                 if let Some(key) = secret_key {
                     let signature = common::SigScheme::sign(&key, data);
-                    Some(StorageProposalVote::Yay(VoteType::ETHBridge(
+                    Some(Self::Yay(VoteType::ETHBridge(
                         signature,
                     )))
                 } else {
@@ -79,26 +89,26 @@ impl StorageProposalVote {
                 }
             }
             (ProposalVote::Nay, ProposalType::Default(_)) => {
-                Some(StorageProposalVote::Nay)
+                Some(Self::Nay)
             }
             (ProposalVote::Nay, ProposalType::PGFSteward(_)) => {
-                Some(StorageProposalVote::Nay)
+                Some(Self::Nay)
             }
             (ProposalVote::Nay, ProposalType::PGFPayment(_)) => {
-                Some(StorageProposalVote::Nay)
+                Some(Self::Nay)
             }
             (ProposalVote::Nay, ProposalType::ETHBridge(_)) => {
-                Some(StorageProposalVote::Nay)
+                Some(Self::Nay)
             }
             _ => None,
         }
     }
 }
 
-impl Display for StorageProposalVote {
+impl Display for StorageVote {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            StorageProposalVote::Yay(vote_type) => match vote_type {
+            Self::Yay(vote_type) => match vote_type {
                 VoteType::Default
                 | VoteType::PGFSteward
                 | VoteType::PGFPayment => write!(f, "yay"),
@@ -107,7 +117,7 @@ impl Display for StorageProposalVote {
                 }
             },
 
-            StorageProposalVote::Nay => write!(f, "nay"),
+            Self::Nay => write!(f, "nay"),
         }
     }
 }

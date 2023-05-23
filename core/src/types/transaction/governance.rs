@@ -10,7 +10,10 @@ use crate::ledger::governance::cli::onchain::{
 use crate::ledger::governance::storage::proposal::{
     AddRemove, PGFAction, ProposalType,
 };
-use crate::ledger::governance::storage::vote::StorageProposalVote;
+use crate::ledger::governance::storage::vote::{
+    StorageVote, StorageVoteWrapper,
+};
+use crate::ledger::governance::utils::VotePower;
 use crate::types::address::Address;
 use crate::types::storage::Epoch;
 
@@ -54,11 +57,13 @@ pub struct VoteProposalData {
     /// The proposal id
     pub id: u64,
     /// The proposal vote
-    pub vote: StorageProposalVote,
+    pub vote: StorageVote,
     /// The proposal author address
     pub voter: Address,
-    /// Delegator addreses
-    pub delegations: Vec<Address>,
+    /// The voting power at start epoch
+    pub voting_power: VotePower,
+    /// Delegate address
+    pub delegate: Option<Address>,
 }
 
 impl TryFrom<DefaultProposal> for InitProposalData {
@@ -173,6 +178,16 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
             voting_end_epoch: value.proposal.voting_end_epoch,
             grace_epoch: value.proposal.grace_epoch,
         })
+    }
+}
+
+impl From<VoteProposalData> for StorageVoteWrapper {
+    fn from(value: VoteProposalData) -> Self {
+        Self {
+            vote: value.vote,
+            voting_power: value.voting_power,
+            delegator: value.delegate,
+        }
     }
 }
 

@@ -9,7 +9,7 @@ use crate::ledger::governance::storage::keys as governance_keys;
 use crate::ledger::governance::storage::proposal::{
     ProposalType, StorageProposal,
 };
-use crate::ledger::governance::storage::vote::StorageProposalVote;
+use crate::ledger::governance::storage::vote::StorageVoteWrapper;
 use crate::ledger::governance::utils::Vote;
 use crate::ledger::governance::ADDRESS as governance_address;
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
@@ -103,16 +103,11 @@ pub fn vote_proposal<S>(
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
-{
-    for delegation in data.delegations {
-        let vote_key = governance_keys::get_vote_proposal_key(
-            data.id,
-            data.voter.clone(),
-            delegation,
-        );
-        storage.write(&vote_key, data.vote.clone())?;
-    }
-    Ok(())
+{   
+    let vote = StorageVoteWrapper::from(data.clone());
+    let vote_key = governance_keys::get_vote_proposal_key(data.id, data.voter);
+
+    storage.write(&vote_key, vote)
 }
 
 /// Read a proposal by id from storage
@@ -161,7 +156,7 @@ where
 {
     let vote_prefix_key =
         governance_keys::get_proposal_vote_prefix_key(proposal_id);
-    let vote_iter = storage_api::iter_prefix::<StorageProposalVote>(
+    let vote_iter = storage_api::iter_prefix::<StorageVoteWrapper>(
         storage,
         &vote_prefix_key,
     )?;
@@ -169,16 +164,14 @@ where
     let votes = vote_iter
         .filter_map(|vote_result| {
             if let Ok((vote_key, vote)) = vote_result {
-                let voter_address =
-                    governance_keys::get_voter_address(&vote_key);
-                let delegator_address =
-                    governance_keys::get_vote_delegation_address(&vote_key);
-                match (voter_address, delegator_address) {
-                    (Some(delegator_address), Some(validator_address)) => {
+                let voter_address = governance_keys::get_voter_address(&vote_key);
+                match voter_address {
+                    Some(voter_address) => {
                         Some(Vote {
-                            validator: validator_address.to_owned(),
-                            delegator: delegator_address.to_owned(),
-                            data: vote,
+                            voter: voter_address.clone(),
+                            delegate: vote.delegator,
+                            data: vote.vote,
+                            voting_power: vote.voting_power
                         })
                     }
                     _ => None,

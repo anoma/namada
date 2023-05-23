@@ -146,7 +146,7 @@ where
                 proposals_result.passed.push(id);
 
                 let proposal_author_key = gov_storage::get_author_key(id);
-                shell.wl_storage.read::<Address>(&proposal_author_key)?
+            shell.wl_storage.read::<Address>(&proposal_author_key)?
             }
             TallyResult::Rejected => {
                 if let ProposalType::PGFPayment(_) = proposal_type {
@@ -222,47 +222,37 @@ where
 {
     let votes = gov_api::get_proposal_votes(storage, proposal_id)?;
 
-    let mut validators_vote: HashMap<Address, TallyVote> = HashMap::default();
-    let mut validator_voting_power: HashMap<Address, VotePower> =
-        HashMap::default();
     let mut delegators_vote: HashMap<Address, TallyVote> = HashMap::default();
-    let mut delegator_voting_power: HashMap<
+    let mut delegators_voting_power: HashMap<Address, VotePower> =
+        HashMap::default();
+    let mut singles_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut singles_voting_power: HashMap<
         Address,
         HashMap<Address, VotePower>,
     > = HashMap::default();
 
     for vote in votes {
-        if vote.is_validator() {
-            let validator = vote.validator.clone();
-            let vote_data = vote.data.clone();
-
-            let validator_stake =
-                get_validator_stake_at(storage, params, &validator, epoch);
-
-            validators_vote.insert(validator.clone(), vote_data.into());
-            validator_voting_power.insert(validator, validator_stake.into());
+        let is_delegate_key = gov_storage::get_delegate_key(&vote.voter);
+        let is_delegate = storage.has_key(&is_delegate_key)?;
+        if is_delegate {
+            delegators_vote.insert(vote.voter.clone(), vote.data.into());
+            delegators_voting_power.insert(vote.voter, vote.voting_power);
         } else {
-            let validator = vote.validator.clone();
-            let delegator = vote.delegator.clone();
-            let vote_data = vote.data.clone();
-
-            let delegator_stake = get_delegator_bond_at(
-                storage, params, &validator, &delegator, epoch,
-            );
-
-            delegators_vote.insert(delegator.clone(), vote_data.into());
-            delegator_voting_power
-                .entry(delegator)
-                .or_default()
-                .insert(validator, delegator_stake.into());
+            if let Some(delegate) = vote.delegate {
+                singles_vote.insert(vote.voter.clone(), vote.data.into());
+                singles_voting_power.entry(vote.voter).or_default().insert(delegate, vote.voting_power);
+            } else {
+                delegators_vote.insert(vote.voter.clone(), vote.data.into());
+                delegators_voting_power.insert(vote.voter, vote.voting_power);
+            }
         }
     }
 
     Ok(ProposalVotes {
-        validators_vote,
-        validator_voting_power,
         delegators_vote,
-        delegator_voting_power,
+        delegators_voting_power,
+        singles_vote,
+        singles_voting_power,
     })
 }
 

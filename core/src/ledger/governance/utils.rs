@@ -7,7 +7,7 @@ use rust_decimal::Decimal;
 
 use super::cli::offline::OfflineVote;
 use super::storage::proposal::ProposalType;
-use super::storage::vote::StorageProposalVote;
+use super::storage::vote::StorageVote;
 use crate::types::address::Address;
 use crate::types::storage::Epoch;
 use crate::types::token::{self, SCALE};
@@ -47,19 +47,14 @@ impl Add<token::Amount> for VotePower {
 /// Structure rappresenting a proposal vote
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct Vote {
-    /// Field holding the address of the validator
-    pub validator: Address,
-    /// Field holding the address of the delegator
-    pub delegator: Address,
+    /// Voter address
+    pub voter: Address,
+    /// if present, this vote is overriding the specified delegate vote
+    pub delegate: Option<Address>,
     /// Field holding vote data
-    pub data: StorageProposalVote,
-}
-
-impl Vote {
-    /// Check if a vote is from a validator
-    pub fn is_validator(&self) -> bool {
-        self.validator.eq(&self.delegator)
-    }
+    pub data: StorageVote,
+    /// Voting power
+    pub voting_power: VotePower
 }
 
 /// Rappresent a tally type
@@ -164,13 +159,13 @@ impl ProposalResult {
 /// /// General rappresentation of a vote
 pub enum TallyVote {
     /// Rappresent a vote for a proposal onchain
-    OnChain(StorageProposalVote),
+    OnChain(StorageVote),
     /// Rappresent a vote for a proposal offline
     Offline(OfflineVote),
 }
 
-impl From<StorageProposalVote> for TallyVote {
-    fn from(vote: StorageProposalVote) -> Self {
+impl From<StorageVote> for TallyVote {
+    fn from(vote: StorageVote) -> Self {
         Self::OnChain(vote)
     }
 }
@@ -203,13 +198,13 @@ impl TallyVote {
 /// outcome
 pub struct ProposalVotes {
     /// Map from validator address to vote
-    pub validators_vote: HashMap<Address, TallyVote>,
-    /// Map from validator to their voting power
-    pub validator_voting_power: HashMap<Address, VotePower>,
-    /// Map from delegation address to their vote
     pub delegators_vote: HashMap<Address, TallyVote>,
+    /// Map from validator to their voting power
+    pub delegators_voting_power: HashMap<Address, VotePower>,
+    /// Map from delegation address to their vote
+    pub singles_vote: HashMap<Address, TallyVote>,
     /// Map from delegator address to the corresponding validator voting power
-    pub delegator_voting_power: HashMap<Address, HashMap<Address, VotePower>>,
+    pub singles_voting_power: HashMap<Address, HashMap<Address, VotePower>>,
 }
 
 /// Compute the result of a proposal
@@ -221,8 +216,8 @@ pub fn compute_proposal_result(
     let mut yay_voting_power = VotePower::default();
     let mut nay_voting_power = VotePower::default();
 
-    for (address, vote_power) in votes.validator_voting_power {
-        let vote_type = votes.validators_vote.get(&address);
+    for (address, vote_power) in votes.delegators_voting_power {
+        let vote_type = votes.delegators_vote.get(&address);
         if let Some(vote) = vote_type {
             if vote.is_yay() {
                 yay_voting_power += vote_power;
@@ -232,13 +227,13 @@ pub fn compute_proposal_result(
         }
     }
 
-    for (delegator, degalations) in votes.delegator_voting_power {
+    for (delegator, degalations) in votes.singles_voting_power {
         let delegator_vote = match votes.delegators_vote.get(&delegator) {
             Some(vote) => vote,
             None => continue,
         };
         for (validator, voting_power) in degalations {
-            let validator_vote = votes.validators_vote.get(&validator);
+            let validator_vote = votes.delegators_vote.get(&validator);
             if let Some(validator_vote) = validator_vote {
                 if !validator_vote.is_same_side(delegator_vote) {
                     if delegator_vote.is_yay() {
@@ -250,7 +245,6 @@ pub fn compute_proposal_result(
                     }
                 }
             } else if delegator_vote.is_yay() {
-                println!("{}", voting_power);
                 yay_voting_power += voting_power;
             } else {
                 nay_voting_power += voting_power;
@@ -281,19 +275,10 @@ pub fn is_valid_validator_voting_period(
     voting_end_epoch: Epoch,
 ) -> bool {
     if voting_start_epoch >= voting_end_epoch {
-        tracing::warn!("first");
         false
     } else {
-        tracing::warn!("second");
         let duration = voting_end_epoch - voting_start_epoch;
-        let two_third_duration = (duration / 3) * 2;
-        tracing::warn!(
-            "{}",
-            format!(
-                "{}, {}, {}",
-                current_epoch, voting_start_epoch, two_third_duration
-            )
-        );
+        let two_third_duration = (duration / 3) * 2; 
         current_epoch <= voting_start_epoch + two_third_duration
     }
 }

@@ -38,7 +38,7 @@ use namada::core::ledger::governance::cli::onchain::{
     DefaultProposal, EthProposal, PgfFundingProposal, PgfStewardProposal,
     ProposalVote,
 };
-use namada::core::ledger::governance::storage::vote::StorageProposalVote;
+use namada::core::ledger::governance::storage::vote::StorageVote;
 use namada::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
 use namada::ibc::signer::Signer;
 use namada::ibc::timestamp::Timestamp as IbcTimestamp;
@@ -2243,7 +2243,6 @@ pub async fn submit_vote_proposal(
             &proposal,
             vote,
             voter_address.clone(),
-            delegator_delegations,
             voter_signing_keys,
             voter_pks_map,
         );
@@ -2271,11 +2270,8 @@ pub async fn submit_vote_proposal(
         let voter_address = ctx.get(&voter);
 
         let eth_signing_key = ctx.get_opt_cached(&eth_key);
-        let vote = StorageProposalVote::build(
-            vote,
-            proposal.clone().r#type,
-            eth_signing_key,
-        );
+        let vote =
+            StorageVote::build(vote, proposal.clone().r#type, eth_signing_key);
 
         let vote = if let Some(vote) = vote {
             vote
@@ -2294,14 +2290,32 @@ pub async fn submit_vote_proposal(
             safe_exit(1)
         }
 
-        let delegations =
-            rpc::get_delegators_delegation(&client, &voter_address).await;
+        let is_governance_delegate =
+            rpc::is_delegate(&client, &voter_address).await;
+        let (voting_power, delegate_address) = if is_governance_delegate {
+            let voting_power =
+                rpc::compute_delegate_voting_power(&client, &voter_address, Some(proposal.voting_start_epoch.0))
+                    .await;
+            (voting_power, None)
+        } else {
+            let delegate_address = rpc::get_delegate_for(&client, &voter_address).await;
+            let voting_power = rpc::get_bond_amount_at(
+                &client,
+                &voter_address,
+                &voter_address,
+                proposal.voting_start_epoch,
+            )
+            .await.unwrap_or_default();
+            
+            (voting_power.into(), delegate_address)
+        };
 
         let tx_data = VoteProposalData {
             id: proposal_id,
             vote,
             voter: voter_address.clone(),
-            delegations: delegations.into_iter().collect(),
+            voting_power: voting_power,
+            delegate: delegate_address,
         };
 
         let tx = ctx

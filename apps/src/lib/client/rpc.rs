@@ -1054,8 +1054,9 @@ pub async fn query_delegatee_set(client: &HttpClient) -> BTreeSet<Address> {
 pub async fn get_delegate_delegations(
     client: &HttpClient,
     delegate: &Address,
+    from_epoch: Option<u64>
 ) -> BTreeMap<Address, VotePower> {
-    unwrap_client_response(RPC.vp().gov().delegations(client, delegate).await)
+    unwrap_client_response(RPC.vp().gov().delegations(client, delegate, &from_epoch).await)
 }
 
 pub async fn get_delegate_for(
@@ -1083,7 +1084,42 @@ pub async fn compute_proposal_votes(
     proposal_id: u64,
     epoch: Epoch,
 ) -> ProposalVotes {
-    todo!()
+    let votes = unwrap_client_response::<Vec<Vote>>(
+        RPC.vp().gov().proposal_id_votes(client, &proposal_id).await,
+    );
+
+    let mut delegators_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut delegators_voting_power: HashMap<Address, VotePower> =
+        HashMap::default();
+    let mut singles_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut singles_voting_power: HashMap<
+        Address,
+        HashMap<Address, VotePower>,
+    > = HashMap::default();
+
+    for vote in votes {
+        let is_delegate_key = gov_storage::get_delegate_key(&vote.voter);
+        let is_delegate = is_delegate(client, &vote.voter).await;
+        if is_delegate {
+            delegators_vote.insert(vote.voter.clone(), vote.data.into());
+            delegators_voting_power.insert(vote.voter, vote.voting_power);
+        } else {
+            if let Some(delegate) = vote.delegate {
+                singles_vote.insert(vote.voter.clone(), vote.data.into());
+                singles_voting_power.entry(vote.voter).or_default().insert(delegate, vote.voting_power);
+            } else {
+                delegators_vote.insert(vote.voter.clone(), vote.data.into());
+                delegators_voting_power.insert(vote.voter, vote.voting_power);
+            }
+        }
+    }
+
+    ProposalVotes {
+        delegators_vote,
+        delegators_voting_power,
+        singles_vote,
+        singles_voting_power,
+    }
 }
 
 pub async fn compute_offline_proposal_votes(
@@ -1091,60 +1127,69 @@ pub async fn compute_offline_proposal_votes(
     proposal: &OfflineSignedProposal,
     votes: Vec<OfflineVote>,
 ) -> ProposalVotes {
-    let mut validators_vote: HashMap<Address, TallyVote> = HashMap::default();
-    let mut validator_voting_power: HashMap<Address, VotePower> =
-        HashMap::default();
     let mut delegators_vote: HashMap<Address, TallyVote> = HashMap::default();
-    let mut delegator_voting_power: HashMap<
+    let mut delegators_voting_power: HashMap<Address, VotePower> =
+        HashMap::default();
+    let mut singles_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut singles_voting_power: HashMap<
         Address,
         HashMap<Address, VotePower>,
     > = HashMap::default();
+
     for vote in votes {
-        let is_validator = is_validator(client, &vote.address).await;
-        let is_delegator = is_delegator(client, &vote.address).await;
-        if is_validator {
-            let validator_stake = get_validator_stake(
-                client,
-                proposal.proposal.tally_epoch,
-                &vote.address,
-            )
-            .await
-            .unwrap_or_default();
-            validators_vote.insert(vote.address.clone(), vote.clone().into());
-            validator_voting_power
-                .insert(vote.address.clone(), validator_stake.into());
-        } else if is_delegator {
-            let validators = get_delegations_at(
-                client,
-                &vote.address.clone(),
-                Some(proposal.proposal.tally_epoch),
-            )
-            .await;
-
-            for validator in vote.delegations.clone() {
-                let delegator_stake =
-                    validators.get(&validator).cloned().unwrap_or_default();
-
-                delegators_vote
-                    .insert(vote.address.clone(), vote.clone().into());
-                delegator_voting_power
-                    .entry(vote.address.clone())
-                    .or_default()
-                    .insert(validator, delegator_stake.into());
-            }
+        let is_delegate = is_delegate(client, &vote.address).await;
+        if is_delegate {
+            
         } else {
-            println!(
-                "Skipping vote, not a validator/delegator at epoch {}.",
-                proposal.proposal.tally_epoch
-            );
+
         }
     }
+    // for vote in votes {
+    //     let is_validator = is_validator(client, &vote.address).await;
+    //     let is_delegator = is_delegator(client, &vote.address).await;
+    //     if is_validator {
+    //         let validator_stake = get_validator_stake(
+    //             client,
+    //             proposal.proposal.tally_epoch,
+    //             &vote.address,
+    //         )
+    //         .await
+    //         .unwrap_or_default();
+    //         validators_vote.insert(vote.address.clone(), vote.clone().into());
+    //         validator_voting_power
+    //             .insert(vote.address.clone(), validator_stake.into());
+    //     } else if is_delegator {
+    //         let validators = get_delegations_at(
+    //             client,
+    //             &vote.address.clone(),
+    //             Some(proposal.proposal.tally_epoch),
+    //         )
+    //         .await;
+
+    //         for validator in vote.delegations.clone() {
+    //             let delegator_stake =
+    //                 validators.get(&validator).cloned().unwrap_or_default();
+
+    //             delegators_vote
+    //                 .insert(vote.address.clone(), vote.clone().into());
+    //             delegator_voting_power
+    //                 .entry(vote.address.clone())
+    //                 .or_default()
+    //                 .insert(validator, delegator_stake.into());
+    //         }
+    //     } else {
+    //         println!(
+    //             "Skipping vote, not a validator/delegator at epoch {}.",
+    //             proposal.proposal.tally_epoch
+    //         );
+    //     }
+    // }
 
     ProposalVotes {
-        validators_vote,
-        validator_voting_power,
         delegators_vote,
-        delegator_voting_power,
+        delegators_voting_power,
+        singles_vote,
+        singles_voting_power,
     }
 }
 
@@ -1600,7 +1645,7 @@ pub async fn query_delegate(
         }
         (Some(delegate_address), None) => {
             let delegate_set =
-                get_delegate_delegations(&client, &delegate_address).await;
+                get_delegate_delegations(&client, &delegate_address, None).await;
             let mut total_voting_power = 0;
 
             println!(
@@ -2020,16 +2065,18 @@ pub async fn delegatee_set(client: &HttpClient) -> BTreeSet<Address> {
 pub async fn delegate_delegations(
     client: &HttpClient,
     delegator: Address,
+    from_epoch: Option<u64>
 ) -> BTreeMap<Address, VotePower> {
-    unwrap_client_response(RPC.vp().gov().delegations(client, &delegator).await)
+    unwrap_client_response(RPC.vp().gov().delegations(client, &delegator, &from_epoch).await)
 }
 
 /// Compute the voting power of a delegatee
-pub async fn compute_delegatee_voting_power(
+pub async fn compute_delegate_voting_power(
     client: &HttpClient,
-    delegatee: &Address,
+    delegate: &Address,
+    from_epoch: Option<u64>
 ) -> VotePower {
-    todo!()
+    unwrap_client_response(RPC.vp().gov().delegate_voting_power(client, &delegate, &from_epoch).await)
 }
 
 /// Check if the given address is a known validator

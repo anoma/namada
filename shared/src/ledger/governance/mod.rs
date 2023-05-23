@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use borsh::BorshDeserialize;
 use namada_core::ledger::governance::storage::keys as gov_storage;
 use namada_core::ledger::governance::storage::proposal::ProposalType;
-use namada_core::ledger::governance::storage::vote::StorageProposalVote;
+use namada_core::ledger::governance::storage::vote::StorageVoteWrapper;
 use namada_core::ledger::governance::utils::is_valid_validator_voting_period;
 use namada_core::ledger::storage_api::governance::is_proposal_accepted;
 use namada_core::ledger::vp_env::VpEnv;
@@ -209,7 +209,7 @@ where
         let voter = gov_storage::get_voter_address(key);
         let delegation_address = gov_storage::get_vote_delegation_address(key);
 
-        let vote: StorageProposalVote = self.force_read(key, ReadType::Post)?;
+        let vote: StorageVoteWrapper = self.force_read(key, ReadType::Post)?;
 
         let (voter_address, delegation_address) =
             match (voter, delegation_address) {
@@ -236,7 +236,7 @@ where
             return Ok(false);
         }
 
-        if !vote.is_compatible(&proposal_type) {
+        if !vote.vote.is_compatible(&proposal_type) {
             return Err(Error::InvalidVoteType);
         }
 

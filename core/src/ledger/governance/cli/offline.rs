@@ -153,9 +153,7 @@ pub struct OfflineVote {
     /// The signature over proposal data
     pub signatures: BTreeSet<SignatureIndex>,
     /// The address corresponding to the signature pk
-    pub address: Address,
-    /// The validators address to which this address delegated to
-    pub delegations: Vec<Address>,
+    pub address: Address
 }
 
 impl OfflineVote {
@@ -164,7 +162,6 @@ impl OfflineVote {
         proposal: &OfflineSignedProposal,
         vote: ProposalVote,
         address: Address,
-        delegations: Vec<Address>,
         signing_key: Vec<common::SecretKey>,
         pks_map: HashMap<common::PublicKey, u64>,
     ) -> Self {
@@ -175,12 +172,9 @@ impl OfflineVote {
         let proposal_vote_data = vote
             .try_to_vec()
             .expect("Conversion to bytes shouldn't fail.");
-        let delegations_hash = delegations
-            .try_to_vec()
-            .expect("Conversion to bytes shouldn't fail.");
 
         let vote_hash = Hash::sha256(
-            [proposal_hash_data, proposal_vote_data, delegations_hash].concat(),
+            [proposal_hash_data, proposal_vote_data].concat(),
         );
 
         let signatures_index =
@@ -189,7 +183,6 @@ impl OfflineVote {
         Self {
             proposal_hash,
             vote,
-            delegations,
             signatures: signatures_index,
             address,
         }
@@ -210,12 +203,8 @@ impl OfflineVote {
             .vote
             .try_to_vec()
             .expect("Conversion to bytes shouldn't fail.");
-        let delegations_hash = self
-            .delegations
-            .try_to_vec()
-            .expect("Conversion to bytes shouldn't fail.");
         let vote_serialized =
-            &[proposal_hash_data, proposal_vote_data, delegations_hash]
+            &[proposal_hash_data, proposal_vote_data]
                 .concat();
 
         Hash::sha256(vote_serialized)
