@@ -13,6 +13,7 @@ use serde_json::json;
 use tendermint::Moniker;
 #[cfg(feature = "abcipp")]
 use tendermint_abcipp::Moniker;
+use tendermint_config::CorsOrigin;
 use thiserror::Error;
 use tokio::fs::{self, File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -381,6 +382,7 @@ async fn update_tendermint_config(
     // Bumped from the default `1_000_000`, because some WASMs can be
     // quite large
     config.rpc.max_body_bytes = 2_000_000;
+    config.rpc.cors_allowed_headers = vec![CorsOrigin::from_str("*").unwrap()];
 
     config.instrumentation.prometheus =
         tendermint_config.instrumentation_prometheus;
