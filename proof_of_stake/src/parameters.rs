@@ -1,6 +1,7 @@
 //! Proof-of-Stake system parameters
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::types::storage::Epoch;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
@@ -145,6 +146,29 @@ impl PosParams {
         }
 
         errors
+    }
+
+    /// Get the epoch offset from which an unbonded bond can withdrawn
+    pub fn withdrawable_epoch_offset(&self) -> u64 {
+        self.pipeline_len
+            + self.unbonding_len
+            + self.cubic_slashing_window_length
+    }
+
+    /// Get the epoch offset for processing slashes
+    pub fn slash_processing_epoch_offset(&self) -> u64 {
+        self.unbonding_len + self.cubic_slashing_window_length + 1
+    }
+
+    /// Get the first and the last epoch of a cubic slash window.
+    pub fn cubic_slash_epoch_window(
+        &self,
+        infraction_epoch: Epoch,
+    ) -> (Epoch, Epoch) {
+        let start = infraction_epoch
+            .sub_or_default(Epoch(self.cubic_slashing_window_length));
+        let end = infraction_epoch + self.cubic_slashing_window_length;
+        (start, end)
     }
 }
 
