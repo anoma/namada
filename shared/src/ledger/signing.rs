@@ -210,10 +210,7 @@ pub async fn sign_tx<
         &keypair,
     )));
 
-    let epoch = match args.epoch {
-        Some(epoch) if args.unchecked => epoch,
-        _ => rpc::query_epoch(client).await,
-    };
+    let epoch = rpc::query_epoch(client).await;
 
     let broadcast_data = if args.dry_run {
         tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
@@ -257,8 +254,6 @@ pub async fn sign_wrapper<
 ) -> TxBroadcastData {
     let fee_amount = if cfg!(feature = "mainnet") {
         Amount::whole(MIN_FEE)
-    } else if args.unchecked {
-        args.fee_amount
     } else {
         let wrapper_tx_fees_key = parameter_storage::get_wrapper_tx_fees_key();
         rpc::query_storage_value::<C, token::Amount>(&client, &wrapper_tx_fees_key)
@@ -268,24 +263,21 @@ pub async fn sign_wrapper<
     let fee_token = &args.fee_token;
     let source = Address::from(&keypair.ref_to());
     let balance_key = token::balance_key(&fee_token, &source);
-    let mut is_bal_sufficient = true;
-    if !args.unchecked {
-        let balance =
-            rpc::query_storage_value::<C, token::Amount>(&client, &balance_key)
-                .await
-                .unwrap_or_default();
-        is_bal_sufficient = fee_amount <= balance;
-        if !is_bal_sufficient {
-            eprintln!(
+    let balance =
+        rpc::query_storage_value::<C, token::Amount>(&client, &balance_key)
+        .await
+        .unwrap_or_default();
+    let is_bal_sufficient = fee_amount <= balance;
+    if !is_bal_sufficient {
+        eprintln!(
+            "The wrapper transaction source doesn't have enough balance \
+             to pay fee {fee_amount}, got {balance}."
+        );
+        if !args.force && cfg!(feature = "mainnet") {
+            panic!(
                 "The wrapper transaction source doesn't have enough balance \
                  to pay fee {fee_amount}, got {balance}."
             );
-            if !args.force && cfg!(feature = "mainnet") {
-                panic!(
-                    "The wrapper transaction source doesn't have enough balance \
-                     to pay fee {fee_amount}, got {balance}."
-                );
-            }
         }
     }
 

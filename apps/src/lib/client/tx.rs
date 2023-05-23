@@ -487,68 +487,60 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
         serde_json::from_reader(file).expect("JSON was not well-formatted");
 
     let signer = WalletAddress::new(proposal.clone().author.to_string());
-    let mut governance_parameters = None;
-    let current_epoch = match args.tx.epoch {
-        Some(epoch) if args.tx.unchecked => epoch,
-        _ => rpc::query_and_print_epoch(client).await,
-    };
-
-    if !args.tx.unchecked {
-        governance_parameters =
-            Some(rpc::get_governance_parameters(client).await);
-        let governance_parameters = governance_parameters.as_ref().unwrap();
-        if proposal.voting_start_epoch <= current_epoch
-            || proposal.voting_start_epoch.0
+    let current_epoch = rpc::query_and_print_epoch(client).await;
+    
+    let governance_parameters = rpc::get_governance_parameters(client).await;
+    if proposal.voting_start_epoch <= current_epoch
+        || proposal.voting_start_epoch.0
+        % governance_parameters.min_proposal_period
+        != 0
+    {
+        println!("{}", proposal.voting_start_epoch <= current_epoch);
+        println!(
+            "{}",
+            proposal.voting_start_epoch.0
                 % governance_parameters.min_proposal_period
-                != 0
-        {
-            println!("{}", proposal.voting_start_epoch <= current_epoch);
-            println!(
-                "{}",
-                proposal.voting_start_epoch.0
-                    % governance_parameters.min_proposal_period
-                    == 0
-            );
-            eprintln!(
-                "Invalid proposal start epoch: {} must be greater than \
-                 current epoch {} and a multiple of {}",
-                proposal.voting_start_epoch,
-                current_epoch,
-                governance_parameters.min_proposal_period
-            );
-            if !args.tx.force {
-                safe_exit(1)
-            }
-        } else if proposal.voting_end_epoch <= proposal.voting_start_epoch
-            || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
-                < governance_parameters.min_proposal_period
-            || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
-                > governance_parameters.max_proposal_period
-            || proposal.voting_end_epoch.0 % 3 != 0
-        {
-            eprintln!(
-                "Invalid proposal end epoch: difference between proposal \
-                 start and end epoch must be at least {} and at max {} and \
-                 end epoch must be a multiple of {}",
-                governance_parameters.min_proposal_period,
-                governance_parameters.max_proposal_period,
-                governance_parameters.min_proposal_period
-            );
-            if !args.tx.force {
-                safe_exit(1)
-            }
-        } else if proposal.grace_epoch <= proposal.voting_end_epoch
-            || proposal.grace_epoch.0 - proposal.voting_end_epoch.0
-                < governance_parameters.min_proposal_grace_epochs
-        {
-            eprintln!(
-                "Invalid proposal grace epoch: difference between proposal \
-                 grace and end epoch must be at least {}",
-                governance_parameters.min_proposal_grace_epochs
-            );
-            if !args.tx.force {
-                safe_exit(1)
-            }
+                == 0
+        );
+        eprintln!(
+            "Invalid proposal start epoch: {} must be greater than \
+             current epoch {} and a multiple of {}",
+            proposal.voting_start_epoch,
+            current_epoch,
+            governance_parameters.min_proposal_period
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    } else if proposal.voting_end_epoch <= proposal.voting_start_epoch
+        || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
+        < governance_parameters.min_proposal_period
+        || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
+        > governance_parameters.max_proposal_period
+        || proposal.voting_end_epoch.0 % 3 != 0
+    {
+        eprintln!(
+            "Invalid proposal end epoch: difference between proposal \
+             start and end epoch must be at least {} and at max {} and \
+             end epoch must be a multiple of {}",
+            governance_parameters.min_proposal_period,
+            governance_parameters.max_proposal_period,
+            governance_parameters.min_proposal_period
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    } else if proposal.grace_epoch <= proposal.voting_end_epoch
+        || proposal.grace_epoch.0 - proposal.voting_end_epoch.0
+        < governance_parameters.min_proposal_grace_epochs
+    {
+        eprintln!(
+            "Invalid proposal grace epoch: difference between proposal \
+             grace and end epoch must be at least {}",
+            governance_parameters.min_proposal_grace_epochs
+        );
+        if !args.tx.force {
+            safe_exit(1)
         }
     }
 
@@ -588,31 +580,28 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
             safe_exit(1)
         };
 
-        if !args.tx.unchecked {
-            let governance_parameters = governance_parameters.unwrap();
-            let balance = rpc::get_token_balance(
-                client,
-                &ctx.native_token,
-                &proposal.author,
-            )
+        let balance = rpc::get_token_balance(
+            client,
+            &ctx.native_token,
+            &proposal.author,
+        )
             .await
             .unwrap_or_default();
-            if balance
-                < token::Amount::from(governance_parameters.min_proposal_fund)
-            {
-                eprintln!(
-                    "Address {} doesn't have enough funds.",
-                    &proposal.author
-                );
-                safe_exit(1);
-            }
+        if balance
+            < token::Amount::from(governance_parameters.min_proposal_fund)
+        {
+            eprintln!(
+                "Address {} doesn't have enough funds.",
+                &proposal.author
+            );
+            safe_exit(1);
+        }
 
-            if init_proposal_data.content.len()
-                > governance_parameters.max_proposal_content_size as usize
-            {
-                eprintln!("Proposal content size too big.",);
-                safe_exit(1);
-            }
+        if init_proposal_data.content.len()
+            > governance_parameters.max_proposal_content_size as usize
+        {
+            eprintln!("Proposal content size too big.",);
+            safe_exit(1);
         }
 
         let mut tx = Tx::new(TxType::Raw);
@@ -724,14 +713,12 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
 
         let proposal: OfflineProposal =
             serde_json::from_reader(file).expect("JSON was not well-formatted");
-        if !args.tx.unchecked {
-            let public_key = rpc::get_public_key(client, &proposal.address)
+        let public_key = rpc::get_public_key(client, &proposal.address)
             .await
             .expect("Public key should exist.");
-            if !proposal.check_signature(&public_key) {
-                eprintln!("Proposal signature mismatch!");
-                safe_exit(1)
-            }
+        if !proposal.check_signature(&public_key) {
+            eprintln!("Proposal signature mismatch!");
+            safe_exit(1)
         }
 
         let signing_key =
@@ -763,10 +750,7 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
             }
         }
     } else {
-        let current_epoch = match args.tx.epoch {
-            Some(epoch) if args.tx.unchecked => epoch,
-            _ => rpc::query_and_print_epoch(client).await,
-        };
+        let current_epoch = rpc::query_and_print_epoch(client).await;
 
         let voter_address = signer.clone();
         let proposal_id = args.proposal_id.unwrap();

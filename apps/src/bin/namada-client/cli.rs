@@ -20,9 +20,7 @@ pub async fn main() -> Result<()> {
             match cmd {
                 // Ledger cmds
                 Sub::TxCustom(TxCustom(args)) => {
-                    if !args.tx.unchecked {
-                        wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    }
+                    wait_until_node_is_synched(&args.tx.ledger_address).await;
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
@@ -41,9 +39,7 @@ pub async fn main() -> Result<()> {
                     }
                 }
                 Sub::TxTransfer(TxTransfer(args)) => {
-                    if !args.tx.unchecked {
-                        wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    }
+                    wait_until_node_is_synched(&args.tx.ledger_address).await;
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
@@ -51,9 +47,7 @@ pub async fn main() -> Result<()> {
                     tx::submit_transfer(&client, ctx, args).await?;
                 }
                 Sub::TxIbcTransfer(TxIbcTransfer(args)) => {
-                    if !args.tx.unchecked {
-                        wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    }
+                    wait_until_node_is_synched(&args.tx.ledger_address).await;
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
@@ -62,9 +56,7 @@ pub async fn main() -> Result<()> {
                         .await?;
                 }
                 Sub::TxUpdateVp(TxUpdateVp(args)) => {
-                    if !args.tx.unchecked {
-                        wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    }
+                    wait_until_node_is_synched(&args.tx.ledger_address).await;
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
@@ -73,9 +65,7 @@ pub async fn main() -> Result<()> {
                         .await?;
                 }
                 Sub::TxInitAccount(TxInitAccount(args)) => {
-                    if !args.tx.unchecked {
-                        wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    }
+                    wait_until_node_is_synched(&args.tx.ledger_address).await;
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
@@ -96,9 +86,7 @@ pub async fn main() -> Result<()> {
                     }
                 }
                 Sub::TxInitValidator(TxInitValidator(args)) => {
-                    if !args.tx.unchecked {
-                        wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    }
+                    wait_until_node_is_synched(&args.tx.ledger_address).await;
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
@@ -107,9 +95,7 @@ pub async fn main() -> Result<()> {
                         .await;
                 }
                 Sub::TxInitProposal(TxInitProposal(args)) => {
-                    if !args.tx.unchecked {
-                        wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    }
+                    wait_until_node_is_synched(&args.tx.ledger_address).await;
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
@@ -118,9 +104,7 @@ pub async fn main() -> Result<()> {
                         .await?;
                 }
                 Sub::TxVoteProposal(TxVoteProposal(args)) => {
-                    if !args.tx.unchecked {
-                        wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    }
+                    wait_until_node_is_synched(&args.tx.ledger_address).await;
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
@@ -129,9 +113,7 @@ pub async fn main() -> Result<()> {
                         .await?;
                 }
                 Sub::TxRevealPk(TxRevealPk(args)) => {
-                    if !args.tx.unchecked {
-                        wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    }
+                    wait_until_node_is_synched(&args.tx.ledger_address).await;
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
@@ -140,9 +122,7 @@ pub async fn main() -> Result<()> {
                         .await?;
                 }
                 Sub::Bond(Bond(args)) => {
-                    if !args.tx.unchecked {
-                        wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    }
+                    wait_until_node_is_synched(&args.tx.ledger_address).await;
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
@@ -151,9 +131,7 @@ pub async fn main() -> Result<()> {
                         .await?;
                 }
                 Sub::Unbond(Unbond(args)) => {
-                    if !args.tx.unchecked {
-                        wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    }
+                    wait_until_node_is_synched(&args.tx.ledger_address).await;
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
@@ -162,9 +140,7 @@ pub async fn main() -> Result<()> {
                         .await?;
                 }
                 Sub::Withdraw(Withdraw(args)) => {
-                    if !args.tx.unchecked {
-                        wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    }
+                    wait_until_node_is_synched(&args.tx.ledger_address).await;
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();

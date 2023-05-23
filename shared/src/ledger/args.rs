@@ -376,8 +376,6 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub dump_tx: bool,
     /// Submit the transaction even if it doesn't pass client checks
     pub force: bool,
-    /// Do not attempt client checks
-    pub unchecked: bool,
     /// Do not wait for the transaction to be added to the blockchain
     pub broadcast_only: bool,
     /// The address of the ledger node as host:port
@@ -385,8 +383,6 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// If any new account is initialized by the tx, use the given alias to
     /// save it in the wallet.
     pub initialized_account_alias: Option<String>,
-    /// The epoch in which to construct transaction
-    pub epoch: Option<Epoch>,
     /// Whether to force overwrite the above alias, if it is provided, in the
     /// wallet.
     pub wallet_alias_force: bool,

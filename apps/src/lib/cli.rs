@@ -1793,8 +1793,7 @@ pub mod args {
     pub const TOKEN: Arg<WalletAddress> = arg("token");
     pub const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     pub const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
-        pub const TX_HASH: Arg<String> = arg("tx-hash");
-        pub const UNCHECKED: ArgFlag = flag("unchecked");
+    pub const TX_HASH: Arg<String> = arg("tx-hash");
     pub const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
     pub const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
     pub const VALIDATOR: Arg<WalletAddress> = arg("validator");
@@ -3170,8 +3169,6 @@ pub mod args {
                 password: self.password,
                 expiration: self.expiration,
                 chain_id: self.chain_id,
-                unchecked: self.unchecked,
-                epoch: self.epoch,
             }
         }
     }
@@ -3183,11 +3180,6 @@ pub mod args {
                     .def()
                     .about("Simulate the transaction application."),
             )
-            .arg(
-                EPOCH
-                    .def()
-                    .about("The epoch in which to construct transaction."),
-            )
             .arg(DUMP_TX.def().about("Dump transaction bytes to a file."))
             .arg(
                 FORCE
@@ -3196,13 +3188,6 @@ pub mod args {
                         "Submit the transaction even if it doesn't pass \
                          client checks.",
                     )
-                    .conflicts_with(UNCHECKED.name),
-            )
-            .arg(
-                UNCHECKED
-                    .def()
-                    .about("Do not attempt client checks.")
-                    .conflicts_with(FORCE.name),
             )
             .arg(BROADCAST_ONLY.def().about(
                 "Do not wait for the transaction to be applied. This will \
@@ -3261,11 +3246,9 @@ pub mod args {
             let dry_run = DRY_RUN_TX.parse(matches);
             let dump_tx = DUMP_TX.parse(matches);
             let force = FORCE.parse(matches);
-            let unchecked = UNCHECKED.parse(matches);
             let broadcast_only = BROADCAST_ONLY.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
-            let epoch = EPOCH.parse(matches);
             let wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
             let fee_amount = GAS_AMOUNT.parse(matches);
             let fee_token = GAS_TOKEN.parse(matches);
@@ -3280,11 +3263,9 @@ pub mod args {
                 dry_run,
                 dump_tx,
                 force,
-                unchecked,
                 broadcast_only,
                 ledger_address,
                 initialized_account_alias,
-                epoch,
                 wallet_alias_force,
                 fee_amount,
                 fee_token,

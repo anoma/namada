@@ -57,25 +57,25 @@ elif [ "$1" = "client" ]; then
 
     echo $'[' > $NAMADA_LEDGER_LOG_PATH
     
-    cargo run --bin namadac -- transfer --source bertha --target christel --token btc --amount 23 --force --signing-key bertha-key --epoch 5 --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac -- transfer --source bertha --target christel --token btc --amount 23 --force --signing-key bertha-key --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac -- bond --validator bertha --amount 25 --signing-key bertha-key --force --epoch 6 --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac -- bond --validator bertha --amount 25 --signing-key bertha-key --force --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac -- reveal-pk --public-key albert-key --epoch 7 --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac -- reveal-pk --public-key albert-key --force --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac -- update --code-path vp_user.wasm --address bertha --signing-key bertha-key --epoch 8 --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac -- update --code-path vp_user.wasm --address bertha --signing-key bertha-key --force --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac -- init-validator --alias bertha-validator --source bertha --commission-rate 0.05 --max-commission-rate-change 0.01 --signing-key bertha-key --epoch 9 --unsafe-dont-encrypt --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac -- init-validator --alias bertha-validator --source bertha --commission-rate 0.05 --max-commission-rate-change 0.01 --signing-key bertha-key --unsafe-dont-encrypt --force --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac -- unbond --validator christel --amount 5 --signing-key christel-key --epoch 2 --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac -- unbond --validator christel --amount 5 --signing-key christel-key --force --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac -- withdraw --validator albert --epoch 3 --signing-key albert-key --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac -- withdraw --validator albert --signing-key albert-key --force --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac -- init-account --alias albert-account --source albert --public-key albert-key --signing-key albert-key --epoch 4 --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac -- init-account --alias albert-account --source albert --public-key albert-key --signing-key albert-key --force --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac -- tx --code-path $NAMADA_DIR/wasm_for_tests/tx_no_op.wasm --data-path README.md --signing-key albert-key --epoch 5 --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac -- tx --code-path $NAMADA_DIR/wasm_for_tests/tx_no_op.wasm --data-path README.md --signing-key albert-key --force --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac -- ibc-transfer --source bertha --receiver christel  --token btc --amount 24 --channel-id channel-141 --signing-key bertha-key --force --epoch 1 --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac -- ibc-transfer --source bertha --receiver christel  --token btc --amount 24 --channel-id channel-141 --signing-key bertha-key --force --ledger-address 127.0.0.1:27657
 
     #cargo run --bin namadac -- init-proposal --data-path valid_proposal.json --epoch 2 --force --signing-key bertha-key --ledger-address 127.0.0.1:27657
 

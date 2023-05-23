@@ -371,10 +371,7 @@ pub async fn submit_reveal_pk_aux<
         tx.code_sechash(),
         &keypair,
     )));
-    let epoch = match args.epoch {
-        Some(epoch) if args.unchecked => epoch,
-        _ => rpc::query_epoch(client).await,
-    };
+    let epoch = rpc::query_epoch(client).await;
     let to_broadcast = if args.dry_run {
         TxBroadcastData::DryRun(tx)
     } else {
@@ -1153,14 +1150,12 @@ pub async fn submit_transfer<
     let target = args.target.effective_address();
     let token = args.token.clone();
 
-    if !args.tx.unchecked {
-        // Check that the source address exists on chain
-        source_exists_or_err(source.clone(), args.tx.force, client).await?;
-        // Check that the target address exists on chain
-        target_exists_or_err(target.clone(), args.tx.force, client).await?;
-        // Check that the token address exists on chain
-        token_exists_or_err(token.clone(), args.tx.force, client).await?;
-    }
+    // Check that the source address exists on chain
+    source_exists_or_err(source.clone(), args.tx.force, client).await?;
+    // Check that the target address exists on chain
+    target_exists_or_err(target.clone(), args.tx.force, client).await?;
+    // Check that the token address exists on chain
+    token_exists_or_err(token.clone(), args.tx.force, client).await?;
     // Check source balance
     let (sub_prefix, balance_key) = match &args.sub_prefix {
         Some(sub_prefix) => {
@@ -1173,16 +1168,14 @@ pub async fn submit_transfer<
         }
         None => (None, token::balance_key(&token, &source)),
     };
-    if !args.tx.unchecked {
-        check_balance_too_low_err::<C>(
-            &token,
-            &source,
-            args.amount,
-            balance_key,
-            args.tx.force,
-            client,
-        ).await?;
-    }
+    check_balance_too_low_err::<C>(
+        &token,
+        &source,
+        args.amount,
+        balance_key,
+        args.tx.force,
+        client,
+    ).await?;
 
     let masp_addr = masp();
     // For MASP sources, use a special sentinel key recognized by VPs as default
@@ -1223,8 +1216,7 @@ pub async fn submit_transfer<
     };
 
     #[cfg(not(feature = "mainnet"))]
-    let is_source_faucet = !args.tx.unchecked
-        && rpc::is_faucet_account(client, &source).await;
+    let is_source_faucet = rpc::is_faucet_account(client, &source).await;
 
     let tx_code_hash =
         query_wasm_code_hash(client, TX_TRANSFER_WASM)
