@@ -58,8 +58,6 @@ use num_traits::{FromPrimitive, ToPrimitive};
 use thiserror::Error;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::client::rpc::query_wasm_code_hash;
-use crate::client::tx::TX_TRANSFER_WASM;
 use crate::config::{genesis, TendermintMode};
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
@@ -676,7 +674,7 @@ where
         };
 
         let tx_chain_id = tx.chain_id.clone();
-        let tx_expiration = tx.expiration.clone();
+        let tx_expiration = tx.expiration;
 
         // Tx chain id
         if tx_chain_id != self.chain_id {
@@ -972,7 +970,9 @@ where
 
     /// Check that the Wrapper's signer has enough funds to pay fees.
     ///
-    /// For security reasons, the `chain_id` and `expiration` fields should come from the serialized wrapper, not from the Shell.
+    /// For security reasons, the `chain_id` and `expiration` fields should come
+    /// from the serialized wrapper, not from the Shell.
+    #[allow(clippy::too_many_arguments)]
     pub fn wrapper_fee_check<CA>(
         &self,
         wrapper: &WrapperTx,
@@ -989,7 +989,7 @@ where
         // In testnets with a faucet, tx is allowed to skip fees if
         // it includes a valid PoW
         #[cfg(not(feature = "mainnet"))]
-        if self.has_valid_pow_solution(&wrapper) {
+        if self.has_valid_pow_solution(wrapper) {
             return Ok(());
         }
 

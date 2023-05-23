@@ -292,7 +292,10 @@ pub mod wrapper_tx {
                 })
         }
 
-        /// Performs validation on the optional fee unshielding data carried by the wrapper and generates the tx for execution. The provided `expiration` and `chain_id` should be the same as the wrapper for safety reasons.
+        /// Performs validation on the optional fee unshielding data carried by
+        /// the wrapper and generates the tx for execution. The provided
+        /// `expiration` and `chain_id` should be the same as the wrapper for
+        /// safety reasons.
         pub fn check_and_generate_fee_unshielding(
             &self,
             transparent_balance: Amount,
@@ -301,7 +304,8 @@ pub mod wrapper_tx {
             transfer_code: Vec<u8>,
             descriptions_limit: u64,
         ) -> Result<Option<Tx>, WrapperTxErr> {
-            // Check that the number of descriptions is within a certain limit to avoid a possible DOS vector
+            // Check that the number of descriptions is within a certain limit
+            // to avoid a possible DOS vector
             if let Some(ref unshield) = self.unshield {
                 let spends = unshield.shielded_spends.len();
                 let converts = unshield.shielded_converts.len();
@@ -309,13 +313,17 @@ pub mod wrapper_tx {
 
                 let descriptions = spends
                     .checked_add(converts)
-                    .ok_or(WrapperTxErr::InvalidUnshield(
-                        "Descriptions overflow".to_string(),
-                    ))?
+                    .ok_or_else(|| {
+                        WrapperTxErr::InvalidUnshield(
+                            "Descriptions overflow".to_string(),
+                        )
+                    })?
                     .checked_add(outs)
-                    .ok_or(WrapperTxErr::InvalidUnshield(
-                        "Descriptions overflow".to_string(),
-                    ))?;
+                    .ok_or_else(|| {
+                        WrapperTxErr::InvalidUnshield(
+                            "Descriptions overflow".to_string(),
+                        )
+                    })?;
 
                 if u64::try_from(descriptions)
                     .map_err(|e| WrapperTxErr::InvalidUnshield(e.to_string()))?
@@ -337,7 +345,9 @@ pub mod wrapper_tx {
             Ok(None)
         }
 
-        /// Generates the optional fee unshielding tx for execution. The provided `expiration` and `chain_id` should be the same as the wrapper for safety reasons.
+        /// Generates the optional fee unshielding tx for execution. The
+        /// provided `expiration` and `chain_id` should be the same as the
+        /// wrapper for safety reasons.
         pub fn generate_fee_unshielding(
             &self,
             transparent_balance: Amount,
@@ -346,7 +356,17 @@ pub mod wrapper_tx {
             transfer_code: Vec<u8>,
         ) -> Result<Option<Tx>, WrapperTxErr> {
             if self.unshield.is_some() {
-                let amount = self.fee.amount.checked_sub(transparent_balance).ok_or(WrapperTxErr::InvalidUnshield("The transparent balance of the fee payer is enough to pay fees, no need for unshielding".to_string()))?;
+                let amount = self
+                    .fee
+                    .amount
+                    .checked_sub(transparent_balance)
+                    .ok_or_else(|| {
+                    WrapperTxErr::InvalidUnshield(
+                        "The transparent balance of the fee payer is enough \
+                         to pay fees, no need for unshielding"
+                            .to_string(),
+                    )
+                })?;
 
                 let transfer = Transfer {
                     source: masp(),
@@ -362,15 +382,17 @@ pub mod wrapper_tx {
                     transfer_code,
                     Some(transfer.try_to_vec().map_err(|_| {
                         WrapperTxErr::InvalidUnshield(
-                        "Error while serializing the unshield transfer data"
-                            .to_string(),
-                    )
+                            "Error while serializing the unshield transfer \
+                             data"
+                                .to_string(),
+                        )
                     })?),
                     chain_id,
                     expiration,
                 );
 
-                // Mock a signature. We don't have the signign key of masp in the ledger but the masp vp does not check it
+                // Mock a signature. We don't have the signign key of masp in
+                // the ledger but the masp vp does not check it
                 let mock_sigkey = SecretKey::Ed25519(ed25519::SecretKey(
                     Box::new([0; 32].into()),
                 ));
@@ -451,9 +473,10 @@ pub mod wrapper_tx {
         use crate::types::address::nam;
 
         fn gen_keypair() -> common::SecretKey {
-            use crate::types::key::SecretKey;
             use rand::prelude::ThreadRng;
             use rand::thread_rng;
+
+            use crate::types::key::SecretKey;
 
             let mut rng: ThreadRng = thread_rng();
             ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()

@@ -12,8 +12,8 @@ use namada::types::token;
 use namada::types::token::Amount;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx, MIN_FEE};
 
+use super::rpc;
 use super::tx::gen_shielded_transfer;
-use super::{rpc, tx};
 use crate::cli::context::{FromContext, WalletAddress, WalletKeypair};
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxBroadcastData;

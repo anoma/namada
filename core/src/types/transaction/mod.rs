@@ -228,6 +228,7 @@ pub mod tx_types {
 
     /// Struct that classifies that kind of Tx
     /// based on the contents of its data.
+    #[allow(clippy::large_enum_variant)]
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
     pub enum TxType {
         /// An ordinary tx
