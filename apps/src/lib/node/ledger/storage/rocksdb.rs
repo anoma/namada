@@ -1310,7 +1310,9 @@ impl<'iter> DBIter<'iter> for RocksDB {
         let block_cf_key = ColumnFamilies::Block.as_str();
         let block_cf = self
             .get_column_family(ColumnFamilies::Block.as_str())
-            .expect("{block_cf_key} column family should exist");
+            .unwrap_or_else(|err| {
+                panic!("{block_cf_key} column family should exist: {err}")
+            });
         let read_opts = make_iter_read_opts(Some(prefix.clone()));
         let iter = self.0.iterator_cf_opt(
             block_cf,
@@ -1340,9 +1342,10 @@ fn iter_subspace_prefix<'iter>(
     prefix: &Key,
 ) -> PersistentPrefixIterator<'iter> {
     let subspace_cf_key = ColumnFamilies::Subspace.as_str();
-    let subspace_cf = db
-        .get_column_family(subspace_cf_key)
-        .expect("{subspace_cf_key} column family should exist");
+    let subspace_cf =
+        db.get_column_family(subspace_cf_key).unwrap_or_else(|err| {
+            panic!("{subspace_cf_key} column family should exist: {err}")
+        });
     let db_prefix = "".to_owned();
     iter_prefix(db, subspace_cf, db_prefix, prefix.to_string())
 }
@@ -1353,9 +1356,9 @@ fn iter_diffs_prefix(
     is_old: bool,
 ) -> PersistentPrefixIterator {
     let diffs_cf_key = ColumnFamilies::Diffs.as_str();
-    let diffs_cf = db
-        .get_column_family(diffs_cf_key)
-        .expect("{diffs_cf_key} column family should exist");
+    let diffs_cf = db.get_column_family(diffs_cf_key).unwrap_or_else(|err| {
+        panic!("{diffs_cf_key} column family should exist: {err}")
+    });
     let prefix = if is_old { "old" } else { "new" };
     let db_prefix = format!("{}/{}/", height.0.raw(), prefix);
     // get keys without a prefix
