@@ -870,56 +870,54 @@ where
             // unshielding tx should not happen. If it does, do not return early
             // from this function but try to take the funds from the unshielded
             // balance
-            match apply_tx(
-                TxType::Decrypted(DecryptedTx::Decrypted {
-                    tx: wrapper
-                        .generate_fee_unshielding(
-                            transparent_balance,
-                            // By this time we've already validated the chain id and expiration, we don't need the correct values anymore
-                            self.chain_id.clone(),
-                            None,
-                            self.load_transfer_code_from_storage(),
-                        )
-                        .map_err(|e| {
-                            Error::TxApply(
-                                protocol::Error::FeeUnshieldingError(e),
-                            )
-                        })?
-                        .ok_or(Error::TxApply(
-                            protocol::Error::FeeUnshieldingError(namada::types::transaction::WrapperTxErr::InvalidUnshield(
-                                "Missing expected fee unshielding tx"
-                                    .to_string(),
-                            ),
-                        )))?,
-                    has_valid_pow: false,
-                }),
-                TxIndex::default(),
-                &mut gas_meter,
-                gas_table,
-                &mut self.wl_storage.write_log,
-                &self.wl_storage.storage,
-                &mut self.vp_wasm_cache,
-                &mut self.tx_wasm_cache,
+            match wrapper.generate_fee_unshielding(
+                transparent_balance,
+                // By this time we've already validated the chain id and
+                // expiration, we don't need the correct values anymore
+                self.chain_id.clone(),
+                None,
+                self.load_transfer_code_from_storage(),
             ) {
-                Ok(result) => {
-                    if result.is_accepted() {
-                        self.wl_storage.write_log.commit_tx();
-                    } else {
-                        self.wl_storage.write_log.drop_tx();
-                        tracing::error!(
-                            "The unshielding tx is invalid, some VPs rejected \
-                             it: {:#?}",
-                            result.vps_result.rejected_vps
-                        );
+                Ok(Some(fee_unshielding_tx)) => {
+                    match apply_tx(
+                        TxType::Decrypted(DecryptedTx::Decrypted {
+                            tx: fee_unshielding_tx,
+                            has_valid_pow: false,
+                        }),
+                        TxIndex::default(),
+                        &mut gas_meter,
+                        gas_table,
+                        &mut self.wl_storage.write_log,
+                        &self.wl_storage.storage,
+                        &mut self.vp_wasm_cache,
+                        &mut self.tx_wasm_cache,
+                    ) {
+                        Ok(result) => {
+                            if result.is_accepted() {
+                                self.wl_storage.write_log.commit_tx();
+                            } else {
+                                self.wl_storage.write_log.drop_tx();
+                                tracing::error!(
+                                    "The unshielding tx is invalid, some VPs \
+                                     rejected it: {:#?}",
+                                    result.vps_result.rejected_vps
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            self.wl_storage.write_log.drop_tx();
+                            tracing::error!(
+                                "The unshielding tx is invalid, wasm run \
+                                 failed: {}",
+                                e
+                            );
+                        }
                     }
                 }
-                Err(e) => {
-                    self.wl_storage.write_log.drop_tx();
-                    tracing::error!(
-                        "The unshielding tx is invalid, wasm run failed: {}",
-                        e
-                    );
+                Ok(None) => {
+                    tracing::error!("Missing expected fee unshielding tx")
                 }
+                Err(e) => tracing::error!("{}", e),
             }
         }
 
