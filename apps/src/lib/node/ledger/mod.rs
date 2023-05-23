@@ -215,7 +215,7 @@ pub fn reset(config: config::Ledger) -> Result<(), shell::Error> {
 pub fn dump_db(
     config: config::Ledger,
     args::LedgerDumpDb {
-        // block_height,
+        block_height,
         out_file_path,
         historic,
     }: args::LedgerDumpDb,
@@ -226,7 +226,7 @@ pub fn dump_db(
     let db_path = config.shell.db_dir(&chain_id);
 
     let db = storage::PersistentDB::open(db_path, None);
-    db.dump_last_block(out_file_path, historic);
+    db.dump_block(out_file_path, historic, &mut block_height.clone());
 }
 
 /// Roll Namada state back to the previous height

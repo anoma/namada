@@ -38,6 +38,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Mutex;
 
+use ark_serialize::Write;
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
 use namada::core::types::ethereum_structs;
@@ -252,22 +253,26 @@ impl RocksDB {
     }
 
     /// Dump last known block
-    pub fn dump_last_block(
+    pub fn dump_block(
         &self,
         out_file_path: std::path::PathBuf,
         historic: bool,
+        height: &mut Option<BlockHeight>,
     ) {
         // Find the last block height
         let state_cf = self
             .get_column_family(STATE_CF)
             .expect("State column family should exist");
-        let height: BlockHeight = types::decode(
+
+        let last_height: BlockHeight = types::decode(
             self.0
                 .get_cf(state_cf, "height")
                 .expect("Unable to read DB")
                 .expect("No block height found"),
         )
         .expect("Unable to decode block height");
+
+        let height = height.get_or_insert(last_height);
 
         let full_path = out_file_path
             .with_file_name(format!(
@@ -306,10 +311,47 @@ impl RocksDB {
         }
 
         // subspace
-        let cf = self
-            .get_column_family(SUBSPACE_CF)
-            .expect("Subspace column family should exist");
-        self.dump_it(cf, None, &mut file);
+        if *height != last_height {
+            // Restoring subspace at specified height
+
+            let restored_subspace = self
+                .iter_prefix(&Key::default())
+                .par_bridge()
+                .fold(
+                    || "".to_string(),
+                    |mut cur, (key, _value, _gas)| match self
+                        .read_subspace_val_with_height(
+                            &Key::from(key.to_db_key()),
+                            *height,
+                            last_height,
+                        )
+                        .expect("Unable to find subspace key")
+                    {
+                        Some(value) => {
+                            let val = HEXLOWER.encode(&value);
+                            let new_line = format!("\"{key}\" = \"{val}\"\n");
+                            cur.push_str(new_line.as_str());
+                            cur
+                        }
+                        None => cur,
+                    },
+                )
+                .reduce(
+                    || "".to_string(),
+                    |mut a: String, b: String| {
+                        a.push_str(&b);
+                        a
+                    },
+                );
+            file.write_all(restored_subspace.as_bytes())
+                .expect("Unable to write to output file");
+        } else {
+            // Just dump the current subspace
+            let cf = self
+                .get_column_family(SUBSPACE_CF)
+                .expect("Subspace column family should exist");
+            self.dump_it(cf, None, &mut file);
+        }
 
         println!("Done writing to {}", full_path.to_string_lossy());
     }
@@ -321,8 +363,6 @@ impl RocksDB {
         prefix: Option<String>,
         file: &mut File,
     ) {
-        use std::io::Write;
-
         let read_opts = make_iter_read_opts(prefix.clone());
         let iter = if let Some(prefix) = prefix {
             self.0.iterator_cf_opt(
