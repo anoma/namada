@@ -170,13 +170,7 @@ pub async fn tx_signer<
             }
             Ok(signing_key)
         }
-        TxSigningKey::SecretKey(signing_key) => {
-            // Check if the signing key needs to reveal its PK first
-            let pk: common::PublicKey = signing_key.ref_to();
-            super::tx::reveal_pk_if_needed::<C, U>(client, wallet, &pk, args)
-                .await?;
-            Ok(signing_key)
-        }
+        TxSigningKey::SecretKey(signing_key) => Ok(signing_key),
         TxSigningKey::None => other_err(
             "All transactions must be signed; please either specify the key \
              or the address from which to look up the signing key."

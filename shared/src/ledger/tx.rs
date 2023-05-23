@@ -753,36 +753,37 @@ pub async fn submit_unbond<
     wallet: &mut Wallet<U>,
     args: args::Unbond,
 ) -> Result<(), Error> {
-    let validator =
+    let source = args.source.clone();
+    // Check the source's current bond amount
+    let bond_source = source.clone().unwrap_or_else(|| args.validator.clone());
+    let tx_code = args.tx_code_path;
+    if !args.tx.force {
         known_validator_or_err(args.validator.clone(), args.tx.force, client)
             .await?;
-    let source = args.source.clone();
-    let tx_code = args.tx_code_path;
+        
+        let bond_amount =
+            rpc::query_bond(client, &bond_source, &args.validator, None).await;
+        println!("Bond amount available for unbonding: {} NAM", bond_amount);
 
-    // Check the source's current bond amount
-    let bond_source = source.clone().unwrap_or_else(|| validator.clone());
-    let bond_amount =
-        rpc::query_bond(client, &bond_source, &validator, None).await;
-    println!("Bond amount available for unbonding: {} NAM", bond_amount);
-
-    if args.amount > bond_amount {
-        eprintln!(
-            "The total bonds of the source {} is lower than the amount to be \
-             unbonded. Amount to unbond is {} and the total bonds is {}.",
-            bond_source, args.amount, bond_amount
-        );
-        if !args.tx.force {
-            return Err(Error::LowerBondThanUnbond(
-                bond_source,
-                args.amount,
-                bond_amount,
-            ));
+        if args.amount > bond_amount {
+            eprintln!(
+                "The total bonds of the source {} is lower than the amount to be \
+                 unbonded. Amount to unbond is {} and the total bonds is {}.",
+                bond_source, args.amount, bond_amount
+            );
+            if !args.tx.force {
+                return Err(Error::LowerBondThanUnbond(
+                    bond_source,
+                    args.amount,
+                    bond_amount,
+                ));
+            }
         }
     }
 
     // Query the unbonds before submitting the tx
     let unbonds =
-        rpc::query_unbond_with_slashing(client, &bond_source, &validator).await;
+        rpc::query_unbond_with_slashing(client, &bond_source, &args.validator).await;
     let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();
@@ -791,7 +792,7 @@ pub async fn submit_unbond<
     let latest_withdrawal_pre = withdrawable.into_iter().last();
 
     let data = pos::Unbond {
-        validator: validator.clone(),
+        validator: args.validator.clone(),
         amount: args.amount,
         source,
     };
@@ -803,7 +804,7 @@ pub async fn submit_unbond<
     tx.set_data(Data::new(data));
     tx.set_code(Code::new(tx_code));
 
-    let default_signer = args.source.unwrap_or(args.validator);
+    let default_signer = args.source.unwrap_or(args.validator.clone());
     process_tx::<C, U>(
         client,
         wallet,
@@ -817,7 +818,7 @@ pub async fn submit_unbond<
 
     // Query the unbonds post-tx
     let unbonds =
-        rpc::query_unbond_with_slashing(client, &bond_source, &validator).await;
+        rpc::query_unbond_with_slashing(client, &bond_source, &args.validator).await;
     let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();

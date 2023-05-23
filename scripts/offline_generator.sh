@@ -26,7 +26,7 @@ echo '{
     "voting_start_epoch": 12,
     "voting_end_epoch": 24,
     "grace_epoch": 30,
-    "proposal_code_path": "'"$NAMADA_DIR"'/wasm_for_tests/tx_no_op.wasm"
+    "type": { "Default": "'"$NAMADA_DIR"'/wasm_for_tests/tx_no_op.wasm" }
 }
 ' > valid_proposal.json
 
@@ -62,7 +62,7 @@ cargo run --bin namadac -- reveal-pk --public-key albert-key --epoch 7 --uncheck
 
 cargo run --bin namadac -- update --code-path vp_user.wasm --address bertha --signing-key bertha-key --epoch 8 --unchecked
 
-cargo run --bin namadac -- init-validator --source bertha --commission-rate 0.05 --max-commission-rate-change 0.01 --signing-key bertha-key --epoch 9 --unsafe-dont-encrypt --unchecked
+cargo run --bin namadac -- init-validator --alias bertha-validator --source bertha --commission-rate 0.05 --max-commission-rate-change 0.01 --signing-key bertha-key --epoch 9 --unsafe-dont-encrypt --unchecked
 
 cargo run --bin namadac -- unbond --validator christel --amount 5 --unchecked --signing-key christel-key --epoch 2
 
@@ -74,7 +74,7 @@ cargo run --bin namadac -- tx --code-path ../../../wasm_for_tests/tx_no_op.wasm 
 
 cargo run --bin namadac -- ibc-transfer --source bertha --receiver christel  --token btc --amount 24 --channel-id channel-141 --signing-key bertha-key --unchecked --epoch 1
 
-cargo run --bin namadac -- init-proposal --data-path valid_proposal.json --epoch 2 --unchecked --signing-key bertha-key
+#cargo run --bin namadac -- init-proposal --data-path valid_proposal.json --epoch 2 --unchecked --signing-key bertha-key
 
 rm valid_proposal.json
 
