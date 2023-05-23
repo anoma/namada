@@ -1,8 +1,13 @@
 package = namada
 
+# Some env vars defaults if not specified
+NAMADA_E2E_USE_PREBUILT_BINARIES ?= true
+NAMADA_E2E_DEBUG ?= true
+RUST_BACKTRACE ?= 1
+
 cargo := $(env) cargo
 rustup := $(env) rustup
-debug-env := RUST_BACKTRACE=1 RUST_LOG=$(package)=debug
+debug-env := RUST_BACKTRACE=$(RUST_BACKTRACE) RUST_LOG=$(package)=debug
 debug-cargo := $(env) $(debug-env) cargo
 # Nightly build is currently used for rustfmt and clippy.
 nightly := $(shell cat rust-nightly-version)
@@ -15,6 +20,7 @@ wasm_templates := wasm/tx_template wasm/vp_template
 
 # TODO upgrade libp2p
 audit-ignores += RUSTSEC-2021-0076
+
 
 build:
 	$(cargo) build
@@ -123,19 +129,14 @@ test-unit-coverage:
 # that directly follows `e2e::`, e.g. `TEST_FILTER=multitoken_tests` would run
 # all tests that start with `e2e::multitoken_tests`.
 test-e2e:
-ifdef NAMADA_E2E_NO_PREBUILT_BINARIES
-	RUST_BACKTRACE=1 $(cargo) +$(nightly) test e2e::$(TEST_FILTER) \
+	NAMADA_E2E_USE_PREBUILT_BINARIES=$(NAMADA_E2E_USE_PREBUILT_BINARIES) \
+	NAMADA_E2E_DEBUG=$(NAMADA_E2E_DEBUG) \
+	RUST_BACKTRACE=$(RUST_BACKTRACE) \
+	$(cargo) +$(nightly) test e2e::$(TEST_FILTER) \
 	-Z unstable-options \
 	-- \
 	--test-threads=1 \
 	-Z unstable-options --report-time
-else
-	NAMADA_E2E_USE_PREBUILT_BINARIES=true RUST_BACKTRACE=1 $(cargo) +$(nightly) test e2e::$(TEST_FILTER) \
-	-Z unstable-options \
-	-- \
-	--test-threads=1 \
-	-Z unstable-options --report-time
-endif
 
 test-unit-abcipp:
 	$(cargo) test \
