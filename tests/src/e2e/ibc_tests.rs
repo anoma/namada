@@ -94,7 +94,7 @@ use crate::{run, run_as};
 
 #[test]
 fn run_ledger_ibc() -> Result<()> {
-    let (test_a, test_b) = setup::two_single_node_nets()?;
+    let (test_a, test_b) = setup_two_single_node_nets()?;
     set_ethereum_bridge_mode(
         &test_a,
         &test_a.net.chain_id,
