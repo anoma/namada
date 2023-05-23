@@ -229,7 +229,7 @@ where
             genesis.faucet_pow_difficulty,
             genesis.faucet_withdrawal_limit,
             genesis.established_accounts,
-            &mut vp_code_cache,
+            &implicit_vp_code_path,
         )?;
 
         // Initialize genesis implicit
@@ -238,7 +238,7 @@ where
         // Initialize genesis token accounts
         self.initialize_token_accounts(
             genesis.token_accounts,
-            &mut vp_code_cache,
+            &implicit_vp_code_path,
         );
 
         // Initialize genesis validator accounts
@@ -246,7 +246,7 @@ where
         self.initialize_validators(
             &staking_token,
             &genesis.validators,
-            &mut vp_code_cache,
+            &implicit_vp_code_path,
         );
         // set the initial validators set
         Ok(self.set_initial_validators(
@@ -262,7 +262,7 @@ where
         faucet_pow_difficulty: Option<testnet_pow::Difficulty>,
         faucet_withdrawal_limit: Option<token::Amount>,
         accounts: Vec<genesis::EstablishedAccount>,
-        vp_code_cache: &mut HashMap<String, Vec<u8>>,
+        implicit_vp_code_path: &str,
     ) -> Result<()> {
         for genesis::EstablishedAccount {
             address,
@@ -342,7 +342,7 @@ where
     fn initialize_token_accounts(
         &mut self,
         accounts: Vec<genesis::TokenAccount>,
-        vp_code_cache: &mut HashMap<String, Vec<u8>>,
+        implicit_vp_code_path: &str,
     ) {
         // Initialize genesis token accounts
         for genesis::TokenAccount {
@@ -353,12 +353,13 @@ where
         } in accounts
         {
             let vp_code_hash =
-                read_wasm_hash(&self.wl_storage, vp_code_path.clone())?.ok_or(
-                    Error::LoadingWasm(format!(
+                read_wasm_hash(&self.wl_storage, vp_code_path.clone())
+                    .unwrap()
+                    .ok_or(Error::LoadingWasm(format!(
                         "Unknown vp code path: {}",
                         implicit_vp_code_path
-                    )),
-                )?;
+                    )))
+                    .expect("Reading wasms should succeed");
 
             // In dev, we don't check the hash
             #[cfg(feature = "dev")]
@@ -389,18 +390,20 @@ where
         &mut self,
         staking_token: &Address,
         validators: &[genesis::Validator],
-        vp_code_cache: &mut HashMap<String, Vec<u8>>,
+        implicit_vp_code_path: &str,
     ) {
         // Initialize genesis validator accounts
         for validator in validators {
             let vp_code_hash = read_wasm_hash(
                 &self.wl_storage,
                 &validator.validator_vp_code_path,
-            )?
+            )
+            .unwrap()
             .ok_or(Error::LoadingWasm(format!(
                 "Unknown vp code path: {}",
                 implicit_vp_code_path
-            )))?;
+            )))
+            .expect("Reading wasms should not fail");
 
             #[cfg(not(feature = "dev"))]
             {
