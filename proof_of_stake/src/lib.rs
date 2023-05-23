@@ -1592,10 +1592,7 @@ where
 
     let unbonds = unbond_handle(source, validator);
     // TODO: think if this should be +1 or not!!!
-    let withdrawable_epoch = current_epoch
-        + params.pipeline_len
-        + params.unbonding_len
-        + params.cubic_slashing_window_length;
+    let withdrawable_epoch = current_epoch + params.withdrawable_epoch_offset();
 
     let mut remaining = amount;
     let mut amount_after_slashing = token::Change::default();
@@ -1945,9 +1942,8 @@ where
             let slash = slash?;
             if start_epoch <= slash.epoch
                 && slash.epoch
-                    < withdraw_epoch
-                        - params.unbonding_len
-                        - params.cubic_slashing_window_length
+                    < withdraw_epoch + params.pipeline_len
+                        - params.withdrawable_epoch_offset()
             {
                 println!(
                     "Slash (epoch, rate) = ({}, {})",
@@ -2787,10 +2783,9 @@ fn make_unbond_details(
             .fold(None, |acc: Option<token::Amount>, slash| {
                 if slash.epoch >= start
                     && slash.epoch
-                        < withdraw
+                        < (withdraw + params.pipeline_len)
                             .checked_sub(Epoch(
-                                params.unbonding_len
-                                    + params.cubic_slashing_window_length,
+                                params.withdrawable_epoch_offset(),
                             ))
                             .unwrap_or_default()
                 {
@@ -2978,19 +2973,15 @@ where
 {
     println!("COMPUTING CUBIC SLASH RATE");
     let mut sum_vp_fraction = Decimal::ZERO;
-    let start_epoch = infraction_epoch
-        .sub_or_default(Epoch(params.cubic_slashing_window_length));
-    let end_epoch = infraction_epoch + params.cubic_slashing_window_length;
+    let (start_epoch, end_epoch) =
+        params.cubic_slash_epoch_window(infraction_epoch);
 
     for epoch in Epoch::iter_bounds_inclusive(start_epoch, end_epoch) {
         let consensus_stake =
             Decimal::from(get_total_consensus_stake(storage, epoch)?);
         println!("Consensus stake in epoch {}: {}", epoch, consensus_stake);
 
-        let processing_epoch = epoch
-            + params.unbonding_len
-            + 1_u64
-            + params.cubic_slashing_window_length;
+        let processing_epoch = epoch + params.slash_processing_epoch_offset();
         let slashes = enqueued_slashes_handle().at(&processing_epoch);
         let infracting_stake = slashes
             .iter(storage)?
@@ -3074,10 +3065,8 @@ where
         rate: Decimal::ZERO, // Let the rate be 0 initially before processing
     };
     // Need `+1` because we process at the beginning of a new epoch
-    let processing_epoch = evidence_epoch
-        + params.unbonding_len
-        + params.cubic_slashing_window_length
-        + 1_u64;
+    let processing_epoch =
+        evidence_epoch + params.slash_processing_epoch_offset();
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
     // Add the slash to the list of enqueued slashes to be processed at a later
@@ -3259,15 +3248,11 @@ where
 {
     let params = read_pos_params(storage)?;
 
-    if current_epoch.0
-        < params.unbonding_len + 1 + params.cubic_slashing_window_length
-    {
+    if current_epoch.0 < params.slash_processing_epoch_offset() {
         return Ok(());
     }
-    let infraction_epoch = current_epoch
-        - params.unbonding_len
-        - params.cubic_slashing_window_length
-        - 1;
+    let infraction_epoch =
+        current_epoch - params.slash_processing_epoch_offset();
 
     // Slashes to be processed in the current epoch
     let enqueued_slashes = enqueued_slashes_handle().at(&current_epoch);
@@ -3636,9 +3621,8 @@ where
     // and the most recent infraction epoch
     let last_slash_epoch = read_validator_last_slash_epoch(storage, validator)?
         .unwrap_or_default();
-    let eligible_epoch = last_slash_epoch
-        + params.unbonding_len
-        + params.cubic_slashing_window_length; // TODO: check this is the correct epoch to submit this tx
+    let eligible_epoch =
+        last_slash_epoch + params.slash_processing_epoch_offset();
     if current_epoch < eligible_epoch {
         return Err(UnjailValidatorError::NotEligible(
             validator.clone(),
@@ -3682,11 +3666,8 @@ where
     let last_infraction_epoch =
         read_validator_last_slash_epoch(storage, validator)?;
     if let Some(last_epoch) = last_infraction_epoch {
-        let is_frozen = current_epoch
-            < last_epoch
-                + params.unbonding_len
-                + 1_u64
-                + params.cubic_slashing_window_length;
+        let is_frozen =
+            current_epoch < last_epoch + params.slash_processing_epoch_offset();
         Ok(is_frozen)
     } else {
         Ok(false)
