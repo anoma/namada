@@ -784,7 +784,7 @@ fn transfer_received_token(
         "--sub-prefix",
         &sub_prefix,
         "--amount",
-        "50000",
+        "50000000000",
         "--gas-amount",
         "0",
         "--gas-limit",
