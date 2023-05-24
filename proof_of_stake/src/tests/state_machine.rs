@@ -1992,6 +1992,7 @@ impl AbstractPosState {
                 &slashes_for_this_bond,
                 token::Amount::from_change(to_unbond),
                 self.params.unbonding_len,
+                self.params.cubic_slashing_window_length,
             )
             .change();
             println!("Cur amnt after slashing = {}", &amount_after_slashing);
@@ -2273,7 +2274,11 @@ impl AbstractPosState {
                             .iter()
                             .filter(|&s| {
                                 start <= s.epoch
-                                    && s.epoch + self.params.unbonding_len
+                                    && s.epoch
+                                        + self.params.unbonding_len
+                                        + self
+                                            .params
+                                            .cubic_slashing_window_length
                                         < infraction_epoch
                             })
                             .cloned()
@@ -2293,6 +2298,7 @@ impl AbstractPosState {
                             &slashes_for_this_unbond,
                             unbond_amount,
                             self.params.unbonding_len,
+                            self.params.cubic_slashing_window_length,
                         );
 
                         println!(
@@ -2334,7 +2340,11 @@ impl AbstractPosState {
                             .iter()
                             .filter(|&s| {
                                 start <= s.epoch
-                                    && s.epoch + self.params.unbonding_len
+                                    && s.epoch
+                                        + self.params.unbonding_len
+                                        + self
+                                            .params
+                                            .cubic_slashing_window_length
                                         < infraction_epoch
                             })
                             .cloned()
@@ -2355,6 +2365,7 @@ impl AbstractPosState {
                             &slashes_for_this_unbond,
                             unbond_amount,
                             self.params.unbonding_len,
+                            self.params.cubic_slashing_window_length,
                         );
                         println!(
                             "Total unbonded (offset {}) w slashing = {}",
@@ -2833,6 +2844,7 @@ fn compute_amount_after_slashing(
     slashes: &BTreeMap<Epoch, Decimal>,
     amount: token::Amount,
     unbonding_len: u64,
+    cubic_slash_window_len: u64,
 ) -> token::Amount {
     let mut computed_amounts = Vec::<SlashedAmount>::new();
     let mut updated_amount = amount;
@@ -2841,7 +2853,9 @@ fn compute_amount_after_slashing(
         let mut indices_to_remove = BTreeSet::<usize>::new();
 
         for (idx, slashed_amount) in computed_amounts.iter().enumerate() {
-            if slashed_amount.epoch + unbonding_len < *infraction_epoch {
+            if slashed_amount.epoch + unbonding_len + cubic_slash_window_len
+                < *infraction_epoch
+            {
                 updated_amount = updated_amount
                     .checked_sub(slashed_amount.amount)
                     .unwrap_or_default();
