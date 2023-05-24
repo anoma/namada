@@ -3019,25 +3019,6 @@ where
     Ok(dec!(9) * sum_vp_fraction * sum_vp_fraction)
 }
 
-/// Get final cubic slashing rate that is bound from below by some minimum value
-/// and capped at 100%
-pub fn get_final_cubic_slash_rate<S>(
-    storage: &S,
-    params: &PosParams,
-    infraction_epoch: Epoch,
-    current_slash_type: SlashType,
-) -> storage_api::Result<Decimal>
-where
-    S: StorageRead,
-{
-    let cubic_rate =
-        compute_cubic_slash_rate(storage, params, infraction_epoch)?;
-    // Need some truncation right now to max the rate at 100%
-    let rate = cubic_rate
-        .clamp(current_slash_type.get_slash_rate(params), Decimal::ONE);
-    Ok(rate)
-}
-
 /// Record a slash for a misbehavior that has been received from Tendermint and
 /// then jail the validator, removing it from the validator set. The slash rate
 /// will be computed at a later epoch.
