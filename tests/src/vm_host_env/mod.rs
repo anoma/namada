@@ -1661,4 +1661,85 @@ mod tests {
         let result = ibc::validate_token_vp_from_tx(&env, &tx, &escrow);
         assert!(result.expect("token validation failed unexpectedly"));
     }
+
+    /// Test IBC token VP to reject an invalid transfer from an escrow account
+    #[test]
+    fn test_ibc_invalid_refund() {
+        // The environment must be initialized first
+        tx_host_env::init();
+
+        // Set the initial state before starting transactions
+        let (token, sender) = ibc::init_storage();
+        let (client_id, _client_state, mut writes) = ibc::prepare_client();
+        let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
+        writes.extend(conn_writes);
+        let (port_id, channel_id, channel_writes) =
+            ibc::prepare_opened_channel(&conn_id, false);
+        writes.extend(channel_writes);
+        writes.into_iter().for_each(|(key, val)| {
+            tx_host_env::with(|env| {
+                env.wl_storage
+                    .storage
+                    .write(&key, &val)
+                    .expect("write error");
+            });
+        });
+        // escrow in advance
+        let escrow_key = token::balance_key(
+            &token,
+            &address::Address::Internal(address::InternalAddress::IbcEscrow),
+        );
+        let val = Amount::whole(100).try_to_vec().unwrap();
+        tx_host_env::with(|env| {
+            env.wl_storage
+                .storage
+                .write(&escrow_key, &val)
+                .expect("write error");
+        });
+
+        // dummy transfer message
+        let transfer_msg =
+            ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
+        // dummy timeout message
+        let counterparty = ibc::dummy_channel_counterparty();
+        let packet = ibc::packet_from_message(
+            &transfer_msg,
+            ibc::Sequence::from(1),
+            &counterparty,
+        );
+        let msg = ibc::msg_timeout(packet, ibc::Sequence::from(1));
+
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx = Tx {
+            code_or_hash: vec![],
+            data: Some(tx_data.clone()),
+            timestamp: DateTimeUtc::now(),
+            chain_id: ChainId::default(),
+            expiration: None,
+        }
+        .sign(&key::testing::keypair_1());
+
+        // invalid refund
+        let sender_key = token::balance_key(&token, &sender);
+        tx_host_env::with(|env| {
+            let escrow_val = Amount::whole(0).try_to_vec().unwrap();
+            env.wl_storage
+                .write_log
+                .write(&escrow_key, escrow_val)
+                .expect("write error");
+            let sender_val = Amount::whole(100).try_to_vec().unwrap();
+            env.wl_storage
+                .write_log
+                .write(&sender_key, sender_val)
+                .expect("write error");
+        });
+
+        // IBC VP isn't triggered because the transaction didn't change
+        // IBC-related data
+        // Check if IBC token VP reject the transaction
+        let env = tx_host_env::take();
+        let result = ibc::validate_token_vp_from_tx(&env, &tx, &escrow_key);
+        assert!(result.is_err());
+    }
 }

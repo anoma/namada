@@ -142,6 +142,14 @@ where
             ));
         }
 
+        // Check if IBC-related data has been changed to validate the IBC
+        // message
+        if !keys_changed.iter().any(ibc_storage::is_ibc_key) {
+            return Err(Error::TokenTransfer(
+                "Invalid transfer without IBC-related state change".to_owned(),
+            ));
+        }
+
         // Check the message
         let ibc_msg =
             Any::decode(&tx_data[..]).map_err(Error::DecodingIbcData)?;
