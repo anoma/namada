@@ -2548,7 +2548,7 @@ fn pos_init_validator() -> Result<()> {
         find_bonded_stake(&test, new_validator, &validator_one_rpc)?;
     assert_eq!(
         bonded_stake,
-        token::Amount::from_str("11_000.5", NATIVE_MAX_DECIMAL_PLACES).unwrap()
+        token::Amount::from_str("11000.5", NATIVE_MAX_DECIMAL_PLACES).unwrap()
     );
 
     Ok(())
