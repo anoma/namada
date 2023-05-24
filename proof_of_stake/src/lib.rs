@@ -1776,7 +1776,11 @@ fn get_slashed_amount(
             // epochs before this current slash
             // TODO: understand this better (from Informal)
             // TODO: do bounds of this need to be changed with a +/- 1??
-            if slashed_amount.epoch + params.unbonding_len < *infraction_epoch {
+            if slashed_amount.epoch
+                + params.unbonding_len
+                + params.cubic_slashing_window_length
+                < *infraction_epoch
+            {
                 updated_amount = updated_amount
                     .checked_sub(slashed_amount.amount)
                     .unwrap_or_default();
@@ -3354,7 +3358,9 @@ where
                     );
                     // TODO: is the 2nd condition correct??
                     if start <= val_slash.epoch
-                        && val_slash.epoch + params.unbonding_len
+                        && val_slash.epoch
+                            + params.unbonding_len
+                            + params.cubic_slashing_window_length
                             < infraction_epoch
                     // TODO: this `<` should maybe be a `<=`
                     {
@@ -3451,7 +3457,9 @@ where
                         val_slash.epoch, val_slash.rate
                     );
                     if start <= val_slash.epoch
-                        && val_slash.epoch + params.unbonding_len
+                        && val_slash.epoch
+                            + params.unbonding_len
+                            + params.cubic_slashing_window_length
                             < infraction_epoch
                     // TODO: this `<` should maybe be a `<=`
                     {
