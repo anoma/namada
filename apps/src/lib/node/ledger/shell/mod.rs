@@ -474,7 +474,7 @@ where
                         "{}",
                         wallet_path.as_path().to_str().unwrap()
                     );
-                    let wallet = wallet::Wallet::load_or_new_from_genesis(
+                    let mut wallet = crate::wallet::load_or_new_from_genesis(
                         wallet_path,
                         genesis::genesis_config::open_genesis_config(
                             genesis_path,
@@ -484,7 +484,7 @@ where
                     wallet
                         .into_validator_data()
                         .map(|data| ShellMode::Validator {
-                            data,
+                            data: data.clone(),
                             broadcast_sender,
                             eth_oracle,
                         })
@@ -1157,7 +1157,7 @@ where
         let genesis_path = &self
             .base_dir
             .join(format!("{}.toml", self.chain_id.as_str()));
-        let mut wallet = wallet::Wallet::load_or_new_from_genesis(
+        let mut wallet = crate::wallet::load_or_new_from_genesis(
             wallet_path,
             genesis::genesis_config::open_genesis_config(genesis_path).unwrap(),
         );
@@ -1174,7 +1174,7 @@ where
                      it's established account",
                 );
             let pk = sk.ref_to();
-            wallet.find_key_by_pk(&pk).expect(
+            wallet.find_key_by_pk(&pk, None).expect(
                 "A validator's established keypair should be stored in its \
                  wallet",
             )

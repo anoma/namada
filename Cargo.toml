@@ -38,21 +38,21 @@ async-process = {git = "https://github.com/heliaxdev/async-process.git", rev = "
 # borsh-schema-derive-internal = {path = "../borsh-rs/borsh-schema-derive-internal"}
 
 # patched to a commit on the `eth-bridge-integration+consensus-timeout` branch of our fork
-tendermint = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "cf4dd4ccb64c12485ff764c10888237cf87396bc"}
-tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "cf4dd4ccb64c12485ff764c10888237cf87396bc"}
-tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "cf4dd4ccb64c12485ff764c10888237cf87396bc"}
-tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "cf4dd4ccb64c12485ff764c10888237cf87396bc"}
-tendermint-testgen = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "cf4dd4ccb64c12485ff764c10888237cf87396bc"}
-tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "cf4dd4ccb64c12485ff764c10888237cf87396bc"}
+tendermint = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "becb27564c143f9a1e64d85cfe80a6dac1acce33"}
+tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "becb27564c143f9a1e64d85cfe80a6dac1acce33"}
+tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "becb27564c143f9a1e64d85cfe80a6dac1acce33"}
+tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "becb27564c143f9a1e64d85cfe80a6dac1acce33"}
+tendermint-testgen = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "becb27564c143f9a1e64d85cfe80a6dac1acce33"}
+tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "becb27564c143f9a1e64d85cfe80a6dac1acce33"}
 
 # patched to a commit on the `eth-bridge-integration` branch of our fork
-ibc = {git = "https://github.com/heliaxdev/cosmos-ibc-rs.git", rev = "17c6d16e6e32c5db96f1d9026ce6beb019cdc7c4"}
-ibc-proto = {git = "https://github.com/heliaxdev/ibc-proto-rs.git", rev = "e50ec3c3c1a9a0bcc3cd59516645ff5b4e1db281"}
-ibc-relayer = {git = "https://github.com/heliaxdev/hermes.git", rev = "b5f2a8881505d97863b965eec3d0fa8a00cde0b8"}
-ibc-relayer-types = {git = "https://github.com/heliaxdev/hermes.git", rev = "b5f2a8881505d97863b965eec3d0fa8a00cde0b8"}
+ibc = {git = "https://github.com/heliaxdev/cosmos-ibc-rs.git", rev = "e06e2ca10bbf555dc87cf4a02a9f37a67931f268"}
+ibc-proto = {git = "https://github.com/heliaxdev/ibc-proto-rs.git", rev = "c8c607d0f7a1ffae19df7b3e04f467d0a836a75b"}
+ibc-relayer = {git = "https://github.com/heliaxdev/hermes.git", rev = "568ffee00f24aaf3b01db5af51583bec06b69164"}
+ibc-relayer-types = {git = "https://github.com/heliaxdev/hermes.git", rev = "568ffee00f24aaf3b01db5af51583bec06b69164"}
 
 # patched to a commit on the `eth-bridge-integration` branch of our fork
-tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "f8afdd8b98cc2dbcd5df51f2fe8fc321bb0abe11"}
+tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "88d5f2f8ffaf484d3e9db8924fe595c54cdd6459"}
 
 # patched to the yanked 1.2.0 until masp updates bitvec
 funty = { git = "https://github.com/bitvecto-rs/funty/", rev = "7ef0d890fbcd8b3def1635ac1a877fc298488446" }

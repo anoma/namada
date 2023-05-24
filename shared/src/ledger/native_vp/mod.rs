@@ -527,7 +527,7 @@ where
         #[cfg(not(feature = "wasm-runtime"))]
         {
             // This line is here to prevent unused var clippy warning
-            let _ = (vp_code, input_data);
+            let _ = (vp_code_hash, input_data);
             unimplemented!(
                 "The \"wasm-runtime\" feature must be enabled to use the \
                  `eval` function."

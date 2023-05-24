@@ -6,7 +6,7 @@ license = "GPL-3.0"
 name = "namada_apps"
 readme = "../README.md"
 resolver = "2"
-version = "0.15.3"
+version = "0.16.0"
 default-run = "namada"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -66,7 +66,7 @@ abciplus = [
 ]
 
 [dependencies]
-namada = {path = "../shared", default-features = false, features = ["wasm-runtime", "ferveo-tpke"]}
+namada = {path = "../shared", default-features = false, features = ["wasm-runtime", "ferveo-tpke", "masp-tx-gen"]}
 ark-serialize = "0.3.0"
 ark-std = "0.3.0"
 # branch = "bat/arse-merkle-tree"
@@ -121,7 +121,7 @@ rayon = "=1.5.3"
 regex = "1.4.5"
 reqwest = "0.11.4"
 rlimit = "0.5.4"
-rocksdb = {version = "0.20.1", features = ['zstd', 'jemalloc'], default-features = false}
+rocksdb = {version = "0.21.0", features = ['zstd', 'jemalloc'], default-features = false}
 rpassword = "5.0.1"
 serde = {version = "1.0.125", features = ["derive"]}
 serde_bytes = "0.11.5"
@@ -156,8 +156,8 @@ winapi = "0.3.9"
 masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", features = ["transparent-inputs"] }
 masp_proofs = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", features = ["bundled-prover", "download-params"] }
 bimap = {version = "0.6.2", features = ["serde"]}
-rust_decimal = "1.26.1"
-rust_decimal_macros = "1.26.1"
+rust_decimal = "=1.26.1"
+rust_decimal_macros = "=1.26.1"
 directories = "4.0.1"
 
 warp = "0.3.2"

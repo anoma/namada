@@ -68,14 +68,14 @@ where
     let (log_val, gas) = write_log.read_pre(key);
     add_gas(gas_meter, gas)?;
     match log_val {
-        Some(&write_log::StorageModification::Write { ref value }) => {
+        Some(write_log::StorageModification::Write { ref value }) => {
             Ok(Some(value.clone()))
         }
         Some(&write_log::StorageModification::Delete) => {
             // Given key has been deleted
             Ok(None)
         }
-        Some(&write_log::StorageModification::InitAccount {
+        Some(write_log::StorageModification::InitAccount {
             ref vp_code_hash,
         }) => {
             // Read the VP of a new account
@@ -110,14 +110,14 @@ where
     let (log_val, gas) = write_log.read(key);
     add_gas(gas_meter, gas)?;
     match log_val {
-        Some(&write_log::StorageModification::Write { ref value }) => {
+        Some(write_log::StorageModification::Write { ref value }) => {
             Ok(Some(value.clone()))
         }
         Some(&write_log::StorageModification::Delete) => {
             // Given key has been deleted
             Ok(None)
         }
-        Some(&write_log::StorageModification::InitAccount {
+        Some(write_log::StorageModification::InitAccount {
             ref vp_code_hash,
         }) => {
             // Read the VP code hash of a new account
@@ -147,7 +147,7 @@ pub fn read_temp(
     let (log_val, gas) = write_log.read(key);
     add_gas(gas_meter, gas)?;
     match log_val {
-        Some(&write_log::StorageModification::Temp { ref value }) => {
+        Some(write_log::StorageModification::Temp { ref value }) => {
             Ok(Some(value.clone()))
         }
         None => Ok(None),
