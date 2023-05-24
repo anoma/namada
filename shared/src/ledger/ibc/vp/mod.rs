@@ -9,10 +9,6 @@ use std::collections::{BTreeSet, HashSet};
 use std::rc::Rc;
 use std::time::Duration;
 
-use namada_core::ledger::ibc::storage::{
-    client_id, ibc_prefix, is_client_counter_key, IbcPrefix,
-};
-use borsh::BorshDeserialize;
 use context::{PseudoExecutionContext, VpValidationContext};
 use namada_core::ledger::ibc::storage::{is_ibc_denom_key, is_ibc_key};
 use namada_core::ledger::ibc::{
@@ -255,8 +251,6 @@ mod tests {
     use core::time::Duration;
     use std::convert::TryFrom;
     use std::str::FromStr;
-    use crate::types::transaction::{TxType};
-    use crate::proto::{Code, Data, Signature, Section};
 
     use borsh::BorshSerialize;
     use prost::Message;
@@ -352,13 +346,14 @@ mod tests {
     use crate::ledger::parameters::EpochDuration;
     use crate::ledger::{ibc, pos};
     use crate::proof_of_stake::parameters::PosParams;
-    use crate::proto::Tx;
+    use crate::proto::{Code, Data, Section, Signature, Tx};
     use crate::tendermint::time::Time as TmTime;
     use crate::tendermint_proto::Protobuf as TmProtobuf;
     use crate::types::key::testing::keypair_1;
     use crate::types::storage::{BlockHash, BlockHeight, TxIndex};
     use crate::types::time::DurationSecs;
     use crate::types::token::{balance_key, Amount};
+    use crate::types::transaction::TxType;
     use crate::vm::wasm;
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
@@ -829,9 +824,8 @@ mod tests {
 
         let ibc = Ibc { ctx };
         // this should fail because no state is stored
-        let result = ibc
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .unwrap_err();
+        let result =
+            ibc.validate_tx(&tx, &keys_changed, &verifiers).unwrap_err();
         assert_matches!(result, Error::StateChange(_));
     }
 
@@ -952,7 +946,7 @@ mod tests {
             tx.data_sechash(),
             &keypair_1(),
         )));
-        
+
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -972,12 +966,8 @@ mod tests {
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
         assert!(
-            ibc.validate_tx(
-                &tx,
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
+            ibc.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
         );
     }
 
@@ -1168,7 +1158,7 @@ mod tests {
             tx.data_sechash(),
             &keypair_1(),
         )));
-        
+
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1187,9 +1177,8 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         // this should fail because no event
-        let result = ibc
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .unwrap_err();
+        let result =
+            ibc.validate_tx(&tx, &keys_changed, &verifiers).unwrap_err();
         assert_matches!(result, Error::IbcEvent(_));
     }
 
@@ -1320,12 +1309,8 @@ mod tests {
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
         assert!(
-            ibc.validate_tx(
-                &tx,
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
+            ibc.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
         );
     }
 
@@ -1993,12 +1978,8 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         assert!(
-            ibc.validate_tx(
-                &tx,
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
+            ibc.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
         );
     }
 
@@ -2138,12 +2119,8 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         assert!(
-            ibc.validate_tx(
-                &tx,
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
+            ibc.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
         );
     }
 
@@ -2321,12 +2298,8 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         assert!(
-            ibc.validate_tx(
-                &tx,
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
+            ibc.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
         );
     }
 
@@ -2473,12 +2446,8 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         assert!(
-            ibc.validate_tx(
-                &tx,
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
+            ibc.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
         );
     }
 
@@ -2630,12 +2599,8 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         assert!(
-            ibc.validate_tx(
-                &tx,
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
+            ibc.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
         );
     }
 
@@ -2787,12 +2752,8 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         assert!(
-            ibc.validate_tx(
-                &tx,
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
+            ibc.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
         );
     }
 }

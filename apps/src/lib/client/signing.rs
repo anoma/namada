@@ -1,46 +1,16 @@
 //! Helpers for making digital signatures using cryptographic keys from the
 //! wallet.
 
-use std::collections::{BTreeMap, HashMap};
-use std::env;
-use std::fs::File;
-use std::io::{Error, ErrorKind, Write};
-
-use borsh::{BorshDeserialize, BorshSerialize};
-use data_encoding::HEXLOWER;
-use itertools::Itertools;
-use masp_primitives::asset_type::AssetType;
-use masp_primitives::transaction::components::sapling::fees::{
-    InputView, OutputView,
-};
-use namada::ledger::parameters::storage as parameter_storage;
-use namada::proof_of_stake::Epoch;
-use namada::proto::{Section, Signature, Tx};
-use namada::types::address::{masp, Address, ImplicitAddress};
-use namada::types::key::*;
-use namada::types::masp::{ExtendedViewingKey, PaymentAddress};
-use namada::types::token;
-use namada::types::token::{Amount, Transfer};
-use namada::types::transaction::decrypted::DecryptedTx;
-use namada::types::transaction::governance::{
-    InitProposalData, VoteProposalData,
-};
-use namada::types::transaction::{
-    hash_tx, pos, Fee, InitAccount, InitValidator, TxType, UpdateVp, WrapperTx,
-    MIN_FEE,
-};
-use serde::{Deserialize, Serialize};
-
-use super::rpc;
-use crate::cli::context::{WalletAddress, WalletKeypair};
-use crate::cli::{self, args, Context};
-use crate::facade::tendermint_config::net::Address as TendermintAddress;
-use crate::facade::tendermint_rpc::HttpClient;
 use namada::ledger::rpc::TxBroadcastData;
 use namada::ledger::signing::TxSigningKey;
 use namada::ledger::tx;
 use namada::ledger::wallet::{Wallet, WalletUtils};
+use namada::proof_of_stake::Epoch;
+use namada::proto::Tx;
+use namada::types::address::Address;
 use namada::types::key::*;
+
+use crate::cli::args;
 
 /// Find the public key for the given address and try to load the keypair
 /// for it from the wallet. Panics if the key cannot be found or loaded.
@@ -101,16 +71,16 @@ pub async fn sign_tx<
         #[cfg(not(feature = "mainnet"))]
         requires_pow,
     )
-        .await
+    .await
 }
 
 /// Create a wrapper tx from a normal tx. Get the hash of the
 /// wrapper and its payload which is needed for monitoring its
 /// progress on chain.
 pub async fn sign_wrapper<
-        C: namada::ledger::queries::Client + Sync,
+    C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
-    >(
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: &args::Tx,

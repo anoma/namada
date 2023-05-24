@@ -28,8 +28,6 @@ mod tests {
     };
     use namada::ledger::tx_env::TxEnv;
     use namada::proto::{Code, Data, Section, Signature, Tx};
-    use namada::tendermint_proto::Protobuf;
-    use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
@@ -607,7 +605,7 @@ mod tests {
         tx_host_env::init();
 
         ibc::init_storage();
-        
+
         // Start a transaction to create a new client
         let msg = ibc::msg_create_client();
         let mut tx_data = vec![];
@@ -857,7 +855,7 @@ mod tests {
                     .expect("write error");
             });
         });
-        
+
         // Start a transaction for ChannelOpenInit
         let port_id = ibc::PortId::transfer();
         let msg = ibc::msg_channel_open_init(port_id.clone(), conn_id);

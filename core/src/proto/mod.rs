@@ -4,8 +4,8 @@ pub mod generated;
 mod types;
 
 pub use types::{
-    Code, Commitment, Data, Dkg, Error, Header, MaspBuilder, Section, Signature,
-    Tx, TxError,
+    Code, Commitment, Data, Dkg, Error, Header, MaspBuilder, Section,
+    Signature, Tx, TxError,
 };
 
 #[cfg(test)]

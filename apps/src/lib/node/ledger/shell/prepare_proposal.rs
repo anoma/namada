@@ -145,10 +145,8 @@ where
                     if let (Some(block_time), Some(exp)) = (block_time.as_ref(), &tx.header.expiration) {
                         if block_time > exp { return None }
                     }
-                    if tx.validate_header().is_ok() && tx.header().wrapper().is_some() {
-                        if self.replay_protection_checks(&tx, tx_bytes.as_slice(), &mut temp_wl_storage).is_ok() {
-                            return Some(tx_bytes.clone());
-                        }
+                    if tx.validate_header().is_ok() && tx.header().wrapper().is_some() && self.replay_protection_checks(&tx, tx_bytes.as_slice(), &mut temp_wl_storage).is_ok() {
+                        return Some(tx_bytes.clone());
                     }
                 }
                 None
@@ -291,7 +289,6 @@ mod test_prepare_proposal {
     use borsh::BorshSerialize;
     use namada::ledger::replay_protection;
     use namada::proof_of_stake::Epoch;
-    use namada::types::hash::Hash;
     use namada::proto::{Code, Data, Header, Section, Signature};
     use namada::types::transaction::{Fee, WrapperTx};
 
@@ -504,7 +501,7 @@ mod test_prepare_proposal {
             &keypair,
         )));
         wrapper.encrypt(&Default::default());
-        
+
         let req = RequestPrepareProposal {
             txs: vec![wrapper.to_bytes(); 2],
             ..Default::default()
@@ -545,11 +542,9 @@ mod test_prepare_proposal {
             &keypair,
         )));
         wrapper.encrypt(&Default::default());
-        let inner_unsigned_hash = wrapper
-            .clone()
-            .update_header(TxType::Raw)
-            .header_hash();
-        
+        let inner_unsigned_hash =
+            wrapper.clone().update_header(TxType::Raw).header_hash();
+
         // Write inner hash to storage
         let hash_key = replay_protection::get_tx_hash_key(&inner_unsigned_hash);
         shell
@@ -603,17 +598,18 @@ mod test_prepare_proposal {
         )));
         wrapper.encrypt(&Default::default());
 
-        let mut new_wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount: 0.into(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            &keypair_2,
-            Epoch(0),
-            0.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        ))));
+        let mut new_wrapper =
+            Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: 0.into(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                &keypair_2,
+                Epoch(0),
+                0.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         new_wrapper.header.chain_id = shell.chain_id.clone();
         new_wrapper.header.timestamp = wrapper.header.timestamp;
         new_wrapper.set_code(tx_code);

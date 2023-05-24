@@ -45,7 +45,7 @@ mainnet = [
   "namada/mainnet",
 ]
 dev = ["namada/dev"]
-std = ["ed25519-consensus/std", "rand/std", "rand_core/std"]
+std = ["ed25519-consensus/std", "rand/std", "rand_core/std", "namada/std"]
 # for integration tests and test utilies
 testing = ["dev"]
 

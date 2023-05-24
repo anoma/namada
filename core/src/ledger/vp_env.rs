@@ -7,8 +7,9 @@ use super::storage_api::{self, StorageRead};
 use crate::proto::Tx;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
-use crate::types::storage::{BlockHash, BlockHeight, Epoch, Header, Key, TxIndex};
-use crate::types::key::common;
+use crate::types::storage::{
+    BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
+};
 
 /// Validity predicate's environment is available for native VPs and WASM VPs
 pub trait VpEnv<'view>

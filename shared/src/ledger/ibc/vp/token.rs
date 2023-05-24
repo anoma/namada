@@ -24,9 +24,7 @@ use crate::ledger::ibc::storage as ibc_storage;
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::proto::Tx;
-use crate::types::address::{
-    Address, DecodeError as AddressError, InternalAddress,
-};
+use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::token::{self, Amount, AmountParseError};
 use crate::vm::WasmCacheAccess;

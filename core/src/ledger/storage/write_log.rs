@@ -439,11 +439,7 @@ impl WriteLog {
                 }
                 StorageModification::InitAccount { vp_code_hash } => {
                     storage
-                        .batch_write_subspace_val(
-                            batch,
-                            key,
-                            *vp_code_hash,
-                        )
+                        .batch_write_subspace_val(batch, key, *vp_code_hash)
                         .map_err(Error::StorageError)?;
                 }
                 // temporary value isn't persisted

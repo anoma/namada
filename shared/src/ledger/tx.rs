@@ -1,23 +1,12 @@
 //! SDK functions to construct different types of transactions
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::str::FromStr;
 
 use borsh::BorshSerialize;
 use itertools::Either::*;
-use masp_primitives::transaction::builder;
-use namada_core::types::address::{masp, masp_tx_key, Address};
-use namada_proof_of_stake::parameters::PosParams;
-use namada_proof_of_stake::types::CommissionPair;
-use prost::EncodeError;
-use rust_decimal::Decimal;
-use thiserror::Error;
-use tokio::time::Duration;
 use masp_primitives::asset_type::AssetType;
-use std::collections::HashSet;
-use masp_primitives::transaction::components::{
-    Amount, OutputDescription, TxOut,
-};
+use masp_primitives::transaction::builder;
 use masp_primitives::transaction::builder::Builder;
 use masp_primitives::transaction::components::sapling::fees::{
     ConvertView, InputView as SaplingInputView, OutputView as SaplingOutputView,
@@ -25,9 +14,17 @@ use masp_primitives::transaction::components::sapling::fees::{
 use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
+use masp_primitives::transaction::components::Amount;
+use namada_core::types::address::{masp, masp_tx_key, Address};
+use namada_proof_of_stake::parameters::PosParams;
+use namada_proof_of_stake::types::CommissionPair;
+use prost::EncodeError;
+use rust_decimal::Decimal;
+use sha2::{Digest as Sha2Digest, Sha256};
+use thiserror::Error;
+use tokio::time::Duration;
 
 use super::rpc::query_wasm_code_hash;
-use crate::proto::MaspBuilder;
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc::core::ics04_channel::timeout::TimeoutHeight;
 use crate::ibc::signer::Signer;
@@ -41,34 +38,45 @@ use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
 use crate::ledger::rpc::{self, TxBroadcastData, TxResponse};
 use crate::ledger::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
 use crate::ledger::wallet::{Wallet, WalletUtils};
-use crate::proto::{Tx, Data, Code, Section, Signature};
+use crate::proto::{Code, Data, MaspBuilder, Section, Signature, Tx};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
+use crate::types::hash::Hash;
 use crate::types::key::*;
 use crate::types::masp::TransferTarget;
 use crate::types::storage::{Epoch, RESERVED_ADDRESS_PREFIX};
 use crate::types::time::DateTimeUtc;
-use crate::types::transaction::{pos, InitAccount, UpdateVp};
+use crate::types::transaction::decrypted::DecryptedTx;
+use crate::types::transaction::{pos, InitAccount, TxType, UpdateVp};
 use crate::types::{storage, token};
 use crate::vm;
 use crate::vm::WasmValidationError;
-use crate::types::transaction::decrypted::DecryptedTx;
-use crate::types::transaction::TxType;
-use crate::types::hash::Hash;
-use sha2::{Digest as Sha2Digest, Sha256};
 
+/// Initialize account transaction WASM
 pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
+/// Initialize validator transaction WASM path
 pub const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
+/// Initialize proposal transaction WASM path
 pub const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
+/// Vote transaction WASM path
 pub const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
+/// Reveal public key transaction WASM path
 pub const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
+/// Update validity predicate WASM path
 pub const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
+/// Transfer transaction WASM path
 pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
+/// IBC transaction WASM path
 pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
+/// User validity predicate WASM path
 pub const VP_USER_WASM: &str = "vp_user.wasm";
+/// Bond WASM path
 pub const TX_BOND_WASM: &str = "tx_bond.wasm";
+/// Unbond WASM path
 pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
+/// Withdraw WASM path
 pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
+/// Change commission WASM path
 pub const TX_CHANGE_COMMISSION_WASM: &str =
     "tx_change_validator_commission.wasm";
 
@@ -353,8 +361,7 @@ pub async fn submit_reveal_pk_aux<
     let keypair = if let Some(signing_key) = &args.signing_key {
         Ok(signing_key.clone())
     } else if let Some(signer) = args.signer.as_ref() {
-        find_keypair(client, wallet, &signer, args.password.clone())
-            .await
+        find_keypair(client, wallet, signer, args.password.clone()).await
     } else {
         find_keypair(client, wallet, &addr, args.password.clone()).await
     }?;
@@ -649,7 +656,7 @@ pub async fn submit_validator_commission_change<
     tx.header.expiration = args.tx.expiration;
     tx.set_data(Data::new(data));
     tx.set_code(Code::new(tx_code));
-    
+
     let default_signer = args.validator.clone();
     process_tx::<C, U>(
         client,
@@ -714,7 +721,7 @@ pub async fn submit_withdraw<
     tx.header.expiration = args.tx.expiration;
     tx.set_data(Data::new(data));
     tx.set_code(Code::new(tx_code));
-    
+
     let default_signer = args.source.unwrap_or(args.validator);
     process_tx::<C, U>(
         client,
@@ -745,15 +752,16 @@ pub async fn submit_unbond<
     if !args.tx.force {
         known_validator_or_err(args.validator.clone(), args.tx.force, client)
             .await?;
-        
+
         let bond_amount =
             rpc::query_bond(client, &bond_source, &args.validator, None).await;
         println!("Bond amount available for unbonding: {} NAM", bond_amount);
 
         if args.amount > bond_amount {
             eprintln!(
-                "The total bonds of the source {} is lower than the amount to be \
-                 unbonded. Amount to unbond is {} and the total bonds is {}.",
+                "The total bonds of the source {} is lower than the amount to \
+                 be unbonded. Amount to unbond is {} and the total bonds is \
+                 {}.",
                 bond_source, args.amount, bond_amount
             );
             if !args.tx.force {
@@ -768,7 +776,8 @@ pub async fn submit_unbond<
 
     // Query the unbonds before submitting the tx
     let unbonds =
-        rpc::query_unbond_with_slashing(client, &bond_source, &args.validator).await;
+        rpc::query_unbond_with_slashing(client, &bond_source, &args.validator)
+            .await;
     let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();
@@ -789,7 +798,7 @@ pub async fn submit_unbond<
     tx.set_data(Data::new(data));
     tx.set_code(Code::new(tx_code));
 
-    let default_signer = args.source.unwrap_or(args.validator.clone());
+    let default_signer = args.source.unwrap_or_else(|| args.validator.clone());
     process_tx::<C, U>(
         client,
         wallet,
@@ -803,7 +812,8 @@ pub async fn submit_unbond<
 
     // Query the unbonds post-tx
     let unbonds =
-        rpc::query_unbond_with_slashing(client, &bond_source, &args.validator).await;
+        rpc::query_unbond_with_slashing(client, &bond_source, &args.validator)
+            .await;
     let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();
@@ -1053,17 +1063,16 @@ pub async fn submit_ibc_transfer<
 /// Try to decode the given asset type and add its decoding to the supplied set.
 /// Returns true only if a new decoding has been added to the given set.
 async fn add_asset_type<
-        C: crate::ledger::queries::Client + Sync,
+    C: crate::ledger::queries::Client + Sync,
     U: ShieldedUtils<C = C>,
-    >(
+>(
     asset_types: &mut HashSet<(Address, Epoch)>,
     shielded: &mut ShieldedContext<U>,
     client: &C,
     asset_type: AssetType,
 ) -> bool {
-    if let Some(asset_type) = shielded
-        .decode_asset_type(client.clone(), asset_type)
-        .await
+    if let Some(asset_type) =
+        shielded.decode_asset_type(client, asset_type).await
     {
         asset_types.insert(asset_type)
     } else {
@@ -1075,13 +1084,13 @@ async fn add_asset_type<
 /// function provides the data necessary for offline wallets to present asset
 /// type information.
 async fn used_asset_types<
-        C: crate::ledger::queries::Client + Sync,
+    C: crate::ledger::queries::Client + Sync,
     U: ShieldedUtils<C = C>,
     P,
     R,
     K,
     N,
-    >(
+>(
     shielded: &mut ShieldedContext<U>,
     client: &C,
     builder: &Builder<P, R, K, N>,
@@ -1089,7 +1098,7 @@ async fn used_asset_types<
     let mut asset_types = HashSet::new();
     // Collect all the asset types used in the Sapling inputs
     for input in builder.sapling_inputs() {
-        add_asset_type(&mut asset_types, shielded, &client, input.asset_type())
+        add_asset_type(&mut asset_types, shielded, client, input.asset_type())
             .await;
     }
     // Collect all the asset types used in the transparent inputs
@@ -1097,19 +1106,19 @@ async fn used_asset_types<
         add_asset_type(
             &mut asset_types,
             shielded,
-            &client,
+            client,
             input.coin().asset_type(),
         )
         .await;
     }
     // Collect all the asset types used in the Sapling outputs
     for output in builder.sapling_outputs() {
-        add_asset_type(&mut asset_types, shielded, &client, output.asset_type())
+        add_asset_type(&mut asset_types, shielded, client, output.asset_type())
             .await;
     }
     // Collect all the asset types used in the transparent outputs
     for output in builder.transparent_outputs() {
-        add_asset_type(&mut asset_types, shielded, &client, output.asset_type())
+        add_asset_type(&mut asset_types, shielded, client, output.asset_type())
             .await;
     }
     // Collect all the asset types used in the Sapling converts
@@ -1117,7 +1126,8 @@ async fn used_asset_types<
         for (asset_type, _) in
             Amount::from(output.conversion().clone()).components()
         {
-            add_asset_type(&mut asset_types, shielded, &client, *asset_type).await;
+            add_asset_type(&mut asset_types, shielded, client, *asset_type)
+                .await;
         }
     }
     Ok(asset_types)
@@ -1163,7 +1173,8 @@ pub async fn submit_transfer<
         balance_key,
         args.tx.force,
         client,
-    ).await?;
+    )
+    .await?;
 
     let masp_addr = masp();
     // For MASP sources, use a special sentinel key recognized by VPs as default
@@ -1193,9 +1204,10 @@ pub async fn submit_transfer<
         };
     // If our chosen signer is the MASP sentinel key, then our shielded inputs
     // will need to cover the gas fees.
-    let chosen_signer = tx_signer::<C, V>(client, wallet, &args.tx, default_signer.clone())
-        .await?
-        .ref_to();
+    let chosen_signer =
+        tx_signer::<C, V>(client, wallet, &args.tx, default_signer.clone())
+            .await?
+            .ref_to();
     let shielded_gas = masp_tx_key().ref_to() == chosen_signer;
     // Determine whether to pin this transaction to a storage key
     let key = match &args.target {
@@ -1206,10 +1218,9 @@ pub async fn submit_transfer<
     #[cfg(not(feature = "mainnet"))]
     let is_source_faucet = rpc::is_faucet_account(client, &source).await;
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, TX_TRANSFER_WASM)
-            .await
-            .unwrap();
+    let tx_code_hash = query_wasm_code_hash(client, TX_TRANSFER_WASM)
+        .await
+        .unwrap();
 
     // Loop twice in case the first submission attempt fails
     for _ in 0..2 {
@@ -1234,9 +1245,11 @@ pub async fn submit_transfer<
 
         let mut tx = Tx::new(TxType::Raw);
         tx.header.chain_id = args.tx.chain_id.clone().unwrap();
-        tx.header.expiration = args.tx.expiration.clone();
+        tx.header.expiration = args.tx.expiration;
         // Add the MASP Transaction and its Builder to facilitate validation
-        let (masp_hash, shielded_tx_epoch) = if let Some(shielded_parts) = shielded_parts {
+        let (masp_hash, shielded_tx_epoch) = if let Some(shielded_parts) =
+            shielded_parts
+        {
             // Add a MASP Transaction section to the Tx
             let masp_tx = tx.add_section(Section::MaspTx(shielded_parts.1));
             // Get the hash of the MASP Transaction section
@@ -1244,13 +1257,10 @@ pub async fn submit_transfer<
                 Hash(masp_tx.hash(&mut Sha256::new()).finalize_reset().into());
             // Get the decoded asset types used in the transaction to give
             // offline wallet users more information
-            let asset_types = used_asset_types(
-                shielded,
-                &client,
-                &shielded_parts.0,
-            )
-            .await
-            .unwrap_or_default();
+            let asset_types =
+                used_asset_types(shielded, client, &shielded_parts.0)
+                    .await
+                    .unwrap_or_default();
             // Add the MASP Transaction's Builder to the Tx
             tx.add_section(Section::MaspBuilder(MaspBuilder {
                 asset_types,
@@ -1341,7 +1351,7 @@ pub async fn submit_init_account<
     let vp_code_path = String::from_utf8(args.vp_code_path).unwrap();
     let vp_code_hash =
         query_wasm_code_hash(client, vp_code_path).await.unwrap();
-    
+
     let mut tx = Tx::new(TxType::Raw);
     tx.header.chain_id = args.tx.chain_id.clone().unwrap();
     tx.header.expiration = args.tx.expiration;
@@ -1368,8 +1378,8 @@ pub async fn submit_init_account<
         false,
     )
     .await
-        .unwrap()
-        .initialized_accounts();
+    .unwrap()
+    .initialized_accounts();
     save_initialized_accounts::<U>(wallet, &args.tx, initialized_accounts)
         .await;
     Ok(())
@@ -1476,7 +1486,7 @@ pub async fn submit_custom<
     tx.header.expiration = args.tx.expiration;
     args.data_path.map(|data| tx.set_data(Data::new(data)));
     tx.set_code(Code::new(args.code_path));
-    
+
     let initialized_accounts = process_tx::<C, U>(
         client,
         wallet,
@@ -1486,7 +1496,7 @@ pub async fn submit_custom<
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-        .await?
+    .await?
     .initialized_accounts();
     save_initialized_accounts::<U>(wallet, &args.tx, initialized_accounts)
         .await;

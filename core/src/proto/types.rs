@@ -259,9 +259,8 @@ impl Ciphertext {
     #[cfg(feature = "ferveo-tpke")]
     pub fn new(sections: Vec<Section>, pubkey: &EncryptionKey) -> Self {
         let mut rng = rand::thread_rng();
-        let bytes = sections
-            .try_to_vec()
-            .expect("unable to serialize sections");
+        let bytes =
+            sections.try_to_vec().expect("unable to serialize sections");
         Self {
             ciphertext: tpke::encrypt(&bytes, pubkey.0, &mut rng),
         }
@@ -954,7 +953,7 @@ impl Tx {
             if let Section::Ciphertext(ct) = &self.sections[i] {
                 // Add all the deecrypted sections
                 self.sections.extend(
-                    ct.decrypt(privkey).map_err(|_| WrapperTxErr::InvalidTx)?
+                    ct.decrypt(privkey).map_err(|_| WrapperTxErr::InvalidTx)?,
                 );
                 // Remove the original ciphertext
                 self.sections.remove(i);
@@ -981,10 +980,8 @@ impl Tx {
             }
         }
         // Encrypt all eligible sections in one go
-        self.sections.push(Section::Ciphertext(Ciphertext::new(
-            plaintexts,
-            pubkey,
-        )));
+        self.sections
+            .push(Section::Ciphertext(Ciphertext::new(plaintexts, pubkey)));
     }
 
     /// Determines the type of the input Tx
@@ -1239,9 +1236,9 @@ mod tests {
         let pubkey = EncryptionKey(<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator());
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
         // generate encrypted payload
-        let plaintext = vec![
-            Section::Data(Data::new("Super secret stuff".as_bytes().to_vec())),
-        ];
+        let plaintext = vec![Section::Data(Data::new(
+            "Super secret stuff".as_bytes().to_vec(),
+        ))];
         let encrypted = Ciphertext::new(plaintext.clone(), &pubkey);
         // check that encryption doesn't do trivial things
         assert_ne!(
@@ -1268,9 +1265,9 @@ mod tests {
         let pubkey = EncryptionKey(<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator());
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
         // generate encrypted payload
-        let plaintext = vec![
-            Section::Data(Data::new("Super secret stuff".as_bytes().to_vec())),
-        ];
+        let plaintext = vec![Section::Data(Data::new(
+            "Super secret stuff".as_bytes().to_vec(),
+        ))];
         let encrypted = Ciphertext::new(plaintext.clone(), &pubkey);
         // serialize via Borsh
         let borsh = encrypted.try_to_vec().expect("Test failed");
@@ -1298,9 +1295,9 @@ mod tests {
         let pubkey = EncryptionKey(<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator());
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
         // generate encrypted payload
-        let plaintext = vec![
-            Section::Data(Data::new("Super secret stuff".as_bytes().to_vec())),
-        ];
+        let plaintext = vec![Section::Data(Data::new(
+            "Super secret stuff".as_bytes().to_vec(),
+        ))];
         let encrypted = Ciphertext::new(plaintext.clone(), &pubkey);
         // serialize via Serde
         let js = serde_json::to_string(&encrypted).expect("Test failed");

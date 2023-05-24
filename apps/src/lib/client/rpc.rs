@@ -34,7 +34,6 @@ use namada::ledger::pos::{
 use namada::ledger::queries::RPC;
 use namada::ledger::rpc::{query_epoch, TxResponse};
 use namada::ledger::storage::ConversionState;
-use namada::proto::Tx;
 use namada::ledger::wallet::{AddressVpType, Wallet};
 use namada::proof_of_stake::types::WeightedValidator;
 use namada::types::address::{masp, Address};
@@ -44,13 +43,7 @@ use namada::types::governance::{
 use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
-use namada::types::storage::{
-    BlockHeight, BlockResults, Epoch, Key, KeySeg, PrefixValue, TxIndex,
-};
-use namada::types::token::{balance_key, Transfer};
-use namada::types::transaction::{
-    AffineCurve, EllipticCurve, PairingEngine, WrapperTx,
-};
+use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
 use namada::types::{storage, token};
 
 use crate::cli::{self, args};
@@ -915,10 +908,7 @@ pub fn print_decoded_balance_with_epoch(
         let asset_value = token::Amount::from(*value as u64);
         println!(
             "{} | {} : {}",
-            tokens
-                .get(addr)
-                .cloned()
-                .unwrap_or_else(|| addr.clone()),
+            tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
             epoch,
             asset_value
         );
@@ -1660,10 +1650,7 @@ pub async fn query_conversions<C: namada::ledger::queries::Client + Sync>(
         // Print the asset to which the conversion applies
         print!(
             "{}[{}]: ",
-            tokens
-                .get(addr)
-                .cloned()
-                .unwrap_or_else(|| addr.clone()),
+            tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
             epoch,
         );
         // Now print out the components of the allowed conversion
@@ -1677,10 +1664,7 @@ pub async fn query_conversions<C: namada::ledger::queries::Client + Sync>(
                 "{}{} {}[{}]",
                 prefix,
                 val,
-                tokens
-                    .get(addr)
-                    .cloned()
-                    .unwrap_or_else(|| addr.clone()),
+                tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
                 epoch
             );
             // Future iterations need to be prefixed with +

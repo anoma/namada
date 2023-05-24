@@ -22,7 +22,6 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada::core::types::hash::Hash;
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::BlockGasMeter;
@@ -48,7 +47,7 @@ use namada::types::token::{self};
 use namada::types::transaction::MIN_FEE;
 use namada::types::transaction::{
     hash_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
-    EllipticCurve, PairingEngine, TxType, WrapperTx,
+    EllipticCurve, PairingEngine, TxType,
 };
 use namada::types::{address, hash};
 use namada::vm::wasm::{TxCache, VpCache};
@@ -660,12 +659,9 @@ where
         tx_bytes: &[u8],
         temp_wl_storage: &mut TempWlStorage<D, H>,
     ) -> Result<()> {
-        let inner_tx_hash = wrapper
-            .clone()
-            .update_header(TxType::Raw)
-            .header_hash();
-        let inner_hash_key =
-            replay_protection::get_tx_hash_key(&inner_tx_hash);
+        let inner_tx_hash =
+            wrapper.clone().update_header(TxType::Raw).header_hash();
+        let inner_hash_key = replay_protection::get_tx_hash_key(&inner_tx_hash);
         if temp_wl_storage
             .has_key(&inner_hash_key)
             .expect("Error while checking inner tx hash key in storage")

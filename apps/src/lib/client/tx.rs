@@ -10,80 +10,35 @@ use async_std::io::prelude::WriteExt;
 use async_trait::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER_PERMISSIVE;
-use itertools::Either::*;
-use masp_primitives::asset_type::AssetType;
-use masp_primitives::consensus::TestNetwork;
-use masp_primitives::convert::AllowedConversion;
-use masp_primitives::ff::PrimeField;
-use masp_primitives::memo::MemoBytes;
-use masp_primitives::merkle_tree::{
-    CommitmentTree, IncrementalWitness, MerklePath,
-};
-use masp_primitives::sapling::keys::FullViewingKey;
-use masp_primitives::sapling::note_encryption::*;
-use masp_primitives::sapling::{
-    Diversifier, Node, Note, Nullifier, ViewingKey,
-};
-use masp_primitives::transaction::builder::{self, *};
-use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
-use masp_primitives::transaction::components::sapling::fees::{
-    ConvertView, InputView as SaplingInputView, OutputView as SaplingOutputView,
-};
-use masp_primitives::transaction::components::transparent::fees::{
-    InputView as TransparentInputView, OutputView as TransparentOutputView,
-};
-use masp_primitives::transaction::components::{
-    Amount, OutputDescription, TxOut,
-};
-use masp_primitives::transaction::fees::fixed::FeeRule;
-use masp_primitives::transaction::{
-    Authorization, Authorized, Transaction, TransparentAddress,
-};
-use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::prover::LocalTxProver;
 use namada::ledger::governance::storage as gov_storage;
-use namada::ledger::masp;
-use namada::ledger::pos::{CommissionPair, PosParams};
-use namada::proto::{Code, Data, MaspBuilder, Section, Signature, Tx};
-use namada::types::address::{masp, masp_tx_key, Address};
 use namada::ledger::rpc::{TxBroadcastData, TxResponse};
 use namada::ledger::signing::TxSigningKey;
 use namada::ledger::wallet::{Wallet, WalletUtils};
-use namada::ledger::tx;
+use namada::ledger::{masp, tx};
+use namada::proto::{Code, Data, Section, Tx};
+use namada::types::address::Address;
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
 use namada::types::hash::Hash;
 use namada::types::key::*;
-use namada::types::masp::{PaymentAddress, TransferTarget};
-use namada::types::storage::{
-    BlockHeight, Epoch, Key, KeySeg, TxIndex, RESERVED_ADDRESS_PREFIX,
-};
-use namada::types::time::DateTimeUtc;
-use namada::types::token::{
-    Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
-};
-use namada::types::transaction::decrypted::DecryptedTx;
+use namada::types::storage::{Epoch, Key};
+use namada::types::token;
 use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
 };
-use namada::types::transaction::{
-    pos, InitAccount, InitValidator, TxType, UpdateVp,
-};
-use namada::types::{storage, token};
-use rand_core::{CryptoRng, OsRng, RngCore};
-use ripemd::Digest as RipemdDigest;
+use namada::types::transaction::{InitValidator, TxType};
 use rust_decimal::Decimal;
 use sha2::{Digest as Sha2Digest, Sha256};
-use tokio::time::{Duration, Instant};
 use tendermint_rpc::HttpClient;
 
 use super::rpc;
-use crate::client::tx::tx::ProcessTxResponse;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::query_wasm_code_hash;
 use crate::client::signing::find_keypair;
+use crate::client::tx::tx::ProcessTxResponse;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::node::ledger::tendermint_node;
 use crate::wallet::{
@@ -394,7 +349,7 @@ impl Default for CLIShieldedUtils {
     fn default() -> Self {
         Self {
             context_dir: PathBuf::from(FILE_NAME),
-                    }
+        }
     }
 }
 
@@ -412,7 +367,7 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
         } else {
             LocalTxProver::with_default_location()
                 .expect("unable to load MASP Parameters")
-                        }
+        }
     }
 
     /// Try to load the last saved shielded context from the given context
@@ -501,12 +456,12 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
 
     let signer = WalletAddress::new(proposal.clone().author.to_string());
     let current_epoch = rpc::query_and_print_epoch(client).await;
-    
+
     let governance_parameters = rpc::get_governance_parameters(client).await;
     if proposal.voting_start_epoch <= current_epoch
         || proposal.voting_start_epoch.0
-        % governance_parameters.min_proposal_period
-        != 0
+            % governance_parameters.min_proposal_period
+            != 0
     {
         println!("{}", proposal.voting_start_epoch <= current_epoch);
         println!(
@@ -516,8 +471,8 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
                 == 0
         );
         eprintln!(
-            "Invalid proposal start epoch: {} must be greater than \
-             current epoch {} and a multiple of {}",
+            "Invalid proposal start epoch: {} must be greater than current \
+             epoch {} and a multiple of {}",
             proposal.voting_start_epoch,
             current_epoch,
             governance_parameters.min_proposal_period
@@ -527,15 +482,15 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
         }
     } else if proposal.voting_end_epoch <= proposal.voting_start_epoch
         || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
-        < governance_parameters.min_proposal_period
+            < governance_parameters.min_proposal_period
         || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
-        > governance_parameters.max_proposal_period
+            > governance_parameters.max_proposal_period
         || proposal.voting_end_epoch.0 % 3 != 0
     {
         eprintln!(
-            "Invalid proposal end epoch: difference between proposal \
-             start and end epoch must be at least {} and at max {} and \
-             end epoch must be a multiple of {}",
+            "Invalid proposal end epoch: difference between proposal start \
+             and end epoch must be at least {} and at max {} and end epoch \
+             must be a multiple of {}",
             governance_parameters.min_proposal_period,
             governance_parameters.max_proposal_period,
             governance_parameters.min_proposal_period
@@ -545,11 +500,11 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
         }
     } else if proposal.grace_epoch <= proposal.voting_end_epoch
         || proposal.grace_epoch.0 - proposal.voting_end_epoch.0
-        < governance_parameters.min_proposal_grace_epochs
+            < governance_parameters.min_proposal_grace_epochs
     {
         eprintln!(
-            "Invalid proposal grace epoch: difference between proposal \
-             grace and end epoch must be at least {}",
+            "Invalid proposal grace epoch: difference between proposal grace \
+             and end epoch must be at least {}",
             governance_parameters.min_proposal_grace_epochs
         );
         if !args.tx.force {
@@ -593,13 +548,10 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
             safe_exit(1)
         };
 
-        let balance = rpc::get_token_balance(
-            client,
-            &ctx.native_token,
-            &proposal.author,
-        )
-            .await
-            .unwrap_or_default();
+        let balance =
+            rpc::get_token_balance(client, &ctx.native_token, &proposal.author)
+                .await
+                .unwrap_or_default();
         if balance
             < token::Amount::from(governance_parameters.min_proposal_fund)
         {
@@ -871,7 +823,7 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
                 let data = tx_data
                     .try_to_vec()
                     .expect("Encoding proposal data shouldn't fail");
-                
+
                 let tx_code = args.tx_code_path;
                 let mut tx = Tx::new(TxType::Raw);
                 tx.header.chain_id = chain_id;
@@ -1057,7 +1009,7 @@ pub async fn submit_validator_commission_change<
         &mut ctx.wallet,
         args,
     )
-        .await
+    .await
 }
 
 /// Submit transaction and wait for result. Returns a list of addresses
@@ -1071,7 +1023,10 @@ async fn process_tx<C: namada::ledger::queries::Client + Sync>(
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<(Context, Vec<Address>), tx::Error> {
     let args = args::Tx {
-        chain_id: args.clone().chain_id.or_else(|| Some(tx.header.chain_id.clone())),
+        chain_id: args
+            .clone()
+            .chain_id
+            .or_else(|| Some(tx.header.chain_id.clone())),
         ..args.clone()
     };
     let res: Vec<Address> = tx::process_tx::<C, _>(
@@ -1083,7 +1038,7 @@ async fn process_tx<C: namada::ledger::queries::Client + Sync>(
         #[cfg(not(feature = "mainnet"))]
         requires_pow,
     )
-        .await?
+    .await?
     .initialized_accounts();
     Ok((ctx, res))
 }

@@ -1,31 +1,12 @@
 //! Functions to sign transactions
-use namada_core::types::address::{Address, ImplicitAddress};
-use namada_core::types::token::{self, Amount};
-use zeroize::Zeroizing;
-use namada_core::types::transaction::{pos, MIN_FEE};
-use namada_core::types::address::masp;
-use std::env;
-use crate::ibc_proto::google::protobuf::Any;
-use prost::Message;
-
-use crate::ledger::rpc::TxBroadcastData;
-use crate::ledger::tx::Error;
-use crate::ledger::wallet::{Wallet, WalletUtils};
-use crate::ledger::{args, rpc};
-use crate::proto::{Section, Tx, Signature};
-use crate::types::key::*;
-use crate::types::storage::Epoch;
-use crate::types::transaction::{hash_tx, Fee, WrapperTx};
-use crate::types::transaction::TxType;
-use crate::ledger::rpc::query_wasm_code_hash;
-use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
-
 use std::collections::{BTreeMap, HashMap};
+#[cfg(feature = "std")]
+use std::env;
+#[cfg(feature = "std")]
 use std::fs::File;
-use std::io::{ErrorKind, Write};
-use crate::ibc::applications::transfer::msgs::transfer::{
-    TYPE_URL as MSG_TRANSFER_TYPE_URL,
-};
+use std::io::ErrorKind;
+#[cfg(feature = "std")]
+use std::io::Write;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
@@ -34,32 +15,46 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::components::sapling::fees::{
     InputView, OutputView,
 };
+use namada_core::types::address::{masp, Address, ImplicitAddress};
+use namada_core::types::token::{self, Amount};
+use namada_core::types::transaction::{pos, MIN_FEE};
+use prost::Message;
+use serde::{Deserialize, Serialize};
+use zeroize::Zeroizing;
+
+use crate::ibc::applications::transfer::msgs::transfer::{
+    MsgTransfer, TYPE_URL as MSG_TRANSFER_TYPE_URL,
+};
+use crate::ibc_proto::google::protobuf::Any;
+use crate::ledger::masp::make_asset_type;
 use crate::ledger::parameters::storage as parameter_storage;
+use crate::ledger::rpc::{query_wasm_code_hash, TxBroadcastData};
+use crate::ledger::tx::{
+    Error, TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_IBC_WASM,
+    TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM,
+    TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UPDATE_VP_WASM,
+    TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
+};
+pub use crate::ledger::wallet::store::AddressVpType;
+use crate::ledger::wallet::{Wallet, WalletUtils};
+use crate::ledger::{args, rpc};
+use crate::proto::{Section, Signature, Tx};
 use crate::types::key::*;
 use crate::types::masp::{ExtendedViewingKey, PaymentAddress};
+use crate::types::storage::Epoch;
 use crate::types::token::Transfer;
 use crate::types::transaction::decrypted::DecryptedTx;
 use crate::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use crate::types::transaction::{
-    InitAccount, InitValidator, UpdateVp,
+    Fee, InitAccount, InitValidator, TxType, UpdateVp, WrapperTx,
 };
-use serde::{Deserialize, Serialize};
 
-pub use crate::ledger::wallet::store::AddressVpType;
-use crate::ledger::masp::make_asset_type;
-use crate::ledger::tx::{
-    TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_IBC_WASM,
-    TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM,
-    TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UPDATE_VP_WASM,
-    TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
-};
-use crate::ledger::tx;
-use crate::types::key::*;
-
+#[cfg(feature = "std")]
 /// Env. var specifying where to store signing test vectors
 const ENV_VAR_LEDGER_LOG_PATH: &str = "NAMADA_LEDGER_LOG_PATH";
+#[cfg(feature = "std")]
 /// Env. var specifying where to store transaction debug outputs
 const ENV_VAR_TX_LOG_PATH: &str = "NAMADA_TX_LOG_PATH";
 
@@ -242,11 +237,11 @@ pub async fn sign_tx<
 /// wrapper and its payload which is needed for monitoring its
 /// progress on chain.
 pub async fn sign_wrapper<
-        C: crate::ledger::queries::Client + Sync,
+    C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
-    >(
+>(
     client: &C,
-    wallet: &mut Wallet<U>,
+    #[allow(unused_variables)] wallet: &mut Wallet<U>,
     args: &args::Tx,
     epoch: Epoch,
     mut tx: Tx,
@@ -257,22 +252,25 @@ pub async fn sign_wrapper<
         Amount::whole(MIN_FEE)
     } else {
         let wrapper_tx_fees_key = parameter_storage::get_wrapper_tx_fees_key();
-        rpc::query_storage_value::<C, token::Amount>(&client, &wrapper_tx_fees_key)
-            .await
-            .unwrap_or_default()
+        rpc::query_storage_value::<C, token::Amount>(
+            client,
+            &wrapper_tx_fees_key,
+        )
+        .await
+        .unwrap_or_default()
     };
     let fee_token = &args.fee_token;
     let source = Address::from(&keypair.ref_to());
-    let balance_key = token::balance_key(&fee_token, &source);
+    let balance_key = token::balance_key(fee_token, &source);
     let balance =
-        rpc::query_storage_value::<C, token::Amount>(&client, &balance_key)
-        .await
-        .unwrap_or_default();
+        rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
+            .await
+            .unwrap_or_default();
     let is_bal_sufficient = fee_amount <= balance;
     if !is_bal_sufficient {
         eprintln!(
-            "The wrapper transaction source doesn't have enough balance \
-             to pay fee {fee_amount}, got {balance}."
+            "The wrapper transaction source doesn't have enough balance to \
+             pay fee {fee_amount}, got {balance}."
         );
         if !args.force && cfg!(feature = "mainnet") {
             panic!(
@@ -292,11 +290,8 @@ pub async fn sign_wrapper<
                 "The transaction requires the completion of a PoW challenge."
             );
             // Obtain a PoW challenge for faucet withdrawal
-            let challenge = rpc::get_testnet_pow_challenge(
-                client,
-                source,
-            )
-            .await;
+            let challenge =
+                rpc::get_testnet_pow_challenge(client, source).await;
 
             // Solve the solution, this blocks until a solution is found
             let solution = challenge.solve();
@@ -326,14 +321,16 @@ pub async fn sign_wrapper<
         keypair,
     )));
 
+    #[cfg(feature = "std")]
     // Attempt to decode the construction
     if let Ok(path) = env::var(ENV_VAR_LEDGER_LOG_PATH) {
         let mut tx = tx.clone();
         // Contract the large data blobs in the transaction
         tx.wallet_filter();
         // Convert the transaction to Ledger format
-        let decoding =
-            to_ledger_vector(client, wallet, &tx).await.expect("unable to decode transaction");
+        let decoding = to_ledger_vector(client, wallet, &tx)
+            .await
+            .expect("unable to decode transaction");
         let output = serde_json::to_string(&decoding)
             .expect("failed to serialize decoding");
         // Record the transaction at the identified path
@@ -345,6 +342,7 @@ pub async fn sign_wrapper<
         writeln!(f, "{},", output)
             .expect("unable to write test vector to file");
     }
+    #[cfg(feature = "std")]
     // Attempt to decode the construction
     if let Ok(path) = env::var(ENV_VAR_TX_LOG_PATH) {
         let mut tx = tx.clone();
@@ -385,7 +383,7 @@ fn other_err<T>(string: String) -> Result<T, Error> {
 
 /// Represents the transaction data that is displayed on a Ledger device
 #[derive(Default, Serialize, Deserialize)]
-struct LedgerVector {
+pub struct LedgerVector {
     blob: String,
     index: u64,
     name: String,
@@ -509,7 +507,7 @@ fn format_outputs(output: &mut Vec<String>) {
 
 /// Converts the given transaction to the form that is displayed on the Ledger
 /// device
-async fn to_ledger_vector<
+pub async fn to_ledger_vector<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
@@ -517,19 +515,38 @@ async fn to_ledger_vector<
     wallet: &mut Wallet<U>,
     tx: &Tx,
 ) -> Result<LedgerVector, std::io::Error> {
-    let init_account_hash = query_wasm_code_hash(client, TX_INIT_ACCOUNT_WASM).await.unwrap();
-    let init_validator_hash = query_wasm_code_hash(client, TX_INIT_VALIDATOR_WASM).await.unwrap();
-    let init_proposal_hash = query_wasm_code_hash(client, TX_INIT_PROPOSAL).await.unwrap();
-    let vote_proposal_hash = query_wasm_code_hash(client, TX_VOTE_PROPOSAL).await.unwrap();
-    let reveal_pk_hash = query_wasm_code_hash(client, TX_REVEAL_PK).await.unwrap();
-    let update_vp_hash = query_wasm_code_hash(client, TX_UPDATE_VP_WASM).await.unwrap();
-    let transfer_hash = query_wasm_code_hash(client, TX_TRANSFER_WASM).await.unwrap();
+    let init_account_hash = query_wasm_code_hash(client, TX_INIT_ACCOUNT_WASM)
+        .await
+        .unwrap();
+    let init_validator_hash =
+        query_wasm_code_hash(client, TX_INIT_VALIDATOR_WASM)
+            .await
+            .unwrap();
+    let init_proposal_hash = query_wasm_code_hash(client, TX_INIT_PROPOSAL)
+        .await
+        .unwrap();
+    let vote_proposal_hash = query_wasm_code_hash(client, TX_VOTE_PROPOSAL)
+        .await
+        .unwrap();
+    let reveal_pk_hash =
+        query_wasm_code_hash(client, TX_REVEAL_PK).await.unwrap();
+    let update_vp_hash = query_wasm_code_hash(client, TX_UPDATE_VP_WASM)
+        .await
+        .unwrap();
+    let transfer_hash = query_wasm_code_hash(client, TX_TRANSFER_WASM)
+        .await
+        .unwrap();
     let ibc_hash = query_wasm_code_hash(client, TX_IBC_WASM).await.unwrap();
     let bond_hash = query_wasm_code_hash(client, TX_BOND_WASM).await.unwrap();
-    let unbond_hash = query_wasm_code_hash(client, TX_UNBOND_WASM).await.unwrap();
-    let withdraw_hash = query_wasm_code_hash(client, TX_WITHDRAW_WASM).await.unwrap();
+    let unbond_hash =
+        query_wasm_code_hash(client, TX_UNBOND_WASM).await.unwrap();
+    let withdraw_hash = query_wasm_code_hash(client, TX_WITHDRAW_WASM)
+        .await
+        .unwrap();
     let change_commission_hash =
-        query_wasm_code_hash(client, TX_CHANGE_COMMISSION_WASM).await.unwrap();
+        query_wasm_code_hash(client, TX_CHANGE_COMMISSION_WASM)
+            .await
+            .unwrap();
     let user_hash = query_wasm_code_hash(client, VP_USER_WASM).await.unwrap();
 
     // To facilitate lookups of human-readable token names
@@ -565,10 +582,10 @@ async fn to_ledger_vector<
         .push(format!("Code hash : {}", HEXLOWER.encode(&code_hash.0)));
 
     if code_hash == init_account_hash {
-        let init_account = InitAccount::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?,
-        )?;
+        let init_account =
+            InitAccount::try_from_slice(&tx.data().ok_or_else(|| {
+                std::io::Error::from(ErrorKind::InvalidData)
+            })?)?;
 
         tv.name = "Init Account 0".to_string();
 
@@ -595,10 +612,10 @@ async fn to_ledger_vector<
             format!("VP type : {}", HEXLOWER.encode(&extra.0)),
         ]);
     } else if code_hash == init_validator_hash {
-        let init_validator = InitValidator::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?,
-        )?;
+        let init_validator =
+            InitValidator::try_from_slice(&tx.data().ok_or_else(|| {
+                std::io::Error::from(ErrorKind::InvalidData)
+            })?)?;
 
         tv.name = "Init Validator 0".to_string();
 
@@ -641,10 +658,10 @@ async fn to_ledger_vector<
             format!("Validator VP type : {}", HEXLOWER.encode(&extra.0)),
         ]);
     } else if code_hash == init_proposal_hash {
-        let init_proposal_data = InitProposalData::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?,
-        )?;
+        let init_proposal_data =
+            InitProposalData::try_from_slice(&tx.data().ok_or_else(|| {
+                std::io::Error::from(ErrorKind::InvalidData)
+            })?)?;
 
         tv.name = "Init Proposal 0".to_string();
 
@@ -699,10 +716,10 @@ async fn to_ledger_vector<
             tv.output_expert.push("Content : none".to_string());
         }
     } else if code_hash == vote_proposal_hash {
-        let vote_proposal = VoteProposalData::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?,
-        )?;
+        let vote_proposal =
+            VoteProposalData::try_from_slice(&tx.data().ok_or_else(|| {
+                std::io::Error::from(ErrorKind::InvalidData)
+            })?)?;
 
         tv.name = "Vote Proposal 0".to_string();
 
@@ -741,10 +758,10 @@ async fn to_ledger_vector<
         tv.output_expert
             .extend(vec![format!("Public key : {}", public_key)]);
     } else if code_hash == update_vp_hash {
-        let transfer = UpdateVp::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?,
-        )?;
+        let transfer =
+            UpdateVp::try_from_slice(&tx.data().ok_or_else(|| {
+                std::io::Error::from(ErrorKind::InvalidData)
+            })?)?;
 
         tv.name = "Update VP 0".to_string();
 
@@ -771,10 +788,10 @@ async fn to_ledger_vector<
             format!("VP type : {}", HEXLOWER.encode(&extra.0)),
         ]);
     } else if code_hash == transfer_hash {
-        let transfer = Transfer::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?,
-        )?;
+        let transfer =
+            Transfer::try_from_slice(&tx.data().ok_or_else(|| {
+                std::io::Error::from(ErrorKind::InvalidData)
+            })?)?;
         // To facilitate lookups of MASP AssetTypes
         let mut asset_types = HashMap::new();
         let builder = if let Some(shielded_hash) = transfer.shielded {
@@ -878,17 +895,27 @@ async fn to_ledger_vector<
 
         match msg.type_url.as_str() {
             MSG_TRANSFER_TYPE_URL => {
-                let transfer =
-                    MsgTransfer::try_from(msg).map_err(|_| std::io::Error::from(ErrorKind::InvalidData))?;
-                let transfer_token = format!("{} {}", transfer.token.amount, transfer.token.denom);
+                let transfer = MsgTransfer::try_from(msg).map_err(|_| {
+                    std::io::Error::from(ErrorKind::InvalidData)
+                })?;
+                let transfer_token = format!(
+                    "{} {}",
+                    transfer.token.amount, transfer.token.denom
+                );
                 tv.output.extend(vec![
                     format!("Source port : {}", transfer.port_id_on_a),
                     format!("Source channel : {}", transfer.chan_id_on_a),
                     format!("Token : {}", transfer_token),
                     format!("Sender : {}", transfer.sender),
                     format!("Receiver : {}", transfer.receiver),
-                    format!("Timeout height : {}", transfer.timeout_height_on_b),
-                    format!("Timeout timestamp : {}", transfer.timeout_timestamp_on_b),
+                    format!(
+                        "Timeout height : {}",
+                        transfer.timeout_height_on_b
+                    ),
+                    format!(
+                        "Timeout timestamp : {}",
+                        transfer.timeout_timestamp_on_b
+                    ),
                 ]);
                 tv.output_expert.extend(vec![
                     format!("Source port : {}", transfer.port_id_on_a),
@@ -896,8 +923,14 @@ async fn to_ledger_vector<
                     format!("Token : {}", transfer_token),
                     format!("Sender : {}", transfer.sender),
                     format!("Receiver : {}", transfer.receiver),
-                    format!("Timeout height : {}", transfer.timeout_height_on_b),
-                    format!("Timeout timestamp : {}", transfer.timeout_timestamp_on_b),
+                    format!(
+                        "Timeout height : {}",
+                        transfer.timeout_height_on_b
+                    ),
+                    format!(
+                        "Timeout timestamp : {}",
+                        transfer.timeout_timestamp_on_b
+                    ),
                 ]);
             }
             _ => {
@@ -909,10 +942,10 @@ async fn to_ledger_vector<
             }
         }
     } else if code_hash == bond_hash {
-        let bond = pos::Bond::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?,
-        )?;
+        let bond =
+            pos::Bond::try_from_slice(&tx.data().ok_or_else(|| {
+                std::io::Error::from(ErrorKind::InvalidData)
+            })?)?;
 
         tv.name = "Bond 0".to_string();
 
@@ -934,10 +967,10 @@ async fn to_ledger_vector<
             format!("Amount : {}", bond.amount),
         ]);
     } else if code_hash == unbond_hash {
-        let unbond = pos::Unbond::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?,
-        )?;
+        let unbond =
+            pos::Unbond::try_from_slice(&tx.data().ok_or_else(|| {
+                std::io::Error::from(ErrorKind::InvalidData)
+            })?)?;
 
         tv.name = "Unbond 0".to_string();
 
@@ -959,10 +992,10 @@ async fn to_ledger_vector<
             format!("Amount : {}", unbond.amount),
         ]);
     } else if code_hash == withdraw_hash {
-        let withdraw = pos::Withdraw::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?,
-        )?;
+        let withdraw =
+            pos::Withdraw::try_from_slice(&tx.data().ok_or_else(|| {
+                std::io::Error::from(ErrorKind::InvalidData)
+            })?)?;
 
         tv.name = "Withdraw 0".to_string();
 
