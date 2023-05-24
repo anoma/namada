@@ -408,7 +408,7 @@ fn start_abci_broadcaster_shell(
     task::JoinHandle<()>,
     thread::JoinHandle<()>,
 ) {
-    let rpc_address = config.tendermint.rpc_address.to_string();
+    let rpc_address = config.tendermint_config.rpc.laddr.to_string();
     let RunAuxSetup {
         vp_wasm_compilation_cache,
         tx_wasm_compilation_cache,
@@ -422,7 +422,7 @@ fn start_abci_broadcaster_shell(
 
     // Start broadcaster
     let broadcaster = if matches!(
-        config.tendermint.tendermint_mode,
+        config.shell.tendermint_mode,
         TendermintMode::Validator
     ) {
         let (bc_abort_send, bc_abort_recv) =
@@ -451,7 +451,7 @@ fn start_abci_broadcaster_shell(
         rocksdb::Cache::new_lru_cache(db_block_cache_size_bytes as usize);
 
     // Construct our ABCI application.
-    let tendermint_mode = config.tendermint.tendermint_mode.clone();
+    let tendermint_mode = config.shell.tendermint_mode.clone();
     let ledger_address = config.shell.ledger_address;
     #[cfg(not(feature = "dev"))]
     let genesis = genesis::genesis(&config.shell.base_dir, &config.chain_id);
@@ -569,7 +569,7 @@ fn start_tendermint(
     let tendermint_dir = config.tendermint_dir();
     let chain_id = config.chain_id.clone();
     let ledger_address = config.shell.ledger_address.to_string();
-    let tendermint_config = config.tendermint.clone();
+    let config = config.clone();
     let genesis_time = config
         .genesis_time
         .clone()
@@ -587,7 +587,7 @@ fn start_tendermint(
                 chain_id,
                 genesis_time,
                 ledger_address,
-                tendermint_config,
+                config,
                 tm_abort_recv,
             )
             .map_err(Error::Tendermint)

@@ -296,7 +296,7 @@ where
         let chain_id = config.chain_id;
         let db_path = config.shell.db_dir(&chain_id);
         let base_dir = config.shell.base_dir;
-        let mode = config.tendermint.tendermint_mode;
+        let mode = config.shell.tendermint_mode;
         let storage_read_past_height_limit =
             config.shell.storage_read_past_height_limit;
         if !Path::new(&base_dir).is_dir() {

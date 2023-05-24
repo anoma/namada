@@ -8,14 +8,15 @@ use namada_apps::node::ledger;
 pub fn main() -> Result<()> {
     let (cmd, mut ctx) = cli::namada_node_cli()?;
     if let Some(mode) = ctx.global_args.mode.clone() {
-        ctx.config.ledger.tendermint.tendermint_mode = mode;
+        ctx.config.ledger.shell.tendermint_mode = mode;
     }
     match cmd {
         cmds::NamadaNode::Ledger(sub) => match sub {
             cmds::Ledger::Run(cmds::LedgerRun(args)) => {
                 let wasm_dir = ctx.wasm_dir();
                 sleep_until(args.start_time);
-                ctx.config.ledger.tendermint.tx_index = args.tx_index;
+                // fixme: not sure why we are setting this here, you can set it in the config file
+                // ctx.config.ledger.tendermint_config.tx_index = args.tx_index;
                 ledger::run(ctx.config.ledger, wasm_dir);
             }
             cmds::Ledger::RunUntil(cmds::LedgerRunUntil(args)) => {
