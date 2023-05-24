@@ -1636,19 +1636,8 @@ where
         });
         println!("to_unbond (init) = {}", to_unbond);
 
-        let mut slashes_for_this_bond = BTreeMap::<Epoch, Decimal>::new();
-        for slash in validator_slashes_handle(validator).iter(storage)? {
-            let slash = slash?;
-            if bond_epoch <= slash.epoch {
-                println!(
-                    "Slash (epoch, rate) = ({}, {})",
-                    &slash.epoch, &slash.rate
-                );
-                let cur_rate =
-                    slashes_for_this_bond.entry(slash.epoch).or_default();
-                *cur_rate = cmp::min(*cur_rate + slash.rate, Decimal::ONE);
-            }
-        }
+        let slashes_for_this_bond =
+            find_slashes_in_range(storage, bond_epoch, None, validator)?;
 
         amount_after_slashing += get_slashed_amount(
             &params,
@@ -1776,9 +1765,7 @@ fn get_slashed_amount(
             // epochs before this current slash
             // TODO: understand this better (from Informal)
             // TODO: do bounds of this need to be changed with a +/- 1??
-            if slashed_amount.epoch
-                + params.unbonding_len
-                + params.cubic_slashing_window_length
+            if slashed_amount.epoch + params.slash_processing_epoch_offset()
                 < *infraction_epoch
             {
                 updated_amount = updated_amount
@@ -1946,23 +1933,15 @@ where
             tracing::debug!("Not yet withdrawable");
             continue;
         }
-        let mut slashes_for_this_unbond = BTreeMap::<Epoch, Decimal>::new();
-        for slash in validator_slashes_handle(validator).iter(storage)? {
-            let slash = slash?;
-            if start_epoch <= slash.epoch
-                && slash.epoch
-                    < withdraw_epoch + params.pipeline_len
-                        - params.withdrawable_epoch_offset()
-            {
-                println!(
-                    "Slash (epoch, rate) = ({}, {})",
-                    &slash.epoch, &slash.rate
-                );
-                let cur_rate =
-                    slashes_for_this_unbond.entry(slash.epoch).or_default();
-                *cur_rate = cmp::min(*cur_rate + slash.rate, Decimal::ONE);
-            }
-        }
+        let slashes_for_this_unbond = find_slashes_in_range(
+            storage,
+            start_epoch,
+            Some(
+                withdraw_epoch + params.pipeline_len
+                    - params.withdrawable_epoch_offset(),
+            ),
+            validator,
+        )?;
 
         // let mut slashes_for_this_unbond = Vec::<Slash>::new();
         // for slash in validator_slashes_handle(validator).iter(storage)? {
@@ -3347,30 +3326,18 @@ where
                     continue;
                 }
 
-                let mut prev_slashes = BTreeMap::<Epoch, Decimal>::new();
-                for val_slash in
-                    validator_slashes_handle(&validator).iter(storage)?
-                {
-                    let val_slash = val_slash?;
-                    println!(
-                        "Past slash at epoch {} with rate {}",
-                        val_slash.epoch, val_slash.rate
-                    );
-                    // TODO: is the 2nd condition correct??
-                    if start <= val_slash.epoch
-                        && val_slash.epoch
-                            + params.unbonding_len
-                            + params.cubic_slashing_window_length
-                            < infraction_epoch
-                    // TODO: this `<` should maybe be a `<=`
-                    {
-                        println!("Collecting this slash");
-                        let cur_rate =
-                            prev_slashes.entry(val_slash.epoch).or_default();
-                        *cur_rate =
-                            cmp::min(*cur_rate + val_slash.rate, Decimal::ONE);
-                    }
-                }
+                let prev_slashes = find_slashes_in_range(
+                    storage,
+                    start,
+                    Some(
+                        infraction_epoch
+                            .checked_sub(Epoch(
+                                params.slash_processing_epoch_offset(),
+                            ))
+                            .unwrap_or_default(),
+                    ),
+                    &validator,
+                )?;
                 println!("Slashes for this unbond: {:?}", prev_slashes);
 
                 total_unbonded += token::Amount::from_change(
@@ -3447,29 +3414,18 @@ where
                     continue;
                 }
 
-                let mut prev_slashes = BTreeMap::<Epoch, Decimal>::new();
-                for val_slash in
-                    validator_slashes_handle(&validator).iter(storage)?
-                {
-                    let val_slash = val_slash?;
-                    println!(
-                        "Past slash at epoch {} with rate {}",
-                        val_slash.epoch, val_slash.rate
-                    );
-                    if start <= val_slash.epoch
-                        && val_slash.epoch
-                            + params.unbonding_len
-                            + params.cubic_slashing_window_length
-                            < infraction_epoch
-                    // TODO: this `<` should maybe be a `<=`
-                    {
-                        println!("Collecting this slash");
-                        let cur_rate =
-                            prev_slashes.entry(val_slash.epoch).or_default();
-                        *cur_rate =
-                            cmp::min(*cur_rate + val_slash.rate, Decimal::ONE);
-                    }
-                }
+                let prev_slashes = find_slashes_in_range(
+                    storage,
+                    start,
+                    Some(
+                        infraction_epoch
+                            .checked_sub(Epoch(
+                                params.slash_processing_epoch_offset(),
+                            ))
+                            .unwrap_or_default(),
+                    ),
+                    &validator,
+                )?;
                 println!("Slashes for this unbond: {:?}", prev_slashes);
 
                 total_unbonded += token::Amount::from_change(
@@ -3710,4 +3666,32 @@ where
             None
         });
     Ok(bond_iter.sum::<token::Amount>())
+}
+
+/// Find slashes applicable to a validator with inclusive `start` and exclusive
+/// `end` epoch.
+fn find_slashes_in_range<S>(
+    storage: &S,
+    start: Epoch,
+    end: Option<Epoch>,
+    validator: &Address,
+) -> storage_api::Result<BTreeMap<Epoch, Decimal>>
+where
+    S: StorageRead,
+{
+    let mut slashes = BTreeMap::<Epoch, Decimal>::new();
+    for slash in validator_slashes_handle(validator).iter(storage)? {
+        let slash = slash?;
+        if start <= slash.epoch
+            && end.map(|end| slash.epoch < end).unwrap_or(true)
+        {
+            println!(
+                "Slash (epoch, rate) = ({}, {})",
+                &slash.epoch, &slash.rate
+            );
+            let cur_rate = slashes.entry(slash.epoch).or_default();
+            *cur_rate = cmp::min(*cur_rate + slash.rate, Decimal::ONE);
+        }
+    }
+    Ok(slashes)
 }
