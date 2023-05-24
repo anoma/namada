@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::storage as ledger_storage;
 use crate::ledger::storage::StorageHasher;
+use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
@@ -42,12 +43,12 @@ where
 
     fn validate_tx(
         &self,
-        _tx_data: &[u8],
+        _tx_data: &Tx,
         _keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool, Self::Error> {
         tracing::debug!(
-            tx_data_len = _tx_data.len(),
+            tx_data_len = _tx_data.data().as_ref().map(Vec::len).unwrap_or(0),
             keys_changed_len = _keys_changed.len(),
             verifiers_len = _verifiers.len(),
             "Validity predicate triggered",

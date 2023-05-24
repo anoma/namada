@@ -4,10 +4,9 @@
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
-    let signed = SignedTxData::try_from_slice(&tx_data[..])
-        .wrap_err("failed to decode SignedTxData")?;
-    let data = signed.data.ok_or_err_msg("Missing data")?;
+fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
+    let signed = tx_data;
+    let data = signed.data().ok_or_err_msg("Missing data")?;
     let unbond = transaction::pos::Unbond::try_from_slice(&data[..])
         .wrap_err("failed to decode Unbond")?;
 
@@ -24,9 +23,9 @@ mod tests {
         bond_handle, read_consensus_validator_set_addresses_with_stake,
         read_total_stake, read_validator_stake, unbond_handle,
     };
-    use namada::proto::Tx;
-    use namada::types::chain::ChainId;
+    use namada::proto::{Code, Data, Signature, Tx};
     use namada::types::storage::Epoch;
+    use namada::types::transaction::TxType;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
@@ -122,9 +121,18 @@ mod tests {
 
         let tx_code = vec![];
         let tx_data = unbond.try_to_vec().unwrap();
-        let tx = Tx::new(tx_code, Some(tx_data), ChainId::default(), None);
-        let signed_tx = tx.sign(&key);
-        let tx_data = signed_tx.data.unwrap();
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_data(Data::new(tx_data));
+        tx.set_code(Code::new(tx_code));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key,
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key,
+        )));
+        let signed_tx = tx.clone();
 
         let unbond_src = unbond
             .source
@@ -182,7 +190,7 @@ mod tests {
         // dbg!(&epoched_bonds_pre);
 
         // Apply the unbond tx
-        apply_tx(ctx(), tx_data)?;
+        apply_tx(ctx(), signed_tx)?;
 
         // Read the data after the tx is executed.
         // The following storage keys should be updated:
