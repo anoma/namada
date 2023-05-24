@@ -86,7 +86,6 @@ use tendermint::merkle::proof::Proof as TmProof;
 use tendermint::trust_threshold::TrustThresholdFraction;
 use tendermint_config::net::Address as TendermintAddress;
 use tendermint_rpc::{Client, HttpClient, Url};
-use tokio::runtime::Runtime;
 
 use crate::e2e::helpers::{find_address, get_actor_rpc, get_validator_pk};
 use crate::e2e::setup::{self, sleep, Bin, NamadaCmd, Test, Who};
@@ -237,15 +236,15 @@ fn make_client_state(test: &Test, height: Height) -> TmClientState {
     let client = HttpClient::new(ledger_address).unwrap();
 
     let key = pos::params_key();
-    let pos_params = Runtime::new()
-        .unwrap()
+    let pos_params = test
+        .async_runtime()
         .block_on(query_storage_value::<HttpClient, PosParams>(&client, &key))
         .unwrap();
     let pipeline_len = pos_params.pipeline_len;
 
     let key = param_storage::get_epoch_duration_storage_key();
-    let epoch_duration = Runtime::new()
-        .unwrap()
+    let epoch_duration = test
+        .async_runtime()
         .block_on(query_storage_value::<HttpClient, EpochDuration>(
             &client, &key,
         ))
@@ -1105,9 +1104,9 @@ fn query_height(test: &Test) -> Result<Height> {
     let rpc = get_actor_rpc(test, &Who::Validator(0));
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
-    let rt = Runtime::new().unwrap();
 
-    let status = rt
+    let status = test
+        .async_runtime()
         .block_on(client.status())
         .map_err(|e| eyre!("Getting the status failed: {}", e))?;
 
@@ -1119,8 +1118,8 @@ fn query_header(test: &Test, height: Height) -> Result<TmHeader> {
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
     let height = height.revision_height() as u32;
-    let result = Runtime::new()
-        .unwrap()
+    let result = test
+        .async_runtime()
         .block_on(client.blockchain(height, height));
     match result {
         Ok(mut response) => match response.block_metas.pop() {
@@ -1136,8 +1135,8 @@ fn get_event(test: &Test, height: u32) -> Result<Option<IbcEvent>> {
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
 
-    let response = Runtime::new()
-        .unwrap()
+    let response = test
+        .async_runtime()
         .block_on(client.block_results(height))
         .map_err(|e| eyre!("block_results() for an IBC event failed: {}", e))?;
     let tx_results = response.txs_results.ok_or_else(|| {
@@ -1173,13 +1172,11 @@ fn check_ibc_update_query(
     let rpc = get_actor_rpc(test, &Who::Validator(0));
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
-    match Runtime::new()
-        .unwrap()
-        .block_on(RPC.shell().ibc_client_update(
-            &client,
-            &client_id.as_str().parse().unwrap(),
-            &consensus_height,
-        )) {
+    match test.async_runtime().block_on(RPC.shell().ibc_client_update(
+        &client,
+        &client_id.as_str().parse().unwrap(),
+        &consensus_height,
+    )) {
         Ok(Some(event)) => {
             println!("Found the update event: {:?}", event);
             Ok(())
@@ -1197,7 +1194,7 @@ fn check_ibc_packet_query(
     let rpc = get_actor_rpc(test, &Who::Validator(0));
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
-    match Runtime::new().unwrap().block_on(RPC.shell().ibc_packet(
+    match test.async_runtime().block_on(RPC.shell().ibc_packet(
         &client,
         event_type,
         &packet.source_port.as_str().parse().unwrap(),
@@ -1223,7 +1220,7 @@ fn query_value_with_proof(
     let rpc = get_actor_rpc(test, &Who::Validator(0));
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
-    let result = Runtime::new().unwrap().block_on(query_storage_value_bytes(
+    let result = test.async_runtime().block_on(query_storage_value_bytes(
         &client,
         key,
         height.map(|h| BlockHeight(h.revision_height())),

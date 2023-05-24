@@ -60,6 +60,7 @@ eyre = "0.6.5"
 file-serve = "0.2.0"
 fs_extra = "1.2.0"
 itertools = "0.10.0"
+once_cell = "1.8.0"
 pretty_assertions = "0.7.2"
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", rev = "8f1b4abe7ebd35c0781bf9a00a4ee59833ffa2a1"}
