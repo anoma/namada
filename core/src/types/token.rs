@@ -708,7 +708,7 @@ impl MaspDenom {
 /// Key segment for a balance key
 pub const BALANCE_STORAGE_KEY: &str = "balance";
 /// Key segment for a denomination key
-pub const DENOM_STORAGE_KEY: &str = "denom";
+pub const DENOM_STORAGE_KEY: &str = "denomination";
 /// Key segment for head shielded transaction pointer keys
 pub const HEAD_TX_KEY: &str = "head-tx";
 /// Key segment prefix for shielded transaction key
