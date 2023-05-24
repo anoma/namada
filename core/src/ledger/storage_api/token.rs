@@ -3,12 +3,14 @@
 use super::{StorageRead, StorageWrite};
 use crate::ledger::storage_api;
 use crate::types::address::Address;
+use crate::types::storage::DbKeySeg::StringSeg;
 use crate::types::storage::Key;
 use crate::types::token;
 pub use crate::types::token::{
     balance_key, is_balance_key, is_total_supply_key, total_supply_key, Amount,
     Change,
 };
+use crate::types::token::Denomination;
 
 /// Read the balance of a given token and owner.
 pub fn read_balance<S>(
@@ -48,6 +50,11 @@ pub fn read_denom<S>(
 where
     S: StorageRead,
 {
+    if let Some(sub_prefix) = sub_prefix {
+        if sub_prefix.segments.contains(&StringSeg("ibc".to_string())) {
+            return Ok(Some(Denomination(0)))
+        }
+    }
     let key = token::denom_key(token, sub_prefix);
     storage.read(&key)
 }
