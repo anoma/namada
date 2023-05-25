@@ -153,11 +153,6 @@ pub async fn main() -> Result<()> {
                 Sub::AddToEthBridgePool(args) => {
                     bridge_pool::add_to_eth_bridge_pool(ctx, args.0).await;
                 }
-                Sub::SubmitValidatorSetUpdate(SubmitValidatorSetUpdate(
-                    args,
-                )) => {
-                    validator_set::submit_validator_set_update(ctx, args).await;
-                }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(args)) => {
                     wait_until_node_is_synched(&args.ledger_address).await;

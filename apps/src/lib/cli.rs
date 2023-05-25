@@ -222,7 +222,6 @@ pub mod cmds {
                 .subcommand(Withdraw::def().display_order(2))
                 // Ethereum bridge
                 .subcommand(AddToEthBridgePool::def().display_order(3))
-                .subcommand(SubmitValidatorSetUpdate::def().display_order(3))
                 // Queries
                 .subcommand(QueryEpoch::def().display_order(4))
                 .subcommand(QueryTransfers::def().display_order(4))
@@ -280,8 +279,6 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryProtocolParameters);
             let add_to_eth_bridge_pool =
                 Self::parse_with_ctx(matches, AddToEthBridgePool);
-            let submit_validator_set_update =
-                Self::parse_with_ctx(matches, SubmitValidatorSetUpdate);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
@@ -296,7 +293,6 @@ pub mod cmds {
                 .or(unbond)
                 .or(withdraw)
                 .or(add_to_eth_bridge_pool)
-                .or(submit_validator_set_update)
                 .or(query_epoch)
                 .or(query_transfers)
                 .or(query_conversions)
@@ -361,7 +357,6 @@ pub mod cmds {
         Unbond(Unbond),
         Withdraw(Withdraw),
         AddToEthBridgePool(AddToEthBridgePool),
-        SubmitValidatorSetUpdate(SubmitValidatorSetUpdate),
         QueryEpoch(QueryEpoch),
         QueryTransfers(QueryTransfers),
         QueryConversions(QueryConversions),
@@ -1813,25 +1808,6 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct SubmitValidatorSetUpdate(pub args::SubmitValidatorSetUpdate);
-
-    impl SubCmd for SubmitValidatorSetUpdate {
-        const CMD: &'static str = "validator-set-update";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                Self(args::SubmitValidatorSetUpdate::parse(matches))
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Submit a validator set update protocol tx.")
-                .add_args::<args::SubmitValidatorSetUpdate>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
     pub struct ConstructProof(pub args::BridgePoolProof);
 
     impl SubCmd for ConstructProof {
@@ -2590,31 +2566,6 @@ pub mod args {
                         "The Namada address of the account paying the fee.",
                     ),
                 )
-        }
-    }
-
-    /// Submit a validator set update protocol tx.
-    #[derive(Clone, Debug)]
-    pub struct SubmitValidatorSetUpdate {
-        /// The query parameters.
-        pub query: Query,
-        /// The epoch of the validator set to relay.
-        pub epoch: Option<Epoch>,
-    }
-
-    impl Args for SubmitValidatorSetUpdate {
-        fn parse(matches: &ArgMatches) -> Self {
-            let epoch = EPOCH.parse(matches);
-            let query = Query::parse(matches);
-            Self { epoch, query }
-        }
-
-        fn def(app: App) -> App {
-            app.add_args::<Query>().arg(
-                EPOCH
-                    .def()
-                    .about("The epoch of the validator set to relay."),
-            )
         }
     }
 
