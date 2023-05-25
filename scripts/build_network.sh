@@ -10,14 +10,17 @@
 # - trash CLI tool (`brew install trash` on macOS or `sudo apt-get install trash-cli` on Ubuntu)
 #
 # ## How to run
-# This script should be run from the root of a Namada source code repo (<https://github.com/anoma/namada>). 
+# This script should be run from the root of a Namada source code repo (https://github.com/anoma/namada). 
 # *.wasm files must already have been built and be present under the `wasm/` directory of the Namada repo. 
 # This can be done by running `make build wasm-scripts`. 
 # The shell script takes three arguments:
-# The first argument is the path to a network config toml compatible with the version of Namada being used. 
-# The second argument is the BASE_DIR of the chain. This will depend on your setup. Example command:
+# The first argument is the path to a network config toml compatible with the version of Namada being used.
+# You can find example network config tomls in the `templates/` directory of the anoma-network-configs repo (https://github.com/heliaxdev/anoma-network-configs)`
+# The second argument is the BASE_DIR of the chain. This will depend on your setup.
 # The third argument is the path to the directory containing the Namada binaries
 # 
+# 
+# Example command:
 # ```shell
 # /path/to/repo/devchain-container/build_network.sh network-configs/mainline-v0.12.1.toml '~/Library/Application Support/Namada'
 # ````
@@ -28,6 +31,15 @@
 # ```shell
 # target/debug/namadan ledger run
 # ````
+
+# After running the ledger, you can run the following command to kill an underlying process
+# ```shell
+# pkill -f ".hack/chains"
+# ```
+# and also delete the chain data by running
+# ```shell
+# rm -r .hack/chains
+# ```
 
 set +x
 # set -eoux pipefail
@@ -185,7 +197,7 @@ package() {
     trash nohup.out
 
     # don't trash namada - so we're ready to go with the chain
-    echo "Run the ledger!"
+    echo "Run the ledger! (and when done follow the instructions to clean up)"
 }
 
 main() {    
@@ -196,9 +208,6 @@ main() {
 
     validate_arguments "$@"
     package "$@"
-
-    package $@
-
 }
 
 
