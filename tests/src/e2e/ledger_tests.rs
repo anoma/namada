@@ -3914,12 +3914,8 @@ fn test_genesis_validators() -> Result<()> {
     // `join-network` use the defaults
     let update_config = |ix: u8, mut config: Config| {
         let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
-        config.ledger.tendermint.p2p_address.set_port(first_port);
-        config
-            .ledger
-            .tendermint
-            .rpc_address
-            .set_port(first_port + 1);
+        config.ledger.cometbft.p2p_address.set_port(first_port);
+        config.ledger.cometbft.rpc_address.set_port(first_port + 1);
         config.ledger.shell.ledger_address.set_port(first_port + 2);
         config
     };
@@ -4102,12 +4098,8 @@ fn double_signing_gets_slashed() -> Result<()> {
 
     let update_config = |ix: u8, mut config: Config| {
         let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
-        config.ledger.tendermint.p2p_address.set_port(first_port);
-        config
-            .ledger
-            .tendermint
-            .rpc_address
-            .set_port(first_port + 1);
+        config.ledger.cometbft.p2p_address.set_port(first_port);
+        config.ledger.cometbft.rpc_address.set_port(first_port + 1);
         config.ledger.shell.ledger_address.set_port(first_port + 2);
         config
     };

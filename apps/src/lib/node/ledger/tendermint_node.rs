@@ -63,7 +63,7 @@ fn from_env_or_default() -> Result<String> {
             tracing::info!("Using CometBFT path from env variable: {}", path);
             Ok(path)
         }
-        Err(std::env::VarError::NotPresent) => Ok(String::from("tendermint")),
+        Err(std::env::VarError::NotPresent) => Ok(String::from("cometbft")),
         Err(std::env::VarError::NotUnicode(msg)) => {
             Err(Error::TendermintPath(msg))
         }
@@ -264,11 +264,11 @@ fn validator_key_to_json(
     Ok(json!({
         "address": raw_hash,
         "pub_key": {
-            "type": format!("cometbft/PubKey{}",id_str),
+            "type": format!("tendermint/PubKey{}",id_str),
             "value": base64::encode(pk_arr),
         },
         "priv_key": {
-            "type": format!("cometbft/PrivKey{}",id_str),
+            "type": format!("tendermint/PrivKey{}",id_str),
             "value": base64::encode(kp_arr),
         }
     }))

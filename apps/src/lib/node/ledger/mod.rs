@@ -421,30 +421,29 @@ fn start_abci_broadcaster_shell(
         tokio::sync::mpsc::unbounded_channel();
 
     // Start broadcaster
-    let broadcaster = if matches!(
-        config.cometbft.tendermint_mode,
-        TendermintMode::Validator
-    ) {
-        let (bc_abort_send, bc_abort_recv) =
-            tokio::sync::oneshot::channel::<()>();
+    let broadcaster =
+        if matches!(config.cometbft.tendermint_mode, TendermintMode::Validator)
+        {
+            let (bc_abort_send, bc_abort_recv) =
+                tokio::sync::oneshot::channel::<()>();
 
-        spawner
-            .spawn_abortable("Broadcaster", move |aborter| async move {
-                // Construct a service for broadcasting protocol txs from the
-                // ledger
-                let mut broadcaster =
-                    Broadcaster::new(&rpc_address, broadcaster_receiver);
-                broadcaster.run(bc_abort_recv).await;
-                tracing::info!("Broadcaster is no longer running.");
+            spawner
+                .spawn_abortable("Broadcaster", move |aborter| async move {
+                    // Construct a service for broadcasting protocol txs from
+                    // the ledger
+                    let mut broadcaster =
+                        Broadcaster::new(&rpc_address, broadcaster_receiver);
+                    broadcaster.run(bc_abort_recv).await;
+                    tracing::info!("Broadcaster is no longer running.");
 
-                drop(aborter);
-            })
-            .with_cleanup(async move {
-                let _ = bc_abort_send.send(());
-            })
-    } else {
-        spawn_dummy_task(())
-    };
+                    drop(aborter);
+                })
+                .with_cleanup(async move {
+                    let _ = bc_abort_send.send(());
+                })
+        } else {
+            spawn_dummy_task(())
+        };
 
     // Setup DB cache, it must outlive the DB instance that's in the shell
     let db_cache =
