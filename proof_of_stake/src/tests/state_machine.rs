@@ -2205,8 +2205,8 @@ impl AbstractPosState {
         if !slashes_this_epoch.is_empty() {
             let infraction_epoch = self.epoch
                 - self.params.unbonding_len
-                - 1
-                - self.params.cubic_slashing_window_length;
+                - self.params.cubic_slashing_window_length
+                - 1;
             // Now need to basically do the end_of_epoch() procedure
             // from the Informal Systems model
             let cubic_rate = self.cubic_slash_rate();
