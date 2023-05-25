@@ -878,8 +878,8 @@ mod test_process_proposal {
                 );
                 assert_eq!(
                     response[0].result.info,
-                    "Error trying to apply a transaction: Insufficient \
-                     balance to pay fee"
+                    "Error trying to apply a transaction: Error while processing transaction's fees: Insufficient transparent \
+                     balance to pay fees"
                         .to_string()
                 );
             }
@@ -940,8 +940,8 @@ mod test_process_proposal {
                 );
                 assert_eq!(
                     response[0].result.info,
-                    "Error trying to apply a transaction: Insufficient \
-                                                     balance to pay fee"
+                    "Error trying to apply a transaction: Error while processing transaction's fees: Insufficient transparent \
+                                                     balance to pay fees"
                         .to_string()
                 );
             }

@@ -95,31 +95,32 @@ where
     let mut write_log = WriteLog::default();
 
     // Wrapper dry run to allow estimating the gas cost of a transaction
-    let mut tx_gas_meter = if let TxType::Wrapper(wrapper) = &tx {
-        let mut tx_gas_meter =
-            TxGasMeter::new(wrapper.gas_limit.to_owned().into());
-        protocol::apply_tx(
-            tx.to_owned(),
-            &request.data,
-            TxIndex::default(),
-            &mut tx_gas_meter,
-            &gas_table,
-            &mut write_log,
-            &ctx.wl_storage.storage,
-            &mut ctx.vp_wasm_cache,
-            &mut ctx.tx_wasm_cache,
-            None,
-            #[cfg(not(feature = "mainnet"))]
-            false,
-        )
-        .into_storage_result()?;
+    let mut tx_gas_meter = match tx {
+        TxType::Wrapper(ref wrapper) => {
+            let mut tx_gas_meter =
+                TxGasMeter::new(wrapper.gas_limit.to_owned().into());
+            protocol::apply_tx(
+                tx.to_owned(),
+                &request.data,
+                TxIndex::default(),
+                &mut tx_gas_meter,
+                &gas_table,
+                &mut write_log,
+                &ctx.wl_storage.storage,
+                &mut ctx.vp_wasm_cache,
+                &mut ctx.tx_wasm_cache,
+                None,
+                #[cfg(not(feature = "mainnet"))]
+                false,
+            )
+            .into_storage_result()?;
 
-        write_log.commit_tx();
+            write_log.commit_tx();
 
-        // NOTE: the encryption key for a dry-run should always be an hardcoded, dummy one
-        let privkey =
+            // NOTE: the encryption key for a dry-run should always be an hardcoded, dummy one
+            let privkey =
             <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-        tx = TxType::Decrypted(DecryptedTx::Decrypted {
+            tx = TxType::Decrypted(DecryptedTx::Decrypted {
             tx: wrapper
                 .decrypt(privkey)
                 .expect("Could not decrypt the inner tx"),
@@ -128,23 +129,28 @@ where
                     // that we got a valid PoW
                     has_valid_pow: true,
         });
-        TxGasMeter::new(
-            tx_gas_meter
-                .tx_gas_limit
-                .checked_sub(tx_gas_meter.get_current_transaction_gas())
-                .unwrap_or_default(),
-        )
-    } else {
-        // If dry run only the inner tx, use the max block gas as the gas limit
-        TxGasMeter::new(
-            ctx.wl_storage
-                .read(&parameters::storage::get_max_block_gas_key())
-                .expect("Error while reading storage key")
-                .expect("Missing parameter in storage"),
-        )
+            TxGasMeter::new(
+                tx_gas_meter
+                    .tx_gas_limit
+                    .checked_sub(tx_gas_meter.get_current_transaction_gas())
+                    .unwrap_or_default(),
+            )
+        }
+        TxType::Protocol(_) | TxType::Decrypted(_) => TxGasMeter::new(u64::MAX),
+        TxType::Raw(raw) => {
+            // Cast tx to a decrypted for execution
+            tx = TxType::Decrypted(DecryptedTx::Decrypted {
+                tx: raw,
+
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: true,
+            });
+
+            TxGasMeter::new(u64::MAX)
+        }
     };
 
-    let data = protocol::apply_tx(
+    let mut data = protocol::apply_tx(
         tx,
         &vec![],
         TxIndex(0),
