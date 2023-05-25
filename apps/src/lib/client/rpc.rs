@@ -44,7 +44,8 @@ use namada::types::storage::{
     BlockHeight, BlockResults, Epoch, Key, KeySeg, PrefixValue, TxIndex,
 };
 use namada::types::token::{
-    balance_key, Change, DenominatedAmount, MaspDenom, TokenAddress, Transfer,
+    balance_key, Change, DenominatedAmount, Denomination, MaspDenom,
+    TokenAddress, Transfer,
 };
 use namada::types::transaction::{
     process_tx, AffineCurve, DecryptedTx, EllipticCurve, PairingEngine, TxType,
@@ -2849,6 +2850,7 @@ pub async fn validate_amount(
     amount: InputAmount,
     token: &Address,
     sub_prefix: &Option<Key>,
+    force: bool,
 ) -> token::DenominatedAmount {
     let input_amount = match amount {
         InputAmount::Unvalidated(amt) => amt.canonical(),
@@ -2861,14 +2863,21 @@ pub async fn validate_amount(
             .await,
     )
     .unwrap_or_else(|| {
-        println!(
-            "No denomination found for token: {token}, the input arguments \
-             could
-                    not be parsed."
-        );
-        cli::safe_exit(1);
+        if force {
+            println!(
+                "No denomination found for token: {token}, but --force was \
+                 passed. Defaulting to the provided denomination."
+            );
+            input_amount.denom
+        } else {
+            println!(
+                "No denomination found for token: {token}, the input \
+                 arguments could not be parsed."
+            );
+            cli::safe_exit(1);
+        }
     });
-    if denom < input_amount.denom {
+    if denom < input_amount.denom && !force {
         println!(
             "The input amount contained a higher precision than allowed by \
              {token}."

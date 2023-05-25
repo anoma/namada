@@ -1788,14 +1788,21 @@ pub async fn submit_transfer(mut ctx: Context, mut args: args::TxTransfer) {
         None => (None, token::balance_key(&token, &source)),
     };
     // validate the amount given
-    let validated_amount =
-        validate_amount(&client, args.amount, &token, &sub_prefix).await;
+    let validated_amount = validate_amount(
+        &client,
+        args.amount,
+        &token,
+        &sub_prefix,
+        args.tx.force,
+    )
+    .await;
     let validate_fee = validate_amount(
         &client,
         args.tx.fee_amount,
         &fee_token,
         // TODO: Currently multi-tokens cannot be used to pay fees
         &None,
+        args.tx.force,
     )
     .await;
 

@@ -1832,7 +1832,7 @@ fn invalid_transactions() -> Result<()> {
         "--token",
         BERTHA,
         "--amount",
-        "1_000_000.1",
+        "1000000.1",
         "--gas-amount",
         "0",
         "--gas-limit",
