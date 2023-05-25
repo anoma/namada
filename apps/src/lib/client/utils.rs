@@ -290,7 +290,7 @@ pub async fn join_network(
             })
             .clone();
 
-        let tm_home_dir = chain_dir.join("tendermint");
+        let tm_home_dir = chain_dir.join("cometbft");
 
         // Write consensus key to tendermint home
         tendermint_node::write_validator_key(
@@ -456,7 +456,7 @@ pub fn init_network(
         let validator_dir = accounts_dir.join(name);
 
         let chain_dir = validator_dir.join(&accounts_temp_dir);
-        let tm_home_dir = chain_dir.join("tendermint");
+        let tm_home_dir = chain_dir.join("cometbft");
 
         // Find or generate tendermint node key
         let node_pk = try_parse_public_key(
@@ -1065,7 +1065,7 @@ pub fn write_tendermint_node_key(
 
     let tm_node_keypair_json = json!({
         "priv_key": {
-            "type": format!("tendermint/PrivKey{}",key_str),
+            "type": format!("cometbft/PrivKey{}",key_str),
             "value": base64::encode(node_keypair),
         }
     });

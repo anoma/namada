@@ -4129,7 +4129,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     let node_sk = key::common::SecretKey::Ed25519(node_sk);
     let tm_home_dir = validator_0_base_dir_copy
         .join(test.net.chain_id.as_str())
-        .join("tendermint");
+        .join("cometbft");
     let _node_pk =
         client::utils::write_tendermint_node_key(&tm_home_dir, node_sk);
 

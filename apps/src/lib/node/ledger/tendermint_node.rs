@@ -138,7 +138,7 @@ pub async fn run(
         .kill_on_drop(true)
         .spawn()
         .map_err(Error::StartUp)?;
-    tracing::info!("Tendermint node started");
+    tracing::info!("CometBFT node started");
 
     tokio::select! {
         status = tendermint_node.wait() => {
@@ -264,11 +264,11 @@ fn validator_key_to_json(
     Ok(json!({
         "address": raw_hash,
         "pub_key": {
-            "type": format!("tendermint/PubKey{}",id_str),
+            "type": format!("cometbft/PubKey{}",id_str),
             "value": base64::encode(pk_arr),
         },
         "priv_key": {
-            "type": format!("tendermint/PrivKey{}",id_str),
+            "type": format!("cometbft/PrivKey{}",id_str),
             "value": base64::encode(kp_arr),
         }
     }))
