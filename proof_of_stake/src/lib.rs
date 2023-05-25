@@ -1937,8 +1937,9 @@ where
             storage,
             start_epoch,
             Some(
-                withdraw_epoch + params.pipeline_len
-                    - params.withdrawable_epoch_offset(),
+                withdraw_epoch
+                    - params.unbonding_len
+                    - params.cubic_slashing_window_length,
             ),
             validator,
         )?;
@@ -2771,9 +2772,10 @@ fn make_unbond_details(
             .fold(None, |acc: Option<token::Amount>, slash| {
                 if slash.epoch >= start
                     && slash.epoch
-                        < (withdraw + params.pipeline_len)
+                        < withdraw
                             .checked_sub(Epoch(
-                                params.withdrawable_epoch_offset(),
+                                params.unbonding_len
+                                    + params.cubic_slashing_window_length,
                             ))
                             .unwrap_or_default()
                 {
