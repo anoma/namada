@@ -2794,7 +2794,7 @@ mod test_finalize_block {
 
         let del_details = details.get(&del_id).unwrap();
         let self_details = details.get(&self_id).unwrap();
-        dbg!(del_details, self_details);
+        // dbg!(del_details, self_details);
 
         // Check slashes
         assert_eq!(del_details.slashes, self_details.slashes);
