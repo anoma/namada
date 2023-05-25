@@ -926,7 +926,7 @@ fn test_slashes_with_unbonding_aux(
         slash_0_evidence_epoch,
         evidence_block_height,
         slash_0_type,
-        &val_addr,
+        val_addr,
     )
     .unwrap();
 
@@ -941,15 +941,14 @@ fn test_slashes_with_unbonding_aux(
     let unbond_amount = decimal_mult_amount(dec!(0.5), val_tokens);
     println!("Going to unbond {unbond_amount}");
     let unbond_epoch = current_epoch;
-    unbond_tokens(&mut s, None, &val_addr, unbond_amount, unbond_epoch)
-        .unwrap();
+    unbond_tokens(&mut s, None, val_addr, unbond_amount, unbond_epoch).unwrap();
 
     // current_epoch = advance_epoch(&mut s, &params);
 
     // Discover second slash
     let slash_1_evidence_epoch = current_epoch;
     // Ensure that both slashes happen before `unbond_epoch + pipeline`
-    let slash_1_processing_epoch =
+    let _slash_1_processing_epoch =
         slash_1_evidence_epoch + params.slash_processing_epoch_offset();
     let evidence_block_height = BlockHeight(0); // doesn't matter for slashing logic
     let slash_1_type = SlashType::DuplicateVote;
@@ -960,7 +959,7 @@ fn test_slashes_with_unbonding_aux(
         slash_1_evidence_epoch,
         evidence_block_height,
         slash_1_type,
-        &val_addr,
+        val_addr,
     )
     .unwrap();
 
@@ -970,11 +969,11 @@ fn test_slashes_with_unbonding_aux(
         current_epoch = advance_epoch(&mut s, &params);
     }
     let token = staking_token_address(&s);
-    let val_balance_pre = read_balance(&s, &token, &val_addr).unwrap();
+    let val_balance_pre = read_balance(&s, &token, val_addr).unwrap();
 
-    withdraw_tokens(&mut s, None, &val_addr, current_epoch).unwrap();
+    withdraw_tokens(&mut s, None, val_addr, current_epoch).unwrap();
 
-    let val_balance_post = read_balance(&s, &token, &val_addr).unwrap();
+    let val_balance_post = read_balance(&s, &token, val_addr).unwrap();
     let withdrawn_tokens = val_balance_post - val_balance_pre;
 
     let slash_rate_0 = validator_slashes_handle(val_addr)
