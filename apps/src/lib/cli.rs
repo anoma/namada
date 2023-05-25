@@ -2289,8 +2289,6 @@ pub mod args {
         arg_opt("eth-cold-key");
     pub const VALIDATOR_ETH_HOT_KEY: ArgOpt<WalletKeypair> =
         arg_opt("eth-hot-key");
-    pub const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> =
-        arg_opt("validator-code-path");
     pub const VALUE: ArgOpt<String> = arg_opt("value");
     pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
