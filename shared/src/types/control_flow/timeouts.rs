@@ -2,9 +2,18 @@
 
 use std::future::Future;
 use std::ops::ControlFlow;
+use std::time::Duration;
 
-use tokio::time::error::Elapsed;
-use tokio::time::{Duration, Instant};
+use thiserror::Error;
+use wasm_timer::{Delay, Instant, TryFutureExt};
+
+/// Timeout related errors.
+#[derive(Error, Debug)]
+pub enum Error {
+    /// A future timed out.
+    #[error("The future timed out")]
+    Elapsed,
+}
 
 /// A sleep strategy to be applied to fallible runs of arbitrary tasks.
 #[derive(Debug, Clone)]
@@ -23,11 +32,11 @@ impl SleepStrategy {
     async fn sleep_update(&self, backoff: &mut Duration) {
         match self {
             Self::Constant(sleep_duration) => {
-                tokio::time::sleep(*sleep_duration).await;
+                _ = Delay::new(*sleep_duration).await;
             }
             Self::LinearBackoff { delta } => {
                 *backoff += *delta;
-                tokio::time::sleep(*backoff).await;
+                _ = Delay::new(*backoff).await;
             }
         }
     }
@@ -61,15 +70,18 @@ impl SleepStrategy {
         &self,
         deadline: Instant,
         future_gen: G,
-    ) -> Result<T, Elapsed>
+    ) -> Result<T, Error>
     where
         G: FnMut() -> F,
         F: Future<Output = ControlFlow<T>>,
     {
-        tokio::time::timeout_at(
-            deadline,
-            async move { self.run(future_gen).await },
-        )
-        .await
+        let run_future = async move {
+            let value = self.run(future_gen).await;
+            Result::<_, std::io::Error>::Ok(value)
+        };
+        run_future
+            .timeout_at(deadline)
+            .await
+            .map_err(|_| Error::Elapsed)
     }
 }
