@@ -126,12 +126,13 @@ test-unit-coverage:
 
 # NOTE: `TEST_FILTER` is prepended with `e2e::`. Since filters in `cargo test`
 # work with a substring search, TEST_FILTER only works if it contains a string
-# that directly follows `e2e::`, e.g. `TEST_FILTER=multitoken_tests` would run
+# that directly follows `e2e::`, e.g. `TEST_FILTER-- --test-threads=1 --nocapture =multitoken_tests` would run
 # all tests that start with `e2e::multitoken_tests`.
 test-e2e:
 	NAMADA_E2E_USE_PREBUILT_BINARIES=$(NAMADA_E2E_USE_PREBUILT_BINARIES) \
 	NAMADA_E2E_DEBUG=$(NAMADA_E2E_DEBUG) \
 	RUST_BACKTRACE=$(RUST_BACKTRACE) \
+	NAMADA_E2E_KEEP_TEMP=true \
 	$(cargo) +$(nightly) test e2e::$(TEST_FILTER) \
 	-Z unstable-options \
 	-- \

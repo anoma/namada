@@ -10,16 +10,16 @@
             "name": "Debug 'namadan run-ledger'",
             "cargo": {
                 "args": [
-                    "run",
-                    "--bin=namadan",
+                    "build",
+                    "--bin=namadac",
                 ],
                 "filter": {
-                    "name": "namadan",
+                    "name": "namadac",
                     "kind": "bin"
                 }
             },
             "args": [
-                "run-ledger"
+                "--base-dir", "chains", "utils", "init-network", "--unsafe-dont-encrypt", "--genesis-path", "genesis/e2e-tests-single-node.toml", "--chain-prefix", "namada-test", "--localhost", "--dont-archive", "--wasm-checksums-path", "wasm/checksums.json"
             ],
             "cwd": "${workspaceFolder}"
         },

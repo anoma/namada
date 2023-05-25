@@ -452,7 +452,7 @@ fn start_abci_broadcaster_shell(
 
     // Construct our ABCI application.
     let tendermint_mode = config.shell.tendermint_mode.clone();
-    let ledger_address = config.shell.ledger_address;
+    let ledger_address = config.tendermint_config.proxy_app.to_string();
     #[cfg(not(feature = "dev"))]
     let genesis = genesis::genesis(&config.shell.base_dir, &config.chain_id);
     #[cfg(feature = "dev")]
@@ -513,7 +513,7 @@ fn start_abci_broadcaster_shell(
 async fn run_abci(
     abci_service: AbciService,
     service_handle: tokio::sync::broadcast::Sender<()>,
-    ledger_address: SocketAddr,
+    ledger_address: String,
     abort_recv: tokio::sync::oneshot::Receiver<()>,
 ) -> shell::Result<()> {
     // Split it into components.
@@ -568,7 +568,7 @@ fn start_tendermint(
 ) -> task::JoinHandle<shell::Result<()>> {
     let tendermint_dir = config.tendermint_dir();
     let chain_id = config.chain_id.clone();
-    let ledger_address = config.shell.ledger_address.to_string();
+    let ledger_address = config.tendermint_config.proxy_app.to_string();
     let config = config.clone();
     let genesis_time = config
         .genesis_time

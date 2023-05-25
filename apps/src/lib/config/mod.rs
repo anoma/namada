@@ -18,7 +18,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::cli;
-use crate::facade::tendermint::Timeout;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_config::{TendermintConfig, TxIndexer, TxIndexConfig};
 
@@ -102,7 +101,7 @@ pub struct Ledger {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Shell {
     pub base_dir: PathBuf,
-    pub ledger_address: SocketAddr,
+    // pub ledger_address: SocketAddr,
     /// RocksDB block cache maximum size in bytes.
     /// When not set, defaults to 1/3 of the available memory.
     pub block_cache_bytes: Option<u64>,
@@ -176,10 +175,6 @@ impl Ledger {
             chain_id,
             shell: Shell {
                 base_dir: base_dir.as_ref().to_owned(),
-                ledger_address: SocketAddr::new(
-                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                    26658,
-                ),
                 block_cache_bytes: None,
                 vp_wasm_compilation_cache_bytes: None,
                 tx_wasm_compilation_cache_bytes: None,
