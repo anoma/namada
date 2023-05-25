@@ -31,7 +31,7 @@ pub const DEFAULT_WASM_CHECKSUMS_FILE: &str = "checksums.json";
 /// Chain-specific Namada configuration. Nested in chain dirs.
 pub const FILENAME: &str = "config.toml";
 /// Chain-specific Tendermint configuration. Nested in chain dirs.
-pub const TENDERMINT_DIR: &str = "tendermint";
+pub const TENDERMINT_DIR: &str = "cometbft";
 /// Chain-specific Namada DB. Nested in chain dirs.
 pub const DB_DIR: &str = "db";
 
