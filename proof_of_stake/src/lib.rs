@@ -1933,11 +1933,7 @@ where
         let slashes_for_this_unbond = find_slashes_in_range(
             storage,
             start_epoch,
-            Some(
-                withdraw_epoch
-                    - params.unbonding_len
-                    - params.cubic_slashing_window_length,
-            ),
+            Some(withdraw_epoch - params.slash_processing_epoch_offset()),
             validator,
         )?;
 
