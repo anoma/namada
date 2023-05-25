@@ -30,8 +30,8 @@ pub const DEFAULT_WASM_DIR: &str = "wasm";
 pub const DEFAULT_WASM_CHECKSUMS_FILE: &str = "checksums.json";
 /// Chain-specific Namada configuration. Nested in chain dirs.
 pub const FILENAME: &str = "config.toml";
-/// Chain-specific Tendermint configuration. Nested in chain dirs.
-pub const TENDERMINT_DIR: &str = "tendermint";
+/// Chain-specific CometBFT configuration. Nested in chain dirs.
+pub const COMETBFT_DIR: &str = "cometbft";
 /// Chain-specific Namada DB. Nested in chain dirs.
 pub const DB_DIR: &str = "db";
 
@@ -95,7 +95,7 @@ pub struct Ledger {
     pub genesis_time: Rfc3339String,
     pub chain_id: ChainId,
     pub shell: Shell,
-    pub tendermint: Tendermint,
+    pub cometbft: Tendermint,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -116,8 +116,8 @@ pub struct Shell {
     pub storage_read_past_height_limit: Option<u64>,
     /// Use the [`Ledger::db_dir()`] method to read the value.
     db_dir: PathBuf,
-    /// Use the [`Ledger::tendermint_dir()`] method to read the value.
-    tendermint_dir: PathBuf,
+    /// Use the [`Ledger::cometbft_dir()`] method to read the value.
+    cometbft_dir: PathBuf,
     /// An optional action to take when a given blockheight is reached.
     pub action_at_height: Option<ActionAtHeight>,
 }
@@ -173,10 +173,10 @@ impl Ledger {
                 // Default corresponds to 1 hour of past blocks at 1 block/sec
                 storage_read_past_height_limit: Some(3600),
                 db_dir: DB_DIR.into(),
-                tendermint_dir: TENDERMINT_DIR.into(),
+                cometbft_dir: COMETBFT_DIR.into(),
                 action_at_height: None,
             },
-            tendermint: Tendermint {
+            cometbft: Tendermint {
                 rpc_address: SocketAddr::new(
                     IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                     26657,
@@ -222,8 +222,8 @@ impl Ledger {
     }
 
     /// Get the directory path to Tendermint
-    pub fn tendermint_dir(&self) -> PathBuf {
-        self.shell.tendermint_dir(&self.chain_id)
+    pub fn cometbft_dir(&self) -> PathBuf {
+        self.shell.cometbft_dir(&self.chain_id)
     }
 }
 
@@ -234,10 +234,10 @@ impl Shell {
     }
 
     /// Get the directory path to Tendermint
-    pub fn tendermint_dir(&self, chain_id: &ChainId) -> PathBuf {
+    pub fn cometbft_dir(&self, chain_id: &ChainId) -> PathBuf {
         self.base_dir
             .join(chain_id.as_str())
-            .join(&self.tendermint_dir)
+            .join(&self.cometbft_dir)
     }
 }
 
