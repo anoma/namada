@@ -1,5 +1,6 @@
 //! SDK RPC queries
 use std::collections::{HashMap, HashSet};
+use std::time::Duration;
 
 use borsh::BorshDeserialize;
 use masp_primitives::asset_type::AssetType;
@@ -11,7 +12,6 @@ use namada_core::types::storage::Key;
 use namada_core::types::token::Amount;
 use namada_proof_of_stake::types::CommissionPair;
 use serde::Serialize;
-use tokio::time::Duration;
 
 use crate::ledger::events::Event;
 use crate::ledger::governance::parameters::GovParams;

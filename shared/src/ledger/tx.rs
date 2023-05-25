@@ -2,6 +2,7 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::str::FromStr;
+use std::time::Duration;
 
 use borsh::BorshSerialize;
 use itertools::Either::*;
@@ -12,7 +13,6 @@ use namada_proof_of_stake::types::CommissionPair;
 use prost::EncodeError;
 use rust_decimal::Decimal;
 use thiserror::Error;
-use tokio::time::Duration;
 
 use super::rpc::query_wasm_code_hash;
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
