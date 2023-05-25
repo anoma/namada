@@ -1967,15 +1967,16 @@ where
         &ADDRESS,
         source,
     )?;
-    // Transfer the slashed tokens from the PoS address to the Slash Pool
+
+    // TODO: Transfer the slashed tokens from the PoS address to the Slash Pool
     // address
-    transfer_tokens(
-        storage,
-        &staking_token,
-        total_slashed,
-        &ADDRESS,
-        &SLASH_POOL_ADDRESS,
-    )?;
+    // transfer_tokens(
+    //     storage,
+    //     &staking_token,
+    //     total_slashed,
+    //     &ADDRESS,
+    //     &SLASH_POOL_ADDRESS,
+    // )?;
 
     Ok(withdrawable_amount)
 }
@@ -3427,15 +3428,15 @@ where
     println!("Total slashed = {}", total_slashed);
     debug_assert!(total_slashed >= token::Change::default());
 
-    // Transfer all slashed tokens from PoS account to Slash Pool address
-    let staking_token = staking_token_address(storage);
-    transfer_tokens(
-        storage,
-        &staking_token,
-        token::Amount::from_change(total_slashed),
-        &ADDRESS,
-        &SLASH_POOL_ADDRESS,
-    )?;
+    // TODO: Transfer all slashed tokens from PoS account to Slash Pool address
+    // let staking_token = staking_token_address(storage);
+    // transfer_tokens(
+    //     storage,
+    //     &staking_token,
+    //     token::Amount::from_change(total_slashed),
+    //     &ADDRESS,
+    //     &SLASH_POOL_ADDRESS,
+    // )?;
 
     Ok(())
 }
