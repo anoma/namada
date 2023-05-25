@@ -592,7 +592,7 @@ fn wrapper_fee_unshielding() -> Result<()> {
                 "--token",
                 NAM,
                 "--amount",
-                "499900",
+                "1",
                 "--gas-limit",
                 "30",
                 "--ledger-address",
@@ -611,9 +611,9 @@ fn wrapper_fee_unshielding() -> Result<()> {
                 "--token",
                 NAM,
                 "--amount",
-                "500000",
+                "50000",
                 "--gas-limit",
-                "30",
+                "100",
                 "--ledger-address",
                 &validator_one_rpc,
             ],
@@ -653,7 +653,7 @@ fn wrapper_fee_unshielding() -> Result<()> {
                 "--amount",
                 "1",
                 "--gas-limit",
-                "30",
+                "1",
                 "--fee-spending-key",
                 A_SPENDING_KEY,
                 "--ledger-address",
@@ -800,7 +800,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--amount",
                 "20",
                 "--gas-limit",
-                "20",
+                "100",
                 "--node",
                 &validator_one_rpc,
             ],
@@ -842,7 +842,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--signer",
                 ALBERT,
                 "--gas-limit",
-                "30",
+                "100",
                 "--node",
                 &validator_one_rpc,
             ],
@@ -863,7 +863,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--signer",
                 ALBERT,
                 "--gas-limit",
-                "30",
+                "100",
                 "--node",
                 &validator_one_rpc,
             ],
@@ -905,7 +905,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--signer",
                 ALBERT,
                 "--gas-limit",
-                "30",
+                "100",
                 "--node",
                 &validator_one_rpc,
             ],
@@ -2536,7 +2536,7 @@ fn pos_init_validator() -> Result<()> {
         BERTHA,
         "--unsafe-dont-encrypt",
         "--gas-limit",
-        "30",
+        "100",
         "--commission-rate",
         "0.05",
         "--max-commission-rate-change",
@@ -2561,7 +2561,7 @@ fn pos_init_validator() -> Result<()> {
         "--amount",
         "10000.5",
         "--gas-limit",
-        "20",
+        "100",
         "--node",
         &validator_one_rpc,
     ];
@@ -2578,7 +2578,7 @@ fn pos_init_validator() -> Result<()> {
         "--amount",
         "1000.5",
         "--gas-limit",
-        "30",
+        "100",
         "--node",
         &validator_one_rpc,
     ];
@@ -2596,9 +2596,9 @@ fn pos_init_validator() -> Result<()> {
         "--token",
         NAM,
         "--amount",
-        "10999.5",
+        "100999.5",
         "--gas-limit",
-        "20",
+        "100",
         "--node",
         &validator_one_rpc,
     ];
@@ -2612,9 +2612,9 @@ fn pos_init_validator() -> Result<()> {
         "--validator",
         new_validator,
         "--amount",
-        "10000",
+        "1",
         "--gas-limit",
-        "30",
+        "100",
         "--node",
         &validator_one_rpc,
     ];
@@ -2645,7 +2645,7 @@ fn pos_init_validator() -> Result<()> {
     // 7. Check the new validator's bonded stake
     let bonded_stake =
         find_bonded_stake(&test, new_validator, &validator_one_rpc)?;
-    assert_eq!(bonded_stake, token::Amount::from_str("11_000.5").unwrap());
+    assert_eq!(bonded_stake, token::Amount::from_str("1001.5").unwrap());
 
     Ok(())
 }
@@ -3366,7 +3366,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "--amount",
         "900",
         "--gas-limit",
-        "100",
+        "150",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3385,7 +3385,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
         "--gas-limit",
-        "100",
+        "150",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3403,7 +3403,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
         "--gas-limit",
-        "100",
+        "150",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3487,7 +3487,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "--signer",
         "validator-0",
         "--gas-limit",
-        "100",
+        "150",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3515,7 +3515,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "--signer",
         BERTHA,
         "--gas-limit",
-        "100",
+        "150",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3536,7 +3536,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "--signer",
         BERTHA,
         "--gas-limit",
-        "100",
+        "150",
         "--ledger-address",
         &validator_one_rpc,
     ];
