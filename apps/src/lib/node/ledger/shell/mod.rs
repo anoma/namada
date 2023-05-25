@@ -493,7 +493,6 @@ where
     /// Apply PoS slashes from the evidence
     fn record_slashes_from_evidence(&mut self) {
         if !self.byzantine_validators.is_empty() {
-            println!("BYZANTINE VALIDATORS NOT EMPTY");
             let byzantine_validators =
                 mem::take(&mut self.byzantine_validators);
             // TODO: resolve this unwrap() better
