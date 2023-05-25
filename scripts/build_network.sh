@@ -81,7 +81,7 @@ cleanup() {
     # Kill the Python process
     pkill -f ".hack/chains"
     rm -r .hack/chains
-    rm local.*.tar.gz
+    rm -f local.*.tar.gz
 }
 validate_arguments() {
     # The script expects 4 arguments:
