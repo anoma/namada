@@ -826,9 +826,9 @@ dependencies = [
 
 [[package]]
 name = "bindgen"
-version = "0.64.0"
+version = "0.65.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4243e6031260db77ede97ad86c27e501d646a27ab57b59a574f725d98ab1fb4"
+checksum = "cfdf7b466f9a4903edc73f95d6d2bcd5baf8ae620638762244d3f60143643cc5"
 dependencies = [
  "bitflags",
  "cexpr",
@@ -836,12 +836,13 @@ dependencies = [
  "lazy_static",
  "lazycell",
  "peeking_take_while",
+ "prettyplease 0.2.6",
  "proc-macro2",
  "quote",
  "regex",
  "rustc-hash",
  "shlex",
- "syn 1.0.109",
+ "syn 2.0.16",
 ]
 
 [[package]]
@@ -2165,7 +2166,7 @@ checksum = "487585f4d0c6655fe74905e2504d8ad6908e4db67f744eb140876906c2f3175d"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.12",
+ "syn 2.0.16",
 ]
 
 [[package]]
@@ -2643,7 +2644,7 @@ dependencies = [
  "eyre",
  "getrandom 0.2.8",
  "hex",
- "prettyplease",
+ "prettyplease 0.1.24",
  "proc-macro2",
  "quote",
  "regex",
@@ -3181,7 +3182,7 @@ checksum = "89ca545a94061b6365f2c7355b4b32bd20df3ff95f02da9329b34ccc3bd6ee72"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.12",
+ "syn 2.0.16",
 ]
 
 [[package]]
@@ -3761,7 +3762,7 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.36.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=17c6d16e6e32c5db96f1d9026ce6beb019cdc7c4#17c6d16e6e32c5db96f1d9026ce6beb019cdc7c4"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=e06e2ca10bbf555dc87cf4a02a9f37a67931f268#e06e2ca10bbf555dc87cf4a02a9f37a67931f268"
 dependencies = [
  "bytes 1.4.0",
  "cfg-if 1.0.0",
@@ -3793,7 +3794,7 @@ dependencies = [
 [[package]]
 name = "ibc-proto"
 version = "0.26.0"
-source = "git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=e50ec3c3c1a9a0bcc3cd59516645ff5b4e1db281#e50ec3c3c1a9a0bcc3cd59516645ff5b4e1db281"
+source = "git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=c8c607d0f7a1ffae19df7b3e04f467d0a836a75b#c8c607d0f7a1ffae19df7b3e04f467d0a836a75b"
 dependencies = [
  "base64 0.13.1",
  "bytes 1.4.0",
@@ -3808,7 +3809,7 @@ dependencies = [
 [[package]]
 name = "ibc-relayer"
 version = "0.22.0"
-source = "git+https://github.com/heliaxdev/hermes.git?rev=b5f2a8881505d97863b965eec3d0fa8a00cde0b8#b5f2a8881505d97863b965eec3d0fa8a00cde0b8"
+source = "git+https://github.com/heliaxdev/hermes.git?rev=568ffee00f24aaf3b01db5af51583bec06b69164#568ffee00f24aaf3b01db5af51583bec06b69164"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -3867,7 +3868,7 @@ dependencies = [
 [[package]]
 name = "ibc-relayer-types"
 version = "0.22.0"
-source = "git+https://github.com/heliaxdev/hermes.git?rev=b5f2a8881505d97863b965eec3d0fa8a00cde0b8#b5f2a8881505d97863b965eec3d0fa8a00cde0b8"
+source = "git+https://github.com/heliaxdev/hermes.git?rev=568ffee00f24aaf3b01db5af51583bec06b69164#568ffee00f24aaf3b01db5af51583bec06b69164"
 dependencies = [
  "bytes 1.4.0",
  "derive_more",
@@ -4236,9 +4237,9 @@ checksum = "348108ab3fba42ec82ff6e9564fc4ca0247bdccdc68dd8af9764bbc79c3c8ffb"
 
 [[package]]
 name = "librocksdb-sys"
-version = "0.10.0+7.9.2"
+version = "0.11.0+8.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fe4d5874f5ff2bc616e55e8c6086d478fcda13faf9495768a4aa1c22042d30b"
+checksum = "d3386f101bcb4bd252d8e9d2fb41ec3b0862a15a62b478c355b2982efa469e3e"
 dependencies = [
  "bindgen",
  "bzip2-sys",
@@ -4788,11 +4789,13 @@ dependencies = [
 
 [[package]]
 name = "namada"
-version = "0.15.3"
+version = "0.16.0"
 dependencies = [
  "assert_matches",
+ "async-std",
  "async-trait",
  "bellman",
+ "bimap",
  "bls12_381",
  "borsh",
  "byte-unit",
@@ -4814,6 +4817,7 @@ dependencies = [
  "namada_ethereum_bridge",
  "namada_proof_of_stake",
  "namada_test_utils",
+ "orion",
  "parity-wasm",
  "paste",
  "pretty_assertions",
@@ -4835,8 +4839,10 @@ dependencies = [
  "test-log",
  "thiserror",
  "tokio",
+ "toml",
  "tracing 0.1.37",
  "tracing-subscriber 0.3.16",
+ "wasm-timer",
  "wasmer",
  "wasmer-cache",
  "wasmer-compiler-singlepass",
@@ -4849,7 +4855,7 @@ dependencies = [
 
 [[package]]
 name = "namada_apps"
-version = "0.15.3"
+version = "0.16.0"
 dependencies = [
  "ark-serialize",
  "ark-std",
@@ -4950,7 +4956,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.15.3"
+version = "0.16.0"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -4977,7 +4983,6 @@ dependencies = [
  "libsecp256k1",
  "masp_primitives",
  "namada_macros",
- "namada_tests",
  "num-rational 0.4.1",
  "num-traits 0.2.15",
  "num256",
@@ -5007,7 +5012,7 @@ dependencies = [
 
 [[package]]
 name = "namada_encoding_spec"
-version = "0.15.3"
+version = "0.16.0"
 dependencies = [
  "borsh",
  "itertools",
@@ -5044,7 +5049,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.15.3"
+version = "0.16.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5053,7 +5058,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.15.3"
+version = "0.16.0"
 dependencies = [
  "borsh",
  "data-encoding",
@@ -5075,7 +5080,7 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.15.3"
+version = "0.16.0"
 dependencies = [
  "borsh",
  "namada_core",
@@ -5084,7 +5089,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.15.3"
+version = "0.16.0"
 dependencies = [
  "assert_cmd",
  "borsh",
@@ -5131,7 +5136,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.15.3"
+version = "0.16.0"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -5146,7 +5151,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.15.3"
+version = "0.16.0"
 dependencies = [
  "borsh",
  "hex",
@@ -5157,7 +5162,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.15.3"
+version = "0.16.0"
 dependencies = [
  "borsh",
  "namada_core",
@@ -6052,6 +6057,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "prettyplease"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b69d39aab54d069e7f2fe8cb970493e7834601ca2d8c65fd7bbd183578080d1"
+dependencies = [
+ "proc-macro2",
+ "syn 2.0.16",
+]
+
+[[package]]
 name = "primitive-types"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6111,9 +6126,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.52"
+version = "1.0.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d0e1ae9e836cc3beddd63db0df682593d7e2d3d891ae8c9083d2113e1744224"
+checksum = "fa1fb82fc0c281dd9671101b66b771ebbe1eaf967b96ac8740dcba4b70005ca8"
 dependencies = [
  "unicode-ident",
 ]
@@ -6160,7 +6175,7 @@ dependencies = [
  "log 0.4.17",
  "multimap",
  "petgraph",
- "prettyplease",
+ "prettyplease 0.1.24",
  "prost",
  "prost-types",
  "regex",
@@ -6777,9 +6792,9 @@ dependencies = [
 
 [[package]]
 name = "rocksdb"
-version = "0.20.1"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "015439787fce1e75d55f279078d33ff14b4af5d93d995e8838ee4631301c8a99"
+checksum = "bb6f170a4041d50a0ce04b0d2e14916d6ca863ea2e422689a5b694395d299ffe"
 dependencies = [
  "libc",
  "librocksdb-sys",
@@ -7709,9 +7724,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.12"
+version = "2.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79d9531f94112cfc3e4c8f5f02cb2b58f72c97b7efd85f70203cc6d8efda5927"
+checksum = "a6f671d4b5ffdb8eadec19c0ae67fe2639df8684bd7bc4b83d986b8db549cf01"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -7795,7 +7810,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=cf4dd4ccb64c12485ff764c10888237cf87396bc#cf4dd4ccb64c12485ff764c10888237cf87396bc"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=becb27564c143f9a1e64d85cfe80a6dac1acce33#becb27564c143f9a1e64d85cfe80a6dac1acce33"
 dependencies = [
  "async-trait",
  "bytes 1.4.0",
@@ -7825,7 +7840,7 @@ dependencies = [
 [[package]]
 name = "tendermint-config"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=cf4dd4ccb64c12485ff764c10888237cf87396bc#cf4dd4ccb64c12485ff764c10888237cf87396bc"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=becb27564c143f9a1e64d85cfe80a6dac1acce33#becb27564c143f9a1e64d85cfe80a6dac1acce33"
 dependencies = [
  "flex-error",
  "serde 1.0.147",
@@ -7838,7 +7853,7 @@ dependencies = [
 [[package]]
 name = "tendermint-light-client"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=cf4dd4ccb64c12485ff764c10888237cf87396bc#cf4dd4ccb64c12485ff764c10888237cf87396bc"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=becb27564c143f9a1e64d85cfe80a6dac1acce33#becb27564c143f9a1e64d85cfe80a6dac1acce33"
 dependencies = [
  "contracts",
  "crossbeam-channel 0.4.4",
@@ -7859,7 +7874,7 @@ dependencies = [
 [[package]]
 name = "tendermint-light-client-verifier"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=cf4dd4ccb64c12485ff764c10888237cf87396bc#cf4dd4ccb64c12485ff764c10888237cf87396bc"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=becb27564c143f9a1e64d85cfe80a6dac1acce33#becb27564c143f9a1e64d85cfe80a6dac1acce33"
 dependencies = [
  "derive_more",
  "flex-error",
@@ -7871,7 +7886,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=cf4dd4ccb64c12485ff764c10888237cf87396bc#cf4dd4ccb64c12485ff764c10888237cf87396bc"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=becb27564c143f9a1e64d85cfe80a6dac1acce33#becb27564c143f9a1e64d85cfe80a6dac1acce33"
 dependencies = [
  "bytes 1.4.0",
  "flex-error",
@@ -7888,7 +7903,7 @@ dependencies = [
 [[package]]
 name = "tendermint-rpc"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=cf4dd4ccb64c12485ff764c10888237cf87396bc#cf4dd4ccb64c12485ff764c10888237cf87396bc"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=becb27564c143f9a1e64d85cfe80a6dac1acce33#becb27564c143f9a1e64d85cfe80a6dac1acce33"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -7921,7 +7936,7 @@ dependencies = [
 [[package]]
 name = "tendermint-testgen"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=cf4dd4ccb64c12485ff764c10888237cf87396bc#cf4dd4ccb64c12485ff764c10888237cf87396bc"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=becb27564c143f9a1e64d85cfe80a6dac1acce33#becb27564c143f9a1e64d85cfe80a6dac1acce33"
 dependencies = [
  "ed25519-dalek",
  "gumdrop",
@@ -8386,7 +8401,7 @@ version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5bf5e9b9c0f7e0a7c027dcfaba7b2c60816c7049171f679d99ee2ff65d0de8c4"
 dependencies = [
- "prettyplease",
+ "prettyplease 0.1.24",
  "proc-macro2",
  "prost-build",
  "quote",
@@ -8417,7 +8432,7 @@ dependencies = [
 [[package]]
 name = "tower-abci"
 version = "0.1.0"
-source = "git+https://github.com/heliaxdev/tower-abci.git?rev=f8afdd8b98cc2dbcd5df51f2fe8fc321bb0abe11#f8afdd8b98cc2dbcd5df51f2fe8fc321bb0abe11"
+source = "git+https://github.com/heliaxdev/tower-abci.git?rev=88d5f2f8ffaf484d3e9db8924fe595c54cdd6459#88d5f2f8ffaf484d3e9db8924fe595c54cdd6459"
 dependencies = [
  "bytes 1.4.0",
  "futures 0.3.28",
