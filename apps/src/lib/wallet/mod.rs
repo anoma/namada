@@ -111,12 +111,12 @@ pub fn gen_validator_keys<U: WalletUtils>(
     protocol_pk: Option<common::PublicKey>,
     protocol_key_scheme: SchemeType,
 ) -> Result<ValidatorKeys, FindKeyError> {
-    let protocol_keypair =
-        find_secret_key(wallet, protocol_pk, |data| data.keys.protocol_keypair.clone())?;
-    let eth_bridge_keypair =
-        find_secret_key(wallet, eth_bridge_pk, |data| {
-            data.keys.eth_bridge_keypair.clone()
-        })?;
+    let protocol_keypair = find_secret_key(wallet, protocol_pk, |data| {
+        data.keys.protocol_keypair.clone()
+    })?;
+    let eth_bridge_keypair = find_secret_key(wallet, eth_bridge_pk, |data| {
+        data.keys.eth_bridge_keypair.clone()
+    })?;
     Ok(store::gen_validator_keys(
         eth_bridge_keypair,
         protocol_keypair,
@@ -140,11 +140,10 @@ where
 {
     maybe_pk
         .map(|pk| {
-            wallet.find_key_by_pkh(&PublicKeyHash::from(&pk))
+            wallet
+                .find_key_by_pkh(&PublicKeyHash::from(&pk))
                 .ok()
-                .or_else(|| {
-                    wallet.get_validator_data().map(extract_key)
-                })
+                .or_else(|| wallet.get_validator_data().map(extract_key))
                 .ok_or(FindKeyError::KeyNotFound)
         })
         .transpose()

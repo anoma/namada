@@ -112,7 +112,9 @@ impl<U: WalletUtils> Wallet<U> {
         password: Option<String>,
         force_alias: bool,
     ) -> (String, common::SecretKey) {
-        let (alias, key) = self.store.gen_key::<U>(scheme, alias, password, force_alias);
+        let (alias, key) =
+            self.store
+                .gen_key::<U>(scheme, alias, password, force_alias);
         // Cache the newly added key
         self.decrypted_key_cache.insert(alias.clone(), key.clone());
         (alias.into(), key)
@@ -125,7 +127,9 @@ impl<U: WalletUtils> Wallet<U> {
         password: Option<String>,
         force_alias: bool,
     ) -> (String, ExtendedSpendingKey) {
-        let (alias, key) = self.store.gen_spending_key::<U>(alias, password, force_alias);
+        let (alias, key) =
+            self.store
+                .gen_spending_key::<U>(alias, password, force_alias);
         // Cache the newly added key
         self.decrypted_spendkey_cache.insert(alias.clone(), key);
         (alias.into(), key)
@@ -146,7 +150,7 @@ impl<U: WalletUtils> Wallet<U> {
     }
 
     /// Returns a mut reference to the validator data, if it exists.
-    pub fn get_validator_data_mut(&mut self) -> Option<&ValidatorData> {
+    pub fn get_validator_data_mut(&mut self) -> Option<&mut ValidatorData> {
         self.store.get_validator_data_mut()
     }
 
@@ -444,7 +448,12 @@ impl<U: WalletUtils> Wallet<U> {
         force_alias: bool,
     ) -> Option<String> {
         self.store
-            .insert_spending_key::<U>(alias.into(), spend_key, viewkey, force_alias)
+            .insert_spending_key::<U>(
+                alias.into(),
+                spend_key,
+                viewkey,
+                force_alias,
+            )
             .map(Into::into)
     }
 

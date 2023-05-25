@@ -173,9 +173,7 @@ pub fn gen_validator_keys(
     let eth_bridge_keypair = eth_bridge_keypair
         .map(|k| {
             if !matches!(&k, common::SecretKey::Secp256k1(_)) {
-                panic!(
-                    "Ethereum bridge keys can only be of kind Secp256k1"
-                );
+                panic!("Ethereum bridge keys can only be of kind Secp256k1");
             }
             k
         })
@@ -201,7 +199,8 @@ mod test_wallet {
     #[test]
     fn test_toml_roundtrip_ed25519() {
         let mut store = new();
-        let validator_keys = gen_validator_keys(None, None, SchemeType::Ed25519);
+        let validator_keys =
+            gen_validator_keys(None, None, SchemeType::Ed25519);
         store.add_validator_data(
             Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
             validator_keys
@@ -213,7 +212,8 @@ mod test_wallet {
     #[test]
     fn test_toml_roundtrip_secp256k1() {
         let mut store = new();
-        let validator_keys = gen_validator_keys(None, None, SchemeType::Secp256k1);
+        let validator_keys =
+            gen_validator_keys(None, None, SchemeType::Secp256k1);
         store.add_validator_data(
             Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
             validator_keys

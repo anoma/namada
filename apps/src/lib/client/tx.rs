@@ -125,7 +125,12 @@ pub async fn submit_init_validator<
         println!("Generating validator account key...");
         let password = read_and_confirm_pwd(unsafe_dont_encrypt);
         ctx.wallet
-            .gen_key(scheme, Some(validator_key_alias.clone()), password, tx_args.wallet_alias_force)
+            .gen_key(
+                scheme,
+                Some(validator_key_alias.clone()),
+                password,
+                tx_args.wallet_alias_force,
+            )
             .1
             .ref_to()
     });
@@ -203,8 +208,13 @@ pub async fn submit_init_validator<
     }
     let eth_hot_pk = eth_hot_key.ref_to();
     // Generate the validator keys
-    let validator_keys =
-        gen_validator_keys(&mut ctx.wallet, Some(eth_hot_pk), protocol_key, scheme).unwrap();
+    let validator_keys = gen_validator_keys(
+        &mut ctx.wallet,
+        Some(eth_hot_pk),
+        protocol_key,
+        scheme,
+    )
+    .unwrap();
     let protocol_key = validator_keys.get_protocol_keypair().ref_to();
     let dkg_key = validator_keys
         .dkg_keypair

@@ -2174,7 +2174,8 @@ pub mod args {
     );
     pub const DAEMON_MODE: ArgFlag = flag("daemon");
     pub const DAEMON_MODE_RETRY_DUR: ArgOpt<Duration> = arg_opt("retry-sleep");
-    pub const DAEMON_MODE_SUCCESS_DUR: ArgOpt<Duration> = arg_opt("success-sleep");
+    pub const DAEMON_MODE_SUCCESS_DUR: ArgOpt<Duration> =
+        arg_opt("success-sleep");
     pub const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     pub const DATA_PATH: Arg<PathBuf> = arg("data-path");
     pub const DECRYPT: ArgFlag = flag("decrypt");
@@ -2286,8 +2287,10 @@ pub mod args {
         arg_opt("consensus-key");
     pub const VALIDATOR_ETH_COLD_KEY: ArgOpt<WalletKeypair> =
         arg_opt("eth-cold-key");
-    pub const VALIDATOR_ETH_HOT_KEY: ArgOpt<WalletKeypair> = arg_opt("eth-hot-key");
-    pub const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> = arg_opt("validator-code-path");
+    pub const VALIDATOR_ETH_HOT_KEY: ArgOpt<WalletKeypair> =
+        arg_opt("eth-hot-key");
+    pub const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> =
+        arg_opt("validator-code-path");
     pub const VALUE: ArgOpt<String> = arg_opt("value");
     pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
@@ -4561,7 +4564,11 @@ pub mod args {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
             let address = RAW_ADDRESS.parse(matches);
-            Self { alias, alias_force, address }
+            Self {
+                alias,
+                alias_force,
+                address,
+            }
         }
 
         fn def(app: App) -> App {
