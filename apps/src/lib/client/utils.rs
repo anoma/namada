@@ -324,14 +324,14 @@ pub async fn join_network(
         tokio::task::spawn_blocking(move || {
             let mut config = Config::load(&base_dir, &chain_id, None);
 
-            config.ledger.tendermint.tendermint_mode =
+            config.ledger.cometbft.tendermint_mode =
                 TendermintMode::Validator;
             // Validator node should turned off peer exchange reactor
-            config.ledger.tendermint.p2p_pex = false;
+            config.ledger.cometbft.p2p_pex = false;
             // Remove self from persistent peers
             config
                 .ledger
-                .tendermint
+                .cometbft
                 .p2p_persistent_peers
                 .retain(|peer| {
                     if let TendermintAddress::Tcp {
@@ -740,7 +740,7 @@ pub fn init_network(
             // directories.
             config.ledger.shell.base_dir = config::DEFAULT_BASE_DIR.into();
             // Add a ledger P2P persistent peers
-            config.ledger.tendermint.p2p_persistent_peers = persistent_peers
+            config.ledger.cometbft.p2p_persistent_peers = persistent_peers
                     .iter()
                     .enumerate()
                     .filter_map(|(index, peer)|
@@ -751,37 +751,37 @@ pub fn init_network(
                             None
                         })
                     .collect();
-            config.ledger.tendermint.consensus_timeout_commit =
+            config.ledger.cometbft.consensus_timeout_commit =
                 consensus_timeout_commit;
-            config.ledger.tendermint.p2p_allow_duplicate_ip =
+            config.ledger.cometbft.p2p_allow_duplicate_ip =
                 allow_duplicate_ip;
-            config.ledger.tendermint.p2p_addr_book_strict = !localhost;
+            config.ledger.cometbft.p2p_addr_book_strict = !localhost;
             // Clear the net address from the config and use it to set ports
             let net_address = validator_config.net_address.take().unwrap();
             let first_port = SocketAddr::from_str(&net_address).unwrap().port();
             if !localhost {
                 config
                     .ledger
-                    .tendermint
+                    .cometbft
                     .p2p_address
                     .set_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
             }
-            config.ledger.tendermint.p2p_address.set_port(first_port);
+            config.ledger.cometbft.p2p_address.set_port(first_port);
             if !localhost {
                 config
                     .ledger
-                    .tendermint
+                    .cometbft
                     .rpc_address
                     .set_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
             }
             config
                 .ledger
-                .tendermint
+                .cometbft
                 .rpc_address
                 .set_port(first_port + 1);
             config.ledger.shell.ledger_address.set_port(first_port + 2);
             // Validator node should turned off peer exchange reactor
-            config.ledger.tendermint.p2p_pex = false;
+            config.ledger.cometbft.p2p_pex = false;
 
             config.write(&validator_dir, &chain_id, true).unwrap();
         },
@@ -789,19 +789,19 @@ pub fn init_network(
 
     // Update the ledger config persistent peers and save it
     let mut config = Config::load(&global_args.base_dir, &chain_id, None);
-    config.ledger.tendermint.p2p_persistent_peers = persistent_peers;
-    config.ledger.tendermint.consensus_timeout_commit =
+    config.ledger.cometbft.p2p_persistent_peers = persistent_peers;
+    config.ledger.cometbft.consensus_timeout_commit =
         consensus_timeout_commit;
-    config.ledger.tendermint.p2p_allow_duplicate_ip = allow_duplicate_ip;
+    config.ledger.cometbft.p2p_allow_duplicate_ip = allow_duplicate_ip;
     // Open P2P address
     if !localhost {
         config
             .ledger
-            .tendermint
+            .cometbft
             .p2p_address
             .set_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
     }
-    config.ledger.tendermint.p2p_addr_book_strict = !localhost;
+    config.ledger.cometbft.p2p_addr_book_strict = !localhost;
     config.ledger.genesis_time = genesis.genesis_time.into();
     config
         .write(&global_args.base_dir, &chain_id, true)

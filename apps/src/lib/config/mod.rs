@@ -95,7 +95,7 @@ pub struct Ledger {
     pub genesis_time: Rfc3339String,
     pub chain_id: ChainId,
     pub shell: Shell,
-    pub tendermint: Tendermint,
+    pub cometbft: Tendermint,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -176,7 +176,7 @@ impl Ledger {
                 tendermint_dir: TENDERMINT_DIR.into(),
                 action_at_height: None,
             },
-            tendermint: Tendermint {
+            cometbft: Tendermint {
                 rpc_address: SocketAddr::new(
                     IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                     26657,
