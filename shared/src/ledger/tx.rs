@@ -953,10 +953,14 @@ pub async fn submit_ibc_transfer<
         Some(sp) => sp.to_string().replace(RESERVED_ADDRESS_PREFIX, ""),
         None => token.to_string(),
     };
-    let token = Coin {
-        denom,
-        amount: args.amount.to_string_native(),
-    };
+    let amount = args
+        .amount
+        .to_string_native()
+        .split('.')
+        .next()
+        .expect("invalid amount")
+        .to_string();
+    let token = Coin { denom, amount };
 
     // this height should be that of the destination chain, not this chain
     let timeout_height = match args.timeout_height {
