@@ -107,8 +107,6 @@ paste = "1.0.9"
 proptest = {git = "https://github.com/heliaxdev/proptest", rev = "8f1b4abe7ebd35c0781bf9a00a4ee59833ffa2a1", optional = true}
 prost = "0.11.6"
 pwasm-utils = {git = "https://github.com/heliaxdev/wasm-utils", tag = "v0.20.0", features = ["sign_ext"], optional = true}
-rand = {version = "0.8", optional = true}
-rand_core = {version = "0.6", optional = true}
 rayon = {version = "=1.5.3", optional = true}
 rust_decimal = "=1.26.1"
 rust_decimal_macros = "=1.26.1"
