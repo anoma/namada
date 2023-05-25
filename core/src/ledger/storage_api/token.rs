@@ -49,7 +49,9 @@ where
     S: StorageRead,
 {
     let key = token::denom_key(token, sub_prefix);
-    storage.read(&key)
+    storage.read(&key).map(|opt_denom| {
+        Some(opt_denom.unwrap_or(token::NATIVE_MAX_DECIMAL_PLACES.into()))
+    })
 }
 
 /// Write the denomination of a given token.

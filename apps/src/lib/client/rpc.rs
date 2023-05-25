@@ -291,7 +291,7 @@ pub async fn query_transparent_balance<
     let tokens = wallet.get_addresses_with_vp_type(AddressVpType::Token);
     match (args.token, args.owner) {
         (Some(token), Some(owner)) => {
-            let (_balance_key, sub_prefix) = match &args.sub_prefix {
+            let (balance_key, sub_prefix) = match &args.sub_prefix {
                 Some(sub_prefix) => {
                     let sub_prefix = Key::parse(sub_prefix).unwrap();
                     let prefix =
@@ -310,8 +310,9 @@ pub async fn query_transparent_balance<
                 ),
             };
             let token_alias = lookup_alias(wallet, &token);
-            let key = token::balance_key(&token, &owner.address().unwrap());
-            match query_storage_value::<C, token::Amount>(&client, &key).await {
+            match query_storage_value::<C, token::Amount>(&client, &balance_key)
+                .await
+            {
                 Some(balance) => {
                     let balance = format_denominated_amount(
                         client,
