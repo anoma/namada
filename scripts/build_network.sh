@@ -78,6 +78,7 @@ validate_arguments() {
     
     if [ "$#" -ne 3 ]; then
         echo "Error: Invalid number of arguments. Expected 3 arguments."
+        echo "See the help page by running --help for more information."
         exit 1
     fi
 
