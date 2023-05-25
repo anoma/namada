@@ -5,7 +5,8 @@ use std::ops::ControlFlow;
 use std::time::Duration;
 
 use thiserror::Error;
-use wasm_timer::{Delay, Instant, TryFutureExt};
+use wasm_timer::TryFutureExt;
+pub use wasm_timer::{Delay, Instant};
 
 /// Timeout related errors.
 #[derive(Error, Debug)]

@@ -1,15 +1,35 @@
 //! Structures encapsulating SDK arguments
+
+use std::time::Duration as StdDuration;
+
 use namada_core::types::chain::ChainId;
+use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::time::DateTimeUtc;
 use rust_decimal::Decimal;
 
 use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
 use crate::types::address::Address;
+use crate::types::keccak::KeccakHash;
 use crate::types::key::{common, SchemeType};
 use crate::types::masp::MaspValue;
 use crate::types::storage::Epoch;
 use crate::types::transaction::GasLimit;
 use crate::types::{storage, token};
+
+/// [`Duration`](StdDuration) wrapper that provides a
+/// method to parse a value from a string.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
+#[repr(transparent)]
+pub struct Duration(pub StdDuration);
+
+impl ::std::str::FromStr for Duration {
+    type Err = ::parse_duration::parse::Error;
+
+    #[inline]
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        ::parse_duration::parse(s).map(Duration)
+    }
+}
 
 /// Abstraction of types being used in Namada
 pub trait NamadaTypes: Clone + std::fmt::Debug {
@@ -521,4 +541,139 @@ pub struct AddressAdd {
     pub alias_force: bool,
     /// Address to add
     pub address: Address,
+}
+
+/// Bridge pool batch recommendation.
+#[derive(Clone, Debug)]
+pub struct RecommendBatch<C: NamadaTypes = SdkTypes> {
+    /// The query parameters.
+    pub query: Query<C>,
+    /// The maximum amount of gas to spend.
+    pub max_gas: Option<u64>,
+    /// An optional parameter indicating how much net
+    /// gas the relayer is willing to pay.
+    pub gas: Option<u64>,
+    /// Estimate of amount of NAM a single ETH is worth.
+    pub nam_per_eth: f64,
+}
+
+/// A transfer to be added to the Ethereum bridge pool.
+#[derive(Clone, Debug)]
+pub struct EthereumBridgePool<C: NamadaTypes = SdkTypes> {
+    /// The args for building a tx to the bridge pool
+    pub tx: Tx<C>,
+    /// The type of token
+    pub asset: EthAddress,
+    /// The recipient address
+    pub recipient: EthAddress,
+    /// The sender of the transfer
+    pub sender: C::Address,
+    /// The amount to be transferred
+    pub amount: token::Amount,
+    /// The amount of fees (in NAM)
+    pub gas_amount: token::Amount,
+    /// The account of fee payer.
+    pub gas_payer: C::Address,
+}
+
+/// Bridge pool proof arguments.
+#[derive(Debug, Clone)]
+pub struct BridgePoolProof<C: NamadaTypes = SdkTypes> {
+    /// The query parameters.
+    pub query: Query<C>,
+    /// The keccak hashes of transfers to
+    /// acquire a proof of.
+    pub transfers: Vec<KeccakHash>,
+    /// The address of the node responsible for relaying
+    /// the transfers.
+    ///
+    /// This node will receive the gas fees escrowed in
+    /// the Bridge pool, to compensate the Ethereum relay
+    /// procedure.
+    pub relayer: Address,
+}
+
+/// Arguments to an Ethereum Bridge pool relay operation.
+#[derive(Debug, Clone)]
+pub struct RelayBridgePoolProof<C: NamadaTypes = SdkTypes> {
+    /// The query parameters.
+    pub query: Query<C>,
+    /// The hashes of the transfers to be relayed
+    pub transfers: Vec<KeccakHash>,
+    /// The Namada address for receiving fees for relaying
+    pub relayer: Address,
+    /// The number of confirmations to wait for on Ethereum
+    pub confirmations: u64,
+    /// The Ethereum RPC endpoint.
+    pub eth_rpc_endpoint: String,
+    /// The Ethereum gas that can be spent during
+    /// the relay call.
+    pub gas: Option<u64>,
+    /// The price of Ethereum gas, during the
+    /// relay call.
+    pub gas_price: Option<u64>,
+    /// The address of the Ethereum wallet to pay the gas fees.
+    /// If unset, the default wallet is used.
+    pub eth_addr: Option<EthAddress>,
+    /// Synchronize with the network, or exit immediately,
+    /// if the Ethereum node has fallen behind.
+    pub sync: bool,
+    /// Safe mode overrides keyboard interrupt signals, to ensure
+    /// Ethereum transfers aren't canceled midway through.
+    pub safe_mode: bool,
+}
+
+/// Consensus validator set arguments.
+#[derive(Debug, Clone)]
+pub struct ConsensusValidatorSet<C: NamadaTypes = SdkTypes> {
+    /// The query parameters.
+    pub query: Query<C>,
+    /// The epoch to query.
+    pub epoch: Option<Epoch>,
+}
+
+/// Validator set proof arguments.
+#[derive(Debug, Clone)]
+pub struct ValidatorSetProof<C: NamadaTypes = SdkTypes> {
+    /// The query parameters.
+    pub query: Query<C>,
+    /// The epoch to query.
+    pub epoch: Option<Epoch>,
+}
+
+/// Validator set update relayer arguments.
+#[derive(Debug, Clone)]
+pub struct ValidatorSetUpdateRelay<C: NamadaTypes = SdkTypes> {
+    /// Run in daemon mode, which will continuously
+    /// perform validator set updates.
+    pub daemon: bool,
+    /// The query parameters.
+    pub query: Query<C>,
+    /// The number of block confirmations on Ethereum.
+    pub confirmations: u64,
+    /// The Ethereum RPC endpoint.
+    pub eth_rpc_endpoint: String,
+    /// The epoch of the validator set to relay.
+    pub epoch: Option<Epoch>,
+    /// The Ethereum gas that can be spent during
+    /// the relay call.
+    pub gas: Option<u64>,
+    /// The price of Ethereum gas, during the
+    /// relay call.
+    pub gas_price: Option<u64>,
+    /// The address of the Ethereum wallet to pay the gas fees.
+    /// If unset, the default wallet is used.
+    pub eth_addr: Option<EthAddress>,
+    /// Synchronize with the network, or exit immediately,
+    /// if the Ethereum node has fallen behind.
+    pub sync: bool,
+    /// The amount of time to sleep between failed
+    /// daemon mode relays.
+    pub retry_dur: Option<StdDuration>,
+    /// The amount of time to sleep between successful
+    /// daemon mode relays.
+    pub success_dur: Option<StdDuration>,
+    /// Safe mode overrides keyboard interrupt signals, to ensure
+    /// Ethereum transfers aren't canceled midway through.
+    pub safe_mode: bool,
 }

@@ -2046,13 +2046,11 @@ pub mod cmds {
 }
 
 pub mod args {
-
     use std::convert::TryFrom;
     use std::env;
     use std::net::SocketAddr;
     use std::path::PathBuf;
     use std::str::FromStr;
-    use std::time::Duration as StdDuration;
 
     use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
     pub use namada::ledger::args::*;
@@ -2242,19 +2240,6 @@ pub mod args {
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
-
-    #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
-    #[repr(transparent)]
-    pub struct Duration(pub StdDuration);
-
-    impl ::std::str::FromStr for Duration {
-        type Err = ::parse_duration::parse::Error;
-
-        #[inline]
-        fn from_str(s: &str) -> Result<Self, Self::Err> {
-            ::parse_duration::parse(s).map(Duration)
-        }
-    }
 
     /// Global command arguments
     #[derive(Clone, Debug)]
@@ -2450,23 +2435,18 @@ pub mod args {
         }
     }
 
-    /// A transfer to be added to the Ethereum bridge pool.
-    #[derive(Clone, Debug)]
-    pub struct EthereumBridgePool {
-        /// The args for building a tx to the bridge pool
-        pub tx: Tx,
-        /// The type of token
-        pub asset: EthAddress,
-        /// The recipient address
-        pub recipient: EthAddress,
-        /// The sender of the transfer
-        pub sender: WalletAddress,
-        /// The amount to be transferred
-        pub amount: Amount,
-        /// The amount of fees (in NAM)
-        pub gas_amount: Amount,
-        /// The account of fee payer.
-        pub gas_payer: WalletAddress,
+    impl CliToSdk<EthereumBridgePool<SdkTypes>> for EthereumBridgePool<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> EthereumBridgePool<SdkTypes> {
+            EthereumBridgePool::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                asset: self.asset,
+                recipient: self.recipient,
+                sender: self.sender.to_sdk(ctx),
+                amount: self.amount,
+                gas_amount: self.gas_amount,
+                gas_payer: self.gas_payer.to_sdk(ctx),
+            }
+        }
     }
 
     impl Args for EthereumBridgePool {
@@ -2490,7 +2470,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx<CliTypes>>()
                 .arg(
                     ERC20
                         .def()
@@ -2521,20 +2501,18 @@ pub mod args {
         }
     }
 
-    #[derive(Debug, Clone)]
-    pub struct RecommendBatch {
-        /// The query parameters.
-        pub query: Query,
-        /// The maximum amount of gas to spend.
-        pub max_gas: Option<u64>,
-        /// An optional parameter indicating how much net
-        /// gas the relayer is willing to pay.
-        pub gas: Option<u64>,
-        /// Estimate of amount of NAM a single ETH is worth.
-        pub nam_per_eth: f64,
+    impl CliToSdk<RecommendBatch<SdkTypes>> for RecommendBatch<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> RecommendBatch<SdkTypes> {
+            RecommendBatch::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                max_gas: self.max_gas,
+                gas: self.gas,
+                nam_per_eth: self.nam_per_eth,
+            }
+        }
     }
 
-    impl Args for RecommendBatch {
+    impl Args for RecommendBatch<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let max_gas = MAX_ETH_GAS.parse(matches);
@@ -2549,7 +2527,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query<CliTypes>>()
                 .arg(MAX_ETH_GAS.def().about(
                     "The maximum amount Ethereum gas that can be spent during \
                      the relay call.",
@@ -2568,15 +2546,17 @@ pub mod args {
         }
     }
 
-    #[derive(Debug, Clone)]
-    pub struct BridgePoolProof {
-        /// The query parameters.
-        pub query: Query,
-        pub transfers: Vec<KeccakHash>,
-        pub relayer: Address,
+    impl CliToSdk<BridgePoolProof<SdkTypes>> for BridgePoolProof<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> BridgePoolProof<SdkTypes> {
+            BridgePoolProof::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                transfers: self.transfers,
+                relayer: self.relayer,
+            }
+        }
     }
 
-    impl Args for BridgePoolProof {
+    impl Args for BridgePoolProof<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let hashes = HASH_LIST.parse(matches);
@@ -2612,36 +2592,26 @@ pub mod args {
         }
     }
 
-    #[derive(Debug, Clone)]
-    pub struct RelayBridgePoolProof {
-        /// The query parameters.
-        pub query: Query,
-        /// The hashes of the transfers to be relayed
-        pub transfers: Vec<KeccakHash>,
-        /// The Namada address for receiving fees for relaying
-        pub relayer: Address,
-        /// The number of confirmations to wait for on Ethereum
-        pub confirmations: u64,
-        /// The Ethereum RPC endpoint.
-        pub eth_rpc_endpoint: String,
-        /// The Ethereum gas that can be spent during
-        /// the relay call.
-        pub gas: Option<u64>,
-        /// The price of Ethereum gas, during the
-        /// relay call.
-        pub gas_price: Option<u64>,
-        /// The address of the Ethereum wallet to pay the gas fees.
-        /// If unset, the default wallet is used.
-        pub eth_addr: Option<EthAddress>,
-        /// Synchronize with the network, or exit immediately,
-        /// if the Ethereum node has fallen behind.
-        pub sync: bool,
-        /// Safe mode overrides keyboard interrupt signals, to ensure
-        /// Ethereum transfers aren't canceled midway through.
-        pub safe_mode: bool,
+    impl CliToSdk<RelayBridgePoolProof<SdkTypes>>
+        for RelayBridgePoolProof<CliTypes>
+    {
+        fn to_sdk(self, ctx: &mut Context) -> RelayBridgePoolProof<SdkTypes> {
+            RelayBridgePoolProof::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                transfers: self.transfers,
+                relayer: self.relayer,
+                confirmations: self.confirmations,
+                eth_rpc_endpoint: self.eth_rpc_endpoint,
+                gas: self.gas,
+                gas_price: self.gas_price,
+                eth_addr: self.eth_addr,
+                sync: self.sync,
+                safe_mode: self.safe_mode,
+            }
+        }
     }
 
-    impl Args for RelayBridgePoolProof {
+    impl Args for RelayBridgePoolProof<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let safe_mode = SAFE_MODE.parse(matches);
             let query = Query::parse(matches);
@@ -2717,15 +2687,18 @@ pub mod args {
         }
     }
 
-    #[derive(Debug, Clone)]
-    pub struct ConsensusValidatorSet {
-        /// The query parameters.
-        pub query: Query,
-        /// The epoch to query.
-        pub epoch: Option<Epoch>,
+    impl CliToSdk<ConsensusValidatorSet<SdkTypes>>
+        for ConsensusValidatorSet<CliTypes>
+    {
+        fn to_sdk(self, ctx: &mut Context) -> ConsensusValidatorSet<SdkTypes> {
+            ConsensusValidatorSet::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                epoch: self.epoch,
+            }
+        }
     }
 
-    impl Args for ConsensusValidatorSet {
+    impl Args for ConsensusValidatorSet<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let epoch = EPOCH.parse(matches);
@@ -2739,12 +2712,13 @@ pub mod args {
         }
     }
 
-    #[derive(Debug, Clone)]
-    pub struct ValidatorSetProof {
-        /// The query parameters.
-        pub query: Query,
-        /// The epoch to query.
-        pub epoch: Option<Epoch>,
+    impl CliToSdk<ValidatorSetProof<SdkTypes>> for ValidatorSetProof<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> ValidatorSetProof<SdkTypes> {
+            ValidatorSetProof::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                epoch: self.epoch,
+            }
+        }
     }
 
     impl Args for ValidatorSetProof {
@@ -2763,40 +2737,28 @@ pub mod args {
         }
     }
 
-    #[derive(Debug, Clone)]
-    pub struct ValidatorSetUpdateRelay {
-        /// Run in daemon mode, which will continuously
-        /// perform validator set updates.
-        pub daemon: bool,
-        /// The query parameters.
-        pub query: Query,
-        /// The number of block confirmations on Ethereum.
-        pub confirmations: u64,
-        /// The Ethereum RPC endpoint.
-        pub eth_rpc_endpoint: String,
-        /// The epoch of the validator set to relay.
-        pub epoch: Option<Epoch>,
-        /// The Ethereum gas that can be spent during
-        /// the relay call.
-        pub gas: Option<u64>,
-        /// The price of Ethereum gas, during the
-        /// relay call.
-        pub gas_price: Option<u64>,
-        /// The address of the Ethereum wallet to pay the gas fees.
-        /// If unset, the default wallet is used.
-        pub eth_addr: Option<EthAddress>,
-        /// Synchronize with the network, or exit immediately,
-        /// if the Ethereum node has fallen behind.
-        pub sync: bool,
-        /// The amount of time to sleep between failed
-        /// daemon mode relays.
-        pub retry_dur: Option<StdDuration>,
-        /// The amount of time to sleep between successful
-        /// daemon mode relays.
-        pub success_dur: Option<StdDuration>,
-        /// Safe mode overrides keyboard interrupt signals, to ensure
-        /// Ethereum transfers aren't canceled midway through.
-        pub safe_mode: bool,
+    impl CliToSdk<ValidatorSetUpdateRelay<SdkTypes>>
+        for ValidatorSetUpdateRelay<CliTypes>
+    {
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> ValidatorSetUpdateRelay<SdkTypes> {
+            ValidatorSetProof::<SdkTypes> {
+                daemon: self.daemon,
+                query: self.query.to_sdk(ctx),
+                confirmations: self.confirmations,
+                eth_rpc_endpoint: self.eth_rpc_endpoint,
+                epoch: self.epoch,
+                gas: self.gas,
+                gas_price: self.gas_price,
+                eth_addr: self.eth_addr,
+                sync: self.sync,
+                retry_dur: self.retry_dur,
+                success_dur: self.success_dur,
+                safe_mode: self.safe_mode,
+            }
+        }
     }
 
     impl Args for ValidatorSetUpdateRelay {

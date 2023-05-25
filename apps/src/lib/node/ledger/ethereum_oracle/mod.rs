@@ -12,6 +12,9 @@ use namada::core::hints;
 use namada::core::types::ethereum_structs;
 use namada::eth_bridge::oracle::config::Config;
 use namada::types::ethereum_events::EthereumEvent;
+use namada::types::ledger::eth_bridge::{
+    eth_syncing_status_timeout, SyncStatus,
+};
 use num256::Uint256;
 use thiserror::Error;
 use tokio::sync::mpsc::error::TryRecvError;
@@ -51,21 +54,6 @@ pub enum Error {
     Timeout,
 }
 
-/// The result of querying an Ethereum nodes syncing status.
-pub enum SyncStatus {
-    /// The fullnode is syncing.
-    Syncing,
-    /// The fullnode is synced up to the given block height.
-    AtHeight(Uint256),
-}
-
-impl SyncStatus {
-    /// Returns true if [`SyncStatus`] reflects a synchronized node.
-    pub fn is_synchronized(&self) -> bool {
-        matches!(self, SyncStatus::AtHeight(_))
-    }
-}
-
 /// A client that can talk to geth and parse
 /// and relay events relevant to Namada to the
 /// ledger process
@@ -92,42 +80,6 @@ impl Deref for Oracle {
     fn deref(&self) -> &Self::Target {
         &self.client
     }
-}
-
-/// Fetch the sync status of an Ethereum node.
-#[inline]
-pub async fn eth_syncing_status(
-    client: &web30::client::Web3,
-) -> Result<SyncStatus, Error> {
-    eth_syncing_status_timeout(
-        client,
-        DEFAULT_BACKOFF,
-        Instant::now() + DEFAULT_CEILING,
-    )
-    .await
-}
-
-/// Fetch the sync status of an Ethereum node, with a custom time
-/// out duration.
-///
-/// Queries to the Ethereum node are interspersed with constant backoff
-/// sleeps of `backoff_duration`, before ultimately timing out at `deadline`.
-pub async fn eth_syncing_status_timeout(
-    client: &web30::client::Web3,
-    backoff_duration: Duration,
-    deadline: Instant,
-) -> Result<SyncStatus, Error> {
-    SleepStrategy::Constant(backoff_duration)
-        .timeout(deadline, || async {
-            ControlFlow::Break(match client.eth_block_number().await {
-                Ok(height) if height == 0u64.into() => SyncStatus::Syncing,
-                Ok(height) => SyncStatus::AtHeight(height),
-                Err(Web3Error::SyncingNode(_)) => SyncStatus::Syncing,
-                Err(_) => return ControlFlow::Continue(()),
-            })
-        })
-        .await
-        .map_or_else(|_| Err(Error::Timeout), Ok)
 }
 
 impl Oracle {

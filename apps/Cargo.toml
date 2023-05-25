@@ -112,7 +112,6 @@ num_cpus = "1.13.0"
 once_cell = "1.8.0"
 orion = "0.16.0"
 owo-colors = "3.5.0"
-parse_duration = "2.1.1"
 prost = "0.11.6"
 prost-types = "0.11.6"
 rand = {version = "0.8", default-features = false}
