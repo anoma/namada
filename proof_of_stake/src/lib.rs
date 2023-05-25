@@ -622,7 +622,7 @@ pub fn read_validator_stake<S>(
 where
     S: StorageRead,
 {
-    tracing::debug!("Read validator stake at epoch {}", epoch);
+    // tracing::debug!("Read validator stake at epoch {}", epoch);
     let handle = validator_deltas_handle(validator);
     let amount = handle
         .get_sum(storage, epoch, params)?
@@ -865,7 +865,7 @@ where
     S: StorageRead + StorageWrite,
 {
     let amount = amount.change();
-    tracing::debug!("Bonding token amount {amount} at epoch {current_epoch}");
+    tracing::debug!("Bonding token amount {amount} at epoch {current_epoch}.");
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
     if let Some(source) = source {
@@ -884,6 +884,7 @@ where
     }
 
     let source = source.unwrap_or(validator);
+    tracing::debug!("Source {} --> Validator {}", source, validator);
     let bond_handle = bond_handle(source, validator);
     let global_bond_handle = global_bond_handle(validator);
 
@@ -897,13 +898,13 @@ where
         }
     }
 
-    println!("\nBonds before incrementing:");
+    tracing::debug!("\nBonds before incrementing:");
     for ep in Epoch::default().iter_range(current_epoch.0 + 3) {
         let delta = bond_handle
             .get_delta_val(storage, ep, &params)?
             .unwrap_or_default();
         if delta != 0 {
-            println!("bond ∆ at epoch {}: {}", ep, delta);
+            tracing::debug!("bond ∆ at epoch {}: {}", ep, delta);
         }
     }
 
@@ -923,13 +924,13 @@ where
         offset,
     )?;
 
-    println!("\nBonds after incrementing:");
+    tracing::debug!("\nBonds after incrementing:");
     for ep in Epoch::default().iter_range(current_epoch.0 + 3) {
         let delta = bond_handle
             .get_delta_val(storage, ep, &params)?
             .unwrap_or_default();
         if delta != 0 {
-            println!("bond ∆ at epoch {}: {}", ep, delta);
+            tracing::debug!("bond ∆ at epoch {}: {}", ep, delta);
         }
     }
 
@@ -1531,11 +1532,6 @@ where
     tracing::debug!("Unbonding token amount {amount} at epoch {current_epoch}");
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
-    tracing::debug!(
-        "Current validator stake at pipeline: {}",
-        read_validator_stake(storage, &params, validator, pipeline_epoch)?
-            .unwrap_or_default()
-    );
 
     // Make sure source is not some other validator
     if let Some(source) = source {
@@ -1573,13 +1569,13 @@ where
     let bonds_handle = bond_handle(source, validator);
     let global_bonds_handle = global_bond_handle(validator);
 
-    println!("\nBonds before decrementing:");
+    tracing::debug!("\nBonds before decrementing:");
     for ep in Epoch::default().iter_range(current_epoch.0 + 3) {
         let delta = bonds_handle
             .get_delta_val(storage, ep, &params)?
             .unwrap_or_default();
         if delta != 0 {
-            println!("bond ∆ at epoch {}: {}", ep, delta);
+            tracing::debug!("bond ∆ at epoch {}: {}", ep, delta);
         }
     }
 
@@ -1619,8 +1615,8 @@ where
             continue;
         }
         let (bond_epoch, bond_amount) = bond.unwrap();
-        println!("\nBond (epoch, amnt) = ({}, {})", bond_epoch, bond_amount);
-        println!("remaining = {}", remaining);
+        // println!("\nBond (epoch, amnt) = ({}, {})", bond_epoch, bond_amount);
+        // println!("remaining = {}", remaining);
 
         let global_bond_amount =
             global_bonds_handle.get_delta_val(storage, bond_epoch, &params)?;
@@ -1634,7 +1630,7 @@ where
             new_global_bond_value: global_bond_amount - to_unbond,
             unbond_value: to_unbond,
         });
-        println!("to_unbond (init) = {}", to_unbond);
+        // println!("to_unbond (init) = {}", to_unbond);
 
         let slashes_for_this_bond =
             find_slashes_in_range(storage, bond_epoch, None, validator)?;
@@ -1644,7 +1640,7 @@ where
             token::Amount::from_change(to_unbond),
             &slashes_for_this_bond,
         )?;
-        println!("Cur amnt after slashing = {}", &amount_after_slashing);
+        // println!("Cur amnt after slashing = {}", &amount_after_slashing);
 
         // Update the unbond records
         let cur_amnt = unbond_records_handle(validator)
@@ -1687,13 +1683,13 @@ where
         )?;
     }
 
-    println!("Bonds after decrementing:");
+    tracing::debug!("Bonds after decrementing:");
     for ep in Epoch::default().iter_range(current_epoch.0 + 3) {
         let delta = bonds_handle
             .get_delta_val(storage, ep, &params)?
             .unwrap_or_default();
         if delta != 0 {
-            println!("bond ∆ at epoch {}: {}", ep, delta);
+            tracing::debug!("bond ∆ at epoch {}: {}", ep, delta);
         }
     }
     let stake_at_pipeline =
@@ -1701,6 +1697,10 @@ where
             .unwrap_or_default()
             .change();
     let token_change = cmp::min(amount_after_slashing, stake_at_pipeline);
+    tracing::debug!(
+        "Token change including slashes on unbond = {}",
+        token_change
+    );
 
     // Update the validator set at the pipeline offset. Since unbonding from a
     // jailed validator who is no longer frozen is allowed, only update the
@@ -1712,7 +1712,6 @@ where
         ValidatorState::Jailed
     );
     if !is_jailed_at_pipeline {
-        tracing::debug!("Updating validator set for unbonding");
         update_validator_set(
             storage,
             &params,
@@ -1750,13 +1749,13 @@ fn get_slashed_amount(
     amount: token::Amount,
     slashes: &BTreeMap<Epoch, Decimal>,
 ) -> storage_api::Result<token::Change> {
-    println!("FN `get_slashed_amount`");
+    // println!("FN `get_slashed_amount`");
 
     let mut updated_amount = amount;
     let mut computed_amounts = Vec::<SlashedAmount>::new();
 
     for (infraction_epoch, slash_rate) in slashes {
-        println!("Slash epoch: {}, rate: {}", infraction_epoch, slash_rate);
+        // println!("Slash epoch: {}, rate: {}", infraction_epoch, slash_rate);
         let mut computed_to_remove = BTreeSet::<Reverse<usize>>::new();
         for (ix, slashed_amount) in computed_amounts.iter().enumerate() {
             // Update amount with slashes that happened more than unbonding_len
@@ -1783,9 +1782,9 @@ fn get_slashed_amount(
             epoch: *infraction_epoch,
         });
     }
-    println!("Finished loop over slashes in `get_slashed_amount`");
-    println!("Updated amount: {:?}", &updated_amount);
-    println!("Computed amounts: {:?}", &computed_amounts);
+    // println!("Finished loop over slashes in `get_slashed_amount`");
+    // println!("Updated amount: {:?}", &updated_amount);
+    // println!("Computed amounts: {:?}", &computed_amounts);
 
     let total_computed_amounts = computed_amounts
         .into_iter()
@@ -1893,9 +1892,10 @@ pub fn withdraw_tokens<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    println!("Withdrawing tokens in epoch {current_epoch}");
+    tracing::debug!("Withdrawing tokens in epoch {current_epoch}");
     let params = read_pos_params(storage)?;
     let source = source.unwrap_or(validator);
+    tracing::debug!("Source {} --> Validator {}", source, validator);
 
     let unbond_handle = unbond_handle(source, validator);
     if unbond_handle.is_empty(storage)? {
@@ -1927,7 +1927,9 @@ where
         // TODO: adding slash rates in same epoch, applying cumulatively in dif
         // epochs
         if withdraw_epoch > current_epoch {
-            tracing::debug!("Not yet withdrawable");
+            tracing::debug!(
+                "Not yet withdrawable until epoch {withdraw_epoch}"
+            );
             continue;
         }
         let slashes_for_this_unbond = find_slashes_in_range(
@@ -2947,7 +2949,7 @@ pub fn compute_cubic_slash_rate<S>(
 where
     S: StorageRead,
 {
-    println!("COMPUTING CUBIC SLASH RATE");
+    // println!("COMPUTING CUBIC SLASH RATE");
     let mut sum_vp_fraction = Decimal::ZERO;
     let (start_epoch, end_epoch) =
         params.cubic_slash_epoch_window(infraction_epoch);
@@ -2955,7 +2957,7 @@ where
     for epoch in Epoch::iter_bounds_inclusive(start_epoch, end_epoch) {
         let consensus_stake =
             Decimal::from(get_total_consensus_stake(storage, epoch)?);
-        println!("Consensus stake in epoch {}: {}", epoch, consensus_stake);
+        // println!("Consensus stake in epoch {}: {}", epoch, consensus_stake);
 
         let processing_epoch = epoch + params.slash_processing_epoch_offset();
         let slashes = enqueued_slashes_handle().at(&processing_epoch);
@@ -2973,7 +2975,7 @@ where
                 let validator_stake =
                     read_validator_stake(storage, params, &validator, epoch)?
                         .unwrap_or_default();
-                println!("Val {} stake: {}", &validator, validator_stake);
+                // println!("Val {} stake: {}", &validator, validator_stake);
 
                 Ok(Decimal::from(validator_stake))
                 // TODO: does something more complex need to be done
@@ -2983,7 +2985,7 @@ where
             .sum::<storage_api::Result<Decimal>>()?;
         sum_vp_fraction += infracting_stake / consensus_stake;
     }
-    println!("sum_vp_fraction: {}", sum_vp_fraction);
+    // println!("sum_vp_fraction: {}", sum_vp_fraction);
     Ok(dec!(9) * sum_vp_fraction * sum_vp_fraction)
 }
 
@@ -3002,15 +3004,13 @@ pub fn slash<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    println!("SLASHING ON NEW EVIDENCE FROM {}", validator);
-    println!(
-        "Current state = {:?}",
-        validator_state_handle(validator)
-            .get(storage, current_epoch, params)
-            .unwrap()
-            .unwrap()
+    tracing::debug!(
+        "Slashing validator {} on new evidence from epoch {} (current epoch = \
+         {})",
+        validator,
+        evidence_epoch,
+        current_epoch
     );
-
     let evidence_block_height: u64 = evidence_block_height.into();
     let slash = Slash {
         epoch: evidence_epoch,
@@ -3120,21 +3120,17 @@ where
             ValidatorState::Inactive => {
                 println!("INACTIVE");
                 panic!(
-                    "SHouldn't be here - haven't implemented inactive vals yet"
+                    "Shouldn't be here - haven't implemented inactive vals yet"
                 )
             }
             ValidatorState::Jailed => {
-                println!("Validator already jailed");
+                tracing::debug!(
+                    "Found evidence for a validator who is already jailed"
+                );
                 // return Ok(());
             }
         }
     }
-
-    println!(
-        "\nWRITING VALIDATOR {} STATE AS JAILED STARTING IN EPOCH {}\n",
-        validator,
-        current_epoch.next()
-    );
     // Set the validator state as `Jailed` thru the pipeline epoch
     for offset in 1..=params.pipeline_len {
         validator_state_handle(validator).set(
@@ -3174,10 +3170,14 @@ where
     // Slashes to be processed in the current epoch
     let enqueued_slashes = enqueued_slashes_handle().at(&current_epoch);
     if enqueued_slashes.is_empty(storage)? {
-        println!("No slashes found");
         return Ok(());
     }
-    println!("Found slashes");
+    tracing::debug!(
+        "Processing slashes at the beginning of epoch {} (committed in epoch \
+         {})",
+        current_epoch,
+        infraction_epoch
+    );
 
     // Compute the cubic slash rate
     let cubic_slash_rate =
@@ -3209,9 +3209,11 @@ where
             r#type: enqueued_slash.r#type,
             rate: slash_rate,
         };
-        println!(
-            "Processing slash for val {} committed in epoch {}, with rate {}",
-            &validator, enqueued_slash.epoch, slash_rate
+        tracing::debug!(
+            "Slash for validator {} committed in epoch {} has rate {}",
+            &validator,
+            enqueued_slash.epoch,
+            slash_rate
         );
 
         let cur_slashes = validators_and_slashes.entry(validator).or_default();
@@ -3232,11 +3234,11 @@ where
         )?
         .unwrap_or_default();
 
-        println!(
-            "Val {} stake at infraction epoch {} = {}",
+        tracing::debug!(
+            "Validator {} stake at infraction epoch {} = {}",
             &validator,
             infraction_epoch,
-            u64::from(validator_stake_at_infraction)
+            validator_stake_at_infraction
         );
 
         let mut total_rate = Decimal::ZERO;
@@ -3256,17 +3258,18 @@ where
 
         // Start from after the infraction epoch up thru last epoch before
         // processing
+        tracing::debug!("Iterating over unbonds after the infraction epoch");
         for epoch in Epoch::iter_bounds_inclusive(
             infraction_epoch.next(),
             current_epoch.prev(),
         ) {
-            println!("\nEpoch {}", epoch);
+            tracing::debug!("Epoch {}", epoch);
             let unbonds = unbond_records_handle(&validator).at(&epoch);
             for unbond in unbonds.iter(storage)? {
                 let (start, unbond_amount) = unbond?;
-                println!(
+                tracing::debug!(
                     "UnbondRecord: amount = {}, start_epoch {}",
-                    &u64::from(unbond_amount),
+                    &unbond_amount,
                     &start
                 );
                 if start > infraction_epoch {
@@ -3285,25 +3288,25 @@ where
                     ),
                     &validator,
                 )?;
-                println!("Slashes for this unbond: {:?}", prev_slashes);
+                tracing::debug!("Slashes for this unbond: {:?}", prev_slashes);
 
                 total_unbonded += token::Amount::from_change(
                     get_slashed_amount(&params, unbond_amount, &prev_slashes)?,
                 );
 
-                println!(
+                tracing::debug!(
                     "Total unbonded (epoch {}) w slashing = {}",
-                    epoch, total_unbonded
+                    epoch,
+                    total_unbonded
                 );
             }
         }
-        println!("Computing adjusted amounts now");
 
         // Compute the adjusted validator deltas and slashed amounts from the
         // current up until the pipeline epoch
         let mut last_slash = token::Change::default();
         for offset in 0..params.pipeline_len {
-            println!(
+            tracing::debug!(
                 "Epoch {}\nLast slash = {}",
                 current_epoch + offset,
                 last_slash
@@ -3313,9 +3316,10 @@ where
 
             for unbond in unbonds.iter(storage)? {
                 let (start, unbond_amount) = unbond?;
-                println!(
+                tracing::debug!(
                     "UnbondRecord: amount = {}, start_epoch {}",
-                    &unbond_amount, &start
+                    &unbond_amount,
+                    &start
                 );
                 if start > infraction_epoch {
                     continue;
@@ -3333,14 +3337,15 @@ where
                     ),
                     &validator,
                 )?;
-                println!("Slashes for this unbond: {:?}", prev_slashes);
+                tracing::debug!("Slashes for this unbond: {:?}", prev_slashes);
 
                 total_unbonded += token::Amount::from_change(
                     get_slashed_amount(&params, unbond_amount, &prev_slashes)?,
                 );
-                println!(
+                tracing::debug!(
                     "Total unbonded (offset {}) w slashing = {}",
-                    offset, total_unbonded
+                    offset,
+                    total_unbonded
                 );
             }
 
@@ -3349,10 +3354,10 @@ where
                 validator_stake_at_infraction - total_unbonded,
             )
             .change();
-            println!("This slash = {}", this_slash);
+            // println!("This slash = {}", this_slash);
 
             let diff_slashed_amount = last_slash - this_slash;
-            println!("Diff slashed amount = {}", diff_slashed_amount);
+            // println!("Diff slashed amount = {}", diff_slashed_amount);
 
             let val_updates =
                 deltas_for_update.entry(validator.clone()).or_default();
@@ -3363,12 +3368,13 @@ where
             // total_unbonded = token::Amount::default();
         }
     }
-    println!("\nUpdating deltas");
+    // println!("\nUpdating deltas");
     // Update the deltas in storage
     let mut total_slashed = token::Change::default();
     for (validator, updates) in deltas_for_update {
         for (offset, delta) in updates {
-            println!("Val {}, offset {}, delta {}", &validator, offset, delta);
+            // println!("Val {}, offset {}, delta {}", &validator, offset,
+            // delta);
             let validator_stake_at_offset = read_validator_stake(
                 storage,
                 &params,
@@ -3386,17 +3392,17 @@ where
                 infraction_epoch.next(),
                 current_epoch + offset,
             )?;
-            println!("\nUnslashable bonds = {}", sum_post_bonds);
+            // println!("\nUnslashable bonds = {}", sum_post_bonds);
             let slashable_stake_at_offset =
                 validator_stake_at_offset - sum_post_bonds.change();
             // let slashable_stake_at_offset = validator_stake_at_offset;
             assert!(slashable_stake_at_offset >= token::Change::default());
 
-            println!("Stake at offset = {}", validator_stake_at_offset);
-            println!(
-                "Slashable stake at offset = {}",
-                slashable_stake_at_offset
-            );
+            // println!("Stake at offset = {}", validator_stake_at_offset);
+            // println!(
+            //     "Slashable stake at offset = {}",
+            //     slashable_stake_at_offset
+            // );
             let change = if slashable_stake_at_offset + delta
                 < token::Change::default()
             {
@@ -3404,7 +3410,12 @@ where
             } else {
                 delta
             };
-            println!("Change = {}", change);
+            tracing::debug!(
+                "Deltas change = {} at offset {} for validator {}",
+                change,
+                offset,
+                &validator
+            );
             total_slashed -= change;
 
             update_validator_deltas(
@@ -3425,7 +3436,6 @@ where
         }
     }
 
-    println!("Total slashed = {}", total_slashed);
     debug_assert!(total_slashed >= token::Change::default());
 
     // TODO: Transfer all slashed tokens from PoS account to Slash Pool address
@@ -3593,10 +3603,10 @@ where
         if start <= slash.epoch
             && end.map(|end| slash.epoch <= end).unwrap_or(true)
         {
-            println!(
-                "Slash (epoch, rate) = ({}, {})",
-                &slash.epoch, &slash.rate
-            );
+            // println!(
+            //     "Slash (epoch, rate) = ({}, {})",
+            //     &slash.epoch, &slash.rate
+            // );
             let cur_rate = slashes.entry(slash.epoch).or_default();
             *cur_rate = cmp::min(*cur_rate + slash.rate, Decimal::ONE);
         }
