@@ -2112,7 +2112,13 @@ pub mod args {
                 sub_prefix: self.sub_prefix,
                 amount: self.amount,
                 native_token: ctx.native_token.clone(),
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_code_path: self
+                    .tx_code_path
+                    .as_path()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+                    .into_bytes(),
             }
         }
     }
@@ -2167,7 +2173,13 @@ pub mod args {
                 channel_id: self.channel_id,
                 timeout_height: self.timeout_height,
                 timeout_sec_offset: self.timeout_sec_offset,
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_code_path: self
+                    .tx_code_path
+                    .as_path()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+                    .into_bytes(),
             }
         }
     }
@@ -2236,7 +2248,13 @@ pub mod args {
                     .unwrap()
                     .to_string()
                     .into_bytes(),
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_code_path: self
+                    .tx_code_path
+                    .as_path()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+                    .into_bytes(),
                 public_key: ctx.get_cached(&self.public_key),
             }
         }
@@ -2298,7 +2316,13 @@ pub mod args {
                     .to_string()
                     .into_bytes(),
                 unsafe_dont_encrypt: self.unsafe_dont_encrypt,
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_code_path: self
+                    .tx_code_path
+                    .as_path()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+                    .into_bytes(),
             }
         }
     }
@@ -2437,7 +2461,13 @@ pub mod args {
                 amount: self.amount,
                 source: self.source.map(|x| ctx.get(&x)),
                 native_token: ctx.native_token.clone(),
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_code_path: self
+                    .tx_code_path
+                    .as_path()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+                    .into_bytes(),
             }
         }
     }
@@ -2477,7 +2507,13 @@ pub mod args {
                 validator: ctx.get(&self.validator),
                 amount: self.amount,
                 source: self.source.map(|x| ctx.get(&x)),
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_code_path: self
+                    .tx_code_path
+                    .as_path()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+                    .into_bytes(),
             }
         }
     }
@@ -2534,7 +2570,13 @@ pub mod args {
                 proposal_data: self.proposal_data,
                 offline: self.offline,
                 native_token: ctx.native_token.clone(),
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_code_path: self
+                    .tx_code_path
+                    .as_path()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+                    .into_bytes(),
             }
         }
     }
@@ -2596,7 +2638,13 @@ pub mod args {
                 vote: self.vote,
                 offline: self.offline,
                 proposal_data: self.proposal_data,
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_code_path: self
+                    .tx_code_path
+                    .as_path()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+                    .into_bytes(),
                 proposal_pgf: self.proposal_pgf,
                 proposal_eth: self.proposal_eth,
             }
@@ -2821,7 +2869,13 @@ pub mod args {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
                 source: self.source.map(|x| ctx.get(&x)),
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_code_path: self
+                    .tx_code_path
+                    .as_path()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+                    .into_bytes(),
             }
         }
     }
@@ -3053,7 +3107,13 @@ pub mod args {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
                 rate: self.rate,
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_code_path: self
+                    .tx_code_path
+                    .as_path()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+                    .into_bytes(),
             }
         }
     }
