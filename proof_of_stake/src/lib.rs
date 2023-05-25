@@ -1745,8 +1745,6 @@ where
 /// Compute a token amount after slashing, given the initial amount and a set of
 /// slashes. It is assumed that the input `slashes` are those commited while the
 /// `amount` was contributing to voting power.
-///
-/// TODO: consider if we want to optimize this
 fn get_slashed_amount(
     params: &PosParams,
     amount: token::Amount,
@@ -1914,7 +1912,6 @@ where
     let mut unbonds_to_remove: Vec<(Epoch, Epoch)> = Vec::new();
 
     for unbond in unbond_handle.iter(storage)? {
-        // println!("\nUNBOND ITER\n");
         let (
             NestedSubKey::Data {
                 key: withdraw_epoch,
@@ -1944,15 +1941,6 @@ where
             validator,
         )?;
 
-        // let mut slashes_for_this_unbond = Vec::<Slash>::new();
-        // for slash in validator_slashes_handle(validator).iter(storage)? {
-        //     let slash = slash?;
-        //     if start_epoch <= slash.epoch
-        //         && slash.epoch < withdraw_epoch - params.unbonding_len
-        //     {
-        //         slashes_for_this_unbond.push(slash);
-        //     }
-        // }
         let amount_after_slashing =
             get_slashed_amount(&params, amount, &slashes_for_this_unbond)?;
 
@@ -2952,7 +2940,8 @@ where
 }
 
 /// Calculate the cubic slashing rate using all slashes within a window around
-/// the given infraction epoch
+/// the given infraction epoch. There is no cap on the rate applied within this
+/// function.
 pub fn compute_cubic_slash_rate<S>(
     storage: &S,
     params: &PosParams,
@@ -2998,9 +2987,6 @@ where
         sum_vp_fraction += infracting_stake / consensus_stake;
     }
     println!("sum_vp_fraction: {}", sum_vp_fraction);
-
-    // TODO: make sure `sum_vp_fraction` does not exceed 1/3 or handle with care
-    // another way
     Ok(dec!(9) * sum_vp_fraction * sum_vp_fraction)
 }
 
@@ -3162,43 +3148,6 @@ where
         )?;
     }
 
-    // Debugging
-    // println!("POST Validator Set");
-
-    // for offset in 0..=params.pipeline_len {
-    //     println!("Epoch {}", current_epoch.0 + offset);
-    //     for wv in read_consensus_validator_set_addresses_with_stake(
-    //         storage,
-    //         current_epoch + offset,
-    //     )? {
-    //         println!(
-    //             "Consensus val {}, stake {}, state {:?}",
-    //             &wv.address,
-    //             u64::from(wv.bonded_stake),
-    //             validator_state_handle(&wv.address).get(
-    //                 storage,
-    //                 current_epoch + offset,
-    //                 params
-    //             )
-    //         );
-    //     }
-    //     for wv in read_below_capacity_validator_set_addresses_with_stake(
-    //         storage,
-    //         current_epoch + offset,
-    //     )? {
-    //         println!(
-    //             "Below-cap val {}, stake {}, state {:?}",
-    //             &wv.address,
-    //             u64::from(wv.bonded_stake),
-    //             validator_state_handle(&wv.address).get(
-    //                 storage,
-    //                 current_epoch + offset,
-    //                 params
-    //             )
-    //         );
-    //     }
-    // }
-
     // No other actions are performed here until the epoch in which the slash is
     // processed.
 
@@ -3312,8 +3261,7 @@ where
         // processing
         for epoch in Epoch::iter_bounds_inclusive(
             infraction_epoch.next(),
-            current_epoch.prev(), /* TODO: should this have a prev() or
-                                   * should it even go to pipeline ??? */
+            current_epoch.prev(),
         ) {
             println!("\nEpoch {}", epoch);
             let unbonds = unbond_records_handle(&validator).at(&epoch);
@@ -3353,46 +3301,6 @@ where
             }
         }
         println!("Computing adjusted amounts now");
-
-        // How to handle if there is are slashes from earlier epochs that were
-        // not processed by this current infraction epoch (so were recently
-        // processed before this current epoch).
-        //
-        // Bonds that became
-
-        // TODO: optimize this, maybe make the validator slashes a map from
-        // epoch to slash
-        // let prev_slash_epoch = validator_slashes_handle(&validator)
-        //     .iter(storage)?
-        //     .fold(None, |acc, s| {
-        //         let slash_epoch = s.as_ref().unwrap().epoch;
-        //         if slash_epoch > infraction_epoch {
-        //             acc
-        //         } else if acc.is_none() {
-        //             Some(slash_epoch)
-        //         } else if acc.unwrap() < slash_epoch {
-        //             Some(slash_epoch)
-        //         } else {
-        //             acc
-        //         }
-        //     });
-        // let prev_total_rate = if let Some(epoch) = prev_slash_epoch {
-        //     validator_slashes_handle(&validator).iter(storage)?.fold(
-        //         Decimal::ZERO,
-        //         |acc, s| {
-        //             let slash_epoch = s.as_ref().unwrap().epoch;
-        //             if acc > Decimal::ONE {
-        //                 Decimal::ONE
-        //             } else if slash_epoch == epoch {
-        //                 acc + s.as_ref().unwrap().rate
-        //             } else {
-        //                 acc
-        //             }
-        //         },
-        //     )
-        // } else {
-        //     Decimal::ZERO
-        // };
 
         // Compute the adjusted validator deltas and slashed amounts from the
         // current up until the pipeline epoch
