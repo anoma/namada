@@ -25,7 +25,7 @@ use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
 use namada_apps::{config, wallet};
 use rand::Rng;
 use serde_json;
-use tempfile::{tempdir, TempDir};
+use tempfile::{tempdir, tempdir_in, TempDir};
 
 use crate::e2e::helpers::generate_bin_command;
 
@@ -40,6 +40,9 @@ pub const ENV_VAR_DEBUG: &str = "NAMADA_E2E_DEBUG";
 
 /// Env. var for keeping temporary files created by the E2E tests
 const ENV_VAR_KEEP_TEMP: &str = "NAMADA_E2E_KEEP_TEMP";
+
+/// Env. var for temporary path
+const ENV_VAR_TEMP_PATH: &str = "NAMADA_E2E_TEMP_PATH";
 
 /// Env. var to use a set of prebuilt binaries. This variable holds the path to
 /// a folder.
@@ -246,8 +249,14 @@ impl TestDir {
             _ => false,
         };
 
+        let path_to_tmp = env::var(ENV_VAR_TEMP_PATH);
+        let temp_dir: TempDir = match path_to_tmp {
+            Ok(path) => tempdir_in(path),
+            _ => tempdir(),
+        }
+        .unwrap();
         if keep_temp {
-            let path = tempdir().unwrap().into_path();
+            let path = temp_dir.into_path();
             println!(
                 "{}: \"{}\"",
                 "Keeping test directory at".underline().yellow(),
@@ -255,7 +264,7 @@ impl TestDir {
             );
             Self(Either::Right(path))
         } else {
-            Self(Either::Left(tempdir().unwrap()))
+            Self(Either::Left(temp_dir))
         }
     }
 
