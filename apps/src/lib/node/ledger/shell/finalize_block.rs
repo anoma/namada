@@ -1,6 +1,6 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 
 use data_encoding::HEXUPPER;
 use namada::ledger::events::EventType;
@@ -20,7 +20,6 @@ use namada::proof_of_stake::{
     write_last_block_proposer_address,
 };
 use namada::types::address::Address;
-use namada::types::hash::Hash;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::types::token::{total_supply_key, Amount};
@@ -1846,7 +1845,7 @@ mod test_finalize_block {
             None,
             None,
         );
-        let fee_amount = wrapper_tx.fee_amount().unwrap();
+        let fee_amount = wrapper_tx.get_tx_fee().unwrap();
 
         let wrapper = wrapper_tx
             .sign(
@@ -1943,7 +1942,7 @@ mod test_finalize_block {
             None,
             None,
         );
-        let fee_amount = wrapper_tx.fee_amount().unwrap();
+        let fee_amount = wrapper_tx.get_tx_fee().unwrap();
 
         let wrapper = wrapper_tx
             .sign(

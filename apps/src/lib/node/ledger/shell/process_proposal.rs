@@ -617,8 +617,6 @@ where
                         TempWlStorage::new(&self.wl_storage.storage);
                     match self.wrapper_fee_check(
                         &wrapper,
-                        tx_chain_id,
-                        tx_expiration,
                         &mut clone_wl_storage,
                         Some(Cow::Borrowed(gas_table)),
                         vp_wasm_cache,

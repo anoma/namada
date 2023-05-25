@@ -12,9 +12,7 @@ use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::token;
 use namada::types::token::Amount;
-use namada::types::transaction::{
-    hash_tx, DecryptedTx, Fee, TxType, WrapperTx,
-};
+use namada::types::transaction::{hash_tx, DecryptedTx, Fee, WrapperTx};
 
 use super::rpc;
 use super::tx::gen_shielded_transfer;

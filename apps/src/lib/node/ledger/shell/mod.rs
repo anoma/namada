@@ -29,7 +29,7 @@ use namada::ledger::gas::{BlockGasMeter, TxGasMeter};
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
 };
-use namada::ledger::protocol::apply_tx;
+use namada::ledger::protocol::{apply_tx, load_transfer_code_from_storage};
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, TempWlStorage, WlStorage, DB,
@@ -778,8 +778,6 @@ where
             // Validate wrapper fees
             if let Err(e) = self.wrapper_fee_check(
                 &wrapper,
-                tx_chain_id,
-                tx_expiration,
                 &mut TempWlStorage::new(&self.wl_storage.storage),
                 None,
                 &mut self.vp_wasm_cache.clone(),
@@ -825,7 +823,7 @@ where
             Ok(tx_type) => tx_type,
             Err(err) => {
                 response.code = 1;
-                response.log = format!("{}", Error::TxDecoding(err));
+                response.log = err.to_string();
                 return response;
             }
         };
@@ -990,26 +988,6 @@ where
         false
     }
 
-    /// Load the wasm code for a transfer from storage.
-    ///
-    /// # Panics
-    /// If the transaction hash or code are not found in storage
-    pub fn load_transfer_code_from_storage(&self) -> Vec<u8> {
-        let transfer_code_name_key =
-            Key::wasm_code_name("tx_transfer.wasm".to_string());
-        let transfer_hash: hash::Hash = self
-            .wl_storage
-            .read(&transfer_code_name_key)
-            .expect("Could not read the storage")
-            .expect("Expected tx transfer hash in storage");
-
-        let transfer_code_key = Key::wasm_code(&transfer_hash);
-        self.wl_storage
-            .read_bytes(&transfer_code_key)
-            .expect("Could not read the storage")
-            .expect("Expected tx transfer code in storage")
-    }
-
     /// Check that the Wrapper's signer has enough funds to pay fees.
     ///
     /// For security reasons, the `chain_id` and `expiration` fields should come
@@ -1018,8 +996,6 @@ where
     pub fn wrapper_fee_check<CA>(
         &self,
         wrapper: &WrapperTx,
-        chain_id: ChainId,
-        expiration: Option<DateTimeUtc>,
         temp_wl_storage: &mut TempWlStorage<D, H>,
         gas_table: Option<Cow<BTreeMap<String, u64>>>,
         vp_wasm_cache: &mut VpCache<CA>,
@@ -1035,14 +1011,14 @@ where
             &wrapper.fee.token,
         )
         .expect("Must be able to read gas cost parameter")
-        .ok_or(format!(
+        .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
             "The provided {} token is not allowed for fee payment",
             wrapper.fee.token
-        ))?;
+        ))))?;
 
         if wrapper.fee.amount_per_gas_unit < gas_cost {
             // The fees do not match the minimum required
-            return Err(format!("Fee amount {} do not match the minimum required amount {} for token {}", wrapper.fee.amount_per_gas_unit, gas_cost, wrapper.fee.token));
+            return Err(Error::TxApply(protocol::Error::FeeError(format!("Fee amount {} do not match the minimum required amount {} for token {}", wrapper.fee.amount_per_gas_unit, gas_cost, wrapper.fee.token))));
         }
 
         let balance = storage_api::token::read_balance(
@@ -1054,15 +1030,14 @@ where
 
         if wrapper.unshield.is_some() {
             // Validate data and generate unshielding tx
-            let transfer_code = self.load_transfer_code_from_storage();
+            let transfer_code =
+                load_transfer_code_from_storage(temp_wl_storage);
 
             let descriptions_limit = self.wl_storage.read(&parameters::storage::get_fee_unshielding_descriptions_limit_key()).expect("Error reading the storage").expect("Missing fee unshielding descriptions limit param in storage");
 
             let unshield = wrapper
                 .check_and_generate_fee_unshielding(
                     balance,
-                    chain_id,
-                    expiration,
                     transfer_code,
                     descriptions_limit,
                 )
@@ -1130,11 +1105,12 @@ where
         }
 
         protocol::transfer_fee(
-            wl_storage,
+            temp_wl_storage,
             block_proposer,
             self.has_valid_pow_solution(&wrapper),
             &wrapper,
         )
+        .map_err(Error::TxApply)
     }
 }
 

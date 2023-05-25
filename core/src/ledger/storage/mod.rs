@@ -1092,7 +1092,7 @@ mod tests {
                 #[cfg(not(feature = "mainnet"))]
                 faucet_account: None,
                 fee_unshielding_gas_limit: 150000000,
-                fee_unshielding_descriptions_limit: 15
+                fee_unshielding_descriptions_limit: 15,
                 gas_cost: BTreeMap::default(),
                 gas_table: BTreeMap::default()
             };

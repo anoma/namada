@@ -293,19 +293,15 @@ pub mod wrapper_tx {
         }
 
         /// Performs validation on the optional fee unshielding data carried by
-        /// the wrapper and generates the tx for execution. The provided
-        /// `expiration` and `chain_id` should be the same as the wrapper for
-        /// safety reasons.
+        /// the wrapper and generates the tx for execution.
         pub fn check_and_generate_fee_unshielding(
             &self,
             transparent_balance: Amount,
-            chain_id: ChainId,
-            expiration: Option<DateTimeUtc>,
             transfer_code: Vec<u8>,
             descriptions_limit: u64,
         ) -> Result<Option<Tx>, WrapperTxErr> {
             // Check that the number of descriptions is within a certain limit
-            // to avoid a possible DOS vector
+            // to avoid a possible DoS vector
             if let Some(ref unshield) = self.unshield {
                 let spends = unshield.shielded_spends.len();
                 let converts = unshield.shielded_converts.len();
@@ -336,8 +332,6 @@ pub mod wrapper_tx {
                 }
                 return self.generate_fee_unshielding(
                     transparent_balance,
-                    chain_id,
-                    expiration,
                     transfer_code,
                 );
             }
@@ -345,28 +339,27 @@ pub mod wrapper_tx {
             Ok(None)
         }
 
-        /// Generates the optional fee unshielding tx for execution. The
-        /// provided `expiration` and `chain_id` should be the same as the
-        /// wrapper for safety reasons.
+        /// Generates the optional fee unshielding tx for execution.
         pub fn generate_fee_unshielding(
             &self,
             transparent_balance: Amount,
-            chain_id: ChainId,
-            expiration: Option<DateTimeUtc>,
             transfer_code: Vec<u8>,
         ) -> Result<Option<Tx>, WrapperTxErr> {
             if self.unshield.is_some() {
                 let amount = self
-                    .fee
-                    .amount
+                    .get_tx_fee()?
                     .checked_sub(transparent_balance)
                     .ok_or_else(|| {
-                    WrapperTxErr::InvalidUnshield(
+                        WrapperTxErr::InvalidUnshield(
                         "The transparent balance of the fee payer is enough \
                          to pay fees, no need for unshielding"
                             .to_string(),
                     )
-                })?;
+                    })?;
+
+                if amount.is_zero() {
+                    return Ok(None);
+                }
 
                 let transfer = Transfer {
                     source: masp(),
@@ -387,8 +380,9 @@ pub mod wrapper_tx {
                                 .to_string(),
                         )
                     })?),
-                    chain_id,
-                    expiration,
+                    // No need to correctly populate these field since we are constructing the tx in protocol
+                    ChainId::default(),
+                    None,
                 );
 
                 // Mock a signature. We don't have the signign key of masp in
@@ -404,7 +398,7 @@ pub mod wrapper_tx {
         }
 
         /// Get the [`Amount`] of fees to be paid by the given wrapper. Returns an error if the amount overflows
-        pub fn fee_amount(&self) -> Result<Amount, WrapperTxErr> {
+        pub fn get_tx_fee(&self) -> Result<Amount, WrapperTxErr> {
             u64::checked_mul(
                 u64::from(&self.gas_limit),
                 self.fee.amount_per_gas_unit.into(),

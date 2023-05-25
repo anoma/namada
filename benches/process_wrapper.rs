@@ -10,7 +10,6 @@ use namada::types::storage::BlockHeight;
 use namada::types::time::DateTimeUtc;
 use namada::types::transaction::{Fee, WrapperTx};
 use namada_apps::node::ledger::shell::process_proposal::ValidationMeta;
-use namada_apps::node::ledger::shell::FeeAccumulator;
 use namada_apps::wallet::defaults;
 use namada_benches::{generate_tx, BenchShell, TX_TRANSFER_WASM};
 
@@ -90,7 +89,7 @@ fn process_tx(c: &mut Criterion) {
                             &mut 0,
                             &mut vp_wasm_cache,
                             &mut tx_wasm_cache,
-                            block_proposer
+                            block_proposer.as_ref()
                         )
                         .code,
                     0

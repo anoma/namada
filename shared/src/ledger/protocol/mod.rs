@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::panic;
 
 use namada_core::ledger::gas::TxGasMeter;
+use namada_core::types::storage::Key;
 use namada_core::ledger::storage::TempWlStorage;
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::hash::Hash;
@@ -43,9 +44,9 @@ pub enum Error {
     TxRunnerError(vm::wasm::run::Error),
     #[error("Txs must either be encrypted or a decryption of an encrypted tx")]
     TxTypeError,
-    #[error("Gas error: {0}")]
-    #[error("{0}")]
+    #[error("Fee ushielding error: {0}")]
     FeeUnshieldingError(crate::types::transaction::WrapperTxErr),
+    #[error("{0}")]
     GasError(#[from] gas::Error),
     #[error("Error while processing transaction's fees: {0}")]
     FeeError(String),
@@ -172,12 +173,33 @@ where
                 changed_keys,
                 vps_result: VpsResult::default(),
                 initialized_accounts: vec![],
-                ibc_event: None,
+                ibc_events: BTreeSet::default(),
             })
         }
         _ => Ok(TxResult::default()),
     }
 }
+
+    /// Load the wasm code for a transfer from storage.
+    ///
+    /// # Panics
+    /// If the transaction hash or code are not found in storage
+    pub fn load_transfer_code_from_storage<S>(storage: &S) -> Vec<u8> 
+where S: StorageRead{
+        let transfer_code_name_key =
+            Key::wasm_code_name("tx_transfer.wasm".to_string());
+        let transfer_hash: hash::Hash = 
+            storage
+            .read(&transfer_code_name_key)
+            .expect("Could not read the storage")
+            .expect("Expected tx transfer hash in storage");
+
+        let transfer_code_key = Key::wasm_code(&transfer_hash);
+        storage
+            .read_bytes(&transfer_code_key)
+            .expect("Could not read the storage")
+            .expect("Expected tx transfer code in storage")
+    }
 
 /// Performs the required operation on a wrapper transaction:
 ///  - replay protection
@@ -222,18 +244,22 @@ where
     write_log.commit_tx();
 
     // Charge fee before performing any fallible operations
+    let mut temp_wl_storage = TempWlStorage::new(storage);
     charge_fee(
         wrapper,
+        tx_bytes,
         &gas_table,
         #[cfg(not(feature = "mainnet"))]
         has_valid_pow,
         block_proposer,
-        write_log,
-        storage,
+        &mut temp_wl_storage,
         changed_keys,
         vp_wasm_cache,
         tx_wasm_cache,
     )?;
+
+    // Extract the updated write log
+    *write_log = temp_wl_storage.write_log;
 
     // Account for gas
     gas_meter.add_tx_size_gas(tx_bytes)?;
@@ -241,18 +267,18 @@ where
     Ok(())
 }
 
-/// Charge fee for the provided wrapper transaction. In ABCI returns an error if the balance of the block proposer overflows. In ABCI++ returns error if:
+/// Charge fee for the provided wrapper transaction. In ABCI returns an error if the balance of the block proposer overflows. In ABCI plus returns error if:
 /// - The unshielding fails
 /// - Fee amount overflows
 /// - Not enough funds are available to pay the entire amount of the fee
 /// - The accumulated fee amount to be credited to the block proposer overflows
 pub fn charge_fee<D, H, CA>(
     wrapper: &WrapperTx,
+    tx_bytes: &[u8],
     gas_table: &BTreeMap<String, u64>,
     #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     block_proposer: Option<&Address>,
-    write_log: &mut WriteLog,
-    storage: &Storage<D, H>,
+    wl_storage: &mut TempWlStorage<D, H>,
     changed_keys: &mut BTreeSet<storage::Key>,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
@@ -266,50 +292,54 @@ where
     if wrapper.unshield.is_some() {
         // The unshielding tx does not charge gas, instantiate a
         // custom gas meter for this step
-        let mut gas_meter = TxGasMeter::new(
-            self.wl_storage
-                .read(&parameters::storage::get_fee_unshielding_gas_limit_key())
-                .expect("Error reading the storage")
-                .expect("Missing fee unshielding gas limit in storage"),
-        );
+        let mut gas_meter =
+            TxGasMeter::new(
+                wl_storage 
+                    .read(
+                        &namada_core::ledger::parameters::storage::get_fee_unshielding_gas_limit_key(
+                        ),
+                    )
+                    .expect("Error reading the storage")
+                    .expect("Missing fee unshielding gas limit in storage"),
+            );
 
         let transparent_balance = storage_api::token::read_balance(
-            &self.wl_storage,
+            wl_storage,
             &wrapper.fee.token,
             &wrapper.fee_payer(),
-        )?;
+        ).map_err(|e| Error::FeeError(e.to_string()))?;
 
         // If it fails, do not return early
         // from this function but try to take the funds from the unshielded
         // balance
         match wrapper.generate_fee_unshielding(
             transparent_balance,
-            // By this time we've already validated the chain id and
-            // expiration, we don't need the correct values anymore
-            self.chain_id.clone(),
-            None,
-            self.load_transfer_code_from_storage(),
+            load_transfer_code_from_storage(wl_storage),
         ) {
             Ok(Some(fee_unshielding_tx)) => {
                 // NOTE: A clean write log must be provided to this call for a correct vp validation
                 match apply_tx(
                     TxType::Decrypted(DecryptedTx::Decrypted {
                         tx: fee_unshielding_tx,
+            #[cfg(not(feature = "mainnet"))]
                         has_valid_pow: false,
                     }),
+                    tx_bytes,
                     TxIndex::default(),
                     &mut gas_meter,
                     gas_table,
-                    &mut self.wl_storage.write_log,
-                    &self.wl_storage.storage,
-                    &mut self.vp_wasm_cache,
-                    &mut self.tx_wasm_cache,
+                    &mut wl_storage.write_log,
+                    &wl_storage.storage,
+                    vp_wasm_cache,
+                    tx_wasm_cache,
+                    None,
+    #[cfg(not(feature = "mainnet"))] false,
+                    
                 ) {
                     Ok(result) => {
-                        if result.is_accepted() {
-                            self.wl_storage.write_log.commit_tx();
-                        } else {
-                            self.wl_storage.write_log.drop_tx();
+                        // NOTE: do not commit the result of the unshielding until fees are paid otherwise this could be exploited to get free unshieldings
+                        if !result.is_accepted() {
+                            wl_storage.write_log.drop_tx();
                             tracing::error!(
                                 "The unshielding tx is invalid, some VPs \
                                      rejected it: {:#?}",
@@ -318,7 +348,7 @@ where
                         }
                     }
                     Err(e) => {
-                        self.wl_storage.write_log.drop_tx();
+                        wl_storage.write_log.drop_tx();
                         tracing::error!(
                             "The unshielding tx is invalid, wasm run \
                                  failed: {}",
@@ -335,15 +365,9 @@ where
     }
 
     // Charge fee
-    let mut wl_storage = TempWlStorage::new(storage);
-    wl_storage.write_log = std::mem::take(write_log);
+    transfer_fee(wl_storage, block_proposer, has_valid_pow, &wrapper)?;
 
-    transfer_fee(&mut wl_storage, block_proposer, has_valid_pow, &wrapper)
-        .map_err(Error::FeeError)?;
-
-    // Rejoin the updated write log
-    *write_log = wl_storage.write_log;
-    changed_keys.append(&mut write_log.get_keys());
+    changed_keys.append(&mut wl_storage.write_log.get_keys());
 
     Ok(())
 }
@@ -354,7 +378,7 @@ pub fn transfer_fee<S>(
     block_proposer: Option<&Address>,
     #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     wrapper: &WrapperTx,
-) -> std::result::Result<(), String>
+) -> Result<()> 
 where
     S: StorageRead + StorageWrite,
 {
@@ -365,11 +389,11 @@ where
     )
     .unwrap();
 
-    match wrapper.fee_amount() {
+    match wrapper.get_tx_fee() {
         Ok(fees) => {
             if balance.checked_sub(fees).is_some() {
                 dispatch_fee_action(wl_storage, wrapper, block_proposer, fees)
-                    .map_err(|e| e.to_string())
+                    .map_err(|e| Error::FeeError(e.to_string()))
             } else {
                 // Balance was insufficient for fee payment
                 #[cfg(not(feature = "mainnet"))]
@@ -378,7 +402,7 @@ where
                 let reject = true;
 
                 if reject {
-                    #[cfg(not(feature = "abcipp"))]
+                #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
                     {
                         // Move all the available funds in the transparent balance of the fee payer
                         dispatch_fee_action(
@@ -387,13 +411,13 @@ where
                             block_proposer,
                             balance,
                         )
-                        .map_err(|e| e.to_string())?;
+                        .map_err(|e| Error::FeeError(e.to_string()))?;
 
-                        return Err("Transparent balance of wrapper's signer was insufficient to pay fee".to_string());
+                        return Err(Error::FeeError("Transparent balance of wrapper's signer was insufficient to pay fee. All the available transparent funds have been moved to the block proposer".to_string()));
                     }
-                    #[cfg(feature = "abcipp")]
-                    return Err("Insufficient transparent balance to pay fees"
-                        .to_string());
+                #[cfg(any(feature = "abciplus", feature = "abcipp"))]
+                    return Err(Error::FeeError("Insufficient transparent balance to pay fees"
+                        .to_string()));
                 } else {
                     tracing::debug!("Balance was insufficient for fee payment but a valid PoW was provided");
                     Ok(())
@@ -402,7 +426,7 @@ where
         }
         Err(e) => {
             // Fee overflow
-            #[cfg(not(feature = "abcipp"))]
+                #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
             {
                 // Move all the available funds in the transparent balance of the fee payer
                 dispatch_fee_action(
@@ -411,13 +435,15 @@ where
                     block_proposer,
                     balance,
                 )
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| Error::FeeError(e.to_string()))?;
 
-                return Err(e.to_string());
+                return Err(Error::FeeError(
+                    format!("{}. All the available transparent funds have been moved to the block proposer", e
+                )));
             }
 
-            #[cfg(feature = "abcipp")]
-            return Err(e.to_string());
+                #[cfg(any(feature = "abciplus", feature = "abcipp"))]
+            return Err(Error::FeeError(e.to_string()));
         }
     }
 }
