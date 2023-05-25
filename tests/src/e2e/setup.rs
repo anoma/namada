@@ -427,16 +427,16 @@ impl Test {
 pub fn working_dir() -> PathBuf {
     let working_dir = fs::canonicalize("..").unwrap();
 
-    // Check that tendermint is either on $PATH or `TENDERMINT` env var is set
-    if std::env::var("TENDERMINT").is_err() {
+    // Check that cometbft is either on $PATH or `COMETBFT` env var is set
+    if std::env::var("COMETBFT").is_err() {
         Command::new("which")
-            .arg("tendermint")
+            .arg("cometbft")
             .assert()
             .try_success()
             .expect(
-                "The env variable TENDERMINT must be set and point to a local \
-                 build of the tendermint abci++ branch, or the tendermint \
-                 binary must be on PATH",
+                "The env variable COMETBFT must be set and point to a local \
+                 build of the cometbft abci++ branch, or the cometbft binary \
+                 must be on PATH",
             );
     }
     working_dir

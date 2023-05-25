@@ -182,7 +182,7 @@ fn test_namada_shuts_down_if_tendermint_dies() -> Result<()> {
     // 2. Kill the tendermint node
     sleep(1);
     Command::new("pkill")
-        .args(["tendermint"])
+        .args(["cometbft"])
         .spawn()
         .expect("Test failed")
         .wait()
@@ -3959,12 +3959,8 @@ fn test_genesis_validators() -> Result<()> {
     // `join-network` use the defaults
     let update_config = |ix: u8, mut config: Config| {
         let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
-        config.ledger.tendermint.p2p_address.set_port(first_port);
-        config
-            .ledger
-            .tendermint
-            .rpc_address
-            .set_port(first_port + 1);
+        config.ledger.cometbft.p2p_address.set_port(first_port);
+        config.ledger.cometbft.rpc_address.set_port(first_port + 1);
         config.ledger.shell.ledger_address.set_port(first_port + 2);
         config
     };
@@ -4148,12 +4144,8 @@ fn double_signing_gets_slashed() -> Result<()> {
 
     let update_config = |ix: u8, mut config: Config| {
         let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
-        config.ledger.tendermint.p2p_address.set_port(first_port);
-        config
-            .ledger
-            .tendermint
-            .rpc_address
-            .set_port(first_port + 1);
+        config.ledger.cometbft.p2p_address.set_port(first_port);
+        config.ledger.cometbft.rpc_address.set_port(first_port + 1);
         config.ledger.shell.ledger_address.set_port(first_port + 2);
         config
     };
@@ -4175,7 +4167,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     let node_sk = key::common::SecretKey::Ed25519(node_sk);
     let tm_home_dir = validator_0_base_dir_copy
         .join(test.net.chain_id.as_str())
-        .join("tendermint");
+        .join("cometbft");
     let _node_pk =
         client::utils::write_tendermint_node_key(&tm_home_dir, node_sk);
 
