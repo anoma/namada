@@ -2112,7 +2112,7 @@ pub mod args {
                 sub_prefix: self.sub_prefix,
                 amount: self.amount,
                 native_token: ctx.native_token.clone(),
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
     }
@@ -2167,7 +2167,7 @@ pub mod args {
                 channel_id: self.channel_id,
                 timeout_height: self.timeout_height,
                 timeout_sec_offset: self.timeout_sec_offset,
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
     }
@@ -2228,15 +2228,8 @@ pub mod args {
             TxInitAccount::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 source: ctx.get(&self.source),
-                vp_code: ctx.read_wasm(self.vp_code),
-                vp_code_path: self
-                    .vp_code_path
-                    .as_path()
-                    .to_str()
-                    .unwrap()
-                    .to_string()
-                    .into_bytes(),
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                vp_code_path: self.vp_code_path.to_path_buf(),
+                tx_code_path: self.tx_code_path.to_path_buf(),
                 public_key: ctx.get_cached(&self.public_key),
             }
         }
@@ -2249,13 +2242,11 @@ pub mod args {
             let vp_code_path = CODE_PATH_OPT
                 .parse(matches)
                 .unwrap_or_else(|| PathBuf::from(VP_USER_WASM));
-            let vp_code = vp_code_path.clone();
             let tx_code_path = PathBuf::from(TX_INIT_ACCOUNT_WASM);
             let public_key = PUBLIC_KEY.parse(matches);
             Self {
                 tx,
                 source,
-                vp_code,
                 vp_code_path,
                 public_key,
                 tx_code_path,
@@ -2292,13 +2283,9 @@ pub mod args {
                 max_commission_rate_change: self.max_commission_rate_change,
                 validator_vp_code_path: self
                     .validator_vp_code_path
-                    .as_path()
-                    .to_str()
-                    .unwrap()
-                    .to_string()
-                    .into_bytes(),
+                    .to_path_buf(),
                 unsafe_dont_encrypt: self.unsafe_dont_encrypt,
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
     }
@@ -2382,20 +2369,8 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> TxUpdateVp<SdkTypes> {
             TxUpdateVp::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                vp_code_path: self
-                    .vp_code_path
-                    .as_path()
-                    .to_str()
-                    .unwrap()
-                    .to_string()
-                    .into_bytes(),
-                tx_code_path: self
-                    .tx_code_path
-                    .as_path()
-                    .to_str()
-                    .unwrap()
-                    .to_string()
-                    .into_bytes(),
+                vp_code_path: self.vp_code_path,
+                tx_code_path: self.tx_code_path,
                 addr: ctx.get(&self.addr),
             }
         }
@@ -2437,7 +2412,7 @@ pub mod args {
                 amount: self.amount,
                 source: self.source.map(|x| ctx.get(&x)),
                 native_token: ctx.native_token.clone(),
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
     }
@@ -2477,7 +2452,7 @@ pub mod args {
                 validator: ctx.get(&self.validator),
                 amount: self.amount,
                 source: self.source.map(|x| ctx.get(&x)),
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
     }
@@ -2524,7 +2499,7 @@ pub mod args {
         /// Native token address
         pub native_token: C::NativeAddress,
         /// Path to the TX WASM code file
-        pub tx_code_path: C::Data,
+        pub tx_code_path: PathBuf,
     }
 
     impl CliToSdk<InitProposal<SdkTypes>> for InitProposal<CliTypes> {
@@ -2534,7 +2509,7 @@ pub mod args {
                 proposal_data: self.proposal_data,
                 offline: self.offline,
                 native_token: ctx.native_token.clone(),
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_code_path: self.tx_code_path,
             }
         }
     }
@@ -2585,7 +2560,7 @@ pub mod args {
         /// The proposal file path
         pub proposal_data: Option<PathBuf>,
         /// Path to the TX WASM code file
-        pub tx_code_path: C::Data,
+        pub tx_code_path: PathBuf,
     }
 
     impl CliToSdk<VoteProposal<SdkTypes>> for VoteProposal<CliTypes> {
@@ -2596,7 +2571,7 @@ pub mod args {
                 vote: self.vote,
                 offline: self.offline,
                 proposal_data: self.proposal_data,
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_code_path: self.tx_code_path.to_path_buf(),
                 proposal_pgf: self.proposal_pgf,
                 proposal_eth: self.proposal_eth,
             }
@@ -2821,7 +2796,7 @@ pub mod args {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
                 source: self.source.map(|x| ctx.get(&x)),
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
     }
@@ -3053,7 +3028,7 @@ pub mod args {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
                 rate: self.rate,
-                tx_code_path: ctx.read_wasm(self.tx_code_path),
+                tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
     }
@@ -3223,7 +3198,7 @@ pub mod args {
                 gas_limit: self.gas_limit,
                 signing_key: self.signing_key.map(|x| ctx.get_cached(&x)),
                 signer: self.signer.map(|x| ctx.get(&x)),
-                tx_reveal_code_path: ctx.read_wasm(self.tx_reveal_code_path),
+                tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
                 expiration: self.expiration,
                 chain_id: self.chain_id,
