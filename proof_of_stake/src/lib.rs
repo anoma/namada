@@ -1764,7 +1764,7 @@ fn get_slashed_amount(
             // TODO: understand this better (from Informal)
             // TODO: do bounds of this need to be changed with a +/- 1??
             if slashed_amount.epoch + params.slash_processing_epoch_offset()
-                < *infraction_epoch
+                <= *infraction_epoch
             {
                 updated_amount = updated_amount
                     .checked_sub(slashed_amount.amount)
