@@ -74,8 +74,8 @@ where
     use crate::ledger::storage::write_log::WriteLog;
     use crate::proto::Tx;
     use crate::types::storage::TxIndex;
-    use crate::types::transaction::TxType;
     use crate::types::transaction::decrypted::DecryptedTx;
+    use crate::types::transaction::TxType;
 
     let mut gas_meter = BlockGasMeter::default();
     let mut write_log = WriteLog::default();
