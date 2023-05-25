@@ -3574,8 +3574,8 @@ where
     Ok(bond_iter.sum::<token::Amount>())
 }
 
-/// Find slashes applicable to a validator with inclusive `start` and exclusive
-/// `end` epoch.
+/// Find slashes applicable to a validator with inclusive `start` and `end`
+/// epoch.
 fn find_slashes_in_range<S>(
     storage: &S,
     start: Epoch,
@@ -3589,7 +3589,7 @@ where
     for slash in validator_slashes_handle(validator).iter(storage)? {
         let slash = slash?;
         if start <= slash.epoch
-            && end.map(|end| slash.epoch < end).unwrap_or(true)
+            && end.map(|end| slash.epoch <= end).unwrap_or(true)
         {
             println!(
                 "Slash (epoch, rate) = ({}, {})",
