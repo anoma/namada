@@ -32,9 +32,6 @@ pub fn main() -> Result<()> {
             cmds::Ledger::DumpDb(cmds::LedgerDumpDb(args)) => {
                 ledger::dump_db(ctx.config.ledger, args);
             }
-            cmds::Ledger::DbDeleteValue(cmds::LedgerDbDeleteValue(args)) => {
-                ledger::db_delete_value(ctx.config.ledger, args);
-            }
             cmds::Ledger::RollBack(_) => {
                 ledger::rollback(ctx.config.ledger)
                     .wrap_err("Failed to rollback the Namada node")?;

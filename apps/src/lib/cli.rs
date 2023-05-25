@@ -823,7 +823,6 @@ pub mod cmds {
         RunUntil(LedgerRunUntil),
         Reset(LedgerReset),
         DumpDb(LedgerDumpDb),
-        DbDeleteValue(LedgerDbDeleteValue),
         RollBack(LedgerRollBack),
     }
 
@@ -835,13 +834,10 @@ pub mod cmds {
                 let run = SubCmd::parse(matches).map(Self::Run);
                 let reset = SubCmd::parse(matches).map(Self::Reset);
                 let dump_db = SubCmd::parse(matches).map(Self::DumpDb);
-                let db_delete_value =
-                    SubCmd::parse(matches).map(Self::DbDeleteValue);
                 let rollback = SubCmd::parse(matches).map(Self::RollBack);
                 let run_until = SubCmd::parse(matches).map(Self::RunUntil);
                 run.or(reset)
                     .or(dump_db)
-                    .or(db_delete_value)
                     .or(rollback)
                     .or(run_until)
                     // The `run` command is the default if no sub-command given
@@ -862,7 +858,6 @@ pub mod cmds {
                 .subcommand(LedgerRunUntil::def())
                 .subcommand(LedgerReset::def())
                 .subcommand(LedgerDumpDb::def())
-                .subcommand(LedgerDbDeleteValue::def())
                 .subcommand(LedgerRollBack::def())
         }
     }
@@ -942,29 +937,6 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Dump Namada ledger node's DB from a block into a file.")
                 .add_args::<args::LedgerDumpDb>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct LedgerDbDeleteValue(pub args::LedgerDbDeleteValue);
-
-    impl SubCmd for LedgerDbDeleteValue {
-        const CMD: &'static str = "db-delete-value";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::LedgerDbDeleteValue::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about(
-                    "Delete a value from the ledger node's DB at the given \
-                     key.",
-                )
-                .setting(AppSettings::ArgRequiredElseHelp)
-                .add_args::<args::LedgerDbDeleteValue>()
         }
     }
 
@@ -2446,26 +2418,6 @@ pub mod args {
                 .arg(HISTORIC.def().about(
                     "If provided, dump also the diff of the last height",
                 ))
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct LedgerDbDeleteValue {
-        pub storage_key: storage::Key,
-    }
-
-    impl Args for LedgerDbDeleteValue {
-        fn parse(matches: &ArgMatches) -> Self {
-            let storage_key = STORAGE_KEY.parse(matches);
-            Self { storage_key }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(
-                STORAGE_KEY
-                    .def()
-                    .about("Storage key to delete a value from."),
-            )
         }
     }
 
