@@ -912,6 +912,7 @@ fn test_slashes_with_unbonding_aux(
     s.commit_block().unwrap();
 
     current_epoch = advance_epoch(&mut s, &params);
+    super::process_slashes(&mut s, current_epoch).unwrap();
 
     // Discover first slash
     let slash_0_evidence_epoch = current_epoch;
@@ -935,6 +936,7 @@ fn test_slashes_with_unbonding_aux(
         slash_0_evidence_epoch + params.slash_processing_epoch_offset();
     while current_epoch < unfreeze_epoch {
         current_epoch = advance_epoch(&mut s, &params);
+        super::process_slashes(&mut s, current_epoch).unwrap();
     }
 
     // Unbond half of the tokens
@@ -967,6 +969,7 @@ fn test_slashes_with_unbonding_aux(
     let withdraw_epoch = unbond_epoch + params.withdrawable_epoch_offset();
     while current_epoch < withdraw_epoch {
         current_epoch = advance_epoch(&mut s, &params);
+        super::process_slashes(&mut s, current_epoch).unwrap();
     }
     let token = staking_token_address(&s);
     let val_balance_pre = read_balance(&s, &token, val_addr).unwrap();
@@ -1891,8 +1894,8 @@ fn advance_epoch(s: &mut TestWlStorage, params: &PosParams) -> Epoch {
         &below_capacity_validator_set_handle(),
     )
     .unwrap();
-    process_slashes(s, current_epoch).unwrap();
-    dbg!(current_epoch);
+    // process_slashes(s, current_epoch).unwrap();
+    // dbg!(current_epoch);
     current_epoch
 }
 
