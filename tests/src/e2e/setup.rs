@@ -15,8 +15,8 @@ use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use expectrl::process::unix::{PtyStream, UnixProcess};
 use expectrl::session::Session;
-use expectrl::stream::log::LoggedStream;
-use expectrl::{Eof, WaitStatus};
+use expectrl::stream::log::LogStream;
+use expectrl::{ControlCode, Eof, WaitStatus};
 use eyre::{eyre, Context};
 use itertools::{Either, Itertools};
 use namada::types::chain::ChainId;
@@ -435,7 +435,7 @@ pub fn working_dir() -> PathBuf {
 
 /// A command under test
 pub struct NamadaCmd {
-    pub session: Session<UnixProcess, LoggedStream<PtyStream, File>>,
+    pub session: Session<UnixProcess, LogStream<PtyStream, File>>,
     pub cmd_str: String,
     pub log_path: PathBuf,
 }
@@ -497,8 +497,9 @@ impl NamadaCmd {
         // Make sure that there is no unread output first
         let _ = self.exp_eof().unwrap();
 
-        let status = self.session.wait().unwrap();
-        assert_eq!(WaitStatus::Exited(self.session.pid(), 0), status);
+        let process = self.session.get_process();
+        let status = process.wait().unwrap();
+        assert_eq!(WaitStatus::Exited(process.pid(), 0), status);
     }
 
     /// Assert that the process exited with failure
@@ -506,8 +507,9 @@ impl NamadaCmd {
         // Make sure that there is no unread output first
         let _ = self.exp_eof().unwrap();
 
-        let status = self.session.wait().unwrap();
-        assert_ne!(WaitStatus::Exited(self.session.pid(), 0), status);
+        let process = self.session.get_process();
+        let status = process.wait().unwrap();
+        assert_ne!(WaitStatus::Exited(process.pid(), 0), status);
     }
 
     /// Wait until provided string is seen on stdout of child process.
@@ -576,17 +578,22 @@ impl NamadaCmd {
         }
     }
 
+    /// Send ctrl-c to to interrupt or terminate.
+    pub fn interrupt(&mut self) -> Result<()> {
+        self.send_control(ControlCode::EndOfText)
+    }
+
     /// Send a control code to the running process and consume resulting output
     /// line (which is empty because echo is off)
     ///
-    /// E.g. `send_control('c')` sends ctrl-c. Upper/smaller case does not
-    /// matter.
+    /// E.g. `send_control(ControlCode::EndOfText)` sends ctrl-c. Upper/smaller
+    /// case does not matter.
     ///
     /// Wrapper over the inner `Session`'s functions with custom error
     /// reporting.
-    pub fn send_control(&mut self, c: char) -> Result<()> {
+    pub fn send_control(&mut self, c: ControlCode) -> Result<()> {
         self.session
-            .send_control(c)
+            .send(c)
             .map_err(|e| eyre!("Error: {}\nCommand: {}", e, self))
     }
 
@@ -611,7 +618,7 @@ impl Drop for NamadaCmd {
             "> Sending Ctrl+C to command".underline().yellow(),
             self.cmd_str,
         );
-        let _result = self.send_control('c');
+        let _result = self.interrupt();
         match self.exp_eof() {
             Err(error) => {
                 eprintln!(
@@ -724,7 +731,7 @@ where
         .write(true)
         .create_new(true)
         .open(&log_path)?;
-    let mut session = session.with_log(logger).unwrap();
+    let mut session = expectrl::session::log(session, logger).unwrap();
 
     session.set_expect_timeout(timeout_sec.map(std::time::Duration::from_secs));
 
@@ -742,7 +749,8 @@ where
         sleep(1);
 
         // If the command failed, try print out its output
-        if let Ok(WaitStatus::Exited(_, result)) = cmd_process.session.status()
+        if let Ok(WaitStatus::Exited(_, result)) =
+            cmd_process.session.get_process().status()
         {
             if result != 0 {
                 let output = cmd_process.exp_eof().unwrap_or_else(|err| {
