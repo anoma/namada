@@ -284,7 +284,7 @@ impl core::fmt::Debug for BlockHash {
 
 /// The data from Tendermint header
 /// relevant for Namada storage
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, Default)]
 pub struct Header {
     /// Merkle root hash of block
     pub hash: Hash,
@@ -957,6 +957,16 @@ impl Epoch {
         let start_ix: u64 = self.into();
         let end_ix: u64 = start_ix + len;
         (start_ix..end_ix).map(Epoch::from)
+    }
+
+    /// TODO
+    pub fn iter_bounds_inclusive(
+        start: Self,
+        end: Self,
+    ) -> impl Iterator<Item = Epoch> + Clone {
+        let start_ix = start.0;
+        let end_ix = end.0;
+        (start_ix..=end_ix).map(Epoch::from)
     }
 
     /// Checked epoch subtraction. Computes self - rhs, returning None if
