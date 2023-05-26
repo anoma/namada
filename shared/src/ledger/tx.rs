@@ -690,29 +690,34 @@ pub async fn submit_unjail_validator<
     wallet: &mut Wallet<U>,
     args: args::TxUnjailValidator,
 ) -> Result<(), Error> {
-    let args::TxUnjailValidator {
-        tx: tx_args,
-        validator,
-        tx_code_path,
-    } = args;
-    if !rpc::is_validator(client, &validator).await {
-        eprintln!("The given address {validator} is not a validator.");
-        if !tx_args.force {
-            return Err(Error::InvalidValidatorAddress(validator));
+    if !rpc::is_validator(client, &args.validator).await {
+        eprintln!("The given address {} is not a validator.", &args.validator);
+        if !args.tx.force {
+            return Err(Error::InvalidValidatorAddress(args.validator.clone()));
         }
     }
 
-    let data = validator
-        .try_to_vec()
-        .expect("Encoding tx data shouldn't fail");
+    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
+    let tx_code_hash =
+        query_wasm_code_hash(client, tx_code_path).await.unwrap();
 
-    let chain_id = tx_args.chain_id.clone().unwrap();
-    let tx = Tx::new(tx_code_path, Some(data), chain_id, tx_args.expiration);
-    let default_signer = validator;
+    let data = args
+        .validator
+        .clone()
+        .try_to_vec()
+        .map_err(Error::EncodeTxFailure)?;
+
+    let mut tx = Tx::new(TxType::Raw);
+    tx.header.chain_id = args.tx.chain_id.clone().unwrap();
+    tx.header.expiration = args.tx.expiration;
+    tx.set_data(Data::new(data));
+    tx.set_code(Code::from_hash(tx_code_hash));
+
+    let default_signer = args.validator;
     process_tx(
         client,
         wallet,
-        &tx_args,
+        &args.tx,
         tx,
         TxSigningKey::WalletAddress(default_signer),
         #[cfg(not(feature = "mainnet"))]
