@@ -740,4 +740,119 @@ mod test {
 
         Ok(())
     }
+
+    #[test]
+    fn test_nested_map_basics() -> storage_api::Result<()> {
+        let mut storage = TestWlStorage::default();
+        let key = storage::Key::parse("testing").unwrap();
+
+        // A nested map from u32 -> String -> u32
+        let nested_map = NestedMap::<u32, LazyMap<String, u32>>::open(key);
+
+        assert!(nested_map.is_empty(&storage)?);
+        assert!(nested_map.iter(&storage)?.next().is_none());
+
+        // Insert a value
+        nested_map
+            .at(&0)
+            .insert(&mut storage, "string1".to_string(), 100)?;
+
+        assert!(!nested_map.is_empty(&storage)?);
+        assert!(nested_map.iter(&storage)?.next().is_some());
+        assert_eq!(
+            nested_map.at(&0).get(&storage, &"string1".to_string())?,
+            Some(100)
+        );
+        assert_eq!(
+            nested_map.at(&0).get(&storage, &"string2".to_string())?,
+            None
+        );
+
+        // Insert more values
+        nested_map
+            .at(&1)
+            .insert(&mut storage, "string1".to_string(), 200)?;
+        nested_map
+            .at(&0)
+            .insert(&mut storage, "string2".to_string(), 300)?;
+
+        let mut it = nested_map.iter(&storage)?;
+        let (
+            NestedSubKey::Data {
+                key,
+                nested_sub_key: SubKey::Data(inner_key),
+            },
+            inner_val,
+        ) = it.next().unwrap()?;
+        assert_eq!(key, 0);
+        assert_eq!(inner_key, "string1".to_string());
+        assert_eq!(inner_val, 100);
+
+        let (
+            NestedSubKey::Data {
+                key,
+                nested_sub_key: SubKey::Data(inner_key),
+            },
+            inner_val,
+        ) = it.next().unwrap()?;
+        assert_eq!(key, 0);
+        assert_eq!(inner_key, "string2".to_string());
+        assert_eq!(inner_val, 300);
+
+        let (
+            NestedSubKey::Data {
+                key,
+                nested_sub_key: SubKey::Data(inner_key),
+            },
+            inner_val,
+        ) = it.next().unwrap()?;
+        assert_eq!(key, 1);
+        assert_eq!(inner_key, "string1".to_string());
+        assert_eq!(inner_val, 200);
+
+        // Next element should be None
+        assert!(it.next().is_none());
+        drop(it);
+
+        // Start removing elements
+        let rem = nested_map
+            .at(&0)
+            .remove(&mut storage, &"string2".to_string())?;
+        assert_eq!(rem, Some(300));
+        assert_eq!(
+            nested_map.at(&0).get(&storage, &"string2".to_string())?,
+            None
+        );
+        assert_eq!(nested_map.at(&0).len(&storage)?, 1_u64);
+        assert_eq!(nested_map.at(&1).len(&storage)?, 1_u64);
+        assert_eq!(nested_map.iter(&storage)?.count(), 2);
+
+        // Start removing elements
+        let rem = nested_map
+            .at(&0)
+            .remove(&mut storage, &"string1".to_string())?;
+        assert_eq!(rem, Some(100));
+        assert_eq!(
+            nested_map.at(&0).get(&storage, &"string1".to_string())?,
+            None
+        );
+        assert_eq!(nested_map.at(&0).len(&storage)?, 0_u64);
+        assert_eq!(nested_map.at(&1).len(&storage)?, 1_u64);
+        assert_eq!(nested_map.iter(&storage)?.count(), 1);
+
+        // Start removing elements
+        let rem = nested_map
+            .at(&1)
+            .remove(&mut storage, &"string1".to_string())?;
+        assert_eq!(rem, Some(200));
+        assert_eq!(
+            nested_map.at(&1).get(&storage, &"string1".to_string())?,
+            None
+        );
+        assert_eq!(nested_map.at(&0).len(&storage)?, 0_u64);
+        assert_eq!(nested_map.at(&1).len(&storage)?, 0_u64);
+        assert!(nested_map.is_empty(&storage)?);
+
+        Ok(())
+    }
 }
