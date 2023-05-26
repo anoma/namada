@@ -21,7 +21,7 @@ max_commission_rate_change = 0.01
 # Public IP:port address.
 # We set the port to be the default+1000, so that if a local node was running at 
 # the same time as the E2E tests, it wouldn't affect them.
-net_address = "127.0.0.1:27656"
+net_address = "127.0.0.1:23656"
 
 # Some tokens present at genesis.
 

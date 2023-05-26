@@ -28,3 +28,7 @@ wasm/*.wasm
 
 # app version string file
 /apps/version.rs
+
+# personal
+chains/
+NOTES.md

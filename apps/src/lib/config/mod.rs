@@ -168,7 +168,7 @@ impl Ledger {
         tendermint_config.p2p.addr_book_strict = true;
         tendermint_config.instrumentation.prometheus = false;
         tendermint_config.instrumentation.prometheus_listen_addr = "127.0.0.1:26661".to_string();
-        tendermint_config.instrumentation.namespace = "namada_tm".to_string();
+        tendermint_config.instrumentation.namespace = "potatoe_tm".to_string();
         tendermint_config.tx_index = TxIndexConfig{indexer: TxIndexer::Null};
         Self {
             genesis_time: Rfc3339String("1970-01-01T00:00:00Z".to_owned()),
