@@ -329,6 +329,17 @@ pub struct TxCommissionRateChange<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: C::Data,
 }
 
+#[derive(Clone, Debug)]
+/// Re-activate a jailed validator args
+pub struct TxUnjailValidator<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Validator address (should be self)
+    pub validator: C::Address,
+    /// Path to the TX WASM code file
+    pub tx_code_path: C::Data,
+}
+
 /// Query PoS commission rate
 #[derive(Clone, Debug)]
 pub struct QueryCommissionRate<C: NamadaTypes = SdkTypes> {
