@@ -223,7 +223,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 
     // 2. Shut it down
     let mut ledger = bg_ledger.foreground();
-    ledger.send_control('c')?;
+    ledger.interrupt()?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
     ledger.exp_string("Namada ledger node has shut down.")?;
@@ -240,7 +240,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     ledger.exp_string("Last state root hash:")?;
 
     // 4. Shut it down
-    ledger.send_control('c')?;
+    ledger.interrupt()?;
     // Wait for it to stop
     ledger.exp_eof()?;
     drop(ledger);
@@ -304,7 +304,7 @@ fn suspend_ledger() -> Result<()> {
 
     // 3. Shut it down
     let mut ledger = bg_ledger.foreground();
-    ledger.send_control('c')?;
+    ledger.interrupt()?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
     ledger.exp_string("Namada ledger node has shut down.")?;
@@ -1781,7 +1781,7 @@ fn invalid_transactions() -> Result<()> {
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
 
     // 3. Shut it down
-    ledger.send_control('c')?;
+    ledger.interrupt()?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
     ledger.exp_string("Namada ledger node has shut down.")?;
