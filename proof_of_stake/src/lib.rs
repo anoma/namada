@@ -3505,7 +3505,6 @@ where
     let stake =
         read_validator_stake(storage, &params, validator, pipeline_epoch)?
             .unwrap_or_default();
-    dbg!(&stake);
 
     insert_validator_into_validator_set(
         storage,

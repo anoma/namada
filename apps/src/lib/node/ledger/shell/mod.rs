@@ -529,7 +529,10 @@ where
                 };
                 // Disregard evidences that should have already been processed
                 // at this time
-                if evidence_epoch + pos_params.unbonding_len < current_epoch {
+                if evidence_epoch + pos_params.slash_processing_epoch_offset()
+                    - pos_params.cubic_slashing_window_length
+                    <= current_epoch
+                {
                     tracing::info!(
                         "Skipping outdated evidence from epoch \
                          {evidence_epoch}"
