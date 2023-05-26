@@ -34,7 +34,7 @@ use namada::ledger::storage::{
 };
 use namada::ledger::storage_api::{self, StorageRead};
 use namada::ledger::{ibc, pos, protocol, replay_protection};
-use namada::proof_of_stake::{self, read_pos_params, slash};
+use namada::proof_of_stake::{self, process_slashes, read_pos_params, slash};
 use namada::proto::{self, Tx};
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::chain::ChainId;
@@ -491,14 +491,16 @@ where
     }
 
     /// Apply PoS slashes from the evidence
-    fn slash(&mut self) {
+    fn record_slashes_from_evidence(&mut self) {
         if !self.byzantine_validators.is_empty() {
+            println!("BYZANTINE VALIDATORS NOT EMPTY");
             let byzantine_validators =
                 mem::take(&mut self.byzantine_validators);
             // TODO: resolve this unwrap() better
             let pos_params = read_pos_params(&self.wl_storage).unwrap();
             let current_epoch = self.wl_storage.storage.block.epoch;
             for evidence in byzantine_validators {
+                // dbg!(&evidence);
                 tracing::info!("Processing evidence {evidence:?}.");
                 let evidence_height = match u64::try_from(evidence.height) {
                     Ok(height) => height,
@@ -526,7 +528,9 @@ where
                         continue;
                     }
                 };
-                if evidence_epoch + pos_params.unbonding_len <= current_epoch {
+                // Disregard evidences that should have already been processed
+                // at this time
+                if evidence_epoch + pos_params.unbonding_len < current_epoch {
                     tracing::info!(
                         "Skipping outdated evidence from epoch \
                          {evidence_epoch}"
@@ -603,6 +607,19 @@ where
                     tracing::error!("Error in slashing: {}", err);
                 }
             }
+        }
+    }
+
+    /// Process and apply slashes that have already been recorded for the
+    /// current epoch
+    fn process_slashes(&mut self) {
+        let current_epoch = self.wl_storage.storage.block.epoch;
+        if let Err(err) = process_slashes(&mut self.wl_storage, current_epoch) {
+            tracing::error!(
+                "Error while processing slashes queued for epoch {}: {}",
+                current_epoch,
+                err
+            );
         }
     }
 
