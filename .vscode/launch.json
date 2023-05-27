@@ -7,7 +7,7 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug 'namadan run-ledger'",
+            "name": "Debug 'namadac init-network'",
             "cargo": {
                 "args": [
                     "build",
@@ -20,6 +20,25 @@
             },
             "args": [
                 "--base-dir", "chains", "utils", "init-network", "--unsafe-dont-encrypt", "--genesis-path", "genesis/e2e-tests-single-node.toml", "--chain-prefix", "namada-test", "--localhost", "--dont-archive", "--wasm-checksums-path", "wasm/checksums.json"
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug 'namadan run-ledger'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=namadan",
+                ],
+                "filter": {
+                    "name": "namadan",
+                    "kind": "bin"
+                }
+            },
+            "args": [
+                "--base-dir", "chains/namada-test.b1d7169d10f8e22d7d/setup/validator-0/.namada", "ledger", "run"
             ],
             "cwd": "${workspaceFolder}"
         },

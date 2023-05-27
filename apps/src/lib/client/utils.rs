@@ -643,6 +643,8 @@ pub fn init_network(
     // Make a copy of genesis config without validator net addresses to
     // `write_genesis_config`. Keep the original, because we still need the
     // addresses to configure validators.
+    // TODO: This is the genesis config that includes all token balances, but not the node setup stuff.
+    // TODO: Why are we generating a genesis config without the net address
     let mut config_clean = config.clone();
     config_clean
         .validator
@@ -720,11 +722,14 @@ pub fn init_network(
     });
 
     // Generate the validators' ledger config
+    // TODO: This generates the inner config
     config.validator.iter_mut().enumerate().for_each(
         |(ix, (name, validator_config))| {
             let accounts_dir = chain_dir.join(NET_ACCOUNTS_DIR);
             let validator_dir =
                 accounts_dir.join(name).join(config::DEFAULT_BASE_DIR);
+            // TODO: This is not the genesis config anymore. It's the namada config. We are starting with a completely fresh one here. 
+            // and then modify it.
             let mut config = Config::load(
                 &validator_dir,
                 &chain_id,
@@ -740,6 +745,7 @@ pub fn init_network(
             // directories.
             config.ledger.shell.base_dir = config::DEFAULT_BASE_DIR.into();
             // Add a ledger P2P persistent peers
+            // TODO: This gets added into the outer config later on.
             config.ledger.tendermint_config.p2p.persistent_peers = persistent_peers
                     .iter()
                     .enumerate()
@@ -767,7 +773,7 @@ pub fn init_network(
                     .p2p
                     .laddr = TendermintAddress::from_str(&format!("0.0.0.0:{}", first_port)).unwrap();
             }
-            config.ledger.tendermint_config.p2p.laddr = TendermintAddress::from_str(&format!("{}:{}", ip, "38485")).unwrap();
+            config.ledger.tendermint_config.p2p.laddr = TendermintAddress::from_str(&format!("{}:{}", ip, first_port)).unwrap();
             if !localhost {
                 config
                     .ledger
@@ -784,21 +790,25 @@ pub fn init_network(
         },
     );
 
+    // TODO: This generates a completely clean config that doesn't respect any port assignments
+    // TODO: This generates the outer config
+    // TODO: It's unclear what this config is used for? Ie, what are the correct values?
     // Update the ledger config persistent peers and save it
     let mut config = Config::load(&global_args.base_dir, &chain_id, None);
     config.ledger.tendermint_config.p2p.persistent_peers = persistent_peers;
     config.ledger.tendermint_config.consensus.timeout_commit =
         consensus_timeout_commit;
     config.ledger.tendermint_config.p2p.allow_duplicate_ip = allow_duplicate_ip;
+    config.ledger.tendermint_config.p2p.addr_book_strict = !localhost;
     // Open P2P address
-    // if !localhost {
-    //     config
-    //         .ledger
-    //         .tendermint_config
-    //         .p2p
-    //         .laddr = TendermintAddress::from_str("0.0.0.0").unwrap();
-    //         // .set_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
-    // }
+    if !localhost {
+        config
+            .ledger
+            .tendermint_config
+            .p2p
+            .laddr = TendermintAddress::from_str(&format!("0.0.0.0:{}", "333")).unwrap();
+            // .set_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
+    }
     config.ledger.tendermint_config.p2p.addr_book_strict = !localhost;
     config.ledger.genesis_time = genesis.genesis_time.into();
     config
