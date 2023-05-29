@@ -2,11 +2,8 @@
 
 use std::future::Future;
 use std::ops::ControlFlow;
-use std::time::Duration;
 
 use thiserror::Error;
-use wasm_timer::TryFutureExt;
-pub use wasm_timer::{Delay, Instant};
 
 /// Timeout related errors.
 #[derive(Error, Debug)]
@@ -67,6 +64,7 @@ impl SleepStrategy {
     ///
     /// Different retries will result in a sleep operation,
     /// with the current [`SleepStrategy`].
+    #[inline]
     pub async fn timeout<T, F, G>(
         &self,
         deadline: Instant,
@@ -76,13 +74,53 @@ impl SleepStrategy {
         G: FnMut() -> F,
         F: Future<Output = ControlFlow<T>>,
     {
-        let run_future = async move {
-            let value = self.run(future_gen).await;
-            Result::<_, std::io::Error>::Ok(value)
-        };
-        run_future
-            .timeout_at(deadline)
+        timeout_at(deadline, async move { self.run(future_gen).await })
             .await
             .map_err(|_| Error::Elapsed)
     }
 }
+
+#[cfg(target_family = "wasm")]
+mod internal {
+    use std::future::Future;
+    pub use std::time::Duration;
+
+    pub use wasm_timer::Instant;
+    use wasm_timer::TryFutureExt;
+
+    /// Timeout a future.
+    ///
+    /// If a timeout occurs, return [`Err`].
+    #[inline]
+    pub(super) async fn timeout_at<F: Future>(
+        deadline: Instant,
+        future: F,
+    ) -> Result<F::Output, ()> {
+        let run_future = async move {
+            let value = future.await;
+            Result::<_, std::io::Error>::Ok(value)
+        };
+        run_future.timeout_at(deadline).await.map_err(|_| ())
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+mod internal {
+    use std::future::Future;
+
+    use tokio::time::timeout_at as tokio_timeout_at;
+    pub use tokio::time::{Duration, Instant};
+
+    /// Timeout a future.
+    ///
+    /// If a timeout occurs, return [`Err`].
+    #[inline]
+    pub(super) async fn timeout_at<F: Future>(
+        deadline: Instant,
+        future: F,
+    ) -> Result<F::Output, ()> {
+        tokio_timeout_at(deadline, future).await.map_err(|_| ())
+    }
+}
+
+pub use internal::*;

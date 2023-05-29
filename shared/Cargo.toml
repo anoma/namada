@@ -138,10 +138,12 @@ zeroize = "1.5.5"
 toml = "0.5.8"
 bimap = {version = "0.6.2", features = ["serde"]}
 orion = "0.16.0"
-wasm-timer = "0.2.5"
 
-[target.'cfg(any(unix, windows))'.dependencies]
-tokio = {version = "1.8.2", default-features = false}
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+tokio = {version = "1.8.2", features = ["full"]}
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+wasm-timer = "0.2.5"
 
 [dev-dependencies]
 assert_matches = "1.5.0"
