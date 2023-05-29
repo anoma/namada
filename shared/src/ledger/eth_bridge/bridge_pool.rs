@@ -11,6 +11,7 @@ use namada::eth_bridge::structs::RelayProof;
 use namada::ledger::queries::RPC;
 use namada::proto::Tx;
 use namada::types::address::Address;
+use namada::types::control_flow::time::{Duration, Instant};
 use namada::types::eth_abi::Encode;
 use namada::types::eth_bridge_pool::{
     GasFee, PendingTransfer, TransferToEthereum,
@@ -20,7 +21,6 @@ use namada::types::token::Amount;
 use namada::types::voting_power::FractionalVotingPower;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
-use tokio::time::{Duration, Instant};
 
 use super::super::signing::TxSigningKey;
 use super::super::tx::process_tx;

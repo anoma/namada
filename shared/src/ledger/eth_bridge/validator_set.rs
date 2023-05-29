@@ -14,11 +14,11 @@ use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::eth_bridge::structs::{Signature, ValidatorSetArgs};
 use namada::ledger::queries::RPC;
 use namada::proto::Tx;
+use namada::types::control_flow::time::{self, Duration, Instant};
 use namada::types::key::RefTo;
 use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
 use namada::types::transaction::TxType;
 use tokio::sync::oneshot;
-use tokio::time::{Duration, Instant};
 
 use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit};
 use crate::cli::{args, safe_exit, Context};
@@ -201,6 +201,10 @@ impl ShouldRelay for CheckNonce {
                 })
             }
         };
+        // TODO: we should not rely on tokio for this. it won't
+        // work on a web browser, for the most part.
+        //
+        // see: https://github.com/tokio-rs/tokio/pull/4967
         tokio::task::block_in_place(move || {
             tokio::runtime::Handle::current().block_on(task)
         })
@@ -468,7 +472,7 @@ async fn relay_validator_set_update_daemon(
         };
 
         tracing::debug!(?sleep_for, "Sleeping");
-        tokio::time::sleep(sleep_for).await;
+        time::sleep(sleep_for).await;
 
         let is_synchronizing =
             eth_sync_or(&args.eth_rpc_endpoint, || ()).await.is_err();
