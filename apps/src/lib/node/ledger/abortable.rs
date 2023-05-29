@@ -1,11 +1,9 @@
 use std::future::Future;
 use std::pin::Pin;
 
+use namada::types::control_flow::install_shutdown_signal;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
-
-use crate::control_flow::install_shutdown_signal;
 
 /// Serves to identify an aborting async task, which is spawned
 /// with an [`AbortableSpawner`].
@@ -14,7 +12,7 @@ pub type AbortingTask = &'static str;
 /// An [`AbortableSpawner`] will spawn abortable tasks into the asynchronous
 /// runtime.
 pub struct AbortableSpawner {
-    shutdown_recv: oneshot::Receiver<()>,
+    shutdown_recv: Pin<Box<dyn Future<Output = ()>>>,
     abort_send: UnboundedSender<AbortingTask>,
     abort_recv: UnboundedReceiver<AbortingTask>,
     cleanup_jobs: Vec<Pin<Box<dyn Future<Output = ()>>>>,
@@ -37,7 +35,7 @@ impl Default for AbortableSpawner {
 impl AbortableSpawner {
     /// Creates a new [`AbortableSpawner`].
     pub fn new() -> Self {
-        let shutdown_recv = install_shutdown_signal();
+        let shutdown_recv = Box::pin(install_shutdown_signal());
         let (abort_send, abort_recv) = mpsc::unbounded_channel();
         Self {
             abort_send,
