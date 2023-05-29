@@ -1,4 +1,6 @@
 //! Structures encapsulating SDK arguments
+use std::path::PathBuf;
+
 use namada_core::types::chain::ChainId;
 use namada_core::types::time::DateTimeUtc;
 use rust_decimal::Decimal;
@@ -402,7 +404,7 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// Sign the tx with the keypair of the public key of the given address
     pub signer: Option<C::Address>,
     /// Path to the TX WASM code file to reveal PK
-    pub tx_reveal_code_path: C::Data,
+    pub tx_reveal_code_path: PathBuf,
     /// Password to decrypt key
     pub password: Option<Zeroizing<String>>,
 }
