@@ -3374,7 +3374,7 @@ pub mod args {
                 gas_limit: self.gas_limit,
                 signing_key: self.signing_key.map(|x| ctx.get_cached(&x)),
                 signer: self.signer.map(|x| ctx.get(&x)),
-                tx_reveal_code_path: ctx.read_wasm(self.tx_reveal_code_path),
+                tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
                 expiration: self.expiration,
                 chain_id: self.chain_id,

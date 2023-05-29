@@ -346,10 +346,8 @@ pub async fn submit_reveal_pk_aux<
     println!("Submitting a tx to reveal the public key for address {addr}...");
     let tx_data = public_key.try_to_vec().map_err(Error::EncodeKeyFailure)?;
 
-    let tx_code_path =
-        String::from_utf8(args.tx_reveal_code_path.clone()).unwrap();
     let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path).await.unwrap();
+        query_wasm_code_hash(client, args.tx_reveal_code_path.to_str().unwrap()).await.unwrap();
 
     let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
         #[cfg(not(feature = "mainnet"))]
