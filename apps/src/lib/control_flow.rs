@@ -2,16 +2,37 @@
 
 pub mod timeouts;
 
+use std::future::{self, Future};
+
+#[cfg(any(unix, windows))]
 use tokio::sync::oneshot;
 
 /// Install a shutdown signal handler, and retrieve the associated
 /// signal's receiver.
-pub fn install_shutdown_signal() -> oneshot::Receiver<()> {
-    let (tx, rx) = oneshot::channel();
-    tokio::spawn(async move {
-        shutdown_send(tx).await;
-    });
-    rx
+pub fn install_shutdown_signal() -> impl Future<Output = ()> + Send {
+    // #[cfg(target_family = "wasm")]
+    // {
+    //     compile_error!("WASM shutdown signal not supported");
+    // }
+
+    // on unix-like systems and windows, install a proper
+    // OS signal based shutdown handler
+    #[cfg(any(unix, windows))]
+    {
+        let (tx, rx) = oneshot::channel();
+        tokio::spawn(async move {
+            shutdown_send(tx).await;
+        });
+        async move {
+            _ = rx.await;
+        }
+    }
+
+    // on the remaining platforms, simply block forever
+    #[cfg(not(any(unix, windows)))]
+    {
+        let () = future::pending().await;
+    }
 }
 
 #[cfg(unix)]
@@ -57,6 +78,7 @@ async fn shutdown_send(tx: oneshot::Sender<()>) {
 
 #[cfg(windows)]
 async fn shutdown_send(tx: oneshot::Sender<()>) {
+    let mut sigbreak = tokio::signal::windows::ctrl_break().unwrap();
     tokio::select! {
         signal = tokio::signal::ctrl_c() => {
             match signal {
@@ -71,19 +93,6 @@ async fn shutdown_send(tx: oneshot::Sender<()>) {
             }
         },
     };
-    if tx.send(()).is_err() {
-        tracing::debug!("Shutdown signal receiver was dropped");
-    }
-}
-
-#[cfg(not(any(unix, windows)))]
-async fn shutdown_send(tx: oneshot::Sender<()>) {
-    match tokio::signal::ctrl_c().await {
-        Ok(()) => tracing::info!("Received interrupt signal, exiting..."),
-        Err(err) => {
-            tracing::error!("Failed to listen for CTRL+C signal: {err}")
-        }
-    }
     if tx.send(()).is_err() {
         tracing::debug!("Shutdown signal receiver was dropped");
     }
