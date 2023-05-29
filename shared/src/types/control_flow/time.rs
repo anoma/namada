@@ -1,4 +1,4 @@
-//! Time out logic for futures.
+//! Time related logic for futures.
 
 use std::future::Future;
 use std::ops::ControlFlow;

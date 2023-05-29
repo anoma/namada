@@ -1,6 +1,6 @@
 //! Control flow utilities.
 
-pub mod timeouts;
+pub mod time;
 
 use std::future::{self, Future};
 

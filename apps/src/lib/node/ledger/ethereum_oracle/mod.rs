@@ -29,7 +29,7 @@ use self::events::PendingEvent;
 #[cfg(test)]
 use self::test_tools::mock_web3_client::Web3;
 use super::abortable::AbortableSpawner;
-use crate::control_flow::timeouts::SleepStrategy;
+use crate::control_flow::time::SleepStrategy;
 use crate::node::ledger::oracle::control::Command;
 
 /// The default amount of time the oracle will wait between processing blocks

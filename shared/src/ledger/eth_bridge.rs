@@ -15,8 +15,8 @@ use tokio::task::LocalSet;
 use web30::client::Web3;
 
 use crate::cli;
-use crate::types::control_flow::timeouts::{
-    Duration, Error as TimeoutsError, Instant, SleepStrategy,
+use crate::types::control_flow::time::{
+    Duration, Error as TimeoutError, Instant, SleepStrategy,
 };
 
 const DEFAULT_BACKOFF: Duration = std::time::Duration::from_millis(500);
@@ -44,7 +44,7 @@ impl SyncStatus {
 #[inline]
 pub async fn eth_syncing_status(
     client: &Web3,
-) -> Result<SyncStatus, TimeoutsError> {
+) -> Result<SyncStatus, TimeoutError> {
     eth_syncing_status_timeout(
         client,
         DEFAULT_BACKOFF,
@@ -62,7 +62,7 @@ pub async fn eth_syncing_status_timeout(
     client: &Web3,
     backoff_duration: Duration,
     deadline: Instant,
-) -> Result<SyncStatus, TimeoutsError> {
+) -> Result<SyncStatus, TimeoutError> {
     SleepStrategy::Constant(backoff_duration)
         .timeout(deadline, || async {
             ControlFlow::Break(match client.eth_block_number().await {
