@@ -6,7 +6,7 @@ pub mod storage;
 pub mod tendermint_node;
 
 use std::convert::TryInto;
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::thread;
@@ -539,9 +539,11 @@ async fn run_abci(
         )
         .finish()
         .unwrap();
+    // TODO: this needs to be passed in without "tcp://" - listen doesn't take a protocol
+    let ledger_address_new = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),26658,);
     tokio::select! {
         // Run the server with the ABCI service
-        status = server.listen(ledger_address) => {
+        status = server.listen(ledger_address_new) => {
             status.map_err(|err| Error::TowerServer(err.to_string()))
         },
         resp_sender = abort_recv => {
