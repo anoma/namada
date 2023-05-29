@@ -140,7 +140,7 @@ pub struct TxInitAccount<C: NamadaTypes = SdkTypes> {
     /// Wasm VP for the new account
     pub vp_code: C::Data,
     /// Path to the VP WASM code file for the new account
-    pub vp_code_path: C::Data,
+    pub vp_code_path: PathBuf,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
     /// Public key for the new account
@@ -180,7 +180,7 @@ pub struct TxUpdateVp<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// Path to the VP WASM code file
-    pub vp_code_path: C::Data,
+    pub vp_code_path: PathBuf,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
     /// Address of the account whose VP is to be updated

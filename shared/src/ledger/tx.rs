@@ -1361,9 +1361,8 @@ pub async fn submit_init_account<
     let vp_code = args.vp_code;
     // Validate the VP code
     validate_untrusted_code_err(&vp_code, args.tx.force)?;
-    let vp_code_path = String::from_utf8(args.vp_code_path).unwrap();
     let vp_code_hash =
-        query_wasm_code_hash(client, vp_code_path).await.unwrap();
+        query_wasm_code_hash(client, args.vp_code_path.to_str().unwrap()).await.unwrap();
 
     let tx_code_hash =
         query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap()).await.unwrap();
@@ -1452,9 +1451,8 @@ pub async fn submit_update_vp<
         }
     }?;
 
-    let vp_code_path = String::from_utf8(args.vp_code_path).unwrap();
     let vp_code_hash =
-        query_wasm_code_hash(client, vp_code_path).await.unwrap();
+        query_wasm_code_hash(client, args.vp_code_path.to_str().unwrap()).await.unwrap();
 
     let tx_code_hash =
         query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap()).await.unwrap();
