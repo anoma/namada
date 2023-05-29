@@ -333,15 +333,13 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
         // Check if this transfer pertains to the supplied token
         relevant &= match &query_token {
             Some(token) => {
-                let check = |(tok, amt): (&TokenAddress, &token::Amount)| {
+                let check = |(tok, chg): (&TokenAddress, &Change)| {
                     tok.sub_prefix == sub_prefix
                         && &tok.address == token
-                        && !amt.is_zero()
+                        && !chg.is_zero()
                 };
                 tfer_delta.values().cloned().any(
-                    |MaspChange { ref asset, change }| {
-                        check((asset, &change.into()))
-                    },
+                    |MaspChange { ref asset, change }| check((asset, &change)),
                 ) || shielded_accounts
                     .values()
                     .cloned()
@@ -382,7 +380,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
                 print!("  {}:", fvk_map[&account]);
                 for (token_addr, val) in masp_change {
                     let token_alias = lookup_alias(&ctx, &token_addr.address);
-                    let sign = match val.cmp(&token::Amount::zero()) {
+                    let sign = match val.cmp(&Change::zero()) {
                         Ordering::Greater => "+",
                         Ordering::Less => "-",
                         Ordering::Equal => "",
@@ -390,8 +388,12 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
                     print!(
                         " {}{} {}",
                         sign,
-                        format_denominated_amount(&client, &token_addr, val,)
-                            .await,
+                        format_denominated_amount(
+                            &client,
+                            &token_addr,
+                            val.into(),
+                        )
+                        .await,
                         token_addr.format_with_alias(&token_alias),
                     );
                 }
@@ -1011,7 +1013,10 @@ pub async fn query_shielded_balance(
                 sub_prefix: args.sub_prefix.map(|k| Key::parse(k).unwrap()),
             };
 
-            let total_balance = balance[&(epoch, token_address.clone())];
+            let total_balance = balance
+                .get(&(epoch, token_address.clone()))
+                .cloned()
+                .unwrap_or_default();
             if total_balance.is_zero() {
                 println!(
                     "No shielded {} balance found for given key",

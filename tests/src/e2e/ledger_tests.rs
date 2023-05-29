@@ -1069,6 +1069,8 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
+    client.exp_string("Transaction accepted")?;
+    client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is valid")?;
     client.assert_success();
 
@@ -1085,7 +1087,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("btc: 20")?;
     client.assert_success();
@@ -1103,7 +1105,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("No shielded nam balance found")?;
     client.assert_success();
@@ -1126,7 +1128,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("btc: 20")?;
     client.assert_success();
@@ -1149,7 +1151,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string(&format!(
         "nam: {}",
@@ -1171,7 +1173,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string(&format!(
         "nam: {}",
@@ -1196,7 +1198,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("btc: 20")?;
     client.assert_success();
@@ -1214,7 +1216,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string(&format!(
         "nam: {}",
@@ -1236,7 +1238,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string(&format!(
         "nam: {}",
@@ -1283,7 +1285,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("eth: 30")?;
     client.assert_success();
@@ -1301,7 +1303,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("No shielded nam balance found")?;
     client.assert_success();
@@ -1322,7 +1324,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("eth: 30")?;
     client.assert_success();
@@ -1340,7 +1342,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string(&format!(
         "nam: {}",
@@ -1363,7 +1365,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string(&format!(
         "nam: {}",
@@ -1413,7 +1415,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("No shielded eth balance found")?;
     client.assert_success();
@@ -1433,7 +1435,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string(&format!(
         "nam: {}",
@@ -1457,7 +1459,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string(&format!(
         "nam: {}",
@@ -1507,7 +1509,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("No shielded btc balance found")?;
     client.assert_success();
@@ -1525,7 +1527,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string(&format!(
         "nam: {}",
@@ -1548,7 +1550,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string(&format!(
         "nam: {}",
@@ -1574,7 +1576,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string(&format!(
         "nam: {}",
@@ -1596,7 +1598,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string(&format!(
         "nam: {}",
@@ -1619,7 +1621,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string(&format!(
         "nam: {}",
@@ -1699,7 +1701,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("No shielded nam balance found")?;
     client.assert_success();
@@ -1717,7 +1719,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("No shielded nam balance found")?;
     client.assert_success();
@@ -1735,7 +1737,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("nam: 0")?;
     client.assert_success();

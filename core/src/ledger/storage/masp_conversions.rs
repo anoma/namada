@@ -65,12 +65,8 @@ where
     // with the zeroth epoch to minimize the number of convert notes clients
     // have to use. This trick works under the assumption that reward tokens
     // from different epochs are exactly equivalent.
-    let reward_asset_bytes =
-        (address::nam(), None::<Key>, MaspDenom::Zero, 0u64)
-            .try_to_vec()
-            .expect("unable to serialize address and epoch");
-    let reward_asset = AssetType::new(reward_asset_bytes.as_ref())
-        .expect("unable to derive asset identifier");
+    let reward_asset =
+        encode_asset_type(address::nam(), &None, MaspDenom::Zero, Epoch(0));
     // Conversions from the previous to current asset for each address
     let mut current_convs =
         BTreeMap::<(Address, Option<Key>, MaspDenom), AllowedConversion>::new();

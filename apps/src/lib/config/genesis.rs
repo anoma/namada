@@ -213,7 +213,7 @@ pub mod genesis_config {
         pub vp: Option<String>,
         // Initial balances held by accounts defined elsewhere.
         // XXX: u64 doesn't work with toml-rs!
-        pub balances: Option<HashMap<String, u64>>,
+        pub balances: Option<HashMap<String, token::Amount>>,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -460,7 +460,9 @@ pub mod genesis_config {
                                 }
                             }
                         },
-                        token::Amount::native_whole(*amount),
+                        token::Amount::from_uint(*amount, config.denom).expect(
+                            "expected a balance that fits into 256 bits",
+                        ),
                     )
                 })
                 .collect(),

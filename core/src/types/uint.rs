@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use uint::construct_uint;
 
 use crate::types::token;
-use crate::types::token::Amount;
+use crate::types::token::{Amount, AmountParseError, MaspDenom};
 
 construct_uint! {
     /// Namada native type to replace for unsigned 256 bit
@@ -165,6 +165,29 @@ impl I256 {
     /// the maximum I256 value
     pub fn maximum() -> Self {
         Self(MAX_SIGNED_VALUE)
+    }
+
+    /// Attempt to convert a MASP-denominated integer to an I256
+    /// using the given denomination.
+    pub fn from_masp_denominated(
+        value: impl Into<i64>,
+        denom: MaspDenom,
+    ) -> Result<Self, AmountParseError> {
+        let value = value.into();
+        let is_negative = value < 0;
+        let value = value.unsigned_abs();
+        let mut result = [0u64; 4];
+        result[denom as usize] = value;
+        let result = Uint(result);
+        if result <= MAX_SIGNED_VALUE {
+            if is_negative {
+                Ok(Self(result.negate()).canonical())
+            } else {
+                Ok(Self(result).canonical())
+            }
+        } else {
+            Err(AmountParseError::InvalidRange)
+        }
     }
 }
 

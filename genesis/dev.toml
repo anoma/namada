@@ -36,7 +36,7 @@ a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6m
 atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
 atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
 # 2. An alias of any account
-bertha = 1000000
+Bertha = "1000000"
 # 3. A public key of a validator or an established account from which the 
 #    address of the implicit account is derived)
 "bertha.public_key" = 100

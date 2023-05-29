@@ -14,10 +14,11 @@ use ripemd::{Digest, Ripemd160};
 fn asset_type_from_epoched_address(
     epoch: Epoch,
     token: &Address,
+    sub_prefix: String,
     denom: token::MaspDenom,
 ) -> AssetType {
     // Timestamp the chosen token with the current epoch
-    let token_bytes = (token, denom, epoch.0)
+    let token_bytes = (token, sub_prefix, denom, epoch.0)
         .try_to_vec()
         .expect("token should serialize");
     // Generate the unique asset identifier from the unique token address
@@ -63,10 +64,19 @@ fn valid_transfer_amount(
 fn convert_amount(
     epoch: Epoch,
     token: &Address,
+    sub_prefix: &Option<storage::Key>,
     val: token::Amount,
     denom: token::MaspDenom,
 ) -> (AssetType, Amount) {
-    let asset_type = asset_type_from_epoched_address(epoch, token, denom);
+    let asset_type = asset_type_from_epoched_address(
+        epoch,
+        token,
+        sub_prefix
+            .as_ref()
+            .map(|k| k.to_string())
+            .unwrap_or_default(),
+        denom,
+    );
     // Combine the value and unit into one amount
     let amount = Amount::from_nonnegative(asset_type, denom.denominate(&val))
         .expect("invalid value or asset type for amount");
@@ -102,6 +112,7 @@ fn validate_tx(
         transparent_tx_pool += shielded_tx.value_balance.clone();
 
         if transfer.source != masp() {
+            log_string("transparent input");
             // Handle transparent input
             // Note that the asset type is timestamped so shields
             // where the shielded value has an incorrect timestamp
@@ -110,10 +121,12 @@ fn validate_tx(
                 let (_transp_asset, transp_amt) = convert_amount(
                     ctx.get_block_epoch().unwrap(),
                     &transfer.token,
+                    &transfer.sub_prefix,
                     transfer.amount.into(),
                     denom,
                 );
 
+                log_string(format!("transparent amount: {:?}", transp_amt));
                 // Non-masp sources add to transparent tx pool
                 transparent_tx_pool += transp_amt;
             }
@@ -135,6 +148,7 @@ fn validate_tx(
         }
 
         if transfer.target != masp() {
+            log_string("transparent output");
             // Handle transparent output
             // The following boundary conditions must be satisfied
             // 1. One to 4 transparent outputs
@@ -166,6 +180,11 @@ fn validate_tx(
                     asset_type_from_epoched_address(
                         ctx.get_block_epoch().unwrap(),
                         &transfer.token,
+                        transfer
+                            .sub_prefix
+                            .as_ref()
+                            .map(|k| k.to_string())
+                            .unwrap_or_default(),
                         denom,
                     );
 
@@ -185,6 +204,7 @@ fn validate_tx(
                 let (_transp_asset, transp_amt) = convert_amount(
                     ctx.get_block_epoch().unwrap(),
                     &transfer.token,
+                    &transfer.sub_prefix,
                     transfer.amount.amount,
                     denom,
                 );
@@ -227,6 +247,7 @@ fn validate_tx(
 
             // Satisfies 1.
             if !shielded_tx.vout.is_empty() {
+                log_string(format!("transparent vout {:?}", shielded_tx.vout));
                 debug_log!(
                     "Transparent output to a transaction from the masp must \
                      be 0 but is {}",
@@ -245,6 +266,11 @@ fn validate_tx(
                 );
                 // Section 3.4: The remaining value in the transparent
                 // transaction value pool MUST be nonnegative.
+                log_string(format!(
+                    "would give the masp a negative balance; transparent tx \
+                     {:?}",
+                    transparent_tx_pool
+                ));
                 return reject();
             }
             _ => {}
@@ -252,5 +278,6 @@ fn validate_tx(
     }
 
     // Do the expensive proof verification in the VM at the end.
+    log_string("reached proof verification");
     ctx.verify_masp(data)
 }

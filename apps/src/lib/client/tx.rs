@@ -524,6 +524,14 @@ pub struct MaspChange {
 )]
 pub struct MaspAmount(HashMap<(Epoch, TokenAddress), token::Change>);
 
+impl MaspAmount {
+    pub fn pop(&mut self) -> Option<((Epoch, TokenAddress), token::Change)>{
+        let key = self.keys().next()?.clone();
+        let value = self.remove(&key).unwrap();
+        Some((key, value))
+    }
+}
+
 impl std::ops::Deref for MaspAmount {
     type Target = HashMap<(Epoch, TokenAddress), token::Change>;
 
@@ -1189,9 +1197,8 @@ impl ShieldedContext {
         // Where we will store our exchanged value
         let mut output = Amount::zero();
         // Repeatedly exchange assets until it is no longer possible
-        while let Some(((asset_epoch, token_addr), value)) =
-            input.iter().next().map(cloned_pair)
-        {
+        loop {
+            let Some(((asset_epoch, token_addr), value)) = input.pop() else { break };
             for denom in MaspDenom::iter() {
                 let target_asset_type = make_asset_type(
                     Some(target_epoch),
@@ -1467,7 +1474,7 @@ impl ShieldedContext {
         client: HttpClient,
         amt: Amount,
         target_epoch: Epoch,
-    ) -> HashMap<TokenAddress, token::Amount> {
+    ) -> HashMap<TokenAddress, token::Change> {
         let mut res = HashMap::new();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
@@ -1524,7 +1531,7 @@ impl ShieldedContext {
                 )
             }
         }
-        MaspAmount(res.into_iter().map(|(k, v)| (k, v.change())).collect())
+        MaspAmount(res)
     }
 }
 
@@ -3413,20 +3420,17 @@ pub async fn submit_tx(
 fn decode_component<K, F>(
     (addr, sub, denom, epoch): (Address, Option<Key>, MaspDenom, Epoch),
     val: i64,
-    res: &mut HashMap<K, token::Amount>,
+    res: &mut HashMap<K, token::Change>,
     mk_key: F,
 ) where
     F: FnOnce(Address, Option<Key>, Epoch) -> K,
     K: Eq + std::hash::Hash,
 {
-    let decoded_amount = token::Amount::from_uint(
-        u64::try_from(val).expect("negative cash does not exist"),
-        denom as u8,
-    )
-    .unwrap();
+    let decoded_change = token::Change::from_masp_denominated(val, denom)
+        .expect("expected this to fit");
     res.entry(mk_key(addr, sub, epoch))
-        .and_modify(|val| *val += decoded_amount)
-        .or_insert(decoded_amount);
+        .and_modify(|val| *val += decoded_change)
+        .or_insert(decoded_change);
 }
 
 #[cfg(test)]
