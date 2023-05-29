@@ -30,11 +30,11 @@ impl SleepStrategy {
     async fn sleep_update(&self, backoff: &mut Duration) {
         match self {
             Self::Constant(sleep_duration) => {
-                _ = Delay::new(*sleep_duration).await;
+                sleep(*sleep_duration).await;
             }
             Self::LinearBackoff { delta } => {
                 *backoff += *delta;
-                _ = Delay::new(*backoff).await;
+                sleep(*backoff).await;
             }
         }
     }
@@ -74,25 +74,29 @@ impl SleepStrategy {
         G: FnMut() -> F,
         F: Future<Output = ControlFlow<T>>,
     {
-        timeout_at(deadline, async move { self.run(future_gen).await })
+        internal_timeout_at(deadline, async move { self.run(future_gen).await })
             .await
             .map_err(|_| Error::Elapsed)
     }
 }
 
+/// Pause the active task for the given duration.
+#[inline]
+pub async fn sleep(dur: Duration) {
+    internal_sleep(dur).await;
+}
+
 #[cfg(target_family = "wasm")]
+#[allow(missing_docs)]
 mod internal {
     use std::future::Future;
     pub use std::time::Duration;
 
     pub use wasm_timer::Instant;
-    use wasm_timer::TryFutureExt;
+    use wasm_timer::{Delay, TryFutureExt};
 
-    /// Timeout a future.
-    ///
-    /// If a timeout occurs, return [`Err`].
     #[inline]
-    pub(super) async fn timeout_at<F: Future>(
+    pub(super) async fn internal_timeout_at<F: Future>(
         deadline: Instant,
         future: F,
     ) -> Result<F::Output, ()> {
@@ -102,24 +106,33 @@ mod internal {
         };
         run_future.timeout_at(deadline).await.map_err(|_| ())
     }
+
+    #[inline]
+    pub(super) async fn internal_sleep(dur: Duration) {
+        _ = Delay::new(dur).await;
+    }
 }
 
 #[cfg(not(target_family = "wasm"))]
+#[allow(missing_docs)]
 mod internal {
     use std::future::Future;
 
-    use tokio::time::timeout_at as tokio_timeout_at;
     pub use tokio::time::{Duration, Instant};
 
-    /// Timeout a future.
-    ///
-    /// If a timeout occurs, return [`Err`].
     #[inline]
-    pub(super) async fn timeout_at<F: Future>(
+    pub(super) async fn internal_timeout_at<F: Future>(
         deadline: Instant,
         future: F,
     ) -> Result<F::Output, ()> {
-        tokio_timeout_at(deadline, future).await.map_err(|_| ())
+        tokio::time::timeout_at(deadline, future)
+            .await
+            .map_err(|_| ())
+    }
+
+    #[inline]
+    pub(super) async fn internal_sleep(dur: Duration) {
+        tokio::time::sleep(dur).await;
     }
 }
 
