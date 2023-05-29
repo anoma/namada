@@ -591,7 +591,7 @@ pub async fn submit_validator_commission_change<
 ) -> Result<(), Error> {
     let epoch = rpc::query_epoch(client).await;
 
-    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
+    let tx_code_path = args.tx_code_path.to_str().unwrap();
     let tx_code_hash =
         query_wasm_code_hash(client, tx_code_path).await.unwrap();
 
@@ -693,9 +693,8 @@ pub async fn submit_withdraw<
 
     let source = args.source.clone();
 
-    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
     let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path).await.unwrap();
+        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap()).await.unwrap();
 
     // Check the source's current unbond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
@@ -757,9 +756,8 @@ pub async fn submit_unbond<
     // Check the source's current bond amount
     let bond_source = source.clone().unwrap_or_else(|| args.validator.clone());
 
-    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
     let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path).await.unwrap();
+        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap()).await.unwrap();
 
     if !args.tx.force {
         known_validator_or_err(args.validator.clone(), args.tx.force, client)
@@ -909,9 +907,8 @@ pub async fn submit_bond<
     )
     .await?;
 
-    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
     let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path).await.unwrap();
+        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap()).await.unwrap();
 
     let bond = pos::Bond {
         validator,
@@ -1010,9 +1007,8 @@ pub async fn submit_ibc_transfer<
     )
     .await?;
 
-    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
     let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path).await.unwrap();
+        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap()).await.unwrap();
 
     let denom = match sub_prefix {
         // To parse IbcToken address, remove the address prefix
@@ -1369,9 +1365,8 @@ pub async fn submit_init_account<
     let vp_code_hash =
         query_wasm_code_hash(client, vp_code_path).await.unwrap();
 
-    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
     let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path).await.unwrap();
+        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap()).await.unwrap();
 
     let mut tx = Tx::new(TxType::Raw);
     tx.header.chain_id = args.tx.chain_id.clone().unwrap();
@@ -1461,9 +1456,8 @@ pub async fn submit_update_vp<
     let vp_code_hash =
         query_wasm_code_hash(client, vp_code_path).await.unwrap();
 
-    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
     let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path).await.unwrap();
+        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap()).await.unwrap();
 
     let mut tx = Tx::new(TxType::Raw);
     tx.header.chain_id = args.tx.chain_id.clone().unwrap();

@@ -127,7 +127,7 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     /// Timeout timestamp offset
     pub timeout_sec_offset: Option<u64>,
     /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    pub tx_code_path: PathBuf,
 }
 
 /// Transaction to initialize a new account
@@ -142,7 +142,7 @@ pub struct TxInitAccount<C: NamadaTypes = SdkTypes> {
     /// Path to the VP WASM code file for the new account
     pub vp_code_path: C::Data,
     /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    pub tx_code_path: PathBuf,
     /// Public key for the new account
     pub public_key: C::PublicKey,
 }
@@ -182,7 +182,7 @@ pub struct TxUpdateVp<C: NamadaTypes = SdkTypes> {
     /// Path to the VP WASM code file
     pub vp_code_path: C::Data,
     /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    pub tx_code_path: PathBuf,
     /// Address of the account whose VP is to be updated
     pub addr: C::Address,
 }
@@ -202,7 +202,7 @@ pub struct Bond<C: NamadaTypes = SdkTypes> {
     /// Native token address
     pub native_token: C::NativeAddress,
     /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    pub tx_code_path: PathBuf,
 }
 
 /// Unbond arguments
@@ -218,7 +218,7 @@ pub struct Unbond<C: NamadaTypes = SdkTypes> {
     /// self-bonds, the validator is also the source
     pub source: Option<C::Address>,
     /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    pub tx_code_path: PathBuf,
 }
 
 /// Reveal public key
@@ -257,7 +257,7 @@ pub struct Withdraw<C: NamadaTypes = SdkTypes> {
     /// from self-bonds, the validator is also the source
     pub source: Option<C::Address>,
     /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    pub tx_code_path: PathBuf,
 }
 
 /// Query asset conversions
@@ -329,7 +329,7 @@ pub struct TxCommissionRateChange<C: NamadaTypes = SdkTypes> {
     /// Value to which the tx changes the commission rate
     pub rate: Decimal,
     /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    pub tx_code_path: PathBuf,
 }
 
 /// Query PoS commission rate
