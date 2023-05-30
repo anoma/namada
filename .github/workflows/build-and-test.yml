@@ -473,14 +473,6 @@ jobs:
           workflow_conclusion: success
           name: ${{ matrix.make.tendermint_artifact }}
           path: /usr/local/bin
-      - name: Download masp parameters
-        run: |
-          mkdir -p /home/runner/work/masp-params
-          curl -o /home/runner/work/masp-params/masp-spend.params -LO https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params?raw=true
-          curl -o /home/runner/work/masp-params/masp-output.params -LO https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
-          curl -o /home/runner/work/masp-params/masp-convert.params -LO https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
-          ls -l /home/runner/work/masp-params
-          shasum /home/runner/work/masp-params/*.params
       - name: Build 
         run: make build
         env:
@@ -515,7 +507,14 @@ jobs:
           chmod +x target/release/namadac
           chmod +x /usr/local/bin/tendermint
       - name: Run e2e test
-        run: python3 .github/workflows/scripts/schedule-e2e.py
+        run: |
+          mkdir -p /home/runner/work/masp-params
+          curl -o /home/runner/work/masp-params/masp-spend.params -LO https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params?raw=true
+          curl -o /home/runner/work/masp-params/masp-output.params -LO https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
+          curl -o /home/runner/work/masp-params/masp-convert.params -LO https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
+          ls -l /home/runner/work/masp-params
+          shasum /home/runner/work/masp-params/*.params
+          python3 .github/workflows/scripts/schedule-e2e.py
         env:
           NAMADA_TENDERMINT_WEBSOCKET_TIMEOUT: 20
           NAMADA_E2E_USE_PREBUILT_BINARIES: "true"
