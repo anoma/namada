@@ -6,7 +6,7 @@ pub mod utils;
 
 use std::fs::{create_dir_all, File};
 use std::io::Write;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
 use std::path::{Path, PathBuf};
 
 use directories::ProjectDirs;
@@ -342,7 +342,10 @@ pub fn get_default_namada_folder() -> PathBuf {
 }
 
 mod tests {
-    use super::*;
+
+    #![allow(unused_imports)]
+    use crate::facade::tendermint_config::TendermintConfig;
+    use super::DEFAULT_COMETBFT_CONFIG;
 
     #[test]
     fn test_default_cometbft_config() {

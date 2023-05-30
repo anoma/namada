@@ -51,10 +51,10 @@ fn num_of_threads_aux(
 pub fn convert_tm_addr_to_socket_addr(tm_addr: &TendermintAddress) -> SocketAddr {
     let tm_addr = tm_addr.clone();
     match tm_addr {
-        TendermintAddress::Tcp { peer_id, host, port } => {
-            return (host, port).to_socket_addrs().unwrap().next().unwrap();
+        TendermintAddress::Tcp { peer_id: _, host, port } => {
+            (host, port).to_socket_addrs().unwrap().next().unwrap()
         },
-        TendermintAddress::Unix { path } => {
+        TendermintAddress::Unix { path: _ } => {
             panic!("Unix addresses aren't currently supported.")
         }
     }

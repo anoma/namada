@@ -1,5 +1,5 @@
 use std::env;
-use std::net::SocketAddr;
+
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::str::FromStr;
@@ -22,9 +22,9 @@ use tokio::process::Command;
 use crate::cli::namada_version;
 use crate::config;
 use crate::facade::tendermint::{block, Genesis};
-use crate::facade::tendermint_config::net::Address as TendermintAddress;
+
 use crate::facade::tendermint_config::{
-    Error as TendermintError, TendermintConfig, TxIndexConfig, TxIndexer,
+    Error as TendermintError, TendermintConfig,
 };
 
 /// Env. var to output Tendermint log to stdout
