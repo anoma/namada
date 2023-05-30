@@ -1016,9 +1016,6 @@ where
     }
 
     /// Check that the Wrapper's signer has enough funds to pay fees.
-    ///
-    /// For security reasons, the `chain_id` and `expiration` fields should come
-    /// from the serialized wrapper, not from the Shell. //FIXME: remove this and check it remove from other places
     #[allow(clippy::too_many_arguments)]
     pub fn wrapper_fee_check<CA>(
         &self,
@@ -1092,10 +1089,8 @@ where
                 .expect("Missing fee unshielding gas limit in storage");
 
             // Runtime check
-            tracing::error!("WAL content: {:?}", temp_wl_storage.write_log); //FIXME: remove
             match apply_tx(
                 TxType::Decrypted(DecryptedTx::Decrypted {
-                    //FIXME: I can already build this correctly?
                     tx: unshield,
                     #[cfg(not(feature = "mainnet"))]
                     has_valid_pow: false,
