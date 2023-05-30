@@ -498,7 +498,7 @@ jobs:
           NAMADA_E2E_KEEP_TEMP: "true"
           NAMADA_TM_STDOUT: "false"
           NAMADA_LOG_COLOR: "false"
-          NAMADA_MASP_PARAMS_DIR: "/home/runner/work/masp"
+          # NAMADA_MASP_PARAMS_DIR: "/home/runner/work/masp"
           NAMADA_LOG: "info"
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
           INDEX: ${{ matrix.make.index }}
