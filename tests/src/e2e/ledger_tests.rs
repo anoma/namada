@@ -27,9 +27,11 @@ use namada_apps::client::tx::CLIShieldedUtils;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
+use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_test_utils::TestWasms;
 use serde_json::json;
 use setup::constants::*;
+use tendermint_config::net::Address as TendermintAddress;
 
 use super::helpers::{
     get_height, is_debug_mode, wait_for_block_height, wait_for_wasm_pre_compile,
@@ -3959,9 +3961,14 @@ fn test_genesis_validators() -> Result<()> {
     // `join-network` use the defaults
     let update_config = |ix: u8, mut config: Config| {
         let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
-        config.ledger.cometbft.p2p_address.set_port(first_port);
-        config.ledger.cometbft.rpc_address.set_port(first_port + 1);
-        config.ledger.shell.ledger_address.set_port(first_port + 2);
+        let p2p_addr = convert_tm_addr_to_socket_addr(&config.ledger.tendermint.p2p.laddr).ip().to_string();
+        println!("ERROR: {}", p2p_addr);
+        println!("ERROR: {}", first_port);
+        config.ledger.cometbft.p2p.laddr = TendermintAddress::from_str(&format!("{}:{}", p2p_addr, first_port)).unwrap();
+        let rpc_addr = convert_tm_addr_to_socket_addr(&config.ledger.tendermint.rpc.laddr).ip().to_string();
+        config.ledger.cometbft.rpc.laddr = TendermintAddress::from_str(&format!("{}:{}", rpc_addr, first_port+1)).unwrap();
+        let proxy_app_addr = convert_tm_addr_to_socket_addr(&config.ledger.tendermint.proxy_app).ip().to_string();
+        config.ledger.cometbft.proxy_app = TendermintAddress::from_str(&format!("{}:{}", proxy_app_addr, first_port+2)).unwrap();
         config
     };
 
@@ -4144,9 +4151,14 @@ fn double_signing_gets_slashed() -> Result<()> {
 
     let update_config = |ix: u8, mut config: Config| {
         let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
-        config.ledger.cometbft.p2p_address.set_port(first_port);
-        config.ledger.cometbft.rpc_address.set_port(first_port + 1);
-        config.ledger.shell.ledger_address.set_port(first_port + 2);
+        let p2p_addr = convert_tm_addr_to_socket_addr(&config.ledger.tendermint.p2p.laddr).ip().to_string();
+        println!("ERROR: {}", p2p_addr);
+        println!("ERROR: {}", first_port);
+        config.ledger.cometbft.p2p.laddr = TendermintAddress::from_str(&format!("{}:{}", p2p_addr, first_port)).unwrap();
+        let rpc_addr = convert_tm_addr_to_socket_addr(&config.ledger.tendermint.rpc.laddr).ip().to_string();
+        config.ledger.cometbft.rpc.laddr = TendermintAddress::from_str(&format!("{}:{}", rpc_addr, first_port+1)).unwrap();
+        let proxy_app_addr = convert_tm_addr_to_socket_addr(&config.ledger.tendermint.proxy_app).ip().to_string();
+        config.ledger.cometbft.proxy_app = TendermintAddress::from_str(&format!("{}:{}", proxy_app_addr, first_port+2)).unwrap();
         config
     };
 

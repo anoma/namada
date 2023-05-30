@@ -1,4 +1,5 @@
 use std::env;
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::str::FromStr;
@@ -75,15 +76,15 @@ pub async fn run(
     home_dir: PathBuf,
     chain_id: ChainId,
     genesis_time: DateTimeUtc,
-    ledger_address: String,
-    config: config::Tendermint,
+    proxy_app_address: String,
+    config: config::Ledger,
     abort_recv: tokio::sync::oneshot::Receiver<
         tokio::sync::oneshot::Sender<()>,
     >,
 ) -> Result<()> {
     let home_dir_string = home_dir.to_string_lossy().to_string();
     let tendermint_path = from_env_or_default()?;
-    let mode = config.tendermint_mode.to_str().to_owned();
+    let mode = config.shell.tendermint_mode.to_str().to_owned();
 
     #[cfg(feature = "dev")]
     // This has to be checked before we run tendermint init
@@ -115,13 +116,13 @@ pub async fn run(
     #[cfg(not(feature = "abcipp"))]
     write_tm_genesis(&home_dir, chain_id, genesis_time).await;
 
-    update_tendermint_config(&home_dir, config).await?;
+    update_tendermint_config(&home_dir, config.cometbft).await?;
 
     let mut tendermint_node = Command::new(&tendermint_path);
     tendermint_node.args([
         "start",
         "--proxy_app",
-        &ledger_address,
+        &proxy_app_address,
         "--home",
         &home_dir_string,
     ]);
@@ -348,23 +349,24 @@ pub fn write_validator_state(home_dir: impl AsRef<Path>) {
 
 async fn update_tendermint_config(
     home_dir: impl AsRef<Path>,
-    tendermint_config: config::Tendermint,
+    config: TendermintConfig,
 ) -> Result<()> {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("config.toml");
-    let mut config =
-        TendermintConfig::load_toml_file(&path).map_err(Error::LoadConfig)?;
+    let mut config = config.clone();
+    // let mut config =
+    //     TendermintConfig::load_toml_file(&path).map_err(Error::LoadConfig)?;
 
     config.moniker =
         Moniker::from_str(&format!("{}-{}", config.moniker, namada_version()))
             .expect("Invalid moniker");
 
-    config.p2p.laddr =
-        TendermintAddress::from_str(&tendermint_config.p2p_address.to_string())
-            .unwrap();
-    config.p2p.persistent_peers = tendermint_config.p2p_persistent_peers;
-    config.p2p.pex = tendermint_config.p2p_pex;
-    config.p2p.allow_duplicate_ip = tendermint_config.p2p_allow_duplicate_ip;
+    // config.p2p.laddr =
+    //     TendermintAddress::from_str(&tendermint_config.p2p_address.to_string())
+    //         .unwrap();
+    // config.p2p.persistent_peers = tendermint_config.p2p_persistent_peers;
+    // config.p2p.pex = tendermint_config.p2p_pex;
+    // config.p2p.allow_duplicate_ip = tendermint_config.p2p_allow_duplicate_ip;
 
     // In "dev", only produce blocks when there are txs or when the AppHash
     // changes
@@ -375,47 +377,47 @@ async fn update_tendermint_config(
     // again in the future.
     config.mempool.keep_invalid_txs_in_cache = false;
 
-    config.rpc.laddr =
-        TendermintAddress::from_str(&tendermint_config.rpc_address.to_string())
-            .unwrap();
+    // config.rpc.laddr =
+    //     TendermintAddress::from_str(&tendermint_config.rpc_address.to_string())
+    //         .unwrap();
     // Bumped from the default `1_000_000`, because some WASMs can be
     // quite large
     config.rpc.max_body_bytes = 2_000_000;
 
-    config.instrumentation.prometheus =
-        tendermint_config.instrumentation_prometheus;
-    config.instrumentation.prometheus_listen_addr = tendermint_config
-        .instrumentation_prometheus_listen_addr
-        .to_string();
-    config.instrumentation.namespace =
-        tendermint_config.instrumentation_namespace;
+    // config.instrumentation.prometheus =
+    //     tendermint_config.instrumentation_prometheus;
+    // config.instrumentation.prometheus_listen_addr = tendermint_config
+    //     .instrumentation_prometheus_listen_addr
+    //     .to_string();
+    // config.instrumentation.namespace =
+    //     tendermint_config.instrumentation_namespace;
 
-    #[cfg(feature = "abciplus")]
-    {
-        config.consensus.timeout_propose =
-            tendermint_config.consensus_timeout_propose;
-        config.consensus.timeout_propose_delta =
-            tendermint_config.consensus_timeout_propose_delta;
-        config.consensus.timeout_prevote =
-            tendermint_config.consensus_timeout_prevote;
-        config.consensus.timeout_prevote_delta =
-            tendermint_config.consensus_timeout_prevote_delta;
-        config.consensus.timeout_precommit =
-            tendermint_config.consensus_timeout_precommit;
-        config.consensus.timeout_precommit_delta =
-            tendermint_config.consensus_timeout_precommit_delta;
-        config.consensus.timeout_commit =
-            tendermint_config.consensus_timeout_commit;
-    }
+    // #[cfg(feature = "abciplus")]
+    // {
+    //     config.consensus.timeout_propose =
+    //         tendermint_config.consensus_timeout_propose;
+    //     config.consensus.timeout_propose_delta =
+    //         tendermint_config.consensus_timeout_propose_delta;
+    //     config.consensus.timeout_prevote =
+    //         tendermint_config.consensus_timeout_prevote;
+    //     config.consensus.timeout_prevote_delta =
+    //         tendermint_config.consensus_timeout_prevote_delta;
+    //     config.consensus.timeout_precommit =
+    //         tendermint_config.consensus_timeout_precommit;
+    //     config.consensus.timeout_precommit_delta =
+    //         tendermint_config.consensus_timeout_precommit_delta;
+    //     config.consensus.timeout_commit =
+    //         tendermint_config.consensus_timeout_commit;
+    // }
 
-    let indexer = if tendermint_config.tx_index {
-        TxIndexer::Kv
-    } else {
-        TxIndexer::Null
-    };
-    #[cfg(feature = "abcipp")]
-    let indexer = [indexer];
-    config.tx_index = TxIndexConfig { indexer };
+    // let indexer = if tendermint_config.tx_index {
+    //     TxIndexer::Kv
+    // } else {
+    //     TxIndexer::Null
+    // };
+    // #[cfg(feature = "abcipp")]
+    // let indexer = [indexer];
+    // config.tx_index = TxIndexConfig { indexer };
 
     let mut file = OpenOptions::new()
         .write(true)
