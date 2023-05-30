@@ -1935,7 +1935,11 @@ where
         let slashes_for_this_unbond = find_slashes_in_range(
             storage,
             start_epoch,
-            Some(withdraw_epoch - params.slash_processing_epoch_offset()),
+            Some(
+                withdraw_epoch
+                    - params.unbonding_len
+                    - params.cubic_slashing_window_length,
+            ),
             validator,
         )?;
 
@@ -3282,7 +3286,8 @@ where
                     Some(
                         infraction_epoch
                             .checked_sub(Epoch(
-                                params.slash_processing_epoch_offset(),
+                                params.unbonding_len
+                                    + params.cubic_slashing_window_length,
                             ))
                             .unwrap_or_default(),
                     ),
@@ -3331,7 +3336,8 @@ where
                     Some(
                         infraction_epoch
                             .checked_sub(Epoch(
-                                params.slash_processing_epoch_offset(),
+                                params.unbonding_len
+                                    + params.cubic_slashing_window_length,
                             ))
                             .unwrap_or_default(),
                     ),
@@ -3585,8 +3591,8 @@ where
     Ok(bond_iter.sum::<token::Amount>())
 }
 
-/// Find slashes applicable to a validator with inclusive `start` and `end`
-/// epoch.
+/// Find slashes applicable to a validator with inclusive `start` and exclusive
+/// `end` epoch.
 fn find_slashes_in_range<S>(
     storage: &S,
     start: Epoch,
@@ -3600,7 +3606,7 @@ where
     for slash in validator_slashes_handle(validator).iter(storage)? {
         let slash = slash?;
         if start <= slash.epoch
-            && end.map(|end| slash.epoch <= end).unwrap_or(true)
+            && end.map(|end| slash.epoch < end).unwrap_or(true)
         {
             // println!(
             //     "Slash (epoch, rate) = ({}, {})",
