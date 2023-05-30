@@ -93,6 +93,7 @@ where
     let mut tx = process_tx(tx.clone()).into_storage_result()?;
 
     let mut write_log = WriteLog::default();
+    let mut cumulated_gas = 0;
 
     // Wrapper dry run to allow estimating the gas cost of a transaction
     let mut tx_gas_meter = match tx {
@@ -116,6 +117,7 @@ where
             .into_storage_result()?;
 
             write_log.commit_tx();
+            cumulated_gas = tx_gas_meter.get_current_transaction_gas();
 
             // NOTE: the encryption key for a dry-run should always be an hardcoded, dummy one
             let privkey =
@@ -136,7 +138,15 @@ where
                     .unwrap_or_default(),
             )
         }
-        TxType::Protocol(_) | TxType::Decrypted(_) => TxGasMeter::new(u64::MAX),
+        TxType::Protocol(_) | TxType::Decrypted(_) => {
+            // If dry run only the inner tx, use the max block gas as the gas limit
+            TxGasMeter::new(
+                ctx.wl_storage
+                    .read(&parameters::storage::get_max_block_gas_key())
+                    .expect("Error while reading storage")
+                    .expect("Missing parameter in storage"),
+            )
+        }
         TxType::Raw(raw) => {
             // Cast tx to a decrypted for execution
             tx = TxType::Decrypted(DecryptedTx::Decrypted {
@@ -146,7 +156,13 @@ where
                 has_valid_pow: true,
             });
 
-            TxGasMeter::new(u64::MAX)
+            // If dry run only the inner tx, use the max block gas as the gas limit
+            TxGasMeter::new(
+                ctx.wl_storage
+                    .read(&parameters::storage::get_max_block_gas_key())
+                    .expect("Error while reading storage")
+                    .expect("Missing parameter in storage"),
+            )
         }
     };
 
@@ -165,6 +181,9 @@ where
         false,
     )
     .into_storage_result()?;
+    cumulated_gas += tx_gas_meter.get_current_transaction_gas();
+    // Account gas for both inner and wrapper (if available)
+    data.gas_used = cumulated_gas;
     // NOTE: the keys changed by the wrapper transaction (if any) are not returned from this function
     let data = data.try_to_vec().into_storage_result()?;
     Ok(EncodedResponseQuery {

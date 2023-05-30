@@ -809,6 +809,7 @@ where
             .expect("Error while reading from storage")
             .expect("Missing gas table in storage");
         let mut write_log = WriteLog::default();
+        let mut cumulated_gas = 0;
         let mut vp_wasm_cache = self.vp_wasm_cache.read_only();
         let mut tx_wasm_cache = self.tx_wasm_cache.read_only();
         let raw_tx = match Tx::try_from(tx_bytes) {
@@ -829,34 +830,36 @@ where
         };
 
         // Wrapper dry run to allow estimating the gas cost of a transaction
-        let mut tx_gas_meter = if let TxType::Wrapper(wrapper) = &tx {
-            let mut tx_gas_meter =
-                TxGasMeter::new(wrapper.gas_limit.to_owned().into());
-            if let Err(e) = protocol::apply_tx(
-                tx.clone(),
-                tx_bytes,
-                TxIndex::default(),
-                &mut tx_gas_meter,
-                &gas_table,
-                &mut write_log,
-                &self.wl_storage.storage,
-                &mut self.vp_wasm_cache.clone(),
-                &mut self.tx_wasm_cache.clone(),
-                None,
-                #[cfg(not(feature = "mainnet"))]
-                false,
-            ) {
-                response.code = 1;
-                response.log = format!("{}", e);
-                return response;
-            };
+        let mut tx_gas_meter = match tx {
+            TxType::Wrapper(ref wrapper) => {
+                let mut tx_gas_meter =
+                    TxGasMeter::new(wrapper.gas_limit.to_owned().into());
+                if let Err(e) = protocol::apply_tx(
+                    tx.clone(),
+                    tx_bytes,
+                    TxIndex::default(),
+                    &mut tx_gas_meter,
+                    &gas_table,
+                    &mut write_log,
+                    &self.wl_storage.storage,
+                    &mut self.vp_wasm_cache.clone(),
+                    &mut self.tx_wasm_cache.clone(),
+                    None,
+                    #[cfg(not(feature = "mainnet"))]
+                    false,
+                ) {
+                    response.code = 1;
+                    response.log = format!("{}", e);
+                    return response;
+                };
 
-            write_log.commit_tx();
+                write_log.commit_tx();
+                cumulated_gas = tx_gas_meter.get_current_transaction_gas();
 
-            // NOTE: the encryption key for a dry-run should always be an hardcoded, dummy one
-            let privkey =
+                // NOTE: the encryption key for a dry-run should always be an hardcoded, dummy one
+                let privkey =
             <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-            tx = TxType::Decrypted(DecryptedTx::Decrypted {
+                tx = TxType::Decrypted(DecryptedTx::Decrypted {
             tx: wrapper
                 .decrypt(privkey)
                 .expect("Could not decrypt the inner tx"),
@@ -865,20 +868,39 @@ where
                     // that we got a valid PoW
                     has_valid_pow: true,
         });
-            TxGasMeter::new(
-                tx_gas_meter
-                    .tx_gas_limit
-                    .checked_sub(tx_gas_meter.get_current_transaction_gas())
-                    .unwrap_or_default(),
-            )
-        } else {
-            // If dry run only the inner tx, use the max block gas as the gas limit
-            TxGasMeter::new(
-                self.wl_storage
-                    .read(&parameters::storage::get_max_block_gas_key())
-                    .expect("Error while reading storage key")
-                    .expect("Missing parameter in storage"),
-            )
+                TxGasMeter::new(
+                    tx_gas_meter
+                        .tx_gas_limit
+                        .checked_sub(tx_gas_meter.get_current_transaction_gas())
+                        .unwrap_or_default(),
+                )
+            }
+            TxType::Protocol(_) | TxType::Decrypted(_) => {
+                // If dry run only the inner tx, use the max block gas as the gas limit
+                TxGasMeter::new(
+                    self.wl_storage
+                        .read(&parameters::storage::get_max_block_gas_key())
+                        .expect("Error while reading storage key")
+                        .expect("Missing parameter in storage"),
+                )
+            }
+            TxType::Raw(raw) => {
+                // Cast tx to a decrypted for execution
+                tx = TxType::Decrypted(DecryptedTx::Decrypted {
+                    tx: raw,
+
+                    #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow: true,
+                });
+
+                // If dry run only the inner tx, use the max block gas as the gas limit
+                TxGasMeter::new(
+                    self.wl_storage
+                        .read(&parameters::storage::get_max_block_gas_key())
+                        .expect("Error while reading storage key")
+                        .expect("Missing parameter in storage"),
+                )
+            }
         };
 
         match protocol::apply_tx(
@@ -897,7 +919,12 @@ where
         )
         .map_err(Error::TxApply)
         {
-            Ok(result) => response.info = result.to_string(),
+            Ok(mut result) => {
+                cumulated_gas += tx_gas_meter.get_current_transaction_gas();
+                // Account gas for both inner and wrapper (if available)
+                result.gas_used = cumulated_gas;
+                response.info = format!("{}", result.to_string(),);
+            }
             Err(error) => {
                 response.code = 1;
                 response.log = format!("{}", error);
@@ -991,7 +1018,7 @@ where
     /// Check that the Wrapper's signer has enough funds to pay fees.
     ///
     /// For security reasons, the `chain_id` and `expiration` fields should come
-    /// from the serialized wrapper, not from the Shell.
+    /// from the serialized wrapper, not from the Shell. //FIXME: remove this and check it remove from other places
     #[allow(clippy::too_many_arguments)]
     pub fn wrapper_fee_check<CA>(
         &self,
@@ -1065,8 +1092,10 @@ where
                 .expect("Missing fee unshielding gas limit in storage");
 
             // Runtime check
+            tracing::error!("WAL content: {:?}", temp_wl_storage.write_log); //FIXME: remove
             match apply_tx(
                 TxType::Decrypted(DecryptedTx::Decrypted {
+                    //FIXME: I can already build this correctly?
                     tx: unshield,
                     #[cfg(not(feature = "mainnet"))]
                     has_valid_pow: false,
