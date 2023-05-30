@@ -3961,14 +3961,32 @@ fn test_genesis_validators() -> Result<()> {
     // `join-network` use the defaults
     let update_config = |ix: u8, mut config: Config| {
         let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
-        let p2p_addr = convert_tm_addr_to_socket_addr(&config.ledger.tendermint.p2p.laddr).ip().to_string();
+        let p2p_addr =
+            convert_tm_addr_to_socket_addr(&config.ledger.tendermint.p2p.laddr)
+                .ip()
+                .to_string();
         println!("ERROR: {}", p2p_addr);
         println!("ERROR: {}", first_port);
-        config.ledger.tendermint.p2p.laddr = TendermintAddress::from_str(&format!("{}:{}", p2p_addr, first_port)).unwrap();
-        let rpc_addr = convert_tm_addr_to_socket_addr(&config.ledger.tendermint.rpc.laddr).ip().to_string();
-        config.ledger.tendermint.rpc.laddr = TendermintAddress::from_str(&format!("{}:{}", rpc_addr, first_port+1)).unwrap();
-        let proxy_app_addr = convert_tm_addr_to_socket_addr(&config.ledger.tendermint.proxy_app).ip().to_string();
-        config.ledger.tendermint.proxy_app = TendermintAddress::from_str(&format!("{}:{}", proxy_app_addr, first_port+2)).unwrap();
+        config.ledger.tendermint.p2p.laddr = TendermintAddress::from_str(
+            &format!("{}:{}", p2p_addr, first_port),
+        )
+        .unwrap();
+        let rpc_addr =
+            convert_tm_addr_to_socket_addr(&config.ledger.tendermint.rpc.laddr)
+                .ip()
+                .to_string();
+        config.ledger.tendermint.rpc.laddr = TendermintAddress::from_str(
+            &format!("{}:{}", rpc_addr, first_port + 1),
+        )
+        .unwrap();
+        let proxy_app_addr =
+            convert_tm_addr_to_socket_addr(&config.ledger.tendermint.proxy_app)
+                .ip()
+                .to_string();
+        config.ledger.tendermint.proxy_app = TendermintAddress::from_str(
+            &format!("{}:{}", proxy_app_addr, first_port + 2),
+        )
+        .unwrap();
         config
     };
 
@@ -4151,14 +4169,32 @@ fn double_signing_gets_slashed() -> Result<()> {
 
     let update_config = |ix: u8, mut config: Config| {
         let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
-        let p2p_addr = convert_tm_addr_to_socket_addr(&config.ledger.tendermint.p2p.laddr).ip().to_string();
+        let p2p_addr =
+            convert_tm_addr_to_socket_addr(&config.ledger.tendermint.p2p.laddr)
+                .ip()
+                .to_string();
         println!("ERROR: {}", p2p_addr);
         println!("ERROR: {}", first_port);
-        config.ledger.tendermint.p2p.laddr = TendermintAddress::from_str(&format!("{}:{}", p2p_addr, first_port)).unwrap();
-        let rpc_addr = convert_tm_addr_to_socket_addr(&config.ledger.tendermint.rpc.laddr).ip().to_string();
-        config.ledger.tendermint.rpc.laddr = TendermintAddress::from_str(&format!("{}:{}", rpc_addr, first_port+1)).unwrap();
-        let proxy_app_addr = convert_tm_addr_to_socket_addr(&config.ledger.tendermint.proxy_app).ip().to_string();
-        config.ledger.tendermint.proxy_app = TendermintAddress::from_str(&format!("{}:{}", proxy_app_addr, first_port+2)).unwrap();
+        config.ledger.tendermint.p2p.laddr = TendermintAddress::from_str(
+            &format!("{}:{}", p2p_addr, first_port),
+        )
+        .unwrap();
+        let rpc_addr =
+            convert_tm_addr_to_socket_addr(&config.ledger.tendermint.rpc.laddr)
+                .ip()
+                .to_string();
+        config.ledger.tendermint.rpc.laddr = TendermintAddress::from_str(
+            &format!("{}:{}", rpc_addr, first_port + 1),
+        )
+        .unwrap();
+        let proxy_app_addr =
+            convert_tm_addr_to_socket_addr(&config.ledger.tendermint.proxy_app)
+                .ip()
+                .to_string();
+        config.ledger.tendermint.proxy_app = TendermintAddress::from_str(
+            &format!("{}:{}", proxy_app_addr, first_port + 2),
+        )
+        .unwrap();
         config
     };
 

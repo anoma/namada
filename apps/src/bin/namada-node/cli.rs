@@ -7,7 +7,8 @@ use namada_apps::node::ledger;
 
 pub fn main() -> Result<()> {
     let (cmd, mut ctx) = cli::namada_node_cli()?;
-    // fixme: not sure why this is set here, since it's settable in the config file
+    // fixme: not sure why this is set here, since it's settable in the config
+    // file
     if let Some(mode) = ctx.global_args.mode.clone() {
         ctx.config.ledger.shell.tendermint_mode = mode;
     }
@@ -16,8 +17,9 @@ pub fn main() -> Result<()> {
             cmds::Ledger::Run(cmds::LedgerRun(args)) => {
                 let wasm_dir = ctx.wasm_dir();
                 sleep_until(args.start_time);
-                // fixme: not sure why this is set here, since it's settable in the config file
-                // ctx.config.ledger.tendermint.tx_index = args.tx_index;
+                // fixme: not sure why this is set here, since it's settable in
+                // the config file ctx.config.ledger.tendermint.
+                // tx_index = args.tx_index;
                 ledger::run(ctx.config.ledger, wasm_dir);
             }
             cmds::Ledger::RunUntil(cmds::LedgerRunUntil(args)) => {

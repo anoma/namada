@@ -23,7 +23,7 @@ use tower::ServiceBuilder;
 use self::abortable::AbortableSpawner;
 use self::shims::abcipp_shim::AbciService;
 use crate::cli::args;
-use crate::config::utils::{num_of_threads, convert_tm_addr_to_socket_addr};
+use crate::config::utils::{convert_tm_addr_to_socket_addr, num_of_threads};
 use crate::config::TendermintMode;
 use crate::facade::tendermint_proto::abci::CheckTxType;
 use crate::facade::tower_abci::{response, split, Server};
@@ -408,7 +408,8 @@ fn start_abci_broadcaster_shell(
     task::JoinHandle<()>,
     thread::JoinHandle<()>,
 ) {
-    let rpc_address = convert_tm_addr_to_socket_addr(&config.tendermint.rpc.laddr);
+    let rpc_address =
+        convert_tm_addr_to_socket_addr(&config.tendermint.rpc.laddr);
     let RunAuxSetup {
         vp_wasm_compilation_cache,
         tx_wasm_compilation_cache,
@@ -421,30 +422,28 @@ fn start_abci_broadcaster_shell(
         tokio::sync::mpsc::unbounded_channel();
 
     // Start broadcaster
-    let broadcaster = if matches!(
-        config.shell.tendermint_mode,
-        TendermintMode::Validator
-    ) {
-        let (bc_abort_send, bc_abort_recv) =
-            tokio::sync::oneshot::channel::<()>();
+    let broadcaster =
+        if matches!(config.shell.tendermint_mode, TendermintMode::Validator) {
+            let (bc_abort_send, bc_abort_recv) =
+                tokio::sync::oneshot::channel::<()>();
 
-        spawner
-            .spawn_abortable("Broadcaster", move |aborter| async move {
-                // Construct a service for broadcasting protocol txs from the
-                // ledger
-                let mut broadcaster =
-                    Broadcaster::new(rpc_address, broadcaster_receiver);
-                broadcaster.run(bc_abort_recv).await;
-                tracing::info!("Broadcaster is no longer running.");
+            spawner
+                .spawn_abortable("Broadcaster", move |aborter| async move {
+                    // Construct a service for broadcasting protocol txs from
+                    // the ledger
+                    let mut broadcaster =
+                        Broadcaster::new(rpc_address, broadcaster_receiver);
+                    broadcaster.run(bc_abort_recv).await;
+                    tracing::info!("Broadcaster is no longer running.");
 
-                drop(aborter);
-            })
-            .with_cleanup(async move {
-                let _ = bc_abort_send.send(());
-            })
-    } else {
-        spawn_dummy_task(())
-    };
+                    drop(aborter);
+                })
+                .with_cleanup(async move {
+                    let _ = bc_abort_send.send(());
+                })
+        } else {
+            spawn_dummy_task(())
+        };
 
     // Setup DB cache, it must outlive the DB instance that's in the shell
     let db_cache =
@@ -452,7 +451,8 @@ fn start_abci_broadcaster_shell(
 
     // Construct our ABCI application.
     let tendermint_mode = config.shell.tendermint_mode.clone();
-    let proxy_app_address = convert_tm_addr_to_socket_addr(&config.tendermint.proxy_app);
+    let proxy_app_address =
+        convert_tm_addr_to_socket_addr(&config.tendermint.proxy_app);
     #[cfg(not(feature = "dev"))]
     let genesis = genesis::genesis(&config.shell.base_dir, &config.chain_id);
     #[cfg(feature = "dev")]
