@@ -71,7 +71,7 @@ use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::{
     query_conversion, query_epoch, query_storage_value, query_wasm_code_hash,
 };
-use crate::client::signing::{find_keypair, sign_tx, TxSigningKey};
+use crate::client::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
 use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -122,6 +122,7 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
         &args.tx,
         tx,
         TxSigningKey::None,
+        None,
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -191,6 +192,7 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
         &args.tx,
         tx,
         TxSigningKey::WalletAddress(args.addr),
+        None,
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -230,6 +232,7 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
         &args.tx,
         tx,
         TxSigningKey::WalletAddress(args.source),
+        None,
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -369,6 +372,7 @@ pub async fn submit_init_validator(
         &tx_args,
         tx,
         TxSigningKey::WalletAddress(source),
+        None,
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -1509,7 +1513,7 @@ pub async fn build_transfer(
     ctx: &mut Context,
     args: &args::TxTransfer,
     client: &HttpClient,
-) -> Transfer {
+) -> (Transfer, Option<token::Amount>) {
     let source = ctx.get_cached(&args.source).effective_address();
     let target = ctx.get(&args.target).effective_address();
     // Check that the source address exists on chain
@@ -1552,31 +1556,37 @@ pub async fn build_transfer(
         }
         None => (None, token::balance_key(&token, &source)),
     };
-    match rpc::query_storage_value::<token::Amount>(client, &balance_key).await
-    {
-        Some(balance) => {
-            if balance < args.amount {
-                eprintln!(
+    let updated_balance =
+        match rpc::query_storage_value::<token::Amount>(client, &balance_key)
+            .await
+        {
+            Some(balance) => {
+                if balance < args.amount {
+                    eprintln!(
                     "The balance of the source {} of token {} is lower than \
                      the amount to be transferred. Amount to transfer is {} \
                      and the balance is {}.",
                     source, token, args.amount, balance
                 );
+                    if !args.tx.force {
+                        safe_exit(1)
+                    }
+                }
+
+                Some(balance.checked_sub(args.amount).unwrap_or_default())
+            }
+            None => {
+                eprintln!(
+                    "No balance found for the source {} of token {}",
+                    source, token
+                );
                 if !args.tx.force {
                     safe_exit(1)
                 }
+
+                Some(0.into())
             }
-        }
-        None => {
-            eprintln!(
-                "No balance found for the source {} of token {}",
-                source, token
-            );
-            if !args.tx.force {
-                safe_exit(1)
-            }
-        }
-    };
+        };
 
     let masp_addr = masp();
     // For MASP sources, redact the amount and token
@@ -1594,15 +1604,18 @@ pub async fn build_transfer(
         _ => None,
     };
 
-    token::Transfer {
-        source,
-        target,
-        token,
-        sub_prefix,
-        amount,
-        key,
-        shielded: None,
-    }
+    (
+        token::Transfer {
+            source,
+            target,
+            token,
+            sub_prefix,
+            amount,
+            key,
+            shielded: None,
+        },
+        updated_balance,
+    )
 }
 
 pub async fn build_shielded_part(
@@ -1655,7 +1668,8 @@ pub async fn build_shielded_part(
 
 pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-    let transfer = build_transfer(&mut ctx, &args, &client).await;
+    let (transfer, updated_balance) =
+        build_transfer(&mut ctx, &args, &client).await;
     #[cfg(not(feature = "mainnet"))]
     let is_source_faucet = rpc::is_faucet_account(
         &ctx.get_cached(&args.source).effective_address(),
@@ -1675,6 +1689,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
             &args.tx,
             tx,
             TxSigningKey::WalletAddress(args.source.to_address()),
+            updated_balance,
             #[cfg(not(feature = "mainnet"))]
             is_source_faucet,
         )
@@ -1744,31 +1759,36 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
         None => (None, token::balance_key(&token, &source)),
     };
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-    match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
-    {
-        Some(balance) => {
-            if balance < args.amount {
-                eprintln!(
+    let balance =
+        match rpc::query_storage_value::<token::Amount>(&client, &balance_key)
+            .await
+        {
+            Some(balance) => {
+                if balance < args.amount {
+                    eprintln!(
                     "The balance of the source {} of token {} is lower than \
                      the amount to be transferred. Amount to transfer is {} \
                      and the balance is {}.",
                     source, token, args.amount, balance
                 );
+                    if !args.tx.force {
+                        safe_exit(1)
+                    }
+                }
+
+                Some(balance.checked_sub(args.amount).unwrap_or_default())
+            }
+            None => {
+                eprintln!(
+                    "No balance found for the source {} of token {}",
+                    source, token
+                );
                 if !args.tx.force {
                     safe_exit(1)
                 }
+                Some(0.into())
             }
-        }
-        None => {
-            eprintln!(
-                "No balance found for the source {} of token {}",
-                source, token
-            );
-            if !args.tx.force {
-                safe_exit(1)
-            }
-        }
-    }
+        };
     let tx_code_hash =
         query_wasm_code_hash(TX_IBC_WASM, args.tx.ledger_address.clone())
             .await
@@ -1829,6 +1849,7 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
         &args.tx,
         tx,
         TxSigningKey::WalletAddress(args.source),
+        balance,
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -1940,7 +1961,7 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             safe_exit(1)
         };
 
-        let balance = rpc::get_token_balance(
+        let mut balance = rpc::get_token_balance(
             &client,
             &ctx.native_token,
             &proposal.author,
@@ -1955,6 +1976,9 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
                 &proposal.author
             );
             safe_exit(1);
+        } else {
+            balance -=
+                token::Amount::from(governance_parameters.min_proposal_fund);
         }
 
         if init_proposal_data.content.len()
@@ -1985,6 +2009,7 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             &args.tx,
             tx,
             TxSigningKey::WalletAddress(signer),
+            Some(balance),
             #[cfg(not(feature = "mainnet"))]
             false,
         )
@@ -2246,6 +2271,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     &args.tx,
                     tx,
                     TxSigningKey::WalletAddress(signer.clone()),
+                    None,
                     #[cfg(not(feature = "mainnet"))]
                     false,
                 )
@@ -2345,6 +2371,7 @@ pub async fn submit_reveal_pk_aux(
             epoch,
             tx,
             &keypair,
+            None,
             #[cfg(not(feature = "mainnet"))]
             false,
         )
@@ -2497,29 +2524,35 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
     let balance_key = token::balance_key(&ctx.native_token, bond_source);
-    match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
-    {
-        Some(balance) => {
-            println!("Found source balance {}", balance);
-            if balance < args.amount {
-                eprintln!(
+    let balance =
+        match rpc::query_storage_value::<token::Amount>(&client, &balance_key)
+            .await
+        {
+            Some(balance) => {
+                println!("Found source balance {}", balance);
+                if balance < args.amount {
+                    eprintln!(
                     "The balance of the source {} is lower than the amount to \
                      be transferred. Amount to transfer is {} and the balance \
                      is {}.",
                     bond_source, args.amount, balance
                 );
+                    if !args.tx.force {
+                        safe_exit(1)
+                    }
+                }
+
+                Some(balance.checked_sub(args.amount).unwrap_or_default())
+            }
+            None => {
+                eprintln!("No balance found for the source {}", bond_source);
                 if !args.tx.force {
                     safe_exit(1)
                 }
+                Some(0.into())
             }
-        }
-        None => {
-            eprintln!("No balance found for the source {}", bond_source);
-            if !args.tx.force {
-                safe_exit(1)
-            }
-        }
-    }
+        };
+
     let tx_code_hash =
         query_wasm_code_hash(TX_BOND_WASM, args.tx.ledger_address.clone())
             .await
@@ -2543,6 +2576,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
         &args.tx,
         tx,
         TxSigningKey::WalletAddress(default_signer),
+        balance,
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -2617,6 +2651,7 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
         &args.tx,
         tx,
         TxSigningKey::WalletAddress(default_signer),
+        None,
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -2733,6 +2768,7 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
         &args.tx,
         tx,
         TxSigningKey::WalletAddress(default_signer),
+        None,
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -2829,6 +2865,7 @@ pub async fn submit_validator_commission_change(
         &args.tx,
         tx,
         TxSigningKey::WalletAddress(default_signer),
+        None,
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -2862,6 +2899,7 @@ async fn process_tx(
     args: &args::Tx,
     tx: Tx,
     default_signer: TxSigningKey,
+    updated_balance: Option<token::Amount>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (Context, ProcessTxResponse) {
     // Loop twice in case the optional unshielding tx fails because of an epoch
@@ -2872,6 +2910,7 @@ async fn process_tx(
             tx.clone(),
             args,
             default_signer.clone(),
+            updated_balance,
             #[cfg(not(feature = "mainnet"))]
             requires_pow,
         )

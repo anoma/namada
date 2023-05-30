@@ -155,6 +155,7 @@ pub async fn sign_tx(
     tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,
+    updated_balance: Option<Amount>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (TxBroadcastData, Option<Epoch>) {
     if args.dump_tx {
@@ -185,6 +186,7 @@ pub async fn sign_tx(
             epoch,
             tx,
             &keypair,
+            updated_balance,
             #[cfg(not(feature = "mainnet"))]
             requires_pow,
         )
@@ -236,13 +238,14 @@ pub fn dump_tx_helper(
 
 /// Create a wrapper tx from a normal tx. Get the hash of the
 /// wrapper and its payload which is needed for monitoring its
-/// progress on chain.
+/// progress on chain. Accepts an optional balance reflecting any modification applied to it by the inner tx for a correct fee validation.
 pub async fn sign_wrapper(
     ctx: &mut Context,
     args: &args::Tx,
     epoch: Epoch,
     tx: Tx,
     keypair: &common::SecretKey,
+    updated_balance: Option<Amount>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (TxBroadcastData, Option<Epoch>) {
     let client = HttpClient::new(args.ledger_address.clone()).unwrap();
@@ -277,13 +280,20 @@ pub async fn sign_wrapper(
     };
 
     let source = Address::from(&keypair.ref_to());
-    let balance_key = token::balance_key(&fee_token, &source);
-    let mut balance =
-        rpc::query_storage_value::<token::Amount>(&client, &balance_key)
-            .await
-            .unwrap_or_default();
+    let mut updated_balance = match updated_balance {
+        Some(balance) => balance,
+        None => {
+            let balance_key = token::balance_key(&fee_token, &source);
 
-    let (unshield, unshielding_epoch) = match fee_amount.checked_sub(balance) {
+            rpc::query_storage_value::<token::Amount>(&client, &balance_key)
+                .await
+                .unwrap_or_default()
+        }
+    };
+
+    let (unshield, unshielding_epoch) = match fee_amount
+        .checked_sub(updated_balance)
+    {
         Some(diff) => {
             if let Some(spending_key) = args.fee_unshield {
                 // Unshield funds for fee payment
@@ -365,7 +375,7 @@ pub async fn sign_wrapper(
                             cli::safe_exit(1);
                         }
 
-                        balance += diff;
+                        updated_balance += diff;
                         (Some(transaction), Some(unshielding_epoch))
                     }
                     Ok(None) => {
@@ -389,7 +399,7 @@ pub async fn sign_wrapper(
                 eprintln!(
                     "The wrapper transaction source doesn't have enough \
                      balance to pay fee. Fee: {fee_amount}, balance: \
-                     {balance}."
+                     {updated_balance}."
                 );
                 if !args.force && cfg!(feature = "mainnet") {
                     cli::safe_exit(1);
@@ -406,7 +416,7 @@ pub async fn sign_wrapper(
     let pow_solution: Option<namada::core::ledger::testnet_pow::Solution> = {
         // If the address derived from the keypair doesn't have enough balance
         // to pay for the fee, allow to find a PoW solution instead.
-        if requires_pow || balance < fee_amount {
+        if requires_pow || updated_balance < fee_amount {
             println!(
                 "The transaction requires the completion of a PoW challenge."
             );
