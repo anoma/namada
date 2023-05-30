@@ -176,7 +176,7 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
 
     tracing::info!("passed spend/output verification");
 
-    let assets_and_values: Vec<(AssetType, i64)> =
+    let assets_and_values: Vec<(AssetType, i128)> =
         tx_data.value_balance.clone().into_components().collect();
 
     tracing::info!("accumulated {} assets/values", assets_and_values.len());

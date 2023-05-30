@@ -23,7 +23,7 @@ endif
 audit-ignores += RUSTSEC-2021-0076
 
 build:
-	$(cargo) $(jobs) build
+	$(cargo) build $(jobs)
 
 build-test:
 	$(cargo) +$(nightly) build --tests $(jobs) -Z unstable-options

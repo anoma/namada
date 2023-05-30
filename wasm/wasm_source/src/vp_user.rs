@@ -103,9 +103,8 @@ fn validate_tx(
         let key_type: KeyType = key.into();
         let is_valid = match key_type {
             KeyType::Token {
-                token,
                 owner,
-                sub_prefix,
+                ..
             } => {
                 if owner == &addr {
                     let pre: token::Amount =

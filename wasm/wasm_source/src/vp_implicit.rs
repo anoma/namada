@@ -130,9 +130,8 @@ fn validate_tx(
                 true
             }
             KeyType::Token {
-                token,
                 owner,
-                sub_prefix,
+                ..
             } => {
                 if owner == &addr {
                     let pre: token::Amount =

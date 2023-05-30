@@ -27,7 +27,7 @@ use namada_apps::client::tx::ShieldedContext;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
-use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
+use namada_core::types::token::{DenominatedAmount, Denomination, NATIVE_MAX_DECIMAL_PLACES};
 use namada_test_utils::TestWasms;
 use serde_json::json;
 use setup::constants::*;
@@ -1014,6 +1014,10 @@ fn masp_pinned_txs() -> Result<()> {
 
 #[test]
 fn masp_incentives() -> Result<()> {
+    // The number of decimal places used by BTC amounts.
+    const BTC_DENOMINATION: u8 = 8;
+    // The number of decimal places used by ETH amounts.
+    const ETH_DENOMINATION: u8 = 18;
     // Download the shielded pool parameters before starting node
     let _ = ShieldedContext::new(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
@@ -1134,9 +1138,9 @@ fn masp_incentives() -> Result<()> {
     client.assert_success();
 
     let amt20 =
-        token::Amount::from_uint(20, NATIVE_MAX_DECIMAL_PLACES).unwrap();
+        token::Amount::from_uint(20, BTC_DENOMINATION).unwrap();
     let amt30 =
-        token::Amount::from_uint(30, NATIVE_MAX_DECIMAL_PLACES).unwrap();
+        token::Amount::from_uint(30, ETH_DENOMINATION).unwrap();
 
     // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_1-epoch_0)
     let mut client = run!(
@@ -1153,10 +1157,10 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
+    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep1.0 - ep0.0);
+    let denominated = DenominatedAmount { amount: amt, denom: NATIVE_MAX_DECIMAL_PLACES.into()};
     client.exp_string(&format!(
-        "nam: {}",
-        ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep1.0 - ep0.0))
-            .to_string_native()
+        "nam: {}", denominated,
     ))?;
     client.assert_success();
 
@@ -1175,10 +1179,10 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
+    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep1.0 - ep0.0);
+    let denominated = DenominatedAmount { amount: amt, denom: NATIVE_MAX_DECIMAL_PLACES.into() };
     client.exp_string(&format!(
-        "nam: {}",
-        ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep1.0 - ep0.0))
-            .to_string_native()
+        "nam: {}", denominated,
     ))?;
     client.assert_success();
 
@@ -1218,10 +1222,10 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
+    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep2.0 - ep0.0);
+    let denominated = DenominatedAmount { amount: amt, denom: NATIVE_MAX_DECIMAL_PLACES.into()};
     client.exp_string(&format!(
-        "nam: {}",
-        ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep2.0 - ep0.0))
-            .to_string_native()
+        "nam: {}", denominated,
     ))?;
     client.assert_success();
 
@@ -1240,10 +1244,10 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
+    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep2.0 - ep0.0);
+    let denominated = DenominatedAmount { amount: amt, denom: NATIVE_MAX_DECIMAL_PLACES.into()};
     client.exp_string(&format!(
-        "nam: {}",
-        ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep2.0 - ep0.0))
-            .to_string_native(),
+        "nam: {}", denominated,
     ))?;
     client.assert_success();
 
@@ -1344,10 +1348,10 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
+    let amt = (amt30 * masp_rewards[&(eth(), None)]).0 * (ep4.0 - ep3.0);
+    let denominated = DenominatedAmount { amount: amt, denom: NATIVE_MAX_DECIMAL_PLACES.into()};
     client.exp_string(&format!(
-        "nam: {}",
-        ((amt30 * masp_rewards[&(eth(), None)]).0 * (ep4.0 - ep3.0))
-            .to_string_native(),
+        "nam: {}", denominated,
     ))?;
     client.assert_success();
 
@@ -1367,11 +1371,11 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
+    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep4.0 - ep0.0))
+        + ((amt30 * masp_rewards[&(eth(), None)]).0 * (ep4.0 - ep3.0));
+    let denominated = DenominatedAmount { amount: amt, denom: NATIVE_MAX_DECIMAL_PLACES.into()};
     client.exp_string(&format!(
-        "nam: {}",
-        (((amt20 * masp_rewards[&(btc(), None)]).0 * (ep4.0 - ep0.0))
-            + ((amt30 * masp_rewards[&(eth(), None)]).0 * (ep4.0 - ep3.0)))
-            .to_string_native()
+        "nam: {}", denominated
     ))?;
     client.assert_success();
 
@@ -1437,10 +1441,10 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
+    let amt = (amt30 * masp_rewards[&(eth(), None)]).0 * (ep.0 - ep3.0);
+    let denominated = DenominatedAmount{ amount: amt, denom: NATIVE_MAX_DECIMAL_PLACES.into()};
     client.exp_string(&format!(
-        "nam: {}",
-        ((amt30 * masp_rewards[&(eth(), None)]).0 * (ep.0 - ep3.0))
-            .to_string_native()
+        "nam: {}", denominated,
     ))?;
     client.assert_success();
 
@@ -1461,11 +1465,11 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
+    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep.0 - ep0.0))
+        + ((amt30 * masp_rewards[&(eth(), None)]).0 * (ep.0 - ep3.0));
+    let denominated = DenominatedAmount{ amount: amt, denom: NATIVE_MAX_DECIMAL_PLACES.into()};
     client.exp_string(&format!(
-        "nam: {}",
-        (((amt20 * masp_rewards[&(btc(), None)]).0 * (ep.0 - ep0.0))
-            + ((amt30 * masp_rewards[&(eth(), None)]).0 * (ep.0 - ep3.0)))
-            .to_string_native()
+        "nam: {}", denominated
     ))?;
     client.assert_success();
 
@@ -1529,10 +1533,10 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
+    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0);
+    let denominated = DenominatedAmount { amount: amt, denom: NATIVE_MAX_DECIMAL_PLACES.into()};
     client.exp_string(&format!(
-        "nam: {}",
-        ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
-            .to_string_native()
+        "nam: {}", denominated,
     ))?;
     client.assert_success();
 
@@ -1552,11 +1556,11 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
+    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
+        + ((amt30 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0));
+    let denominated = DenominatedAmount { amount: amt, denom: NATIVE_MAX_DECIMAL_PLACES.into() };
     client.exp_string(&format!(
-        "nam: {}",
-        (((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
-            + ((amt30 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0)))
-            .to_string_native()
+        "nam: {}", denominated,
     ))?;
     client.assert_success();
 
@@ -1578,10 +1582,10 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
+    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0);
+    let denominated = DenominatedAmount {amount: amt, denom: NATIVE_MAX_DECIMAL_PLACES.into()};
     client.exp_string(&format!(
-        "nam: {}",
-        ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
-            .to_string_native()
+        "nam: {}", denominated
     ))?;
     client.assert_success();
 
@@ -1600,10 +1604,10 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
+    let amt = (amt30 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0);
+    let denominated = DenominatedAmount {amount: amt, denom: NATIVE_MAX_DECIMAL_PLACES.into()};
     client.exp_string(&format!(
-        "nam: {}",
-        ((amt30 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0))
-            .to_string_native()
+        "nam: {}", denominated,
     ))?;
     client.assert_success();
 
@@ -1623,11 +1627,11 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
+    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
+        + ((amt30 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0));
+    let denominated = DenominatedAmount { amount: amt, denom: NATIVE_MAX_DECIMAL_PLACES.into()};
     client.exp_string(&format!(
-        "nam: {}",
-        (((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
-            + ((amt30 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0)))
-            .to_string_native()
+        "nam: {}", denominated,
     ))?;
     client.assert_success();
 

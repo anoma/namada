@@ -44,7 +44,7 @@ use namada::types::storage::{
     BlockHeight, BlockResults, Epoch, Key, KeySeg, PrefixValue, TxIndex,
 };
 use namada::types::token::{
-    balance_key, Change, DenominatedAmount, Denomination, MaspDenom,
+    balance_key, Change, DenominatedAmount, MaspDenom,
     TokenAddress, Transfer,
 };
 use namada::types::transaction::{

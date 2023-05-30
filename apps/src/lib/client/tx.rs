@@ -493,11 +493,6 @@ pub fn is_amount_required(src: Amount, dest: Amount, delta: Amount) -> bool {
     false
 }
 
-/// An extension of Option's cloned method for pair types
-fn cloned_pair<T: Clone, U: Clone>((a, b): (&T, &U)) -> (T, U) {
-    (a.clone(), b.clone())
-}
-
 /// Errors that can occur when trying to retrieve pinned transaction
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum PinnedBalanceError {
@@ -555,6 +550,7 @@ impl std::ops::Add for MaspAmount {
                 .and_modify(|val| *val += value)
                 .or_insert(value);
         }
+        self.retain(|_, v| !v.is_zero());
         self
     }
 }
@@ -606,7 +602,7 @@ impl<'a> From<&'a MaspAmount> for Amount {
 
 /// Represents the amount used of different conversions
 pub type Conversions =
-    HashMap<AssetType, (AllowedConversion, MerklePath<Node>, i64)>;
+    HashMap<AssetType, (AllowedConversion, MerklePath<Node>, i128)>;
 
 /// Represents an amount that is
 pub type MaspDenominatedAmount = Amount<(TokenAddress, MaspDenom)>;
@@ -1087,7 +1083,7 @@ impl ShieldedContext {
         client: HttpClient,
         asset_type: AssetType,
         conversions: &'a mut Conversions,
-    ) -> Option<&'a mut (AllowedConversion, MerklePath<Node>, i64)> {
+    ) -> Option<&'a mut (AllowedConversion, MerklePath<Node>, i128)> {
         match conversions.entry(asset_type) {
             Entry::Occupied(conv_entry) => Some(conv_entry.into_mut()),
             Entry::Vacant(conv_entry) => {
@@ -1152,8 +1148,8 @@ impl ShieldedContext {
         client: &HttpClient,
         conv: AllowedConversion,
         asset_type: AssetType,
-        value: i64,
-        usage: &mut i64,
+        value: i128,
+        usage: &mut i128,
         input: &mut MaspAmount,
         output: &mut Amount,
     ) {
@@ -1170,6 +1166,9 @@ impl ShieldedContext {
         }
         // We should use an amount of the AllowedConversion that almost
         // cancels the original amount
+        if threshold > value {
+            return
+        }
         let required = value / threshold;
         // Forget about the trace amount left over because we cannot
         // realize its value
@@ -1178,7 +1177,7 @@ impl ShieldedContext {
         *usage += required;
         // Apply the conversions to input and move the trace amount to output
         *input += self
-            .decode_all_amounts(client, conv * required - &trace)
+            .decode_all_amounts(client, conv.clone() * required - &trace)
             .await;
         *output += trace;
     }
@@ -1214,7 +1213,7 @@ impl ShieldedContext {
                 );
                 let at_target_asset_type = target_epoch == asset_epoch;
 
-                let denom_value = denom.denominate_i64(&value);
+                let denom_value = denom.denominate(&token::Amount::from(value)) as i128;
                 _ = self
                     .query_allowed_conversion(
                         client.clone(),
@@ -1237,7 +1236,7 @@ impl ShieldedContext {
                     self.apply_conversion(
                         &client,
                         conv.clone(),
-                        target_asset_type,
+                        asset_type,
                         denom_value,
                         usage,
                         &mut input,
@@ -1266,26 +1265,24 @@ impl ShieldedContext {
                     self.apply_conversion(
                         &client,
                         conv.clone(),
-                        target_asset_type,
+                        asset_type,
                         denom_value,
                         usage,
                         &mut input,
                         &mut output,
                     )
-                    .await;
+                        .await;
                 } else {
                     // At the target asset type. Then move component over to
                     // output.
-
                     let mut comp = MaspAmount::default();
+                    comp.insert((asset_epoch, token_addr.clone()), denom_value.into());
                     for ((e, key), val) in input.iter() {
                         if *key == token_addr {
                             comp.insert((*e, key.clone()), *val);
                         }
                     }
                     output += Amount::from(&comp);
-                    // Strike from input to avoid repeating computation
-                    input -= comp;
                 }
             }
         }
@@ -1501,7 +1498,6 @@ impl ShieldedContext {
         res
     }
 
-    // TODO :: Panics if we ever switch to an i128 in the masp crate
     /// Convert an amount whose units are AssetTypes to one whose units are
     /// Addresses that they decode to.
     pub async fn decode_all_amounts(
@@ -1542,11 +1538,14 @@ fn convert_amount(
     sub_prefix: &Option<&String>,
     val: &token::Amount,
 ) -> ([AssetType; 4], Amount) {
+    println!("{}", DenominatedAmount { amount: val.clone(), denom: 18.into()});
     let mut amount = Amount::zero();
     let asset_types: [AssetType; 4] = MaspDenom::iter()
         .map(|denom| {
             let asset_type =
                 make_asset_type(Some(epoch), token, sub_prefix, denom);
+            let inner = denom.denominate(val);
+            println!("{}", inner);
             // Combine the value and unit into one amount
             amount +=
                 Amount::from_nonnegative(asset_type, denom.denominate(val))
@@ -3419,7 +3418,7 @@ pub async fn submit_tx(
 
 fn decode_component<K, F>(
     (addr, sub, denom, epoch): (Address, Option<Key>, MaspDenom, Epoch),
-    val: i64,
+    val: i128,
     res: &mut HashMap<K, token::Change>,
     mk_key: F,
 ) where

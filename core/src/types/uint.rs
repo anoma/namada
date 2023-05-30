@@ -170,14 +170,14 @@ impl I256 {
     /// Attempt to convert a MASP-denominated integer to an I256
     /// using the given denomination.
     pub fn from_masp_denominated(
-        value: impl Into<i64>,
+        value: impl Into<i128>,
         denom: MaspDenom,
     ) -> Result<Self, AmountParseError> {
         let value = value.into();
         let is_negative = value < 0;
         let value = value.unsigned_abs();
         let mut result = [0u64; 4];
-        result[denom as usize] = value;
+        result[denom as usize] = value as u64;
         let result = Uint(result);
         if result <= MAX_SIGNED_VALUE {
             if is_negative {
