@@ -172,11 +172,12 @@ pub async fn submit_init_validator<
         .expect("DKG sessions keys should have been created")
         .public();
 
-    let vp_code_path = String::from_utf8(validator_vp_code_path).unwrap();
-    let validator_vp_code_hash =
-        query_wasm_code_hash::<C>(client, vp_code_path)
-            .await
-            .unwrap();
+    let validator_vp_code_hash = query_wasm_code_hash::<C>(
+        client,
+        validator_vp_code_path.to_str().unwrap(),
+    )
+    .await
+    .unwrap();
 
     // Validate the commission rate data
     if commission_rate > Decimal::ONE || commission_rate < Decimal::ZERO {
@@ -824,12 +825,17 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
                     .try_to_vec()
                     .expect("Encoding proposal data shouldn't fail");
 
-                let tx_code = args.tx_code_path;
+                let tx_code_hash = query_wasm_code_hash(
+                    client,
+                    args.tx_code_path.to_str().unwrap(),
+                )
+                .await
+                .unwrap();
                 let mut tx = Tx::new(TxType::Raw);
                 tx.header.chain_id = chain_id;
                 tx.header.expiration = expiration;
                 tx.set_data(Data::new(data));
-                tx.set_code(Code::new(tx_code));
+                tx.set_code(Code::from_hash(tx_code_hash));
 
                 process_tx::<C>(
                     client,

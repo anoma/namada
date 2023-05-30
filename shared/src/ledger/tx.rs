@@ -346,10 +346,12 @@ pub async fn submit_reveal_pk_aux<
     println!("Submitting a tx to reveal the public key for address {addr}...");
     let tx_data = public_key.try_to_vec().map_err(Error::EncodeKeyFailure)?;
 
-    let tx_code_path =
-        String::from_utf8(args.tx_reveal_code_path.clone()).unwrap();
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path).await.unwrap();
+    let tx_code_hash = query_wasm_code_hash(
+        client,
+        args.tx_reveal_code_path.to_str().unwrap(),
+    )
+    .await
+    .unwrap();
 
     let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
         #[cfg(not(feature = "mainnet"))]
@@ -593,9 +595,10 @@ pub async fn submit_validator_commission_change<
 ) -> Result<(), Error> {
     let epoch = rpc::query_epoch(client).await;
 
-    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
     let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path).await.unwrap();
+        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
+            .await
+            .unwrap();
 
     // TODO: put following two let statements in its own function
     let params_key = crate::ledger::pos::params_key();
@@ -695,9 +698,10 @@ pub async fn submit_withdraw<
 
     let source = args.source.clone();
 
-    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
     let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path).await.unwrap();
+        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
+            .await
+            .unwrap();
 
     // Check the source's current unbond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
@@ -759,9 +763,10 @@ pub async fn submit_unbond<
     // Check the source's current bond amount
     let bond_source = source.clone().unwrap_or_else(|| args.validator.clone());
 
-    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
     let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path).await.unwrap();
+        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
+            .await
+            .unwrap();
 
     if !args.tx.force {
         known_validator_or_err(args.validator.clone(), args.tx.force, client)
@@ -911,9 +916,10 @@ pub async fn submit_bond<
     )
     .await?;
 
-    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
     let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path).await.unwrap();
+        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
+            .await
+            .unwrap();
 
     let bond = pos::Bond {
         validator,
@@ -1012,9 +1018,10 @@ pub async fn submit_ibc_transfer<
     )
     .await?;
 
-    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
     let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path).await.unwrap();
+        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
+            .await
+            .unwrap();
 
     let denom = match sub_prefix {
         // To parse IbcToken address, remove the address prefix
@@ -1237,9 +1244,10 @@ pub async fn submit_transfer<
     #[cfg(not(feature = "mainnet"))]
     let is_source_faucet = rpc::is_faucet_account(client, &source).await;
 
-    let tx_code_hash = query_wasm_code_hash(client, TX_TRANSFER_WASM)
-        .await
-        .unwrap();
+    let tx_code_hash =
+        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
+            .await
+            .unwrap();
 
     // Loop twice in case the first submission attempt fails
     for _ in 0..2 {
@@ -1364,16 +1372,16 @@ pub async fn submit_init_account<
     args: args::TxInitAccount,
 ) -> Result<(), Error> {
     let public_key = args.public_key;
-    let vp_code = args.vp_code;
-    // Validate the VP code
-    validate_untrusted_code_err(&vp_code, args.tx.force)?;
-    let vp_code_path = String::from_utf8(args.vp_code_path).unwrap();
-    let vp_code_hash =
-        query_wasm_code_hash(client, vp_code_path).await.unwrap();
 
-    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
+    let vp_code_hash =
+        query_wasm_code_hash(client, args.vp_code_path.to_str().unwrap())
+            .await
+            .unwrap();
+
     let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path).await.unwrap();
+        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
+            .await
+            .unwrap();
 
     let mut tx = Tx::new(TxType::Raw);
     tx.header.chain_id = args.tx.chain_id.clone().unwrap();
@@ -1459,13 +1467,15 @@ pub async fn submit_update_vp<
         }
     }?;
 
-    let vp_code_path = String::from_utf8(args.vp_code_path).unwrap();
     let vp_code_hash =
-        query_wasm_code_hash(client, vp_code_path).await.unwrap();
+        query_wasm_code_hash(client, args.vp_code_path.to_str().unwrap())
+            .await
+            .unwrap();
 
-    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
     let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path).await.unwrap();
+        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
+            .await
+            .unwrap();
 
     let mut tx = Tx::new(TxType::Raw);
     tx.header.chain_id = args.tx.chain_id.clone().unwrap();
@@ -1709,6 +1719,7 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
     }
 }
 
+#[allow(dead_code)]
 fn validate_untrusted_code_err(
     vp_code: &Vec<u8>,
     force: bool,
