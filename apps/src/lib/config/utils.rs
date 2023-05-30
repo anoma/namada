@@ -6,6 +6,8 @@ use std::{cmp, env};
 use itertools::Either;
 
 use crate::cli;
+use std::net::{SocketAddr, ToSocketAddrs};
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
 /// Find how many threads to use from an environment variable if it's set and
 /// valid (>= 1). If the environment variable is invalid, exits the process with
@@ -42,6 +44,19 @@ fn num_of_threads_aux(
         }
     } else {
         Either::Left(cmp::max(1, default))
+    }
+}
+
+// fixme: Handle this gracefully with either an Option or a Result. Ensure that hostname resolution works.
+pub fn convert_tm_addr_to_socket_addr(tm_addr: &TendermintAddress) -> SocketAddr {
+    let tm_addr = tm_addr.clone();
+    match tm_addr {
+        TendermintAddress::Tcp { peer_id, host, port } => {
+            return (host, port).to_socket_addrs().unwrap().next().unwrap();
+        },
+        TendermintAddress::Unix { path } => {
+            panic!("Unix addresses aren't currently supported.")
+        }
     }
 }
 
