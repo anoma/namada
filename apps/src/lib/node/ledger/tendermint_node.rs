@@ -1,5 +1,4 @@
 use std::env;
-
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::str::FromStr;
@@ -22,7 +21,6 @@ use tokio::process::Command;
 use crate::cli::namada_version;
 use crate::config;
 use crate::facade::tendermint::{block, Genesis};
-
 use crate::facade::tendermint_config::{
     Error as TendermintError, TendermintConfig,
 };
@@ -362,8 +360,8 @@ async fn update_tendermint_config(
             .expect("Invalid moniker");
 
     // config.p2p.laddr =
-    //     TendermintAddress::from_str(&tendermint_config.p2p_address.to_string())
-    //         .unwrap();
+    //     TendermintAddress::from_str(&tendermint_config.p2p_address.
+    // to_string())         .unwrap();
     // config.p2p.persistent_peers = tendermint_config.p2p_persistent_peers;
     // config.p2p.pex = tendermint_config.p2p_pex;
     // config.p2p.allow_duplicate_ip = tendermint_config.p2p_allow_duplicate_ip;
@@ -378,8 +376,8 @@ async fn update_tendermint_config(
     config.mempool.keep_invalid_txs_in_cache = false;
 
     // config.rpc.laddr =
-    //     TendermintAddress::from_str(&tendermint_config.rpc_address.to_string())
-    //         .unwrap();
+    //     TendermintAddress::from_str(&tendermint_config.rpc_address.
+    // to_string())         .unwrap();
     // Bumped from the default `1_000_000`, because some WASMs can be
     // quite large
     config.rpc.max_body_bytes = 2_000_000;

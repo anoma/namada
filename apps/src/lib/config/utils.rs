@@ -1,12 +1,12 @@
 //! Configuration utilities
 
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::str::FromStr;
 use std::{cmp, env};
 
 use itertools::Either;
 
 use crate::cli;
-use std::net::{SocketAddr, ToSocketAddrs};
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
 /// Find how many threads to use from an environment variable if it's set and
@@ -47,13 +47,18 @@ fn num_of_threads_aux(
     }
 }
 
-// fixme: Handle this gracefully with either an Option or a Result. Ensure that hostname resolution works.
-pub fn convert_tm_addr_to_socket_addr(tm_addr: &TendermintAddress) -> SocketAddr {
+// fixme: Handle this gracefully with either an Option or a Result. Ensure that
+// hostname resolution works.
+pub fn convert_tm_addr_to_socket_addr(
+    tm_addr: &TendermintAddress,
+) -> SocketAddr {
     let tm_addr = tm_addr.clone();
     match tm_addr {
-        TendermintAddress::Tcp { peer_id: _, host, port } => {
-            (host, port).to_socket_addrs().unwrap().next().unwrap()
-        },
+        TendermintAddress::Tcp {
+            peer_id: _,
+            host,
+            port,
+        } => (host, port).to_socket_addrs().unwrap().next().unwrap(),
         TendermintAddress::Unix { path: _ } => {
             panic!("Unix addresses aren't currently supported.")
         }

@@ -6,7 +6,6 @@ pub mod utils;
 
 use std::fs::{create_dir_all, File};
 use std::io::Write;
-
 use std::path::{Path, PathBuf};
 
 use directories::ProjectDirs;
@@ -17,7 +16,9 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::cli;
-use crate::facade::tendermint_config::{TendermintConfig, TxIndexer, TxIndexConfig};
+use crate::facade::tendermint_config::{
+    TendermintConfig, TxIndexConfig, TxIndexer,
+};
 
 /// Base directory contains global config and chain directories.
 pub const DEFAULT_BASE_DIR: &str = ".namada";
@@ -128,9 +129,12 @@ impl Ledger {
         chain_id: ChainId,
         mode: TendermintMode,
     ) -> Self {
-        let mut tendermint_config = TendermintConfig::parse_toml(DEFAULT_COMETBFT_CONFIG).unwrap();
+        let mut tendermint_config =
+            TendermintConfig::parse_toml(DEFAULT_COMETBFT_CONFIG).unwrap();
         tendermint_config.instrumentation.namespace = "namada_tm".to_string();
-        tendermint_config.tx_index = TxIndexConfig{indexer: TxIndexer::Null};
+        tendermint_config.tx_index = TxIndexConfig {
+            indexer: TxIndexer::Null,
+        };
         Self {
             genesis_time: Rfc3339String("1970-01-01T00:00:00Z".to_owned()),
             chain_id,
@@ -345,8 +349,8 @@ pub fn get_default_namada_folder() -> PathBuf {
 mod tests {
 
     #![allow(unused_imports)]
-    use crate::facade::tendermint_config::TendermintConfig;
     use super::DEFAULT_COMETBFT_CONFIG;
+    use crate::facade::tendermint_config::TendermintConfig;
 
     #[test]
     fn test_default_cometbft_config() {
