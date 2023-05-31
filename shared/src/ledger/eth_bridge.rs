@@ -3,8 +3,6 @@
 pub mod bridge_pool;
 pub mod validator_set;
 
-use std::ops::ControlFlow;
-
 use itertools::Either;
 pub use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
 pub use namada_core::ledger::eth_bridge::{ADDRESS, INTERNAL_ADDRESS};
@@ -18,13 +16,10 @@ use crate::cli;
 use crate::types::control_flow::time::{
     Duration, Error as TimeoutError, Instant, SleepStrategy,
 };
+use crate::types::control_flow::{self, Halt, TryHalt};
 
 const DEFAULT_BACKOFF: Duration = std::time::Duration::from_millis(500);
 const DEFAULT_CEILING: Duration = std::time::Duration::from_secs(30);
-
-/// Result indicating that a fatal error occurred,
-/// therefore we must halt execution.
-pub type ExitResult<T> = Result<T, ()>;
 
 /// The result of querying an Ethereum nodes syncing status.
 pub enum SyncStatus {
@@ -90,7 +85,7 @@ pub struct BlockOnEthSync<'rpc_url> {
 }
 
 /// Block until Ethereum finishes synchronizing.
-pub async fn block_on_eth_sync(args: BlockOnEthSync<'_>) -> ExitResult<()> {
+pub async fn block_on_eth_sync(args: BlockOnEthSync<'_>) -> Halt<()> {
     let BlockOnEthSync {
         deadline,
         rpc_timeout,
@@ -114,21 +109,18 @@ pub async fn block_on_eth_sync(args: BlockOnEthSync<'_>) -> ExitResult<()> {
             }
         })
         .await
-        .map_err(|_| {
+        .try_halt(|_| {
             tracing::error!(
                 "Timed out while waiting for Ethereum to synchronize"
             );
         })?;
     tracing::info!("The Ethereum node is up to date");
-    Ok(())
+    control_flow::proceed(())
 }
 
 /// Check if Ethereum has finished synchronizing. In case it has
 /// not, perform `action`.
-pub async fn eth_sync_or<F, T>(
-    url: &str,
-    mut action: F,
-) -> ExitResult<Either<T, ()>>
+pub async fn eth_sync_or<F, T>(url: &str, mut action: F) -> Halt<Either<T, ()>>
 where
     F: FnMut() -> T,
 {
@@ -139,25 +131,25 @@ where
     let is_synchronized = status_fut
         .await
         .map(|status| status.is_synchronized())
-        .map_err(|err| {
+        .try_halt(|err| {
             tracing::error!(
                 "An error occurred while fetching the Ethereum \
                  synchronization status: {err}"
             );
         })?;
     if is_synchronized {
-        Ok(Either::Right(()))
+        control_flow::proceed(Either::Right(()))
     } else {
-        Ok(Either::Left(action()))
+        control_flow::proceed(Either::Left(action()))
     }
 }
 
 /// Check if Ethereum has finished synchronizing. In case it has
 /// not, end execution.
-pub async fn eth_sync_or_exit(url: &str) -> ExitResult<()> {
+pub async fn eth_sync_or_exit(url: &str) -> Halt<()> {
     eth_sync_or(url, || {
         tracing::error!("The Ethereum node has not finished synchronizing");
     })
-    .await?;
-    Ok(())
+    .await?
+    .try_halt(|_| ())
 }

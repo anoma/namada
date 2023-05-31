@@ -10,7 +10,7 @@ use namada_core::hints;
 use namada_core::types::storage::Epoch;
 use namada_core::types::vote_extensions::validator_set_update;
 
-use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit, ExitResult};
+use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit};
 use crate::client::eth_bridge::BlockOnEthSync;
 use crate::eth_bridge::ethers::abi::{AbiDecode, AbiType, Tokenizable};
 use crate::eth_bridge::ethers::core::types::TransactionReceipt;
@@ -18,8 +18,10 @@ use crate::eth_bridge::ethers::providers::{Http, Provider};
 use crate::eth_bridge::structs::{Signature, ValidatorSetArgs};
 use crate::ledger::queries::{Client, RPC};
 use crate::proto::Tx;
-use crate::types::control_flow::install_shutdown_signal;
 use crate::types::control_flow::time::{self, Duration, Instant};
+use crate::types::control_flow::{
+    self, install_shutdown_signal, Halt, TryHalt,
+};
 use crate::types::key::RefTo;
 use crate::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
 use crate::types::transaction::TxType;
@@ -74,22 +76,12 @@ impl Error {
         }
     }
 
-    /// Exit from the relayer process, if the error
-    /// was critical.
-    fn maybe_exit(&self) -> ExitResult<()> {
-        if let Error::WithReason { critical: true, .. } = self {
-            hints::cold();
-            Err(())
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Display the error message.
-    fn display(&self) {
-        match self {
+    /// Display the error message, and return the [`Halt`] status.
+    fn handle(&self) -> Halt<()> {
+        let critical = match self {
             Error::WithReason {
                 reason,
+                critical,
                 level: tracing::Level::ERROR,
                 ..
             } => {
@@ -97,18 +89,29 @@ impl Error {
                     %reason,
                     "An error occurred during the relay"
                 );
+                critical
             }
             Error::WithReason {
                 reason,
+                critical,
                 level: tracing::Level::DEBUG,
-                ..
             } => {
                 tracing::debug!(
                     %reason,
                     "An error occurred during the relay"
                 );
+                critical
             }
-            _ => {}
+            // all log levels we care about are DEBUG and ERROR
+            _ => {
+                hints::cold();
+                return control_flow::proceed(());
+            }
+        };
+        if hints::unlikely(critical) {
+            control_flow::halt()
+        } else {
+            control_flow::proceed(())
         }
     }
 }
@@ -290,7 +293,7 @@ pub async fn query_validator_set_args(args: args::ConsensusValidatorSet) {
 pub async fn relay_validator_set_update<C>(
     nam_client: &C,
     args: args::ValidatorSetUpdateRelay,
-) -> ExitResult<()>
+) -> Halt<()>
 where
     C: Client + Sync,
 {
@@ -316,7 +319,7 @@ where
         )
         .await?;
     } else {
-        let result = relay_validator_set_update_once::<CheckNonce, _>(
+        relay_validator_set_update_once::<CheckNonce, _>(
             &args,
             &nam_client,
             |relay_result| match relay_result {
@@ -349,12 +352,8 @@ where
                 }
             },
         )
-        .await;
-        if let Err(err) = result {
-            err.display();
-            err.maybe_exit()?;
-        }
-        Ok(())
+        .await
+        .try_halt_or_recover(|error| error.handle())
     }
 }
 
@@ -362,7 +361,8 @@ async fn relay_validator_set_update_daemon<C>(
     mut args: args::ValidatorSetUpdateRelay,
     nam_client: &C,
     shutdown_receiver: &mut Option<F>,
-) where
+) -> Halt<()>
+where
     C: Client + Sync,
     F: Future<Output = ()>,
 {
@@ -390,7 +390,7 @@ async fn relay_validator_set_update_daemon<C>(
         };
 
         if should_exit {
-            safe_exit(0);
+            return control_flow::halt();
         }
 
         let sleep_for = if last_call_succeeded {
@@ -403,7 +403,7 @@ async fn relay_validator_set_update_daemon<C>(
         time::sleep(sleep_for).await;
 
         let is_synchronizing =
-            eth_sync_or(&args.eth_rpc_endpoint, || ()).await.is_err();
+            eth_sync_or(&args.eth_rpc_endpoint, || ()).await.is_break();
         if is_synchronizing {
             tracing::debug!("The Ethereum node is synchronizing");
             last_call_succeeded = false;
@@ -416,10 +416,11 @@ async fn relay_validator_set_update_daemon<C>(
         let governance =
             get_governance_contract(&nam_client, Arc::clone(&eth_client))
                 .await
-                .unwrap_or_else(|err| {
-                    err.display();
-                    safe_exit(1);
-                });
+                .try_halt(|err| {
+                    // only care about displaying errors,
+                    // exit on all circumstances
+                    _ = err.handle();
+                })?;
         let governance_epoch_prep_call = governance.validator_set_nonce();
         let governance_epoch_fut =
             governance_epoch_prep_call.call().map(|result| {
@@ -428,7 +429,6 @@ async fn relay_validator_set_update_daemon<C>(
                         tracing::error!(
                             "Failed to fetch latest validator set nonce: {err}"
                         );
-                        safe_exit(1);
                     })
                     .map(|e| Epoch(e.as_u64()))
             });
@@ -439,13 +439,12 @@ async fn relay_validator_set_update_daemon<C>(
                 tracing::error!(
                     "Failed to fetch the latest epoch in Namada: {err}"
                 );
-                safe_exit(1);
             })
         });
 
         let (nam_current_epoch, gov_current_epoch) =
             futures::try_join!(nam_current_epoch_fut, governance_epoch_fut)
-                .unwrap();
+                .try_halt(|()| ())?;
 
         tracing::debug!(
             ?nam_current_epoch,
@@ -494,7 +493,8 @@ async fn relay_validator_set_update_daemon<C>(
         ).await;
 
         if let Err(err) = result {
-            err.display();
+            // only print errors, do not exit
+            _ = err.handle();
             last_call_succeeded = false;
         }
     }
@@ -509,13 +509,7 @@ async fn get_governance_contract(
         .eth_bridge()
         .read_governance_contract(nam_client)
         .await
-        .map_err(|err| {
-            use namada::ledger::queries::tm::Error;
-            match err {
-                Error::Tendermint(e) => self::Error::critical(e.to_string()),
-                e => self::Error::recoverable(e.to_string()),
-            }
-        })?;
+        .map_err(|err| Error::critical(e.to_string()))?;
     Ok(Governance::new(governance_contract.address, eth_client))
 }
 

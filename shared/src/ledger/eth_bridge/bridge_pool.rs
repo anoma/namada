@@ -9,7 +9,7 @@ use namada_core::types::chain::ChainId;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 
-use super::{block_on_eth_sync, eth_sync_or_exit, ExitResult};
+use super::{block_on_eth_sync, eth_sync_or_exit};
 use crate::client::eth_bridge::BlockOnEthSync;
 use crate::eth_bridge::ethers::abi::AbiDecode;
 use crate::eth_bridge::ethers::prelude::{Http, Provider};
@@ -21,8 +21,10 @@ use crate::ledger::tx::process_tx;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::Tx;
 use crate::types::address::Address;
-use crate::types::control_flow::install_shutdown_signal;
 use crate::types::control_flow::time::{Duration, Instant};
+use crate::types::control_flow::{
+    self, install_shutdown_signal, Halt, TryHalt,
+};
 use crate::types::eth_abi::Encode;
 use crate::types::eth_bridge_pool::{
     GasFee, PendingTransfer, TransferToEthereum,
@@ -114,7 +116,7 @@ where
 pub async fn query_signed_bridge_pool<C>(
     client: &C,
     args: args::Query,
-) -> ExitResult<HashMap<String, PendingTransfer>>
+) -> Halt<HashMap<String, PendingTransfer>>
 where
     C: Client + Sync,
 {
@@ -130,13 +132,13 @@ where
         .collect();
     if pool_contents.is_empty() {
         println!("Bridge pool is empty.");
-        return Err(());
+        return control_flow::halt();
     }
     let contents = BridgePoolResponse {
         bridge_pool_contents: pool_contents.clone(),
     };
     println!("{}", serde_json::to_string_pretty(&contents).unwrap());
-    Ok(pool_contents)
+    control_flow::proceed(pool_contents)
 }
 
 /// Iterates over all ethereum events
@@ -163,7 +165,7 @@ async fn construct_bridge_pool_proof<C>(
     client: &C,
     transfers: &[KeccakHash],
     relayer: Address,
-) -> ExitResult<Vec<u8>>
+) -> Halt<Vec<u8>>
 where
     C: Client + Sync,
 {
@@ -204,11 +206,11 @@ where
             let stdin = std::io::stdin();
             stdin.read_line(&mut buffer).unwrap_or_else(|e| {
                 println!("Encountered error reading from STDIN: {:?}", e);
-                return Err(());
+                return control_flow::halt();
             });
             match buffer.trim() {
                 "y" => break,
-                "n" => return Err(()),
+                "n" => return control_flow::halt(),
                 _ => {
                     print!("Expected 'y' or 'n'. Please try again: ");
                     std::io::stdout().flush().unwrap();
@@ -224,11 +226,9 @@ where
         .generate_bridge_pool_proof(client, Some(data), None, false)
         .await;
 
-    response
-        .map_err(|e| {
-            println!("Encountered error constructing proof:\n{:?}", e);
-        })
-        .map(|response| response.data)
+    response.map(|response| response.data).try_halt(|e| {
+        println!("Encountered error constructing proof:\n{:?}", e);
+    })
 }
 
 /// A response from construction a bridge pool proof.
@@ -246,7 +246,7 @@ struct BridgePoolProofResponse {
 pub async fn construct_proof<C>(
     client: &C,
     args: args::BridgePoolProof,
-) -> ExitResult<()>
+) -> Halt<()>
 where
     C: Client + Sync,
 {
@@ -256,13 +256,10 @@ where
         args.relayer.clone(),
     )
     .await?;
-    let bp_proof: RelayProof = match AbiDecode::decode(&bp_proof_bytes) {
-        Ok(proof) => proof,
-        Err(error) => {
+    let bp_proof: RelayProof =
+        AbiDecode::decode(&bp_proof_bytes).try_halt(|error| {
             println!("Unable to decode the generated proof: {:?}", error);
-            return Err(());
-        }
-    };
+        })?;
     let resp = BridgePoolProofResponse {
         hashes: args.transfers,
         relayer_address: args.relayer,
@@ -275,14 +272,14 @@ where
         abi_encoded_proof: bp_proof_bytes,
     };
     println!("{}", serde_json::to_string(&resp).unwrap());
-    Ok(())
+    control_flow::proceed(())
 }
 
 /// Relay a validator set update, signed off for a given epoch.
 pub async fn relay_bridge_pool_proof<C>(
     nam_client: &C,
     args: args::RelayBridgePoolProof,
-) -> ExitResult<()>
+) -> Halt<()>
 where
     C: Client + Sync,
 {
@@ -322,17 +319,14 @@ where
                  reason:\n{err_msg}\n\nPerhaps the Ethereum bridge is not \
                  active.",
             );
-            return Err(());
+            return control_flow::halt();
         }
     };
 
-    let bp_proof: RelayProof = match AbiDecode::decode(&bp_proof) {
-        Ok(proof) => proof,
-        Err(error) => {
+    let bp_proof: RelayProof =
+        AbiDecode::decode(&bp_proof).try_halt(|error| {
             println!("Unable to decode the generated proof: {:?}", error);
-            return Err(());
-        }
-    };
+        })?;
 
     // NOTE: this operation costs no gas on Ethereum
     let contract_nonce =
@@ -351,7 +345,7 @@ where
                  has yet to be crafted in Namada.",
                 bp_proof.batch_nonce
             );
-            return Err(());
+            return control_flow::halt();
         }
         Ordering::Greater => {
             let error = "Error".on_red();
@@ -363,7 +357,7 @@ where
                  Somehow, Namada's nonce is ahead of the contract's nonce!",
                 bp_proof.batch_nonce
             );
-            return Err(());
+            return control_flow::halt();
         }
     }
 
@@ -385,7 +379,7 @@ where
         .unwrap();
 
     println!("{transf_result:?}");
-    Ok(())
+    control_flow::proceed(())
 }
 
 mod recommendations {
