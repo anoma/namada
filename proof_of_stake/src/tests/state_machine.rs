@@ -919,7 +919,7 @@ impl ConcretePosState {
             current_epoch,
             current_epoch + params.pipeline_len,
         ) {
-            // println!("Epoch {epoch}");
+            tracing::debug!("Epoch {epoch}");
             let mut vals = HashSet::<Address>::new();
             for WeightedValidator {
                 bonded_stake,
@@ -2015,19 +2015,21 @@ impl AbstractPosState {
             .unwrap()
             .get(&id.validator)
             .unwrap();
-        let pipeline_stake = self
-            .validator_stakes
-            .get(&self.pipeline())
-            .unwrap()
-            .get(&id.validator)
-            .unwrap();
-        println!("pipeline stake = {}", pipeline_stake);
-        let token_change = cmp::min(*pipeline_stake, amount_after_slashing);
+        // let pipeline_stake = self
+        //     .validator_stakes
+        //     .get(&self.pipeline())
+        //     .unwrap()
+        //     .get(&id.validator)
+        //     .unwrap();
+        // let token_change = cmp::min(*pipeline_stake, amount_after_slashing);
 
         if *pipeline_state != ValidatorState::Jailed {
-            self.update_validator_sets(&id.validator, -token_change);
+            self.update_validator_sets(&id.validator, -amount_after_slashing);
         }
-        self.update_validator_total_stake(&id.validator, -token_change);
+        self.update_validator_total_stake(
+            &id.validator,
+            -amount_after_slashing,
+        );
     }
 
     /// Update validator's total stake with bonded or unbonded change at the
