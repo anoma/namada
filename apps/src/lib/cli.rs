@@ -2074,20 +2074,22 @@ pub mod args {
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
-    pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
-    pub const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
-    pub const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
-    pub const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
-    pub const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
-    pub const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
-    pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
-    pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
-    pub const VP_USER_WASM: &str = "vp_user.wasm";
     pub const TX_BOND_WASM: &str = "tx_bond.wasm";
-    pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
-    pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
+    pub const TX_BRIDGE_POOL_WASM: &str = "tx_bridge_pool.wasm";
     pub const TX_CHANGE_COMMISSION_WASM: &str =
         "tx_change_validator_commission.wasm";
+    pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
+    pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
+    pub const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
+    pub const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
+    pub const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
+    pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
+    pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
+    pub const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
+    pub const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
+    pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
+
+    pub const VP_USER_WASM: &str = "vp_user.wasm";
 
     pub const ADDRESS: Arg<WalletAddress> = arg("address");
     pub const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
@@ -2445,6 +2447,7 @@ pub mod args {
                 amount: self.amount,
                 gas_amount: self.gas_amount,
                 gas_payer: self.gas_payer.to_sdk(ctx),
+                code_path: ctx.read_wasm(self.code_path),
             }
         }
     }
@@ -2458,6 +2461,7 @@ pub mod args {
             let amount = AMOUNT.parse(matches);
             let gas_amount = FEE_AMOUNT.parse(matches);
             let gas_payer = FEE_PAYER.parse(matches);
+            let tx_code_path = PathBuf::from(TX_BRIDGE_POOL_WASM);
             Self {
                 tx,
                 asset,
@@ -2466,6 +2470,7 @@ pub mod args {
                 amount,
                 gas_amount,
                 gas_payer,
+                tx_code_path,
             }
         }
 

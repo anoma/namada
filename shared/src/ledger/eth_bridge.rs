@@ -22,8 +22,9 @@ use crate::types::control_flow::time::{
 const DEFAULT_BACKOFF: Duration = std::time::Duration::from_millis(500);
 const DEFAULT_CEILING: Duration = std::time::Duration::from_secs(30);
 
-/// A fatal error occurred, therefore we must halt execution.
-pub type Exit = ();
+/// Result indicating that a fatal error occurred,
+/// therefore we must halt execution.
+pub type ExitResult<T> = Result<T, ()>;
 
 /// The result of querying an Ethereum nodes syncing status.
 pub enum SyncStatus {
@@ -89,7 +90,7 @@ pub struct BlockOnEthSync<'rpc_url> {
 }
 
 /// Block until Ethereum finishes synchronizing.
-pub async fn block_on_eth_sync(args: BlockOnEthSync<'_>) -> Result<(), Exit> {
+pub async fn block_on_eth_sync(args: BlockOnEthSync<'_>) -> ExitResult<()> {
     let BlockOnEthSync {
         deadline,
         rpc_timeout,
@@ -127,7 +128,7 @@ pub async fn block_on_eth_sync(args: BlockOnEthSync<'_>) -> Result<(), Exit> {
 pub async fn eth_sync_or<F, T>(
     url: &str,
     mut action: F,
-) -> Result<Either<T, ()>, Exit>
+) -> ExitResult<Either<T, ()>>
 where
     F: FnMut() -> T,
 {
@@ -153,7 +154,7 @@ where
 
 /// Check if Ethereum has finished synchronizing. In case it has
 /// not, end execution.
-pub async fn eth_sync_or_exit(url: &str) -> Result<(), Exit> {
+pub async fn eth_sync_or_exit(url: &str) -> ExitResult<()> {
     eth_sync_or(url, || {
         tracing::error!("The Ethereum node has not finished synchronizing");
     })

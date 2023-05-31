@@ -5,26 +5,24 @@ use std::sync::Arc;
 use borsh::BorshSerialize;
 use data_encoding::HEXLOWER;
 use ethbridge_governance_contract::Governance;
-use futures::future::FutureExt;
-use namada::core::types::storage::Epoch;
-use namada::core::types::vote_extensions::validator_set_update;
-use namada::eth_bridge::ethers::abi::{AbiDecode, AbiType, Tokenizable};
-use namada::eth_bridge::ethers::core::types::TransactionReceipt;
-use namada::eth_bridge::ethers::providers::{Http, Provider};
-use namada::eth_bridge::structs::{Signature, ValidatorSetArgs};
-use namada::ledger::queries::RPC;
-use namada::proto::Tx;
-use namada::types::control_flow::time::{self, Duration, Instant};
-use namada::types::key::RefTo;
-use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
-use namada::types::transaction::TxType;
-use tokio::sync::oneshot;
+use futures::future::{self, FutureExt};
+use namada_core::hints;
+use namada_core::types::storage::Epoch;
+use namada_core::types::vote_extensions::validator_set_update;
 
-use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit};
-use crate::cli::{args, safe_exit, Context};
+use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit, ExitResult};
 use crate::client::eth_bridge::BlockOnEthSync;
-use crate::control_flow::install_shutdown_signal;
-use crate::facade::tendermint_rpc::{Client, HttpClient};
+use crate::eth_bridge::ethers::abi::{AbiDecode, AbiType, Tokenizable};
+use crate::eth_bridge::ethers::core::types::TransactionReceipt;
+use crate::eth_bridge::ethers::providers::{Http, Provider};
+use crate::eth_bridge::structs::{Signature, ValidatorSetArgs};
+use crate::ledger::queries::{Client, RPC};
+use crate::proto::Tx;
+use crate::types::control_flow::install_shutdown_signal;
+use crate::types::control_flow::time::{self, Duration, Instant};
+use crate::types::key::RefTo;
+use crate::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
+use crate::types::transaction::TxType;
 
 /// Relayer related errors.
 #[derive(Debug, Default)]
@@ -78,9 +76,12 @@ impl Error {
 
     /// Exit from the relayer process, if the error
     /// was critical.
-    fn maybe_exit(&self) {
+    fn maybe_exit(&self) -> ExitResult<()> {
         if let Error::WithReason { critical: true, .. } = self {
-            safe_exit(1);
+            hints::cold();
+            Err(())
+        } else {
+            Ok(())
         }
     }
 
@@ -244,90 +245,6 @@ impl From<Option<TransactionReceipt>> for RelayResult {
     }
 }
 
-/// Submit a validator set update protocol tx to the network.
-pub async fn submit_validator_set_update(
-    mut ctx: Context,
-    args: args::SubmitValidatorSetUpdate,
-) {
-    let maybe_validator_data = ctx.wallet.take_validator_data();
-    let Some(validator_data) = maybe_validator_data else {
-        println!("No validator keys found in the Namada directory.");
-        safe_exit(1);
-    };
-
-    let args::SubmitValidatorSetUpdate {
-        query,
-        epoch: maybe_epoch,
-    } = args;
-
-    let client = HttpClient::new(query.ledger_address).unwrap();
-
-    let epoch = if let Some(epoch) = maybe_epoch {
-        epoch
-    } else {
-        RPC.shell().epoch(&client).await.unwrap().next()
-    };
-
-    if epoch.0 == 0 {
-        println!(
-            "Validator set update proofs should only be requested from epoch \
-             1 onwards"
-        );
-        safe_exit(1);
-    }
-
-    let voting_powers = match RPC
-        .shell()
-        .eth_bridge()
-        .voting_powers_at_epoch(&client, &epoch)
-        .await
-    {
-        Ok(voting_powers) => voting_powers,
-        Err(e) => {
-            println!("Failed to get voting powers: {e}");
-            safe_exit(1);
-        }
-    };
-    let protocol_tx = ProtocolTxType::ValSetUpdateVext(
-        validator_set_update::Vext {
-            voting_powers,
-            signing_epoch: epoch - 1,
-            validator_addr: validator_data.address,
-        }
-        .sign(&validator_data.keys.eth_bridge_keypair),
-    );
-    let tx = Tx::new(
-        vec![],
-        Some(
-            TxType::Protocol(ProtocolTx {
-                pk: validator_data.keys.protocol_keypair.ref_to(),
-                tx: protocol_tx,
-            })
-            .try_to_vec()
-            .expect("Could not serialize ProtocolTx"),
-        ),
-        ctx.config.ledger.chain_id.clone(),
-        None,
-    )
-    .sign(&validator_data.keys.protocol_keypair);
-
-    let response = match client.broadcast_tx_sync(tx.to_bytes().into()).await {
-        Ok(response) => response,
-        Err(e) => {
-            println!("Failed to broadcast protocol tx: {e}");
-            safe_exit(1);
-        }
-    };
-
-    if response.code == 0.into() {
-        println!("Transaction added to mempool: {:?}", response);
-    } else {
-        let err = serde_json::to_string(&response).unwrap();
-        eprintln!("Encountered error while broadcasting transaction: {err}");
-        safe_exit(1);
-    }
-}
-
 /// Query an ABI encoding of the validator set to be installed
 /// at the given epoch, and its associated proof.
 pub async fn query_validator_set_update_proof(args: args::ValidatorSetProof) {
@@ -370,7 +287,13 @@ pub async fn query_validator_set_args(args: args::ConsensusValidatorSet) {
 }
 
 /// Relay a validator set update, signed off for a given epoch.
-pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
+pub async fn relay_validator_set_update<C>(
+    nam_client: &C,
+    args: args::ValidatorSetUpdateRelay,
+) -> ExitResult<()>
+where
+    C: Client + Sync,
+{
     let mut signal_receiver = args.safe_mode.then(install_shutdown_signal);
 
     if args.sync {
@@ -380,21 +303,18 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
             rpc_timeout: std::time::Duration::from_secs(3),
             delta_sleep: Duration::from_secs(1),
         })
-        .await;
+        .await?;
     } else {
-        eth_sync_or_exit(&args.eth_rpc_endpoint).await;
+        eth_sync_or_exit(&args.eth_rpc_endpoint).await?;
     }
-
-    let nam_client =
-        HttpClient::new(args.query.ledger_address.clone()).unwrap();
 
     if args.daemon {
         relay_validator_set_update_daemon(
             args,
             nam_client,
-            &mut signal_receiver,
+            Pin::new(&mut signal_receiver),
         )
-        .await;
+        .await?;
     } else {
         let result = relay_validator_set_update_once::<CheckNonce, _>(
             &args,
@@ -432,16 +352,20 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
         .await;
         if let Err(err) = result {
             err.display();
-            err.maybe_exit();
+            err.maybe_exit()?;
         }
+        Ok(())
     }
 }
 
-async fn relay_validator_set_update_daemon(
+async fn relay_validator_set_update_daemon<C>(
     mut args: args::ValidatorSetUpdateRelay,
-    nam_client: HttpClient,
-    shutdown_receiver: &mut Option<oneshot::Receiver<()>>,
-) {
+    nam_client: &C,
+    shutdown_receiver: &mut Option<F>,
+) where
+    C: Client + Sync,
+    F: Future<Output = ()>,
+{
     let eth_client =
         Arc::new(Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap());
 
@@ -456,10 +380,14 @@ async fn relay_validator_set_update_daemon(
     tracing::info!("The validator set update relayer daemon has started");
 
     loop {
-        let should_exit = shutdown_receiver
-            .as_mut()
-            .map(|rx| rx.try_recv().is_ok())
-            .unwrap_or(false);
+        let should_exit = if let Some(fut) = shutdown_receiver.as_mut() {
+            let fut = future::maybe_done(fut);
+            futures::pin_mut!(fut);
+            fut.as_mut().await;
+            fut.as_mut().take_output().is_some()
+        } else {
+            false
+        };
 
         if should_exit {
             safe_exit(0);

@@ -96,6 +96,7 @@ derivative = "2.2.0"
 ethers = "2.0.0"
 eyre = "0.6.8"
 ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "9e5e91c954158e7cff45c483fd06cd649a81553f"}
+futures = "0.3"
 # TODO using the same version of tendermint-rs as we do here.
 ibc = {version = "0.36.0", default-features = false, features = ["serde"], optional = true}
 ibc-proto = {version = "0.26.0", default-features = false, optional = true}

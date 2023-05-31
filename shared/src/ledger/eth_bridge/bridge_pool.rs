@@ -5,38 +5,40 @@ use std::sync::Arc;
 
 use borsh::BorshSerialize;
 use ethbridge_bridge_contract::Bridge;
-use namada::eth_bridge::ethers::abi::AbiDecode;
-use namada::eth_bridge::ethers::prelude::{Http, Provider};
-use namada::eth_bridge::structs::RelayProof;
-use namada::ledger::queries::RPC;
-use namada::proto::Tx;
-use namada::types::address::Address;
-use namada::types::control_flow::time::{Duration, Instant};
-use namada::types::eth_abi::Encode;
-use namada::types::eth_bridge_pool::{
-    GasFee, PendingTransfer, TransferToEthereum,
-};
-use namada::types::keccak::KeccakHash;
-use namada::types::token::Amount;
-use namada::types::voting_power::FractionalVotingPower;
+use namada_core::types::chain::ChainId;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 
-use super::super::signing::TxSigningKey;
-use super::super::tx::process_tx;
-use super::{block_on_eth_sync, eth_sync_or_exit};
-use crate::cli::{args, safe_exit, Context};
+use super::{block_on_eth_sync, eth_sync_or_exit, ExitResult};
 use crate::client::eth_bridge::BlockOnEthSync;
-use crate::control_flow::install_shutdown_signal;
-use crate::facade::tendermint_rpc::HttpClient;
-
-const ADD_TRANSFER_WASM: &str = "tx_bridge_pool.wasm";
+use crate::eth_bridge::ethers::abi::AbiDecode;
+use crate::eth_bridge::ethers::prelude::{Http, Provider};
+use crate::eth_bridge::structs::RelayProof;
+use crate::ledger::args;
+use crate::ledger::queries::{Client, RPC};
+use crate::ledger::signing::TxSigningKey;
+use crate::ledger::tx::process_tx;
+use crate::ledger::wallet::{Wallet, WalletUtils};
+use crate::proto::Tx;
+use crate::types::address::Address;
+use crate::types::control_flow::install_shutdown_signal;
+use crate::types::control_flow::time::{Duration, Instant};
+use crate::types::eth_abi::Encode;
+use crate::types::eth_bridge_pool::{
+    GasFee, PendingTransfer, TransferToEthereum,
+};
+use crate::types::keccak::KeccakHash;
+use crate::types::token::Amount;
+use crate::types::voting_power::FractionalVotingPower;
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
-pub async fn add_to_eth_bridge_pool(
-    ctx: Context,
+pub async fn add_to_eth_bridge_pool<C>(
+    client: &C,
+    chain_id: ChainId,
     args: args::EthereumBridgePool,
-) {
+) where
+    C: Client + Sync,
+{
     let args::EthereumBridgePool {
         ref tx,
         asset,
@@ -46,29 +48,24 @@ pub async fn add_to_eth_bridge_pool(
         gas_amount,
         ref gas_payer,
     } = args;
-    let tx_code = ctx.read_wasm(ADD_TRANSFER_WASM);
     let transfer = PendingTransfer {
         transfer: TransferToEthereum {
             asset,
             recipient,
-            sender: ctx.get(sender),
+            sender,
             amount,
         },
         gas_fee: GasFee {
             amount: gas_amount,
-            payer: ctx.get(gas_payer),
+            payer,
         },
     };
     let data = transfer.try_to_vec().unwrap();
-    let transfer_tx = Tx::new(
-        tx_code,
-        Some(data),
-        ctx.config.ledger.chain_id.clone(),
-        None,
-    );
+    let transfer_tx = Tx::new(args.tx_code_path, Some(data), chain_id, None);
     // this should not initialize any new addresses, so we ignore the result.
     process_tx(
-        ctx,
+        client,
+        wallet,
         tx,
         transfer_tx,
         TxSigningKey::None,
@@ -87,12 +84,14 @@ struct BridgePoolResponse {
 
 /// Query the contents of the Ethereum bridge pool.
 /// Prints out a json payload.
-pub async fn query_bridge_pool(args: args::Query) {
-    let client = HttpClient::new(args.ledger_address).unwrap();
+pub async fn query_bridge_pool<C>(client: &C, args: args::Query)
+where
+    C: Client + Sync,
+{
     let response: Vec<PendingTransfer> = RPC
         .shell()
         .eth_bridge()
-        .read_ethereum_bridge_pool(&client)
+        .read_ethereum_bridge_pool(client)
         .await
         .unwrap();
     let pool_contents: HashMap<String, PendingTransfer> = response
@@ -112,14 +111,17 @@ pub async fn query_bridge_pool(args: args::Query) {
 /// Query the contents of the Ethereum bridge pool that
 /// is covered by the latest signed root.
 /// Prints out a json payload.
-pub async fn query_signed_bridge_pool(
+pub async fn query_signed_bridge_pool<C>(
+    client: &C,
     args: args::Query,
-) -> HashMap<String, PendingTransfer> {
-    let client = HttpClient::new(args.ledger_address).unwrap();
+) -> ExitResult<HashMap<String, PendingTransfer>>
+where
+    C: Client + Sync,
+{
     let response: Vec<PendingTransfer> = RPC
         .shell()
         .eth_bridge()
-        .read_signed_ethereum_bridge_pool(&client)
+        .read_signed_ethereum_bridge_pool(client)
         .await
         .unwrap();
     let pool_contents: HashMap<String, PendingTransfer> = response
@@ -128,13 +130,13 @@ pub async fn query_signed_bridge_pool(
         .collect();
     if pool_contents.is_empty() {
         println!("Bridge pool is empty.");
-        safe_exit(0);
+        return Err(());
     }
     let contents = BridgePoolResponse {
         bridge_pool_contents: pool_contents.clone(),
     };
     println!("{}", serde_json::to_string_pretty(&contents).unwrap());
-    pool_contents
+    Ok(pool_contents)
 }
 
 /// Iterates over all ethereum events
@@ -142,12 +144,14 @@ pub async fn query_signed_bridge_pool(
 /// backing each `TransferToEthereum` event.
 ///
 /// Prints a json payload.
-pub async fn query_relay_progress(args: args::Query) {
-    let client = HttpClient::new(args.ledger_address).unwrap();
+pub async fn query_relay_progress<C>(client: &C, args: args::Query)
+where
+    C: Client + Sync,
+{
     let resp = RPC
         .shell()
         .eth_bridge()
-        .transfer_to_ethereum_progress(&client)
+        .transfer_to_ethereum_progress(client)
         .await
         .unwrap();
     println!("{}", serde_json::to_string_pretty(&resp).unwrap());
@@ -155,11 +159,14 @@ pub async fn query_relay_progress(args: args::Query) {
 
 /// Internal methdod to construct a proof that a set of transfers are in the
 /// bridge pool.
-async fn construct_bridge_pool_proof(
-    client: &HttpClient,
+async fn construct_bridge_pool_proof<C>(
+    client: &C,
     transfers: &[KeccakHash],
     relayer: Address,
-) -> Vec<u8> {
+) -> ExitResult<Vec<u8>>
+where
+    C: Client + Sync,
+{
     let in_progress = RPC
         .shell()
         .eth_bridge()
@@ -197,11 +204,11 @@ async fn construct_bridge_pool_proof(
             let stdin = std::io::stdin();
             stdin.read_line(&mut buffer).unwrap_or_else(|e| {
                 println!("Encountered error reading from STDIN: {:?}", e);
-                safe_exit(1)
+                return Err(());
             });
             match buffer.trim() {
                 "y" => break,
-                "n" => safe_exit(0),
+                "n" => return Err(()),
                 _ => {
                     print!("Expected 'y' or 'n'. Please try again: ");
                     std::io::stdout().flush().unwrap();
@@ -217,13 +224,11 @@ async fn construct_bridge_pool_proof(
         .generate_bridge_pool_proof(client, Some(data), None, false)
         .await;
 
-    match response {
-        Ok(response) => response.data,
-        Err(e) => {
+    response
+        .map_err(|e| {
             println!("Encountered error constructing proof:\n{:?}", e);
-            safe_exit(1)
-        }
-    }
+        })
+        .map(|response| response.data)
 }
 
 /// A response from construction a bridge pool proof.
@@ -238,19 +243,24 @@ struct BridgePoolProofResponse {
 /// Construct a merkle proof of a batch of transfers in
 /// the bridge pool and return it to the user (as opposed
 /// to relaying it to ethereum).
-pub async fn construct_proof(args: args::BridgePoolProof) {
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
+pub async fn construct_proof<C>(
+    client: &C,
+    args: args::BridgePoolProof,
+) -> ExitResult<()>
+where
+    C: Client + Sync,
+{
     let bp_proof_bytes = construct_bridge_pool_proof(
-        &client,
+        client,
         &args.transfers,
         args.relayer.clone(),
     )
-    .await;
+    .await?;
     let bp_proof: RelayProof = match AbiDecode::decode(&bp_proof_bytes) {
         Ok(proof) => proof,
         Err(error) => {
             println!("Unable to decode the generated proof: {:?}", error);
-            safe_exit(1)
+            return Err(());
         }
     };
     let resp = BridgePoolProofResponse {
@@ -265,10 +275,17 @@ pub async fn construct_proof(args: args::BridgePoolProof) {
         abi_encoded_proof: bp_proof_bytes,
     };
     println!("{}", serde_json::to_string(&resp).unwrap());
+    Ok(())
 }
 
 /// Relay a validator set update, signed off for a given epoch.
-pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
+pub async fn relay_bridge_pool_proof<C>(
+    nam_client: &C,
+    args: args::RelayBridgePoolProof,
+) -> ExitResult<()>
+where
+    C: Client + Sync,
+{
     let _signal_receiver = args.safe_mode.then(install_shutdown_signal);
 
     if args.sync {
@@ -278,21 +295,20 @@ pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
             rpc_timeout: std::time::Duration::from_secs(3),
             delta_sleep: Duration::from_secs(1),
         })
-        .await;
+        .await?;
     } else {
-        eth_sync_or_exit(&args.eth_rpc_endpoint).await;
+        eth_sync_or_exit(&args.eth_rpc_endpoint).await?;
     }
 
-    let nam_client = HttpClient::new(args.query.ledger_address).unwrap();
     let bp_proof =
-        construct_bridge_pool_proof(&nam_client, &args.transfers, args.relayer)
-            .await;
+        construct_bridge_pool_proof(nam_client, &args.transfers, args.relayer)
+            .await?;
     let eth_client =
         Arc::new(Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap());
     let bridge = match RPC
         .shell()
         .eth_bridge()
-        .read_bridge_contract(&nam_client)
+        .read_bridge_contract(nam_client)
         .await
     {
         Ok(address) => Bridge::new(address.address, eth_client),
@@ -306,7 +322,7 @@ pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
                  reason:\n{err_msg}\n\nPerhaps the Ethereum bridge is not \
                  active.",
             );
-            safe_exit(1)
+            return Err(());
         }
     };
 
@@ -314,7 +330,7 @@ pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
         Ok(proof) => proof,
         Err(error) => {
             println!("Unable to decode the generated proof: {:?}", error);
-            safe_exit(1)
+            return Err(());
         }
     };
 
@@ -335,7 +351,7 @@ pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
                  has yet to be crafted in Namada.",
                 bp_proof.batch_nonce
             );
-            safe_exit(1);
+            return Err(());
         }
         Ordering::Greater => {
             let error = "Error".on_red();
@@ -347,7 +363,7 @@ pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
                  Somehow, Namada's nonce is ahead of the contract's nonce!",
                 bp_proof.batch_nonce
             );
-            safe_exit(1);
+            return Err(());
         }
     }
 
@@ -369,6 +385,7 @@ pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
         .unwrap();
 
     println!("{transf_result:?}");
+    Ok(())
 }
 
 mod recommendations {
@@ -404,22 +421,23 @@ mod recommendations {
     enum AlgorithmMode {
         /// Only keep profitable transactions
         Greedy,
-        /// Allow transactions with are not profitable
+        /// Allow transactions which are not profitable
         Generous,
     }
 
     /// Recommend the most economical batch of transfers to relay based
     /// on a conversion rate estimates from NAM to ETH and gas usage
     /// heuristics.
-    pub async fn recommend_batch(args: args::RecommendBatch) {
-        let client =
-            HttpClient::new(args.query.ledger_address.clone()).unwrap();
+    pub async fn recommend_batch<C>(client: &C, args: args::RecommendBatch)
+    where
+        C: Client + Sync,
+    {
         // get transfers that can already been relayed but are awaiting a quorum
         // of backing votes.
         let in_progress = RPC
             .shell()
             .eth_bridge()
-            .transfer_to_ethereum_progress(&client)
+            .transfer_to_ethereum_progress(client)
             .await
             .unwrap()
             .keys()
@@ -432,7 +450,7 @@ mod recommendations {
             <(BridgePoolRootProof, BlockHeight)>::try_from_slice(
                 &RPC.shell()
                     .storage_value(
-                        &client,
+                        client,
                         None,
                         Some(0.into()),
                         false,
@@ -449,7 +467,7 @@ mod recommendations {
         let voting_powers = RPC
             .shell()
             .eth_bridge()
-            .voting_powers_at_height(&client, &height)
+            .voting_powers_at_height(client, &height)
             .await
             .unwrap();
         let valset_size = voting_powers.len() as u64;
@@ -466,7 +484,7 @@ mod recommendations {
         // we don't recommend transfers that have already been relayed
         let mut contents: Vec<(String, i64, PendingTransfer)> =
             query_signed_bridge_pool(args.query)
-                .await
+                .await?
                 .into_iter()
                 .filter_map(|(k, v)| {
                     if !in_progress.contains(&v) {
