@@ -83,6 +83,13 @@ impl DB for MockDB {
                 }
                 None => return Ok(None),
             };
+        let update_epoch_blocks_delay: Option<u32> =
+            match self.0.borrow().get("update_epoch_blocks_delay") {
+                Some(bytes) => {
+                    types::decode(bytes).map_err(Error::CodingError)?
+                }
+                None => return Ok(None),
+            };
         #[cfg(feature = "ferveo-tpke")]
         let tx_queue: TxQueue = match self.0.borrow().get("tx_queue") {
             Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
@@ -160,6 +167,7 @@ impl DB for MockDB {
                     pred_epochs,
                     next_epoch_min_start_height,
                     next_epoch_min_start_time,
+                    update_epoch_blocks_delay,
                     address_gen,
                     results,
                     #[cfg(feature = "ferveo-tpke")]
@@ -188,6 +196,7 @@ impl DB for MockDB {
             pred_epochs,
             next_epoch_min_start_height,
             next_epoch_min_start_time,
+            update_epoch_blocks_delay,
             address_gen,
             results,
             #[cfg(feature = "ferveo-tpke")]
@@ -202,6 +211,10 @@ impl DB for MockDB {
         self.0.borrow_mut().insert(
             "next_epoch_min_start_time".into(),
             types::encode(&next_epoch_min_start_time),
+        );
+        self.0.borrow_mut().insert(
+            "update_epoch_blocks_delay".into(),
+            types::encode(&update_epoch_blocks_delay),
         );
         #[cfg(feature = "ferveo-tpke")]
         {
