@@ -1692,14 +1692,9 @@ where
             tracing::debug!("bond ∆ at epoch {}: {}", ep, delta);
         }
     }
-    let stake_at_pipeline =
-        read_validator_stake(storage, &params, validator, pipeline_epoch)?
-            .unwrap_or_default()
-            .change();
-    let token_change = cmp::min(amount_after_slashing, stake_at_pipeline);
     tracing::debug!(
         "Token change including slashes on unbond = {}",
-        token_change
+        -amount_after_slashing
     );
 
     // Update the validator set at the pipeline offset. Since unbonding from a
@@ -1716,7 +1711,7 @@ where
             storage,
             &params,
             validator,
-            -token_change,
+            -amount_after_slashing,
             current_epoch,
         )?;
     }
@@ -1726,14 +1721,14 @@ where
         storage,
         &params,
         validator,
-        -token_change,
+        -amount_after_slashing,
         current_epoch,
         params.pipeline_len,
     )?;
     update_total_deltas(
         storage,
         &params,
-        -token_change,
+        -amount_after_slashing,
         current_epoch,
         params.pipeline_len,
     )?;
