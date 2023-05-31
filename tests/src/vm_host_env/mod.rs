@@ -1195,7 +1195,7 @@ mod tests {
         // original denom
         let hash = ibc_storage::calc_hash(&denom);
         let denom_key = ibc_storage::ibc_denom_key(&hash);
-        writes.insert(denom_key, denom.as_bytes().to_vec());
+        writes.insert(denom_key, denom.try_to_vec().unwrap());
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
                 env.wl_storage

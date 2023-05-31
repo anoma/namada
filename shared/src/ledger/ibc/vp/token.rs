@@ -192,7 +192,7 @@ where
         {
             let denom_key = ibc_storage::ibc_denom_key(token_hash);
             coin.denom = match self.ctx.read_bytes_pre(&denom_key) {
-                Ok(Some(v)) => String::from_utf8(v).map_err(|e| {
+                Ok(Some(v)) => String::try_from_slice(&v[..]).map_err(|e| {
                     Error::Denom(format!(
                         "Decoding the denom string failed: {}",
                         e

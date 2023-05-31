@@ -1,5 +1,6 @@
 //! IbcCommonContext implementation for IBC
 
+use borsh::BorshSerialize;
 use prost::Message;
 use sha2::Digest;
 
@@ -363,7 +364,14 @@ pub trait IbcCommonContext: IbcStorageContext {
         denom: PrefixedDenom,
     ) -> Result<(), ContextError> {
         let key = storage::ibc_denom_key(trace_hash);
-        let bytes = denom.to_string().as_bytes().to_vec();
+        let bytes = denom.to_string().try_to_vec().map_err(|e| {
+            ContextError::ChannelError(ChannelError::Other {
+                description: format!(
+                    "Encoding the denom failed: Denom {}, error {}",
+                    denom, e
+                ),
+            })
+        })?;
         self.write(&key, bytes).map_err(|_| {
             ContextError::ChannelError(ChannelError::Other {
                 description: format!("Writing the denom failed: Key {}", key),

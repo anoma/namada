@@ -1,7 +1,6 @@
 //! IBC integration as a native validity predicate
 
 mod context;
-mod denom;
 mod token;
 
 use std::cell::RefCell;
@@ -10,7 +9,6 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use context::{PseudoExecutionContext, VpValidationContext};
-use namada_core::ledger::ibc::storage::{is_ibc_denom_key, is_ibc_key};
 use namada_core::ledger::ibc::{
     Error as ActionError, IbcActions, TransferModule, ValidationParams,
 };
@@ -23,6 +21,7 @@ use namada_proof_of_stake::read_pos_params;
 use thiserror::Error;
 pub use token::{Error as IbcTokenError, IbcToken};
 
+use crate::ledger::ibc::storage::{calc_hash, is_ibc_denom_key, is_ibc_key};
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
 use crate::ledger::parameters::read_epoch_duration_parameter;
 use crate::vm::WasmCacheAccess;
@@ -40,8 +39,8 @@ pub enum Error {
     IbcAction(ActionError),
     #[error("State change error: {0}")]
     StateChange(String),
-    #[error("Denom store error: {0}")]
-    Denom(denom::Error),
+    #[error("Denom error: {0}")]
+    Denom(String),
     #[error("IBC event error: {0}")]
     IbcEvent(String),
 }
@@ -86,9 +85,7 @@ where
         self.validate_with_msg(&tx_data)?;
 
         // Validate the denom store if a denom key has been changed
-        if keys_changed.iter().any(is_ibc_denom_key) {
-            self.validate_denom(&tx_data).map_err(Error::Denom)?;
-        }
+        self.validate_denom(keys_changed)?;
 
         Ok(true)
     }
@@ -172,6 +169,35 @@ where
             unbonding_period: Duration::from_secs(unbonding_period_secs),
             upgrade_path: Vec::new(),
         })
+    }
+
+    fn validate_denom(&self, keys_changed: &BTreeSet<Key>) -> VpResult<()> {
+        for key in keys_changed {
+            if let Some(hash) = is_ibc_denom_key(key) {
+                match self.ctx.read_post::<String>(key).map_err(|e| {
+                    Error::Denom(format!(
+                        "Getting the denom failed: Key {}, Error {}",
+                        key, e
+                    ))
+                })? {
+                    Some(denom) => {
+                        if calc_hash(&denom) != hash {
+                            return Err(Error::Denom(format!(
+                                "The denom is invalid: Key {}, Denom {}",
+                                key, denom
+                            )));
+                        }
+                    }
+                    None => {
+                        return Err(Error::Denom(format!(
+                            "The corresponding denom wasn't stored: Key {}",
+                            key
+                        )));
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -2187,7 +2213,7 @@ mod tests {
         ));
         let trace_hash = calc_hash(coin.denom.to_string());
         let denom_key = ibc_denom_key(&trace_hash);
-        let bytes = coin.denom.to_string().as_bytes().to_vec();
+        let bytes = coin.denom.to_string().try_to_vec().unwrap();
         wl_storage
             .write_log
             .write(&denom_key, bytes)
