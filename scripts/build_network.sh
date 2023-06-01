@@ -105,14 +105,14 @@ validate_arguments() {
 
     if [ "$#" -eq 2 ]; then
         NAMADA_BIN_DIR=$BASE_DIR
-        if [ "$OSTYPE"=="linux-gnu" ]; then
+        if [ "$OSTYPE"=="darwin" ]; then
+            BASE_DIR="$HOME/Library/Application Support/Namada"
+        else
             if [ -z ${XDG_DATA_HOME+x} ]; then
                 BASE_DIR="$HOME/.local/share/namada"
             else
                 BASE_DIR="$XDG_DATA_HOME/namada"
-            fi
-        elif [ "$OSTYPE"=="darwin" ]; then
-            BASE_DIR="$HOME/Library/Application Support/Namada"
+            fi    
         fi
         echo "Using default BASE_DIR: $BASE_DIR"
     fi
