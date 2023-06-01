@@ -2063,8 +2063,6 @@ pub mod args {
     use namada::types::storage::{self, BlockHeight, Epoch};
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
-    use namada::types::token::Amount;
-    use namada::types::transaction::GasLimit;
     use rust_decimal::Decimal;
 
     use super::context::*;

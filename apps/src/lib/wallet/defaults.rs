@@ -81,8 +81,6 @@ mod dev {
     use namada::types::key::dkg_session_keys::DkgKeypair;
     use namada::types::key::*;
 
-    use crate::wallet::alias::Alias;
-
     /// Generate a new protocol signing keypair, eth hot key and DKG session
     /// keypair
     pub fn validator_keys() -> (common::SecretKey, common::SecretKey, DkgKeypair)

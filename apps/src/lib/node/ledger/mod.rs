@@ -233,65 +233,6 @@ pub fn rollback(config: config::Ledger) -> Result<(), shell::Error> {
     shell::rollback(config)
 }
 
-/// Delete a value from storage.
-// TODO: recalculate merkle roots? maybe this should be
-// a new argument
-pub fn db_delete_value(
-    config: config::Ledger,
-    args: args::LedgerDbDeleteValue,
-) {
-    use namada::ledger::storage::DB;
-
-    let chain_id = config.chain_id;
-    let db_path = config.shell.db_dir(&chain_id);
-
-    let mut db = storage::PersistentDB::open(db_path, None);
-    let latest_block = match db.read_last_block() {
-        Ok(Some(data)) => {
-            tracing::info!(
-                last_height = ?data.height,
-                "Read the last committed block's data."
-            );
-            data
-        }
-        Ok(None) => {
-            tracing::error!("No block has been committed yet.");
-            return;
-        }
-        Err(reason) => {
-            tracing::error!(%reason, "Failed to read the last block's data.");
-            return;
-        }
-    };
-
-    tracing::info!(
-        key = %args.storage_key,
-        last_height = ?latest_block.height,
-        "Deleting value from storage subspace key..."
-    );
-    if let Err(reason) =
-        db.delete_subspace_val(latest_block.height, &args.storage_key)
-    {
-        tracing::error!(
-            %reason,
-            key = %args.storage_key,
-            "Failed to delete value from database."
-        );
-        return;
-    }
-
-    tracing::debug!("Flushing changes...");
-    if let Err(reason) = db.flush(true) {
-        tracing::error!(%reason, "Failed to flush database changes.");
-        return;
-    }
-
-    tracing::info!(
-        key = %args.storage_key,
-        "Value successfully deleted from the database."
-    );
-}
-
 /// Runs and monitors a few concurrent tasks.
 ///
 /// This includes:

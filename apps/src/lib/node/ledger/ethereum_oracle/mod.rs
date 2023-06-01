@@ -4,37 +4,36 @@ pub mod test_tools;
 
 use std::borrow::Cow;
 use std::ops::{ControlFlow, Deref};
-use std::time::Duration;
 
 use clarity::Address;
 use ethbridge_events::{event_codecs, EventKind};
 use namada::core::hints;
 use namada::core::types::ethereum_structs;
 use namada::eth_bridge::oracle::config::Config;
+#[cfg(not(test))]
+use namada::ledger::eth_bridge::eth_syncing_status_timeout;
+use namada::ledger::eth_bridge::SyncStatus;
+#[cfg(not(test))]
+use namada::types::control_flow::time::Instant;
+use namada::types::control_flow::time::{Duration, SleepStrategy};
 use namada::types::ethereum_events::EthereumEvent;
-use namada::types::ledger::eth_bridge::{
-    eth_syncing_status_timeout, SyncStatus,
-};
 use num256::Uint256;
 use thiserror::Error;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::Sender as BoundedSender;
 use tokio::task::LocalSet;
-use tokio::time::Instant;
 #[cfg(not(test))]
 use web30::client::Web3;
-use web30::jsonrpc::error::Web3Error;
 
 use self::events::PendingEvent;
 #[cfg(test)]
 use self::test_tools::mock_web3_client::Web3;
 use super::abortable::AbortableSpawner;
-use crate::control_flow::time::SleepStrategy;
 use crate::node::ledger::oracle::control::Command;
 
 /// The default amount of time the oracle will wait between processing blocks
-const DEFAULT_BACKOFF: Duration = std::time::Duration::from_millis(500);
-const DEFAULT_CEILING: Duration = std::time::Duration::from_secs(30);
+const DEFAULT_BACKOFF: Duration = Duration::from_millis(500);
+const DEFAULT_CEILING: Duration = Duration::from_secs(30);
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -912,11 +911,13 @@ mod test_oracle {
         }
         // check that the oracle indeed processes the confirmed blocks
         for height in 0u64..confirmed_block_height + 1 {
-            let block_processed =
-                timeout(Duration::from_secs(3), blocks_processed_recv.recv())
-                    .await
-                    .expect("Timed out waiting for block to be checked")
-                    .unwrap();
+            let block_processed = timeout(
+                std::time::Duration::from_secs(3),
+                blocks_processed_recv.recv(),
+            )
+            .await
+            .expect("Timed out waiting for block to be checked")
+            .unwrap();
             assert_eq!(block_processed, Uint256::from(height));
         }
 
@@ -924,9 +925,12 @@ mod test_oracle {
         // TODO: check this in a deterministic way rather than just waiting a
         // bit
         assert!(
-            timeout(Duration::from_secs(1), blocks_processed_recv.recv())
-                .await
-                .is_err()
+            timeout(
+                std::time::Duration::from_secs(1),
+                blocks_processed_recv.recv()
+            )
+            .await
+            .is_err()
         );
 
         // increase the height of the chain by one, and check that the oracle
@@ -936,11 +940,13 @@ mod test_oracle {
             .send(TestCmd::NewHeight(Uint256::from(synced_block_height)))
             .expect("Test failed");
 
-        let block_processed =
-            timeout(Duration::from_secs(3), blocks_processed_recv.recv())
-                .await
-                .expect("Timed out waiting for block to be checked")
-                .unwrap();
+        let block_processed = timeout(
+            std::time::Duration::from_secs(3),
+            blocks_processed_recv.recv(),
+        )
+        .await
+        .expect("Timed out waiting for block to be checked")
+        .unwrap();
         assert_eq!(block_processed, Uint256::from(confirmed_block_height + 1));
 
         drop(eth_recv);
@@ -977,11 +983,13 @@ mod test_oracle {
         // check that the oracle has indeed processed the first `n` blocks, even
         // though the first latest block that the oracle received was not 0
         for height in 0u64..confirmed_block_height + 1 {
-            let block_processed =
-                timeout(Duration::from_secs(3), blocks_processed_recv.recv())
-                    .await
-                    .expect("Timed out waiting for block to be checked")
-                    .unwrap();
+            let block_processed = timeout(
+                std::time::Duration::from_secs(3),
+                blocks_processed_recv.recv(),
+            )
+            .await
+            .expect("Timed out waiting for block to be checked")
+            .unwrap();
             assert_eq!(block_processed, Uint256::from(height));
         }
 
@@ -997,11 +1005,13 @@ mod test_oracle {
         for height in (confirmed_block_height + 1)
             ..(confirmed_block_height + difference + 1)
         {
-            let block_processed =
-                timeout(Duration::from_secs(3), blocks_processed_recv.recv())
-                    .await
-                    .expect("Timed out waiting for block to be checked")
-                    .unwrap();
+            let block_processed = timeout(
+                std::time::Duration::from_secs(3),
+                blocks_processed_recv.recv(),
+            )
+            .await
+            .expect("Timed out waiting for block to be checked")
+            .unwrap();
             assert_eq!(block_processed, Uint256::from(height));
         }
 
