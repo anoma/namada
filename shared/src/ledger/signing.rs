@@ -48,7 +48,6 @@ use crate::types::key::*;
 use crate::types::masp::{ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::Epoch;
 use crate::types::token::Transfer;
-use crate::types::transaction::decrypted::DecryptedTx;
 use crate::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
@@ -214,12 +213,6 @@ pub async fn sign_tx<
     let epoch = rpc::query_epoch(client).await;
 
     let broadcast_data = if args.dry_run {
-        tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            // To be able to dry-run testnet faucet withdrawal, pretend 
-            // that we got a valid PoW
-            has_valid_pow: true,
-        }));
         TxBroadcastData::DryRun(tx)
     } else {
         sign_wrapper(
