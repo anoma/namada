@@ -308,9 +308,10 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
+    let params = read_pos_params(ctx.wl_storage)?;
     let bond_id = BondId { source, validator };
 
-    bond_amount(ctx.wl_storage, &bond_id, epoch)
+    bond_amount(ctx.wl_storage, &params, &bond_id, epoch)
 }
 
 fn unbond<D, H>(

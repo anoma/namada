@@ -681,52 +681,6 @@ pub async fn submit_validator_commission_change<
     Ok(())
 }
 
-/// Submit transaction to unjail a jailed validator
-pub async fn submit_unjail_validator<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    args: args::TxUnjailValidator,
-) -> Result<(), Error> {
-    if !rpc::is_validator(client, &args.validator).await {
-        eprintln!("The given address {} is not a validator.", &args.validator);
-        if !args.tx.force {
-            return Err(Error::InvalidValidatorAddress(args.validator.clone()));
-        }
-    }
-
-    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path).await.unwrap();
-
-    let data = args
-        .validator
-        .clone()
-        .try_to_vec()
-        .map_err(Error::EncodeTxFailure)?;
-
-    let mut tx = Tx::new(TxType::Raw);
-    tx.header.chain_id = args.tx.chain_id.clone().unwrap();
-    tx.header.expiration = args.tx.expiration;
-    tx.set_data(Data::new(data));
-    tx.set_code(Code::from_hash(tx_code_hash));
-
-    let default_signer = args.validator;
-    process_tx(
-        client,
-        wallet,
-        &args.tx,
-        tx,
-        TxSigningKey::WalletAddress(default_signer),
-        #[cfg(not(feature = "mainnet"))]
-        false,
-    )
-    .await?;
-    Ok(())
-}
-
 /// Submit transaction to withdraw an unbond
 pub async fn submit_withdraw<
     C: crate::ledger::queries::Client + Sync,

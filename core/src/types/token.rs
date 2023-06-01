@@ -1,7 +1,6 @@
 //! A basic fungible token
 
 use std::fmt::Display;
-use std::iter::Sum;
 use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
@@ -151,13 +150,13 @@ impl<'de> serde::Deserialize<'de> for Amount {
 
 impl From<Amount> for Decimal {
     fn from(amount: Amount) -> Self {
-        Into::<Decimal>::into(amount.micro)
+        Into::<Decimal>::into(amount.micro) / Into::<Decimal>::into(SCALE)
     }
 }
 
 impl From<Decimal> for Amount {
     fn from(micro: Decimal) -> Self {
-        let res = micro.to_u64().unwrap();
+        let res = (micro * Into::<Decimal>::into(SCALE)).to_u64().unwrap();
         Self { micro: res }
     }
 }
@@ -237,12 +236,6 @@ impl Sub for Amount {
 impl SubAssign for Amount {
     fn sub_assign(&mut self, rhs: Self) {
         self.micro -= rhs.micro
-    }
-}
-
-impl Sum for Amount {
-    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Amount::default(), |acc, next| acc + next)
     }
 }
 

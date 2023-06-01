@@ -305,9 +305,6 @@ pub mod genesis_config {
         // light client attack.
         // XXX: u64 doesn't work with toml-rs!
         pub light_client_attack_min_slash_rate: Decimal,
-        /// Number of epochs above and below (separately) the current epoch to
-        /// consider when doing cubic slashing
-        pub cubic_slashing_window_length: u64,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -650,7 +647,6 @@ pub mod genesis_config {
             target_staked_ratio,
             duplicate_vote_min_slash_rate,
             light_client_attack_min_slash_rate,
-            cubic_slashing_window_length,
         } = pos_params;
         let pos_params = PosParams {
             max_validator_slots,
@@ -663,7 +659,6 @@ pub mod genesis_config {
             target_staked_ratio,
             duplicate_vote_min_slash_rate,
             light_client_attack_min_slash_rate,
-            cubic_slashing_window_length,
         };
 
         let mut genesis = Genesis {

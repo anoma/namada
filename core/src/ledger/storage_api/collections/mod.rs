@@ -60,7 +60,7 @@ pub trait LazyCollection {
     type SubKeyWithData: Debug;
 
     /// A type of a value in the inner-most collection
-    type Value: BorshDeserialize + Debug;
+    type Value: BorshDeserialize;
 
     /// Create or use an existing vector with the given storage `key`.
     fn open(key: storage::Key) -> Self;

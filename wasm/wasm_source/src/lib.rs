@@ -16,8 +16,6 @@ pub mod tx_reveal_pk;
 pub mod tx_transfer;
 #[cfg(feature = "tx_unbond")]
 pub mod tx_unbond;
-#[cfg(feature = "tx_unjail_validator")]
-pub mod tx_unjail_validator;
 #[cfg(feature = "tx_update_vp")]
 pub mod tx_update_vp;
 #[cfg(feature = "tx_vote_proposal")]
@@ -35,5 +33,6 @@ pub mod vp_testnet_faucet;
 pub mod vp_token;
 #[cfg(feature = "vp_user")]
 pub mod vp_user;
+
 #[cfg(feature = "vp_validator")]
 pub mod vp_validator;

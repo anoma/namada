@@ -100,7 +100,6 @@ pub struct Rfc3339String(pub String);
     Clone,
     Copy,
     Debug,
-    Default,
     PartialEq,
     Eq,
     PartialOrd,
@@ -121,11 +120,6 @@ impl DateTimeUtc {
     /// Returns an rfc3339 string or an error.
     pub fn to_rfc3339(&self) -> String {
         chrono::DateTime::to_rfc3339(&self.0)
-    }
-
-    /// Returns the DateTimeUtc corresponding to one second in the future
-    pub fn next_second(&self) -> Self {
-        *self + DurationSecs(0)
     }
 }
 
