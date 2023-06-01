@@ -113,7 +113,8 @@ impl Oracle {
     async fn syncing(&self) -> Result<SyncStatus, Error> {
         let deadline = Instant::now() + self.ceiling;
         match eth_syncing_status_timeout(&self.client, self.backoff, deadline)
-            .await?
+            .await
+            .map_err(|_| Error::Timeout)?
         {
             s @ SyncStatus::Syncing => Ok(s),
             SyncStatus::AtHeight(height) => {

@@ -130,7 +130,7 @@ pub fn gen_validator_keys<U: WalletUtils>(
 /// If a key was provided in `maybe_pk`, and it's found in [`Wallet`], we use
 /// `extract_key` to retrieve it from [`ValidatorData`].
 fn find_secret_key<F, U>(
-    wallet: &Wallet<U>,
+    wallet: &mut Wallet<U>,
     maybe_pk: Option<common::PublicKey>,
     extract_key: F,
 ) -> Result<Option<common::SecretKey>, FindKeyError>
@@ -141,7 +141,8 @@ where
     maybe_pk
         .map(|pk| {
             wallet
-                .find_key_by_pkh(&PublicKeyHash::from(&pk))
+                // TODO: optionally encrypt validator keys
+                .find_key_by_pkh(&PublicKeyHash::from(&pk), None)
                 .ok()
                 .or_else(|| wallet.get_validator_data().map(extract_key))
                 .ok_or(FindKeyError::KeyNotFound)

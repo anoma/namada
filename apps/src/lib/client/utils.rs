@@ -556,10 +556,12 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-eth-hot-key", name);
             println!("Generating validator {} eth hot key...", name);
+            let password = read_and_confirm_pwd(unsafe_dont_encrypt);
             let (_alias, keypair) = wallet.gen_key(
                 SchemeType::Secp256k1,
                 Some(alias),
-                unsafe_dont_encrypt,
+                password,
+                true,
             );
             keypair.ref_to()
         });
@@ -571,10 +573,12 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-eth-cold-key", name);
             println!("Generating validator {} eth cold key...", name);
+            let password = read_and_confirm_pwd(unsafe_dont_encrypt);
             let (_alias, keypair) = wallet.gen_key(
                 SchemeType::Secp256k1,
                 Some(alias),
-                unsafe_dont_encrypt,
+                password,
+                true,
             );
             keypair.ref_to()
         });

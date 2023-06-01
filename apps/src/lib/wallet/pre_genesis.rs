@@ -82,9 +82,7 @@ pub fn load(store_dir: &Path) -> Result<ValidatorWallet, ReadError> {
             let eth_cold_key = store
                 .eth_cold_key
                 .get::<CliWalletUtils>(true, password.clone())?;
-            let eth_hot_key = store
-                .eth_hot_key
-                .get::<CliWalletUtils>(true, password.clone())?;
+            let eth_hot_key = store.validator_keys.eth_bridge_keypair.clone();
             let tendermint_node_key = store
                 .tendermint_node_key
                 .get::<CliWalletUtils>(true, password)?;

@@ -21,7 +21,7 @@ use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
 use namada::types::key::{self, *};
-use namada::types::storage::{Epoch, Key, KeySeg};
+use namada::types::storage::{Epoch, Key};
 use namada::types::token;
 use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
@@ -113,7 +113,7 @@ pub async fn submit_init_validator<
     let consensus_key_alias = format!("{}-consensus-key", alias);
     let eth_hot_key_alias = format!("{}-eth-hot-key", alias);
     let eth_cold_key_alias = format!("{}-eth-cold-key", alias);
-    let account_key = ctx.get_opt_cached(&account_key).unwrap_or_else(|| {
+    let account_key = account_key.unwrap_or_else(|| {
         println!("Generating validator account key...");
         let password = read_and_confirm_pwd(unsafe_dont_encrypt);
         ctx.wallet
@@ -149,10 +149,9 @@ pub async fn submit_init_validator<
                 .1
         });
 
-    let eth_cold_key = ctx
-        .get_opt_cached(&eth_cold_key)
+    let eth_cold_pk = eth_cold_key
         .map(|key| match key {
-            common::SecretKey::Secp256k1(_) => key,
+            common::SecretKey::Secp256k1(_) => key.ref_to(),
             common::SecretKey::Ed25519(_) => {
                 eprintln!("Eth cold key can only be secp256k1");
                 safe_exit(1)
@@ -170,12 +169,12 @@ pub async fn submit_init_validator<
                     tx_args.wallet_alias_force,
                 )
                 .1
+                .ref_to()
         });
 
-    let eth_hot_key = ctx
-        .get_opt_cached(&eth_hot_key)
+    let eth_hot_pk = eth_hot_key
         .map(|key| match key {
-            common::SecretKey::Secp256k1(_) => key,
+            common::SecretKey::Secp256k1(_) => key.ref_to(),
             common::SecretKey::Ed25519(_) => {
                 eprintln!("Eth hot key can only be secp256k1");
                 safe_exit(1)
@@ -193,16 +192,16 @@ pub async fn submit_init_validator<
                     tx_args.wallet_alias_force,
                 )
                 .1
+                .ref_to()
         });
 
     if protocol_key.is_none() {
         println!("Generating protocol signing key...");
     }
-    let eth_hot_pk = eth_hot_key.ref_to();
     // Generate the validator keys
     let validator_keys = gen_validator_keys(
         &mut ctx.wallet,
-        Some(eth_hot_pk),
+        Some(eth_hot_pk.clone()),
         protocol_key,
         scheme,
     )
@@ -249,14 +248,10 @@ pub async fn submit_init_validator<
     let data = InitValidator {
         account_key,
         consensus_key: consensus_key.ref_to(),
-        eth_cold_key: key::secp256k1::PublicKey::try_from_pk(
-            &eth_cold_key.ref_to(),
-        )
-        .unwrap(),
-        eth_hot_key: key::secp256k1::PublicKey::try_from_pk(
-            &eth_hot_key.ref_to(),
-        )
-        .unwrap(),
+        eth_cold_key: key::secp256k1::PublicKey::try_from_pk(&eth_cold_pk)
+            .unwrap(),
+        eth_hot_key: key::secp256k1::PublicKey::try_from_pk(&eth_hot_pk)
+            .unwrap(),
         protocol_key,
         dkg_key,
         commission_rate,

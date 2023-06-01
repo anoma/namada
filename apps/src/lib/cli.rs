@@ -1688,21 +1688,21 @@ pub mod cmds {
     pub enum EthBridgePool {
         /// Get a recommendation on a batch of transfers
         /// to relay.
-        RecommendBatch(args::RecommendBatch),
+        RecommendBatch(args::RecommendBatch<args::CliTypes>),
         /// Construct a proof that a set of transfers is in the pool.
         /// This can be used to relay transfers across the
         /// bridge to Ethereum.
-        ConstructProof(args::BridgePoolProof),
+        ConstructProof(args::BridgePoolProof<args::CliTypes>),
         /// Construct and relay a bridge pool proof to
         /// Ethereum directly.
-        RelayProof(args::RelayBridgePoolProof),
+        RelayProof(args::RelayBridgePoolProof<args::CliTypes>),
         /// Query the contents of the pool.
-        QueryPool(args::Query),
+        QueryPool(args::Query<args::CliTypes>),
         /// Query to provable contents of the pool.
-        QuerySigned(args::Query),
+        QuerySigned(args::Query<args::CliTypes>),
         /// Check the confirmation status of `TransferToEthereum`
         /// events.
-        QueryRelays(args::Query),
+        QueryRelays(args::Query<args::CliTypes>),
     }
 
     impl Cmd for EthBridgePool {
@@ -1760,7 +1760,7 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct AddToEthBridgePool(pub args::EthereumBridgePool);
+    pub struct AddToEthBridgePool(pub args::EthereumBridgePool<args::CliTypes>);
 
     impl SubCmd for AddToEthBridgePool {
         const CMD: &'static str = "add-erc20-transfer";
@@ -1775,12 +1775,12 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Add a new transfer to the Ethereum bridge pool.")
                 .setting(AppSettings::ArgRequiredElseHelp)
-                .add_args::<args::EthereumBridgePool>()
+                .add_args::<args::EthereumBridgePool<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct ConstructProof(pub args::BridgePoolProof);
+    pub struct ConstructProof(pub args::BridgePoolProof<args::CliTypes>);
 
     impl SubCmd for ConstructProof {
         const CMD: &'static str = "construct-proof";
@@ -1798,12 +1798,12 @@ pub mod cmds {
                      the pool.",
                 )
                 .setting(AppSettings::ArgRequiredElseHelp)
-                .add_args::<args::BridgePoolProof>()
+                .add_args::<args::BridgePoolProof<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct RelayProof(pub args::RelayBridgePoolProof);
+    pub struct RelayProof(pub args::RelayBridgePoolProof<args::CliTypes>);
 
     impl SubCmd for RelayProof {
         const CMD: &'static str = "relay-proof";
@@ -1821,12 +1821,12 @@ pub mod cmds {
                      the pool and relay it to Ethereum.",
                 )
                 .setting(AppSettings::ArgRequiredElseHelp)
-                .add_args::<args::RelayBridgePoolProof>()
+                .add_args::<args::RelayBridgePoolProof<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct RecommendBatch(pub args::RecommendBatch);
+    pub struct RecommendBatch(pub args::RecommendBatch<args::CliTypes>);
 
     impl SubCmd for RecommendBatch {
         const CMD: &'static str = "recommend-batch";
@@ -1844,12 +1844,12 @@ pub mod cmds {
                      pool to relay to Ethereum.",
                 )
                 .setting(AppSettings::ArgRequiredElseHelp)
-                .add_args::<args::RecommendBatch>()
+                .add_args::<args::RecommendBatch<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryEthBridgePool(args::Query);
+    pub struct QueryEthBridgePool(args::Query<args::CliTypes>);
 
     impl SubCmd for QueryEthBridgePool {
         const CMD: &'static str = "query";
@@ -1863,12 +1863,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Get the contents of the Ethereum bridge pool.")
-                .add_args::<args::Query>()
+                .add_args::<args::Query<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QuerySignedBridgePool(args::Query);
+    pub struct QuerySignedBridgePool(args::Query<args::CliTypes>);
 
     impl SubCmd for QuerySignedBridgePool {
         const CMD: &'static str = "query-signed";
@@ -1885,12 +1885,12 @@ pub mod cmds {
                     "Get the contents of the Ethereum bridge pool with a \
                      signed Merkle root.",
                 )
-                .add_args::<args::Query>()
+                .add_args::<args::Query<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryRelayProgress(args::Query);
+    pub struct QueryRelayProgress(args::Query<args::CliTypes>);
 
     impl SubCmd for QueryRelayProgress {
         const CMD: &'static str = "query-relayed";
@@ -1904,7 +1904,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Get the confirmation status of transfers to Ethereum.")
-                .add_args::<args::Query>()
+                .add_args::<args::Query<args::CliTypes>>()
         }
     }
 
@@ -1914,14 +1914,14 @@ pub mod cmds {
         /// Query an Ethereum ABI encoding of the consensus validator
         /// set in Namada, at the given epoch, or the latest
         /// one, if none is provided.
-        ConsensusValidatorSet(args::ConsensusValidatorSet),
+        ConsensusValidatorSet(args::ConsensusValidatorSet<args::CliTypes>),
         /// Query an Ethereum ABI encoding of a proof of the consensus
         /// validator set in Namada, at the given epoch, or the next
         /// one, if none is provided.
-        ValidatorSetProof(args::ValidatorSetProof),
+        ValidatorSetProof(args::ValidatorSetProof<args::CliTypes>),
         /// Relay a validator set update to Namada's Ethereum bridge
         /// smart contracts.
-        ValidatorSetUpdateRelay(args::ValidatorSetUpdateRelay),
+        ValidatorSetUpdateRelay(args::ValidatorSetUpdateRelay<args::CliTypes>),
     }
 
     impl SubCmd for ValidatorSet {
@@ -1955,7 +1955,9 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct ConsensusValidatorSet(args::ConsensusValidatorSet);
+    pub struct ConsensusValidatorSet(
+        args::ConsensusValidatorSet<args::CliTypes>,
+    );
 
     impl SubCmd for ConsensusValidatorSet {
         const CMD: &'static str = "consensus";
@@ -1973,12 +1975,12 @@ pub mod cmds {
                      validator set in Namada, at the requested epoch, or the \
                      current one, if no epoch is provided.",
                 )
-                .add_args::<args::ConsensusValidatorSet>()
+                .add_args::<args::ConsensusValidatorSet<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct ValidatorSetProof(args::ValidatorSetProof);
+    pub struct ValidatorSetProof(args::ValidatorSetProof<args::CliTypes>);
 
     impl SubCmd for ValidatorSetProof {
         const CMD: &'static str = "proof";
@@ -1996,12 +1998,14 @@ pub mod cmds {
                      consensus validator set in Namada, at the requested \
                      epoch, or the next one, if no epoch is provided.",
                 )
-                .add_args::<args::ValidatorSetProof>()
+                .add_args::<args::ValidatorSetProof<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct ValidatorSetUpdateRelay(args::ValidatorSetUpdateRelay);
+    pub struct ValidatorSetUpdateRelay(
+        args::ValidatorSetUpdateRelay<args::CliTypes>,
+    );
 
     impl SubCmd for ValidatorSetUpdateRelay {
         const CMD: &'static str = "relay";
@@ -2018,7 +2022,7 @@ pub mod cmds {
                     "Relay a validator set update to Namada's Ethereum bridge \
                      smart contracts.",
                 )
-                .add_args::<args::ValidatorSetUpdateRelay>()
+                .add_args::<args::ValidatorSetUpdateRelay<args::CliTypes>>()
         }
     }
 
@@ -2441,16 +2445,16 @@ pub mod args {
                 tx: self.tx.to_sdk(ctx),
                 asset: self.asset,
                 recipient: self.recipient,
-                sender: self.sender.to_sdk(ctx),
+                sender: ctx.get(&self.sender),
                 amount: self.amount,
                 gas_amount: self.gas_amount,
-                gas_payer: self.gas_payer.to_sdk(ctx),
+                gas_payer: ctx.get(&self.gas_payer),
                 code_path: ctx.read_wasm(self.code_path),
             }
         }
     }
 
-    impl Args for EthereumBridgePool {
+    impl Args for EthereumBridgePool<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let asset = ERC20.parse(matches);
@@ -2459,7 +2463,7 @@ pub mod args {
             let amount = AMOUNT.parse(matches);
             let gas_amount = FEE_AMOUNT.parse(matches);
             let gas_payer = FEE_PAYER.parse(matches);
-            let tx_code_path = PathBuf::from(TX_BRIDGE_POOL_WASM);
+            let code_path = PathBuf::from(TX_BRIDGE_POOL_WASM);
             Self {
                 tx,
                 asset,
@@ -2468,7 +2472,7 @@ pub mod args {
                 amount,
                 gas_amount,
                 gas_payer,
-                tx_code_path,
+                code_path,
             }
         }
 
@@ -2583,7 +2587,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query<CliTypes>>()
                 .arg(HASH_LIST.def().about(
                     "List of Keccak hashes of transfers in the bridge pool.",
                 ))
@@ -2652,7 +2656,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query<CliTypes>>()
                 .arg(SAFE_MODE.def().about(
                     "Safe mode overrides keyboard interrupt signals, to \
                      ensure Ethereum transfers aren't canceled midway through.",
@@ -2709,7 +2713,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>().arg(EPOCH.def().about(
+            app.add_args::<Query<CliTypes>>().arg(EPOCH.def().about(
                 "The epoch of the consensus set of validators to query.",
             ))
         }
@@ -2724,7 +2728,7 @@ pub mod args {
         }
     }
 
-    impl Args for ValidatorSetProof {
+    impl Args for ValidatorSetProof<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let epoch = EPOCH.parse(matches);
@@ -2732,7 +2736,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>().arg(
+            app.add_args::<Query<CliTypes>>().arg(
                 EPOCH
                     .def()
                     .about("The epoch of the set of validators to be proven."),
@@ -2747,7 +2751,7 @@ pub mod args {
             self,
             ctx: &mut Context,
         ) -> ValidatorSetUpdateRelay<SdkTypes> {
-            ValidatorSetProof::<SdkTypes> {
+            ValidatorSetUpdateRelay::<SdkTypes> {
                 daemon: self.daemon,
                 query: self.query.to_sdk(ctx),
                 confirmations: self.confirmations,
@@ -2764,7 +2768,7 @@ pub mod args {
         }
     }
 
-    impl Args for ValidatorSetUpdateRelay {
+    impl Args for ValidatorSetUpdateRelay<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let safe_mode = SAFE_MODE.parse(matches);
             let daemon = DAEMON_MODE.parse(matches);
@@ -2797,7 +2801,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query<CliTypes>>()
                 .arg(SAFE_MODE.def().about(
                     "Safe mode overrides keyboard interrupt signals, to \
                      ensure Ethereum transfers aren't canceled midway through.",

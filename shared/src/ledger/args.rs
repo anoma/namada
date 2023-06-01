@@ -177,6 +177,10 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     pub account_key: Option<C::PublicKey>,
     /// Consensus key
     pub consensus_key: Option<C::Keypair>,
+    /// Ethereum cold key
+    pub eth_cold_key: Option<C::Keypair>,
+    /// Ethereum hot key
+    pub eth_hot_key: Option<C::Keypair>,
     /// Protocol key
     pub protocol_key: Option<C::PublicKey>,
     /// Commission rate
