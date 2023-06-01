@@ -9,8 +9,7 @@ use namada_core::types::chain::ChainId;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 
-use super::{block_on_eth_sync, eth_sync_or_exit};
-use crate::client::eth_bridge::BlockOnEthSync;
+use super::{block_on_eth_sync, eth_sync_or_exit, BlockOnEthSync};
 use crate::eth_bridge::ethers::abi::AbiDecode;
 use crate::eth_bridge::ethers::prelude::{Http, Provider};
 use crate::eth_bridge::structs::RelayProof;
@@ -34,21 +33,24 @@ use crate::types::token::Amount;
 use crate::types::voting_power::FractionalVotingPower;
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
-pub async fn add_to_eth_bridge_pool<C>(
+pub async fn add_to_eth_bridge_pool<C, U>(
     client: &C,
+    wallet: &mut Wallet<U>,
     chain_id: ChainId,
     args: args::EthereumBridgePool,
 ) where
     C: Client + Sync,
+    U: WalletUtils,
 {
     let args::EthereumBridgePool {
         ref tx,
         asset,
         recipient,
-        ref sender,
+        sender,
         amount,
         gas_amount,
-        ref gas_payer,
+        gas_payer,
+        code_path,
     } = args;
     let transfer = PendingTransfer {
         transfer: TransferToEthereum {
@@ -59,11 +61,11 @@ pub async fn add_to_eth_bridge_pool<C>(
         },
         gas_fee: GasFee {
             amount: gas_amount,
-            payer,
+            payer: gas_payer,
         },
     };
     let data = transfer.try_to_vec().unwrap();
-    let transfer_tx = Tx::new(args.tx_code_path, Some(data), chain_id, None);
+    let transfer_tx = Tx::new(code_path, Some(data), chain_id, None);
     // this should not initialize any new addresses, so we ignore the result.
     process_tx(
         client,
@@ -384,14 +386,15 @@ where
 
 mod recommendations {
     use borsh::BorshDeserialize;
-    use namada::eth_bridge::storage::bridge_pool::get_signed_root_key;
-    use namada::eth_bridge::storage::proof::BridgePoolRootProof;
-    use namada::types::storage::BlockHeight;
-    use namada::types::vote_extensions::validator_set_update::{
+
+    use super::*;
+    use crate::eth_bridge::storage::bridge_pool::get_signed_root_key;
+    use crate::eth_bridge::storage::proof::BridgePoolRootProof;
+    use crate::types::storage::BlockHeight;
+    use crate::types::vote_extensions::validator_set_update::{
         EthAddrBook, VotingPowersMap, VotingPowersMapExt,
     };
 
-    use super::*;
     const TRANSFER_FEE: i64 = 37_500;
     const SIGNATURE_FEE: u64 = 24_500;
     const VALSET_FEE: u64 = 2000;
@@ -613,10 +616,18 @@ mod recommendations {
 
     #[cfg(test)]
     mod test_recommendations {
-        use namada::types::ethereum_events::EthAddress;
+        use namada_core::types::address::Address;
+        use namada_core::types::ethereum_events::EthAddress;
 
         use super::*;
-        use crate::wallet::defaults::bertha_address;
+
+        /// An established user address for testing & development
+        pub fn bertha_address() -> Address {
+            Address::decode(
+                "atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw",
+            )
+            .expect("The token address decoding shouldn't fail")
+        }
 
         /// Generate a pending transfer with the specified gas
         /// fee.

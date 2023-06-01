@@ -1,30 +1,25 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
+use std::future::Future;
 use std::sync::Arc;
 
-use borsh::BorshSerialize;
 use data_encoding::HEXLOWER;
 use ethbridge_governance_contract::Governance;
 use futures::future::{self, FutureExt};
 use namada_core::hints;
 use namada_core::types::storage::Epoch;
-use namada_core::types::vote_extensions::validator_set_update;
 
-use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit};
-use crate::client::eth_bridge::BlockOnEthSync;
+use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit, BlockOnEthSync};
 use crate::eth_bridge::ethers::abi::{AbiDecode, AbiType, Tokenizable};
 use crate::eth_bridge::ethers::core::types::TransactionReceipt;
 use crate::eth_bridge::ethers::providers::{Http, Provider};
 use crate::eth_bridge::structs::{Signature, ValidatorSetArgs};
+use crate::ledger::args;
 use crate::ledger::queries::{Client, RPC};
-use crate::proto::Tx;
 use crate::types::control_flow::time::{self, Duration, Instant};
 use crate::types::control_flow::{
     self, install_shutdown_signal, Halt, TryHalt,
 };
-use crate::types::key::RefTo;
-use crate::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
-use crate::types::transaction::TxType;
 
 /// Relayer related errors.
 #[derive(Debug, Default)]
@@ -250,19 +245,22 @@ impl From<Option<TransactionReceipt>> for RelayResult {
 
 /// Query an ABI encoding of the validator set to be installed
 /// at the given epoch, and its associated proof.
-pub async fn query_validator_set_update_proof(args: args::ValidatorSetProof) {
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
-
+pub async fn query_validator_set_update_proof<C>(
+    client: &C,
+    args: args::ValidatorSetProof,
+) where
+    C: Client + Sync,
+{
     let epoch = if let Some(epoch) = args.epoch {
         epoch
     } else {
-        RPC.shell().epoch(&client).await.unwrap().next()
+        RPC.shell().epoch(client).await.unwrap().next()
     };
 
     let encoded_proof = RPC
         .shell()
         .eth_bridge()
-        .read_valset_upd_proof(&client, &epoch)
+        .read_valset_upd_proof(client, &epoch)
         .await
         .unwrap();
 
@@ -270,19 +268,22 @@ pub async fn query_validator_set_update_proof(args: args::ValidatorSetProof) {
 }
 
 /// Query an ABI encoding of the validator set at a given epoch.
-pub async fn query_validator_set_args(args: args::ConsensusValidatorSet) {
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
-
+pub async fn query_validator_set_args<C>(
+    client: &C,
+    args: args::ConsensusValidatorSet,
+) where
+    C: Client + Sync,
+{
     let epoch = if let Some(epoch) = args.epoch {
         epoch
     } else {
-        RPC.shell().epoch(&client).await.unwrap()
+        RPC.shell().epoch(client).await.unwrap()
     };
 
     let encoded_validator_set_args = RPC
         .shell()
         .eth_bridge()
-        .read_consensus_valset(&client, &epoch)
+        .read_consensus_valset(client, &epoch)
         .await
         .unwrap();
 
@@ -315,7 +316,7 @@ where
         relay_validator_set_update_daemon(
             args,
             nam_client,
-            Pin::new(&mut signal_receiver),
+            &mut signal_receiver,
         )
         .await?;
     } else {
@@ -357,7 +358,7 @@ where
     }
 }
 
-async fn relay_validator_set_update_daemon<C>(
+async fn relay_validator_set_update_daemon<C, F>(
     mut args: args::ValidatorSetUpdateRelay,
     nam_client: &C,
     shutdown_receiver: &mut Option<F>,
@@ -414,7 +415,7 @@ where
         // so it is best to always fetch the latest governance
         // contract address
         let governance =
-            get_governance_contract(&nam_client, Arc::clone(&eth_client))
+            get_governance_contract(nam_client, Arc::clone(&eth_client))
                 .await
                 .try_halt(|err| {
                     // only care about displaying errors,
@@ -434,7 +435,7 @@ where
             });
 
         let shell = RPC.shell();
-        let nam_current_epoch_fut = shell.epoch(&nam_client).map(|result| {
+        let nam_current_epoch_fut = shell.epoch(nam_client).map(|result| {
             result.map_err(|err| {
                 tracing::error!(
                     "Failed to fetch the latest epoch in Namada: {err}"
@@ -475,7 +476,7 @@ where
 
         let result = relay_validator_set_update_once::<DoNotCheckNonce, _>(
             &args,
-            &nam_client,
+            nam_client,
             |transf_result| {
                 let Some(receipt) = transf_result else {
                     tracing::warn!("No transfer receipt received from the Ethereum node");
@@ -500,25 +501,29 @@ where
     }
 }
 
-async fn get_governance_contract(
-    nam_client: &HttpClient,
+async fn get_governance_contract<C>(
+    nam_client: &C,
     eth_client: Arc<Provider<Http>>,
-) -> Result<Governance<Provider<Http>>, Error> {
+) -> Result<Governance<Provider<Http>>, Error>
+where
+    C: Client + Sync,
+{
     let governance_contract = RPC
         .shell()
         .eth_bridge()
         .read_governance_contract(nam_client)
         .await
-        .map_err(|err| Error::critical(e.to_string()))?;
+        .map_err(|err| Error::critical(err.to_string()))?;
     Ok(Governance::new(governance_contract.address, eth_client))
 }
 
-async fn relay_validator_set_update_once<R, F>(
+async fn relay_validator_set_update_once<C, R, F>(
     args: &args::ValidatorSetUpdateRelay,
-    nam_client: &HttpClient,
+    nam_client: &C,
     mut action: F,
 ) -> Result<(), Error>
 where
+    C: Client + Sync,
     R: ShouldRelay,
     F: FnMut(R::RelayResult),
 {

@@ -3,6 +3,8 @@
 pub mod bridge_pool;
 pub mod validator_set;
 
+use std::ops::ControlFlow;
+
 use itertools::Either;
 pub use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
 pub use namada_core::ledger::eth_bridge::{ADDRESS, INTERNAL_ADDRESS};
@@ -11,8 +13,8 @@ pub use namada_ethereum_bridge::storage::eth_bridge_queries::*;
 use num256::Uint256;
 use tokio::task::LocalSet;
 use web30::client::Web3;
+use web30::jsonrpc::error::Web3Error;
 
-use crate::cli;
 use crate::types::control_flow::time::{
     Duration, Error as TimeoutError, Instant, SleepStrategy,
 };

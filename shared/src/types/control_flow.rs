@@ -2,7 +2,7 @@
 
 pub mod time;
 
-use std::future::{self, Future};
+use std::future::Future;
 use std::ops::ControlFlow;
 
 #[cfg(any(unix, windows))]
@@ -65,8 +65,8 @@ impl<L, R> TryHalt<R, L> for itertools::Either<L, R> {
         F: FnMut(L) -> Halt<R>,
     {
         match self {
-            Either::Right(x) => proceed(x),
-            Either::Left(e) => handle_err(e),
+            itertools::Either::Right(x) => proceed(x),
+            itertools::Either::Left(e) => handle_err(e),
         }
     }
 }
@@ -95,7 +95,7 @@ pub fn install_shutdown_signal() -> impl Future<Output = ()> {
     // on the remaining platforms, simply block forever
     #[cfg(not(any(unix, windows)))]
     {
-        let () = future::pending().await;
+        let () = std::future::pending().await;
     }
 }
 
