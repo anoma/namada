@@ -485,7 +485,7 @@ pub fn is_amount_required(src: Amount, dest: Amount, delta: Amount) -> bool {
     if delta > Amount::zero() {
         let gap = dest - src;
         for (asset_type, value) in gap.components() {
-            if *value > 0 && delta[asset_type] > 0 {
+            if *value >= 0 && delta[asset_type] >= 0 {
                 return true;
             }
         }
@@ -1205,6 +1205,8 @@ impl ShieldedContext {
         let mut output = Amount::zero();
         // Repeatedly exchange assets until it is no longer possible
         loop {
+            println!("\n\nInput {:?}\n\n", input);
+
             let Some(((asset_epoch, token_addr), value)) = input.pop() else { break };
             for denom in MaspDenom::iter() {
                 let target_asset_type = make_asset_type(
@@ -1294,7 +1296,14 @@ impl ShieldedContext {
                 }
             }
         }
-        (output, conversions)
+        // finally convert the rewards in epoch 0.
+        let mut comp = MaspAmount::default();
+        for ((_, key), val) in input.drain() {
+            comp.insert((target_epoch, key), val);
+        }
+        output += comp;
+        println!("\n\noutput {:?}\n\n", output);
+        (output.into(), conversions)
     }
 
     /// Collect enough unspent notes in this context to exceed the given amount
