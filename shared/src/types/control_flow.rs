@@ -4,7 +4,10 @@ pub mod time;
 
 use std::future::Future;
 use std::ops::ControlFlow;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
+use futures::future::FutureExt;
 #[cfg(any(unix, windows))]
 use tokio::sync::oneshot;
 
@@ -72,9 +75,37 @@ impl<L, R> TryHalt<R, L> for itertools::Either<L, R> {
     }
 }
 
+/// A shutdown signal receiver.
+pub struct ShutdownSignal {
+    #[cfg(not(any(unix, windows)))]
+    _inner: (),
+    #[cfg(any(unix, windows))]
+    rx: oneshot::Receiver<()>,
+}
+
+#[cfg(any(unix, windows))]
+impl Future for ShutdownSignal {
+    type Output = ();
+
+    #[inline]
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        self.rx.poll_unpin(cx).map(|_| ())
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+impl Future for ShutdownSignal {
+    type Output = ();
+
+    #[inline]
+    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<()> {
+        Poll::Pending
+    }
+}
+
 /// Install a shutdown signal handler, and retrieve the associated
 /// signal's receiver.
-pub fn install_shutdown_signal() -> impl Future<Output = ()> + Unpin {
+pub fn install_shutdown_signal() -> ShutdownSignal {
     // #[cfg(target_family = "wasm")]
     // {
     //     compile_error!("WASM shutdown signal not supported");
@@ -88,15 +119,13 @@ pub fn install_shutdown_signal() -> impl Future<Output = ()> + Unpin {
         tokio::spawn(async move {
             shutdown_send(tx).await;
         });
-        async move {
-            _ = rx.await;
-        }
+        ShutdownSignal { rx }
     }
 
     // on the remaining platforms, simply block forever
     #[cfg(not(any(unix, windows)))]
     {
-        let () = std::future::pending().await;
+        ShutdownSignal { _inner: () }
     }
 }
 
