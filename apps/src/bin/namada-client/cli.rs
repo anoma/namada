@@ -319,6 +319,9 @@ pub async fn main() -> Result<()> {
             Utils::PkToTmAddress(PkToTmAddress(args)) => {
                 utils::pk_to_tm_address(global_args, args)
             }
+            Utils::DefaultBaseDir(DefaultBaseDir(args)) => {
+                utils::default_base_dir(global_args, args)
+            }
         },
     }
     Ok(())

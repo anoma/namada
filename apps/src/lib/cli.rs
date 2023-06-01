@@ -1506,6 +1506,7 @@ pub mod cmds {
         InitNetwork(InitNetwork),
         InitGenesisValidator(InitGenesisValidator),
         PkToTmAddress(PkToTmAddress),
+        DefaultBaseDir(DefaultBaseDir),
     }
 
     impl SubCmd for Utils {
@@ -1522,11 +1523,14 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::InitGenesisValidator);
                 let pk_to_tm_address =
                     SubCmd::parse(matches).map(Self::PkToTmAddress);
+                let default_base_dir =
+                    SubCmd::parse(matches).map(Self::DefaultBaseDir);
                 join_network
                     .or(fetch_wasms)
                     .or(init_network)
                     .or(init_genesis)
                     .or(pk_to_tm_address)
+                    .or(default_base_dir)
             })
         }
 
@@ -1538,6 +1542,7 @@ pub mod cmds {
                 .subcommand(InitNetwork::def())
                 .subcommand(InitGenesisValidator::def())
                 .subcommand(PkToTmAddress::def())
+                .subcommand(DefaultBaseDir::def())
                 .setting(AppSettings::SubcommandRequiredElseHelp)
         }
     }
@@ -1641,6 +1646,29 @@ pub mod cmds {
                      Tendermint address.",
                 )
                 .add_args::<args::PkToTmAddress>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct DefaultBaseDir(pub args::DefaultBaseDir);
+
+    impl SubCmd for DefaultBaseDir {
+        const CMD: &'static str = "default-base-dir";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::DefaultBaseDir::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Print the default base directory that would be used if \
+                     --base-dir or NAMADA_BASE_DIR were not used to set the \
+                     base directory.",
+                )
+                .add_args::<args::DefaultBaseDir>()
         }
     }
 }
@@ -3643,6 +3671,19 @@ pub mod args {
                 "The consensus public key to be converted to Tendermint \
                  address.",
             ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct DefaultBaseDir {}
+
+    impl Args for DefaultBaseDir {
+        fn parse(_matches: &ArgMatches) -> Self {
+            Self {}
+        }
+
+        fn def(app: App) -> App {
+            app
         }
     }
 
