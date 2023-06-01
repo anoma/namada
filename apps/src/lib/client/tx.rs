@@ -53,7 +53,7 @@ use namada::types::storage::{
 };
 use namada::types::time::DateTimeUtc;
 use namada::types::token::{
-    DenominatedAmount, MaspDenom, TokenAddress, Transfer, HEAD_TX_KEY,
+    Change, DenominatedAmount, MaspDenom, TokenAddress, Transfer, HEAD_TX_KEY,
     PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
 use namada::types::transaction::governance::{
@@ -520,8 +520,8 @@ pub struct MaspChange {
 pub struct MaspAmount(HashMap<(Epoch, TokenAddress), token::Change>);
 
 impl MaspAmount {
-    pub fn pop(&mut self) -> Option<((Epoch, TokenAddress), token::Change)>{
-        let key = self.keys().next()?.clone();
+    pub fn pop(&mut self) -> Option<((Epoch, TokenAddress), token::Change)> {
+        let key = self.keys().find(|(e, _)| e.0 != 0)?.clone();
         let value = self.remove(&key).unwrap();
         Some((key, value))
     }
@@ -581,6 +581,17 @@ impl std::ops::SubAssign for MaspAmount {
     }
 }
 
+impl std::ops::Mul<Change> for MaspAmount {
+    type Output = Self;
+
+    fn mul(mut self, rhs: Change) -> Self::Output {
+        for (_, value) in self.iter_mut() {
+            *value = *value * rhs
+        }
+        self
+    }
+}
+
 impl<'a> From<&'a MaspAmount> for Amount {
     fn from(masp_amount: &'a MaspAmount) -> Amount {
         let mut res = Amount::zero();
@@ -592,7 +603,7 @@ impl<'a> From<&'a MaspAmount> for Amount {
                     &key.sub_prefix,
                     denom,
                 );
-                res += Amount::from_pair(asset, denom.denominate_i64(val))
+                res += Amount::from_pair(asset, denom.denominate_i128(val))
                     .unwrap();
             }
         }
@@ -600,9 +611,15 @@ impl<'a> From<&'a MaspAmount> for Amount {
     }
 }
 
+impl From<MaspAmount> for Amount {
+    fn from(amt: MaspAmount) -> Self {
+        Self::from(&amt)
+    }
+}
+
 /// Represents the amount used of different conversions
 pub type Conversions =
-    HashMap<AssetType, (AllowedConversion, MerklePath<Node>, i128)>;
+    HashMap<AssetType, (AllowedConversion, MerklePath<Node>, Change)>;
 
 /// Represents an amount that is
 pub type MaspDenominatedAmount = Amount<(TokenAddress, MaspDenom)>;
@@ -1083,26 +1100,17 @@ impl ShieldedContext {
         client: HttpClient,
         asset_type: AssetType,
         conversions: &'a mut Conversions,
-    ) -> Option<&'a mut (AllowedConversion, MerklePath<Node>, i128)> {
-        match conversions.entry(asset_type) {
-            Entry::Occupied(conv_entry) => Some(conv_entry.into_mut()),
-            Entry::Vacant(conv_entry) => {
-                // Query for the ID of the last accepted transaction
-                let (addr, sub_prefix, denom, ep, conv, path): (
-                    Address,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                ) = query_conversion(client, asset_type).await?;
+    ) {
+        if let Entry::Vacant(conv_entry) = conversions.entry(asset_type) {
+            // Query for the ID of the last accepted transaction
+            if let Some((addr, sub_prefix, denom, ep, conv, path)) =
+                query_conversion(client, asset_type).await
+            {
                 self.asset_types
                     .insert(asset_type, (addr, sub_prefix, denom, ep));
                 // If the conversion is 0, then we just have a pure decoding
-                if conv == Amount::zero() {
-                    None
-                } else {
-                    Some(conv_entry.insert((Amount::into(conv), path, 0)))
+                if conv != Amount::zero() {
+                    conv_entry.insert((conv.into(), path, Change::zero()));
                 }
             }
         }
@@ -1356,6 +1364,9 @@ impl ShieldedContext {
                 }
             }
         }
+        println!("val_acc: {:?}", val_acc);
+        println!("notes: {:?}", notes);
+        println!("conversions: {:?}", conversions);
         (val_acc, notes, conversions)
     }
 
@@ -1538,7 +1549,13 @@ fn convert_amount(
     sub_prefix: &Option<&String>,
     val: &token::Amount,
 ) -> ([AssetType; 4], Amount) {
-    println!("{}", DenominatedAmount { amount: val.clone(), denom: 18.into()});
+    println!(
+        "{}",
+        DenominatedAmount {
+            amount: val.clone(),
+            denom: 18.into()
+        }
+    );
     let mut amount = Amount::zero();
     let asset_types: [AssetType; 4] = MaspDenom::iter()
         .map(|denom| {
@@ -1662,12 +1679,14 @@ async fn gen_shielded_transfer(
         }
         // Commit the conversion notes used during summation
         for (conv, wit, value) in used_convs.values() {
-            if *value > 0 {
-                builder.add_convert(
-                    conv.clone(),
-                    *value as u64,
-                    wit.clone(),
-                )?;
+            if value.is_positive() {
+                for denom in MaspDenom::iter() {
+                    builder.add_convert(
+                        conv.clone(),
+                        denom.denominate(&token::Amount::from(*value)),
+                        wit.clone(),
+                    )?;
+                }
             }
         }
     } else {

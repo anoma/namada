@@ -3,7 +3,7 @@
 //! the backing type of token amounts.
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
-use std::ops::{Add, AddAssign, BitXor, Div, Mul, Neg, Sub, SubAssign};
+use std::ops::{Add, AddAssign, BitXor, Div, Mul, Neg, Rem, Sub, SubAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use impl_num_traits::impl_uint_num_traits;
@@ -104,6 +104,11 @@ impl I256 {
     /// Check if the amount is negative (less than zero)
     pub fn is_negative(&self) -> bool {
         !self.non_negative()
+    }
+
+    /// Check if the amount is positive (greater than zero)
+    pub fn is_positive(&self) -> bool {
+        self.non_negative() && !self.is_zero()
     }
 
     /// Get the absolute value
@@ -327,6 +332,29 @@ impl Div<Uint> for I256 {
     }
 }
 
+impl Div<I256> for I256 {
+    type Output = Self;
+
+    fn div(self, rhs: I256) -> Self::Output {
+        if rhs.is_negative() {
+            -(self / rhs.abs())
+        } else {
+            self / rhs.abs()
+        }
+    }
+}
+
+impl Rem for I256 {
+    type Output = Self;
+
+    fn rem(self, rhs: Self) -> Self::Output {
+        if self.is_negative() {
+            -(Self(self.abs() % rhs.abs()))
+        } else {
+            Self(self.abs() % rhs.abs())
+        }
+    }
+}
 impl From<i128> for I256 {
     fn from(val: i128) -> Self {
         if val < 0 {
