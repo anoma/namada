@@ -37,7 +37,7 @@ pub trait TryHalt<T, E> {
 
     /// Exit from some context, if we encounter an error.
     #[inline]
-    fn try_halt<F>(self, handle_err: F) -> Halt<T>
+    fn try_halt<F>(self, mut handle_err: F) -> Halt<T>
     where
         Self: Sized,
         F: FnMut(E),
@@ -51,7 +51,7 @@ pub trait TryHalt<T, E> {
 
 impl<T, E> TryHalt<T, E> for Result<T, E> {
     #[inline]
-    fn try_halt_or_recover<F>(self, handle_err: F) -> Halt<T>
+    fn try_halt_or_recover<F>(self, mut handle_err: F) -> Halt<T>
     where
         F: FnMut(E) -> Halt<T>,
     {
@@ -64,7 +64,7 @@ impl<T, E> TryHalt<T, E> for Result<T, E> {
 
 impl<L, R> TryHalt<R, L> for itertools::Either<L, R> {
     #[inline]
-    fn try_halt_or_recover<F>(self, handle_err: F) -> Halt<R>
+    fn try_halt_or_recover<F>(self, mut handle_err: F) -> Halt<R>
     where
         F: FnMut(L) -> Halt<R>,
     {
@@ -88,7 +88,7 @@ impl Future for ShutdownSignal {
     type Output = ();
 
     #[inline]
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
         self.rx.poll_unpin(cx).map(|_| ())
     }
 }

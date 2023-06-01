@@ -1,3 +1,5 @@
+//! Validator set updates SDK functionality.
+
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::future::Future;

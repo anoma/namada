@@ -1,3 +1,5 @@
+//! Bridge pool SDK functionality.
+
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::io::Write;
@@ -40,6 +42,7 @@ pub async fn add_to_eth_bridge_pool<C, U>(
     args: args::EthereumBridgePool,
 ) where
     C: Client + Sync,
+    C::Error: std::fmt::Debug,
     U: WalletUtils,
 {
     let args::EthereumBridgePool {
@@ -76,7 +79,8 @@ pub async fn add_to_eth_bridge_pool<C, U>(
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-    .await;
+    .await
+    .unwrap();
 }
 
 /// A json serializable representation of the Ethereum
@@ -88,7 +92,7 @@ struct BridgePoolResponse {
 
 /// Query the contents of the Ethereum bridge pool.
 /// Prints out a json payload.
-pub async fn query_bridge_pool<C>(client: &C, args: args::Query)
+pub async fn query_bridge_pool<C>(client: &C)
 where
     C: Client + Sync,
     C::Error: std::fmt::Debug,
@@ -118,7 +122,6 @@ where
 /// Prints out a json payload.
 pub async fn query_signed_bridge_pool<C>(
     client: &C,
-    args: args::Query,
 ) -> Halt<HashMap<String, PendingTransfer>>
 where
     C: Client + Sync,
@@ -150,7 +153,7 @@ where
 /// backing each `TransferToEthereum` event.
 ///
 /// Prints a json payload.
-pub async fn query_relay_progress<C>(client: &C, args: args::Query)
+pub async fn query_relay_progress<C>(client: &C)
 where
     C: Client + Sync,
     C::Error: std::fmt::Debug,
@@ -430,7 +433,10 @@ mod recommendations {
     /// Recommend the most economical batch of transfers to relay based
     /// on a conversion rate estimates from NAM to ETH and gas usage
     /// heuristics.
-    pub async fn recommend_batch<C>(client: &C, args: args::RecommendBatch)
+    pub async fn recommend_batch<C>(
+        client: &C,
+        args: args::RecommendBatch,
+    ) -> Halt<()>
     where
         C: Client + Sync,
         C::Error: std::fmt::Debug,
@@ -486,7 +492,7 @@ mod recommendations {
 
         // we don't recommend transfers that have already been relayed
         let mut contents: Vec<(String, i64, PendingTransfer)> =
-            query_signed_bridge_pool(args.query)
+            query_signed_bridge_pool(client)
                 .await?
                 .into_iter()
                 .filter_map(|(k, v)| {
@@ -510,6 +516,8 @@ mod recommendations {
         let max_gas = args.max_gas.unwrap_or(u64::MAX);
         let max_cost = args.gas.map(|x| x as i64).unwrap_or_default();
         generate(contents, validator_gas, max_gas, max_cost);
+
+        control_flow::proceed(())
     }
 
     /// Given an ordered list of signatures, figure out the size of the first
