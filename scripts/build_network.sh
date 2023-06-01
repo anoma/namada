@@ -1,32 +1,36 @@
 #!/usr/bin/env bash
 #
-# Script for initializing a Namada chain for local development and joining it. Note that this script trashes any
-# existing local chain directories!
+# Script for initializing a Namada chain for local development and joining it.
+# Note that this script trashes any existing local chain directories!
 #
 # ## Prerequisites
 # - bash
 # - Python 3
-# - toml Python pip library <https://pypi.org/project/toml/> (this is the `python3-toml` package on Ubuntu distributions)
-# - trash CLI tool (`brew install trash` on macOS or `sudo apt-get install trash-cli` on Ubuntu)
+# - toml Python pip library <https://pypi.org/project/toml/> (this is the
+#   `python3-toml` package on Ubuntu distributions)
+# - trash CLI tool (`brew install trash` on macOS or `sudo apt-get install
+#   trash-cli` on Ubuntu)
 #
 # ## How to run
-# This script should be run from the root of a Namada source code repo (https://github.com/anoma/namada). 
-# *.wasm files must already have been built and be present under the `wasm/` directory of the Namada repo. 
-# This can be done by running `make build wasm-scripts`. 
-# The shell script takes three arguments:
-# The first argument is the path to a network config toml compatible with the version of Namada being used.
-# You can find example network config tomls in the `templates/` directory of the anoma-network-configs repo (https://github.com/heliaxdev/anoma-network-configs)`
-# The second argument is the BASE_DIR of the chain. This will depend on your setup.
-# The third argument is the path to the directory containing the Namada binaries
+# This script should be run from the root of a Namada source code repo
+# (https://github.com/anoma/namada). *.wasm files must already have been built
+# and be present under the `wasm/` directory of the Namada repo. This can be
+# done by running `make build wasm-scripts`. The shell script takes three
+# arguments: The first argument is the path to a network config toml compatible
+# with the version of Namada being used. You can find example network config
+# tomls in the `templates/` directory of the anoma-network-configs repo
+# (https://github.com/heliaxdev/anoma-network-configs)` The second argument is
+# the BASE_DIR of the chain. This will depend on your setup. The third argument
+# is the path to the directory containing the Namada binaries
 # 
 # 
 # Example command:
 # ```shell
-# /path/to/repo/devchain-container/build_network.sh network-configs/mainline-v0.12.1.toml '~/Library/Application Support/Namada'
+# ./scripts/build_network.sh network-configs/mainline-v0.12.1.toml '~/Library/Application Support/Namada'
 # ````
 #
-# Once the script is finished, it should be possible to straight away start running a ledger node e.g. the command
-# assuming binaries have been built is:
+# Once the script is finished, it should be possible to straight away start
+# running a ledger node e.g. the command assuming binaries have been built is:
 #
 # ```shell
 # target/debug/namadan ledger run
@@ -56,7 +60,7 @@ show_help() {
 }
 
 check_toml_file() {
-    toml_file="$1"  # Replace with the actual path to your TOML file
+    toml_file="$NETWORK_CONFIG_PATH"  # Get the file path from the first argument
     section_prefix="validator.validator"
     # Search for the section name in the TOML file
     section_count=$(awk -F'[][]' -v prefix="$section_prefix" '/^\[.*\]$/ && $2 ~ "^" prefix { count++ } END { print count }' "$toml_file")
@@ -84,16 +88,19 @@ cleanup() {
     rm -f local.*.tar.gz
 }
 validate_arguments() {
-    # The script expects 4 arguments:
+    # The script expects 3 arguments:
     # 1. The path to a network config toml
-    # 2. The BASE_DIR of the chain
-    # 3. The path to the directory containing the Namada binaries
+    # 2. The path to the directory containing the Namada binaries
+    # 3. The BASE_DIR of the chain
     
-    if [ "$#" -ne 3 ]; then
-        echo "Error: Invalid number of arguments. Expected 3 arguments."
+    if [ "$#" -gt 3 ] || [ "$#" -lt 2 ]; then
+        echo "Error: Invalid number of arguments. Expected 2 or 3 arguments."
         echo "See the help page by running --help for more information."
         exit 1
     fi
+
+    NETWORK_CONFIG_PATH=$1
+    NAMADA_BIN_DIR=$2
 
     local current_directory="$(pwd)"
 
@@ -103,20 +110,20 @@ validate_arguments() {
     fi
 
     # The first argument should be a path to a network config toml
-    if [ ! -f "$1" ]; then
+    if [ ! -f "$NETWORK_CONFIG_PATH" ]; then
         echo "Error: Invalid network config path. Expected a path to a network config toml, yet found no file in the location."
         exit 1
     fi
-    file="$1"  # Get the file path from the first argument
+    file="$NETWORK_CONFIG_PATH"  # Get the file path from the first argument
     extension="${file##*.}"
     if [ "$extension" != "toml" ]; then
         echo "Error: The first argument provided is not a .toml file."
         exit 1
     fi
 
-    check_toml_file "$1"
+    check_toml_file "$NETWORK_CONFIG_PATH"
 
-    local directory="$3"
+    local directory="$NAMADA_BIN_DIR"
 
     if [ ! -d "$directory" ]; then
         echo "Error: Invalid directory. The specified directory does not exist."
@@ -131,22 +138,29 @@ validate_arguments() {
     fi
 
     check_wasm_files
+
+    if [ "$#" -eq 2 ]; then
+        BASE_DIR=$(echo $NAMADA_BIN_DIR/namadac utils default-base-dir)
+        echo "Using default BASE_DIR: $BASE_DIR"
+    else [ "$#" -eq 3 ];
+        BASE_DIR=$3
+    fi
+
+
+    exit 1
 }
 
 package() {
-    export NETWORK_CONFIG_PATH=$1
-    export BASE_DIR="${2}"
-    export NAMADA_BIN_DIR=$3
 
     # Clean up any existing chain data
     trash $BASE_DIR || true
     git checkout --ours -- wasm/checksums.json
     trash nohup.out || true
 
-    export CHAIN_DIR='.hack/chains'
+    CHAIN_DIR='.hack/chains'
     mkdir -p $CHAIN_DIR
 
-    export ALIAS='validator-local-dev'
+    ALIAS='validator-local-dev'
 
     $NAMADA_BIN_DIR/namadac --base-dir $BASE_DIR utils init-genesis-validator \
         --alias $ALIAS \
@@ -156,13 +170,13 @@ package() {
         --unsafe-dont-encrypt
 
     # get the directory of this script
-    export SCRIPT_DIR="$(dirname $0)"
-    export NAMADA_NETWORK_CONFIG_PATH="${CHAIN_DIR}/network-config-processed.toml"
+    SCRIPT_DIR="$(dirname $0)"
+    NAMADA_NETWORK_CONFIG_PATH="${CHAIN_DIR}/network-config-processed.toml"
     $SCRIPT_DIR/utils/add_validator_shard.py $BASE_DIR/pre-genesis/$ALIAS/validator.toml $NETWORK_CONFIG_PATH >$NAMADA_NETWORK_CONFIG_PATH
 
     python3 wasm/checksums.py
 
-    export NAMADA_CHAIN_PREFIX='local'
+    NAMADA_CHAIN_PREFIX='local'
 
     $NAMADA_BIN_DIR/namadac --base-dir $BASE_DIR utils init-network \
         --chain-prefix "$NAMADA_CHAIN_PREFIX" \
@@ -171,14 +185,14 @@ package() {
         --unsafe-dont-encrypt
 
     basename *.tar.gz .tar.gz >${CHAIN_DIR}/chain-id
-    export NAMADA_CHAIN_ID="$(cat ${CHAIN_DIR}/chain-id)"
+    NAMADA_CHAIN_ID="$(cat ${CHAIN_DIR}/chain-id)"
     trash "$BASE_DIR/${NAMADA_CHAIN_ID}"
     mv "${NAMADA_CHAIN_ID}.tar.gz" $CHAIN_DIR
 
     # clean up the http server when the script exits
     trap cleanup EXIT
 
-    export NAMADA_NETWORK_CONFIGS_SERVER='http://localhost:8123'
+    NAMADA_NETWORK_CONFIGS_SERVER='http://localhost:8123'
     nohup bash -c "python3 -m http.server --directory ${CHAIN_DIR} 8123 &" &&
         sleep 2 &&
         $NAMADA_BIN_DIR/namadac --base-dir $BASE_DIR utils join-network \
