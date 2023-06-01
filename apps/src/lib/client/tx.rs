@@ -485,7 +485,7 @@ pub fn is_amount_required(src: Amount, dest: Amount, delta: Amount) -> bool {
     if delta > Amount::zero() {
         let gap = dest - src;
         for (asset_type, value) in gap.components() {
-            if *value > 0 && delta[asset_type] > 0 {
+            if *value >= 0 && delta[asset_type] >= 0 {
                 return true;
             }
         }
@@ -1211,7 +1211,7 @@ impl ShieldedContext {
         let mut output = MaspAmount::default();
         // Repeatedly exchange assets until it is no longer possible
         loop {
-            println!("Input {:?}", input);
+            println!("\n\nInput {:?}\n\n", input);
 
             let Some(((asset_epoch, token_addr), value)) = input.pop() else { break };
             let at_target_asset_type = target_epoch == asset_epoch;
@@ -1224,7 +1224,7 @@ impl ShieldedContext {
                     &mut conversions,
                 )
                 .await;
-            println!("conversions {:?}", conv);
+            println!("\n\nconversions {:?}\n\n", conv);
             if let (Some(conv), false) = (
                 conv.get(&(target_epoch, token_addr.clone())),
                 at_target_asset_type,
@@ -1306,7 +1306,7 @@ impl ShieldedContext {
             comp.insert((target_epoch, key), val);
         }
         output += comp;
-        println!("{:?}", output);
+        println!("\n\noutput {:?}\n\n", output);
         (output.into(), conversions)
     }
 
