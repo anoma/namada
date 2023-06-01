@@ -696,8 +696,8 @@ impl MaspDenom {
     }
 
     /// Get the corresponding u64 word from the input uint256.
-    pub fn denominate_i64(&self, amount: &Change) -> i64 {
-        let val = amount.abs().0[*self as usize] as i64;
+    pub fn denominate_i128(&self, amount: &Change) -> i128 {
+        let val = amount.abs().0[*self as usize] as i128;
         if Change::is_negative(amount) {
             -val
         } else {
@@ -1149,6 +1149,21 @@ mod tests {
 
         let non_zero = Amount::from_uint(1, 0).expect("Test failed");
         assert!(!non_zero.is_zero());
+    }
+
+    #[test]
+    fn testy_poo() {
+        let change = Change::from(30000000000000000000i128);
+        let output = Change::from(6893488147419103231i128);
+
+        let amt = DenominatedAmount {
+            amount: Amount::from(change),
+            denom: 18.into(),
+        };
+        println!("{}", amt);
+        println!("{:?}", change.0.0);
+        println!("{:?}", output.0.0);
+        assert!(false);
     }
 }
 

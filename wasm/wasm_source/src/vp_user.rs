@@ -102,10 +102,7 @@ fn validate_tx(
     for key in keys_changed.iter() {
         let key_type: KeyType = key.into();
         let is_valid = match key_type {
-            KeyType::Token {
-                owner,
-                ..
-            } => {
+            KeyType::Token { owner, .. } => {
                 if owner == &addr {
                     let pre: token::Amount =
                         ctx.read_pre(key)?.unwrap_or_default();

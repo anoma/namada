@@ -129,10 +129,7 @@ fn validate_tx(
                 }
                 true
             }
-            KeyType::Token {
-                owner,
-                ..
-            } => {
+            KeyType::Token { owner, .. } => {
                 if owner == &addr {
                     let pre: token::Amount =
                         ctx.read_pre(key)?.unwrap_or_default();

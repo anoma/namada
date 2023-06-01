@@ -98,8 +98,8 @@ ibc = {version = "0.14.0", default-features = false, optional = true}
 ibc-proto = {version = "0.17.1", default-features = false, optional = true}
 itertools = "0.10.0"
 loupe = {version = "0.1.3", optional = true}
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "402b08accff6cf656b7f63823d074931cdcf7773" }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "402b08accff6cf656b7f63823d074931cdcf7773" }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "ea4fcc68d9412b94042c1c2f0ea0212394e1be37" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "ea4fcc68d9412b94042c1c2f0ea0212394e1be37" }
 parity-wasm = {version = "0.45.0", features = ["sign_ext"], optional = true}
 paste = "1.0.9"
 # A fork with state machine testing
