@@ -16,7 +16,6 @@ use masp_primitives::transaction::components::transparent::fees::{
 };
 use masp_primitives::transaction::components::Amount;
 use namada_core::types::address::{masp, masp_tx_key, Address};
-use namada_core::types::transaction::DecryptedTx;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::CommissionPair;
 use prost::EncodeError;
@@ -353,12 +352,7 @@ pub async fn submit_reveal_pk_aux<
     .await
     .unwrap();
 
-    let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
-        #[cfg(not(feature = "mainnet"))]
-        // To be able to dry-run testnet faucet withdrawal, pretend 
-        // that we got a valid PoW
-        has_valid_pow: true,
-    }));
+    let mut tx = Tx::new(TxType::Raw);
     tx.header.chain_id = args.chain_id.clone().expect("value should be there");
     tx.header.expiration = args.expiration;
     tx.set_data(Data::new(tx_data));
