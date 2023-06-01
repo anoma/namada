@@ -36,6 +36,7 @@ pub trait TryHalt<T, E> {
     #[inline]
     fn try_halt<F>(self, handle_err: F) -> Halt<T>
     where
+        Self: Sized,
         F: FnMut(E),
     {
         self.try_halt_or_recover(|e| {
@@ -47,7 +48,7 @@ pub trait TryHalt<T, E> {
 
 impl<T, E> TryHalt<T, E> for Result<T, E> {
     #[inline]
-    fn try_halt<F>(self, handle_err: F) -> Halt<T>
+    fn try_halt_or_recover<F>(self, handle_err: F) -> Halt<T>
     where
         F: FnMut(E) -> Halt<T>,
     {
@@ -60,7 +61,7 @@ impl<T, E> TryHalt<T, E> for Result<T, E> {
 
 impl<L, R> TryHalt<R, L> for itertools::Either<L, R> {
     #[inline]
-    fn try_halt<F>(self, handle_err: F) -> Halt<R>
+    fn try_halt_or_recover<F>(self, handle_err: F) -> Halt<R>
     where
         F: FnMut(L) -> Halt<R>,
     {
@@ -73,7 +74,7 @@ impl<L, R> TryHalt<R, L> for itertools::Either<L, R> {
 
 /// Install a shutdown signal handler, and retrieve the associated
 /// signal's receiver.
-pub fn install_shutdown_signal() -> impl Future<Output = ()> {
+pub fn install_shutdown_signal() -> impl Future<Output = ()> + Unpin {
     // #[cfg(target_family = "wasm")]
     // {
     //     compile_error!("WASM shutdown signal not supported");

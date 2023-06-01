@@ -84,7 +84,7 @@ impl Error {
                     %reason,
                     "An error occurred during the relay"
                 );
-                critical
+                *critical
             }
             Error::WithReason {
                 reason,
@@ -95,7 +95,7 @@ impl Error {
                     %reason,
                     "An error occurred during the relay"
                 );
-                critical
+                *critical
             }
             // all log levels we care about are DEBUG and ERROR
             _ => {
@@ -250,6 +250,7 @@ pub async fn query_validator_set_update_proof<C>(
     args: args::ValidatorSetProof,
 ) where
     C: Client + Sync,
+    C::Error: std::fmt::Debug,
 {
     let epoch = if let Some(epoch) = args.epoch {
         epoch
@@ -273,6 +274,7 @@ pub async fn query_validator_set_args<C>(
     args: args::ConsensusValidatorSet,
 ) where
     C: Client + Sync,
+    C::Error: std::fmt::Debug,
 {
     let epoch = if let Some(epoch) = args.epoch {
         epoch
@@ -297,6 +299,7 @@ pub async fn relay_validator_set_update<C>(
 ) -> Halt<()>
 where
     C: Client + Sync,
+    C::Error: std::fmt::Debug + std::fmt::Display,
 {
     let mut signal_receiver = args.safe_mode.then(install_shutdown_signal);
 
@@ -318,11 +321,11 @@ where
             nam_client,
             &mut signal_receiver,
         )
-        .await?;
+        .await
     } else {
-        relay_validator_set_update_once::<CheckNonce, _>(
+        relay_validator_set_update_once::<CheckNonce, _, _>(
             &args,
-            &nam_client,
+            nam_client,
             |relay_result| match relay_result {
                 RelayResult::GovernanceCallError(reason) => {
                     tracing::error!(reason, "Calling Governance failed");
@@ -365,7 +368,8 @@ async fn relay_validator_set_update_daemon<C, F>(
 ) -> Halt<()>
 where
     C: Client + Sync,
-    F: Future<Output = ()>,
+    C::Error: std::fmt::Debug + std::fmt::Display,
+    F: Future<Output = ()> + Unpin,
 {
     let eth_client =
         Arc::new(Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap());
@@ -474,7 +478,7 @@ where
         let new_epoch = gov_current_epoch + 1u64;
         args.epoch = Some(new_epoch);
 
-        let result = relay_validator_set_update_once::<DoNotCheckNonce, _>(
+        let result = relay_validator_set_update_once::<DoNotCheckNonce, _, _>(
             &args,
             nam_client,
             |transf_result| {
@@ -507,6 +511,7 @@ async fn get_governance_contract<C>(
 ) -> Result<Governance<Provider<Http>>, Error>
 where
     C: Client + Sync,
+    C::Error: std::fmt::Debug + std::fmt::Display,
 {
     let governance_contract = RPC
         .shell()
@@ -517,13 +522,14 @@ where
     Ok(Governance::new(governance_contract.address, eth_client))
 }
 
-async fn relay_validator_set_update_once<C, R, F>(
+async fn relay_validator_set_update_once<R, F, C>(
     args: &args::ValidatorSetUpdateRelay,
     nam_client: &C,
     mut action: F,
 ) -> Result<(), Error>
 where
     C: Client + Sync,
+    C::Error: std::fmt::Debug + std::fmt::Display,
     R: ShouldRelay,
     F: FnMut(R::RelayResult),
 {

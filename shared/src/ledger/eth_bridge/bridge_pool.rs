@@ -91,6 +91,7 @@ struct BridgePoolResponse {
 pub async fn query_bridge_pool<C>(client: &C, args: args::Query)
 where
     C: Client + Sync,
+    C::Error: std::fmt::Debug,
 {
     let response: Vec<PendingTransfer> = RPC
         .shell()
@@ -121,6 +122,7 @@ pub async fn query_signed_bridge_pool<C>(
 ) -> Halt<HashMap<String, PendingTransfer>>
 where
     C: Client + Sync,
+    C::Error: std::fmt::Debug,
 {
     let response: Vec<PendingTransfer> = RPC
         .shell()
@@ -151,6 +153,7 @@ where
 pub async fn query_relay_progress<C>(client: &C, args: args::Query)
 where
     C: Client + Sync,
+    C::Error: std::fmt::Debug,
 {
     let resp = RPC
         .shell()
@@ -170,6 +173,7 @@ async fn construct_bridge_pool_proof<C>(
 ) -> Halt<Vec<u8>>
 where
     C: Client + Sync,
+    C::Error: std::fmt::Debug,
 {
     let in_progress = RPC
         .shell()
@@ -206,10 +210,9 @@ where
         loop {
             let mut buffer = String::new();
             let stdin = std::io::stdin();
-            stdin.read_line(&mut buffer).unwrap_or_else(|e| {
-                println!("Encountered error reading from STDIN: {:?}", e);
-                return control_flow::halt();
-            });
+            stdin.read_line(&mut buffer).try_halt(|e| {
+                println!("Encountered error reading from STDIN: {e:?}");
+            })?;
             match buffer.trim() {
                 "y" => break,
                 "n" => return control_flow::halt(),
@@ -251,6 +254,7 @@ pub async fn construct_proof<C>(
 ) -> Halt<()>
 where
     C: Client + Sync,
+    C::Error: std::fmt::Debug,
 {
     let bp_proof_bytes = construct_bridge_pool_proof(
         client,
@@ -284,6 +288,7 @@ pub async fn relay_bridge_pool_proof<C>(
 ) -> Halt<()>
 where
     C: Client + Sync,
+    C::Error: std::fmt::Debug + std::fmt::Display,
 {
     let _signal_receiver = args.safe_mode.then(install_shutdown_signal);
 
@@ -428,6 +433,7 @@ mod recommendations {
     pub async fn recommend_batch<C>(client: &C, args: args::RecommendBatch)
     where
         C: Client + Sync,
+        C::Error: std::fmt::Debug,
     {
         // get transfers that can already been relayed but are awaiting a quorum
         // of backing votes.
