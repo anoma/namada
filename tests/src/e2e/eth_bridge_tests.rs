@@ -18,7 +18,7 @@ use namada::types::ethereum_events::EthAddress;
 use namada::types::storage::{self, Epoch};
 use namada::types::{address, token};
 use namada_apps::config::ethereum_bridge;
-use namada_apps::control_flow::timeouts::SleepStrategy;
+use namada::types::control_flow::time::SleepStrategy;
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::{
