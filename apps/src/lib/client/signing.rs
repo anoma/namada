@@ -57,19 +57,16 @@ pub async fn sign_tx<
 >(
     client: &C,
     wallet: &mut Wallet<U>,
-    tx: Tx,
+    tx: &mut Tx,
     args: &args::Tx,
     default: TxSigningKey,
-    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> Result<TxBroadcastData, tx::Error> {
+) -> Result<(), tx::Error> {
     namada::ledger::signing::sign_tx::<C, U>(
         client,
         wallet,
         tx,
         args,
         default,
-        #[cfg(not(feature = "mainnet"))]
-        requires_pow,
     )
     .await
 }
