@@ -1153,45 +1153,41 @@ impl ShieldedContext {
     #[allow(clippy::too_many_arguments)]
     async fn apply_conversion(
         &mut self,
-        conv: &MaspAmount,
-        asset_type: (Epoch, TokenAddress),
-        value: Change,
+        client: &HttpClient,
+        conv: AllowedConversion,
+        asset_type: AssetType,
+        value: i128,
+        usage: &mut i128,
         input: &mut MaspAmount,
-        output: &mut MaspAmount,
-    ) -> Option<Change> {
-        if !value.non_negative() {
-            return None;
-        }
+        output: &mut Amount,
+    ) {
         // If conversion if possible, accumulate the exchanged amount
-        // println!("conv {:?}", conv);
+        let conv: Amount = conv.into();
         // The amount required of current asset to qualify for conversion
         let threshold = -conv[&asset_type];
-        // println!("theshold: {}, value: {}", threshold, value);
-        if threshold.is_zero() {
+        if threshold == 0 {
             eprintln!(
-                "Asset threshold of selected conversion for asset type {:?} \
-                 is 0, this is a bug, please report it.",
+                "Asset threshold of selected conversion for asset type {} is \
+                 0, this is a bug, please report it.",
                 asset_type
             );
         }
         // We should use an amount of the AllowedConversion that almost
         // cancels the original amount
         if threshold > value {
-            return None;
+            return
         }
         let required = value / threshold;
-
         // Forget about the trace amount left over because we cannot
         // realize its value
-        let trace =
-            MaspAmount(HashMap::from([(asset_type, value % threshold)]));
-        // println!("Trace: {:?}", trace);
-        // println!("required {:?}", required);
+        let trace = Amount::from_pair(asset_type, value % threshold).unwrap();
+        // Record how much more of the given conversion has been used
+        *usage += required;
         // Apply the conversions to input and move the trace amount to output
-        *input += conv.clone() * required - trace.clone();
-        // println!("Input {:?}", input);
+        *input += self
+            .decode_all_amounts(client, conv.clone() * required - &trace)
+            .await;
         *output += trace;
-        Some(required)
     }
 
     /// Convert the given amount into the latest asset types whilst making a
@@ -1206,97 +1202,98 @@ impl ShieldedContext {
         mut conversions: Conversions,
     ) -> (Amount, Conversions) {
         // Where we will store our exchanged value
-        let mut output = MaspAmount::default();
+        let mut output = Amount::zero();
         // Repeatedly exchange assets until it is no longer possible
         loop {
             println!("\n\nInput {:?}\n\n", input);
 
             let Some(((asset_epoch, token_addr), value)) = input.pop() else { break };
-            let at_target_asset_type = target_epoch == asset_epoch;
-            let conv = self
-                .aggregate_conversions(
-                    &client,
-                    asset_epoch,
-                    target_epoch,
-                    token_addr.clone(),
-                    &mut conversions,
-                )
-                .await;
-            if let (Some(conv), false) = (
-                conv.get(&(target_epoch, token_addr.clone())),
-                at_target_asset_type,
-            ) {
-                println!(
-                    "converting current asset type to latest asset type..."
+            for denom in MaspDenom::iter() {
+                let target_asset_type = make_asset_type(
+                    Some(target_epoch),
+                    &token_addr.address,
+                    &token_addr.sub_prefix,
+                    denom,
                 );
-                if let Some(used) = self
-                    .apply_conversion(
-                        conv,
-                        (asset_epoch, token_addr.clone()),
-                        value,
+                let asset_type = make_asset_type(
+                    Some(asset_epoch),
+                    &token_addr.address,
+                    &token_addr.sub_prefix,
+                    denom,
+                );
+                let at_target_asset_type = target_epoch == asset_epoch;
+
+                let denom_value = denom.denominate(&token::Amount::from(value)) as i128;
+                _ = self
+                    .query_allowed_conversion(
+                        client.clone(),
+                        target_asset_type,
+                        &mut conversions,
+                    )
+                    .await;
+
+                if let (Some((conv, _wit, usage)), false) = (
+                    conversions.get_mut(&target_asset_type),
+                    at_target_asset_type,
+                ) {
+                    println!(
+                        "converting current asset type to latest asset type..."
+                    );
+                    // Not at the target asset type, not at the latest asset
+                    // type. Apply conversion to get from
+                    // current asset type to the latest
+                    // asset type.
+                    self.apply_conversion(
+                        &client,
+                        conv.clone(),
+                        asset_type,
+                        denom_value,
+                        usage,
                         &mut input,
                         &mut output,
                     )
-                    .await
+                    .await;
+                    break;
+                }
+                _ = self
+                    .query_allowed_conversion(
+                        client.clone(),
+                        asset_type,
+                        &mut conversions,
+                    )
+                    .await;
+                if let (Some((conv, _wit, usage)), false) =
+                    (conversions.get_mut(&asset_type), at_target_asset_type)
                 {
-                    for denom in MaspDenom::iter() {
-                        let target_asset_type = make_asset_type(
-                            Some(target_epoch),
-                            &token_addr.address,
-                            &token_addr.sub_prefix,
-                            denom,
-                        );
-                        if let Some((_, _, usage)) =
-                            conversions.get_mut(&target_asset_type)
-                        {
-                            println!("used: {:?}", used);
-                            *usage += denom.denominate_i128(&used);
-                            println!("usage: {:?}", usage);
-                        }
-                    }
-                };
-                break;
-            }
-            if let (Some(conv), false) =
-                (conv.get(&(asset_epoch, token_addr.clone())), at_target_asset_type)
-            {
-                if let Some(used) = self
-                    .apply_conversion(
-                        conv,
-                        (asset_epoch, token_addr.clone()),
-                        value,
+                    println!(
+                        "converting latest asset type to target asset type..."
+                    );
+                    // Not at the target asset type, yes at the latest asset
+                    // type. Apply inverse conversion to get
+                    // from latest asset type to the target
+                    // asset type.
+                    self.apply_conversion(
+                        &client,
+                        conv.clone(),
+                        asset_type,
+                        denom_value,
+                        usage,
                         &mut input,
                         &mut output,
                     )
-                    .await
-                {
-                    for denom in MaspDenom::iter() {
-                        let asset_type = make_asset_type(
-                            Some(asset_epoch),
-                            &token_addr.address,
-                            &token_addr.sub_prefix,
-                            denom,
-                        );
-                        if let Some((_, _, usage)) =
-                            conversions.get_mut(&asset_type)
-                        {
-                            println!("used: {:?}", used);
-                            *usage += denom.denominate_i128(&used);
-                            println!("usage: {:?}", usage);
+                        .await;
+                } else {
+                    // At the target asset type. Then move component over to
+                    // output.
+                    let mut comp = MaspAmount::default();
+                    comp.insert((asset_epoch, token_addr.clone()), denom_value.into());
+                    for ((e, key), val) in input.iter() {
+                        if *key == token_addr {
+                            comp.insert((*e, key.clone()), *val);
                         }
                     }
+                    output += Amount::from(&comp);
                 }
-            } else {
-                // At the target asset type. Then move component over to
-                // output.
-                let mut comp = MaspAmount::default();
-                comp.insert((asset_epoch, token_addr.clone()), value);
-                for ((e, key), val) in input.iter() {
-                    if *key == token_addr {
-                        comp.insert((*e, key.clone()), *val);
-                    }
-                }
-                output += comp;
             }
         }
         // finally convert the rewards in epoch 0.
@@ -1304,9 +1301,9 @@ impl ShieldedContext {
         for ((_, key), val) in input.drain() {
             comp.insert((target_epoch, key), val);
         }
-        output += comp;
+        output += Amount::from(comp);
         println!("\n\nconversions {:?}\n\n", output);
-        (output.into(), conversions)
+        (output, conversions)
     }
 
     /// Collect enough unspent notes in this context to exceed the given amount
@@ -1548,58 +1545,6 @@ impl ShieldedContext {
             }
         }
         MaspAmount(res)
-    }
-
-    /// Change conversions to use 256 bit numbers
-    async fn aggregate_conversions(
-        &mut self,
-        client: &HttpClient,
-        asset_epoch: Epoch,
-        target_epoch: Epoch,
-        token_addr: TokenAddress,
-        conversions: &mut Conversions,
-    ) -> HashMap<(Epoch, TokenAddress), MaspAmount> {
-        let mut conv = HashMap::new();
-        for denom in MaspDenom::iter() {
-            let target_asset_type = make_asset_type(
-                Some(target_epoch),
-                &token_addr.address,
-                &token_addr.sub_prefix,
-                denom,
-            );
-            let asset_type = make_asset_type(
-                Some(asset_epoch),
-                &token_addr.address,
-                &token_addr.sub_prefix,
-                denom,
-            );
-
-            self.query_allowed_conversion(
-                client.clone(),
-                target_asset_type,
-                conversions,
-            )
-            .await;
-            self.query_allowed_conversion(
-                client.clone(),
-                asset_type,
-                conversions,
-            )
-            .await;
-            if let Some((a, _, _)) = conversions.get(&target_asset_type) {
-                let amt = self.decode_all_amounts(&client, a.clone().into()).await;
-                conv.entry((target_epoch, token_addr.clone()))
-                    .and_modify(|e| *e += amt.clone())
-                    .or_insert(amt);
-            }
-            if let Some((a, _, _)) = conversions.get(&asset_type) {
-                let amt = self.decode_all_amounts(&client, a.clone().into()).await;
-                conv.entry((asset_epoch, token_addr.clone()))
-                    .and_modify(|e| *e += amt.clone())
-                    .or_insert(amt);
-            }
-        }
-        conv
     }
 }
 
