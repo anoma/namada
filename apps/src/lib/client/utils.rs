@@ -1146,3 +1146,16 @@ fn is_valid_validator_for_current_chain(
         }
     })
 }
+
+/// Replace the contents of `addr` with a dummy address.
+#[inline]
+pub fn take_config_address(addr: &mut TendermintAddress) -> TendermintAddress {
+    std::mem::replace(
+        addr,
+        TendermintAddress::Tcp {
+            peer_id: None,
+            host: String::new(),
+            port: 0,
+        },
+    )
+}

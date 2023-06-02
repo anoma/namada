@@ -17,7 +17,7 @@ pub async fn main() -> Result<()> {
             match cmd {
                 // Ledger cmds
                 Sub::TxCustom(TxCustom(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -39,7 +39,7 @@ pub async fn main() -> Result<()> {
                     }
                 }
                 Sub::TxTransfer(TxTransfer(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -50,7 +50,7 @@ pub async fn main() -> Result<()> {
                     tx::submit_transfer(&client, ctx, args).await?;
                 }
                 Sub::TxIbcTransfer(TxIbcTransfer(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -62,7 +62,7 @@ pub async fn main() -> Result<()> {
                         .await?;
                 }
                 Sub::TxUpdateVp(TxUpdateVp(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -74,7 +74,7 @@ pub async fn main() -> Result<()> {
                         .await?;
                 }
                 Sub::TxInitAccount(TxInitAccount(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -98,7 +98,7 @@ pub async fn main() -> Result<()> {
                     }
                 }
                 Sub::TxInitValidator(TxInitValidator(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -110,7 +110,7 @@ pub async fn main() -> Result<()> {
                         .await;
                 }
                 Sub::TxInitProposal(TxInitProposal(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -122,7 +122,7 @@ pub async fn main() -> Result<()> {
                         .await?;
                 }
                 Sub::TxVoteProposal(TxVoteProposal(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -134,7 +134,7 @@ pub async fn main() -> Result<()> {
                         .await?;
                 }
                 Sub::TxRevealPk(TxRevealPk(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -146,7 +146,7 @@ pub async fn main() -> Result<()> {
                         .await?;
                 }
                 Sub::Bond(Bond(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -158,7 +158,7 @@ pub async fn main() -> Result<()> {
                         .await?;
                 }
                 Sub::Unbond(Unbond(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -170,7 +170,7 @@ pub async fn main() -> Result<()> {
                         .await?;
                 }
                 Sub::Withdraw(Withdraw(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -183,7 +183,7 @@ pub async fn main() -> Result<()> {
                 }
                 // Eth bridge
                 Sub::AddToEthBridgePool(mut args) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -195,7 +195,7 @@ pub async fn main() -> Result<()> {
                 }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -205,7 +205,7 @@ pub async fn main() -> Result<()> {
                     rpc::query_and_print_epoch(&client).await;
                 }
                 Sub::QueryTransfers(QueryTransfers(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -222,7 +222,7 @@ pub async fn main() -> Result<()> {
                     .await;
                 }
                 Sub::QueryConversions(QueryConversions(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -234,7 +234,7 @@ pub async fn main() -> Result<()> {
                         .await;
                 }
                 Sub::QueryBlock(QueryBlock(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -244,7 +244,7 @@ pub async fn main() -> Result<()> {
                     rpc::query_block(&client).await;
                 }
                 Sub::QueryBalance(QueryBalance(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -261,7 +261,7 @@ pub async fn main() -> Result<()> {
                     .await;
                 }
                 Sub::QueryBonds(QueryBonds(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -274,7 +274,7 @@ pub async fn main() -> Result<()> {
                         .expect("expected successful query of bonds");
                 }
                 Sub::QueryBondedStake(QueryBondedStake(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -285,7 +285,7 @@ pub async fn main() -> Result<()> {
                     rpc::query_bonded_stake(&client, args).await;
                 }
                 Sub::QueryCommissionRate(QueryCommissionRate(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -301,7 +301,7 @@ pub async fn main() -> Result<()> {
                     .await;
                 }
                 Sub::QuerySlashes(QuerySlashes(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -312,7 +312,7 @@ pub async fn main() -> Result<()> {
                     rpc::query_slashes(&client, &mut ctx.wallet, args).await;
                 }
                 Sub::QueryDelegations(QueryDelegations(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -324,7 +324,7 @@ pub async fn main() -> Result<()> {
                         .await;
                 }
                 Sub::QueryResult(QueryResult(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -335,7 +335,7 @@ pub async fn main() -> Result<()> {
                     rpc::query_result(&client, args).await;
                 }
                 Sub::QueryRawBytes(QueryRawBytes(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -347,7 +347,7 @@ pub async fn main() -> Result<()> {
                 }
 
                 Sub::QueryProposal(QueryProposal(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -358,7 +358,7 @@ pub async fn main() -> Result<()> {
                     rpc::query_proposal(&client, args).await;
                 }
                 Sub::QueryProposalResult(QueryProposalResult(mut args)) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
@@ -371,7 +371,7 @@ pub async fn main() -> Result<()> {
                 Sub::QueryProtocolParameters(QueryProtocolParameters(
                     mut args,
                 )) => {
-                    let client = HttpClient::new(std::mem::take(
+                    let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
