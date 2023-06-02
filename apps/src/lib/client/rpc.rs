@@ -287,12 +287,11 @@ pub async fn query_transparent_balance<
     match (args.token, args.owner) {
         (Some(token), Some(owner)) => {
             let key = match &args.sub_prefix {
-                Some(sub_prefix) => {
-                    let sub_prefix = Key::parse(sub_prefix).unwrap();
-                    let prefix =
-                        token::multitoken_balance_prefix(&token, &sub_prefix);
+                Some(sp) => {
+                    let sub_prefix =
+                        Address::decode(sp).expect("Invalid sub_prefix");
                     token::multitoken_balance_key(
-                        &prefix,
+                        &sub_prefix,
                         &owner.address().unwrap(),
                     )
                 }
@@ -492,8 +491,8 @@ fn print_balances(
     writeln!(w, "Token {}", token_alias).unwrap();
 
     let print_num = balances
-        .filter_map(
-            |(key, balance)| match token::is_any_multitoken_balance_key(&key) {
+        .filter_map(|(key, balance)| {
+            match token::is_multitoken_balance_key(&key) {
                 Some((sub_prefix, owner)) => Some((
                     owner.clone(),
                     format!(
@@ -513,8 +512,8 @@ fn print_balances(
                         ),
                     )
                 }),
-            },
-        )
+            }
+        })
         .filter_map(|(o, s)| match target {
             Some(t) if o == *t => Some(s),
             Some(_) => None,

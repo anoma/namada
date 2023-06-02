@@ -60,13 +60,14 @@ pub use namada::ledger::ibc::storage::{
     ack_key, channel_counter_key, channel_key, client_counter_key,
     client_state_key, client_type_key, client_update_height_key,
     client_update_timestamp_key, commitment_key, connection_counter_key,
-    connection_key, consensus_state_key, ibc_token_prefix,
-    next_sequence_ack_key, next_sequence_recv_key, next_sequence_send_key,
-    port_key, receipt_key,
+    connection_key, consensus_state_key, ibc_token, next_sequence_ack_key,
+    next_sequence_recv_key, next_sequence_send_key, port_key, receipt_key,
 };
 use namada::ledger::ibc::vp::{
     get_dummy_genesis_validator, get_dummy_header as tm_dummy_header, Ibc,
-    IbcToken,
+};
+use namada::ledger::native_vp::multitoken::{
+    Error as MultitokenVpError, MultitokenVp,
 };
 use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::parameters::storage::{
@@ -115,19 +116,20 @@ impl<'a> TestIbcVp<'a> {
     }
 }
 
-pub struct TestIbcTokenVp<'a> {
-    pub token: IbcToken<'a, MockDB, Sha256Hasher, WasmCacheRwAccess>,
+pub struct TestMultitokenVp<'a> {
+    pub multitoken_vp:
+        MultitokenVp<'a, MockDB, Sha256Hasher, WasmCacheRwAccess>,
 }
 
-impl<'a> TestIbcTokenVp<'a> {
+impl<'a> TestMultitokenVp<'a> {
     pub fn validate(
         &self,
-        tx_data: &Tx,
-    ) -> std::result::Result<bool, namada::ledger::ibc::vp::IbcTokenError> {
-        self.token.validate_tx(
-            tx_data,
-            self.token.ctx.keys_changed,
-            self.token.ctx.verifiers,
+        tx: &Tx,
+    ) -> std::result::Result<bool, MultitokenVpError> {
+        self.multitoken_vp.validate_tx(
+            tx,
+            self.multitoken_vp.ctx.keys_changed,
+            self.multitoken_vp.ctx.verifiers,
         )
     }
 }
@@ -168,11 +170,11 @@ pub fn validate_ibc_vp_from_tx<'a>(
 }
 
 /// Validate the native token VP for the given address
-pub fn validate_token_vp_from_tx<'a>(
+pub fn validate_multitoken_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
     tx: &'a Tx,
     target: &Key,
-) -> std::result::Result<bool, namada::ledger::ibc::vp::IbcTokenError> {
+) -> std::result::Result<bool, MultitokenVpError> {
     let (verifiers, keys_changed) = tx_env
         .wl_storage
         .write_log
@@ -198,9 +200,9 @@ pub fn validate_token_vp_from_tx<'a>(
         &verifiers,
         vp_wasm_cache,
     );
-    let token = IbcToken { ctx };
+    let multitoken_vp = MultitokenVp { ctx };
 
-    TestIbcTokenVp { token }.validate(tx)
+    TestMultitokenVp { multitoken_vp }.validate(tx)
 }
 
 /// Initialize the test storage. Requires initialized [`tx_host_env::ENV`].
@@ -762,6 +764,6 @@ pub fn packet_from_message(
 }
 
 pub fn balance_key_with_ibc_prefix(denom: String, owner: &Address) -> Key {
-    let prefix = ibc_token_prefix(denom).expect("invalid denom");
-    token::multitoken_balance_key(&prefix, owner)
+    let ibc_token = ibc_token(denom);
+    token::multitoken_balance_key(&ibc_token, owner)
 }

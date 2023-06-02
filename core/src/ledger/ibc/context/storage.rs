@@ -6,6 +6,7 @@ pub use ics23::ProofSpec;
 
 use super::super::Error;
 use crate::ledger::storage_api;
+use crate::types::address::Address;
 use crate::types::ibc::IbcEvent;
 use crate::types::storage::{BlockHeight, Header, Key};
 use crate::types::token::Amount;
@@ -54,8 +55,26 @@ pub trait IbcStorageContext {
     /// Transfer token
     fn transfer_token(
         &mut self,
-        src: &Key,
-        dest: &Key,
+        src: &Address,
+        dest: &Address,
+        token: &Address,
+        sub_prefix: Option<Address>,
+        amount: Amount,
+    ) -> Result<(), Self::Error>;
+
+    /// Mint token
+    fn mint_token(
+        &mut self,
+        target: &Address,
+        sub_prefix: &Address,
+        amount: Amount,
+    ) -> Result<(), Self::Error>;
+
+    /// Burn token
+    fn burn_token(
+        &mut self,
+        target: &Address,
+        sub_prefix: &Address,
         amount: Amount,
     ) -> Result<(), Self::Error>;
 
