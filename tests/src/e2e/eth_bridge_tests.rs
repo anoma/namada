@@ -13,12 +13,12 @@ use namada::ledger::eth_bridge::{
     UpgradeableContract,
 };
 use namada::types::address::wnam;
+use namada::types::control_flow::time::SleepStrategy;
 use namada::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
 use namada::types::ethereum_events::EthAddress;
 use namada::types::storage::{self, Epoch};
 use namada::types::{address, token};
 use namada_apps::config::ethereum_bridge;
-use namada::types::control_flow::time::SleepStrategy;
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::{

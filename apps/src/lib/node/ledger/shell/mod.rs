@@ -63,6 +63,7 @@ use thiserror::Error;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
 use super::ethereum_oracle::{self as oracle, last_processed_block};
+use crate::config;
 use crate::config::{genesis, TendermintMode};
 use crate::facade::tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
@@ -73,9 +74,10 @@ use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{storage, tendermint_node};
+#[cfg(feature = "dev")]
+use crate::wallet;
 #[allow(unused_imports)]
 use crate::wallet::{ValidatorData, ValidatorKeys};
-use crate::{config, wallet};
 
 fn key_to_tendermint(
     pk: &common::PublicKey,
@@ -474,7 +476,7 @@ where
                         "{}",
                         wallet_path.as_path().to_str().unwrap()
                     );
-                    let mut wallet = crate::wallet::load_or_new_from_genesis(
+                    let wallet = crate::wallet::load_or_new_from_genesis(
                         wallet_path,
                         genesis::genesis_config::open_genesis_config(
                             genesis_path,

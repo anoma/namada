@@ -171,7 +171,7 @@ where
         #[cfg(not(feature = "dev"))]
         {
             assert_eq!(
-                implicit_vp_code_hash.as_slice(),
+                implicit_vp_code_hash.0.as_slice(),
                 &implicit_vp_sha256,
                 "Invalid implicit account's VP sha256 hash for {}",
                 implicit_vp_code_path
@@ -284,7 +284,7 @@ where
             #[cfg(not(feature = "dev"))]
             {
                 assert_eq!(
-                    vp_code_hash.as_slice(),
+                    vp_code_hash.0.as_slice(),
                     &vp_sha256,
                     "Invalid established account's VP sha256 hash for {}",
                     vp_code_path
@@ -367,7 +367,7 @@ where
             #[cfg(not(feature = "dev"))]
             {
                 assert_eq!(
-                    vp_code_hash.as_slice(),
+                    vp_code_hash.0.as_slice(),
                     &vp_sha256,
                     "Invalid token account's VP sha256 hash for {}",
                     vp_code_path
@@ -408,7 +408,7 @@ where
             #[cfg(not(feature = "dev"))]
             {
                 assert_eq!(
-                    vp_code_hash.as_slice(),
+                    vp_code_hash.0.as_slice(),
                     &validator.validator_vp_sha256,
                     "Invalid validator VP sha256 hash for {}",
                     validator.validator_vp_code_path
