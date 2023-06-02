@@ -619,7 +619,7 @@ impl From<MaspAmount> for Amount {
 
 /// Represents the amount used of different conversions
 pub type Conversions =
-    HashMap<AssetType, (AllowedConversion, MerklePath<Node>, Change)>;
+    HashMap<AssetType, (AllowedConversion, MerklePath<Node>, i128)>;
 
 /// Represents an amount that is
 pub type MaspDenominatedAmount = Amount<(TokenAddress, MaspDenom)>;
@@ -1110,7 +1110,7 @@ impl ShieldedContext {
                     .insert(asset_type, (addr, sub_prefix, denom, ep));
                 // If the conversion is 0, then we just have a pure decoding
                 if conv != Amount::zero() {
-                    conv_entry.insert((conv.into(), path, Change::zero()));
+                    conv_entry.insert((conv.into(), path, 0));
                 }
             }
         }
@@ -1301,9 +1301,9 @@ impl ShieldedContext {
         for ((_, key), val) in input.drain() {
             comp.insert((target_epoch, key), val);
         }
-        output += comp;
-        println!("\n\noutput {:?}\n\n", output);
-        (output.into(), conversions)
+        output += Amount::from(comp);
+        println!("\n\nconversions {:?}\n\n", output);
+        (output, conversions)
     }
 
     /// Collect enough unspent notes in this context to exceed the given amount
@@ -1373,9 +1373,6 @@ impl ShieldedContext {
                 }
             }
         }
-        println!("val_acc: {:?}", val_acc);
-        println!("notes: {:?}", notes);
-        println!("conversions: {:?}", conversions);
         (val_acc, notes, conversions)
     }
 
@@ -1682,20 +1679,22 @@ async fn gen_shielded_transfer(
                 epoch,
             )
             .await;
+        println!("used convs: {:?}", used_convs);
         // Commit the notes found to our transaction
         for (diversifier, note, merkle_path) in unspent_notes {
+            let decoded = ctx.shielded.decode_asset_type(client.clone(), note.asset_type.clone()).await.unwrap();
+            println!("Adding note value: {:?}: {:?}", decoded, note.value);
             builder.add_sapling_spend(sk, diversifier, note, merkle_path)?;
         }
         // Commit the conversion notes used during summation
         for (conv, wit, value) in used_convs.values() {
             if value.is_positive() {
-                for denom in MaspDenom::iter() {
-                    builder.add_convert(
-                        conv.clone(),
-                        denom.denominate(&token::Amount::from(*value)),
-                        wit.clone(),
-                    )?;
-                }
+                println!("adding conversion {:?} -> {}", conv.assets, *value as u64);
+                builder.add_convert(
+                    conv.clone(),
+                    *value as u64,
+                    wit.clone(),
+                )?;
             }
         }
     } else {
@@ -1753,6 +1752,8 @@ async fn gen_shielded_transfer(
             target_enc.as_ref(),
         ));
         for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter()) {
+            let decoded = ctx.shielded.decode_asset_type(client.clone(), asset_type.clone()).await.unwrap();
+            println!("Adding transparent outpt: {:?}: {}", decoded, denom.denominate(&amt));
             builder.add_transparent_output(
                 &TransparentAddress::PublicKey(hash.into()),
                 *asset_type,
