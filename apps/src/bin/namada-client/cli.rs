@@ -182,7 +182,8 @@ pub async fn main() -> Result<()> {
                         .await?;
                 }
                 // Eth bridge
-                Sub::AddToEthBridgePool(mut args) => {
+                Sub::AddToEthBridgePool(args) => {
+                    let mut args = args.0;
                     let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
@@ -191,12 +192,19 @@ pub async fn main() -> Result<()> {
                         safe_exit(1);
                     }
                     let args = args.to_sdk(&mut ctx);
-                    bridge_pool::add_to_eth_bridge_pool(&client, args.0).await;
+                    let chain_id = ctx.config.ledger.chain_id.clone();
+                    bridge_pool::add_to_eth_bridge_pool(
+                        &client,
+                        &mut ctx.wallet,
+                        chain_id,
+                        args,
+                    )
+                    .await;
                 }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
-                        &mut args.tx.ledger_address,
+                        &mut args.ledger_address,
                     ))
                     .unwrap();
                     if wait_until_node_is_synched(&client).await.is_break() {
@@ -206,7 +214,7 @@ pub async fn main() -> Result<()> {
                 }
                 Sub::QueryTransfers(QueryTransfers(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
-                        &mut args.tx.ledger_address,
+                        &mut args.query.ledger_address,
                     ))
                     .unwrap();
                     if wait_until_node_is_synched(&client).await.is_break() {
@@ -223,7 +231,7 @@ pub async fn main() -> Result<()> {
                 }
                 Sub::QueryConversions(QueryConversions(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
-                        &mut args.tx.ledger_address,
+                        &mut args.query.ledger_address,
                     ))
                     .unwrap();
                     if wait_until_node_is_synched(&client).await.is_break() {
@@ -235,7 +243,7 @@ pub async fn main() -> Result<()> {
                 }
                 Sub::QueryBlock(QueryBlock(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
-                        &mut args.tx.ledger_address,
+                        &mut args.ledger_address,
                     ))
                     .unwrap();
                     if wait_until_node_is_synched(&client).await.is_break() {
@@ -245,7 +253,7 @@ pub async fn main() -> Result<()> {
                 }
                 Sub::QueryBalance(QueryBalance(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
-                        &mut args.tx.ledger_address,
+                        &mut args.query.ledger_address,
                     ))
                     .unwrap();
                     if wait_until_node_is_synched(&client).await.is_break() {
@@ -262,7 +270,7 @@ pub async fn main() -> Result<()> {
                 }
                 Sub::QueryBonds(QueryBonds(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
-                        &mut args.tx.ledger_address,
+                        &mut args.query.ledger_address,
                     ))
                     .unwrap();
                     if wait_until_node_is_synched(&client).await.is_break() {
@@ -275,7 +283,7 @@ pub async fn main() -> Result<()> {
                 }
                 Sub::QueryBondedStake(QueryBondedStake(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
-                        &mut args.tx.ledger_address,
+                        &mut args.query.ledger_address,
                     ))
                     .unwrap();
                     if wait_until_node_is_synched(&client).await.is_break() {
@@ -286,7 +294,7 @@ pub async fn main() -> Result<()> {
                 }
                 Sub::QueryCommissionRate(QueryCommissionRate(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
-                        &mut args.tx.ledger_address,
+                        &mut args.query.ledger_address,
                     ))
                     .unwrap();
                     if wait_until_node_is_synched(&client).await.is_break() {
@@ -302,7 +310,7 @@ pub async fn main() -> Result<()> {
                 }
                 Sub::QuerySlashes(QuerySlashes(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
-                        &mut args.tx.ledger_address,
+                        &mut args.query.ledger_address,
                     ))
                     .unwrap();
                     if wait_until_node_is_synched(&client).await.is_break() {
@@ -313,7 +321,7 @@ pub async fn main() -> Result<()> {
                 }
                 Sub::QueryDelegations(QueryDelegations(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
-                        &mut args.tx.ledger_address,
+                        &mut args.query.ledger_address,
                     ))
                     .unwrap();
                     if wait_until_node_is_synched(&client).await.is_break() {
@@ -325,7 +333,7 @@ pub async fn main() -> Result<()> {
                 }
                 Sub::QueryResult(QueryResult(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
-                        &mut args.tx.ledger_address,
+                        &mut args.query.ledger_address,
                     ))
                     .unwrap();
                     if wait_until_node_is_synched(&client).await.is_break() {
@@ -336,7 +344,7 @@ pub async fn main() -> Result<()> {
                 }
                 Sub::QueryRawBytes(QueryRawBytes(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
-                        &mut args.tx.ledger_address,
+                        &mut args.query.ledger_address,
                     ))
                     .unwrap();
                     if wait_until_node_is_synched(&client).await.is_break() {
@@ -348,7 +356,7 @@ pub async fn main() -> Result<()> {
 
                 Sub::QueryProposal(QueryProposal(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
-                        &mut args.tx.ledger_address,
+                        &mut args.query.ledger_address,
                     ))
                     .unwrap();
                     if wait_until_node_is_synched(&client).await.is_break() {
@@ -359,7 +367,7 @@ pub async fn main() -> Result<()> {
                 }
                 Sub::QueryProposalResult(QueryProposalResult(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
-                        &mut args.tx.ledger_address,
+                        &mut args.query.ledger_address,
                     ))
                     .unwrap();
                     if wait_until_node_is_synched(&client).await.is_break() {
@@ -372,7 +380,7 @@ pub async fn main() -> Result<()> {
                     mut args,
                 )) => {
                     let client = HttpClient::new(utils::take_config_address(
-                        &mut args.tx.ledger_address,
+                        &mut args.query.ledger_address,
                     ))
                     .unwrap();
                     if wait_until_node_is_synched(&client).await.is_break() {

@@ -14,7 +14,7 @@ pub async fn main() -> Result<()> {
         cmds::NamadaRelayer::EthBridgePool(sub) => match sub {
             cmds::EthBridgePool::RecommendBatch(mut args) => {
                 let client = HttpClient::new(utils::take_config_address(
-                    &mut args.tx.ledger_address,
+                    &mut args.query.ledger_address,
                 ))
                 .unwrap();
                 if wait_until_node_is_synched(&client).await.is_break() {
@@ -25,7 +25,7 @@ pub async fn main() -> Result<()> {
             }
             cmds::EthBridgePool::ConstructProof(mut args) => {
                 let client = HttpClient::new(utils::take_config_address(
-                    &mut args.tx.ledger_address,
+                    &mut args.query.ledger_address,
                 ))
                 .unwrap();
                 if wait_until_node_is_synched(&client).await.is_break() {
@@ -36,7 +36,7 @@ pub async fn main() -> Result<()> {
             }
             cmds::EthBridgePool::RelayProof(mut args) => {
                 let client = HttpClient::new(utils::take_config_address(
-                    &mut args.tx.ledger_address,
+                    &mut args.query.ledger_address,
                 ))
                 .unwrap();
                 if wait_until_node_is_synched(&client).await.is_break() {
@@ -47,42 +47,39 @@ pub async fn main() -> Result<()> {
             }
             cmds::EthBridgePool::QueryPool(mut query) => {
                 let client = HttpClient::new(utils::take_config_address(
-                    &mut args.tx.ledger_address,
+                    &mut query.ledger_address,
                 ))
                 .unwrap();
                 if wait_until_node_is_synched(&client).await.is_break() {
                     safe_exit(1);
                 }
-                let args = args.to_sdk_ctxless();
-                bridge_pool::query_bridge_pool(&client, query).await;
+                bridge_pool::query_bridge_pool(&client).await;
             }
             cmds::EthBridgePool::QuerySigned(mut query) => {
                 let client = HttpClient::new(utils::take_config_address(
-                    &mut args.tx.ledger_address,
+                    &mut query.ledger_address,
                 ))
                 .unwrap();
                 if wait_until_node_is_synched(&client).await.is_break() {
                     safe_exit(1);
                 }
-                let args = args.to_sdk_ctxless();
-                bridge_pool::query_signed_bridge_pool(&client, query).await;
+                bridge_pool::query_signed_bridge_pool(&client).await;
             }
             cmds::EthBridgePool::QueryRelays(mut query) => {
                 let client = HttpClient::new(utils::take_config_address(
-                    &mut args.tx.ledger_address,
+                    &mut query.ledger_address,
                 ))
                 .unwrap();
                 if wait_until_node_is_synched(&client).await.is_break() {
                     safe_exit(1);
                 }
-                let args = args.to_sdk_ctxless();
-                bridge_pool::query_relay_progress(&client, query).await;
+                bridge_pool::query_relay_progress(&client).await;
             }
         },
         cmds::NamadaRelayer::ValidatorSet(sub) => match sub {
             cmds::ValidatorSet::ConsensusValidatorSet(mut args) => {
                 let client = HttpClient::new(utils::take_config_address(
-                    &mut args.tx.ledger_address,
+                    &mut args.query.ledger_address,
                 ))
                 .unwrap();
                 if wait_until_node_is_synched(&client).await.is_break() {
@@ -93,7 +90,7 @@ pub async fn main() -> Result<()> {
             }
             cmds::ValidatorSet::ValidatorSetProof(mut args) => {
                 let client = HttpClient::new(utils::take_config_address(
-                    &mut args.tx.ledger_address,
+                    &mut args.query.ledger_address,
                 ))
                 .unwrap();
                 if wait_until_node_is_synched(&client).await.is_break() {
@@ -105,7 +102,7 @@ pub async fn main() -> Result<()> {
             }
             cmds::ValidatorSet::ValidatorSetUpdateRelay(mut args) => {
                 let client = HttpClient::new(utils::take_config_address(
-                    &mut args.tx.ledger_address,
+                    &mut args.query.ledger_address,
                 ))
                 .unwrap();
                 if wait_until_node_is_synched(&client).await.is_break() {
