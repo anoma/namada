@@ -54,10 +54,8 @@ pub const FIXED_LEN_STRING_BYTES: usize = 45;
 
 /// Internal IBC address
 pub const IBC: Address = Address::Internal(InternalAddress::Ibc);
-/// Internal IBC token burn address
-pub const IBC_BURN: Address = Address::Internal(InternalAddress::IbcBurn);
-/// Internal IBC token mint address
-pub const IBC_MINT: Address = Address::Internal(InternalAddress::IbcMint);
+/// Internal multitoken mint address
+pub const MINT: Address = Address::Internal(InternalAddress::Mint);
 /// Internal ledger parameters address
 pub const PARAMETERS: Address = Address::Internal(InternalAddress::Parameters);
 /// Internal PoS address
@@ -84,18 +82,16 @@ mod internal {
         "ano::Slash Fund                              ";
     pub const IBC: &str =
         "ibc::Inter-Blockchain Communication          ";
-    pub const IBC_ESCROW: &str =
-        "ibc::IBC Escrow Address                      ";
-    pub const IBC_BURN: &str =
-        "ibc::IBC Burn Address                        ";
-    pub const IBC_MINT: &str =
-        "ibc::IBC Mint Address                        ";
     pub const ETH_BRIDGE: &str =
         "ano::ETH Bridge Address                      ";
     pub const ETH_BRIDGE_POOL: &str =
         "ano::ETH Bridge Pool Address                 ";
     pub const REPLAY_PROTECTION: &str =
         "ano::Replay Protection                       ";
+    pub const MULTITOKEN: &str =
+        "ano::Multitoken                              ";
+    pub const MINT: &str =
+        "ano::Multitoken Mint Address                 ";
 }
 
 /// Fixed-length address strings prefix for established addresses.
@@ -233,11 +229,6 @@ impl Address {
                     InternalAddress::IbcToken(hash) => {
                         format!("{}::{}", PREFIX_IBC, hash)
                     }
-                    InternalAddress::IbcEscrow => {
-                        internal::IBC_ESCROW.to_string()
-                    }
-                    InternalAddress::IbcBurn => internal::IBC_BURN.to_string(),
-                    InternalAddress::IbcMint => internal::IBC_MINT.to_string(),
                     InternalAddress::EthBridge => {
                         internal::ETH_BRIDGE.to_string()
                     }
@@ -247,6 +238,10 @@ impl Address {
                     InternalAddress::ReplayProtection => {
                         internal::REPLAY_PROTECTION.to_string()
                     }
+                    InternalAddress::Multitoken => {
+                        internal::MULTITOKEN.to_string()
+                    }
+                    InternalAddress::Mint => internal::MINT.to_string(),
                 };
                 debug_assert_eq!(string.len(), FIXED_LEN_STRING_BYTES);
                 string
@@ -320,6 +315,10 @@ impl Address {
                 internal::REPLAY_PROTECTION => {
                     Ok(Address::Internal(InternalAddress::ReplayProtection))
                 }
+                internal::MULTITOKEN => {
+                    Ok(Address::Internal(InternalAddress::Multitoken))
+                }
+                internal::MINT => Ok(Address::Internal(InternalAddress::Mint)),
                 _ => Err(Error::new(
                     ErrorKind::InvalidData,
                     "Invalid internal address",
@@ -327,15 +326,6 @@ impl Address {
             },
             Some((PREFIX_IBC, raw)) => match string {
                 internal::IBC => Ok(Address::Internal(InternalAddress::Ibc)),
-                internal::IBC_ESCROW => {
-                    Ok(Address::Internal(InternalAddress::IbcEscrow))
-                }
-                internal::IBC_BURN => {
-                    Ok(Address::Internal(InternalAddress::IbcBurn))
-                }
-                internal::IBC_MINT => {
-                    Ok(Address::Internal(InternalAddress::IbcMint))
-                }
                 _ if raw.len() == HASH_HEX_LEN => Ok(Address::Internal(
                     InternalAddress::IbcToken(raw.to_string()),
                 )),
@@ -532,12 +522,6 @@ pub enum InternalAddress {
     Ibc,
     /// IBC-related token
     IbcToken(String),
-    /// Escrow for IBC token transfer
-    IbcEscrow,
-    /// Burn tokens with IBC token transfer
-    IbcBurn,
-    /// Mint tokens from this address with IBC token transfer
-    IbcMint,
     /// Governance address
     Governance,
     /// SlashFund address for governance
@@ -548,22 +532,10 @@ pub enum InternalAddress {
     EthBridgePool,
     /// Replay protection contains transactions' hash
     ReplayProtection,
-}
-
-impl InternalAddress {
-    /// Get an IBC token address from the port ID and channel ID
-    pub fn ibc_token_address(
-        port_id: String,
-        channel_id: String,
-        token: &Address,
-    ) -> Self {
-        let mut hasher = Sha256::new();
-        let s = format!("{}/{}/{}", port_id, channel_id, token);
-        hasher.update(&s);
-        let hash =
-            format!("{:.width$x}", hasher.finalize(), width = HASH_HEX_LEN);
-        InternalAddress::IbcToken(hash)
-    }
+    /// Multitoken
+    Multitoken,
+    /// Minted multitoken address
+    Mint,
 }
 
 impl Display for InternalAddress {
@@ -579,12 +551,11 @@ impl Display for InternalAddress {
                 Self::SlashFund => "SlashFund".to_string(),
                 Self::Ibc => "IBC".to_string(),
                 Self::IbcToken(hash) => format!("IbcToken: {}", hash),
-                Self::IbcEscrow => "IbcEscrow".to_string(),
-                Self::IbcBurn => "IbcBurn".to_string(),
-                Self::IbcMint => "IbcMint".to_string(),
                 Self::EthBridge => "EthBridge".to_string(),
                 Self::EthBridgePool => "EthBridgePool".to_string(),
                 Self::ReplayProtection => "ReplayProtection".to_string(),
+                Self::Multitoken => "Multitoken".to_string(),
+                Self::Mint => "Mint".to_string(),
             }
         )
     }
@@ -875,30 +846,26 @@ pub mod testing {
             InternalAddress::Parameters => {}
             InternalAddress::Ibc => {}
             InternalAddress::IbcToken(_) => {}
-            InternalAddress::IbcEscrow => {}
-            InternalAddress::IbcBurn => {}
-            InternalAddress::IbcMint => {}
             InternalAddress::EthBridge => {}
             InternalAddress::EthBridgePool => {}
-            InternalAddress::ReplayProtection => {} /* Add new addresses in
-                                                     * the
-                                                     * `prop_oneof` below. */
+            InternalAddress::ReplayProtection => {}
+            InternalAddress::Multitoken => {}
+            InternalAddress::Mint => {} /* Add new addresses in the
+                                         * `prop_oneof` below. */
         };
         prop_oneof![
             Just(InternalAddress::PoS),
             Just(InternalAddress::PosSlashPool),
             Just(InternalAddress::Ibc),
             Just(InternalAddress::Parameters),
-            Just(InternalAddress::Ibc),
             arb_ibc_token(),
-            Just(InternalAddress::IbcEscrow),
-            Just(InternalAddress::IbcBurn),
-            Just(InternalAddress::IbcMint),
             Just(InternalAddress::Governance),
             Just(InternalAddress::SlashFund),
             Just(InternalAddress::EthBridge),
             Just(InternalAddress::EthBridgePool),
-            Just(InternalAddress::ReplayProtection)
+            Just(InternalAddress::ReplayProtection),
+            Just(InternalAddress::Multitoken),
+            Just(InternalAddress::Mint)
         ]
     }
 

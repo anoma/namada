@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use namada_vp_prelude::address::{self, Address, InternalAddress};
+use namada_vp_prelude::address::{self, Address};
 use namada_vp_prelude::storage::KeySeg;
 use namada_vp_prelude::{storage, token, *};
 
@@ -53,10 +53,7 @@ fn token_checks(
 ) -> VpResult {
     let mut change = token::Change::default();
     for key in keys_touched.iter() {
-        let owner: Option<&Address> = token::is_balance_key(token, key)
-            .or_else(|| {
-                token::is_multitoken_balance_key(token, key).map(|a| a.1)
-            });
+        let owner: Option<&Address> = token::is_balance_key(token, key);
 
         match owner {
             None => {
@@ -77,33 +74,10 @@ fn token_checks(
             }
             Some(owner) => {
                 // accumulate the change
-                let pre: token::Change = match owner {
-                    Address::Internal(InternalAddress::IbcMint) => {
-                        token::Change::maximum()
-                    }
-                    Address::Internal(InternalAddress::IbcBurn) => {
-                        token::Change::default()
-                    }
-                    _ => ctx
-                        .read_pre::<token::Amount>(key)?
-                        .unwrap_or_default()
-                        .change(),
-                };
-                let post: token::Change = match owner {
-                    Address::Internal(InternalAddress::IbcMint) => ctx
-                        .read_temp::<token::Amount>(key)?
-                        .map(|x| x.change())
-                        .unwrap_or_else(token::Change::maximum),
-                    Address::Internal(InternalAddress::IbcBurn) => ctx
-                        .read_temp::<token::Amount>(key)?
-                        .unwrap_or_default()
-                        .change(),
-                    _ => ctx
-                        .read_post::<token::Amount>(key)?
-                        .unwrap_or_default()
-                        .change(),
-                };
-                let this_change = post - pre;
+                let pre: token::Amount = ctx.read_pre(key)?.unwrap_or_default();
+                let post: token::Amount =
+                    ctx.read_post(key)?.unwrap_or_default();
+                let this_change = post.change() - pre.change();
                 change += this_change;
                 // make sure that the spender approved the transaction
                 if !(this_change.non_negative()

@@ -1,5 +1,5 @@
 use masp_primitives::transaction::Transaction;
-use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::KeySeg;
 use namada_core::types::token;
@@ -14,7 +14,7 @@ pub fn transfer(
     src: &Address,
     dest: &Address,
     token: &Address,
-    sub_prefix: Option<storage::Key>,
+    sub_prefix: Option<Address>,
     amount: DenominatedAmount,
     key: &Option<String>,
     shielded_hash: &Option<Hash>,
@@ -22,70 +22,24 @@ pub fn transfer(
 ) -> TxResult {
     if amount.amount != Amount::default() {
         let src_key = match &sub_prefix {
-            Some(sub_prefix) => {
-                let prefix =
-                    token::multitoken_balance_prefix(token, sub_prefix);
-                token::multitoken_balance_key(&prefix, src)
-            }
+            Some(sub_prefix) => token::multitoken_balance_key(sub_prefix, src),
             None => token::balance_key(token, src),
         };
         let dest_key = match &sub_prefix {
-            Some(sub_prefix) => {
-                let prefix =
-                    token::multitoken_balance_prefix(token, sub_prefix);
-                token::multitoken_balance_key(&prefix, dest)
-            }
+            Some(sub_prefix) => token::multitoken_balance_key(sub_prefix, dest),
             None => token::balance_key(token, dest),
         };
+        let src_bal: Option<Amount> = ctx.read(&src_key)?;
+        let mut src_bal = src_bal.unwrap_or_else(|| {
+            log_string(format!("src {} has no balance", src_key));
+            unreachable!()
+        });
+        src_bal.spend(&amount.amount);
+        let mut dest_bal: Amount = ctx.read(&dest_key)?.unwrap_or_default();
+        dest_bal.receive(&amount.amount);
         if src != dest {
-            let src_bal: Option<Amount> = match src {
-                Address::Internal(InternalAddress::IbcMint) => {
-                    Some(Amount::max_signed())
-                }
-                Address::Internal(InternalAddress::IbcBurn) => {
-                    log_string("invalid transfer from the burn address");
-                    unreachable!()
-                }
-                _ => ctx.read(&src_key)?,
-            };
-            let mut src_bal = src_bal.unwrap_or_else(|| {
-                log_string(format!("src {} has no balance", src_key));
-                unreachable!()
-            });
-            src_bal.spend(&amount.amount);
-            let mut dest_bal: Amount = match dest {
-                Address::Internal(InternalAddress::IbcMint) => {
-                    log_string("invalid transfer to the mint address");
-                    unreachable!()
-                }
-                _ => ctx.read(&dest_key)?.unwrap_or_default(),
-            };
-            dest_bal.receive(&amount.amount);
-
-            match src {
-                Address::Internal(InternalAddress::IbcMint) => {
-                    ctx.write_temp(&src_key, src_bal)?;
-                }
-                Address::Internal(InternalAddress::IbcBurn) => {
-                    log_string("invalid transfer from the burn address");
-                    unreachable!()
-                }
-                _ => {
-                    ctx.write(&src_key, src_bal)?;
-                }
-            }
-            match dest {
-                Address::Internal(InternalAddress::IbcMint) => {
-                    log_string("invalid transfer to the mint address");
-                    unreachable!()
-                }
-                Address::Internal(InternalAddress::IbcBurn) => {
-                    ctx.write_temp(&dest_key, dest_bal)?;
-                }
-                _ => {
-                    ctx.write(&dest_key, dest_bal)?;
-                }
-            }
+            ctx.write(&src_key, src_bal)?;
+            ctx.write(&dest_key, dest_bal)?;
         }
     }
 
@@ -135,49 +89,49 @@ pub fn transfer(
     Ok(())
 }
 
-/// A token transfer with storage keys that can be used in a transaction.
-pub fn transfer_with_keys(
+/// Mint that can be used in a transaction.
+pub fn mint(
     ctx: &mut Ctx,
-    src_key: &storage::Key,
-    dest_key: &storage::Key,
+    minter: &Address,
+    target: &Address,
+    sub_prefix: &Address,
     amount: Amount,
 ) -> TxResult {
-    let src_owner = is_any_token_or_multitoken_balance_key(src_key);
-    let src_bal: Option<Amount> = match src_owner {
-        Some([_, Address::Internal(InternalAddress::IbcMint)]) => {
-            Some(Amount::max_signed())
-        }
-        Some([_, Address::Internal(InternalAddress::IbcBurn)]) => {
-            log_string("invalid transfer from the burn address");
-            unreachable!()
-        }
-        _ => ctx.read(src_key)?,
-    };
-    let mut src_bal = src_bal.unwrap_or_else(|| {
-        log_string(format!("src {} has no balance", src_key));
-        unreachable!()
-    });
-    src_bal.spend(&amount);
-    let dest_owner = is_any_token_balance_key(dest_key);
-    let mut dest_bal: Amount = match dest_owner {
-        Some([_, Address::Internal(InternalAddress::IbcMint)]) => {
-            log_string("invalid transfer to the mint address");
-            unreachable!()
-        }
-        _ => ctx.read(dest_key)?.unwrap_or_default(),
-    };
-    dest_bal.receive(&amount);
-    match src_owner {
-        Some([_, Address::Internal(InternalAddress::IbcMint)]) => {
-            ctx.write_temp(src_key, src_bal)?;
-        }
-        _ => ctx.write(src_key, src_bal)?,
-    }
-    match dest_owner {
-        Some([_, Address::Internal(InternalAddress::IbcBurn)]) => {
-            ctx.write_temp(dest_key, dest_bal)?;
-        }
-        _ => ctx.write(dest_key, dest_bal)?,
-    }
+    let target_key = token::multitoken_balance_key(sub_prefix, target);
+    let mut target_bal: Amount = ctx.read(&target_key)?.unwrap_or_default();
+    target_bal.receive(&amount);
+
+    let minted_key = token::multitoken_minted_key(sub_prefix);
+    let mut minted_bal: Amount = ctx.read(&minted_key)?.unwrap_or_default();
+    minted_bal.receive(&amount);
+
+    ctx.write(&target_key, target_bal)?;
+    ctx.write(&minted_key, minted_bal)?;
+
+    let minter_key = token::multitoken_minter_key(sub_prefix);
+    ctx.write(&minter_key, minter)?;
+
+    Ok(())
+}
+
+/// Burn that can be used in a transaction.
+pub fn burn(
+    ctx: &mut Ctx,
+    target: &Address,
+    sub_prefix: &Address,
+    amount: Amount,
+) -> TxResult {
+    let target_key = token::multitoken_balance_key(sub_prefix, target);
+    let mut target_bal: Amount = ctx.read(&target_key)?.unwrap_or_default();
+    target_bal.spend(&amount);
+
+    // burn the minted amount
+    let minted_key = token::multitoken_minted_key(sub_prefix);
+    let mut minted_bal: Amount = ctx.read(&minted_key)?.unwrap_or_default();
+    minted_bal.spend(&amount);
+
+    ctx.write(&target_key, target_bal)?;
+    ctx.write(&minted_key, minted_bal)?;
+
     Ok(())
 }

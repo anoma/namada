@@ -1145,13 +1145,17 @@ pub async fn build_ibc_transfer<
 
     // Check source balance
     let (sub_prefix, balance_key) = match args.sub_prefix {
-        Some(sub_prefix) => {
-            let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
-            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
-            (
-                Some(sub_prefix),
-                token::multitoken_balance_key(&prefix, &source),
-            )
+        Some(sp) => {
+            let sub_prefix = Address::decode(&sp).map_err(|e| {
+                Error::Other(format!(
+                    "The sub_prefix was not an Address: sub_prefix {}, error \
+                     {}",
+                    sp, e
+                ))
+            })?;
+            let balance_key =
+                token::multitoken_balance_key(&sub_prefix, &source);
+            (Some(sub_prefix), balance_key)
         }
         None => (None, token::balance_key(&token, &source)),
     };
@@ -1334,13 +1338,17 @@ pub async fn build_transfer<
     token_exists_or_err(token.clone(), args.tx.force, client).await?;
     // Check source balance
     let (sub_prefix, balance_key) = match &args.sub_prefix {
-        Some(ref sub_prefix) => {
-            let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
-            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
-            (
-                Some(sub_prefix),
-                token::multitoken_balance_key(&prefix, &source),
-            )
+        Some(sp) => {
+            let sub_prefix = Address::decode(sp).map_err(|e| {
+                Error::Other(format!(
+                    "The sub_prefix was not an Address: sub_prefix {}, error \
+                     {}",
+                    sp, e
+                ))
+            })?;
+            let balance_key =
+                token::multitoken_balance_key(&sub_prefix, &source);
+            (Some(sub_prefix), balance_key)
         }
         None => (None, token::balance_key(&token, &source)),
     };
