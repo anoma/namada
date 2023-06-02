@@ -15,7 +15,7 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::components::sapling::fees::{
     InputView, OutputView,
 };
-use namada_core::types::address::{masp, Address, ImplicitAddress};
+use namada_core::types::address::{masp, masp_tx_key, Address, ImplicitAddress};
 use namada_core::types::token::{self, Amount};
 use namada_core::types::transaction::{pos, MIN_FEE};
 use prost::Message;
@@ -113,12 +113,8 @@ pub async fn find_keypair<
 pub enum TxSigningKey {
     /// Do not sign any transaction
     None,
-    /// Obtain the actual keypair from wallet and use that to sign
-    WalletKeypair(common::SecretKey),
     /// Obtain the keypair corresponding to given address from wallet and sign
     WalletAddress(Address),
-    /// Directly use the given secret key to sign transactions
-    SecretKey(common::SecretKey),
 }
 
 /// Given CLI arguments and some defaults, determine the rightful transaction
@@ -136,7 +132,7 @@ pub async fn tx_signer<
 ) -> Result<common::SecretKey, Error> {
     // Override the default signing key source if possible
     let default = if let Some(signing_key) = &args.signing_key {
-        TxSigningKey::WalletKeypair(signing_key.clone())
+        return Ok(signing_key.clone());
     } else if let Some(signer) = &args.signer {
         TxSigningKey::WalletAddress(signer.clone())
     } else {
@@ -144,7 +140,9 @@ pub async fn tx_signer<
     };
     // Now actually fetch the signing key and apply it
     match default {
-        TxSigningKey::WalletKeypair(signing_key) => Ok(signing_key),
+        TxSigningKey::WalletAddress(signer) if signer == masp() => {
+            Ok(masp_tx_key())
+        },
         TxSigningKey::WalletAddress(signer) => {
             let signer = signer;
             let signing_key = find_keypair::<C, U>(
@@ -165,7 +163,6 @@ pub async fn tx_signer<
             }
             Ok(signing_key)
         }
-        TxSigningKey::SecretKey(signing_key) => Ok(signing_key),
         TxSigningKey::None => other_err(
             "All transactions must be signed; please either specify the key \
              or the address from which to look up the signing key."
@@ -188,11 +185,10 @@ pub async fn sign_tx<
 >(
     client: &C,
     wallet: &mut Wallet<U>,
-    mut tx: Tx,
+    tx: &mut Tx,
     args: &args::Tx,
     default: TxSigningKey,
-    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> Result<TxBroadcastData, Error> {
+) -> Result<(), Error> {
     let keypair = tx_signer::<C, U>(client, wallet, args, default).await?;
     // Sign over the transacttion data
     tx.add_section(Section::Signature(Signature::new(
@@ -204,26 +200,134 @@ pub async fn sign_tx<
         tx.code_sechash(),
         &keypair,
     )));
+    // Then sign over the bound wrapper
+    tx.add_section(Section::Signature(Signature::new(
+        &tx.header_hash(),
+        &keypair,
+    )));
+    Ok(())
+}
 
-    let epoch = rpc::query_epoch(client).await;
-
-    let broadcast_data = if args.dry_run {
-        TxBroadcastData::DryRun(tx)
+/// Create a wrapper tx from a normal tx. Get the hash of the
+/// wrapper and its payload which is needed for monitoring its
+/// progress on chain.
+pub async fn wrap_tx<
+    C: crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
+    client: &C,
+    #[allow(unused_variables)] wallet: &mut Wallet<U>,
+    args: &args::Tx,
+    epoch: Epoch,
+    mut tx: Tx,
+    keypair: &common::PublicKey,
+    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
+) -> Tx {
+    let fee_amount = if cfg!(feature = "mainnet") {
+        Amount::whole(MIN_FEE)
     } else {
-        sign_wrapper(
+        let wrapper_tx_fees_key = parameter_storage::get_wrapper_tx_fees_key();
+        rpc::query_storage_value::<C, token::Amount>(
             client,
-            wallet,
-            args,
-            epoch,
-            tx,
-            &keypair,
-            #[cfg(not(feature = "mainnet"))]
-            requires_pow,
+            &wrapper_tx_fees_key,
         )
         .await
+        .unwrap_or_default()
+    };
+    let fee_token = &args.fee_token;
+    let source = Address::from(keypair);
+    let balance_key = token::balance_key(fee_token, &source);
+    let balance =
+        rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
+            .await
+            .unwrap_or_default();
+    let is_bal_sufficient = fee_amount <= balance;
+    if !is_bal_sufficient {
+        eprintln!(
+            "The wrapper transaction source doesn't have enough balance to \
+             pay fee {fee_amount}, got {balance}."
+        );
+        if !args.force && cfg!(feature = "mainnet") {
+            panic!(
+                "The wrapper transaction source doesn't have enough balance \
+                 to pay fee {fee_amount}, got {balance}."
+            );
+        }
+    }
+
+    #[cfg(not(feature = "mainnet"))]
+    // A PoW solution can be used to allow zero-fee testnet transactions
+    let pow_solution: Option<crate::core::ledger::testnet_pow::Solution> = {
+        // If the address derived from the keypair doesn't have enough balance
+        // to pay for the fee, allow to find a PoW solution instead.
+        if requires_pow || !is_bal_sufficient {
+            println!(
+                "The transaction requires the completion of a PoW challenge."
+            );
+            // Obtain a PoW challenge for faucet withdrawal
+            let challenge =
+                rpc::get_testnet_pow_challenge(client, source).await;
+
+            // Solve the solution, this blocks until a solution is found
+            let solution = challenge.solve();
+            Some(solution)
+        } else {
+            None
+        }
     };
 
-    Ok(broadcast_data)
+    // This object governs how the payload will be processed
+    tx.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
+        Fee {
+            amount: fee_amount,
+            token: fee_token.clone(),
+        },
+        keypair.clone(),
+        epoch,
+        args.gas_limit.clone(),
+        #[cfg(not(feature = "mainnet"))]
+        pow_solution,
+    ))));
+    tx.header.chain_id = args.chain_id.clone().unwrap();
+    tx.header.expiration = args.expiration;
+
+    #[cfg(feature = "std")]
+    // Attempt to decode the construction
+    if let Ok(path) = env::var(ENV_VAR_LEDGER_LOG_PATH) {
+        let mut tx = tx.clone();
+        // Contract the large data blobs in the transaction
+        tx.wallet_filter();
+        // Convert the transaction to Ledger format
+        let decoding = to_ledger_vector(client, wallet, &tx)
+            .await
+            .expect("unable to decode transaction");
+        let output = serde_json::to_string(&decoding)
+            .expect("failed to serialize decoding");
+        // Record the transaction at the identified path
+        let mut f = File::options()
+            .append(true)
+            .create(true)
+            .open(path)
+            .expect("failed to open test vector file");
+        writeln!(f, "{},", output)
+            .expect("unable to write test vector to file");
+    }
+    #[cfg(feature = "std")]
+    // Attempt to decode the construction
+    if let Ok(path) = env::var(ENV_VAR_TX_LOG_PATH) {
+        let mut tx = tx.clone();
+        // Contract the large data blobs in the transaction
+        tx.wallet_filter();
+        // Record the transaction at the identified path
+        let mut f = File::options()
+            .append(true)
+            .create(true)
+            .open(path)
+            .expect("failed to open test vector file");
+        writeln!(f, "{:x?},", tx).expect("unable to write test vector to file");
+    }
+
+    tx
 }
 
 /// Create a wrapper tx from a normal tx. Get the hash of the
@@ -300,7 +404,7 @@ pub async fn sign_wrapper<
             amount: fee_amount,
             token: fee_token.clone(),
         },
-        keypair,
+        keypair.ref_to(),
         epoch,
         args.gas_limit.clone(),
         #[cfg(not(feature = "mainnet"))]

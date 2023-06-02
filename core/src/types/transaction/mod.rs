@@ -360,7 +360,7 @@ mod test_process_tx {
                 amount: 10.into(),
                 token: nam(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -396,7 +396,7 @@ mod test_process_tx {
                 amount: 10.into(),
                 token: nam(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]

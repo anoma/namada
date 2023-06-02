@@ -1238,7 +1238,7 @@ mod test_utils {
                 amount: 0.into(),
                 token: native_token,
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -1306,7 +1306,7 @@ mod test_mempool_validate {
                     amount: 100.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
-                &keypair,
+                keypair.ref_to(),
                 Epoch(0),
                 0.into(),
                 #[cfg(not(feature = "mainnet"))]
@@ -1343,7 +1343,7 @@ mod test_mempool_validate {
                     amount: 100.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
-                &keypair,
+                keypair.ref_to(),
                 Epoch(0),
                 0.into(),
                 #[cfg(not(feature = "mainnet"))]
@@ -1408,7 +1408,7 @@ mod test_mempool_validate {
                 amount: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]

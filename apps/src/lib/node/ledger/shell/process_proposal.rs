@@ -540,7 +540,7 @@ mod test_process_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -585,7 +585,7 @@ mod test_process_proposal {
                 amount: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -649,7 +649,7 @@ mod test_process_proposal {
                 amount: 1.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -716,7 +716,7 @@ mod test_process_proposal {
                 amount: Amount::whole(1_000_100),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -767,7 +767,7 @@ mod test_process_proposal {
                         amount: i.into(),
                         token: shell.wl_storage.storage.native_token.clone(),
                     },
-                    &keypair,
+                    keypair.ref_to(),
                     Epoch(0),
                     0.into(),
                     #[cfg(not(feature = "mainnet"))]
@@ -826,7 +826,7 @@ mod test_process_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -874,7 +874,7 @@ mod test_process_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -1025,7 +1025,7 @@ mod test_process_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -1097,7 +1097,7 @@ mod test_process_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -1155,7 +1155,7 @@ mod test_process_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -1239,7 +1239,7 @@ mod test_process_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -1262,7 +1262,7 @@ mod test_process_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair_2,
+            keypair_2.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -1310,7 +1310,7 @@ mod test_process_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -1374,7 +1374,7 @@ mod test_process_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -1435,7 +1435,7 @@ mod test_process_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -1478,7 +1478,7 @@ mod test_process_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]

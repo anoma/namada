@@ -181,7 +181,7 @@ pub mod wrapper_tx {
         /// transaction
         pub fn new(
             fee: Fee,
-            keypair: &common::SecretKey,
+            pk: common::PublicKey,
             epoch: Epoch,
             gas_limit: GasLimit,
             #[cfg(not(feature = "mainnet"))] pow_solution: Option<
@@ -190,7 +190,7 @@ pub mod wrapper_tx {
         ) -> WrapperTx {
             Self {
                 fee,
-                pk: keypair.ref_to(),
+                pk,
                 epoch,
                 gas_limit,
                 #[cfg(not(feature = "mainnet"))]
@@ -301,7 +301,7 @@ pub mod wrapper_tx {
                         amount: 10.into(),
                         token: nam(),
                     },
-                    &keypair,
+                    keypair.ref_to(),
                     Epoch(0),
                     0.into(),
                     #[cfg(not(feature = "mainnet"))]
@@ -334,7 +334,7 @@ pub mod wrapper_tx {
                         amount: 10.into(),
                         token: nam(),
                     },
-                    &keypair,
+                    keypair.ref_to(),
                     Epoch(0),
                     0.into(),
                     #[cfg(not(feature = "mainnet"))]
@@ -369,7 +369,7 @@ pub mod wrapper_tx {
                     amount: 10.into(),
                     token: nam(),
                 },
-                &keypair,
+                keypair.ref_to(),
                 Epoch(0),
                 0.into(),
                 #[cfg(not(feature = "mainnet"))]

@@ -963,7 +963,7 @@ mod test_finalize_block {
                         amount: MIN_FEE.into(),
                         token: shell.wl_storage.storage.native_token.clone(),
                     },
-                    &keypair,
+                    keypair.ref_to(),
                     Epoch(0),
                     0.into(),
                     #[cfg(not(feature = "mainnet"))]
@@ -1038,7 +1038,7 @@ mod test_finalize_block {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -1159,7 +1159,7 @@ mod test_finalize_block {
                         amount: MIN_FEE.into(),
                         token: shell.wl_storage.storage.native_token.clone(),
                     },
-                    &keypair,
+                    keypair.ref_to(),
                     Epoch(0),
                     0.into(),
                     #[cfg(not(feature = "mainnet"))]
@@ -1196,7 +1196,7 @@ mod test_finalize_block {
                         amount: MIN_FEE.into(),
                         token: shell.wl_storage.storage.native_token.clone(),
                     },
-                    &keypair,
+                    keypair.ref_to(),
                     Epoch(0),
                     0.into(),
                     #[cfg(not(feature = "mainnet"))]
@@ -1725,7 +1725,7 @@ mod test_finalize_block {
                     amount: 0.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
-                &keypair,
+                keypair.ref_to(),
                 Epoch(0),
                 0.into(),
                 #[cfg(not(feature = "mainnet"))]
