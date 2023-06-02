@@ -52,10 +52,7 @@ use namada::types::storage::{
     BlockHeight, Epoch, Key, KeySeg, TxIndex, RESERVED_ADDRESS_PREFIX,
 };
 use namada::types::time::DateTimeUtc;
-use namada::types::token::{
-    Change, DenominatedAmount, MaspDenom, TokenAddress, Transfer, HEAD_TX_KEY,
-    PIN_KEY_PREFIX, TX_KEY_PREFIX,
-};
+use namada::types::token::{Change, DenominatedAmount, MaspDenom, TokenAddress, Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX, Denomination};
 use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
 };
@@ -1155,38 +1152,45 @@ impl ShieldedContext {
         &mut self,
         client: &HttpClient,
         conv: AllowedConversion,
-        asset_type: AssetType,
+        asset_type: (Epoch, TokenAddress, MaspDenom),
         value: i128,
         usage: &mut i128,
         input: &mut MaspAmount,
-        output: &mut Amount,
+        output: &mut MaspAmount,
     ) {
         // If conversion if possible, accumulate the exchanged amount
         let conv: Amount = conv.into();
+        //println!("apply converson: {:?}", conv);
         // The amount required of current asset to qualify for conversion
-        let threshold = -conv[&asset_type];
+        let masp_asset = make_asset_type(
+            Some(asset_type.0),
+            &asset_type.1.address,
+            &asset_type.1.sub_prefix,
+            asset_type.2
+        );
+        let threshold = -conv[&masp_asset];
+        //println!("threshold {}, value {}", threshold, value);
         if threshold == 0 {
             eprintln!(
                 "Asset threshold of selected conversion for asset type {} is \
                  0, this is a bug, please report it.",
-                asset_type
+                masp_asset
             );
         }
         // We should use an amount of the AllowedConversion that almost
         // cancels the original amount
-        if threshold > value {
-            return
-        }
         let required = value / threshold;
+        //println!("required: {}", required);
         // Forget about the trace amount left over because we cannot
         // realize its value
-        let trace = Amount::from_pair(asset_type, value % threshold).unwrap();
+        let trace = MaspAmount(HashMap::from([((asset_type.0 , asset_type.1), Change::from(value % threshold))]));
         // Record how much more of the given conversion has been used
         *usage += required;
         // Apply the conversions to input and move the trace amount to output
         *input += self
-            .decode_all_amounts(client, conv.clone() * required - &trace)
-            .await;
+            .decode_all_amounts(client, conv.clone() * required)
+            .await
+            - trace.clone();
         *output += trace;
     }
 
@@ -1202,7 +1206,7 @@ impl ShieldedContext {
         mut conversions: Conversions,
     ) -> (Amount, Conversions) {
         // Where we will store our exchanged value
-        let mut output = Amount::zero();
+        let mut output = MaspAmount::default();
         // Repeatedly exchange assets until it is no longer possible
         loop {
             println!("\n\nInput {:?}\n\n", input);
@@ -1223,7 +1227,7 @@ impl ShieldedContext {
                 );
                 let at_target_asset_type = target_epoch == asset_epoch;
 
-                let denom_value = denom.denominate(&token::Amount::from(value)) as i128;
+                let denom_value = denom.denominate_i128(&value);
                 _ = self
                     .query_allowed_conversion(
                         client.clone(),
@@ -1246,7 +1250,7 @@ impl ShieldedContext {
                     self.apply_conversion(
                         &client,
                         conv.clone(),
-                        asset_type,
+                        (asset_epoch, token_addr.clone(), denom),
                         denom_value,
                         usage,
                         &mut input,
@@ -1275,7 +1279,7 @@ impl ShieldedContext {
                     self.apply_conversion(
                         &client,
                         conv.clone(),
-                        asset_type,
+                        (asset_epoch, token_addr.clone(), denom),
                         denom_value,
                         usage,
                         &mut input,
@@ -1292,7 +1296,7 @@ impl ShieldedContext {
                             comp.insert((*e, key.clone()), *val);
                         }
                     }
-                    output += Amount::from(&comp);
+                    output += comp;
                 }
             }
         }
@@ -1301,9 +1305,9 @@ impl ShieldedContext {
         for ((_, key), val) in input.drain() {
             comp.insert((target_epoch, key), val);
         }
-        output += Amount::from(comp);
+        output += comp;
         println!("\n\nconversions {:?}\n\n", output);
-        (output, conversions)
+        (output.into(), conversions)
     }
 
     /// Collect enough unspent notes in this context to exceed the given amount
@@ -1373,6 +1377,8 @@ impl ShieldedContext {
                 }
             }
         }
+        println!("val_acc {:?}", val_acc);
+        println!("notes {:?}", notes);
         (val_acc, notes, conversions)
     }
 
@@ -1679,7 +1685,7 @@ async fn gen_shielded_transfer(
                 epoch,
             )
             .await;
-        println!("used convs: {:?}", used_convs);
+        //println!("used convs: {:?}", used_convs);
         // Commit the notes found to our transaction
         for (diversifier, note, merkle_path) in unspent_notes {
             let decoded = ctx.shielded.decode_asset_type(client.clone(), note.asset_type.clone()).await.unwrap();

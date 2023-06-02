@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use color_eyre::eyre::Result;
+use eyre::Chain;
 use namada_apps::cli::cmds::*;
 use namada_apps::cli::{self, args, Context, safe_exit};
 use namada_apps::client::{rpc, tx, utils};
@@ -10,6 +11,7 @@ use namada_apps::facade::tendermint::block::Height;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient};
 use tokio::time::sleep;
+use namada::types::chain::ChainId;
 use namada::types::token::{Amount, DenominatedAmount, Denomination};
 use namada_apps::cli::args::{InputAmount, Tx};
 use namada_apps::cli::context::FromContext;
@@ -37,20 +39,20 @@ pub async fn main() -> Result<()> {
         sub_prefix: None,
         amount: InputAmount::Unvalidated(DenominatedAmount { amount: Amount::from_uint(30, 0).unwrap(), denom: Denomination(0) }),
     }));
-    match cli::namada_client_cli()? {
-        cli::NamadaClient::WithContext(cmd_box) => {
-            let (cmd, ctx) = *cmd_box;
+    //match cli::namada_client_cli()? {
+        //cli::NamadaClient::WithContext(cmd_box) => {
+            //let (cmd, ctx) = *cmd_box;
             use NamadaClientWithContext as Sub;
-            /*let global_args = args::Global {
-                chain_id: None,
-                base_dir: " /tmp/.tmpmalzmo".into(),
+            let global_args = args::Global {
+                chain_id: Some(ChainId("e2e-test.1842a9ed7737c1c61d588".into())),
+                base_dir: "/tmp/.tmpmalzmo".into(),
                 wasm_dir: None,
                 mode: Some(TendermintMode::Full)
             };
 
             let ctx = Context::new(global_args).unwrap();
-            println!("{:?}", test_cmd);*/
-            match cmd {
+
+            match test_cmd {
                 // Ledger cmds
                 Sub::TxCustom(TxCustom(args)) => {
                     wait_until_node_is_synched(&args.tx.ledger_address).await;
@@ -176,7 +178,7 @@ pub async fn main() -> Result<()> {
                     rpc::query_protocol_parameters(ctx, args).await;
                 }
             }
-        }
+        /*}
         cli::NamadaClient::WithoutContext(cmd, global_args) => match cmd {
             // Utils cmds
             Utils::JoinNetwork(JoinNetwork(args)) => {
@@ -192,7 +194,7 @@ pub async fn main() -> Result<()> {
                 utils::init_genesis_validator(global_args, args)
             }
         },
-    }
+    }*/
     Ok(())
 }
 
