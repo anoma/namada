@@ -2410,8 +2410,26 @@ pub mod args {
         }
     }
 
-    pub trait CliToSdk<X>: Args {
-        fn to_sdk(self, ctx: &mut Context) -> X;
+    /// Convert CLI args to SDK args, with contextual data.
+    pub trait CliToSdk<SDK>: Args {
+        /// Convert CLI args to SDK args, with contextual data.
+        fn to_sdk(self, ctx: &mut Context) -> SDK;
+    }
+
+    /// Convert CLI args to SDK args, without contextual data.
+    pub trait CliToSdkCtxless<SDK>: Args {
+        /// Convert CLI args to SDK args, without contextual data.
+        fn to_sdk_ctxless(self) -> SDK;
+    }
+
+    impl<CLI, SDK> CliToSdk<SDK> for CLI
+    where
+        CLI: Args + CliToSdkCtxless<SDK>,
+    {
+        #[inline]
+        fn to_sdk(self, _: &mut Context) -> SDK {
+            self.to_sdk_ctxless()
+        }
     }
 
     impl CliToSdk<QueryResult<SdkTypes>> for QueryResult<CliTypes> {
@@ -2508,10 +2526,10 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<RecommendBatch<SdkTypes>> for RecommendBatch<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> RecommendBatch<SdkTypes> {
+    impl CliToSdkCtxless<RecommendBatch<SdkTypes>> for RecommendBatch<CliTypes> {
+        fn to_sdk_ctxless(self) -> RecommendBatch<SdkTypes> {
             RecommendBatch::<SdkTypes> {
-                query: self.query.to_sdk(ctx),
+                query: self.query.to_sdk_ctxless(),
                 max_gas: self.max_gas,
                 gas: self.gas,
                 nam_per_eth: self.nam_per_eth,
@@ -2553,10 +2571,10 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<BridgePoolProof<SdkTypes>> for BridgePoolProof<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> BridgePoolProof<SdkTypes> {
+    impl CliToSdkCtxless<BridgePoolProof<SdkTypes>> for BridgePoolProof<CliTypes> {
+        fn to_sdk_ctxless(self) -> BridgePoolProof<SdkTypes> {
             BridgePoolProof::<SdkTypes> {
-                query: self.query.to_sdk(ctx),
+                query: self.query.to_sdk_ctxless(),
                 transfers: self.transfers,
                 relayer: self.relayer,
             }
@@ -2599,12 +2617,12 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<RelayBridgePoolProof<SdkTypes>>
+    impl CliToSdkCtxless<RelayBridgePoolProof<SdkTypes>>
         for RelayBridgePoolProof<CliTypes>
     {
-        fn to_sdk(self, ctx: &mut Context) -> RelayBridgePoolProof<SdkTypes> {
+        fn to_sdk_ctxless(self) -> RelayBridgePoolProof<SdkTypes> {
             RelayBridgePoolProof::<SdkTypes> {
-                query: self.query.to_sdk(ctx),
+                query: self.query.to_sdk_ctxless(),
                 transfers: self.transfers,
                 relayer: self.relayer,
                 confirmations: self.confirmations,
@@ -2694,12 +2712,12 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<ConsensusValidatorSet<SdkTypes>>
+    impl CliToSdkCtxless<ConsensusValidatorSet<SdkTypes>>
         for ConsensusValidatorSet<CliTypes>
     {
-        fn to_sdk(self, ctx: &mut Context) -> ConsensusValidatorSet<SdkTypes> {
+        fn to_sdk_ctxless(self) -> ConsensusValidatorSet<SdkTypes> {
             ConsensusValidatorSet::<SdkTypes> {
-                query: self.query.to_sdk(ctx),
+                query: self.query.to_sdk_ctxless(),
                 epoch: self.epoch,
             }
         }
@@ -2719,10 +2737,12 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<ValidatorSetProof<SdkTypes>> for ValidatorSetProof<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> ValidatorSetProof<SdkTypes> {
+    impl CliToSdkCtxless<ValidatorSetProof<SdkTypes>>
+        for ValidatorSetProof<CliTypes>
+    {
+        fn to_sdk_ctxless(self) -> ValidatorSetProof<SdkTypes> {
             ValidatorSetProof::<SdkTypes> {
-                query: self.query.to_sdk(ctx),
+                query: self.query.to_sdk_ctxless(),
                 epoch: self.epoch,
             }
         }
@@ -2744,16 +2764,13 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<ValidatorSetUpdateRelay<SdkTypes>>
+    impl CliToSdkCtxless<ValidatorSetUpdateRelay<SdkTypes>>
         for ValidatorSetUpdateRelay<CliTypes>
     {
-        fn to_sdk(
-            self,
-            ctx: &mut Context,
-        ) -> ValidatorSetUpdateRelay<SdkTypes> {
+        fn to_sdk_ctxless(self) -> ValidatorSetUpdateRelay<SdkTypes> {
             ValidatorSetUpdateRelay::<SdkTypes> {
                 daemon: self.daemon,
-                query: self.query.to_sdk(ctx),
+                query: self.query.to_sdk_ctxless(),
                 confirmations: self.confirmations,
                 eth_rpc_endpoint: self.eth_rpc_endpoint,
                 epoch: self.epoch,
@@ -4136,8 +4153,8 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<Query<SdkTypes>> for Query<CliTypes> {
-        fn to_sdk(self, _ctx: &mut Context) -> Query<SdkTypes> {
+    impl CliToSdkCtxless<Query<SdkTypes>> for Query<CliTypes> {
+        fn to_sdk_ctxless(self) -> Query<SdkTypes> {
             Query::<SdkTypes> { ledger_address: () }
         }
     }
