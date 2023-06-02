@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use namada_vp_prelude::address::{self, Address, InternalAddress};
+use namada_vp_prelude::address::{self, Address};
 use namada_vp_prelude::storage::KeySeg;
 use namada_vp_prelude::{storage, token, *};
 
@@ -53,10 +53,7 @@ fn token_checks(
 ) -> VpResult {
     let mut change: token::Change = 0;
     for key in keys_touched.iter() {
-        let owner: Option<&Address> = token::is_balance_key(token, key)
-            .or_else(|| {
-                token::is_multitoken_balance_key(token, key).map(|a| a.1)
-            });
+        let owner: Option<&Address> = token::is_balance_key(token, key);
 
         match owner {
             None => {
@@ -77,24 +74,9 @@ fn token_checks(
             }
             Some(owner) => {
                 // accumulate the change
-                let pre: token::Amount = match owner {
-                    Address::Internal(InternalAddress::IbcMint) => {
-                        token::Amount::max()
-                    }
-                    Address::Internal(InternalAddress::IbcBurn) => {
-                        token::Amount::default()
-                    }
-                    _ => ctx.read_pre(key)?.unwrap_or_default(),
-                };
-                let post: token::Amount = match owner {
-                    Address::Internal(InternalAddress::IbcMint) => {
-                        ctx.read_temp(key)?.unwrap_or_else(token::Amount::max)
-                    }
-                    Address::Internal(InternalAddress::IbcBurn) => {
-                        ctx.read_temp(key)?.unwrap_or_default()
-                    }
-                    _ => ctx.read_post(key)?.unwrap_or_default(),
-                };
+                let pre: token::Amount = ctx.read_pre(key)?.unwrap_or_default();
+                let post: token::Amount =
+                    ctx.read_post(key)?.unwrap_or_default();
                 let this_change = post.change() - pre.change();
                 change += this_change;
                 // make sure that the spender approved the transaction

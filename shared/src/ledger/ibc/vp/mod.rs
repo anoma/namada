@@ -1,7 +1,6 @@
 //! IBC integration as a native validity predicate
 
 mod context;
-mod token;
 
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashSet};
@@ -19,7 +18,6 @@ use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::Key;
 use namada_proof_of_stake::read_pos_params;
 use thiserror::Error;
-pub use token::{Error as IbcTokenError, IbcToken};
 
 use crate::ledger::ibc::storage::{calc_hash, is_ibc_denom_key, is_ibc_key};
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
@@ -2516,7 +2514,7 @@ mod tests {
             .expect("write failed");
         // init the escrow balance
         let balance_key =
-            balance_key(&nam(), &Address::Internal(InternalAddress::IbcEscrow));
+            balance_key(&nam(), &Address::Internal(InternalAddress::Ibc));
         let amount = Amount::whole(100);
         wl_storage
             .write_log
@@ -2669,7 +2667,7 @@ mod tests {
             .expect("write failed");
         // init the escrow balance
         let balance_key =
-            balance_key(&nam(), &Address::Internal(InternalAddress::IbcEscrow));
+            balance_key(&nam(), &Address::Internal(InternalAddress::Ibc));
         let amount = Amount::whole(100);
         wl_storage
             .write_log

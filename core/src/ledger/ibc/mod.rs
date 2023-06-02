@@ -141,7 +141,7 @@ where
         }
     }
 
-    /// Restore the denom when it is hashed, i.e. the denom is `ibc/{hash}`.
+    /// Restore the denom when it is hashed
     fn restore_denom(&self, msg: MsgTransfer) -> Result<MsgTransfer, Error> {
         let mut msg = msg;
         // lookup the original denom with the IBC token hash

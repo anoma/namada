@@ -9,11 +9,12 @@ pub use namada_core::ledger::ibc::{
 };
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::ledger::tx_env::TxEnv;
+use namada_core::types::address::{Address, InternalAddress};
 pub use namada_core::types::ibc::IbcEvent;
 use namada_core::types::storage::{BlockHeight, Header, Key};
 use namada_core::types::token::Amount;
 
-use crate::token::transfer_with_keys;
+use crate::token::{burn, mint, transfer};
 use crate::{Ctx, KeyValIterator};
 
 /// IBC actions to handle an IBC message
@@ -72,11 +73,37 @@ impl IbcStorageContext for Ctx {
 
     fn transfer_token(
         &mut self,
-        src: &Key,
-        dest: &Key,
+        src: &Address,
+        dest: &Address,
+        token: &Address,
+        sub_prefix: Option<Address>,
         amount: Amount,
     ) -> std::result::Result<(), Self::Error> {
-        transfer_with_keys(self, src, dest, amount)
+        transfer(self, src, dest, token, sub_prefix, amount, &None, &None)
+    }
+
+    fn mint_token(
+        &mut self,
+        target: &Address,
+        sub_prefix: &Address,
+        amount: Amount,
+    ) -> Result<(), Self::Error> {
+        mint(
+            self,
+            &Address::Internal(InternalAddress::Ibc),
+            target,
+            sub_prefix,
+            amount,
+        )
+    }
+
+    fn burn_token(
+        &mut self,
+        target: &Address,
+        sub_prefix: &Address,
+        amount: Amount,
+    ) -> Result<(), Self::Error> {
+        burn(self, target, sub_prefix, amount)
     }
 
     fn get_height(&self) -> std::result::Result<BlockHeight, Self::Error> {
