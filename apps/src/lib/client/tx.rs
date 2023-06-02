@@ -619,7 +619,7 @@ impl From<MaspAmount> for Amount {
 
 /// Represents the amount used of different conversions
 pub type Conversions =
-    HashMap<AssetType, (AllowedConversion, MerklePath<Node>, Change)>;
+    HashMap<AssetType, (AllowedConversion, MerklePath<Node>, i128)>;
 
 /// Represents an amount that is
 pub type MaspDenominatedAmount = Amount<(TokenAddress, MaspDenom)>;
@@ -1110,7 +1110,7 @@ impl ShieldedContext {
                     .insert(asset_type, (addr, sub_prefix, denom, ep));
                 // If the conversion is 0, then we just have a pure decoding
                 if conv != Amount::zero() {
-                    conv_entry.insert((conv.into(), path, Change::zero()));
+                    conv_entry.insert((conv.into(), path, 0));
                 }
             }
         }
@@ -1153,7 +1153,6 @@ impl ShieldedContext {
     #[allow(clippy::too_many_arguments)]
     async fn apply_conversion(
         &mut self,
-        client: &HttpClient,
         conv: &MaspAmount,
         asset_type: (Epoch, TokenAddress),
         value: Change,
@@ -1164,10 +1163,9 @@ impl ShieldedContext {
             return None;
         }
         // If conversion if possible, accumulate the exchanged amount
-        let conv = self.decode_all_amounts(client, conv.into()).await;
         // println!("conv {:?}", conv);
         // The amount required of current asset to qualify for conversion
-        let threshold = token::Change::from(-conv[&asset_type]);
+        let threshold = -conv[&asset_type];
         // println!("theshold: {}, value: {}", threshold, value);
         if threshold.is_zero() {
             eprintln!(
@@ -1224,7 +1222,6 @@ impl ShieldedContext {
                     &mut conversions,
                 )
                 .await;
-            println!("\n\nconversions {:?}\n\n", conv);
             if let (Some(conv), false) = (
                 conv.get(&(target_epoch, token_addr.clone())),
                 at_target_asset_type,
@@ -1234,7 +1231,6 @@ impl ShieldedContext {
                 );
                 if let Some(used) = self
                     .apply_conversion(
-                        &client,
                         conv,
                         (asset_epoch, token_addr.clone()),
                         value,
@@ -1253,7 +1249,9 @@ impl ShieldedContext {
                         if let Some((_, _, usage)) =
                             conversions.get_mut(&target_asset_type)
                         {
-                            *usage += used;
+                            println!("used: {:?}", used);
+                            *usage += denom.denominate_i128(&used);
+                            println!("usage: {:?}", usage);
                         }
                     }
                 };
@@ -1264,7 +1262,6 @@ impl ShieldedContext {
             {
                 if let Some(used) = self
                     .apply_conversion(
-                        &client,
                         conv,
                         (asset_epoch, token_addr.clone()),
                         value,
@@ -1283,7 +1280,9 @@ impl ShieldedContext {
                         if let Some((_, _, usage)) =
                             conversions.get_mut(&asset_type)
                         {
-                            *usage += used;
+                            println!("used: {:?}", used);
+                            *usage += denom.denominate_i128(&used);
+                            println!("usage: {:?}", usage);
                         }
                     }
                 }
@@ -1306,7 +1305,7 @@ impl ShieldedContext {
             comp.insert((target_epoch, key), val);
         }
         output += comp;
-        println!("\n\noutput {:?}\n\n", output);
+        println!("\n\nconversions {:?}\n\n", output);
         (output.into(), conversions)
     }
 
@@ -1377,9 +1376,6 @@ impl ShieldedContext {
                 }
             }
         }
-        println!("val_acc: {:?}", val_acc);
-        println!("notes: {:?}", notes);
-        println!("conversions: {:?}", conversions);
         (val_acc, notes, conversions)
     }
 
@@ -1591,16 +1587,16 @@ impl ShieldedContext {
             )
             .await;
             if let Some((a, _, _)) = conversions.get(&target_asset_type) {
-                conv.insert(
-                    (target_epoch, token_addr.clone()),
-                    self.decode_all_amounts(&client, a.clone().into()).await,
-                );
+                let amt = self.decode_all_amounts(&client, a.clone().into()).await;
+                conv.entry((target_epoch, token_addr.clone()))
+                    .and_modify(|e| *e += amt.clone())
+                    .or_insert(amt);
             }
             if let Some((a, _, _)) = conversions.get(&asset_type) {
-                conv.insert(
-                    (asset_epoch, token_addr.clone()),
-                    self.decode_all_amounts(&client, a.clone().into()).await,
-                );
+                let amt = self.decode_all_amounts(&client, a.clone().into()).await;
+                conv.entry((asset_epoch, token_addr.clone()))
+                    .and_modify(|e| *e += amt.clone())
+                    .or_insert(amt);
             }
         }
         conv
@@ -1738,20 +1734,22 @@ async fn gen_shielded_transfer(
                 epoch,
             )
             .await;
+        println!("used convs: {:?}", used_convs);
         // Commit the notes found to our transaction
         for (diversifier, note, merkle_path) in unspent_notes {
+            let decoded = ctx.shielded.decode_asset_type(client.clone(), note.asset_type.clone()).await.unwrap();
+            println!("Adding note value: {:?}: {:?}", decoded, note.value);
             builder.add_sapling_spend(sk, diversifier, note, merkle_path)?;
         }
         // Commit the conversion notes used during summation
         for (conv, wit, value) in used_convs.values() {
             if value.is_positive() {
-                for denom in MaspDenom::iter() {
-                    builder.add_convert(
-                        conv.clone(),
-                        denom.denominate(&token::Amount::from(*value)),
-                        wit.clone(),
-                    )?;
-                }
+                println!("adding conversion {:?} -> {}", conv.assets, *value as u64);
+                builder.add_convert(
+                    conv.clone(),
+                    *value as u64,
+                    wit.clone(),
+                )?;
             }
         }
     } else {
@@ -1809,6 +1807,8 @@ async fn gen_shielded_transfer(
             target_enc.as_ref(),
         ));
         for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter()) {
+            let decoded = ctx.shielded.decode_asset_type(client.clone(), asset_type.clone()).await.unwrap();
+            println!("Adding transparent outpt: {:?}: {}", decoded, denom.denominate(&amt));
             builder.add_transparent_output(
                 &TransparentAddress::PublicKey(hash.into()),
                 *asset_type,
