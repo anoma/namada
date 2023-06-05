@@ -263,6 +263,10 @@ async fn run_oracle_aux(mut oracle: Oracle) {
                                 | Error::CheckEvents(_, _, _)
                             )
                         ) => {
+                            // the oracle is unresponsive, we don't want the test to end
+                            if cfg!(test) && matches!(&reason, Error::CheckEvents(_, _, _)) {
+                                return ControlFlow::Continue(());
+                            }
                             tracing::error!(
                                 %reason,
                                 block = ?next_block_to_process,
