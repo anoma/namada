@@ -2,6 +2,7 @@
 use namada_core::types::chain::ChainId;
 use namada_core::types::time::DateTimeUtc;
 use rust_decimal::Decimal;
+use zeroize::Zeroizing;
 
 use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
 use crate::types::address::Address;
@@ -403,7 +404,7 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// Path to the TX WASM code file to reveal PK
     pub tx_reveal_code_path: C::Data,
     /// Password to decrypt key
-    pub password: Option<String>,
+    pub password: Option<Zeroizing<String>>,
 }
 
 /// MASP add key or address arguments

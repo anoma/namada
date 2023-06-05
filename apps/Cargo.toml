@@ -135,7 +135,6 @@ tendermint-config = {version = "0.23.6", optional = true}
 tendermint-proto = {version = "0.23.6", optional = true}
 tendermint-rpc = {version = "0.23.6", features = ["http-client", "websocket-client"], optional = true}
 thiserror = "1.0.38"
-tiny-bip39 = "0.8.2"
 tokio = {version = "1.8.2", features = ["full"]}
 toml = "0.5.8"
 tonic = "0.8.3"

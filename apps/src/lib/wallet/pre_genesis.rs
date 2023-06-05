@@ -8,6 +8,7 @@ use namada::ledger::wallet::pre_genesis::{
 };
 use namada::ledger::wallet::{gen_key_to_store, WalletUtils};
 use namada::types::key::SchemeType;
+use zeroize::Zeroizing;
 
 use crate::wallet::store::gen_validator_keys;
 use crate::wallet::{read_and_confirm_encryption_password, CliWalletUtils};
@@ -97,17 +98,20 @@ pub fn load(store_dir: &Path) -> Result<ValidatorWallet, ReadError> {
 
 /// Generate a new [`ValidatorWallet`] with required pre-genesis keys. Will
 /// prompt for password when `!unsafe_dont_encrypt`.
-fn gen(scheme: SchemeType, password: Option<String>) -> ValidatorWallet {
-    let (account_key, account_sk) = gen_key_to_store(scheme, &password);
+fn gen(
+    scheme: SchemeType,
+    password: Option<Zeroizing<String>>,
+) -> ValidatorWallet {
+    let (account_key, account_sk) = gen_key_to_store(scheme, password.clone());
     let (consensus_key, consensus_sk) = gen_key_to_store(
         // Note that TM only allows ed25519 for consensus key
         SchemeType::Ed25519,
-        &password,
+        password.clone(),
     );
     let (tendermint_node_key, tendermint_node_sk) = gen_key_to_store(
         // Note that TM only allows ed25519 for node IDs
         SchemeType::Ed25519,
-        &password,
+        password,
     );
     let validator_keys = gen_validator_keys(None, scheme);
     let store = ValidatorStore {

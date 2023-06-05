@@ -17,6 +17,7 @@ pub use pre_genesis::gen_key_to_store;
 use rand_core::RngCore;
 pub use store::{gen_sk_rng, AddressVpType, Store};
 use thiserror::Error;
+use zeroize::Zeroizing;
 
 use self::derivation_path::{DerivationPath, DerivationPathError};
 pub use self::keys::{DecryptionError, StoredKeypair};
@@ -66,12 +67,12 @@ pub trait WalletUtils {
     }
 
     /// Read the password for decryption from the file/env/stdin.
-    fn read_decryption_password() -> String;
+    fn read_decryption_password() -> Zeroizing<String>;
 
     /// Read the password for encryption from the file/env/stdin.
     /// If the password is read from stdin, the implementation is expected
     /// to ask for a confirmation.
-    fn read_encryption_password() -> String;
+    fn read_encryption_password() -> Zeroizing<String>;
 
     /// Read an alias from the file/env/stdin.
     fn read_alias(prompt_msg: &str) -> String;
@@ -80,7 +81,7 @@ pub trait WalletUtils {
     fn read_mnemonic_code() -> Result<Mnemonic, GenRestoreKeyError>;
 
     /// Read a mnemonic code from the file/env/stdin.
-    fn read_mnemonic_passphrase(confirm: bool) -> String;
+    fn read_mnemonic_passphrase(confirm: bool) -> Zeroizing<String>;
 
     /// The given alias has been selected but conflicts with another alias in
     /// the store. Offer the user to either replace existing mapping, alter the
@@ -128,14 +129,14 @@ impl<U: WalletUtils> Wallet<U> {
         alias: Option<String>,
         alias_force: bool,
         seed_and_derivation_path: Option<(Seed, DerivationPath)>,
-        encryption_password: Option<String>,
+        password: Option<Zeroizing<String>>,
     ) -> Result<(String, common::SecretKey), GenRestoreKeyError> {
         let (alias, key) = self.store.gen_key::<U>(
             scheme,
             alias,
             alias_force,
             seed_and_derivation_path,
-            encryption_password,
+            password,
         );
         // Cache the newly added key
         self.decrypted_key_cache.insert(alias.clone(), key.clone());
@@ -145,19 +146,19 @@ impl<U: WalletUtils> Wallet<U> {
     /// Restore a keypair from the user mnemonic code (read from stdin) using
     /// a given BIP44 derivation path and derive an implicit address from its
     /// public part and insert them into the store with the provided alias,
-    /// converted to lower case.
-    /// If none provided, the alias will be the public key hash (in
-    /// lowercase too). If the key is to be encrypted, will prompt for
-    /// password from stdin. Stores the key in decrypted key cache and
-    /// returns the alias of the key and a reference-counting pointer to the
-    /// key.
+    /// converted to lower case. If none provided, the alias will be the public
+    /// key hash (in lowercase too).
+    /// The key is encrypted with the provided password. If no password
+    /// provided, will prompt for password from stdin.
+    /// Stores the key in decrypted key cache and returns the alias of the key
+    /// and a reference-counting pointer to the key.
     pub fn derive_key_from_user_mnemonic_code(
         &mut self,
         scheme: SchemeType,
         alias: Option<String>,
         alias_force: bool,
         derivation_path: Option<String>,
-        encryption_password: Option<String>,
+        password: Option<Zeroizing<String>>,
     ) -> Result<(String, common::SecretKey), GenRestoreKeyError> {
         let parsed_derivation_path = derivation_path
             .map(|p| {
@@ -187,7 +188,7 @@ impl<U: WalletUtils> Wallet<U> {
             alias,
             alias_force,
             Some((seed, parsed_derivation_path)),
-            encryption_password,
+            password,
         )
     }
 
@@ -208,7 +209,7 @@ impl<U: WalletUtils> Wallet<U> {
         scheme: SchemeType,
         alias: Option<String>,
         alias_force: bool,
-        encryption_password: Option<String>,
+        password: Option<Zeroizing<String>>,
         derivation_path_and_mnemonic_rng: Option<(String, &mut U::Rng)>,
     ) -> Result<(String, common::SecretKey), GenRestoreKeyError> {
         let parsed_path_and_rng = derivation_path_and_mnemonic_rng
@@ -257,7 +258,7 @@ impl<U: WalletUtils> Wallet<U> {
             alias,
             alias_force,
             seed_and_derivation_path,
-            encryption_password,
+            password,
         )
     }
 
@@ -265,7 +266,7 @@ impl<U: WalletUtils> Wallet<U> {
     pub fn gen_spending_key(
         &mut self,
         alias: String,
-        password: Option<String>,
+        password: Option<Zeroizing<String>>,
         force_alias: bool,
     ) -> (String, ExtendedSpendingKey) {
         let (alias, key) =
@@ -304,7 +305,7 @@ impl<U: WalletUtils> Wallet<U> {
     pub fn find_key(
         &mut self,
         alias_pkh_or_pk: impl AsRef<str>,
-        password: Option<String>,
+        password: Option<Zeroizing<String>>,
     ) -> Result<common::SecretKey, FindKeyError> {
         // Try cache first
         if let Some(cached_key) = self
@@ -332,7 +333,7 @@ impl<U: WalletUtils> Wallet<U> {
     pub fn find_spending_key(
         &mut self,
         alias: impl AsRef<str>,
-        password: Option<String>,
+        password: Option<Zeroizing<String>>,
     ) -> Result<ExtendedSpendingKey, FindKeyError> {
         // Try cache first
         if let Some(cached_key) =
@@ -379,7 +380,7 @@ impl<U: WalletUtils> Wallet<U> {
     pub fn find_key_by_pk(
         &mut self,
         pk: &common::PublicKey,
-        password: Option<String>,
+        password: Option<Zeroizing<String>>,
     ) -> Result<common::SecretKey, FindKeyError> {
         // Try to look-up alias for the given pk. Otherwise, use the PKH string.
         let pkh: PublicKeyHash = pk.into();
@@ -411,7 +412,7 @@ impl<U: WalletUtils> Wallet<U> {
     pub fn find_key_by_pkh(
         &mut self,
         pkh: &PublicKeyHash,
-        password: Option<String>,
+        password: Option<Zeroizing<String>>,
     ) -> Result<common::SecretKey, FindKeyError> {
         // Try to look-up alias for the given pk. Otherwise, use the PKH string.
         let alias = self
@@ -445,7 +446,7 @@ impl<U: WalletUtils> Wallet<U> {
         decrypted_key_cache: &mut HashMap<Alias, T>,
         stored_key: &StoredKeypair<T>,
         alias: Alias,
-        password: Option<String>,
+        password: Option<Zeroizing<String>>,
     ) -> Result<T, FindKeyError>
     where
         <T as std::str::FromStr>::Err: Display,
@@ -595,7 +596,7 @@ impl<U: WalletUtils> Wallet<U> {
         &mut self,
         alias: String,
         spend_key: ExtendedSpendingKey,
-        password: Option<String>,
+        password: Option<Zeroizing<String>>,
         force_alias: bool,
     ) -> Option<String> {
         self.store
