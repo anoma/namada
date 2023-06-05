@@ -1766,6 +1766,7 @@ pub mod args {
     pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
     pub const TX_CHANGE_COMMISSION_WASM: &str =
         "tx_change_validator_commission.wasm";
+    pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
 
     pub const ADDRESS: Arg<WalletAddress> = arg("address");
     pub const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
@@ -3076,7 +3077,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query<CliTypes>>()
+            app.add_args::<Tx<CliTypes>>()
                 .arg(VALIDATOR.def().about(
                     "The validator's address whose commission rate to change.",
                 ))
@@ -3085,6 +3086,43 @@ pub mod args {
                         .def()
                         .about("The desired new commission rate."),
                 )
+        }
+    }
+
+    impl CliToSdk<TxUnjailValidator<SdkTypes>> for TxUnjailValidator<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxUnjailValidator<SdkTypes> {
+            TxUnjailValidator {
+                tx: self.tx.to_sdk(ctx),
+                validator: ctx.get(&self.validator),
+                tx_code_path: self
+                    .tx_code_path
+                    .as_path()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+                    .into_bytes(),
+            }
+        }
+    }
+
+    impl Args for TxUnjailValidator<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let validator = VALIDATOR.parse(matches);
+            let tx_code_path = PathBuf::from(TX_UNJAIL_VALIDATOR_WASM);
+            Self {
+                tx,
+                validator,
+                tx_code_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx<CliTypes>>().arg(
+                VALIDATOR.def().about(
+                    "The address of the jailed validator to re-activate.",
+                ),
+            )
         }
     }
 

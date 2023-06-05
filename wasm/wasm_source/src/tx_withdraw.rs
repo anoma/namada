@@ -131,10 +131,14 @@ mod tests {
 
         tx_host_env::commit_tx_and_block();
 
-        // Fast forward to pipeline + unbonding offset epoch so that it's
-        // possible to withdraw the unbonded tokens
+        // Fast forward to pipeline + unbonding + cubic_slashing_window_length
+        // offset epoch so that it's possible to withdraw the unbonded
+        // tokens
         tx_host_env::with(|env| {
-            for _ in 0..(pos_params.pipeline_len + pos_params.unbonding_len) {
+            for _ in 0..(pos_params.pipeline_len
+                + pos_params.unbonding_len
+                + pos_params.cubic_slashing_window_length)
+            {
                 env.wl_storage.storage.block.epoch =
                     env.wl_storage.storage.block.epoch.next();
             }
@@ -144,12 +148,19 @@ mod tests {
         } else {
             Epoch::default()
         };
-        let withdraw_epoch =
-            Epoch(pos_params.pipeline_len + pos_params.unbonding_len);
+        let withdraw_epoch = Epoch(
+            pos_params.pipeline_len
+                + pos_params.unbonding_len
+                + pos_params.cubic_slashing_window_length,
+        );
 
         assert_eq!(
             tx_host_env::with(|env| env.wl_storage.storage.block.epoch),
-            Epoch(pos_params.pipeline_len + pos_params.unbonding_len)
+            Epoch(
+                pos_params.pipeline_len
+                    + pos_params.unbonding_len
+                    + pos_params.cubic_slashing_window_length
+            )
         );
 
         let tx_code = vec![];
