@@ -47,8 +47,8 @@ tendermint-testgen = {git = "https://github.com/heliaxdev/tendermint-rs.git", re
 tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "02b256829e80f8cfecf3fa0d625c2a76c79cd043"}
 
 # patched to a commit on the `eth-bridge-integration` branch of our fork
-ibc = {git = "https://github.com/heliaxdev/cosmos-ibc-rs.git", rev = "e71bc2cc79f8c2b32e970d95312f251398c93d9e"}
-ibc-proto = {git = "https://github.com/heliaxdev/ibc-proto-rs.git", rev = "6f4038fcf4981f1ed70771d1cd89931267f917af"}
+ibc = {git = "https://github.com/heliaxdev/cosmos-ibc-rs.git", rev = "4ec09135f5ef669144ef48c0a111a6428164c9ed"}
+ibc-proto = {git = "https://github.com/heliaxdev/ibc-proto-rs.git", rev = "19ad1cdfda14e95bd45fba0e0c710c086f71d0bc"}
 
 # patched to the yanked 1.2.0 until masp updates bitvec
 funty = { git = "https://github.com/bitvecto-rs/funty/", rev = "7ef0d890fbcd8b3def1635ac1a877fc298488446" }

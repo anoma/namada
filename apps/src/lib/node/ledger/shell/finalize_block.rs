@@ -127,26 +127,19 @@ where
             if ErrorCodes::from_u32(processed_tx.result.code).unwrap()
                 == ErrorCodes::InvalidSig
             {
-                let mut tx_event = match process_tx(tx.clone()) {
-                    Ok(tx @ TxType::Wrapper(_))
-                    | Ok(tx @ TxType::Protocol(_)) => {
+                let mut tx_event = match tx.header().tx_type {
+                    TxType::Wrapper(_) | TxType::Protocol(_) => {
                         Event::new_tx_event(&tx, height.0)
                     }
-                    _ => match TxType::try_from(tx) {
-                        Ok(tx @ TxType::Wrapper(_))
-                        | Ok(tx @ TxType::Protocol(_)) => {
-                            Event::new_tx_event(&tx, height.0)
-                        }
-                        _ => {
-                            tracing::error!(
-                                "Internal logic error: FinalizeBlock received \
-                                 a tx with an invalid signature error code \
-                                 that could not be deserialized to a \
-                                 WrapperTx / ProtocolTx type"
-                            );
-                            continue;
-                        }
-                    },
+                    _ => {
+                        tracing::error!(
+                            "Internal logic error: FinalizeBlock received a \
+                             tx with an invalid signature error code that \
+                             could not be deserialized to a WrapperTx / \
+                             ProtocolTx type"
+                        );
+                        continue;
+                    }
                 };
                 tx_event["code"] = processed_tx.result.code.to_string();
                 tx_event["info"] =
@@ -156,8 +149,8 @@ where
                 continue;
             }
 
-            let tx_type = if let Ok(tx_type) = process_tx(tx) {
-                tx_type
+            let tx = if let Ok(()) = tx.validate_header() {
+                tx
             } else {
                 tracing::error!(
                     "Internal logic error: FinalizeBlock received tx that \
@@ -165,12 +158,13 @@ where
                 );
                 continue;
             };
+            let tx_type = tx.header();
             // If [`process_proposal`] rejected a Tx, emit an event here and
             // move on to next tx
             if ErrorCodes::from_u32(processed_tx.result.code).unwrap()
                 != ErrorCodes::Ok
             {
-                let mut tx_event = Event::new_tx_event(&tx_type, height.0);
+                let mut tx_event = Event::new_tx_event(&tx, height.0);
                 tx_event["code"] = processed_tx.result.code.to_string();
                 tx_event["info"] =
                     format!("Tx rejected: {}", &processed_tx.result.info);
@@ -179,7 +173,7 @@ where
                 // if the rejected tx was decrypted, remove it
                 // from the queue of txs to be processed and remove the hash
                 // from storage
-                if let TxType::Decrypted(_) = &tx_type {
+                if let TxType::Decrypted(_) = &tx_type.tx_type {
                     let tx_hash = self
                         .wl_storage
                         .storage
@@ -187,7 +181,9 @@ where
                         .pop()
                         .expect("Missing wrapper tx in queue")
                         .tx
-                        .tx_hash;
+                        .clone()
+                        .update_header(TxType::Raw)
+                        .header_hash();
                     let tx_hash_key =
                         replay_protection::get_tx_hash_key(&tx_hash);
                     self.wl_storage
@@ -198,24 +194,26 @@ where
                 continue;
             }
 
-            let (mut tx_event, tx_unsigned_hash) = match &tx_type {
+            let (mut tx_event, tx_unsigned_hash) = match &tx_type.tx_type {
                 TxType::Wrapper(wrapper) => {
                     stats.increment_wrapper_txs();
-                    let mut tx_event = Event::new_tx_event(&tx_type, height.0);
+                    let mut tx_event = Event::new_tx_event(&tx, height.0);
 
                     // Writes both txs hash to storage
-                    let tx = Tx::try_from(processed_tx.tx.as_ref()).unwrap();
+                    let processed_tx =
+                        Tx::try_from(processed_tx.tx.as_ref()).unwrap();
                     let wrapper_tx_hash_key =
                         replay_protection::get_tx_hash_key(&hash::Hash(
-                            tx.unsigned_hash(),
+                            processed_tx.header_hash().0,
                         ));
                     self.wl_storage
                         .storage
                         .write(&wrapper_tx_hash_key, vec![])
                         .expect("Error while writing tx hash to storage");
 
-                    let inner_tx_hash_key =
-                        replay_protection::get_tx_hash_key(&wrapper.tx_hash);
+                    let inner_tx_hash_key = replay_protection::get_tx_hash_key(
+                        &tx.clone().update_header(TxType::Raw).header_hash(),
+                    );
                     self.wl_storage
                         .storage
                         .write(&inner_tx_hash_key, vec![])
@@ -276,8 +274,8 @@ where
                         }
                     }
 
-                    self.wl_storage.storage.tx_queue.push(WrapperTxInQueue {
-                        tx: wrapper.clone(),
+                    self.wl_storage.storage.tx_queue.push(TxInQueue {
+                        tx: processed_tx.clone(),
                         #[cfg(not(feature = "mainnet"))]
                         has_valid_pow,
                     });
@@ -292,20 +290,23 @@ where
                         .pop()
                         .expect("Missing wrapper tx in queue")
                         .tx
-                        .tx_hash;
-                    let mut event = Event::new_tx_event(&tx_type, height.0);
+                        .clone()
+                        .update_header(TxType::Raw)
+                        .header_hash();
+                    let mut event = Event::new_tx_event(&tx, height.0);
 
                     match inner {
-                        DecryptedTx::Decrypted {
-                            tx,
-                            has_valid_pow: _,
-                        } => {
-                            stats.increment_tx_type(
-                                namada::core::types::hash::Hash(tx.code_hash())
-                                    .to_string(),
-                            );
+                        DecryptedTx::Decrypted { has_valid_pow: _ } => {
+                            if let Some(code_sec) = tx
+                                .get_section(tx.code_sechash())
+                                .and_then(Section::code_sec)
+                            {
+                                stats.increment_tx_type(
+                                    code_sec.code.hash().to_string(),
+                                );
+                            }
                         }
-                        DecryptedTx::Undecryptable(_) => {
+                        DecryptedTx::Undecryptable => {
                             event["log"] =
                                 "Transaction could not be decrypted.".into();
                             event["code"] = ErrorCodes::Undecryptable.into();
@@ -313,7 +314,7 @@ where
                     }
                     (event, Some(wrapper_hash))
                 }
-                TxType::Raw(_) => {
+                TxType::Raw => {
                     tracing::error!(
                         "Internal logic error: FinalizeBlock received a \
                          TxType::Raw transaction"
@@ -330,7 +331,7 @@ where
             };
 
             match protocol::apply_tx(
-                tx_type,
+                tx.clone(),
                 tx_length,
                 TxIndex(
                     tx_index
@@ -418,8 +419,8 @@ where
                                 .storage
                                 .delete(&tx_hash_key)
                                 .expect(
-                                "Error while deleting tx hash key from storage",
-                            );
+                                    "Error while deleting tx hash key from storage",
+                                );
                         }
                     }
 
@@ -898,6 +899,7 @@ mod test_finalize_block {
         rewards_accumulator_handle, validator_consensus_key_handle,
         validator_rewards_products_handle,
     };
+    use namada::proto::{Code, Data, Section, Signature};
     use namada::types::governance::ProposalVote;
     use namada::types::key::tm_consensus_key_raw_hash;
     use namada::types::storage::Epoch;
@@ -905,7 +907,7 @@ mod test_finalize_block {
     use namada::types::transaction::governance::{
         InitProposalData, ProposalType, VoteProposalData,
     };
-    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
+    use namada::types::transaction::{Fee, WrapperTx, MIN_FEE};
     use namada_test_utils::TestWasms;
     use rust_decimal_macros::dec;
     use test_log::test;
@@ -940,31 +942,31 @@ mod test_finalize_block {
 
         // create some wrapper txs
         for i in 1u64..5 {
-            let raw_tx = Tx::new(
-                "wasm_code".as_bytes().to_owned(),
-                Some(format!("transaction data: {}", i).as_bytes().to_owned()),
-                shell.chain_id.clone(),
-                None,
-            );
-            let wrapper = WrapperTx::new(
-                Fee {
-                    amount: MIN_FEE.into(),
-                    token: shell.wl_storage.storage.native_token.clone(),
-                },
+            let mut wrapper =
+                Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount: MIN_FEE.into(),
+                        token: shell.wl_storage.storage.native_token.clone(),
+                    },
+                    &keypair,
+                    Epoch(0),
+                    0.into(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
+                ))));
+            wrapper.header.chain_id = shell.chain_id.clone();
+            wrapper.set_data(Data::new("wasm_code".as_bytes().to_owned()));
+            wrapper.set_code(Code::new(
+                format!("transaction data: {}", i).as_bytes().to_owned(),
+            ));
+            wrapper.add_section(Section::Signature(Signature::new(
+                &wrapper.header_hash(),
                 &keypair,
-                Epoch(0),
-                0.into(),
-                raw_tx.clone(),
-                Default::default(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
-            );
-            let tx = wrapper
-                .sign(&keypair, shell.chain_id.clone(), None)
-                .expect("Test failed");
+            )));
+            wrapper.encrypt(&Default::default());
             if i > 1 {
                 processed_txs.push(ProcessedTx {
-                    tx: tx.to_bytes(),
+                    tx: wrapper.to_bytes(),
                     result: TxResult {
                         code: u32::try_from(i.rem_euclid(2))
                             .expect("Test failed"),
@@ -1000,10 +1002,9 @@ mod test_finalize_block {
         for wrapper in shell.iter_tx_queue() {
             // we cannot easily implement the PartialEq trait for WrapperTx
             // so we check the hashes of the inner txs for equality
-            assert_eq!(
-                wrapper.tx.tx_hash,
-                valid_tx.next().expect("Test failed").tx_hash
-            );
+            let valid_tx = valid_tx.next().expect("Test failed");
+            assert_eq!(wrapper.tx.header.code_hash, *valid_tx.code_sechash());
+            assert_eq!(wrapper.tx.header.data_hash, *valid_tx.data_sechash());
             counter += 1;
         }
         assert_eq!(counter, 3);
@@ -1017,13 +1018,7 @@ mod test_finalize_block {
     fn test_process_proposal_rejected_decrypted_tx() {
         let (mut shell, _) = setup(1);
         let keypair = gen_keypair();
-        let raw_tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some(String::from("transaction data").as_bytes().to_owned()),
-            shell.chain_id.clone(),
-            None,
-        );
-        let wrapper = WrapperTx::new(
+        let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -1031,25 +1026,28 @@ mod test_finalize_block {
             &keypair,
             Epoch(0),
             0.into(),
-            raw_tx.clone(),
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        );
+        ))));
+        outer_tx.header.chain_id = shell.chain_id.clone();
+        outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        outer_tx.set_data(Data::new(
+            String::from("transaction data").as_bytes().to_owned(),
+        ));
+        outer_tx.encrypt(&Default::default());
+        shell.enqueue_tx(outer_tx.clone());
 
+        outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: false,
+        }));
         let processed_tx = ProcessedTx {
-            tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                tx: raw_tx,
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: false,
-            }))
-            .to_bytes(),
+            tx: outer_tx.to_bytes(),
             result: TxResult {
                 code: ErrorCodes::InvalidTx.into(),
                 info: "".into(),
             },
         };
-        shell.enqueue_tx(wrapper);
 
         // check that the decrypted tx was not applied
         for event in shell
@@ -1074,13 +1072,7 @@ mod test_finalize_block {
         let (mut shell, _) = setup(1);
 
         let keypair = crate::wallet::defaults::daewon_keypair();
-        let pubkey = EncryptionKey::default();
         // not valid tx bytes
-        let tx = "garbage data".as_bytes().to_owned();
-        let inner_tx =
-            namada::types::transaction::encrypted::EncryptedTx::encrypt(
-                &tx, pubkey,
-            );
         let wrapper = WrapperTx {
             fee: Fee {
                 amount: 0.into(),
@@ -1089,23 +1081,20 @@ mod test_finalize_block {
             pk: keypair.ref_to(),
             epoch: Epoch(0),
             gas_limit: 0.into(),
-            inner_tx,
-            tx_hash: hash_tx(&tx),
             #[cfg(not(feature = "mainnet"))]
             pow_solution: None,
         };
         let processed_tx = ProcessedTx {
-            tx: Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
-                wrapper.clone(),
-            )))
-            .to_bytes(),
+            tx: Tx::new(TxType::Decrypted(DecryptedTx::Undecryptable))
+                .to_bytes(),
             result: TxResult {
                 code: ErrorCodes::Ok.into(),
                 info: "".into(),
             },
         };
 
-        shell.enqueue_tx(wrapper);
+        let tx = Tx::new(TxType::Wrapper(Box::new(wrapper)));
+        shell.enqueue_tx(tx);
 
         // check that correct error message is returned
         for event in shell
@@ -1149,37 +1138,35 @@ mod test_finalize_block {
         // create two decrypted txs
         let tx_code = TestWasms::TxNoOp.read_bytes();
         for i in 0..2 {
-            let raw_tx = Tx::new(
-                tx_code.clone(),
-                Some(
-                    format!("Decrypted transaction data: {}", i)
-                        .as_bytes()
-                        .to_owned(),
-                ),
-                shell.chain_id.clone(),
-                None,
-            );
-            let wrapper_tx = WrapperTx::new(
-                Fee {
-                    amount: MIN_FEE.into(),
-                    token: shell.wl_storage.storage.native_token.clone(),
-                },
-                &keypair,
-                Epoch(0),
-                0.into(),
-                raw_tx.clone(),
-                Default::default(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
-            );
-            shell.enqueue_tx(wrapper_tx);
-            processed_txs.push(ProcessedTx {
-                tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                    tx: raw_tx,
+            let mut outer_tx =
+                Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount: MIN_FEE.into(),
+                        token: shell.wl_storage.storage.native_token.clone(),
+                    },
+                    &keypair,
+                    Epoch(0),
+                    0.into(),
                     #[cfg(not(feature = "mainnet"))]
-                    has_valid_pow: false,
-                }))
-                .to_bytes(),
+                    None,
+                ))));
+            outer_tx.header.chain_id = shell.chain_id.clone();
+            outer_tx.set_code(Code::new(tx_code.clone()));
+            outer_tx.set_data(Data::new(
+                format!("Decrypted transaction data: {}", i)
+                    .as_bytes()
+                    .to_owned(),
+            ));
+            outer_tx.encrypt(&Default::default());
+            shell.enqueue_tx(outer_tx.clone());
+            outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: false,
+            }));
+            outer_tx.decrypt(<EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator())
+                .expect("Test failed");
+            processed_txs.push(ProcessedTx {
+                tx: outer_tx.to_bytes(),
                 result: TxResult {
                     code: ErrorCodes::Ok.into(),
                     info: "".into(),
@@ -1188,35 +1175,33 @@ mod test_finalize_block {
         }
         // create two wrapper txs
         for i in 0..2 {
-            let raw_tx = Tx::new(
-                "wasm_code".as_bytes().to_owned(),
-                Some(
-                    format!("Encrypted transaction data: {}", i)
-                        .as_bytes()
-                        .to_owned(),
-                ),
-                shell.chain_id.clone(),
-                None,
-            );
-            let wrapper_tx = WrapperTx::new(
-                Fee {
-                    amount: MIN_FEE.into(),
-                    token: shell.wl_storage.storage.native_token.clone(),
-                },
+            let mut wrapper_tx =
+                Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount: MIN_FEE.into(),
+                        token: shell.wl_storage.storage.native_token.clone(),
+                    },
+                    &keypair,
+                    Epoch(0),
+                    0.into(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
+                ))));
+            wrapper_tx.header.chain_id = shell.chain_id.clone();
+            wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+            wrapper_tx.set_data(Data::new(
+                format!("Encrypted transaction data: {}", i)
+                    .as_bytes()
+                    .to_owned(),
+            ));
+            wrapper_tx.add_section(Section::Signature(Signature::new(
+                &wrapper_tx.header_hash(),
                 &keypair,
-                Epoch(0),
-                0.into(),
-                raw_tx.clone(),
-                Default::default(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
-            );
-            let wrapper = wrapper_tx
-                .sign(&keypair, shell.chain_id.clone(), None)
-                .expect("Test failed");
-            valid_txs.push(wrapper_tx);
+            )));
+            wrapper_tx.encrypt(&Default::default());
+            valid_txs.push(wrapper_tx.clone());
             processed_txs.push(ProcessedTx {
-                tx: wrapper.to_bytes(),
+                tx: wrapper_tx.to_bytes(),
                 result: TxResult {
                     code: ErrorCodes::Ok.into(),
                     info: "".into(),
@@ -1262,10 +1247,9 @@ mod test_finalize_block {
 
         let mut counter = 0;
         for wrapper in shell.iter_tx_queue() {
-            assert_eq!(
-                wrapper.tx.tx_hash,
-                txs.next().expect("Test failed").tx_hash
-            );
+            let next = txs.next().expect("Test failed");
+            assert_eq!(wrapper.tx.header.code_hash, *next.code_sechash());
+            assert_eq!(wrapper.tx.header.data_hash, *next.data_sechash());
             counter += 1;
         }
         assert_eq!(counter, 2);
@@ -1701,29 +1685,35 @@ mod test_finalize_block {
         wasm_path.push("wasm_for_tests/tx_no_op.wasm");
         let tx_code = std::fs::read(wasm_path)
             .expect("Expected a file at given code path");
-        let raw_tx = Tx::new(
-            tx_code,
-            Some("Encrypted transaction data".as_bytes().to_owned()),
-            shell.chain_id.clone(),
-            None,
-        );
-        let wrapper_tx = WrapperTx::new(
-            Fee {
-                amount: 0.into(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            &keypair,
-            Epoch(0),
-            0.into(),
-            raw_tx.clone(),
-            Default::default(),
+        let mut wrapper_tx =
+            Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: 0.into(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                &keypair,
+                Epoch(0),
+                0.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
+        wrapper_tx.header.chain_id = shell.chain_id.clone();
+        wrapper_tx.set_code(Code::new(tx_code));
+        wrapper_tx.set_data(Data::new(
+            "Encrypted transaction data".as_bytes().to_owned(),
+        ));
+        let mut decrypted_tx = wrapper_tx.clone();
+        wrapper_tx.encrypt(&Default::default());
+
+        decrypted_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]
-            None,
-        );
+            has_valid_pow: false,
+        }));
 
         // Write inner hash in storage
-        let inner_hash_key =
-            replay_protection::get_tx_hash_key(&wrapper_tx.tx_hash);
+        let inner_hash_key = replay_protection::get_tx_hash_key(
+            &wrapper_tx.clone().update_header(TxType::Raw).header_hash(),
+        );
         shell
             .wl_storage
             .storage
@@ -1731,12 +1721,7 @@ mod test_finalize_block {
             .expect("Test failed");
 
         let processed_tx = ProcessedTx {
-            tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                tx: raw_tx,
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: false,
-            }))
-            .to_bytes(),
+            tx: decrypted_tx.to_bytes(),
             result: TxResult {
                 code: ErrorCodes::Ok.into(),
                 info: "".into(),

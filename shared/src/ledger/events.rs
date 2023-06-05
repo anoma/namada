@@ -13,7 +13,7 @@ use crate::ledger::native_vp::governance::utils::ProposalEvent;
 use crate::tendermint_proto::abci::EventAttribute;
 use crate::types::ibc::IbcEvent;
 #[cfg(feature = "ferveo-tpke")]
-use crate::types::transaction::{hash_tx, TxType};
+use crate::types::transaction::TxType;
 
 /// Indicates if an event is emitted do to
 /// an individual Tx or the nature of a finalized block
@@ -67,42 +67,37 @@ impl Event {
     /// Creates a new event with the hash and height of the transaction
     /// already filled in
     #[cfg(feature = "ferveo-tpke")]
-    pub fn new_tx_event(tx: &TxType, height: u64) -> Self {
-        let mut event = match tx {
-            TxType::Wrapper(wrapper) => {
+    pub fn new_tx_event(tx: &crate::proto::Tx, height: u64) -> Self {
+        let mut event = match tx.header().tx_type {
+            TxType::Wrapper(_) => {
                 let mut event = Event {
                     event_type: EventType::Accepted,
                     level: EventLevel::Tx,
                     attributes: HashMap::new(),
                 };
-                event["hash"] = hash_tx(
-                    &wrapper
-                        .try_to_vec()
-                        .expect("Serializing wrapper should not fail"),
-                )
-                .to_string();
+                event["hash"] = tx.header_hash().to_string();
                 event
             }
-            TxType::Decrypted(decrypted) => {
+            TxType::Decrypted(_) => {
                 let mut event = Event {
                     event_type: EventType::Applied,
                     level: EventLevel::Tx,
                     attributes: HashMap::new(),
                 };
-                event["hash"] = decrypted.hash_commitment().to_string();
+                event["hash"] = tx
+                    .clone()
+                    .update_header(TxType::Raw)
+                    .header_hash()
+                    .to_string();
                 event
             }
-            tx @ TxType::Protocol(_) => {
+            TxType::Protocol(_) => {
                 let mut event = Event {
                     event_type: EventType::Applied,
                     level: EventLevel::Tx,
                     attributes: HashMap::new(),
                 };
-                event["hash"] = hash_tx(
-                    &tx.try_to_vec()
-                        .expect("Serializing protocol tx should not fail"),
-                )
-                .to_string();
+                event["hash"] = tx.header_hash().to_string();
                 event
             }
             _ => unreachable!(),
