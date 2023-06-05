@@ -2815,7 +2815,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "0.5.0"
-source = "git+https://github.com/anoma/masp?rev=bee40fc465f6afbd10558d12fe96eb1742eee45c#bee40fc465f6afbd10558d12fe96eb1742eee45c"
+source = "git+https://github.com/anoma/masp?rev=4274fc0bf300bcdae4f186fba134bab8af83ae93#4274fc0bf300bcdae4f186fba134bab8af83ae93"
 dependencies = [
  "aes",
  "bip0039",
@@ -2848,7 +2848,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "0.5.0"
-source = "git+https://github.com/anoma/masp?rev=bee40fc465f6afbd10558d12fe96eb1742eee45c#bee40fc465f6afbd10558d12fe96eb1742eee45c"
+source = "git+https://github.com/anoma/masp?rev=4274fc0bf300bcdae4f186fba134bab8af83ae93#4274fc0bf300bcdae4f186fba134bab8af83ae93"
 dependencies = [
  "bellman",
  "blake2b_simd 1.0.1",
