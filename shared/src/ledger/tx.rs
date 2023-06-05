@@ -528,18 +528,11 @@ pub async fn submit_validator_commission_change<
     let validator = args.validator.clone();
     if rpc::is_validator(client, &validator).await {
         if args.rate < Decimal::ZERO || args.rate > Decimal::ONE {
-            if args.tx.force {
-                eprintln!(
-                    "Invalid new commission rate, received {}",
-                    args.rate
-                );
-                Ok(())
-            } else {
-                Err(Error::InvalidCommisionRate(args.rate))
+            eprintln!("Invalid new commission rate, received {}", args.rate);
+            if !args.tx.force {
+                return Err(Error::InvalidCommisionRate(args.rate));
             }
-        } else {
-            Ok(())
-        }?;
+        }
 
         let pipeline_epoch_minus_one = epoch + params.pipeline_len - 1;
 
