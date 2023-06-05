@@ -2,12 +2,15 @@
 
 use std::iter::Peekable;
 
+use super::EPOCH_SWITCH_BLOCKS_DELAY;
+use crate::ledger::parameters::EpochDuration;
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
-use crate::ledger::{gas, storage_api};
+use crate::ledger::{gas, parameters, storage_api};
 use crate::types::address::Address;
-use crate::types::storage;
+use crate::types::storage::{self, BlockHeight};
+use crate::types::time::DateTimeUtc;
 
 /// Storage with write log that allows to implement prefix iterator that works
 /// with changes not yet committed to the DB.
@@ -23,25 +26,105 @@ where
     pub storage: Storage<D, H>,
 }
 
+/// Temporary storage that can be used for changes that will never be committed
+/// to the DB. This is useful for the shell `PrepareProposal` and
+/// `ProcessProposal` handlers that should not change state, but need to apply
+/// storage changes for replay protection to validate the proposal.
+#[derive(Debug)]
+pub struct TempWlStorage<'a, D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    /// Write log
+    pub write_log: WriteLog,
+    /// Storage provides access to DB
+    pub storage: &'a Storage<D, H>,
+}
+
+impl<'a, D, H> TempWlStorage<'a, D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    /// Create a temp storage that can mutated in memory, but never committed to
+    /// DB.
+    pub fn new(storage: &'a Storage<D, H>) -> Self {
+        Self {
+            write_log: WriteLog::default(),
+            storage,
+        }
+    }
+}
+
+/// Common trait for [`WlStorage`] and [`TempWlStorage`], used to implement
+/// storage_api traits.
+trait WriteLogAndStorage {
+    // DB type
+    type D: DB + for<'iter> DBIter<'iter>;
+    // DB hasher type
+    type H: StorageHasher;
+
+    /// Borrow `WriteLog`
+    fn write_log(&self) -> &WriteLog;
+
+    /// Borrow mutable `WriteLog`
+    fn write_log_mut(&mut self) -> &mut WriteLog;
+
+    /// Borrow `Storage`
+    fn storage(&self) -> &Storage<Self::D, Self::H>;
+}
+
+impl<D, H> WriteLogAndStorage for WlStorage<D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    type D = D;
+    type H = H;
+
+    fn write_log(&self) -> &WriteLog {
+        &self.write_log
+    }
+
+    fn write_log_mut(&mut self) -> &mut WriteLog {
+        &mut self.write_log
+    }
+
+    fn storage(&self) -> &Storage<D, H> {
+        &self.storage
+    }
+}
+
+impl<D, H> WriteLogAndStorage for TempWlStorage<'_, D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    type D = D;
+    type H = H;
+
+    fn write_log(&self) -> &WriteLog {
+        &self.write_log
+    }
+
+    fn write_log_mut(&mut self) -> &mut WriteLog {
+        &mut self.write_log
+    }
+
+    fn storage(&self) -> &Storage<D, H> {
+        self.storage
+    }
+}
+
 impl<D, H> WlStorage<D, H>
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
+    H: 'static + StorageHasher,
 {
     /// Combine storage with write-log
     pub fn new(write_log: WriteLog, storage: Storage<D, H>) -> Self {
         Self { write_log, storage }
-    }
-
-    /// Commit the genesis state to DB. This should only be used before any
-    /// blocks are produced.
-    pub fn commit_genesis(&mut self) -> storage_api::Result<()> {
-        // Because the `impl StorageWrite for WlStorage` writes into block-level
-        // write log, we just commit the `block_write_log`, but without
-        // committing an actual block in storage
-        self.write_log
-            .commit_block(&mut self.storage)
-            .into_storage_result()
     }
 
     /// Commit the current transaction's write log to the block when it's
@@ -60,10 +143,70 @@ where
     /// Commit the current block's write log to the storage and commit the block
     /// to DB. Starts a new block write log.
     pub fn commit_block(&mut self) -> storage_api::Result<()> {
+        let mut batch = D::batch();
         self.write_log
-            .commit_block(&mut self.storage)
+            .commit_block(&mut self.storage, &mut batch)
             .into_storage_result()?;
-        self.storage.commit_block().into_storage_result()
+        self.storage.commit_block(batch).into_storage_result()
+    }
+
+    /// Initialize a new epoch when the current epoch is finished. Returns
+    /// `true` on a new epoch.
+    pub fn update_epoch(
+        &mut self,
+        height: BlockHeight,
+        time: DateTimeUtc,
+    ) -> crate::ledger::storage::Result<bool> {
+        let parameters =
+            parameters::read(self).expect("Couldn't read protocol parameters");
+
+        match self.storage.update_epoch_blocks_delay.as_mut() {
+            None => {
+                // Check if the new epoch minimum start height and start time
+                // have been fulfilled. If so, queue the next
+                // epoch to start two blocks into the future so
+                // as to align validator set updates + etc with
+                // tendermint. This is because tendermint has a two block delay
+                // to validator changes.
+                let current_epoch_duration_satisfied = height
+                    >= self.storage.next_epoch_min_start_height
+                    && time >= self.storage.next_epoch_min_start_time;
+                if current_epoch_duration_satisfied {
+                    self.storage.update_epoch_blocks_delay =
+                        Some(EPOCH_SWITCH_BLOCKS_DELAY);
+                }
+            }
+            Some(blocks_until_switch) => {
+                *blocks_until_switch -= 1;
+            }
+        };
+        let new_epoch =
+            matches!(self.storage.update_epoch_blocks_delay, Some(0));
+
+        if new_epoch {
+            // Reset the delay tracker
+            self.storage.update_epoch_blocks_delay = None;
+
+            // Begin a new epoch
+            self.storage.block.epoch = self.storage.block.epoch.next();
+            let EpochDuration {
+                min_num_of_blocks,
+                min_duration,
+            } = parameters.epoch_duration;
+            self.storage.next_epoch_min_start_height =
+                height + min_num_of_blocks;
+            self.storage.next_epoch_min_start_time = time + min_duration;
+            // TODO put this into PoS parameters and pass it to tendermint
+            // `consensus_params` on `InitChain` and `EndBlock`
+            let evidence_max_age_num_blocks: u64 = 100000;
+            self.storage
+                .block
+                .pred_epochs
+                .new_epoch(height, evidence_max_age_num_blocks);
+            tracing::info!("Began a new epoch {}", self.storage.block.epoch);
+        }
+        self.storage.update_epoch_in_merkle_tree()?;
+        Ok(new_epoch)
     }
 }
 
@@ -156,10 +299,9 @@ where
                         what = Next::ReturnStorage;
                     }
                     (Some((storage_key, _, _)), Some((wl_key, _))) => {
-                        let wl_key = wl_key.to_string();
-                        if &wl_key <= storage_key {
+                        if wl_key <= storage_key {
                             what = Next::ReturnWl {
-                                advance_storage: &wl_key == storage_key,
+                                advance_storage: wl_key == storage_key,
                             };
                         } else {
                             what = Next::ReturnStorage;
@@ -183,10 +325,10 @@ where
                                 return Some((key, value, gas));
                             }
                             write_log::StorageModification::InitAccount {
-                                vp,
+                                vp_code_hash,
                             } => {
-                                let gas = vp.len() as u64;
-                                return Some((key, vp, gas));
+                                let gas = vp_code_hash.len() as u64;
+                                return Some((key, vp_code_hash.to_vec(), gas));
                             }
                             write_log::StorageModification::Delete => {
                                 continue;
@@ -204,10 +346,11 @@ where
     }
 }
 
-impl<D, H> StorageRead for WlStorage<D, H>
+impl<T, D, H> StorageRead for T
 where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
+    T: WriteLogAndStorage<D = D, H = H>,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
     type PrefixIter<'iter> = PrefixIter<'iter, D> where Self: 'iter;
 
@@ -216,29 +359,31 @@ where
         key: &storage::Key,
     ) -> storage_api::Result<Option<Vec<u8>>> {
         // try to read from the write log first
-        let (log_val, _gas) = self.write_log.read(key);
+        let (log_val, _gas) = self.write_log().read(key);
         match log_val {
-            Some(&write_log::StorageModification::Write { ref value }) => {
+            Some(write_log::StorageModification::Write { ref value }) => {
                 Ok(Some(value.clone()))
             }
-            Some(&write_log::StorageModification::Delete) => Ok(None),
-            Some(&write_log::StorageModification::InitAccount {
-                ref vp,
-                ..
-            }) => Ok(Some(vp.clone())),
-            Some(&write_log::StorageModification::Temp { ref value }) => {
+            Some(write_log::StorageModification::Delete) => Ok(None),
+            Some(write_log::StorageModification::InitAccount {
+                ref vp_code_hash,
+            }) => Ok(Some(vp_code_hash.to_vec())),
+            Some(write_log::StorageModification::Temp { ref value }) => {
                 Ok(Some(value.clone()))
             }
             None => {
                 // when not found in write log, try to read from the storage
-                self.storage.db.read_subspace_val(key).into_storage_result()
+                self.storage()
+                    .db
+                    .read_subspace_val(key)
+                    .into_storage_result()
             }
         }
     }
 
     fn has_key(&self, key: &storage::Key) -> storage_api::Result<bool> {
         // try to read from the write log first
-        let (log_val, _gas) = self.write_log.read(key);
+        let (log_val, _gas) = self.write_log().read(key);
         match log_val {
             Some(&write_log::StorageModification::Write { .. })
             | Some(&write_log::StorageModification::InitAccount { .. })
@@ -249,7 +394,7 @@ where
             }
             None => {
                 // when not found in write log, try to check the storage
-                self.storage.block.tree.has_key(key).into_storage_result()
+                self.storage().block.tree.has_key(key).into_storage_result()
             }
         }
     }
@@ -259,7 +404,7 @@ where
         prefix: &storage::Key,
     ) -> storage_api::Result<Self::PrefixIter<'iter>> {
         let (iter, _gas) =
-            iter_prefix_post(&self.write_log, &self.storage, prefix);
+            iter_prefix_post(self.write_log(), self.storage(), prefix);
         Ok(iter)
     }
 
@@ -271,40 +416,51 @@ where
     }
 
     fn get_chain_id(&self) -> std::result::Result<String, storage_api::Error> {
-        Ok(self.storage.chain_id.to_string())
+        Ok(self.storage().chain_id.to_string())
     }
 
     fn get_block_height(
         &self,
     ) -> std::result::Result<storage::BlockHeight, storage_api::Error> {
-        Ok(self.storage.block.height)
+        Ok(self.storage().block.height)
+    }
+
+    fn get_block_header(
+        &self,
+        height: storage::BlockHeight,
+    ) -> std::result::Result<Option<storage::Header>, storage_api::Error> {
+        self.storage()
+            .db
+            .read_block_header(height)
+            .into_storage_result()
     }
 
     fn get_block_hash(
         &self,
     ) -> std::result::Result<storage::BlockHash, storage_api::Error> {
-        Ok(self.storage.block.hash.clone())
+        Ok(self.storage().block.hash.clone())
     }
 
     fn get_block_epoch(
         &self,
     ) -> std::result::Result<storage::Epoch, storage_api::Error> {
-        Ok(self.storage.block.epoch)
+        Ok(self.storage().block.epoch)
     }
 
     fn get_tx_index(
         &self,
     ) -> std::result::Result<storage::TxIndex, storage_api::Error> {
-        Ok(self.storage.tx_index)
+        Ok(self.storage().tx_index)
     }
 
     fn get_native_token(&self) -> storage_api::Result<Address> {
-        Ok(self.storage.native_token.clone())
+        Ok(self.storage().native_token.clone())
     }
 }
 
-impl<D, H> StorageWrite for WlStorage<D, H>
+impl<T, D, H> StorageWrite for T
 where
+    T: WriteLogAndStorage<D = D, H = H>,
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
 {
@@ -313,13 +469,19 @@ where
         key: &storage::Key,
         val: impl AsRef<[u8]>,
     ) -> storage_api::Result<()> {
-        self.write_log
+        let _ = self
+            .write_log_mut()
             .protocol_write(key, val.as_ref().to_vec())
-            .into_storage_result()
+            .into_storage_result();
+        Ok(())
     }
 
     fn delete(&mut self, key: &storage::Key) -> storage_api::Result<()> {
-        self.write_log.protocol_delete(key).into_storage_result()
+        let _ = self
+            .write_log_mut()
+            .protocol_delete(key)
+            .into_storage_result();
+        Ok(())
     }
 }
 

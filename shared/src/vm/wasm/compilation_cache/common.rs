@@ -16,14 +16,12 @@ use std::{cmp, fs};
 
 use clru::{CLruCache, CLruCacheConfig, WeightScale};
 use wasmer::{Module, Store};
-use wasmer_cache::{FileSystemCache, Hash};
+use wasmer_cache::{FileSystemCache, Hash as CacheHash};
 
+use crate::core::types::hash::{Hash, HASH_LENGTH};
 use crate::vm::wasm::run::untrusted_wasm_store;
 use crate::vm::wasm::{self, memory};
 use crate::vm::{WasmCacheAccess, WasmCacheRoAccess};
-
-/// The size of the [`struct@Hash`]
-const HASH_BYTES: usize = 32;
 
 /// Cache handle. Thread-safe.
 #[derive(Debug, Clone)]
@@ -67,7 +65,7 @@ impl WeightScale<Hash, Module> for ModuleCacheScale {
         // elements, so we use the size of the module as its scale
         // and subtract 1 from it to negate the increment of the cache length.
 
-        let size = loupe::size_of_val(&value) + HASH_BYTES;
+        let size = loupe::size_of_val(&value) + HASH_LENGTH;
         tracing::debug!(
             "WASM module hash {}, size including the hash {}",
             key.to_string(),
@@ -105,14 +103,14 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
     /// it. If the cache access is set to [`crate::vm::WasmCacheRwAccess`], it
     /// updates the position in the LRU cache. Otherwise, the compiled
     /// module will not be be cached, if it's not already.
-    pub fn fetch_or_compile(
+    pub fn fetch(
         &mut self,
-        code: impl AsRef<[u8]>,
-    ) -> Result<(Module, Store), wasm::run::Error> {
+        code_hash: &Hash,
+    ) -> Result<Option<(Module, Store)>, wasm::run::Error> {
         if A::is_read_write() {
-            self.get_or_compile(code)
+            self.get(code_hash)
         } else {
-            self.peek_or_compile(code)
+            self.peek(code_hash)
         }
     }
 
@@ -128,176 +126,130 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
 
     /// Get a WASM module from LRU cache, from a file or compile it and cache
     /// it. Updates the position in the LRU cache.
-    fn get_or_compile(
+    fn get(
         &mut self,
-        code: impl AsRef<[u8]>,
-    ) -> Result<(Module, Store), wasm::run::Error> {
-        let hash = hash_of_code(&code);
-
+        hash: &Hash,
+    ) -> Result<Option<(Module, Store)>, wasm::run::Error> {
         let mut in_memory = self.in_memory.write().unwrap();
-        if let Some(module) = in_memory.get(&hash) {
+        if let Some(module) = in_memory.get(hash) {
             tracing::trace!(
                 "{} found {} in cache.",
                 N::name(),
                 hash.to_string()
             );
-            return Ok((module.clone(), store()));
-        }
-        drop(in_memory);
-
-        let mut iter = 0;
-        loop {
-            let mut progress = self.progress.write().unwrap();
-            match progress.get(&hash) {
-                Some(Compilation::Done) => {
-                    drop(progress);
-                    let mut in_memory = self.in_memory.write().unwrap();
-                    if let Some(module) = in_memory.get(&hash) {
-                        tracing::info!(
-                            "{} found {} in memory cache.",
-                            N::name(),
-                            hash.to_string()
-                        );
-                        return Ok((module.clone(), store()));
-                    }
-
-                    let (module, store) = file_load_module(&self.dir, &hash);
-                    tracing::info!(
-                        "{} found {} in file cache.",
-                        N::name(),
-                        hash.to_string()
-                    );
-                    // Put into cache, ignore result if it's full
-                    let _ = in_memory.put_with_weight(hash, module.clone());
-
-                    return Ok((module, store));
-                }
-                Some(Compilation::Compiling) => {
-                    drop(progress);
-                    tracing::info!(
-                        "Waiting for {} {} ...",
-                        N::name(),
-                        hash.to_string()
-                    );
-                    exponential_backoff(iter);
-                    iter += 1;
-                    continue;
-                }
-                None => {
-                    progress.insert(hash, Compilation::Compiling);
-                    drop(progress);
-
-                    let (module, store) =
-                        if module_file_exists(&self.dir, &hash) {
-                            tracing::info!(
-                                "Loading {} {} from file.",
-                                N::name(),
-                                hash.to_string()
-                            );
-                            file_load_module(&self.dir, &hash)
-                        } else {
-                            tracing::info!(
-                                "Compiling {} {}.",
-                                N::name(),
-                                hash.to_string()
-                            );
-
-                            match wasm::run::prepare_wasm_code(code) {
-                                Ok(code) => match compile(code) {
-                                    Ok((module, store)) => {
-                                        // Write the file
-                                        file_write_module(
-                                            &self.dir, &module, &hash,
-                                        );
-
-                                        (module, store)
-                                    }
-                                    Err(err) => {
-                                        let mut progress =
-                                            self.progress.write().unwrap();
-                                        tracing::info!(
-                                            "Failed to compile WASM {} with {}",
-                                            hash.to_string(),
-                                            err
-                                        );
-                                        progress.remove(&hash);
-                                        drop(progress);
-                                        return Err(err);
-                                    }
-                                },
-                                Err(err) => {
-                                    let mut progress =
-                                        self.progress.write().unwrap();
-                                    tracing::info!(
-                                        "Failed to prepare WASM {} with {}",
-                                        hash.to_string(),
-                                        err
-                                    );
-                                    progress.remove(&hash);
-                                    drop(progress);
-                                    return Err(err);
-                                }
-                            }
-                        };
-
-                    // Update progress
-                    let mut progress = self.progress.write().unwrap();
-                    progress.insert(hash, Compilation::Done);
-
-                    // Put into cache, ignore the result (fails if the module
-                    // cannot fit into the cache)
-                    let mut in_memory = self.in_memory.write().unwrap();
-                    let _ = in_memory.put_with_weight(hash, module.clone());
-
-                    return Ok((module, store));
-                }
-            }
-        }
-    }
-
-    /// Peak-only is used for dry-ran txs (and VPs that the tx triggers).
-    /// It doesn't update the in-memory cache or persist the compiled modules to
-    /// files.
-    fn peek_or_compile(
-        &self,
-        code: impl AsRef<[u8]>,
-    ) -> Result<(Module, Store), wasm::run::Error> {
-        let hash = hash_of_code(&code);
-
-        let in_memory = self.in_memory.read().unwrap();
-        if let Some(module) = in_memory.peek(&hash) {
-            tracing::info!(
-                "{} found {} in cache.",
-                N::name(),
-                hash.to_string()
-            );
-            return Ok((module.clone(), store()));
+            return Ok(Some((module.clone(), store())));
         }
         drop(in_memory);
 
         let mut iter = 0;
         loop {
             let progress = self.progress.read().unwrap();
-            match progress.get(&hash) {
+            match progress.get(hash) {
                 Some(Compilation::Done) => {
                     drop(progress);
-                    let in_memory = self.in_memory.read().unwrap();
-                    if let Some(module) = in_memory.peek(&hash) {
+                    let mut in_memory = self.in_memory.write().unwrap();
+                    if let Some(module) = in_memory.get(hash) {
                         tracing::info!(
                             "{} found {} in memory cache.",
                             N::name(),
                             hash.to_string()
                         );
-                        return Ok((module.clone(), store()));
+                        return Ok(Some((module.clone(), store())));
                     }
 
-                    let (module, store) = file_load_module(&self.dir, &hash);
+                    let (module, store) = file_load_module(&self.dir, hash);
                     tracing::info!(
                         "{} found {} in file cache.",
                         N::name(),
                         hash.to_string()
                     );
-                    return Ok((module, store));
+                    // Put into cache, ignore result if it's full
+                    let _ =
+                        in_memory.put_with_weight(hash.clone(), module.clone());
+
+                    return Ok(Some((module, store)));
+                }
+                Some(Compilation::Compiling) => {
+                    drop(progress);
+                    tracing::info!(
+                        "Waiting for {} {} ...",
+                        N::name(),
+                        hash.to_string()
+                    );
+                    exponential_backoff(iter);
+                    iter += 1;
+                    continue;
+                }
+                None => {
+                    drop(progress);
+                    let (module, store) = if module_file_exists(&self.dir, hash)
+                    {
+                        tracing::info!(
+                            "Loading {} {} from file.",
+                            N::name(),
+                            hash.to_string()
+                        );
+                        file_load_module(&self.dir, hash)
+                    } else {
+                        return Ok(None);
+                    };
+
+                    // Update progress
+                    let mut progress = self.progress.write().unwrap();
+                    progress.insert(hash.clone(), Compilation::Done);
+
+                    // Put into cache, ignore the result (fails if the module
+                    // cannot fit into the cache)
+                    let mut in_memory = self.in_memory.write().unwrap();
+                    let _ =
+                        in_memory.put_with_weight(hash.clone(), module.clone());
+
+                    return Ok(Some((module, store)));
+                }
+            }
+        }
+    }
+
+    /// Peak-only is used for dry-ran txs (and VPs that the tx triggers).
+    /// It doesn't update the in-memory cache.
+    fn peek(
+        &self,
+        hash: &Hash,
+    ) -> Result<Option<(Module, Store)>, wasm::run::Error> {
+        let in_memory = self.in_memory.read().unwrap();
+        if let Some(module) = in_memory.peek(hash) {
+            tracing::info!(
+                "{} found {} in cache.",
+                N::name(),
+                hash.to_string()
+            );
+            return Ok(Some((module.clone(), store())));
+        }
+        drop(in_memory);
+
+        let mut iter = 0;
+        loop {
+            let progress = self.progress.read().unwrap();
+            match progress.get(hash) {
+                Some(Compilation::Done) => {
+                    drop(progress);
+                    let in_memory = self.in_memory.read().unwrap();
+                    if let Some(module) = in_memory.peek(hash) {
+                        tracing::info!(
+                            "{} found {} in memory cache.",
+                            N::name(),
+                            hash.to_string()
+                        );
+                        return Ok(Some((module.clone(), store())));
+                    }
+
+                    let (module, store) = file_load_module(&self.dir, hash);
+                    tracing::info!(
+                        "{} found {} in file cache.",
+                        N::name(),
+                        hash.to_string()
+                    );
+                    return Ok(Some((module, store)));
                 }
                 Some(Compilation::Compiling) => {
                     drop(progress);
@@ -313,23 +265,86 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                 None => {
                     drop(progress);
 
-                    return if module_file_exists(&self.dir, &hash) {
+                    return if module_file_exists(&self.dir, hash) {
                         tracing::info!(
                             "Loading {} {} from file.",
                             N::name(),
                             hash.to_string()
                         );
-                        Ok(file_load_module(&self.dir, &hash))
+                        Ok(Some(file_load_module(&self.dir, hash)))
                     } else {
-                        tracing::info!(
-                            "Compiling {} {}.",
-                            N::name(),
-                            hash.to_string()
-                        );
-                        let code = wasm::run::prepare_wasm_code(code)?;
-                        compile(code)
+                        Ok(None)
                     };
                 }
+            }
+        }
+    }
+
+    /// Compile a WASM module and persist the compiled modules to files.
+    pub fn compile_or_fetch(
+        &mut self,
+        code: impl AsRef<[u8]>,
+    ) -> Result<Option<(Module, Store)>, wasm::run::Error> {
+        let hash = hash_of_code(&code);
+
+        if !A::is_read_write() {
+            // It doesn't update the cache and files
+            let progress = self.progress.read().unwrap();
+            match progress.get(&hash) {
+                Some(_) => return self.peek(&hash),
+                None => {
+                    let code = wasm::run::prepare_wasm_code(code)?;
+                    return Ok(Some(compile(code)?));
+                }
+            }
+        }
+
+        let mut progress = self.progress.write().unwrap();
+        if progress.get(&hash).is_some() {
+            drop(progress);
+            return self.fetch(&hash);
+        }
+        progress.insert(hash.clone(), Compilation::Compiling);
+        drop(progress);
+
+        tracing::info!("Compiling {} {}.", N::name(), hash.to_string());
+
+        match wasm::run::prepare_wasm_code(code) {
+            Ok(code) => match compile(code) {
+                Ok((module, store)) => {
+                    // Write the file
+                    file_write_module(&self.dir, &module, &hash);
+
+                    // Update progress
+                    let mut progress = self.progress.write().unwrap();
+                    progress.insert(hash.clone(), Compilation::Done);
+
+                    // Put into cache, ignore result if it's full
+                    let mut in_memory = self.in_memory.write().unwrap();
+                    let _ = in_memory.put_with_weight(hash, module.clone());
+
+                    Ok(Some((module, store)))
+                }
+                Err(err) => {
+                    tracing::info!(
+                        "Failed to compile WASM {} with {}",
+                        hash.to_string(),
+                        err
+                    );
+                    let mut progress = self.progress.write().unwrap();
+                    progress.remove(&hash);
+                    Err(err)
+                }
+            },
+            Err(err) => {
+                tracing::info!(
+                    "Failed to prepare WASM {} with {}",
+                    hash.to_string(),
+                    err
+                );
+                let mut progress = self.progress.write().unwrap();
+                progress.remove(&hash);
+                Err(err)
             }
         }
     }
@@ -349,7 +364,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                         progress.insert(hash, Compilation::Done);
                         return;
                     }
-                    progress.insert(hash, Compilation::Compiling);
+                    progress.insert(hash.clone(), Compilation::Compiling);
                     drop(progress);
                     let progress = self.progress.clone();
                     let code = code.as_ref().to_vec();
@@ -363,8 +378,10 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                                     Ok((module, store)) => {
                                         let mut progress =
                                             progress.write().unwrap();
-                                        progress
-                                            .insert(hash, Compilation::Done);
+                                        progress.insert(
+                                            hash.clone(),
+                                            Compilation::Done,
+                                        );
                                         file_write_module(&dir, &module, &hash);
                                         (module, store)
                                     }
@@ -418,11 +435,11 @@ fn exponential_backoff(iteration: u64) {
 }
 
 fn hash_of_code(code: impl AsRef<[u8]>) -> Hash {
-    Hash::generate(code.as_ref())
+    Hash::sha256(code.as_ref())
 }
 
 fn hash_to_store_dir(hash: &Hash) -> PathBuf {
-    PathBuf::from("vp_wasm_cache").join(hash.to_string())
+    PathBuf::from("vp_wasm_cache").join(hash.to_string().to_lowercase())
 }
 
 fn compile(
@@ -449,14 +466,15 @@ fn store() -> Store {
 fn file_write_module(dir: impl AsRef<Path>, module: &Module, hash: &Hash) {
     use wasmer_cache::Cache;
     let mut fs_cache = fs_cache(dir, hash);
-    fs_cache.store(*hash, module).unwrap();
+    fs_cache.store(CacheHash::new(hash.0), module).unwrap();
 }
 
 fn file_load_module(dir: impl AsRef<Path>, hash: &Hash) -> (Module, Store) {
     use wasmer_cache::Cache;
     let fs_cache = fs_cache(dir, hash);
     let store = store();
-    let module = unsafe { fs_cache.load(&store, *hash) }.unwrap();
+    let hash = CacheHash::new(hash.0);
+    let module = unsafe { fs_cache.load(&store, hash) }.unwrap();
     (module, store)
 }
 
@@ -470,7 +488,7 @@ fn fs_cache(dir: impl AsRef<Path>, hash: &Hash) -> FileSystemCache {
 fn module_file_exists(dir: impl AsRef<Path>, hash: &Hash) -> bool {
     let file = dir.as_ref().join(hash_to_store_dir(hash)).join(format!(
         "{}.{}",
-        hash.to_string(),
+        hash.to_string().to_lowercase(),
         file_ext()
     ));
     file.exists()
@@ -557,23 +575,18 @@ mod test {
     use std::cmp::max;
 
     use byte_unit::Byte;
+    use namada_test_utils::TestWasms;
     use tempfile::{tempdir, TempDir};
     use test_log::test;
 
     use super::*;
     use crate::vm::WasmCacheRwAccess;
 
-    const TX_NO_OP: &str = "../wasm_for_tests/tx_no_op.wasm";
-    const TX_READ_STORAGE_KEY: &str =
-        "../wasm_for_tests/tx_read_storage_key.wasm";
-    const VP_ALWAYS_TRUE: &str = "../wasm_for_tests/vp_always_true.wasm";
-    const VP_EVAL: &str = "../wasm_for_tests/vp_eval.wasm";
-
     #[test]
     fn test_fetch_or_compile_valid_wasm() {
         // Load some WASMs and find their hashes and in-memory size
-        let tx_read_storage_key = load_wasm(TX_READ_STORAGE_KEY);
-        let tx_no_op = load_wasm(TX_NO_OP);
+        let tx_read_storage_key = load_wasm(TestWasms::TxReadStorageKey.path());
+        let tx_no_op = load_wasm(TestWasms::TxNoOp.path());
 
         // Create a new cache with the limit set to
         // `max(tx_read_storage_key.size, tx_no_op.size) + 1`
@@ -588,8 +601,20 @@ mod test {
 
             // Fetch `tx_read_storage_key`
             {
-                let (_module, _store) =
-                    cache.fetch_or_compile(&tx_read_storage_key.code).unwrap();
+                let fetched = cache.fetch(&tx_read_storage_key.hash).unwrap();
+                assert_matches!(
+                    fetched,
+                    None,
+                    "The module should not be in cache"
+                );
+
+                let fetched =
+                    cache.compile_or_fetch(&tx_read_storage_key.code).unwrap();
+                assert_matches!(
+                    fetched,
+                    Some(_),
+                    "The code should be compiled"
+                );
 
                 let in_memory = cache.in_memory.read().unwrap();
                 assert_matches!(
@@ -614,8 +639,19 @@ mod test {
             // Fetch `tx_no_op`. Fetching another module should get us over the
             // limit, so the previous one should be popped from the cache
             {
-                let (_module, _store) =
-                    cache.fetch_or_compile(&tx_no_op.code).unwrap();
+                let fetched = cache.fetch(&tx_no_op.hash).unwrap();
+                assert_matches!(
+                    fetched,
+                    None,
+                    "The module must not be in cache"
+                );
+
+                let fetched = cache.compile_or_fetch(&tx_no_op.code).unwrap();
+                assert_matches!(
+                    fetched,
+                    Some(_),
+                    "The code should be compiled"
+                );
 
                 let in_memory = cache.in_memory.read().unwrap();
                 assert_matches!(
@@ -660,8 +696,12 @@ mod test {
             cache.in_memory = in_memory;
             cache.progress = Default::default();
             {
-                let (_module, _store) =
-                    cache.fetch_or_compile(&tx_read_storage_key.code).unwrap();
+                let fetched = cache.fetch(&tx_read_storage_key.hash).unwrap();
+                assert_matches!(
+                    fetched,
+                    Some(_),
+                    "The module must be in file cache"
+                );
 
                 let in_memory = cache.in_memory.read().unwrap();
                 assert_matches!(
@@ -697,8 +737,12 @@ mod test {
 
             // Fetch `tx_read_storage_key` again, now it should be in-memory
             {
-                let (_module, _store) =
-                    cache.fetch_or_compile(&tx_read_storage_key.code).unwrap();
+                let fetched = cache.fetch(&tx_read_storage_key.hash).unwrap();
+                assert_matches!(
+                    fetched,
+                    Some(_),
+                    "The module must be in memory"
+                );
 
                 let in_memory = cache.in_memory.read().unwrap();
                 assert_matches!(
@@ -736,9 +780,20 @@ mod test {
             {
                 let mut cache = cache.read_only();
 
+                let fetched = cache.fetch(&tx_no_op.hash).unwrap();
+                assert_matches!(
+                    fetched,
+                    Some(_),
+                    "The module must be in cache"
+                );
+
                 // Fetching with read-only should not modify the in-memory cache
-                let (_module, _store) =
-                    cache.fetch_or_compile(&tx_no_op.code).unwrap();
+                let fetched = cache.compile_or_fetch(&tx_no_op.code).unwrap();
+                assert_matches!(
+                    fetched,
+                    Some(_),
+                    "The module should be compiled"
+                );
 
                 let in_memory = cache.in_memory.read().unwrap();
                 assert_matches!(
@@ -766,7 +821,7 @@ mod test {
 
         // Try to compile it
         let error = cache
-            .fetch_or_compile(&invalid_wasm)
+            .compile_or_fetch(&invalid_wasm)
             .expect_err("Compilation should fail");
         println!("Error: {}", error);
 
@@ -789,8 +844,8 @@ mod test {
     #[test]
     fn test_pre_compile_valid_wasm() {
         // Load some WASMs and find their hashes and in-memory size
-        let vp_always_true = load_wasm(VP_ALWAYS_TRUE);
-        let vp_eval = load_wasm(VP_EVAL);
+        let vp_always_true = load_wasm(TestWasms::VpAlwaysTrue.path());
+        let vp_eval = load_wasm(TestWasms::VpEval.path());
 
         // Create a new cache with the limit set to
         // `max(vp_always_true.size, vp_eval.size) + 1 + extra_bytes`
@@ -817,8 +872,12 @@ mod test {
 
             // Now fetch it to wait for it finish compilation
             {
-                let (_module, _store) =
-                    cache.fetch_or_compile(&vp_always_true.code).unwrap();
+                let fetched = cache.fetch(&vp_always_true.hash).unwrap();
+                assert_matches!(
+                    fetched,
+                    Some(_),
+                    "The module must be in cache"
+                );
 
                 let in_memory = cache.in_memory.read().unwrap();
                 assert_matches!(
@@ -856,8 +915,12 @@ mod test {
 
             // Now fetch it to wait for it finish compilation
             {
-                let (_module, _store) =
-                    cache.fetch_or_compile(&vp_eval.code).unwrap();
+                let fetched = cache.fetch(&vp_eval.hash).unwrap();
+                assert_matches!(
+                    fetched,
+                    Some(_),
+                    "The module must be in cache"
+                );
 
                 let in_memory = cache.in_memory.read().unwrap();
                 assert_matches!(
@@ -906,10 +969,12 @@ mod test {
 
         // Now fetch it to wait for it finish compilation
         {
-            let error = cache
-                .fetch_or_compile(&invalid_wasm)
-                .expect_err("Compilation should fail");
-            println!("Error: {}", error);
+            let fetched = cache.fetch(&hash).unwrap();
+            assert_matches!(
+                fetched,
+                None,
+                "There should be no entry for this hash in cache"
+            );
 
             let in_memory = cache.in_memory.read().unwrap();
             assert_matches!(
@@ -933,7 +998,7 @@ mod test {
     }
 
     /// Get the WASM code bytes, its hash and find the compiled module's size
-    fn load_wasm(file: impl AsRef<str>) -> WasmWithMeta {
+    fn load_wasm(file: impl AsRef<Path>) -> WasmWithMeta {
         // When `WeightScale` calls `loupe::size_of_val` in the cache, for some
         // reason it returns 8 bytes more than the same call in here.
         let extra_bytes = 8;
@@ -947,12 +1012,13 @@ mod test {
                 // No in-memory cache needed, but must be non-zero
                 1,
             );
-            let (module, _store) = cache.fetch_or_compile(&code).unwrap();
-            loupe::size_of_val(&module) + HASH_BYTES + extra_bytes
+            let (module, _store) =
+                cache.compile_or_fetch(&code).unwrap().unwrap();
+            loupe::size_of_val(&module) + HASH_LENGTH + extra_bytes
         };
         println!(
             "Compiled module {} size including the hash: {} ({})",
-            file,
+            file.to_string_lossy(),
             Byte::from_bytes(size as u128).get_appropriate_unit(true),
             size,
         );

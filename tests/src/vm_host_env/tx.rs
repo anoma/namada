@@ -16,6 +16,7 @@ use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::run::Error;
 use namada::vm::wasm::{self, TxCache, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
+use namada_core::types::hash::Hash;
 use namada_tx_prelude::{BorshSerialize, Ctx};
 use tempfile::TempDir;
 
@@ -62,11 +63,13 @@ impl Default for TestTxEnv {
         let (tx_wasm_cache, tx_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
+        let wl_storage = WlStorage {
+            storage: TestStorage::default(),
+            write_log: WriteLog::default(),
+        };
+        let chain_id = wl_storage.storage.chain_id.clone();
         Self {
-            wl_storage: WlStorage {
-                storage: TestStorage::default(),
-                write_log: WriteLog::default(),
-            },
+            wl_storage,
             iterators: PrefixIterators::default(),
             gas_meter: BlockGasMeter::default(),
             tx_index: TxIndex::default(),
@@ -76,7 +79,7 @@ impl Default for TestTxEnv {
             vp_cache_dir,
             tx_wasm_cache,
             tx_cache_dir,
-            tx: Tx::new(vec![], None),
+            tx: Tx::new(vec![], None, chain_id, None),
         }
     }
 }
@@ -99,21 +102,30 @@ impl TestTxEnv {
         vp_whitelist: Option<Vec<String>>,
         tx_whitelist: Option<Vec<String>>,
     ) {
-        let _ = parameters::update_epoch_parameter(
-            &mut self.wl_storage.storage,
+        parameters::update_epoch_parameter(
+            &mut self.wl_storage,
             &epoch_duration.unwrap_or(EpochDuration {
                 min_num_of_blocks: 1,
                 min_duration: DurationSecs(5),
             }),
-        );
-        let _ = parameters::update_tx_whitelist_parameter(
-            &mut self.wl_storage.storage,
+        )
+        .unwrap();
+        parameters::update_tx_whitelist_parameter(
+            &mut self.wl_storage,
             tx_whitelist.unwrap_or_default(),
-        );
-        let _ = parameters::update_vp_whitelist_parameter(
-            &mut self.wl_storage.storage,
+        )
+        .unwrap();
+        parameters::update_vp_whitelist_parameter(
+            &mut self.wl_storage,
             vp_whitelist.unwrap_or_default(),
-        );
+        )
+        .unwrap();
+    }
+
+    pub fn store_wasm_code(&mut self, code: Vec<u8>) {
+        let hash = Hash::sha256(&code);
+        let key = Key::wasm_code(&hash);
+        self.wl_storage.storage.write(&key, code).unwrap();
     }
 
     /// Fake accounts' existence by initializing their VP storage.
@@ -145,7 +157,7 @@ impl TestTxEnv {
     /// Commit the genesis state. Typically, you'll want to call this after
     /// setting up the initial state, before running a transaction.
     pub fn commit_genesis(&mut self) {
-        self.wl_storage.commit_genesis().unwrap();
+        self.wl_storage.commit_block().unwrap();
     }
 
     pub fn commit_tx_and_block(&mut self) {
@@ -202,7 +214,7 @@ impl TestTxEnv {
             &mut self.wl_storage.write_log,
             &mut self.gas_meter,
             &self.tx_index,
-            &self.tx.code,
+            &self.tx.code_or_hash,
             self.tx.data.as_ref().unwrap_or(&empty_data),
             &mut self.vp_wasm_cache,
             &mut self.tx_wasm_cache,
@@ -424,7 +436,7 @@ mod native_tx_host_env {
     native_host_fn!(tx_get_chain_id(result_ptr: u64));
     native_host_fn!(tx_get_block_height() -> u64);
     native_host_fn!(tx_get_tx_index() -> u32);
-    native_host_fn!(tx_get_block_time() -> i64);
+    native_host_fn!(tx_get_block_header(height: u64) -> i64);
     native_host_fn!(tx_get_block_hash(result_ptr: u64));
     native_host_fn!(tx_get_block_epoch() -> u64);
     native_host_fn!(tx_get_native_token(result_ptr: u64));

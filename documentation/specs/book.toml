@@ -15,8 +15,6 @@ git-branch = "main"
 [output.html.search]
 expand = true
 
-[output.katex]
-
 [output.linkcheck]
 
 [preprocessor.katex]

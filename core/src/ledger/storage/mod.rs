@@ -11,8 +11,8 @@ mod wl_storage;
 pub mod write_log;
 
 use core::fmt::Debug;
+use std::cmp::Ordering;
 
-use merkle_tree::StorageBytes;
 pub use merkle_tree::{
     MembershipProof, MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite,
     StoreType,
@@ -20,7 +20,7 @@ pub use merkle_tree::{
 use thiserror::Error;
 pub use traits::{Sha256Hasher, StorageHasher};
 pub use wl_storage::{
-    iter_prefix_post, iter_prefix_pre, PrefixIter, WlStorage,
+    iter_prefix_post, iter_prefix_pre, PrefixIter, TempWlStorage, WlStorage,
 };
 
 #[cfg(feature = "wasm-runtime")]
@@ -37,6 +37,7 @@ use crate::types::address::{
     masp, Address, EstablishedAddressGen, InternalAddress,
 };
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
+use crate::types::hash::{Error as HashError, Hash};
 // TODO
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::internal::TxQueue;
@@ -99,6 +100,8 @@ where
     /// Wrapper txs to be decrypted in the next block proposal
     #[cfg(feature = "ferveo-tpke")]
     pub tx_queue: TxQueue,
+    /// How many block heights in the past can the storage be queried
+    pub storage_read_past_height_limit: Option<u64>,
 }
 
 /// The block storage data
@@ -145,6 +148,8 @@ pub enum Error {
     BorshCodingError(std::io::Error),
     #[error("Merkle tree at the height {height} is not stored")]
     NoMerkleTree { height: BlockHeight },
+    #[error("Code hash error: {0}")]
+    InvalidCodeHash(HashError),
 }
 
 /// The block's state as stored in the database.
@@ -218,8 +223,14 @@ pub trait DB: std::fmt::Debug {
     /// Read the last committed block's metadata
     fn read_last_block(&mut self) -> Result<Option<BlockStateRead>>;
 
-    /// Write block's metadata
-    fn write_block(&mut self, state: BlockStateWrite) -> Result<()>;
+    /// Write block's metadata. Merkle tree sub-stores are committed only when
+    /// `is_full_commit` is `true` (typically on a beginning of a new epoch).
+    fn write_block(
+        &mut self,
+        state: BlockStateWrite,
+        batch: &mut Self::WriteBatch,
+        is_full_commit: bool,
+    ) -> Result<()>;
 
     /// Read the block header with the given height from the DB
     fn read_block_header(&self, height: BlockHeight) -> Result<Option<Header>>;
@@ -228,7 +239,7 @@ pub trait DB: std::fmt::Debug {
     fn read_merkle_tree_stores(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<MerkleTreeStoresRead>>;
+    ) -> Result<Option<(BlockHeight, MerkleTreeStoresRead)>>;
 
     /// Read the latest value for account subspace key from the DB
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>>;
@@ -289,6 +300,14 @@ pub trait DB: std::fmt::Debug {
         height: BlockHeight,
         key: &Key,
     ) -> Result<i64>;
+
+    /// Prune Merkle tree stores at the given epoch
+    fn prune_merkle_tree_stores(
+        &mut self,
+        batch: &mut Self::WriteBatch,
+        pruned_epoch: Epoch,
+        pred_epochs: &Epochs,
+    ) -> Result<()>;
 }
 
 /// A database prefix iterator.
@@ -306,20 +325,16 @@ pub trait DBIter<'iter> {
 
     /// Read results subspace key value pairs from the DB
     fn iter_results(&'iter self) -> Self::PrefixIter;
+
+    /// Read subspace old diffs at a given height
+    fn iter_old_diffs(&'iter self, height: BlockHeight) -> Self::PrefixIter;
+
+    /// Read subspace new diffs at a given height
+    fn iter_new_diffs(&'iter self, height: BlockHeight) -> Self::PrefixIter;
 }
 
 /// Atomic batch write.
-pub trait DBWriteBatch {
-    /// Insert a value into the database under the given key.
-    fn put<K, V>(&mut self, key: K, value: V)
-    where
-        K: AsRef<[u8]>,
-        V: AsRef<[u8]>;
-
-    /// Removes the database entry for key. Does nothing if the key was not
-    /// found.
-    fn delete<K: AsRef<[u8]>>(&mut self, key: K);
-}
+pub trait DBWriteBatch {}
 
 impl<D, H> Storage<D, H>
 where
@@ -332,6 +347,7 @@ where
         chain_id: ChainId,
         native_token: Address,
         cache: Option<&D::Cache>,
+        storage_read_past_height_limit: Option<u64>,
     ) -> Self {
         let block = BlockStorage {
             tree: MerkleTree::default(),
@@ -359,6 +375,7 @@ where
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: TxQueue::default(),
             native_token,
+            storage_read_past_height_limit,
         }
     }
 
@@ -379,7 +396,6 @@ where
             tx_queue,
         }) = self.db.read_last_block()?
         {
-            self.block.tree = MerkleTree::new(merkle_tree_stores);
             self.block.hash = hash;
             self.block.height = height;
             self.block.epoch = epoch;
@@ -390,7 +406,10 @@ where
             self.next_epoch_min_start_height = next_epoch_min_start_height;
             self.next_epoch_min_start_time = next_epoch_min_start_time;
             self.address_gen = address_gen;
-            if self.last_epoch.0 > 1 {
+            // Rebuild Merkle tree
+            self.block.tree = MerkleTree::new(merkle_tree_stores)
+                .or_else(|_| self.get_merkle_tree(height))?;
+            if self.last_epoch.0 > 0 {
                 // The derived conversions will be placed in MASP address space
                 let masp_addr = masp();
                 let key_prefix: Key = masp_addr.to_db_key().into();
@@ -429,7 +448,10 @@ where
     }
 
     /// Persist the current block's state to the database
-    pub fn commit_block(&mut self) -> Result<()> {
+    pub fn commit_block(&mut self, mut batch: D::WriteBatch) -> Result<()> {
+        // All states are written only when the first height or a new epoch
+        let is_full_commit =
+            self.block.height.0 == 1 || self.last_epoch != self.block.epoch;
         let state = BlockStateWrite {
             merkle_tree_stores: self.block.tree.stores(),
             header: self.header.as_ref(),
@@ -444,11 +466,15 @@ where
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: &self.tx_queue,
         };
-        self.db.write_block(state)?;
+        self.db.write_block(state, &mut batch, is_full_commit)?;
         self.last_height = self.block.height;
         self.last_epoch = self.block.epoch;
         self.header = None;
-        Ok(())
+        if is_full_commit {
+            // prune old merkle tree stores
+            self.prune_merkle_tree_stores(&mut batch)?;
+        }
+        self.db.exec_batch(batch)
     }
 
     /// Find the root hash of the merkle tree
@@ -575,18 +601,25 @@ where
         Ok(())
     }
 
-    /// Get a validity predicate for the given account address and the gas cost
-    /// for reading it.
+    /// Get the hash of a validity predicate for the given account address and
+    /// the gas cost for reading it.
     pub fn validity_predicate(
         &self,
         addr: &Address,
-    ) -> Result<(Option<Vec<u8>>, u64)> {
+    ) -> Result<(Option<Hash>, u64)> {
         let key = if let Address::Implicit(_) = addr {
             parameters::storage::get_implicit_vp_key()
         } else {
             Key::validity_predicate(addr)
         };
-        self.read(&key)
+        match self.read(&key)? {
+            (Some(value), gas) => {
+                let vp_code_hash = Hash::try_from(&value[..])
+                    .map_err(Error::InvalidCodeHash)?;
+                Ok((Some(vp_code_hash), gas))
+            }
+            (None, gas) => Ok((None, gas)),
+        }
     }
 
     #[allow(dead_code)]
@@ -611,43 +644,99 @@ where
         (self.block.hash.clone(), BLOCK_HASH_LENGTH as _)
     }
 
+    /// Get the Merkle tree with stores and diffs in the DB
+    /// Use `self.block.tree` if you want that of the current block height
+    pub fn get_merkle_tree(
+        &self,
+        height: BlockHeight,
+    ) -> Result<MerkleTree<H>> {
+        let (stored_height, stores) = self
+            .db
+            .read_merkle_tree_stores(height)?
+            .ok_or(Error::NoMerkleTree { height })?;
+        // Restore the tree state with diffs
+        let mut tree = MerkleTree::<H>::new(stores).expect("invalid stores");
+        let mut target_height = stored_height;
+        while target_height < height {
+            target_height = target_height.next_height();
+            let mut old_diff_iter = self.db.iter_old_diffs(target_height);
+            let mut new_diff_iter = self.db.iter_new_diffs(target_height);
+
+            let mut old_diff = old_diff_iter.next();
+            let mut new_diff = new_diff_iter.next();
+            loop {
+                match (&old_diff, &new_diff) {
+                    (Some(old), Some(new)) => {
+                        let old_key = Key::parse(old.0.clone())
+                            .expect("the key should be parsable");
+                        let new_key = Key::parse(new.0.clone())
+                            .expect("the key should be parsable");
+                        // compare keys as String
+                        match old.0.cmp(&new.0) {
+                            Ordering::Equal => {
+                                // the value was updated
+                                tree.update(&new_key, new.1.clone())?;
+                                old_diff = old_diff_iter.next();
+                                new_diff = new_diff_iter.next();
+                            }
+                            Ordering::Less => {
+                                // the value was deleted
+                                tree.delete(&old_key)?;
+                                old_diff = old_diff_iter.next();
+                            }
+                            Ordering::Greater => {
+                                // the value was inserted
+                                tree.update(&new_key, new.1.clone())?;
+                                new_diff = new_diff_iter.next();
+                            }
+                        }
+                    }
+                    (Some(old), None) => {
+                        // the value was deleted
+                        let key = Key::parse(old.0.clone())
+                            .expect("the key should be parsable");
+                        tree.delete(&key)?;
+                        old_diff = old_diff_iter.next();
+                    }
+                    (None, Some(new)) => {
+                        // the value was inserted
+                        let key = Key::parse(new.0.clone())
+                            .expect("the key should be parsable");
+                        tree.update(&key, new.1.clone())?;
+                        new_diff = new_diff_iter.next();
+                    }
+                    (None, None) => break,
+                }
+            }
+        }
+        Ok(tree)
+    }
+
     /// Get the existence proof
     #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
     pub fn get_existence_proof(
         &self,
         key: &Key,
-        value: StorageBytes,
+        value: merkle_tree::StorageBytes,
         height: BlockHeight,
     ) -> Result<Proof> {
         use std::array;
 
-        if height >= self.get_block_height().0 {
-            let MembershipProof::ICS23(proof) = self
-                .block
-                .tree
+        if height > self.last_height {
+            Err(Error::Temporary {
+                error: format!(
+                    "The block at the height {} hasn't committed yet",
+                    height,
+                ),
+            })
+        } else {
+            let tree = self.get_merkle_tree(height)?;
+            let MembershipProof::ICS23(proof) = tree
                 .get_sub_tree_existence_proof(array::from_ref(key), vec![value])
                 .map_err(Error::MerkleTreeError)?;
-            self.block
-                .tree
-                .get_sub_tree_proof(key, proof)
+            tree.get_sub_tree_proof(key, proof)
                 .map(Into::into)
                 .map_err(Error::MerkleTreeError)
-        } else {
-            match self.db.read_merkle_tree_stores(height)? {
-                Some(stores) => {
-                    let tree = MerkleTree::<H>::new(stores);
-                    let MembershipProof::ICS23(proof) = tree
-                        .get_sub_tree_existence_proof(
-                            array::from_ref(key),
-                            vec![value],
-                        )
-                        .map_err(Error::MerkleTreeError)?;
-                    tree.get_sub_tree_proof(key, proof)
-                        .map(Into::into)
-                        .map_err(Error::MerkleTreeError)
-                }
-                None => Err(Error::NoMerkleTree { height }),
-            }
         }
     }
 
@@ -658,20 +747,18 @@ where
         key: &Key,
         height: BlockHeight,
     ) -> Result<Proof> {
-        if height >= self.last_height {
-            self.block
-                .tree
+        if height > self.last_height {
+            Err(Error::Temporary {
+                error: format!(
+                    "The block at the height {} hasn't committed yet",
+                    height,
+                ),
+            })
+        } else {
+            self.get_merkle_tree(height)?
                 .get_non_existence_proof(key)
                 .map(Into::into)
                 .map_err(Error::MerkleTreeError)
-        } else {
-            match self.db.read_merkle_tree_stores(height)? {
-                Some(stores) => MerkleTree::<H>::new(stores)
-                    .get_non_existence_proof(key)
-                    .map(Into::into)
-                    .map_err(Error::MerkleTreeError),
-                None => Err(Error::NoMerkleTree { height }),
-            }
         }
     }
 
@@ -721,60 +808,15 @@ where
         }
     }
 
-    /// Initialize a new epoch when the current epoch is finished. Returns
-    /// `true` on a new epoch.
-    pub fn update_epoch(
-        &mut self,
-        height: BlockHeight,
-        time: DateTimeUtc,
-    ) -> Result<bool> {
-        let (parameters, _gas) =
-            parameters::read(self).expect("Couldn't read protocol parameters");
+    /// Get the timestamp of the last committed block, or the current timestamp
+    /// if no blocks have been produced yet
+    pub fn get_last_block_timestamp(&self) -> Result<DateTimeUtc> {
+        let last_block_height = self.get_block_height().0;
 
-        match self.update_epoch_blocks_delay.as_mut() {
-            None => {
-                // Check if the new epoch minimum start height and start time
-                // have been fulfilled. If so, queue the next
-                // epoch to start two blocks into the future so
-                // as to align validator set updates + etc with
-                // tendermint. This is because tendermint has a two block delay
-                // to validator changes.
-                let current_epoch_duration_satisfied = height
-                    >= self.next_epoch_min_start_height
-                    && time >= self.next_epoch_min_start_time;
-                if current_epoch_duration_satisfied {
-                    self.update_epoch_blocks_delay =
-                        Some(EPOCH_SWITCH_BLOCKS_DELAY);
-                }
-            }
-            Some(blocks_until_switch) => {
-                *blocks_until_switch -= 1;
-            }
-        };
-        let new_epoch = matches!(self.update_epoch_blocks_delay, Some(0));
-
-        if new_epoch {
-            // Reset the delay tracker
-            self.update_epoch_blocks_delay = None;
-
-            // Begin a new epoch
-            self.block.epoch = self.block.epoch.next();
-            let EpochDuration {
-                min_num_of_blocks,
-                min_duration,
-            } = parameters.epoch_duration;
-            self.next_epoch_min_start_height = height + min_num_of_blocks;
-            self.next_epoch_min_start_time = time + min_duration;
-            // TODO put this into PoS parameters and pass it to tendermint
-            // `consensus_params` on `InitChain` and `EndBlock`
-            let evidence_max_age_num_blocks: u64 = 100000;
-            self.block
-                .pred_epochs
-                .new_epoch(height, evidence_max_age_num_blocks);
-            tracing::info!("Began a new epoch {}", self.block.epoch);
-        }
-        self.update_epoch_in_merkle_tree()?;
-        Ok(new_epoch)
+        Ok(self
+            .db
+            .read_block_header(last_block_height)?
+            .map_or_else(DateTimeUtc::now, |header| header.time))
     }
 
     /// Get the current conversions
@@ -848,6 +890,38 @@ where
         self.db
             .batch_delete_subspace_val(batch, self.block.height, key)
     }
+
+    // Prune merkle tree stores. Use after updating self.block.height in the
+    // commit.
+    fn prune_merkle_tree_stores(
+        &mut self,
+        batch: &mut D::WriteBatch,
+    ) -> Result<()> {
+        if let Some(limit) = self.storage_read_past_height_limit {
+            if self.last_height.0 <= limit {
+                return Ok(());
+            }
+
+            let min_height = (self.last_height.0 - limit).into();
+            if let Some(epoch) = self.block.pred_epochs.get_epoch(min_height) {
+                if epoch.0 == 0 {
+                    return Ok(());
+                } else {
+                    // get the start height of the previous epoch because the
+                    // Merkle tree stores at the starting
+                    // height of the epoch would be used
+                    // to restore stores at a height (> min_height) in the epoch
+                    self.db.prune_merkle_tree_stores(
+                        batch,
+                        epoch.prev(),
+                        &self.block.pred_epochs,
+                    )?;
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl From<MerkleTreeError> for Error {
@@ -910,6 +984,7 @@ pub mod testing {
                 #[cfg(feature = "ferveo-tpke")]
                 tx_queue: TxQueue::default(),
                 native_token: address::nam(),
+                storage_read_past_height_limit: Some(1000),
             }
         }
     }
@@ -1036,16 +1111,16 @@ mod tests {
             min_blocks_delta, min_duration_delta, max_time_per_block_delta)
             in arb_and_epoch_duration_start_and_block())
         {
-            let storage = TestStorage {
-                next_epoch_min_start_height:
-                    start_height + epoch_duration.min_num_of_blocks,
-                next_epoch_min_start_time:
-                    start_time + epoch_duration.min_duration,
+            let mut wl_storage =
+            TestWlStorage {
+                storage: TestStorage {
+                    next_epoch_min_start_height:
+                        start_height + epoch_duration.min_num_of_blocks,
+                    next_epoch_min_start_time:
+                        start_time + epoch_duration.min_duration,
+                    ..Default::default()
+                },
                 ..Default::default()
-            };
-            let mut wl_storage = TestWlStorage {
-                write_log: Default::default(),
-                storage,
             };
 
             let mut parameters = Parameters {
@@ -1054,7 +1129,7 @@ mod tests {
                 max_expected_time_per_block: Duration::seconds(max_expected_time_per_block).into(),
                 vp_whitelist: vec![],
                 tx_whitelist: vec![],
-                implicit_vp: vec![],
+                implicit_vp_code_hash: Hash::zero(),
                 epochs_per_year: 100,
                 pos_gain_p: dec!(0.1),
                 pos_gain_d: dec!(0.1),
@@ -1065,14 +1140,14 @@ mod tests {
                 #[cfg(not(feature = "mainnet"))]
                 wrapper_tx_fees: None,
             };
-            parameters.init_storage(&mut wl_storage.storage);
+            parameters.init_storage(&mut wl_storage).unwrap();
 
             wl_storage.initalize_tokens(token::Amount::from(1000), token::Amount::from(500));
             let epoch_before = wl_storage.storage.last_epoch;
             assert_eq!(epoch_before, wl_storage.storage.block.epoch);
 
             // Try to apply the epoch update
-            wl_storage.storage.update_epoch(block_height, block_time).unwrap();
+            wl_storage.update_epoch(block_height, block_time).unwrap();
 
             // Test for 1.
             if block_height.0 - start_height.0
@@ -1089,13 +1164,13 @@ mod tests {
 
                 let block_height = block_height + 1;
                 let block_time = block_time + Duration::seconds(1);
-                wl_storage.storage.update_epoch(block_height, block_time).unwrap();
+                wl_storage.update_epoch(block_height, block_time).unwrap();
                 assert_eq!(wl_storage.storage.block.epoch, epoch_before);
                 assert_eq!(wl_storage.storage.update_epoch_blocks_delay, Some(1));
 
                 let block_height = block_height + 1;
                 let block_time = block_time + Duration::seconds(1);
-                wl_storage.storage.update_epoch(block_height, block_time).unwrap();
+                wl_storage.update_epoch(block_height, block_time).unwrap();
                 assert_eq!(wl_storage.storage.block.epoch, epoch_before.next());
                 assert!(wl_storage.storage.update_epoch_blocks_delay.is_none());
 
@@ -1130,14 +1205,8 @@ mod tests {
                 Duration::seconds(min_duration + min_duration_delta).into();
             parameters.max_expected_time_per_block =
                 Duration::seconds(max_expected_time_per_block + max_time_per_block_delta).into();
-            parameters::update_max_expected_time_per_block_parameter(
-                &mut wl_storage.storage,
-                &parameters.max_expected_time_per_block
-            ).unwrap();
-            parameters::update_epoch_parameter(
-                &mut wl_storage.storage,
-                &parameters.epoch_duration
-            ).unwrap();
+            parameters::update_max_expected_time_per_block_parameter(&mut wl_storage, &parameters.max_expected_time_per_block).unwrap();
+            parameters::update_epoch_parameter(&mut wl_storage, &parameters.epoch_duration).unwrap();
 
             // Test for 2.
             let epoch_before = wl_storage.storage.block.epoch;
@@ -1149,31 +1218,31 @@ mod tests {
 
             // No update should happen before both epoch duration conditions are
             // satisfied
-            wl_storage.storage.update_epoch(height_before_update, time_before_update).unwrap();
+            wl_storage.update_epoch(height_before_update, time_before_update).unwrap();
             assert_eq!(wl_storage.storage.block.epoch, epoch_before);
             assert!(wl_storage.storage.update_epoch_blocks_delay.is_none());
-            wl_storage.storage.update_epoch(height_of_update, time_before_update).unwrap();
+            wl_storage.update_epoch(height_of_update, time_before_update).unwrap();
             assert_eq!(wl_storage.storage.block.epoch, epoch_before);
             assert!(wl_storage.storage.update_epoch_blocks_delay.is_none());
-            wl_storage.storage.update_epoch(height_before_update, time_of_update).unwrap();
+            wl_storage.update_epoch(height_before_update, time_of_update).unwrap();
             assert_eq!(wl_storage.storage.block.epoch, epoch_before);
             assert!(wl_storage.storage.update_epoch_blocks_delay.is_none());
 
             // Update should be enqueued for 2 blocks in the future starting at or after this height and time
-            wl_storage.storage.update_epoch(height_of_update, time_of_update).unwrap();
+            wl_storage.update_epoch(height_of_update, time_of_update).unwrap();
             assert_eq!(wl_storage.storage.block.epoch, epoch_before);
             assert_eq!(wl_storage.storage.update_epoch_blocks_delay, Some(2));
 
             // Increment the block height and time to simulate new blocks now
             let height_of_update = height_of_update + 1;
             let time_of_update = time_of_update + Duration::seconds(1);
-            wl_storage.storage.update_epoch(height_of_update, time_of_update).unwrap();
+            wl_storage.update_epoch(height_of_update, time_of_update).unwrap();
             assert_eq!(wl_storage.storage.block.epoch, epoch_before);
             assert_eq!(wl_storage.storage.update_epoch_blocks_delay, Some(1));
 
             let height_of_update = height_of_update + 1;
             let time_of_update = time_of_update + Duration::seconds(1);
-            wl_storage.storage.update_epoch(height_of_update, time_of_update).unwrap();
+            wl_storage.update_epoch(height_of_update, time_of_update).unwrap();
             assert_eq!(wl_storage.storage.block.epoch, epoch_before.next());
             assert!(wl_storage.storage.update_epoch_blocks_delay.is_none());
             // The next epoch's minimum duration should change
@@ -1185,8 +1254,9 @@ mod tests {
             // Increment the block height and time once more to make sure things reset
             let height_of_update = height_of_update + 1;
             let time_of_update = time_of_update + Duration::seconds(1);
-            wl_storage.storage.update_epoch(height_of_update, time_of_update).unwrap();
+            wl_storage.update_epoch(height_of_update, time_of_update).unwrap();
             assert_eq!(wl_storage.storage.block.epoch, epoch_before.next());
+            assert!(wl_storage.storage.update_epoch_blocks_delay.is_none());
         }
     }
 }

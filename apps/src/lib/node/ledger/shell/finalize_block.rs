@@ -2,15 +2,14 @@
 
 use std::collections::HashMap;
 
-use namada::ledger::inflation::{self, RewardsController};
+use data_encoding::HEXUPPER;
 use namada::ledger::parameters::storage as params_storage;
 use namada::ledger::pos::types::{decimal_mult_u64, into_tm_voting_power};
-use namada::ledger::pos::{
-    namada_proof_of_stake, staking_token_address, ADDRESS as POS_ADDRESS,
-};
-use namada::ledger::protocol;
+use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
+use namada::ledger::storage_api::token::credit_tokens;
 use namada::ledger::storage_api::{StorageRead, StorageWrite};
+use namada::ledger::{inflation, protocol, replay_protection};
 use namada::proof_of_stake::{
     delegator_rewards_products_handle, find_validator_by_raw_hash,
     read_last_block_proposer_address, read_pos_params, read_total_stake,
@@ -19,15 +18,16 @@ use namada::proof_of_stake::{
     write_last_block_proposer_address,
 };
 use namada::types::address::Address;
-#[cfg(feature = "abcipp")]
-use namada::types::key::{tm_consensus_key_raw_hash, tm_raw_hash_to_string};
+use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::types::token::{total_supply_key, Amount};
 use rust_decimal::prelude::Decimal;
 
 use super::governance::execute_governance_proposals;
 use super::*;
-use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
+use crate::facade::tendermint_proto::abci::{
+    Misbehavior as Evidence, VoteInfo,
+};
 use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 use crate::node::ledger::shell::stats::InternalStats;
 
@@ -101,6 +101,10 @@ where
             )?;
         }
 
+        // Invariant: This has to be applied after
+        // `copy_validator_sets_and_positions` if we're starting a new epoch
+        self.slash();
+
         let wrapper_fees = self.get_wrapper_tx_fees();
         let mut stats = InternalStats::default();
 
@@ -173,16 +177,48 @@ where
                 tx_event["gas_used"] = "0".into();
                 response.events.push(tx_event);
                 // if the rejected tx was decrypted, remove it
-                // from the queue of txs to be processed
+                // from the queue of txs to be processed and remove the hash
+                // from storage
                 if let TxType::Decrypted(_) = &tx_type {
-                    self.wl_storage.storage.tx_queue.pop();
+                    let tx_hash = self
+                        .wl_storage
+                        .storage
+                        .tx_queue
+                        .pop()
+                        .expect("Missing wrapper tx in queue")
+                        .tx
+                        .tx_hash;
+                    let tx_hash_key =
+                        replay_protection::get_tx_hash_key(&tx_hash);
+                    self.wl_storage
+                        .storage
+                        .delete(&tx_hash_key)
+                        .expect("Error while deleting tx hash from storage");
                 }
                 continue;
             }
 
-            let mut tx_event = match &tx_type {
+            let (mut tx_event, tx_unsigned_hash) = match &tx_type {
                 TxType::Wrapper(wrapper) => {
                     let mut tx_event = Event::new_tx_event(&tx_type, height.0);
+
+                    // Writes both txs hash to storage
+                    let tx = Tx::try_from(processed_tx.tx.as_ref()).unwrap();
+                    let wrapper_tx_hash_key =
+                        replay_protection::get_tx_hash_key(&hash::Hash(
+                            tx.unsigned_hash(),
+                        ));
+                    self.wl_storage
+                        .storage
+                        .write(&wrapper_tx_hash_key, vec![])
+                        .expect("Error while writing tx hash to storage");
+
+                    let inner_tx_hash_key =
+                        replay_protection::get_tx_hash_key(&wrapper.tx_hash);
+                    self.wl_storage
+                        .storage
+                        .write(&inner_tx_hash_key, vec![])
+                        .expect("Error while writing tx hash to storage");
 
                     #[cfg(not(feature = "mainnet"))]
                     let has_valid_pow =
@@ -244,11 +280,18 @@ where
                         #[cfg(not(feature = "mainnet"))]
                         has_valid_pow,
                     });
-                    tx_event
+                    (tx_event, None)
                 }
                 TxType::Decrypted(inner) => {
                     // We remove the corresponding wrapper tx from the queue
-                    self.wl_storage.storage.tx_queue.pop();
+                    let wrapper_hash = self
+                        .wl_storage
+                        .storage
+                        .tx_queue
+                        .pop()
+                        .expect("Missing wrapper tx in queue")
+                        .tx
+                        .tx_hash;
                     let mut event = Event::new_tx_event(&tx_type, height.0);
 
                     match inner {
@@ -267,8 +310,7 @@ where
                             event["code"] = ErrorCodes::Undecryptable.into();
                         }
                     }
-
-                    event
+                    (event, Some(wrapper_hash))
                 }
                 TxType::Raw(_) => {
                     tracing::error!(
@@ -320,7 +362,7 @@ where
                                 .results
                                 .accept(tx_index);
                         }
-                        if let Some(ibc_event) = &result.ibc_event {
+                        for ibc_event in &result.ibc_events {
                             // Add the IBC event besides the tx_event
                             let event = Event::from(ibc_event.clone());
                             response.events.push(event);
@@ -361,6 +403,25 @@ where
                         msg
                     );
                     stats.increment_errored_txs();
+
+                    // If transaction type is Decrypted and failed because of
+                    // out of gas, remove its hash from storage to allow
+                    // rewrapping it
+                    if let Some(hash) = tx_unsigned_hash {
+                        if let Error::TxApply(protocol::Error::GasError(namada::ledger::gas::Error::TransactionGasExceededError)) =
+                            msg
+                        {
+                            let tx_hash_key =
+                                replay_protection::get_tx_hash_key(&hash);
+                            self.wl_storage
+                                .storage
+                                .delete(&tx_hash_key)
+                                .expect(
+                                "Error while deleting tx hash key from storage",
+                            );
+                        }
+                    }
+
                     self.wl_storage.drop_tx();
                     tx_event["gas_used"] = self
                         .gas_meter
@@ -396,15 +457,16 @@ where
                 tracing::debug!(
                     "Found last block proposer: {proposer_address}"
                 );
+                let votes = pos_votes_from_abci(&self.wl_storage, &req.votes);
                 namada_proof_of_stake::log_block_rewards(
                     &mut self.wl_storage,
                     if new_epoch {
-                        current_epoch - 1
+                        current_epoch.prev()
                     } else {
                         current_epoch
                     },
                     &proposer_address,
-                    &req.votes,
+                    votes,
                 )?;
             }
             None => {
@@ -483,11 +545,8 @@ where
 
         let new_epoch = self
             .wl_storage
-            .storage
             .update_epoch(height, header_time)
             .expect("Must be able to update epoch");
-
-        self.slash();
         (height, new_epoch)
     }
 
@@ -501,39 +560,39 @@ where
                 .expect("Could not find the PoS parameters");
         // TODO ABCI validator updates on block H affects the validator set
         // on block H+2, do we need to update a block earlier?
-        // self.wl_storage.validator_set_update(current_epoch, |update| {
-        namada_proof_of_stake::validator_set_update_tendermint(
-            &self.wl_storage,
-            &pos_params,
-            current_epoch,
-            |update| {
-                let (consensus_key, power) = match update {
-                    ValidatorSetUpdate::Consensus(ConsensusValidator {
-                        consensus_key,
-                        bonded_stake,
-                    }) => {
-                        let power: i64 = into_tm_voting_power(
-                            pos_params.tm_votes_per_token,
+        response.validator_updates =
+            namada_proof_of_stake::validator_set_update_tendermint(
+                &self.wl_storage,
+                &pos_params,
+                current_epoch,
+                |update| {
+                    let (consensus_key, power) = match update {
+                        ValidatorSetUpdate::Consensus(ConsensusValidator {
+                            consensus_key,
                             bonded_stake,
-                        );
-                        (consensus_key, power)
-                    }
-                    ValidatorSetUpdate::Deactivated(consensus_key) => {
-                        // Any validators that have been dropped from the
-                        // consensus set must have voting power set to 0 to
-                        // remove them from the conensus set
-                        let power = 0_i64;
-                        (consensus_key, power)
-                    }
-                };
-                let pub_key = TendermintPublicKey {
-                    sum: Some(key_to_tendermint(&consensus_key).unwrap()),
-                };
-                let pub_key = Some(pub_key);
-                let update = ValidatorUpdate { pub_key, power };
-                response.validator_updates.push(update);
-            },
-        );
+                        }) => {
+                            let power: i64 = into_tm_voting_power(
+                                pos_params.tm_votes_per_token,
+                                bonded_stake,
+                            );
+                            (consensus_key, power)
+                        }
+                        ValidatorSetUpdate::Deactivated(consensus_key) => {
+                            // Any validators that have been dropped from the
+                            // consensus set must have voting power set to 0 to
+                            // remove them from the conensus set
+                            let power = 0_i64;
+                            (consensus_key, power)
+                        }
+                    };
+                    let pub_key = TendermintPublicKey {
+                        sum: Some(key_to_tendermint(&consensus_key).unwrap()),
+                    };
+                    let pub_key = Some(pub_key);
+                    ValidatorUpdate { pub_key, power }
+                },
+            )
+            .expect("Must be able to update validator sets");
     }
 
     /// Calculate the new inflation rate, mint the new tokens to the PoS
@@ -568,7 +627,9 @@ where
             .expect("PoS inflation rate should exist in storage");
         // Read from PoS storage
         let total_tokens = self
-            .read_storage_key(&total_supply_key(&staking_token_address()))
+            .read_storage_key(&total_supply_key(&staking_token_address(
+                &self.wl_storage,
+            )))
             .expect("Total NAM balance should exist in storage");
         let pos_locked_supply =
             read_total_stake(&self.wl_storage, &params, last_epoch)?;
@@ -585,43 +646,39 @@ where
         let masp_d_gain = Decimal::new(1, 1);
 
         // Run rewards PD controller
-        let pos_controller = inflation::RewardsController::new(
-            pos_locked_supply,
+        let pos_controller = inflation::RewardsController {
+            locked_tokens: pos_locked_supply,
             total_tokens,
-            pos_locked_ratio_target,
-            pos_last_staked_ratio,
-            pos_max_inflation_rate,
-            token::Amount::from(pos_last_inflation_amount),
-            pos_p_gain_nom,
-            pos_d_gain_nom,
+            locked_ratio_target: pos_locked_ratio_target,
+            locked_ratio_last: pos_last_staked_ratio,
+            max_reward_rate: pos_max_inflation_rate,
+            last_inflation_amount: token::Amount::from(
+                pos_last_inflation_amount,
+            ),
+            p_gain_nom: pos_p_gain_nom,
+            d_gain_nom: pos_d_gain_nom,
             epochs_per_year,
-        );
-        let _masp_controller = inflation::RewardsController::new(
-            masp_locked_supply,
+        };
+        let _masp_controller = inflation::RewardsController {
+            locked_tokens: masp_locked_supply,
             total_tokens,
-            masp_locked_ratio_target,
-            masp_locked_ratio_last,
-            masp_max_inflation_rate,
-            token::Amount::from(masp_last_inflation_rate),
-            masp_p_gain,
-            masp_d_gain,
+            locked_ratio_target: masp_locked_ratio_target,
+            locked_ratio_last: masp_locked_ratio_last,
+            max_reward_rate: masp_max_inflation_rate,
+            last_inflation_amount: token::Amount::from(
+                masp_last_inflation_rate,
+            ),
+            p_gain_nom: masp_p_gain,
+            d_gain_nom: masp_d_gain,
             epochs_per_year,
-        );
+        };
 
         // Run the rewards controllers
         let inflation::ValsToUpdate {
             locked_ratio,
             inflation,
-        } = RewardsController::run(&pos_controller);
-        // let new_masp_vals = RewardsController::run(&_masp_controller);
-
-        // Mint tokens to the PoS account for the last epoch's inflation
-        inflation::mint_tokens(
-            &mut self.wl_storage,
-            &POS_ADDRESS,
-            &staking_token_address(),
-            Amount::from(inflation),
-        )?;
+        } = pos_controller.run();
+        // let new_masp_vals = _masp_controller.run();
 
         // Get the number of blocks in the last epoch
         let first_block_of_last_epoch = self
@@ -700,14 +757,34 @@ where
             )?;
         }
 
-        // TODO: Figure out how to deal with round-off to a whole number of
-        // tokens. May be tricky. TODO: Storing reward products
-        // as a Decimal suggests that no round-off should be done here,
-        // TODO: perhaps only upon withdrawal. But by truncating at
-        // withdrawal, may leave tokens in TDOD: the PoS account
-        // that are not accounted for. Is this an issue?
+        let staking_token = staking_token_address(&self.wl_storage);
+
+        // Mint tokens to the PoS account for the last epoch's inflation
+        let pos_reward_tokens =
+            Amount::from(inflation - reward_tokens_remaining);
+        tracing::info!(
+            "Minting tokens for PoS rewards distribution into the PoS \
+             account. Amount: {pos_reward_tokens}.",
+        );
+        credit_tokens(
+            &mut self.wl_storage,
+            &staking_token,
+            &address::POS,
+            pos_reward_tokens,
+        )?;
+
         if reward_tokens_remaining > 0 {
-            // TODO: do something here?
+            let amount = Amount::from(reward_tokens_remaining);
+            tracing::info!(
+                "Minting tokens remaining from PoS rewards distribution into \
+                 the Governance account. Amount: {amount}.",
+            );
+            credit_tokens(
+                &mut self.wl_storage,
+                &staking_token,
+                &address::GOV,
+                amount,
+            )?;
         }
 
         // Write new rewards parameters that will be used for the inflation of
@@ -734,6 +811,75 @@ where
     }
 }
 
+/// Convert ABCI vote info to PoS vote info. Any info which fails the conversion
+/// will be skipped and errors logged.
+///
+/// # Panics
+/// Panics if a validator's address cannot be converted to native address
+/// (either due to storage read error or the address not being found) or
+/// if the voting power cannot be converted to u64.
+fn pos_votes_from_abci(
+    storage: &impl StorageRead,
+    votes: &[VoteInfo],
+) -> Vec<namada_proof_of_stake::types::VoteInfo> {
+    votes
+        .iter()
+        .filter_map(
+            |VoteInfo {
+                 validator,
+                 signed_last_block,
+             }| {
+                if let Some(
+                    crate::facade::tendermint_proto::abci::Validator {
+                        address,
+                        power,
+                    },
+                ) = validator
+                {
+                    let tm_raw_hash_string = HEXUPPER.encode(address);
+                    if *signed_last_block {
+                        tracing::debug!(
+                            "Looking up validator from Tendermint VoteInfo's \
+                             raw hash {tm_raw_hash_string}"
+                        );
+
+                        // Look-up the native address
+                        let validator_address = find_validator_by_raw_hash(
+                            storage,
+                            &tm_raw_hash_string,
+                        )
+                        .expect(
+                            "Must be able to read from storage to find native \
+                             address of validator from tendermint raw hash",
+                        )
+                        .expect(
+                            "Must be able to find the native address of \
+                             validator from tendermint raw hash",
+                        );
+
+                        // Try to convert voting power to u64
+                        let validator_vp = u64::try_from(*power).expect(
+                            "Must be able to convert voting power from i64 to \
+                             u64",
+                        );
+
+                        return Some(namada_proof_of_stake::types::VoteInfo {
+                            validator_address,
+                            validator_vp,
+                        });
+                    } else {
+                        tracing::debug!(
+                            "Validator {tm_raw_hash_string} didn't sign last \
+                             block"
+                        )
+                    }
+                }
+                None
+            },
+        )
+        .collect()
+}
+
 /// We test the failure cases of [`finalize_block`]. The happy flows
 /// are covered by the e2e tests.
 #[cfg(test)]
@@ -743,7 +889,6 @@ mod test_finalize_block {
 
     use data_encoding::HEXUPPER;
     use namada::ledger::parameters::EpochDuration;
-    use namada::ledger::pos::types::VoteInfo;
     use namada::ledger::storage_api;
     use namada::proof_of_stake::btree_set::BTreeSetShims;
     use namada::proof_of_stake::types::WeightedValidator;
@@ -753,21 +898,23 @@ mod test_finalize_block {
         validator_rewards_products_handle,
     };
     use namada::types::governance::ProposalVote;
+    use namada::types::key::tm_consensus_key_raw_hash;
     use namada::types::storage::Epoch;
     use namada::types::time::DurationSecs;
     use namada::types::transaction::governance::{
-        InitProposalData, VoteProposalData,
+        InitProposalData, ProposalType, VoteProposalData,
     };
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
+    use namada_test_utils::TestWasms;
     use rust_decimal_macros::dec;
     use test_log::test;
 
     use super::*;
+    use crate::facade::tendermint_proto::abci::{Validator, VoteInfo};
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
-
     /// Check that if a wrapper tx was rejected by [`process_proposal`],
     /// check that the correct event is returned. Check that it does
     /// not appear in the queue of txs to be decrypted
@@ -794,6 +941,8 @@ mod test_finalize_block {
             let raw_tx = Tx::new(
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
+                shell.chain_id.clone(),
+                None,
             );
             let wrapper = WrapperTx::new(
                 Fee {
@@ -808,7 +957,9 @@ mod test_finalize_block {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             );
-            let tx = wrapper.sign(&keypair).expect("Test failed");
+            let tx = wrapper
+                .sign(&keypair, shell.chain_id.clone(), None)
+                .expect("Test failed");
             if i > 1 {
                 processed_txs.push(ProcessedTx {
                     tx: tx.to_bytes(),
@@ -867,6 +1018,8 @@ mod test_finalize_block {
         let raw_tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some(String::from("transaction data").as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -980,7 +1133,7 @@ mod test_finalize_block {
         let mut processed_txs = vec![];
         let mut valid_txs = vec![];
 
-        // Add unshielded balance for fee paymenty
+        // Add unshielded balance for fee payment
         let balance_key = token::balance_key(
             &shell.wl_storage.storage.native_token,
             &Address::from(&keypair.ref_to()),
@@ -992,10 +1145,7 @@ mod test_finalize_block {
             .unwrap();
 
         // create two decrypted txs
-        let mut wasm_path = top_level_directory();
-        wasm_path.push("wasm_for_tests/tx_no_op.wasm");
-        let tx_code = std::fs::read(wasm_path)
-            .expect("Expected a file at given code path");
+        let tx_code = TestWasms::TxNoOp.read_bytes();
         for i in 0..2 {
             let raw_tx = Tx::new(
                 tx_code.clone(),
@@ -1004,6 +1154,8 @@ mod test_finalize_block {
                         .as_bytes()
                         .to_owned(),
                 ),
+                shell.chain_id.clone(),
+                None,
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
@@ -1041,6 +1193,8 @@ mod test_finalize_block {
                         .as_bytes()
                         .to_owned(),
                 ),
+                shell.chain_id.clone(),
+                None,
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
@@ -1055,7 +1209,9 @@ mod test_finalize_block {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             );
-            let wrapper = wrapper_tx.sign(&keypair).expect("Test failed");
+            let wrapper = wrapper_tx
+                .sign(&keypair, shell.chain_id.clone(), None)
+                .expect("Test failed");
             valid_txs.push(wrapper_tx);
             processed_txs.push(ProcessedTx {
                 tx: wrapper.to_bytes(),
@@ -1125,7 +1281,7 @@ mod test_finalize_block {
             min_duration: DurationSecs(0),
         };
         namada::ledger::parameters::update_epoch_parameter(
-            &mut shell.wl_storage.storage,
+            &mut shell.wl_storage,
             &epoch_duration,
         )
         .unwrap();
@@ -1144,7 +1300,7 @@ mod test_finalize_block {
                 voting_start_epoch: Epoch::default(),
                 voting_end_epoch: Epoch::default().next(),
                 grace_epoch: Epoch::default().next(),
-                proposal_code: None,
+                r#type: ProposalType::Default(None),
             };
 
             storage_api::governance::init_proposal(
@@ -1166,11 +1322,14 @@ mod test_finalize_block {
         };
 
         // Add a proposal to be accepted and one to be rejected.
-        add_proposal(0, ProposalVote::Yay);
+        add_proposal(
+            0,
+            ProposalVote::Yay(namada::types::governance::VoteType::Default),
+        );
         add_proposal(1, ProposalVote::Nay);
 
         // Commit the genesis state
-        shell.wl_storage.commit_genesis().unwrap();
+        shell.wl_storage.commit_block().unwrap();
         shell.commit();
 
         // Collect all storage key-vals into a sorted map
@@ -1211,9 +1370,12 @@ mod test_finalize_block {
         )
         .unwrap()
         .unwrap();
+
         let votes = vec![VoteInfo {
-            validator_address: proposer_address.clone(),
-            validator_vp: u64::from(val_stake),
+            validator: Some(Validator {
+                address: proposer_address.clone(),
+                power: u64::from(val_stake) as i64,
+            }),
             signed_last_block: true,
         }];
 
@@ -1288,23 +1450,31 @@ mod test_finalize_block {
         // All validators sign blocks initially
         let votes = vec![
             VoteInfo {
-                validator_address: pkh1.clone(),
-                validator_vp: u64::from(val1.bonded_stake),
+                validator: Some(Validator {
+                    address: pkh1.clone(),
+                    power: u64::from(val1.bonded_stake) as i64,
+                }),
                 signed_last_block: true,
             },
             VoteInfo {
-                validator_address: pkh2.clone(),
-                validator_vp: u64::from(val2.bonded_stake),
+                validator: Some(Validator {
+                    address: pkh2.clone(),
+                    power: u64::from(val2.bonded_stake) as i64,
+                }),
                 signed_last_block: true,
             },
             VoteInfo {
-                validator_address: pkh3.clone(),
-                validator_vp: u64::from(val3.bonded_stake),
+                validator: Some(Validator {
+                    address: pkh3.clone(),
+                    power: u64::from(val3.bonded_stake) as i64,
+                }),
                 signed_last_block: true,
             },
             VoteInfo {
-                validator_address: pkh4.clone(),
-                validator_vp: u64::from(val4.bonded_stake),
+                validator: Some(Validator {
+                    address: pkh4.clone(),
+                    power: u64::from(val4.bonded_stake) as i64,
+                }),
                 signed_last_block: true,
             },
         ];
@@ -1389,23 +1559,31 @@ mod test_finalize_block {
         // Now we don't receive a vote from val4.
         let votes = vec![
             VoteInfo {
-                validator_address: pkh1.clone(),
-                validator_vp: u64::from(val1.bonded_stake),
+                validator: Some(Validator {
+                    address: pkh1.clone(),
+                    power: u64::from(val1.bonded_stake) as i64,
+                }),
                 signed_last_block: true,
             },
             VoteInfo {
-                validator_address: pkh2,
-                validator_vp: u64::from(val2.bonded_stake),
+                validator: Some(Validator {
+                    address: pkh2,
+                    power: u64::from(val2.bonded_stake) as i64,
+                }),
                 signed_last_block: true,
             },
             VoteInfo {
-                validator_address: pkh3,
-                validator_vp: u64::from(val3.bonded_stake),
+                validator: Some(Validator {
+                    address: pkh3,
+                    power: u64::from(val3.bonded_stake) as i64,
+                }),
                 signed_last_block: true,
             },
             VoteInfo {
-                validator_address: pkh4,
-                validator_vp: u64::from(val4.bonded_stake),
+                validator: Some(Validator {
+                    address: pkh4,
+                    power: u64::from(val4.bonded_stake) as i64,
+                }),
                 signed_last_block: false,
             },
         ];
@@ -1508,5 +1686,82 @@ mod test_finalize_block {
         };
         shell.finalize_block(req).unwrap();
         shell.commit();
+    }
+
+    /// Test that if a decrypted transaction fails because of out-of-gas, its
+    /// hash is removed from storage to allow rewrapping it
+    #[test]
+    fn test_remove_tx_hash() {
+        let (mut shell, _) = setup(1);
+        let keypair = gen_keypair();
+
+        let mut wasm_path = top_level_directory();
+        wasm_path.push("wasm_for_tests/tx_no_op.wasm");
+        let tx_code = std::fs::read(wasm_path)
+            .expect("Expected a file at given code path");
+        let raw_tx = Tx::new(
+            tx_code,
+            Some("Encrypted transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let wrapper_tx = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            raw_tx.clone(),
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+
+        // Write inner hash in storage
+        let inner_hash_key =
+            replay_protection::get_tx_hash_key(&wrapper_tx.tx_hash);
+        shell
+            .wl_storage
+            .storage
+            .write(&inner_hash_key, vec![])
+            .expect("Test failed");
+
+        let processed_tx = ProcessedTx {
+            tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                tx: raw_tx,
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: false,
+            }))
+            .to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        };
+        shell.enqueue_tx(wrapper_tx);
+
+        let _event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed")[0];
+
+        // FIXME: uncomment when proper gas metering is in place
+        // // Check inner tx hash has been removed from storage
+        // assert_eq!(event.event_type.to_string(), String::from("applied"));
+        // let code = event.attributes.get("code").expect("Test
+        // failed").as_str(); assert_eq!(code,
+        // String::from(ErrorCodes::WasmRuntimeError).as_str());
+
+        // assert!(
+        //     !shell
+        //         .storage
+        //         .has_key(&inner_hash_key)
+        //         .expect("Test failed")
+        //         .0
+        // )
     }
 }

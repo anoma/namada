@@ -31,8 +31,8 @@ fn calculate_masp_rewards<D, H>(
     addr: &Address,
 ) -> crate::ledger::storage_api::Result<(u64, u64)>
 where
-    D: super::DB + for<'iter> super::DBIter<'iter>,
-    H: super::StorageHasher,
+    D: 'static + super::DB + for<'iter> super::DBIter<'iter>,
+    H: 'static + super::StorageHasher,
 {
     use rust_decimal::Decimal;
 
@@ -40,8 +40,9 @@ where
     // Query the storage for information
 
     //// information about the amount of tokens on the chain
-    let total_tokens: token::Amount =
-        wl_storage.read(&token::total_supply_key(addr))?.expect("");
+    let total_tokens: token::Amount = wl_storage
+        .read(&token::total_supply_key(addr))?
+        .expect("the total supply key should be here");
 
     // total staked amount in the Shielded pool
     let total_token_in_masp: token::Amount = wl_storage
@@ -99,7 +100,7 @@ where
     let ValsToUpdate {
         locked_ratio,
         inflation,
-    } = RewardsController::run(&controller);
+    } = RewardsController::run(controller);
 
     // inflation-per-token = inflation / locked tokens = n/100
     // ∴ n = (inflation * 100) / locked tokens
@@ -165,8 +166,8 @@ pub fn update_allowed_conversions<D, H>(
     wl_storage: &mut super::WlStorage<D, H>,
 ) -> crate::ledger::storage_api::Result<()>
 where
-    D: super::DB + for<'iter> super::DBIter<'iter>,
-    H: super::StorageHasher,
+    D: 'static + super::DB + for<'iter> super::DBIter<'iter>,
+    H: 'static + super::StorageHasher,
 {
     use std::cmp::Ordering;
 
@@ -253,7 +254,8 @@ where
             // The reward for each reward.1 units of the current asset is
             // reward.0 units of the reward token
             total_reward +=
-                (addr_bal * (new_normed_inflation, *normed_inflation)).0 - addr_bal;
+                (addr_bal * (new_normed_inflation, *normed_inflation)).0
+                    - addr_bal;
             // Save the new normed inflation
             *normed_inflation = new_normed_inflation;
         } else {
@@ -272,9 +274,9 @@ where
             );
             // The reward for each reward.1 units of the current asset is
             // reward.0 units of the reward token
-            total_reward +=
-                ((addr_bal * (real_reward, reward.1)).0 *
-                (*normed_inflation, ref_inflation)).0;
+            total_reward += ((addr_bal * (real_reward, reward.1)).0
+                * (*normed_inflation, ref_inflation))
+                .0;
         }
         // Add a conversion from the previous asset type
         wl_storage.storage.conversion_state.assets.insert(

@@ -9,6 +9,7 @@ use thiserror::Error;
 use crate::ledger;
 use crate::ledger::storage::{Storage, StorageHasher};
 use crate::types::address::{Address, EstablishedAddressGen};
+use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
 use crate::types::storage;
 
@@ -44,11 +45,11 @@ pub enum StorageModification {
     /// Delete an existing key-value
     Delete,
     /// Initialize a new account with established address and a given validity
-    /// predicate. The key for `InitAccount` inside the [`WriteLog`] must point
-    /// to its validity predicate.
+    /// predicate hash. The key for `InitAccount` inside the [`WriteLog`] must
+    /// point to its validity predicate.
     InitAccount {
-        /// Validity predicate bytes
-        vp: Vec<u8>,
+        /// Validity predicate hash bytes
+        vp_code_hash: Hash,
     },
     /// Temporary value. This value will be never written to the storage. After
     /// writing a temporary value, it can't be mutated with normal write.
@@ -68,8 +69,8 @@ pub struct WriteLog {
     block_write_log: HashMap<storage::Key, StorageModification>,
     /// The storage modifications for the current transaction
     tx_write_log: HashMap<storage::Key, StorageModification>,
-    /// The IBC event for the current transaction
-    ibc_event: Option<IbcEvent>,
+    /// The IBC events for the current transaction
+    ibc_events: BTreeSet<IbcEvent>,
 }
 
 /// Write log prefix iterator
@@ -94,7 +95,7 @@ impl Default for WriteLog {
             address_gen: None,
             block_write_log: HashMap::with_capacity(100_000),
             tx_write_log: HashMap::with_capacity(100),
-            ibc_event: None,
+            ibc_events: BTreeSet::new(),
         }
     }
 }
@@ -117,8 +118,8 @@ impl WriteLog {
                         key.len() + value.len()
                     }
                     StorageModification::Delete => key.len(),
-                    StorageModification::InitAccount { ref vp } => {
-                        key.len() + vp.len()
+                    StorageModification::InitAccount { ref vp_code_hash } => {
+                        key.len() + vp_code_hash.len()
                     }
                     StorageModification::Temp { ref value } => {
                         key.len() + value.len()
@@ -145,8 +146,8 @@ impl WriteLog {
                         key.len() + value.len()
                     }
                     StorageModification::Delete => key.len(),
-                    StorageModification::InitAccount { ref vp } => {
-                        key.len() + vp.len()
+                    StorageModification::InitAccount { ref vp_code_hash } => {
+                        key.len() + vp_code_hash.len()
                     }
                     StorageModification::Temp { ref value } => {
                         key.len() + value.len()
@@ -313,7 +314,7 @@ impl WriteLog {
     pub fn init_account(
         &mut self,
         storage_address_gen: &EstablishedAddressGen,
-        vp: Vec<u8>,
+        vp_code_hash: Hash,
     ) -> (Address, u64) {
         // If we've previously generated a new account, we use the local copy of
         // the generator. Otherwise, we create a new copy from the storage
@@ -322,19 +323,19 @@ impl WriteLog {
         let addr =
             address_gen.generate_address("TODO more randomness".as_bytes());
         let key = storage::Key::validity_predicate(&addr);
-        let gas = (key.len() + vp.len()) as _;
+        let gas = (key.len() + vp_code_hash.len()) as _;
         self.tx_write_log
-            .insert(key, StorageModification::InitAccount { vp });
+            .insert(key, StorageModification::InitAccount { vp_code_hash });
         (addr, gas)
     }
 
     /// Set an IBC event and return the gas cost.
-    pub fn set_ibc_event(&mut self, event: IbcEvent) -> u64 {
+    pub fn emit_ibc_event(&mut self, event: IbcEvent) -> u64 {
         let len = event
             .attributes
             .iter()
             .fold(0, |acc, (k, v)| acc + k.len() + v.len());
-        self.ibc_event = Some(event);
+        self.ibc_events.insert(event);
         len as _
     }
 
@@ -381,13 +382,13 @@ impl WriteLog {
     }
 
     /// Take the IBC event of the current transaction
-    pub fn take_ibc_event(&mut self) -> Option<IbcEvent> {
-        self.ibc_event.take()
+    pub fn take_ibc_events(&mut self) -> BTreeSet<IbcEvent> {
+        std::mem::take(&mut self.ibc_events)
     }
 
     /// Get the IBC event of the current transaction
-    pub fn get_ibc_event(&self) -> Option<&IbcEvent> {
-        self.ibc_event.as_ref()
+    pub fn get_ibc_events(&self) -> &BTreeSet<IbcEvent> {
+        &self.ibc_events
     }
 
     /// Commit the current transaction's write log to the block when it's
@@ -402,7 +403,7 @@ impl WriteLog {
             HashMap::with_capacity(100),
         );
         self.block_write_log.extend(tx_write_log);
-        self.take_ibc_event();
+        self.take_ibc_events();
     }
 
     /// Drop the current transaction's write log when it's declined by any of
@@ -416,6 +417,7 @@ impl WriteLog {
     pub fn commit_block<DB, H>(
         &mut self,
         storage: &mut Storage<DB, H>,
+        batch: &mut DB::WriteBatch,
     ) -> Result<()>
     where
         DB: 'static
@@ -423,33 +425,31 @@ impl WriteLog {
             + for<'iter> ledger::storage::DBIter<'iter>,
         H: StorageHasher,
     {
-        let mut batch = Storage::<DB, H>::batch();
         for (key, entry) in self.block_write_log.iter() {
             match entry {
                 StorageModification::Write { value } => {
                     storage
-                        .batch_write_subspace_val(
-                            &mut batch,
-                            key,
-                            value.clone(),
-                        )
+                        .batch_write_subspace_val(batch, key, value.clone())
                         .map_err(Error::StorageError)?;
                 }
                 StorageModification::Delete => {
                     storage
-                        .batch_delete_subspace_val(&mut batch, key)
+                        .batch_delete_subspace_val(batch, key)
                         .map_err(Error::StorageError)?;
                 }
-                StorageModification::InitAccount { vp } => {
+                StorageModification::InitAccount { vp_code_hash } => {
                     storage
-                        .batch_write_subspace_val(&mut batch, key, vp.clone())
+                        .batch_write_subspace_val(
+                            batch,
+                            key,
+                            vp_code_hash.clone(),
+                        )
                         .map_err(Error::StorageError)?;
                 }
                 // temporary value isn't persisted
                 StorageModification::Temp { .. } => {}
             }
         }
-        storage.exec_batch(batch).map_err(Error::StorageError)?;
         if let Some(address_gen) = self.address_gen.take() {
             storage.address_gen = address_gen
         }
@@ -535,6 +535,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::types::hash::Hash;
     use crate::types::{address, storage};
 
     #[test]
@@ -607,17 +608,20 @@ mod tests {
 
         // init
         let init_vp = "initialized".as_bytes().to_vec();
-        let (addr, gas) = write_log.init_account(&address_gen, init_vp.clone());
+        let vp_hash = Hash::sha256(init_vp);
+        let (addr, gas) = write_log.init_account(&address_gen, vp_hash.clone());
         let vp_key = storage::Key::validity_predicate(&addr);
-        assert_eq!(gas, (vp_key.len() + init_vp.len()) as u64);
+        assert_eq!(gas, (vp_key.len() + vp_hash.len()) as u64);
 
         // read
         let (value, gas) = write_log.read(&vp_key);
         match value.expect("no read value") {
-            StorageModification::InitAccount { vp } => assert_eq!(*vp, init_vp),
+            StorageModification::InitAccount { vp_code_hash } => {
+                assert_eq!(*vp_code_hash, vp_hash)
+            }
             _ => panic!("unexpected result"),
         }
-        assert_eq!(gas, (vp_key.len() + init_vp.len()) as u64);
+        assert_eq!(gas, (vp_key.len() + vp_hash.len()) as u64);
 
         // get all
         let (_changed_keys, init_accounts) = write_log.get_partitioned_keys();
@@ -631,12 +635,16 @@ mod tests {
         let address_gen = EstablishedAddressGen::new("test");
 
         let init_vp = "initialized".as_bytes().to_vec();
-        let (addr, _) = write_log.init_account(&address_gen, init_vp);
+        let vp_hash = Hash::sha256(init_vp);
+        let (addr, _) = write_log.init_account(&address_gen, vp_hash);
         let vp_key = storage::Key::validity_predicate(&addr);
 
         // update should fail
         let updated_vp = "updated".as_bytes().to_vec();
-        let result = write_log.write(&vp_key, updated_vp).unwrap_err();
+        let updated_vp_hash = Hash::sha256(updated_vp);
+        let result = write_log
+            .write(&vp_key, updated_vp_hash.to_vec())
+            .unwrap_err();
         assert_matches!(result, Error::UpdateVpOfNewAccount);
     }
 
@@ -646,7 +654,8 @@ mod tests {
         let address_gen = EstablishedAddressGen::new("test");
 
         let init_vp = "initialized".as_bytes().to_vec();
-        let (addr, _) = write_log.init_account(&address_gen, init_vp);
+        let vp_hash = Hash::sha256(init_vp);
+        let (addr, _) = write_log.init_account(&address_gen, vp_hash);
         let vp_key = storage::Key::validity_predicate(&addr);
 
         // delete should fail
@@ -670,6 +679,7 @@ mod tests {
         let mut storage =
             crate::ledger::storage::testing::TestStorage::default();
         let mut write_log = WriteLog::default();
+        let mut batch = crate::ledger::storage::testing::TestStorage::batch();
         let address_gen = EstablishedAddressGen::new("test");
 
         let key1 =
@@ -682,7 +692,7 @@ mod tests {
             storage::Key::parse("key4").expect("cannot parse the key string");
 
         // initialize an account
-        let vp1 = "vp1".as_bytes().to_vec();
+        let vp1 = Hash::sha256("vp1".as_bytes());
         let (addr1, _) = write_log.init_account(&address_gen, vp1.clone());
         write_log.commit_tx();
 
@@ -708,11 +718,13 @@ mod tests {
         write_log.commit_tx();
 
         // commit a block
-        write_log.commit_block(&mut storage).expect("commit failed");
+        write_log
+            .commit_block(&mut storage, &mut batch)
+            .expect("commit failed");
 
-        let (vp, _gas) =
+        let (vp_code_hash, _gas) =
             storage.validity_predicate(&addr1).expect("vp read failed");
-        assert_eq!(vp, Some(vp1));
+        assert_eq!(vp_code_hash, Some(vp1));
         let (value, _) = storage.read(&key1).expect("read failed");
         assert_eq!(value.expect("no read value"), val1);
         let (value, _) = storage.read(&key2).expect("read failed");
@@ -790,6 +802,7 @@ pub mod testing {
 
     use super::*;
     use crate::types::address::testing::arb_address;
+    use crate::types::hash::HASH_LENGTH;
     use crate::types::storage::testing::arb_key;
 
     /// Generate an arbitrary tx write log of [`HashMap<storage::Key,
@@ -827,8 +840,11 @@ pub mod testing {
                 any::<Vec<u8>>()
                     .prop_map(|value| StorageModification::Write { value }),
                 Just(StorageModification::Delete),
-                any::<Vec<u8>>()
-                    .prop_map(|vp| StorageModification::InitAccount { vp }),
+                any::<[u8; HASH_LENGTH]>().prop_map(|hash| {
+                    StorageModification::InitAccount {
+                        vp_code_hash: Hash(hash),
+                    }
+                }),
                 any::<Vec<u8>>()
                     .prop_map(|value| StorageModification::Temp { value }),
             ]

@@ -3,9 +3,9 @@
 use std::num::TryFromIntError;
 
 use namada_core::types::address::Address;
-use namada_core::types::hash::Hash;
+use namada_core::types::hash::{Hash, HASH_LENGTH};
 use namada_core::types::storage::{
-    BlockHash, BlockHeight, Epoch, Key, TxIndex,
+    BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
 };
 use thiserror::Error;
 
@@ -36,6 +36,8 @@ pub enum RuntimeError {
     ReadTemporaryValueError,
     #[error("Trying to read a permament value with read_temp")]
     ReadPermanentValueError,
+    #[error("Invalid transaction code hash")]
+    InvalidCodeHash,
 }
 
 /// VP environment function result
@@ -65,18 +67,18 @@ where
     let (log_val, gas) = write_log.read_pre(key);
     add_gas(gas_meter, gas)?;
     match log_val {
-        Some(&write_log::StorageModification::Write { ref value }) => {
+        Some(write_log::StorageModification::Write { ref value }) => {
             Ok(Some(value.clone()))
         }
         Some(&write_log::StorageModification::Delete) => {
             // Given key has been deleted
             Ok(None)
         }
-        Some(&write_log::StorageModification::InitAccount {
-            ref vp, ..
+        Some(write_log::StorageModification::InitAccount {
+            ref vp_code_hash,
         }) => {
             // Read the VP of a new account
-            Ok(Some(vp.clone()))
+            Ok(Some(vp_code_hash.to_vec()))
         }
         Some(&write_log::StorageModification::Temp { .. }) => {
             Err(RuntimeError::ReadTemporaryValueError)
@@ -107,18 +109,18 @@ where
     let (log_val, gas) = write_log.read(key);
     add_gas(gas_meter, gas)?;
     match log_val {
-        Some(&write_log::StorageModification::Write { ref value }) => {
+        Some(write_log::StorageModification::Write { ref value }) => {
             Ok(Some(value.clone()))
         }
         Some(&write_log::StorageModification::Delete) => {
             // Given key has been deleted
             Ok(None)
         }
-        Some(&write_log::StorageModification::InitAccount {
-            ref vp, ..
+        Some(write_log::StorageModification::InitAccount {
+            ref vp_code_hash,
         }) => {
-            // Read the VP of a new account
-            Ok(Some(vp.clone()))
+            // Read the VP code hash of a new account
+            Ok(Some(vp_code_hash.to_vec()))
         }
         Some(&write_log::StorageModification::Temp { .. }) => {
             Err(RuntimeError::ReadTemporaryValueError)
@@ -144,7 +146,7 @@ pub fn read_temp(
     let (log_val, gas) = write_log.read(key);
     add_gas(gas_meter, gas)?;
     match log_val {
-        Some(&write_log::StorageModification::Temp { ref value }) => {
+        Some(write_log::StorageModification::Temp { ref value }) => {
             Ok(Some(value.clone()))
         }
         None => Ok(None),
@@ -247,6 +249,23 @@ where
     Ok(height)
 }
 
+/// Getting the block header.
+pub fn get_block_header<DB, H>(
+    gas_meter: &mut VpGasMeter,
+    storage: &Storage<DB, H>,
+    height: BlockHeight,
+) -> EnvResult<Option<Header>>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    let (header, gas) = storage
+        .get_block_header(Some(height))
+        .map_err(RuntimeError::StorageError)?;
+    add_gas(gas_meter, gas)?;
+    Ok(header)
+}
+
 /// Getting the block hash. The height is that of the block to which the
 /// current transaction is being applied.
 pub fn get_block_hash<DB, H>(
@@ -268,7 +287,12 @@ pub fn get_tx_code_hash(
     gas_meter: &mut VpGasMeter,
     tx: &Tx,
 ) -> EnvResult<Hash> {
-    let hash = Hash(tx.code_hash());
+    let hash = if tx.code_or_hash.len() == HASH_LENGTH {
+        Hash::try_from(&tx.code_or_hash[..])
+            .map_err(|_| RuntimeError::InvalidCodeHash)?
+    } else {
+        Hash(tx.code_hash())
+    };
     add_gas(gas_meter, MIN_STORAGE_GAS)?;
     Ok(hash)
 }

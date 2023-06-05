@@ -33,6 +33,7 @@ mod protocol_txs {
 
     use super::*;
     use crate::proto::Tx;
+    use crate::types::chain::ChainId;
     use crate::types::key::*;
     use crate::types::transaction::{EllipticCurve, TxError, TxType};
 
@@ -87,6 +88,7 @@ mod protocol_txs {
             self,
             pk: &common::PublicKey,
             signing_key: &common::SecretKey,
+            chain_id: ChainId,
         ) -> Tx {
             Tx::new(
                 vec![],
@@ -98,6 +100,8 @@ mod protocol_txs {
                     .try_to_vec()
                     .expect("Could not serialize ProtocolTx"),
                 ),
+                chain_id,
+                None,
             )
             .sign(signing_key)
         }
@@ -108,6 +112,7 @@ mod protocol_txs {
             signing_key: &common::SecretKey,
             wasm_dir: &'a Path,
             wasm_loader: F,
+            chain_id: ChainId,
         ) -> Self
         where
             F: FnOnce(&'a str, &'static str) -> Vec<u8>,
@@ -125,6 +130,8 @@ mod protocol_txs {
                         data.try_to_vec()
                             .expect("Serializing request should not fail"),
                     ),
+                    chain_id,
+                    None,
                 )
                 .sign(signing_key),
             )

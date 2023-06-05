@@ -889,7 +889,7 @@ pub fn genesis(base_dir: impl AsRef<Path>, chain_id: &ChainId) -> Genesis {
 }
 #[cfg(feature = "dev")]
 pub fn genesis(num_validators: u64) -> Genesis {
-    use namada::types::address;
+    use namada::types::address::{self};
     use rust_decimal_macros::dec;
 
     use crate::wallet;
@@ -1032,7 +1032,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         balances.insert((&validator.account_key).into(), default_key_tokens);
     }
 
-    let token_accounts = address::tokens()
+    let token_accounts = address::masp_rewards()
         .into_keys()
         .map(|address| TokenAccount {
             address,

@@ -6,12 +6,12 @@ pub use dev::{
     christel_address, christel_keypair, daewon_address, daewon_keypair, keys,
     validator_address, validator_keypair, validator_keys,
 };
+use namada::ledger::wallet::alias::Alias;
 use namada::ledger::{eth_bridge, governance, pos};
 use namada::types::address::Address;
 use namada::types::key::*;
 
 use crate::config::genesis::genesis_config::GenesisConfig;
-use crate::wallet::alias::Alias;
 
 /// The default addresses with their aliases.
 pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
@@ -70,13 +70,16 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
 
 #[cfg(feature = "dev")]
 mod dev {
+    use std::collections::HashMap;
+
     use borsh::BorshDeserialize;
+    use namada::ledger::wallet::alias::Alias;
     use namada::ledger::{governance, pos};
-    use namada::types::address::{self, Address};
+    use namada::types::address::{
+        apfel, btc, dot, eth, kartoffel, nam, schnitzel, Address,
+    };
     use namada::types::key::dkg_session_keys::DkgKeypair;
     use namada::types::key::*;
-
-    use crate::wallet::alias::Alias;
 
     /// Generate a new protocol signing keypair and DKG session keypair
     pub fn validator_keys() -> (common::SecretKey, DkgKeypair) {
@@ -108,6 +111,21 @@ mod dev {
         ]
     }
 
+    /// Deprecated function, soon to be deleted. Generates default tokens
+    fn tokens() -> HashMap<Address, &'static str> {
+        vec![
+            (nam(), "NAM"),
+            (btc(), "BTC"),
+            (eth(), "ETH"),
+            (dot(), "DOT"),
+            (schnitzel(), "Schnitzel"),
+            (apfel(), "Apfel"),
+            (kartoffel(), "Kartoffel"),
+        ]
+        .into_iter()
+        .collect()
+    }
+
     /// The default addresses with their aliases.
     pub fn addresses() -> Vec<(Alias, Address)> {
         let mut addresses: Vec<(Alias, Address)> = vec![
@@ -120,7 +138,7 @@ mod dev {
             ("christel".into(), christel_address()),
             ("daewon".into(), daewon_address()),
         ];
-        let token_addresses = address::tokens()
+        let token_addresses = tokens()
             .into_iter()
             .map(|(addr, alias)| (alias.into(), addr));
         addresses.extend(token_addresses);

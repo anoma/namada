@@ -5,8 +5,10 @@ import sys
 
 N_OF_MACHINES = 2
 
+NIGHTLY_VERSION = open("rust-nightly-version", "r").read().strip()
+
 E2E_FILE = ".github/workflows/scripts/e2e.json"
-CARGO_TEST_COMMAND = "cargo test {} -- --test-threads=1 --nocapture"
+CARGO_TEST_COMMAND = "cargo +{} test {} -Z unstable-options -- --test-threads=1 -Z unstable-options --nocapture"
 
 MACHINES = [{'tasks': [], 'total_time': 0} for _ in range(N_OF_MACHINES)]
 
@@ -32,7 +34,7 @@ for task in sorted_task.items():
 for index, machine in enumerate(MACHINES):
     print("Machine {}: {} tasks for a total of {}s".format(index, len(machine['tasks']), machine['total_time']))
     for test in machine['tasks']:
-        cargo = CARGO_TEST_COMMAND.format(test)
+        cargo = CARGO_TEST_COMMAND.format(NIGHTLY_VERSION, test)
 
 tasks = MACHINES[CURRENT_MACHINE_INDEX]['tasks']
 
@@ -41,7 +43,7 @@ has_failures = False
 
 for test_name in tasks:
     try:
-        command = CARGO_TEST_COMMAND.format(test_name)
+        command = CARGO_TEST_COMMAND.format(NIGHTLY_VERSION, test_name)
         subprocess.check_call(command, shell=True, stdout=sys.stdout, stderr=subprocess.STDOUT)
         test_results[test_name] = {
             'status': 'ok',

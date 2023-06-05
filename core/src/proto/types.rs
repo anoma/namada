@@ -9,6 +9,7 @@ use thiserror::Error;
 use super::generated::types;
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint_proto::abci::ResponseDeliverTx;
+use crate::types::chain::ChainId;
 use crate::types::key::*;
 use crate::types::time::DateTimeUtc;
 #[cfg(feature = "ferveo-tpke")]
@@ -32,7 +33,7 @@ pub enum Error {
     #[error("Timestamp is empty")]
     NoTimestampError,
     #[error("Timestamp is invalid: {0}")]
-    InvalidTimestamp(prost_types::TimestampOutOfSystemRangeError),
+    InvalidTimestamp(prost_types::TimestampError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -136,16 +137,21 @@ pub struct SigningTx {
     pub code_hash: [u8; 32],
     pub data: Option<Vec<u8>>,
     pub timestamp: DateTimeUtc,
+    pub chain_id: ChainId,
+    pub expiration: Option<DateTimeUtc>,
 }
 
 impl SigningTx {
     pub fn hash(&self) -> [u8; 32] {
         let timestamp = Some(self.timestamp.into());
+        let expiration = self.expiration.map(|e| e.into());
         let mut bytes = vec![];
         types::Tx {
-            code: self.code_hash.to_vec(),
+            code_or_hash: self.code_hash.to_vec(),
             data: self.data.clone(),
             timestamp,
+            chain_id: self.chain_id.as_str().to_owned(),
+            expiration,
         }
         .encode(&mut bytes)
         .expect("encoding a transaction failed");
@@ -166,6 +172,8 @@ impl SigningTx {
             code_hash: self.code_hash,
             data: Some(signed),
             timestamp: self.timestamp,
+            chain_id: self.chain_id,
+            expiration: self.expiration,
         }
     }
 
@@ -185,6 +193,8 @@ impl SigningTx {
             code_hash: self.code_hash,
             data,
             timestamp: self.timestamp,
+            chain_id: self.chain_id.clone(),
+            expiration: self.expiration,
         };
         let signed_data = tx.hash();
         common::SigScheme::verify_signature_raw(pk, &signed_data, sig)
@@ -195,9 +205,11 @@ impl SigningTx {
     pub fn expand(self, code: Vec<u8>) -> Option<Tx> {
         if hash_tx(&code).0 == self.code_hash {
             Some(Tx {
-                code,
+                code_or_hash: code,
                 data: self.data,
                 timestamp: self.timestamp,
+                chain_id: self.chain_id,
+                expiration: self.expiration,
             })
         } else {
             None
@@ -208,9 +220,11 @@ impl SigningTx {
 impl From<Tx> for SigningTx {
     fn from(tx: Tx) -> SigningTx {
         SigningTx {
-            code_hash: hash_tx(&tx.code).0,
+            code_hash: hash_tx(&tx.code_or_hash).0,
             data: tx.data,
             timestamp: tx.timestamp,
+            chain_id: tx.chain_id,
+            expiration: tx.expiration,
         }
     }
 }
@@ -222,9 +236,11 @@ impl From<Tx> for SigningTx {
     Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Hash,
 )]
 pub struct Tx {
-    pub code: Vec<u8>,
+    pub code_or_hash: Vec<u8>,
     pub data: Option<Vec<u8>>,
     pub timestamp: DateTimeUtc,
+    pub chain_id: ChainId,
+    pub expiration: Option<DateTimeUtc>,
 }
 
 impl TryFrom<&[u8]> for Tx {
@@ -236,10 +252,18 @@ impl TryFrom<&[u8]> for Tx {
             Some(t) => t.try_into().map_err(Error::InvalidTimestamp)?,
             None => return Err(Error::NoTimestampError),
         };
+        let chain_id = ChainId(tx.chain_id);
+        let expiration = match tx.expiration {
+            Some(e) => Some(e.try_into().map_err(Error::InvalidTimestamp)?),
+            None => None,
+        };
+
         Ok(Tx {
-            code: tx.code,
+            code_or_hash: tx.code_or_hash,
             data: tx.data,
             timestamp,
+            chain_id,
+            expiration,
         })
     }
 }
@@ -247,10 +271,14 @@ impl TryFrom<&[u8]> for Tx {
 impl From<Tx> for types::Tx {
     fn from(tx: Tx) -> Self {
         let timestamp = Some(tx.timestamp.into());
+        let expiration = tx.expiration.map(|e| e.into());
+
         types::Tx {
-            code: tx.code,
+            code_or_hash: tx.code_or_hash,
             data: tx.data,
             timestamp,
+            chain_id: tx.chain_id.as_str().to_owned(),
+            expiration,
         }
     }
 }
@@ -342,11 +370,20 @@ impl From<Tx> for ResponseDeliverTx {
 }
 
 impl Tx {
-    pub fn new(code: Vec<u8>, data: Option<Vec<u8>>) -> Self {
+    /// Create a new transaction. `code_or_hash` should be set as the wasm code
+    /// bytes or hash.
+    pub fn new(
+        code_or_hash: Vec<u8>,
+        data: Option<Vec<u8>>,
+        chain_id: ChainId,
+        expiration: Option<DateTimeUtc>,
+    ) -> Self {
         Tx {
-            code,
+            code_or_hash,
             data,
             timestamp: DateTimeUtc::now(),
+            chain_id,
+            expiration,
         }
     }
 
@@ -362,13 +399,41 @@ impl Tx {
         SigningTx::from(self.clone()).hash()
     }
 
+    pub fn unsigned_hash(&self) -> [u8; 32] {
+        match self.data {
+            Some(ref data) => {
+                match SignedTxData::try_from_slice(data) {
+                    Ok(signed_data) => {
+                        // Reconstruct unsigned tx
+                        let unsigned_tx = Tx {
+                            code_or_hash: self.code_or_hash.clone(),
+                            data: signed_data.data,
+                            timestamp: self.timestamp,
+                            chain_id: self.chain_id.clone(),
+                            expiration: self.expiration,
+                        };
+                        unsigned_tx.hash()
+                    }
+                    Err(_) => {
+                        // Unsigned tx
+                        self.hash()
+                    }
+                }
+            }
+            None => {
+                // Unsigned tx
+                self.hash()
+            }
+        }
+    }
+
     pub fn code_hash(&self) -> [u8; 32] {
         SigningTx::from(self.clone()).code_hash
     }
 
     /// Sign a transaction using [`SignedTxData`].
     pub fn sign(self, keypair: &common::SecretKey) -> Self {
-        let code = self.code.clone();
+        let code = self.code_or_hash.clone();
         SigningTx::from(self)
             .sign(keypair)
             .expand(code)
@@ -468,7 +533,9 @@ mod tests {
     fn test_tx() {
         let code = "wasm code".as_bytes().to_owned();
         let data = "arbitrary data".as_bytes().to_owned();
-        let tx = Tx::new(code.clone(), Some(data.clone()));
+        let chain_id = ChainId::default();
+        let tx =
+            Tx::new(code.clone(), Some(data.clone()), chain_id.clone(), None);
 
         let bytes = tx.to_bytes();
         let tx_from_bytes =
@@ -476,9 +543,11 @@ mod tests {
         assert_eq!(tx_from_bytes, tx);
 
         let types_tx = types::Tx {
-            code,
+            code_or_hash: code,
             data: Some(data),
             timestamp: None,
+            chain_id: chain_id.0,
+            expiration: None,
         };
         let mut bytes = vec![];
         types_tx.encode(&mut bytes).expect("encoding failed");

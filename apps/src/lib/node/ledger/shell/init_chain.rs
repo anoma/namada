@@ -4,17 +4,15 @@ use std::hash::Hash;
 
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
-use namada::ledger::parameters::storage::get_staked_ratio_key;
-use namada::ledger::parameters::Parameters;
+use namada::ledger::parameters::{self, Parameters};
 use namada::ledger::pos::{into_tm_voting_power, staking_token_address};
 use namada::ledger::storage_api::token::{
     credit_tokens, read_balance, read_total_supply,
 };
-use namada::ledger::storage_api::StorageWrite;
+use namada::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
+use namada::types::hash::Hash as CodeHash;
 use namada::types::key::*;
 use rust_decimal::Decimal;
-#[cfg(not(feature = "dev"))]
-use sha2::{Digest, Sha256};
 
 use super::*;
 use crate::facade::tendermint_proto::abci;
@@ -30,6 +28,8 @@ where
     /// Create a new genesis for the chain with specified id. This includes
     /// 1. A set of initial users and tokens
     /// 2. Setting up the validity predicates for both users and tokens
+    ///
+    /// INVARIANT: This method must not commit the state changes to DB.
     pub fn init_chain(
         &mut self,
         init: request::InitChain,
@@ -89,26 +89,6 @@ where
             pos_inflation_amount,
             wrapper_tx_fees,
         } = genesis.parameters;
-        // borrow necessary for release build, annoys clippy on dev build
-        #[allow(clippy::needless_borrow)]
-        let implicit_vp =
-            wasm_loader::read_wasm(&self.wasm_dir, &implicit_vp_code_path)
-                .map_err(Error::ReadingWasm)?;
-        // In dev, we don't check the hash
-        #[cfg(feature = "dev")]
-        let _ = implicit_vp_sha256;
-        #[cfg(not(feature = "dev"))]
-        {
-            let mut hasher = Sha256::new();
-            hasher.update(&implicit_vp);
-            let vp_code_hash = hasher.finalize();
-            assert_eq!(
-                vp_code_hash.as_slice(),
-                &implicit_vp_sha256,
-                "Invalid implicit account's VP sha256 hash for {}",
-                implicit_vp_code_path
-            );
-        }
         #[cfg(not(feature = "mainnet"))]
         // Try to find a faucet account
         let faucet_account = {
@@ -127,13 +107,73 @@ where
             )
         };
 
+        // Store wasm codes into storage
+        let checksums = wasm_loader::Checksums::read_checksums(&self.wasm_dir);
+        for (name, full_name) in checksums.0.iter() {
+            let code = wasm_loader::read_wasm(&self.wasm_dir, name)
+                .map_err(Error::ReadingWasm)?;
+            let code_hash = CodeHash::sha256(&code);
+
+            let elements = full_name.split('.').collect::<Vec<&str>>();
+            let checksum = elements.get(1).ok_or_else(|| {
+                Error::LoadingWasm(format!("invalid full name: {}", full_name))
+            })?;
+            assert_eq!(
+                code_hash.to_string(),
+                checksum.to_uppercase(),
+                "Invalid wasm code sha256 hash for {}",
+                name
+            );
+
+            if (tx_whitelist.is_empty() && vp_whitelist.is_empty())
+                || tx_whitelist.contains(&code_hash.to_string().to_lowercase())
+                || vp_whitelist.contains(&code_hash.to_string().to_lowercase())
+            {
+                #[cfg(not(test))]
+                if name.starts_with("tx_") {
+                    self.tx_wasm_cache.pre_compile(&code);
+                } else if name.starts_with("vp_") {
+                    self.vp_wasm_cache.pre_compile(&code);
+                }
+
+                let code_key = Key::wasm_code(&code_hash);
+                self.wl_storage.write_bytes(&code_key, code)?;
+
+                let hash_key = Key::wasm_hash(name);
+                self.wl_storage.write_bytes(&hash_key, code_hash)?;
+            } else {
+                tracing::warn!("The wasm {name} isn't whitelisted.");
+            }
+        }
+
+        // check if implicit_vp wasm is stored
+        let implicit_vp_code_hash =
+            read_wasm_hash(&self.wl_storage, &implicit_vp_code_path)?.ok_or(
+                Error::LoadingWasm(format!(
+                    "Unknown vp code path: {}",
+                    implicit_vp_code_path
+                )),
+            )?;
+        // In dev, we don't check the hash
+        #[cfg(feature = "dev")]
+        let _ = implicit_vp_sha256;
+        #[cfg(not(feature = "dev"))]
+        {
+            assert_eq!(
+                implicit_vp_code_hash.as_slice(),
+                &implicit_vp_sha256,
+                "Invalid implicit account's VP sha256 hash for {}",
+                implicit_vp_code_path
+            );
+        }
+
         let parameters = Parameters {
             epoch_duration,
             max_proposal_bytes,
             max_expected_time_per_block,
             vp_whitelist,
             tx_whitelist,
-            implicit_vp,
+            implicit_vp_code_hash,
             epochs_per_year,
             pos_gain_p,
             pos_gain_d,
@@ -144,21 +184,21 @@ where
             #[cfg(not(feature = "mainnet"))]
             wrapper_tx_fees,
         };
-        parameters.init_storage(&mut self.wl_storage.storage);
+        parameters
+            .init_storage(&mut self.wl_storage)
+            .expect("Initializing chain parameters must not fail");
 
         // Initialize governance parameters
         genesis
             .gov_params
-            .init_storage(&mut self.wl_storage.storage);
+            .init_storage(&mut self.wl_storage)
+            .expect("Initializing governance parameters must not fail");
 
         // Depends on parameters being initialized
         self.wl_storage
             .storage
             .init_genesis_epoch(initial_height, genesis_time, &parameters)
             .expect("Initializing genesis epoch must not fail");
-
-        // Loaded VP code cache to avoid loading the same files multiple times
-        let mut vp_code_cache: HashMap<String, Vec<u8>> = HashMap::default();
 
         // Initialize genesis established accounts
         for genesis::EstablishedAccount {
@@ -169,25 +209,17 @@ where
             storage,
         } in genesis.established_accounts
         {
-            let vp_code = match vp_code_cache.get(&vp_code_path).cloned() {
-                Some(vp_code) => vp_code,
-                None => {
-                    let wasm =
-                        wasm_loader::read_wasm(&self.wasm_dir, &vp_code_path)
-                            .map_err(Error::ReadingWasm)?;
-                    vp_code_cache.insert(vp_code_path.clone(), wasm.clone());
-                    wasm
-                }
-            };
+            let vp_code_hash = read_wasm_hash(&self.wl_storage, &vp_code_path)?
+                .ok_or(Error::LoadingWasm(format!(
+                    "Unknown vp code path: {}",
+                    implicit_vp_code_path
+                )))?;
 
             // In dev, we don't check the hash
             #[cfg(feature = "dev")]
             let _ = vp_sha256;
             #[cfg(not(feature = "dev"))]
             {
-                let mut hasher = Sha256::new();
-                hasher.update(&vp_code);
-                let vp_code_hash = hasher.finalize();
                 assert_eq!(
                     vp_code_hash.as_slice(),
                     &vp_sha256,
@@ -197,7 +229,7 @@ where
             }
 
             self.wl_storage
-                .write_bytes(&Key::validity_predicate(&address), vp_code)
+                .write_bytes(&Key::validity_predicate(&address), vp_code_hash)
                 .unwrap();
 
             if let Some(pk) = public_key {
@@ -258,20 +290,19 @@ where
                 .write(&token::last_locked_ratio(&address), last_locked_ratio)
                 .unwrap();
 
-            let vp_code =
-                vp_code_cache.get_or_insert_with(vp_code_path.clone(), || {
-                    wasm_loader::read_wasm(&self.wasm_dir, &vp_code_path)
-                        .unwrap()
-                });
+            let vp_code_hash =
+                read_wasm_hash(&self.wl_storage, vp_code_path.clone())?.ok_or(
+                    Error::LoadingWasm(format!(
+                        "Unknown vp code path: {}",
+                        implicit_vp_code_path
+                    )),
+                )?;
 
             // In dev, we don't check the hash
             #[cfg(feature = "dev")]
             let _ = vp_sha256;
             #[cfg(not(feature = "dev"))]
             {
-                let mut hasher = Sha256::new();
-                hasher.update(&vp_code);
-                let vp_code_hash = hasher.finalize();
                 assert_eq!(
                     vp_code_hash.as_slice(),
                     &vp_sha256,
@@ -281,7 +312,7 @@ where
             }
 
             self.wl_storage
-                .write_bytes(&Key::validity_predicate(&address), vp_code)
+                .write_bytes(&Key::validity_predicate(&address), vp_code_hash)
                 .unwrap();
 
             let mut total_balance_for_token = token::Amount::default();
@@ -300,23 +331,19 @@ where
         }
 
         // Initialize genesis validator accounts
+        let staking_token = staking_token_address(&self.wl_storage);
         for validator in &genesis.validators {
-            let vp_code = vp_code_cache.get_or_insert_with(
-                validator.validator_vp_code_path.clone(),
-                || {
-                    wasm_loader::read_wasm(
-                        &self.wasm_dir,
-                        &validator.validator_vp_code_path,
-                    )
-                    .unwrap()
-                },
-            );
+            let vp_code_hash = read_wasm_hash(
+                &self.wl_storage,
+                &validator.validator_vp_code_path,
+            )?
+            .ok_or(Error::LoadingWasm(format!(
+                "Unknown vp code path: {}",
+                implicit_vp_code_path
+            )))?;
 
             #[cfg(not(feature = "dev"))]
             {
-                let mut hasher = Sha256::new();
-                hasher.update(&vp_code);
-                let vp_code_hash = hasher.finalize();
                 assert_eq!(
                     vp_code_hash.as_slice(),
                     &validator.validator_vp_sha256,
@@ -327,7 +354,7 @@ where
 
             let addr = &validator.pos_data.address;
             self.wl_storage
-                .write_bytes(&Key::validity_predicate(addr), vp_code)
+                .write_bytes(&Key::validity_predicate(addr), vp_code_hash)
                 .expect("Unable to write user VP");
             // Validator account key
             let pk_key = pk_key(addr);
@@ -339,7 +366,7 @@ where
             // Account balance (tokens not staked in PoS)
             credit_tokens(
                 &mut self.wl_storage,
-                &staking_token_address(),
+                &staking_token,
                 addr,
                 validator.non_staked_balance,
             )
@@ -373,29 +400,24 @@ where
         );
 
         let total_nam =
-            read_total_supply(&self.wl_storage, &staking_token_address())
-                .unwrap();
+            read_total_supply(&self.wl_storage, &staking_token).unwrap();
         // At this stage in the chain genesis, the PoS address balance is the
         // same as the number of staked tokens
-        let total_staked_nam = read_balance(
-            &self.wl_storage,
-            &staking_token_address(),
-            &address::POS,
-        )
-        .unwrap();
+        let total_staked_nam =
+            read_balance(&self.wl_storage, &staking_token, &address::POS)
+                .unwrap();
 
         tracing::info!("Genesis total native tokens: {total_nam}.");
         tracing::info!("Total staked tokens: {total_staked_nam}.");
 
         // Set the ratio of staked to total NAM tokens in the parameters storage
-        self.wl_storage
-            .write(
-                &get_staked_ratio_key(),
-                Decimal::from(total_staked_nam) / Decimal::from(total_nam),
-            )
-            .expect("unable to set staked ratio of NAM in storage");
+        parameters::update_staked_ratio_parameter(
+            &mut self.wl_storage,
+            &(Decimal::from(total_staked_nam) / Decimal::from(total_nam)),
+        )
+        .expect("unable to set staked ratio of NAM in storage");
 
-        ibc::init_genesis_storage(&mut self.wl_storage.storage);
+        ibc::init_genesis_storage(&mut self.wl_storage);
 
         // Set the initial validator set
         for validator in genesis.validators {
@@ -413,11 +435,21 @@ where
             response.validators.push(abci_validator);
         }
 
-        self.wl_storage
-            .commit_genesis()
-            .expect("Must be able to commit genesis state");
-
         Ok(response)
+    }
+}
+
+fn read_wasm_hash(
+    storage: &impl StorageRead,
+    path: impl AsRef<str>,
+) -> storage_api::Result<Option<CodeHash>> {
+    let hash_key = Key::wasm_hash(path);
+    match storage.read_bytes(&hash_key)? {
+        Some(value) => {
+            let hash = CodeHash::try_from(&value[..]).into_storage_result()?;
+            Ok(Some(hash))
+        }
+        None => Ok(None),
     }
 }
 
@@ -442,5 +474,64 @@ where
             Entry::Occupied(o) => o.get().clone(),
             Entry::Vacant(v) => v.insert(f()).clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::BTreeMap;
+    use std::str::FromStr;
+
+    use namada::ledger::storage::DBIter;
+    use namada::types::chain::ChainId;
+    use namada::types::storage;
+
+    use crate::facade::tendermint_proto::abci::RequestInitChain;
+    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
+    use crate::node::ledger::shell::test_utils::TestShell;
+
+    /// Test that the init-chain handler never commits changes directly to the
+    /// DB.
+    #[test]
+    fn test_init_chain_doesnt_commit_db() {
+        let (mut shell, _receiver) = TestShell::new();
+
+        // Collect all storage key-vals into a sorted map
+        let store_block_state = |shell: &TestShell| -> BTreeMap<_, _> {
+            let prefix: storage::Key = FromStr::from_str("").unwrap();
+            shell
+                .wl_storage
+                .storage
+                .db
+                .iter_prefix(&prefix)
+                .map(|(key, val, _gas)| (key, val))
+                .collect()
+        };
+
+        // Store the full state in sorted map
+        let initial_storage_state: std::collections::BTreeMap<String, Vec<u8>> =
+            store_block_state(&shell);
+
+        shell.init_chain(
+            RequestInitChain {
+                time: Some(Timestamp {
+                    seconds: 0,
+                    nanos: 0,
+                }),
+                chain_id: ChainId::default().to_string(),
+                ..Default::default()
+            },
+            1,
+        );
+
+        // Store the full state again
+        let storage_state: std::collections::BTreeMap<String, Vec<u8>> =
+            store_block_state(&shell);
+
+        // The storage state must be unchanged
+        itertools::assert_equal(
+            initial_storage_state.iter(),
+            storage_state.iter(),
+        );
     }
 }

@@ -104,17 +104,6 @@ pub fn single_node_net() -> Result<Test> {
     network(|genesis| genesis, None)
 }
 
-/// Setup two networks with a single genesis validator node.
-pub fn two_single_node_nets() -> Result<(Test, Test)> {
-    Ok((
-        network(|genesis| genesis, None)?,
-        network(
-            |genesis| set_validators(1, genesis, |_| ANOTHER_CHAIN_PORT_OFFSET),
-            None,
-        )?,
-    ))
-}
-
 /// Setup a configurable network.
 pub fn network(
     mut update_genesis: impl FnMut(GenesisConfig) -> GenesisConfig,
@@ -782,9 +771,6 @@ pub fn sleep(seconds: u64) {
 
 #[allow(dead_code)]
 pub mod constants {
-    use std::fs;
-    use std::path::PathBuf;
-
     // User addresses aliases
     pub const ALBERT: &str = "Albert";
     pub const ALBERT_KEY: &str = "Albert-key";
@@ -830,23 +816,9 @@ pub mod constants {
     pub const KARTOFFEL: &str = "Kartoffel";
 
     // Paths to the WASMs used for tests
-    pub const TX_TRANSFER_WASM: &str = "wasm/tx_transfer.wasm";
-    pub const VP_USER_WASM: &str = "wasm/vp_user.wasm";
-    pub const TX_NO_OP_WASM: &str = "wasm_for_tests/tx_no_op.wasm";
-    pub const TX_INIT_PROPOSAL: &str = "wasm_for_tests/tx_init_proposal.wasm";
-    pub const TX_WRITE_WASM: &str = "wasm_for_tests/tx_write.wasm";
-    pub const TX_IBC_WASM: &str = "wasm/tx_ibc.wasm";
-    pub const VP_ALWAYS_TRUE_WASM: &str = "wasm_for_tests/vp_always_true.wasm";
-    pub const VP_ALWAYS_FALSE_WASM: &str =
-        "wasm_for_tests/vp_always_false.wasm";
-    pub const TX_MINT_TOKENS_WASM: &str = "wasm_for_tests/tx_mint_tokens.wasm";
-    pub const TX_PROPOSAL_CODE: &str = "wasm_for_tests/tx_proposal_code.wasm";
-
-    /// Find the absolute path to one of the WASM files above
-    pub fn wasm_abs_path(file_name: &str) -> PathBuf {
-        let working_dir = fs::canonicalize("..").unwrap();
-        working_dir.join(file_name)
-    }
+    pub const VP_USER_WASM: &str = "vp_user.wasm";
+    pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
+    pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
 }
 
 /// Copy WASM files from the `wasm` directory to every node's chain dir.
@@ -927,7 +899,7 @@ pub fn get_all_wasms_hashes(
                 Some(
                     wasm.split('.').collect::<Vec<&str>>()[1]
                         .to_owned()
-                        .to_uppercase(),
+                        .to_lowercase(),
                 )
             } else {
                 None

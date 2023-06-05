@@ -4,7 +4,10 @@ use super::{StorageRead, StorageWrite};
 use crate::ledger::storage_api;
 use crate::types::address::Address;
 use crate::types::token;
-pub use crate::types::token::Amount;
+pub use crate::types::token::{
+    balance_key, is_balance_key, is_total_supply_key, total_supply_key, Amount,
+    Change,
+};
 
 /// Read the balance of a given token and owner.
 pub fn read_balance<S>(
@@ -46,6 +49,9 @@ pub fn transfer<S>(
 where
     S: StorageRead + StorageWrite,
 {
+    if amount.is_zero() {
+        return Ok(());
+    }
     let src_key = token::balance_key(token, src);
     let src_balance = read_balance(storage, token, src)?;
     match src_balance.checked_sub(amount) {
@@ -79,13 +85,20 @@ pub fn credit_tokens<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    let key = token::balance_key(token, dest);
-    let new_balance = read_balance(storage, token, dest)? + amount;
-    storage.write(&key, new_balance)?;
+    let balance_key = token::balance_key(token, dest);
+    let cur_balance = read_balance(storage, token, dest)?;
+    let new_balance = cur_balance.checked_add(amount).ok_or_else(|| {
+        storage_api::Error::new_const("Token balance overflow")
+    })?;
 
     let total_supply_key = token::total_supply_key(token);
-    let current_supply = storage
+    let cur_supply = storage
         .read::<Amount>(&total_supply_key)?
         .unwrap_or_default();
-    storage.write(&total_supply_key, current_supply + amount)
+    let new_supply = cur_supply.checked_add(amount).ok_or_else(|| {
+        storage_api::Error::new_const("Token total supply overflow")
+    })?;
+
+    storage.write(&balance_key, new_balance)?;
+    storage.write(&total_supply_key, new_supply)
 }

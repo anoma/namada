@@ -7,7 +7,6 @@
 #![deny(rustdoc::private_intra_doc_links)]
 
 pub mod key;
-pub mod token;
 
 // used in the VP input
 use core::convert::AsRef;
@@ -31,7 +30,7 @@ use namada_core::types::hash::{Hash, HASH_LENGTH};
 use namada_core::types::internal::HostEnvResult;
 use namada_core::types::key::*;
 use namada_core::types::storage::{
-    BlockHash, BlockHeight, Epoch, TxIndex, BLOCK_HASH_LENGTH,
+    BlockHash, BlockHeight, Epoch, Header, TxIndex, BLOCK_HASH_LENGTH,
 };
 pub use namada_core::types::*;
 pub use namada_macros::validity_predicate;
@@ -54,8 +53,8 @@ pub fn is_tx_whitelisted(ctx: &Ctx) -> VpResult {
         || whitelist.contains(&tx_hash.to_string().to_lowercase()))
 }
 
-pub fn is_vp_whitelisted(ctx: &Ctx, vp_bytes: &[u8]) -> VpResult {
-    let vp_hash = sha256(vp_bytes);
+pub fn is_vp_whitelisted(ctx: &Ctx, vp_hash: &[u8]) -> VpResult {
+    let vp_hash = Hash::try_from(vp_hash).unwrap();
     let key = parameters::storage::get_vp_whitelist_storage_key();
     let whitelist: Vec<String> = ctx.read_pre(&key)?.unwrap_or_default();
     // if whitelist is empty, allow any transaction
@@ -239,6 +238,14 @@ impl<'view> VpEnv<'view> for Ctx {
         get_block_height()
     }
 
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, Error> {
+        // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
+        get_block_header(height)
+    }
+
     fn get_block_hash(&self) -> Result<BlockHash, Error> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_block_hash()
@@ -265,11 +272,7 @@ impl<'view> VpEnv<'view> for Ctx {
         iter_prefix_pre_impl(prefix)
     }
 
-    fn eval(
-        &self,
-        vp_code: Vec<u8>,
-        input_data: Vec<u8>,
-    ) -> Result<bool, Error> {
+    fn eval(&self, vp_code: Hash, input_data: Vec<u8>) -> Result<bool, Error> {
         let result = unsafe {
             namada_vp_eval(
                 vp_code.as_ptr() as _,
@@ -361,6 +364,13 @@ impl StorageRead for CtxPreStorageRead<'_> {
         get_block_height()
     }
 
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, Error> {
+        get_block_header(height)
+    }
+
     fn get_block_hash(&self) -> Result<BlockHash, Error> {
         get_block_hash()
     }
@@ -424,6 +434,13 @@ impl StorageRead for CtxPostStorageRead<'_> {
         get_block_height()
     }
 
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, Error> {
+        get_block_header(height)
+    }
+
     fn get_block_hash(&self) -> Result<BlockHash, Error> {
         get_block_hash()
     }
@@ -476,6 +493,17 @@ fn get_chain_id() -> Result<String, Error> {
 
 fn get_block_height() -> Result<BlockHeight, Error> {
     Ok(BlockHeight(unsafe { namada_vp_get_block_height() }))
+}
+
+fn get_block_header(height: BlockHeight) -> Result<Option<Header>, Error> {
+    let read_result = unsafe { namada_vp_get_block_header(height.0) };
+    match read_from_buffer(read_result, namada_vp_result_buffer) {
+        Some(value) => Ok(Some(
+            Header::try_from_slice(&value[..])
+                .expect("The conversion shouldn't fail"),
+        )),
+        None => Ok(None),
+    }
 }
 
 fn get_block_hash() -> Result<BlockHash, Error> {

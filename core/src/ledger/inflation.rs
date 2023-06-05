@@ -30,15 +30,24 @@ pub struct ValsToUpdate {
 /// PD controller used to dynamically adjust the rewards rates
 #[derive(Debug, Clone)]
 pub struct RewardsController {
-    locked_tokens: token::Amount,
-    total_tokens: token::Amount,
-    locked_ratio_target: Decimal,
-    locked_ratio_last: Decimal,
-    max_reward_rate: Decimal,
-    last_inflation_amount: token::Amount,
-    p_gain_nom: Decimal,
-    d_gain_nom: Decimal,
-    epochs_per_year: u64,
+    /// Locked token amount in the relevant system
+    pub locked_tokens: token::Amount,
+    /// Total token supply
+    pub total_tokens: token::Amount,
+    /// PD target locked ratio
+    pub locked_ratio_target: Decimal,
+    /// PD last locked ratio
+    pub locked_ratio_last: Decimal,
+    /// Maximum reward rate
+    pub max_reward_rate: Decimal,
+    /// Last inflation amount
+    pub last_inflation_amount: token::Amount,
+    /// Nominal proportional gain
+    pub p_gain_nom: Decimal,
+    /// Nominal derivative gain
+    pub d_gain_nom: Decimal,
+    /// Number of epochs per year
+    pub epochs_per_year: u64,
 }
 
 impl RewardsController {
@@ -69,8 +78,8 @@ impl RewardsController {
     }
 
     /// Calculate a new rewards rate
-    pub fn run(
-        Self {
+    pub fn run(self) -> ValsToUpdate {
+        let Self {
             locked_tokens,
             total_tokens,
             locked_ratio_target,
@@ -80,11 +89,11 @@ impl RewardsController {
             p_gain_nom,
             d_gain_nom,
             epochs_per_year,
-        }: &Self,
-    ) -> ValsToUpdate {
-        let locked: Decimal = u64::from(*locked_tokens).into();
-        let total: Decimal = u64::from(*total_tokens).into();
-        let epochs_py: Decimal = (*epochs_per_year).into();
+        } = self;
+
+        let locked: Decimal = u64::from(locked_tokens).into();
+        let total: Decimal = u64::from(total_tokens).into();
+        let epochs_py: Decimal = (epochs_per_year).into();
 
         let locked_ratio = locked / total;
         let max_inflation = total * max_reward_rate / epochs_py;
@@ -95,7 +104,7 @@ impl RewardsController {
         let delta_error = locked_ratio_last - locked_ratio;
         let control_val = p_gain * error - d_gain * delta_error;
 
-        let last_inflation_amount = Decimal::from(*last_inflation_amount);
+        let last_inflation_amount = Decimal::from(last_inflation_amount);
         let inflation = if last_inflation_amount + control_val > max_inflation {
             max_inflation
         } else if last_inflation_amount + control_val > dec!(0.0) {

@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use self::parameters::key_of_token;
+use crate::ibc::applications::transfer::Amount as IbcAmount;
 use crate::types::address::{masp, Address, DecodeError as AddressError};
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
@@ -46,6 +47,11 @@ pub const MAX_AMOUNT: Amount = Amount { micro: u64::MAX };
 pub type Change = i128;
 
 impl Amount {
+    /// Returns whether an amount is zero.
+    pub fn is_zero(&self) -> bool {
+        self.micro == 0
+    }
+
     /// Get the amount as a [`Change`]
     pub fn change(&self) -> Change {
         self.micro as Change
@@ -98,6 +104,23 @@ impl Amount {
         Self {
             micro: change as u64,
         }
+    }
+
+    /// Convert the amount to [`Decimal`] ignoring its scale (i.e. as an integer
+    /// in micro units).
+    pub fn as_dec_unscaled(&self) -> Decimal {
+        Into::<Decimal>::into(self.micro)
+    }
+
+    /// Convert from a [`Decimal`] that's not scaled (i.e. an integer
+    /// in micro units).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the given decimal is not an integer that fits `u64`.
+    pub fn from_dec_unscaled(micro: Decimal) -> Self {
+        let res = micro.to_u64().unwrap();
+        Self { micro: res }
     }
 }
 
@@ -285,6 +308,18 @@ impl Display for Amount {
 impl From<Amount> for Change {
     fn from(amount: Amount) -> Self {
         amount.micro as i128
+    }
+}
+
+impl TryFrom<IbcAmount> for Amount {
+    type Error = AmountParseError;
+
+    fn try_from(amount: IbcAmount) -> Result<Self, Self::Error> {
+        // TODO: https://github.com/anoma/namada/issues/1089
+        if amount > u64::MAX.into() {
+            return Err(AmountParseError::InvalidRange);
+        }
+        Self::from_str(&amount.to_string())
     }
 }
 
@@ -498,35 +533,6 @@ pub enum TransferError {
     NoToken,
 }
 
-#[cfg(any(feature = "abciplus", feature = "abcipp"))]
-impl TryFrom<crate::ledger::ibc::data::FungibleTokenPacketData> for Transfer {
-    type Error = TransferError;
-
-    fn try_from(
-        data: crate::ledger::ibc::data::FungibleTokenPacketData,
-    ) -> Result<Self, Self::Error> {
-        let source =
-            Address::decode(&data.sender).map_err(TransferError::Address)?;
-        let target =
-            Address::decode(&data.receiver).map_err(TransferError::Address)?;
-        let token_str =
-            data.denom.split('/').last().ok_or(TransferError::NoToken)?;
-        let token =
-            Address::decode(token_str).map_err(TransferError::Address)?;
-        let amount =
-            Amount::from_str(&data.amount).map_err(TransferError::Amount)?;
-        Ok(Self {
-            source,
-            target,
-            token,
-            sub_prefix: None,
-            amount,
-            key: None,
-            shielded: None,
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
@@ -590,6 +596,15 @@ mod tests {
         assert_eq!(max.checked_add(zero), Some(max));
         assert_eq!(max.checked_add(one), None);
         assert_eq!(max.checked_add(max), None);
+    }
+
+    #[test]
+    fn test_amount_is_zero() {
+        let zero = Amount::from(0);
+        assert!(zero.is_zero());
+
+        let non_zero = Amount::from(1);
+        assert!(!non_zero.is_zero());
     }
 }
 

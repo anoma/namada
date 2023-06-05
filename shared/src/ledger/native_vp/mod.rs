@@ -3,6 +3,7 @@
 
 pub mod governance;
 pub mod parameters;
+pub mod replay_protection;
 pub mod slash_fund;
 
 use std::cell::RefCell;
@@ -19,7 +20,9 @@ use crate::ledger::storage::{Storage, StorageHasher};
 use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
-use crate::types::storage::{BlockHash, BlockHeight, Epoch, Key, TxIndex};
+use crate::types::storage::{
+    BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
+};
 use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::WasmCacheAccess;
 
@@ -236,6 +239,13 @@ where
         self.ctx.get_block_height()
     }
 
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, storage_api::Error> {
+        self.ctx.get_block_header(height)
+    }
+
     fn get_block_hash(&self) -> Result<BlockHash, storage_api::Error> {
         self.ctx.get_block_hash()
     }
@@ -320,6 +330,13 @@ where
         self.ctx.get_block_height()
     }
 
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, storage_api::Error> {
+        self.ctx.get_block_header(height)
+    }
+
     fn get_block_hash(&self) -> Result<BlockHash, storage_api::Error> {
         self.ctx.get_block_hash()
     }
@@ -396,6 +413,18 @@ where
         .into_storage_result()
     }
 
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, storage_api::Error> {
+        vp_host_fns::get_block_header(
+            &mut self.gas_meter.borrow_mut(),
+            self.storage,
+            height,
+        )
+        .into_storage_result()
+    }
+
     fn get_block_hash(&self) -> Result<BlockHash, storage_api::Error> {
         vp_host_fns::get_block_hash(
             &mut self.gas_meter.borrow_mut(),
@@ -443,7 +472,7 @@ where
 
     fn eval(
         &self,
-        vp_code: Vec<u8>,
+        vp_code_hash: Hash,
         input_data: Vec<u8>,
     ) -> Result<bool, storage_api::Error> {
         #[cfg(feature = "wasm-runtime")]
@@ -479,7 +508,8 @@ where
                 #[cfg(not(feature = "mainnet"))]
                 false,
             );
-            match eval_runner.eval_native_result(ctx, vp_code, input_data) {
+            match eval_runner.eval_native_result(ctx, vp_code_hash, input_data)
+            {
                 Ok(result) => Ok(result),
                 Err(err) => {
                     tracing::warn!(
@@ -494,7 +524,7 @@ where
         #[cfg(not(feature = "wasm-runtime"))]
         {
             // This line is here to prevent unused var clippy warning
-            let _ = (vp_code, input_data);
+            let _ = (vp_code_hash, input_data);
             unimplemented!(
                 "The \"wasm-runtime\" feature must be enabled to use the \
                  `eval` function."

@@ -31,6 +31,7 @@ const NUM_CONSENSUS_VALIDATORS_STORAGE_KEY: &str = "num_consensus";
 const BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY: &str = "below_capacity";
 const TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
 const VALIDATOR_SET_POSITIONS_KEY: &str = "validator_set_positions";
+const CONSENSUS_KEYS: &str = "consensus_keys";
 const LAST_BLOCK_PROPOSER_STORAGE_KEY: &str = "last_block_proposer";
 const CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY: &str =
     "validator_rewards_accumulator";
@@ -558,4 +559,16 @@ pub fn validator_set_positions_key() -> Key {
     Key::from(ADDRESS.to_db_key())
         .push(&VALIDATOR_SET_POSITIONS_KEY.to_owned())
         .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for consensus keys set.
+pub fn consensus_keys_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&CONSENSUS_KEYS.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for consensus keys set?
+pub fn is_consensus_keys_key(key: &Key) -> bool {
+    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)] if addr == &ADDRESS && key == CONSENSUS_KEYS)
 }
