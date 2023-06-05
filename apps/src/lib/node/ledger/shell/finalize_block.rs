@@ -75,8 +75,8 @@ where
             Some(EPOCH_SWITCH_BLOCKS_DELAY)
         );
 
-        tracing::debug!(
-            "Block height: {height}, epoch: {current_epoch}, new epoch: \
+        tracing::info!(
+            "Block height: {height}, epoch: {current_epoch}, is new epoch: \
              {new_epoch}."
         );
 
