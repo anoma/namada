@@ -168,6 +168,8 @@ pub struct BlockStateRead {
     pub next_epoch_min_start_height: BlockHeight,
     /// Minimum block time at which the next epoch may start
     pub next_epoch_min_start_time: DateTimeUtc,
+    /// Update epoch delay
+    pub update_epoch_blocks_delay: Option<u32>,
     /// Established address generator
     pub address_gen: EstablishedAddressGen,
     /// Results of applying transactions
@@ -195,6 +197,8 @@ pub struct BlockStateWrite<'a> {
     pub next_epoch_min_start_height: BlockHeight,
     /// Minimum block time at which the next epoch may start
     pub next_epoch_min_start_time: DateTimeUtc,
+    /// Update epoch delay
+    pub update_epoch_blocks_delay: Option<u32>,
     /// Established address generator
     pub address_gen: &'a EstablishedAddressGen,
     /// Results of applying transactions
@@ -390,6 +394,7 @@ where
             pred_epochs,
             next_epoch_min_start_height,
             next_epoch_min_start_time,
+            update_epoch_blocks_delay,
             results,
             address_gen,
             #[cfg(feature = "ferveo-tpke")]
@@ -405,6 +410,7 @@ where
             self.last_epoch = epoch;
             self.next_epoch_min_start_height = next_epoch_min_start_height;
             self.next_epoch_min_start_time = next_epoch_min_start_time;
+            self.update_epoch_blocks_delay = update_epoch_blocks_delay;
             self.address_gen = address_gen;
             // Rebuild Merkle tree
             self.block.tree = MerkleTree::new(merkle_tree_stores)
@@ -462,6 +468,7 @@ where
             pred_epochs: &self.block.pred_epochs,
             next_epoch_min_start_height: self.next_epoch_min_start_height,
             next_epoch_min_start_time: self.next_epoch_min_start_time,
+            update_epoch_blocks_delay: self.update_epoch_blocks_delay,
             address_gen: &self.address_gen,
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: &self.tx_queue,
