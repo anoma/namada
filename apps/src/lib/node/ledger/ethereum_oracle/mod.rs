@@ -518,13 +518,13 @@ mod test_oracle {
 
     use super::*;
     use crate::node::ledger::ethereum_oracle::test_tools::mock_web3_client::{
-        event_signature, TestCmd, Web3,
+        event_signature, TestCmd, Web3, Web3Controller,
     };
 
     /// The data returned from setting up a test
     struct TestPackage {
         oracle: Oracle,
-        admin_channel: tokio::sync::mpsc::UnboundedSender<TestCmd>,
+        controller: Web3Controller,
         eth_recv: tokio::sync::mpsc::Receiver<EthereumEvent>,
         control_sender: control::Sender,
         blocks_processed_recv: tokio::sync::mpsc::UnboundedReceiver<Uint256>,
@@ -556,10 +556,11 @@ mod test_oracle {
 
     /// Set up an oracle with a mock web3 client that we can control
     fn setup() -> TestPackage {
-        let (admin_channel, blocks_processed_recv, client) = Web3::setup();
+        let (blocks_processed_recv, client) = Web3::setup();
         let (eth_sender, eth_receiver) = tokio::sync::mpsc::channel(1000);
         let (last_processed_block_sender, _) = last_processed_block::channel();
         let (control_sender, control_receiver) = control::channel();
+        let controller = client.controller();
         TestPackage {
             oracle: Oracle {
                 client,
@@ -570,7 +571,7 @@ mod test_oracle {
                 ceiling: DEFAULT_CEILING,
                 control: control_receiver,
             },
-            admin_channel,
+            controller,
             eth_recv: eth_receiver,
             control_sender,
             blocks_processed_recv,
@@ -584,7 +585,7 @@ mod test_oracle {
         let TestPackage {
             oracle,
             eth_recv,
-            admin_channel,
+            controller,
             mut control_sender,
             ..
         } = setup();
@@ -594,9 +595,7 @@ mod test_oracle {
             Config::default(),
         )
         .await;
-        admin_channel
-            .send(TestCmd::Unresponsive)
-            .expect("Test failed");
+        controller.apply_cmd(TestCmd::Unresponsive);
         drop(eth_recv);
         oracle.await.expect("Test failed");
     }
@@ -608,7 +607,7 @@ mod test_oracle {
         let TestPackage {
             oracle,
             mut eth_recv,
-            admin_channel,
+            controller,
             blocks_processed_recv: _processed,
             mut control_sender,
         } = setup();
@@ -618,9 +617,7 @@ mod test_oracle {
             Config::default(),
         )
         .await;
-        admin_channel
-            .send(TestCmd::NewHeight(Uint256::from(150u32)))
-            .expect("Test failed");
+        controller.apply_cmd(TestCmd::NewHeight(Uint256::from(150u32)));
 
         let mut time = std::time::Duration::from_secs(1);
         while time > std::time::Duration::from_millis(10) {
@@ -639,7 +636,7 @@ mod test_oracle {
         let TestPackage {
             oracle,
             mut eth_recv,
-            admin_channel,
+            controller,
             blocks_processed_recv: _processed,
             mut control_sender,
         } = setup();
@@ -653,9 +650,7 @@ mod test_oracle {
             start_with_default_config(oracle, &mut control_sender, config)
                 .await;
         // Increase height above the configured minimum confirmations
-        admin_channel
-            .send(TestCmd::NewHeight(min_confirmations.into()))
-            .expect("Test failed");
+        controller.apply_cmd(TestCmd::NewHeight(min_confirmations.into()));
 
         let new_event = TransferToNamadaFilter {
             nonce: 0.into(),
@@ -665,14 +660,12 @@ mod test_oracle {
         }
         .encode();
         let (sender, _) = channel();
-        admin_channel
-            .send(TestCmd::NewEvent {
-                event_type: event_signature::<TransferToNamadaFilter>(),
-                data: new_event,
-                height: 101,
-                seen: sender,
-            })
-            .expect("Test failed");
+        controller.apply_cmd(TestCmd::NewEvent {
+            event_type: event_signature::<TransferToNamadaFilter>(),
+            data: new_event,
+            height: 101,
+            seen: sender,
+        });
         // since height is not updating, we should not receive events
         let mut time = std::time::Duration::from_secs(1);
         while time > std::time::Duration::from_millis(10) {
@@ -690,7 +683,7 @@ mod test_oracle {
         let TestPackage {
             oracle,
             eth_recv,
-            admin_channel,
+            controller,
             blocks_processed_recv: _processed,
             mut control_sender,
         } = setup();
@@ -704,14 +697,10 @@ mod test_oracle {
             start_with_default_config(oracle, &mut control_sender, config)
                 .await;
         // Increase height above the configured minimum confirmations
-        admin_channel
-            .send(TestCmd::NewHeight(min_confirmations.into()))
-            .expect("Test failed");
+        controller.apply_cmd(TestCmd::NewHeight(min_confirmations.into()));
 
         // set the oracle to be unresponsive
-        admin_channel
-            .send(TestCmd::Unresponsive)
-            .expect("Test failed");
+        controller.apply_cmd(TestCmd::Unresponsive);
         // send a new event to the oracle
         let new_event = TransferToNamadaFilter {
             nonce: 0.into(),
@@ -721,18 +710,14 @@ mod test_oracle {
         }
         .encode();
         let (sender, mut seen) = channel();
-        admin_channel
-            .send(TestCmd::NewEvent {
-                event_type: event_signature::<TransferToNamadaFilter>(),
-                data: new_event,
-                height: 150,
-                seen: sender,
-            })
-            .expect("Test failed");
+        controller.apply_cmd(TestCmd::NewEvent {
+            event_type: event_signature::<TransferToNamadaFilter>(),
+            data: new_event,
+            height: 150,
+            seen: sender,
+        });
         // set the height high enough to emit the event
-        admin_channel
-            .send(TestCmd::NewHeight(Uint256::from(251u32)))
-            .expect("Test failed");
+        controller.apply_cmd(TestCmd::NewHeight(Uint256::from(251u32)));
 
         // the event should not be emitted even though the height is large
         // enough
@@ -742,7 +727,7 @@ mod test_oracle {
             time -= std::time::Duration::from_millis(10);
         }
         // check that when web3 becomes responsive, oracle sends event
-        admin_channel.send(TestCmd::Normal).expect("Test failed");
+        controller.apply_cmd(TestCmd::Normal);
         seen.await.expect("Test failed");
         drop(eth_recv);
         oracle.await.expect("Test failed");
@@ -755,7 +740,7 @@ mod test_oracle {
         let TestPackage {
             oracle,
             mut eth_recv,
-            admin_channel,
+            controller,
             blocks_processed_recv: _processed,
             mut control_sender,
         } = setup();
@@ -769,9 +754,7 @@ mod test_oracle {
             start_with_default_config(oracle, &mut control_sender, config)
                 .await;
         // Increase height above the configured minimum confirmations
-        admin_channel
-            .send(TestCmd::NewHeight(min_confirmations.into()))
-            .expect("Test failed");
+        controller.apply_cmd(TestCmd::NewHeight(min_confirmations.into()));
 
         // confirmed after 100 blocks
         let first_event = TransferToNamadaFilter {
@@ -801,29 +784,23 @@ mod test_oracle {
 
         // send in the events to the logs
         let (sender, seen_second) = channel();
-        admin_channel
-            .send(TestCmd::NewEvent {
-                event_type: event_signature::<TransferToErcFilter>(),
-                data: second_event,
-                height: 125,
-                seen: sender,
-            })
-            .expect("Test failed");
+        controller.apply_cmd(TestCmd::NewEvent {
+            event_type: event_signature::<TransferToErcFilter>(),
+            data: second_event,
+            height: 125,
+            seen: sender,
+        });
         let (sender, _recv) = channel();
-        admin_channel
-            .send(TestCmd::NewEvent {
-                event_type: event_signature::<TransferToNamadaFilter>(),
-                data: first_event,
-                height: 100,
-                seen: sender,
-            })
-            .expect("Test failed");
+        controller.apply_cmd(TestCmd::NewEvent {
+            event_type: event_signature::<TransferToNamadaFilter>(),
+            data: first_event,
+            height: 100,
+            seen: sender,
+        });
 
         // increase block height so first event is confirmed but second is
         // not.
-        admin_channel
-            .send(TestCmd::NewHeight(Uint256::from(200u32)))
-            .expect("Test failed");
+        controller.apply_cmd(TestCmd::NewHeight(Uint256::from(200u32)));
         // check the correct event is received
         let event = eth_recv.recv().await.expect("Test failed");
         if let EthereumEvent::TransfersToNamada {
@@ -847,15 +824,11 @@ mod test_oracle {
         }
 
         // increase block height so second event is emitted
-        admin_channel
-            .send(TestCmd::NewHeight(Uint256::from(225u32)))
-            .expect("Test failed");
+        controller.apply_cmd(TestCmd::NewHeight(Uint256::from(225u32)));
         // wait until event is emitted
         seen_second.await.expect("Test failed");
         // increase block height so second event is confirmed
-        admin_channel
-            .send(TestCmd::NewHeight(Uint256::from(250u32)))
-            .expect("Test failed");
+        controller.apply_cmd(TestCmd::NewHeight(Uint256::from(250u32)));
         // check correct event is received
         let event = eth_recv.recv().await.expect("Test failed");
         if let EthereumEvent::TransfersToEthereum { mut transfers, .. } = event
@@ -888,7 +861,7 @@ mod test_oracle {
         let TestPackage {
             oracle,
             eth_recv,
-            admin_channel,
+            controller,
             mut blocks_processed_recv,
             mut control_sender,
         } = setup();
@@ -906,9 +879,7 @@ mod test_oracle {
         let synced_block_height =
             u64::from(config.min_confirmations) + confirmed_block_height;
         for height in 0..synced_block_height + 1 {
-            admin_channel
-                .send(TestCmd::NewHeight(Uint256::from(height)))
-                .expect("Test failed");
+            controller.apply_cmd(TestCmd::NewHeight(Uint256::from(height)));
         }
         // check that the oracle indeed processes the confirmed blocks
         for height in 0u64..confirmed_block_height + 1 {
@@ -937,9 +908,8 @@ mod test_oracle {
         // increase the height of the chain by one, and check that the oracle
         // processed the next confirmed block
         let synced_block_height = synced_block_height + 1;
-        admin_channel
-            .send(TestCmd::NewHeight(Uint256::from(synced_block_height)))
-            .expect("Test failed");
+        controller
+            .apply_cmd(TestCmd::NewHeight(Uint256::from(synced_block_height)));
 
         let block_processed = timeout(
             std::time::Duration::from_secs(3),
@@ -962,7 +932,7 @@ mod test_oracle {
         let TestPackage {
             oracle,
             eth_recv,
-            admin_channel,
+            controller,
             mut blocks_processed_recv,
             mut control_sender,
         } = setup();
@@ -977,9 +947,8 @@ mod test_oracle {
         let confirmed_block_height = 9; // all blocks up to and including this block have enough confirmations
         let synced_block_height =
             u64::from(config.min_confirmations) + confirmed_block_height;
-        admin_channel
-            .send(TestCmd::NewHeight(Uint256::from(synced_block_height)))
-            .expect("Test failed");
+        controller
+            .apply_cmd(TestCmd::NewHeight(Uint256::from(synced_block_height)));
 
         // check that the oracle has indeed processed the first `n` blocks, even
         // though the first latest block that the oracle received was not 0
@@ -998,9 +967,8 @@ mod test_oracle {
         // by more than one
         let difference = 10;
         let synced_block_height = synced_block_height + difference;
-        admin_channel
-            .send(TestCmd::NewHeight(Uint256::from(synced_block_height)))
-            .expect("Test failed");
+        controller
+            .apply_cmd(TestCmd::NewHeight(Uint256::from(synced_block_height)));
 
         // check that the oracle still checks the blocks inbetween
         for height in (confirmed_block_height + 1)
