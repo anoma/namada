@@ -37,9 +37,7 @@ fn wallet_encrypted_key_cmds() -> Result<()> {
 
     cmd.exp_string("Enter your encryption password:")?;
     cmd.send_line(password)?;
-    cmd.exp_string(
-        "To confirm, please enter the same encryption password once more: ",
-    )?;
+    cmd.exp_string("Enter same passphrase again: ")?;
     cmd.send_line(password)?;
     cmd.exp_string(&format!(
         "Successfully added a key and an address with alias: \"{}\"",
@@ -54,7 +52,7 @@ fn wallet_encrypted_key_cmds() -> Result<()> {
         Some(20),
     )?;
 
-    cmd.exp_string("Enter decryption password:")?;
+    cmd.exp_string("Enter your decryption password:")?;
     cmd.send_line(password)?;
     cmd.exp_string("Public key hash:")?;
     cmd.exp_string("Public key:")?;

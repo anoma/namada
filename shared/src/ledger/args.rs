@@ -454,6 +454,23 @@ pub struct KeyAndAddressGen {
     pub alias_force: bool,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
+    /// BIP44 derivation path
+    pub derivation_path: Option<String>,
+}
+
+/// Wallet restore key and implicit address arguments
+#[derive(Clone, Debug)]
+pub struct KeyAndAddressRestore {
+    /// Scheme type
+    pub scheme: SchemeType,
+    /// Key alias
+    pub alias: Option<String>,
+    /// Whether to force overwrite the alias, if provided
+    pub alias_force: bool,
+    /// Don't encrypt the keypair
+    pub unsafe_dont_encrypt: bool,
+    /// BIP44 derivation path
+    pub derivation_path: Option<String>,
 }
 
 /// Wallet key lookup arguments

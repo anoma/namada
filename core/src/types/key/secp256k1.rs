@@ -468,6 +468,13 @@ impl super::SigScheme for SigScheme {
         SecretKey(Box::new(libsecp256k1::SecretKey::random(csprng)))
     }
 
+    fn from_bytes(sk: [u8; 32]) -> SecretKey {
+        SecretKey(Box::new(
+            libsecp256k1::SecretKey::parse_slice(&sk)
+                .expect("Secret key parsing should not fail."),
+        ))
+    }
+
     /// Sign the data with a key
     fn sign(keypair: &SecretKey, data: impl AsRef<[u8]>) -> Self::Signature {
         #[cfg(not(any(test, feature = "secp256k1-sign-verify")))]

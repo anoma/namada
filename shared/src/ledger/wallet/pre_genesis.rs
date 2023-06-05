@@ -69,7 +69,7 @@ pub fn gen_key_to_store(
     scheme: SchemeType,
     password: &Option<String>,
 ) -> (StoredKeypair<common::SecretKey>, common::SecretKey) {
-    let sk = store::gen_sk(scheme);
+    let sk = store::gen_sk_rng(scheme);
     StoredKeypair::new(sk, password.clone())
 }
 
