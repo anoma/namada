@@ -1562,6 +1562,30 @@ pub async fn query_delegations<C: namada::ledger::queries::Client + Sync>(
     }
 }
 
+pub async fn query_find_validator<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
+    args: args::QueryFindValidator,
+) {
+    let args::QueryFindValidator { query: _, tm_addr } = args;
+    if tm_addr.len() != 40 {
+        eprintln!(
+            "Expected 40 characters in Tendermint address, got {}",
+            tm_addr.len()
+        );
+        cli::safe_exit(1);
+    }
+    let tm_addr = tm_addr.to_ascii_uppercase();
+    let validator = unwrap_client_response::<C, _>(
+        RPC.vp().pos().validator_by_tm_addr(client, &tm_addr).await,
+    );
+    match validator {
+        Some(address) => println!("Found validator address \"{address}\"."),
+        None => {
+            println!("No validator with Tendermint address {tm_addr} found.")
+        }
+    }
+}
+
 /// Dry run a transaction
 pub async fn dry_run_tx<C: namada::ledger::queries::Client + Sync>(
     client: &C,

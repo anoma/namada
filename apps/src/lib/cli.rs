@@ -175,6 +175,7 @@ pub mod cmds {
                 .subcommand(QueryBondedStake::def().display_order(3))
                 .subcommand(QuerySlashes::def().display_order(3))
                 .subcommand(QueryDelegations::def().display_order(3))
+                .subcommand(QueryFindValidator::def().display_order(3))
                 .subcommand(QueryResult::def().display_order(3))
                 .subcommand(QueryRawBytes::def().display_order(3))
                 .subcommand(QueryProposal::def().display_order(3))
@@ -213,6 +214,8 @@ pub mod cmds {
             let query_slashes = Self::parse_with_ctx(matches, QuerySlashes);
             let query_delegations =
                 Self::parse_with_ctx(matches, QueryDelegations);
+            let query_find_validator =
+                Self::parse_with_ctx(matches, QueryFindValidator);
             let query_result = Self::parse_with_ctx(matches, QueryResult);
             let query_raw_bytes = Self::parse_with_ctx(matches, QueryRawBytes);
             let query_proposal = Self::parse_with_ctx(matches, QueryProposal);
@@ -242,6 +245,7 @@ pub mod cmds {
                 .or(query_bonded_stake)
                 .or(query_slashes)
                 .or(query_delegations)
+                .or(query_find_validator)
                 .or(query_result)
                 .or(query_raw_bytes)
                 .or(query_proposal)
@@ -306,6 +310,7 @@ pub mod cmds {
         QueryCommissionRate(QueryCommissionRate),
         QuerySlashes(QuerySlashes),
         QueryDelegations(QueryDelegations),
+        QueryFindValidator(QueryFindValidator),
         QueryRawBytes(QueryRawBytes),
         QueryProposal(QueryProposal),
         QueryProposalResult(QueryProposalResult),
@@ -1462,6 +1467,28 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct QueryFindValidator(pub args::QueryFindValidator<args::CliTypes>);
+
+    impl SubCmd for QueryFindValidator {
+        const CMD: &'static str = "find-validator";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryFindValidator(args::QueryFindValidator::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Find a PoS validator by its Tendermint address.")
+                .add_args::<args::QueryFindValidator<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct QueryRawBytes(pub args::QueryRawBytes<args::CliTypes>);
 
     impl SubCmd for QueryRawBytes {
@@ -1847,6 +1874,7 @@ pub mod args {
     pub const TENDERMINT_TX_INDEX: ArgFlag = flag("tx-index");
     pub const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     pub const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
+    pub const TM_ADDRESS: Arg<String> = arg("tm-address");
     pub const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     pub const TOKEN: Arg<WalletAddress> = arg("token");
     pub const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
@@ -3165,6 +3193,31 @@ pub mod args {
             QueryDelegations::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 owner: ctx.get(&self.owner),
+            }
+        }
+    }
+
+    impl Args for QueryFindValidator<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let tm_addr = TM_ADDRESS.parse(matches);
+            Self { query, tm_addr }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>().arg(
+                TM_ADDRESS
+                    .def()
+                    .about("The address of the validator in Tendermint."),
+            )
+        }
+    }
+
+    impl CliToSdk<QueryFindValidator<SdkTypes>> for QueryFindValidator<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryFindValidator<SdkTypes> {
+            QueryFindValidator::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                tm_addr: self.tm_addr,
             }
         }
     }
