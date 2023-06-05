@@ -400,8 +400,8 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub signing_key: Option<C::Keypair>,
     /// Sign the tx with the keypair of the public key of the given address
     pub signer: Option<C::Address>,
-    /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    /// Path to the TX WASM code file to reveal PK
+    pub tx_reveal_code_path: C::Data,
     /// Password to decrypt key
     pub password: Option<String>,
 }
