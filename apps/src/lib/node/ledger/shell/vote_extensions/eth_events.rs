@@ -472,7 +472,7 @@ mod test_vote_extensions {
     #[cfg(feature = "abcipp")]
     use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
-    use namada::types::storage::{BlockHeight, Epoch, InnerEthEventsQueue};
+    use namada::types::storage::{Epoch, InnerEthEventsQueue};
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::bridge_pool_roots;
     use namada::types::vote_extensions::ethereum_events;
@@ -484,7 +484,6 @@ mod test_vote_extensions {
     #[cfg(feature = "abcipp")]
     use crate::facade::tower_abci::request;
     use crate::node::ledger::shell::test_utils::*;
-    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
     /// Test validating Ethereum events.
     #[test]
@@ -854,12 +853,7 @@ mod test_vote_extensions {
                 .expect("Test failed");
         }
         // we advance forward to the next epoch
-        let mut req = FinalizeBlock::default();
-        req.header.time = namada::types::time::DateTimeUtc::now();
-        shell.wl_storage.storage.last_height = BlockHeight(11);
-        shell.finalize_block(req).expect("Test failed");
-        shell.commit();
-        assert_eq!(shell.wl_storage.storage.get_current_epoch().0.0, 1);
+        assert_eq!(shell.start_new_epoch().0, 1);
         assert!(
             shell
                 .wl_storage

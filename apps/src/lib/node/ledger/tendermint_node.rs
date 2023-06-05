@@ -10,6 +10,7 @@ use namada::types::key::{
     common, ed25519, secp256k1, tm_consensus_key_raw_hash, ParseSecretKeyError,
     RefTo, SecretKey,
 };
+use namada::types::storage::BlockHeight;
 use namada::types::time::DateTimeUtc;
 use semver::{Version, VersionReq};
 use serde_json::json;
@@ -27,7 +28,7 @@ use crate::config;
 use crate::facade::tendermint::{block, Genesis};
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_config::{
-    Error as TendermintError, TendermintConfig,
+    Error as TendermintError, TendermintConfig, TxIndexConfig, TxIndexer,
 };
 
 /// Env. var to output Tendermint log to stdout
@@ -90,6 +91,8 @@ pub enum Error {
     StartUp(std::io::Error),
     #[error("{0}")]
     Runtime(String),
+    #[error("Failed to rollback tendermint state: {0}")]
+    RollBack(String),
     #[error("Failed to convert to String: {0:?}")]
     TendermintPath(std::ffi::OsString),
 }
@@ -264,6 +267,48 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
+pub fn rollback(tendermint_dir: impl AsRef<Path>) -> Result<BlockHeight> {
+    let tendermint_path = from_env_or_default()?;
+    let tendermint_dir = tendermint_dir.as_ref().to_string_lossy();
+
+    // Rollback tendermint state, see https://github.com/tendermint/tendermint/blob/main/cmd/tendermint/commands/rollback.go for details
+    // on how the tendermint rollback behaves
+    let output = std::process::Command::new(tendermint_path)
+        .args([
+            "rollback",
+            "unsafe-all",
+            // NOTE: log config: https://docs.tendermint.com/master/nodes/logging.html#configuring-log-levels
+            // "--log-level=\"*debug\"",
+            "--home",
+            &tendermint_dir,
+        ])
+        .output()
+        .map_err(|e| Error::RollBack(e.to_string()))?;
+
+    // Capture the block height from the output of tendermint rollback
+    // Tendermint stdout message: "Rolled
+    // back state to height %d and hash %v"
+    let output_msg = String::from_utf8(output.stdout)
+        .map_err(|e| Error::RollBack(e.to_string()))?;
+    let (_, right) = output_msg
+        .split_once("Rolled back state to height")
+        .ok_or(Error::RollBack(
+            "Missing expected block height in tendermint stdout message"
+                .to_string(),
+        ))?;
+
+    let mut sub = right.split_ascii_whitespace();
+    let height = sub.next().ok_or(Error::RollBack(
+        "Missing expected block height in tendermint stdout message"
+            .to_string(),
+    ))?;
+
+    Ok(height
+        .parse::<u64>()
+        .map_err(|e| Error::RollBack(e.to_string()))?
+        .into())
+}
+
 /// Convert a common signing scheme validator key into JSON for
 /// Tendermint
 fn validator_key_to_json(
@@ -422,6 +467,15 @@ async fn update_tendermint_config(
         config.consensus.timeout_commit =
             tendermint_config.consensus_timeout_commit;
     }
+
+    let indexer = if tendermint_config.tx_index {
+        TxIndexer::Kv
+    } else {
+        TxIndexer::Null
+    };
+    #[cfg(feature = "abcipp")]
+    let indexer = [indexer];
+    config.tx_index = TxIndexConfig { indexer };
 
     let mut file = OpenOptions::new()
         .write(true)

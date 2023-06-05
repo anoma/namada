@@ -4,11 +4,11 @@ use namada::core::hints;
 #[cfg(feature = "abcipp")]
 use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 use namada::ledger::pos::PosQueries;
-use namada::ledger::storage::traits::StorageHasher;
-use namada::ledger::storage::{DBIter, DB};
+use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::proto::Tx;
 use namada::types::internal::WrapperTxInQueue;
 use namada::types::storage::BlockHeight;
+use namada::types::time::DateTimeUtc;
 use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
@@ -26,6 +26,7 @@ use super::block_space_alloc::{AllocFailure, BlockSpaceAllocator};
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
+use crate::facade::tendermint_proto::google::protobuf::Timestamp;
 #[cfg(feature = "abcipp")]
 use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
 use crate::node::ledger::shell::{process_tx, ShellMode};
@@ -54,7 +55,7 @@ where
 
             // add encrypted txs
             let (encrypted_txs, alloc) =
-                self.build_encrypted_txs(alloc, &req.txs);
+                self.build_encrypted_txs(alloc, &req.txs, req.time);
             let mut txs = encrypted_txs;
 
             // decrypt the wrapper txs included in the previous block
@@ -126,18 +127,29 @@ where
         &self,
         mut alloc: EncryptedTxBatchAllocator,
         txs: &[TxBytes],
+        block_time: Option<Timestamp>,
     ) -> (Vec<TxBytes>, BlockSpaceAllocator<BuildingDecryptedTxBatch>) {
         let pos_queries = self.wl_storage.pos_queries();
+        let block_time = block_time.and_then(|block_time| {
+            // If error in conversion, default to last block datetime, it's
+            // valid because of mempool check
+            TryInto::<DateTimeUtc>::try_into(block_time).ok()
+        });
         let txs = txs
             .iter()
             .filter_map(|tx_bytes| {
-                if let Ok(Ok(TxType::Wrapper(_))) =
-                    Tx::try_from(tx_bytes.as_slice()).map(process_tx)
-                {
-                    Some(tx_bytes.clone())
-                } else {
-                    None
+                if let Ok(tx) = Tx::try_from(tx_bytes.as_slice()) {
+                    // If tx doesn't have an expiration it is valid. If time cannot be
+                    // retrieved from block default to last block datetime which has
+                    // already been checked by mempool_validate, so it's valid
+                    if let (Some(block_time), Some(exp)) = (block_time.as_ref(), &tx.expiration) {
+                        if block_time > exp { return None }
+                    }
+                    if let Ok(TxType::Wrapper(_)) = process_tx(tx) {
+                        return Some(tx_bytes.clone());
+                    }
                 }
+                None
             })
             .take_while(|tx_bytes| {
                 alloc.try_alloc(&tx_bytes[..])
@@ -396,14 +408,12 @@ mod test_prepare_proposal {
     #[cfg(feature = "abcipp")]
     use std::collections::{BTreeSet, HashMap};
 
-    use borsh::BorshDeserialize;
-    #[cfg(feature = "abcipp")]
-    use borsh::BorshSerialize;
+    use borsh::{BorshDeserialize, BorshSerialize};
     use namada::core::ledger::storage_api::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
     use namada::ledger::pos::PosQueries;
-    use namada::proof_of_stake::consensus_validator_set_handle;
+    use namada::proof_of_stake::{consensus_validator_set_handle, Epoch};
     #[cfg(feature = "abcipp")]
     use namada::proto::SignableEthMessage;
     use namada::proto::{Signed, SignedTxData};
@@ -411,7 +421,7 @@ mod test_prepare_proposal {
     #[cfg(feature = "abcipp")]
     use namada::types::key::common;
     use namada::types::key::RefTo;
-    use namada::types::storage::{BlockHeight, Epoch};
+    use namada::types::storage::BlockHeight;
     use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::transaction::{Fee, TxType, WrapperTx};
     #[cfg(feature = "abcipp")]
@@ -434,7 +444,6 @@ mod test_prepare_proposal {
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, TestShell,
     };
-    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
     #[cfg(feature = "abcipp")]
@@ -507,11 +516,78 @@ mod test_prepare_proposal {
         #[cfg(not(feature = "abcipp"))]
         {
             let tx = ProtocolTxType::EthEventsVext(vext)
-                .sign(shell.mode.get_protocol_key().expect("Test failed"))
+                .sign(
+                    shell.mode.get_protocol_key().expect("Test failed"),
+                    shell.chain_id.clone(),
+                )
                 .to_bytes();
             let rsp = shell.mempool_validate(&tx, Default::default());
             assert!(rsp.code != 0, "{}", rsp.log);
         }
+    }
+
+    /// Test that if a tx from the mempool is not a
+    /// WrapperTx type, it is not included in the
+    /// proposed block.
+    #[test]
+    fn test_prepare_proposal_rejects_non_wrapper_tx() {
+        let (shell, _recv, _, _) = test_utils::setup();
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction_data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let req = RequestPrepareProposal {
+            txs: vec![tx.to_bytes()],
+            ..Default::default()
+        };
+        assert!(shell.prepare_proposal(req).txs.is_empty());
+    }
+
+    /// Test that if an error is encountered while
+    /// trying to process a tx from the mempool,
+    /// we simply exclude it from the proposal
+    #[test]
+    fn test_error_in_processing_tx() {
+        let (shell, _recv, _, _) = test_utils::setup();
+        let keypair = gen_keypair();
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction_data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        // an unsigned wrapper will cause an error in processing
+        let wrapper = Tx::new(
+            "".as_bytes().to_owned(),
+            Some(
+                WrapperTx::new(
+                    Fee {
+                        amount: 0.into(),
+                        token: shell.wl_storage.storage.native_token.clone(),
+                    },
+                    &keypair,
+                    Epoch(0),
+                    0.into(),
+                    tx,
+                    Default::default(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
+                )
+                .try_to_vec()
+                .expect("Test failed"),
+            ),
+            shell.chain_id.clone(),
+            None,
+        )
+        .to_bytes();
+        #[allow(clippy::redundant_clone)]
+        let req = RequestPrepareProposal {
+            txs: vec![wrapper.clone()],
+            ..Default::default()
+        };
+        assert!(shell.prepare_proposal(req).txs.is_empty());
     }
 
     /// Test if we are filtering out Ethereum events with bad
@@ -520,10 +596,7 @@ mod test_prepare_proposal {
     fn test_prepare_proposal_filter_out_bad_vext_signatures() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
 
-        let (mut shell, _recv, _, _) = test_utils::setup();
-
-        // artificially change the block height
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
+        let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
 
         let signed_vote_extension = {
             let (protocol_key, _, _) = wallet::defaults::validator_keys();
@@ -593,10 +666,7 @@ mod test_prepare_proposal {
     fn test_prepare_proposal_filter_out_bad_vext_validators() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
 
-        let (mut shell, _recv, _, _) = test_utils::setup();
-
-        // artificially change the block height
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
+        let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
 
         let (validator_addr, protocol_key) = {
             let bertha_key = wallet::defaults::bertha_keypair();
@@ -625,10 +695,7 @@ mod test_prepare_proposal {
     fn test_prepare_proposal_filter_duped_ethereum_events() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 
-        let (mut shell, _recv, _, _) = test_utils::setup();
-
-        // artificially change the block height
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
+        let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
 
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let validator_addr = wallet::defaults::validator_address();
@@ -720,10 +787,7 @@ mod test_prepare_proposal {
     fn test_prepare_proposal_vext_normal_op() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 
-        let (mut shell, _recv, _, _) = test_utils::setup();
-
-        // artificially change the block height
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
+        let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
 
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let validator_addr = wallet::defaults::validator_address();
@@ -853,12 +917,7 @@ mod test_prepare_proposal {
                 .expect("Test failed");
         }
 
-        let mut req = FinalizeBlock::default();
-        req.header.time = namada::types::time::DateTimeUtc::now();
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
-        shell.finalize_block(req).expect("Test failed");
-        shell.commit();
-
+        shell.start_new_epoch();
         assert_eq!(
             shell.wl_storage.pos_queries().get_epoch(
                 shell.wl_storage.pos_queries().get_current_decision_height()
@@ -929,7 +988,7 @@ mod test_prepare_proposal {
             let vote = ProtocolTxType::EthEventsVext(
                 signed_eth_ev_vote_extension.clone(),
             )
-            .sign(&protocol_key)
+            .sign(&protocol_key, shell.chain_id.clone())
             .to_bytes();
             let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
                 txs: vec![vote],
@@ -978,6 +1037,8 @@ mod test_prepare_proposal {
             let tx = Tx::new(
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
+                shell.chain_id.clone(),
+                None,
             );
             expected_decrypted.push(Tx::from(DecryptedTx::Decrypted {
                 tx: tx.clone(),
@@ -997,7 +1058,9 @@ mod test_prepare_proposal {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             );
-            let wrapper = wrapper_tx.sign(&keypair).expect("Test failed");
+            let wrapper = wrapper_tx
+                .sign(&keypair, shell.chain_id.clone(), None)
+                .expect("Test failed");
             shell.enqueue_tx(wrapper_tx);
             expected_wrapper.push(wrapper.clone());
             req.txs.push(wrapper.to_bytes());
@@ -1023,5 +1086,51 @@ mod test_prepare_proposal {
             .collect();
         // check that the order of the txs is correct
         assert_eq!(received, expected_txs);
+    }
+
+    /// Test that expired wrapper transactions are not included in the block
+    #[test]
+    fn test_expired_wrapper_tx() {
+        let (shell, _recv, _, _) = test_utils::setup();
+        let keypair = gen_keypair();
+        let tx_time = DateTimeUtc::now();
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let wrapper_tx = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let wrapper = wrapper_tx
+            .sign(&keypair, shell.chain_id.clone(), Some(tx_time))
+            .expect("Test failed");
+
+        let time = DateTimeUtc::now();
+        let block_time =
+            namada::core::tendermint_proto::google::protobuf::Timestamp {
+                seconds: time.0.timestamp(),
+                nanos: time.0.timestamp_subsec_nanos() as i32,
+            };
+        let req = RequestPrepareProposal {
+            txs: vec![wrapper.to_bytes()],
+            max_tx_bytes: 0,
+            time: Some(block_time),
+            ..Default::default()
+        };
+        let result = shell.prepare_proposal(req);
+        eprintln!("Proposal: {:?}", result.txs);
+        assert!(result.txs.is_empty());
     }
 }

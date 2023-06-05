@@ -32,15 +32,12 @@ pub use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::internal::HostEnvResult;
 use namada_core::types::storage::TxIndex;
 pub use namada_core::types::storage::{
-    self, BlockHash, BlockHeight, Epoch, BLOCK_HASH_LENGTH,
+    self, BlockHash, BlockHeight, Epoch, Header, BLOCK_HASH_LENGTH,
 };
-use namada_core::types::time::Rfc3339String;
 pub use namada_core::types::{eth_bridge_pool, *};
 pub use namada_macros::transaction;
 use namada_vm_env::tx::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
-
-pub use crate::ibc::IbcActions;
 
 /// Log a string. The message will be printed at the `tracing::Level::Info`.
 pub fn log_string<T: AsRef<str>>(msg: T) {
@@ -75,6 +72,7 @@ macro_rules! debug_log {
 }
 
 /// Execution context provides access to the host environment functions
+#[derive(Debug, Clone)]
 pub struct Ctx(());
 
 impl Ctx {
@@ -139,10 +137,22 @@ impl StorageRead for Ctx {
             .expect("Cannot convert the ID string"))
     }
 
-    fn get_block_height(
-        &self,
-    ) -> Result<namada_core::types::storage::BlockHeight, Error> {
+    fn get_block_height(&self) -> Result<BlockHeight, Error> {
         Ok(BlockHeight(unsafe { namada_tx_get_block_height() }))
+    }
+
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, Error> {
+        let read_result = unsafe { namada_tx_get_block_header(height.0) };
+        match read_from_buffer(read_result, namada_tx_result_buffer) {
+            Some(value) => Ok(Some(
+                Header::try_from_slice(&value[..])
+                    .expect("The conversion shouldn't fail"),
+            )),
+            None => Ok(None),
+        }
     }
 
     fn get_block_hash(
@@ -232,16 +242,6 @@ impl StorageWrite for Ctx {
 }
 
 impl TxEnv for Ctx {
-    fn get_block_time(&self) -> Result<time::Rfc3339String, Error> {
-        let read_result = unsafe { namada_tx_get_block_time() };
-        let time_value = read_from_buffer(read_result, namada_tx_result_buffer)
-            .expect("The block time should exist");
-        Ok(Rfc3339String(
-            String::try_from_slice(&time_value[..])
-                .expect("The conversion shouldn't fail"),
-        ))
-    }
-
     fn write_temp<T: BorshSerialize>(
         &mut self,
         key: &storage::Key,

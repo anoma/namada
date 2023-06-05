@@ -4,8 +4,10 @@
 use data_encoding::HEXUPPER;
 use namada::core::hints;
 use namada::core::ledger::storage::WlStorage;
+use namada::core::types::hash::Hash;
 use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 use namada::ledger::pos::PosQueries;
+use namada::ledger::storage::TempWlStorage;
 use namada::types::internal::WrapperTxInQueue;
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
@@ -43,8 +45,8 @@ pub struct ValidationMeta {
 
 impl<D, H> From<&WlStorage<D, H>> for ValidationMeta
 where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
     fn from(wl_storage: &WlStorage<D, H>) -> Self {
         let max_proposal_bytes =
@@ -105,7 +107,8 @@ where
             n_txs = req.txs.len(),
             "Received block proposal",
         );
-        let (tx_results, metadata) = self.check_proposal(&req.txs);
+        let (tx_results, metadata) =
+            self.process_txs(&req.txs, self.get_block_timestamp(req.time));
 
         // We should not have more than one `ethereum_events::VextDigest` in
         // a proposal from some round's leader.
@@ -215,7 +218,8 @@ where
             n_txs = req.txs.len(),
             "Received block proposal",
         );
-        let (tx_results, meta) = self.check_proposal(&req.txs);
+        let (tx_results, meta) =
+            self.process_txs(&req.txs, self.get_block_timestamp(req.time));
 
         // Erroneous transactions were detected when processing
         // the leader's proposal. We allow txs that do not
@@ -269,20 +273,32 @@ where
     /// `ProcessProposal` should be able to make a decision on whether a
     /// proposed block is acceptable or not based solely on what this
     /// function returns.
-    pub fn check_proposal(
+    pub fn process_txs(
         &self,
         txs: &[TxBytes],
+        block_time: DateTimeUtc,
     ) -> (Vec<TxResult>, ValidationMeta) {
         let mut tx_queue_iter = self.wl_storage.storage.tx_queue.iter();
+        let mut temp_wl_storage = TempWlStorage::new(&self.wl_storage.storage);
         let mut metadata = ValidationMeta::from(&self.wl_storage);
         let tx_results: Vec<_> = txs
             .iter()
             .map(|tx_bytes| {
-                self.check_proposal_tx(
+                let result = self.check_proposal_tx(
                     tx_bytes,
                     &mut tx_queue_iter,
                     &mut metadata,
-                )
+                    &mut temp_wl_storage,
+                    block_time,
+                );
+                if let ErrorCodes::Ok =
+                    ErrorCodes::from_u32(result.code).unwrap()
+                {
+                    temp_wl_storage.write_log.commit_tx();
+                } else {
+                    temp_wl_storage.write_log.drop_tx();
+                }
+                result
             })
             .collect();
         metadata.decrypted_queue_has_remaining_txs =
@@ -383,6 +399,7 @@ where
     ///   6. A transaction could not be decrypted
     ///   7. An error in the vote extensions included in the proposal
     ///   8. Not enough block space was available for some tx
+    ///   9. Replay attack
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
@@ -392,6 +409,8 @@ where
         tx_bytes: &[u8],
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTxInQueue>,
         metadata: &mut ValidationMeta,
+        temp_wl_storage: &mut TempWlStorage<D, H>,
+        block_time: DateTimeUtc,
     ) -> TxResult {
         // try to allocate space for this tx
         if let Err(e) = metadata.txs_bin.try_dump(tx_bytes) {
@@ -424,17 +443,20 @@ where
                 })
             },
             |tx| {
-                process_tx(tx).map_err(|err| {
+                let tx_chain_id = tx.chain_id.clone();
+                let tx_expiration = tx.expiration;
+                let tx_type = process_tx(tx.clone()).map_err(|err| {
                     // This occurs if the wrapper / protocol tx signature is
                     // invalid
                     TxResult {
                         code: ErrorCodes::InvalidSig.into(),
                         info: err.to_string(),
                     }
-                })
+                })?;
+                Ok((tx_chain_id, tx_expiration, tx_type, tx))
             },
         );
-        let tx = match maybe_tx {
+        let (tx_chain_id, tx_expiration, tx_type, tx) = match maybe_tx {
             Ok(tx) => tx,
             Err(tx_result) => return tx_result,
         };
@@ -442,7 +464,7 @@ where
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
-        match tx {
+        match tx_type {
             // If it is a raw transaction, we do no further validation
             TxType::Raw(_) => TxResult {
                 code: ErrorCodes::InvalidTx.into(),
@@ -450,132 +472,157 @@ where
                        not supported"
                     .into(),
             },
-            TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                ProtocolTxType::EthEventsVext(ext) => self
-                    .validate_eth_events_vext_and_get_it_back(
-                        ext,
-                        self.wl_storage.storage.last_height,
-                    )
-                    .map(|_| TxResult {
-                        code: ErrorCodes::Ok.into(),
-                        info: "Process Proposal accepted this transaction"
-                            .into(),
-                    })
-                    .unwrap_or_else(|err| TxResult {
-                        code: ErrorCodes::InvalidVoteExtension.into(),
+            TxType::Protocol(protocol_tx) => {
+                // Tx chain id
+                if tx_chain_id != self.chain_id {
+                    return TxResult {
+                        code: ErrorCodes::InvalidChainId.into(),
                         info: format!(
-                            "Process proposal rejected this proposal because \
-                             one of the included Ethereum events vote \
-                             extensions was invalid: {err}"
+                            "Tx carries a wrong chain id: expected {}, found \
+                             {}",
+                            self.chain_id, tx_chain_id
                         ),
-                    }),
-                ProtocolTxType::BridgePoolVext(ext) => self
-                    .validate_bp_roots_vext_and_get_it_back(
-                        ext,
-                        self.wl_storage.storage.last_height,
-                    )
-                    .map(|_| TxResult {
-                        code: ErrorCodes::Ok.into(),
-                        info: "Process Proposal accepted this transaction"
-                            .into(),
-                    })
-                    .unwrap_or_else(|err| TxResult {
-                        code: ErrorCodes::InvalidVoteExtension.into(),
-                        info: format!(
-                            "Process proposal rejected this proposal because \
-                             one of the included Bridge pool root's vote \
-                             extensions was invalid: {err}"
-                        ),
-                    }),
-                ProtocolTxType::ValSetUpdateVext(ext) => self
-                    .validate_valset_upd_vext_and_get_it_back(
-                        ext,
-                        // n.b. only accept validator set updates issued at
-                        // the current epoch (signing off on the validators
-                        // of the next epoch)
-                        self.wl_storage.storage.get_current_epoch().0,
-                    )
-                    .map(|_| TxResult {
-                        code: ErrorCodes::Ok.into(),
-                        info: "Process Proposal accepted this transaction"
-                            .into(),
-                    })
-                    .unwrap_or_else(|err| TxResult {
-                        code: ErrorCodes::InvalidVoteExtension.into(),
-                        info: format!(
-                            "Process proposal rejected this proposal because \
-                             one of the included validator set update vote \
-                             extensions was invalid: {err}"
-                        ),
-                    }),
-                ProtocolTxType::EthereumEvents(digest) => {
-                    #[cfg(feature = "abcipp")]
-                    {
-                        metadata.digests.eth_ev_digest_num += 1;
-                    }
-                    let extensions =
-                        digest.decompress(self.wl_storage.storage.last_height);
-                    let valid_extensions =
-                        self.validate_eth_events_vext_list(extensions).map(
-                            |maybe_ext| maybe_ext.ok().map(|(power, _)| power),
-                        );
+                    };
+                }
 
-                    self.validate_vexts_in_proposal(valid_extensions)
-                }
-                ProtocolTxType::BridgePool(digest) => {
-                    #[cfg(feature = "abcipp")]
-                    {
-                        metadata.digests.bridge_pool_roots += 1;
-                    }
-                    let valid_extensions =
-                        self.validate_bp_roots_vext_list(digest).map(
-                            |maybe_ext| maybe_ext.ok().map(|(power, _)| power),
-                        );
-                    self.validate_vexts_in_proposal(valid_extensions)
-                }
-                ProtocolTxType::ValidatorSetUpdate(digest) => {
-                    if !self
-                        .wl_storage
-                        .ethbridge_queries()
-                        .must_send_valset_upd(SendValsetUpd::AtPrevHeight)
-                    {
+                // Tx expiration
+                if let Some(exp) = tx_expiration {
+                    if block_time > exp {
                         return TxResult {
-                            code: ErrorCodes::InvalidVoteExtension.into(),
-                            info: "Process proposal rejected a validator set \
-                                   update vote extension issued at an invalid \
-                                   block height"
-                                .into(),
+                            code: ErrorCodes::ExpiredTx.into(),
+                            info: format!(
+                                "Tx expired at {:#?}, block time: {:#?}",
+                                exp, block_time
+                            ),
                         };
                     }
-                    #[cfg(feature = "abcipp")]
-                    {
-                        metadata.digests.valset_upd_digest_num += 1;
-                    }
-
-                    let extensions = digest.decompress(
-                        self.wl_storage.storage.get_current_epoch().0,
-                    );
-                    let valid_extensions =
-                        self.validate_valset_upd_vext_list(extensions).map(
-                            |maybe_ext| maybe_ext.ok().map(|(power, _)| power),
-                        );
-
-                    self.validate_vexts_in_proposal(valid_extensions)
                 }
-                _ => TxResult {
-                    code: ErrorCodes::InvalidTx.into(),
-                    info: "Unsupported protocol transaction type".into(),
-                },
-            },
+                match protocol_tx.tx {
+                    ProtocolTxType::EthEventsVext(ext) => self
+                        .validate_eth_events_vext_and_get_it_back(
+                            ext,
+                            self.wl_storage.storage.last_height,
+                        )
+                        .map(|_| TxResult {
+                            code: ErrorCodes::Ok.into(),
+                            info: "Process Proposal accepted this transaction"
+                                .into(),
+                        })
+                        .unwrap_or_else(|err| TxResult {
+                            code: ErrorCodes::InvalidVoteExtension.into(),
+                            info: format!(
+                                "Process proposal rejected this proposal \
+                                 because one of the included Ethereum events \
+                                 vote extensions was invalid: {err}"
+                            ),
+                        }),
+                    ProtocolTxType::BridgePoolVext(ext) => self
+                        .validate_bp_roots_vext_and_get_it_back(
+                            ext,
+                            self.wl_storage.storage.last_height,
+                        )
+                        .map(|_| TxResult {
+                            code: ErrorCodes::Ok.into(),
+                            info: "Process Proposal accepted this transaction"
+                                .into(),
+                        })
+                        .unwrap_or_else(|err| TxResult {
+                            code: ErrorCodes::InvalidVoteExtension.into(),
+                            info: format!(
+                                "Process proposal rejected this proposal \
+                                 because one of the included Bridge pool \
+                                 root's vote extensions was invalid: {err}"
+                            ),
+                        }),
+                    ProtocolTxType::ValSetUpdateVext(ext) => self
+                        .validate_valset_upd_vext_and_get_it_back(
+                            ext,
+                            // n.b. only accept validator set updates issued at
+                            // the current epoch (signing off on the validators
+                            // of the next epoch)
+                            self.wl_storage.storage.get_current_epoch().0,
+                        )
+                        .map(|_| TxResult {
+                            code: ErrorCodes::Ok.into(),
+                            info: "Process Proposal accepted this transaction"
+                                .into(),
+                        })
+                        .unwrap_or_else(|err| TxResult {
+                            code: ErrorCodes::InvalidVoteExtension.into(),
+                            info: format!(
+                                "Process proposal rejected this proposal \
+                                 because one of the included validator set \
+                                 update vote extensions was invalid: {err}"
+                            ),
+                        }),
+                    ProtocolTxType::EthereumEvents(digest) => {
+                        #[cfg(feature = "abcipp")]
+                        {
+                            metadata.digests.eth_ev_digest_num += 1;
+                        }
+                        let extensions = digest
+                            .decompress(self.wl_storage.storage.last_height);
+                        let valid_extensions = self
+                            .validate_eth_events_vext_list(extensions)
+                            .map(|maybe_ext| {
+                                maybe_ext.ok().map(|(power, _)| power)
+                            });
+
+                        self.validate_vexts_in_proposal(valid_extensions)
+                    }
+                    ProtocolTxType::BridgePool(digest) => {
+                        #[cfg(feature = "abcipp")]
+                        {
+                            metadata.digests.bridge_pool_roots += 1;
+                        }
+                        let valid_extensions = self
+                            .validate_bp_roots_vext_list(digest)
+                            .map(|maybe_ext| {
+                                maybe_ext.ok().map(|(power, _)| power)
+                            });
+                        self.validate_vexts_in_proposal(valid_extensions)
+                    }
+                    ProtocolTxType::ValidatorSetUpdate(digest) => {
+                        if !self
+                            .wl_storage
+                            .ethbridge_queries()
+                            .must_send_valset_upd(SendValsetUpd::AtPrevHeight)
+                        {
+                            return TxResult {
+                                code: ErrorCodes::InvalidVoteExtension.into(),
+                                info: "Process proposal rejected a validator \
+                                       set update vote extension issued at an \
+                                       invalid block height"
+                                    .into(),
+                            };
+                        }
+                        #[cfg(feature = "abcipp")]
+                        {
+                            metadata.digests.valset_upd_digest_num += 1;
+                        }
+
+                        let extensions = digest.decompress(
+                            self.wl_storage.storage.get_current_epoch().0,
+                        );
+                        let valid_extensions = self
+                            .validate_valset_upd_vext_list(extensions)
+                            .map(|maybe_ext| {
+                                maybe_ext.ok().map(|(power, _)| power)
+                            });
+
+                        self.validate_vexts_in_proposal(valid_extensions)
+                    }
+                    _ => TxResult {
+                        code: ErrorCodes::InvalidTx.into(),
+                        info: "Unsupported protocol transaction type".into(),
+                    },
+                }
+            }
             TxType::Decrypted(tx) => {
                 metadata.has_decrypted_txs = true;
                 match tx_queue_iter.next() {
-                    Some(WrapperTxInQueue {
-                        tx: wrapper,
-                        #[cfg(not(feature = "mainnet"))]
-                            has_valid_pow: _,
-                    }) => {
-                        if wrapper.tx_hash != tx.hash_commitment() {
+                    Some(wrapper) => {
+                        if wrapper.tx.tx_hash != tx.hash_commitment() {
                             TxResult {
                                 code: ErrorCodes::InvalidOrder.into(),
                                 info: "Process proposal rejected a decrypted \
@@ -584,6 +631,41 @@ where
                                     .into(),
                             }
                         } else if verify_decrypted_correctly(&tx, privkey) {
+                            if let DecryptedTx::Decrypted {
+                                tx,
+                                has_valid_pow: _,
+                            } = tx
+                            {
+                                // Tx chain id
+                                if tx.chain_id != self.chain_id {
+                                    return TxResult {
+                                        code:
+                                            ErrorCodes::InvalidDecryptedChainId
+                                                .into(),
+                                        info: format!(
+                                            "Decrypted tx carries a wrong \
+                                             chain id: expected {}, found {}",
+                                            self.chain_id, tx.chain_id
+                                        ),
+                                    };
+                                }
+
+                                // Tx expiration
+                                if let Some(exp) = tx.expiration {
+                                    if block_time > exp {
+                                        return TxResult {
+                                            code:
+                                                ErrorCodes::ExpiredDecryptedTx
+                                                    .into(),
+                                            info: format!(
+                                                "Decrypted tx expired at \
+                                                 {:#?}, block time: {:#?}",
+                                                exp, block_time
+                                            ),
+                                        };
+                                    }
+                                }
+                            }
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
                                 info: "Process Proposal accepted this \
@@ -591,6 +673,7 @@ where
                                     .into(),
                             }
                         } else {
+                            // Wrong inner tx commitment
                             TxResult {
                                 code: ErrorCodes::InvalidTx.into(),
                                 info: "The encrypted payload of tx was \
@@ -606,7 +689,7 @@ where
                     },
                 }
             }
-            TxType::Wrapper(tx) => {
+            TxType::Wrapper(wrapper) => {
                 // decrypted txs shouldn't show up before wrapper txs
                 if metadata.has_decrypted_txs {
                     return TxResult {
@@ -642,8 +725,33 @@ where
                     };
                 }
 
+                // ChainId check
+                if tx_chain_id != self.chain_id {
+                    return TxResult {
+                        code: ErrorCodes::InvalidChainId.into(),
+                        info: format!(
+                            "Tx carries a wrong chain id: expected {}, found \
+                             {}",
+                            self.chain_id, tx_chain_id
+                        ),
+                    };
+                }
+
+                // Tx expiration
+                if let Some(exp) = tx_expiration {
+                    if block_time > exp {
+                        return TxResult {
+                            code: ErrorCodes::ExpiredTx.into(),
+                            info: format!(
+                                "Tx expired at {:#?}, block time: {:#?}",
+                                exp, block_time
+                            ),
+                        };
+                    }
+                }
+
                 // validate the ciphertext via Ferveo
-                if !tx.validate_ciphertext() {
+                if !wrapper.validate_ciphertext() {
                     TxResult {
                         code: ErrorCodes::InvalidTx.into(),
                         info: format!(
@@ -652,22 +760,70 @@ where
                         ),
                     }
                 } else {
+                    // Replay protection checks
+                    let inner_hash_key =
+                        replay_protection::get_tx_hash_key(&wrapper.tx_hash);
+                    if temp_wl_storage.has_key(&inner_hash_key).expect(
+                        "Error while checking inner tx hash key in storage",
+                    ) {
+                        return TxResult {
+                            code: ErrorCodes::ReplayTx.into(),
+                            info: format!(
+                                "Inner transaction hash {} already in \
+                                 storage, replay attempt",
+                                &wrapper.tx_hash
+                            ),
+                        };
+                    }
+
+                    // Write inner hash to WAL
+                    temp_wl_storage
+                        .write_log
+                        .write(&inner_hash_key, vec![])
+                        .expect(
+                            "Couldn't write inner transaction hash to write \
+                             log",
+                        );
+
+                    let wrapper_hash = Hash(tx.unsigned_hash());
+                    let wrapper_hash_key =
+                        replay_protection::get_tx_hash_key(&wrapper_hash);
+                    if temp_wl_storage.has_key(&wrapper_hash_key).expect(
+                        "Error while checking wrapper tx hash key in storage",
+                    ) {
+                        return TxResult {
+                            code: ErrorCodes::ReplayTx.into(),
+                            info: format!(
+                                "Wrapper transaction hash {} already in \
+                                 storage, replay attempt",
+                                wrapper_hash
+                            ),
+                        };
+                    }
+
+                    // Write wrapper hash to WAL
+                    temp_wl_storage
+                        .write_log
+                        .write(&wrapper_hash_key, vec![])
+                        .expect("Couldn't write wrapper tx hash to write log");
+
                     // If the public key corresponds to the MASP sentinel
                     // transaction key, then the fee payer is effectively
                     // the MASP, otherwise derive
                     // the payer from public key.
-                    let fee_payer = if tx.pk != masp_tx_key().ref_to() {
-                        tx.fee_payer()
+                    let fee_payer = if wrapper.pk != masp_tx_key().ref_to() {
+                        wrapper.fee_payer()
                     } else {
                         masp()
                     };
                     // check that the fee payer has sufficient balance
-                    let balance = self.get_balance(&tx.fee.token, &fee_payer);
+                    let balance =
+                        self.get_balance(&wrapper.fee.token, &fee_payer);
 
                     // In testnets, tx is allowed to skip fees if it
                     // includes a valid PoW
                     #[cfg(not(feature = "mainnet"))]
-                    let has_valid_pow = self.has_valid_pow_solution(&tx);
+                    let has_valid_pow = self.has_valid_pow_solution(&wrapper);
                     #[cfg(feature = "mainnet")]
                     let has_valid_pow = false;
 
@@ -772,10 +928,12 @@ mod test_process_proposal {
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::Epoch;
+    use namada::types::time::DateTimeUtc;
     use namada::types::token;
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
-    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx};
+    use namada::types::transaction::protocol::ProtocolTxType;
+    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::bridge_pool_roots::MultiSignedVext;
     #[cfg(feature = "abcipp")]
@@ -785,7 +943,7 @@ mod test_process_proposal {
     use super::*;
     use crate::node::ledger::shell::test_utils::{
         self, deactivate_bridge, gen_keypair, get_bp_bytes_to_sign,
-        setup_at_height, ProcessProposal, TestError, TestShell,
+        ProcessProposal, TestError, TestShell,
     };
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::ProcessedTx;
     #[cfg(feature = "abcipp")]
@@ -813,7 +971,7 @@ mod test_process_proposal {
             },
             events: vec![],
         })
-        .sign(protocol_key)
+        .sign(protocol_key, shell.chain_id.clone())
         .to_bytes()
     }
 
@@ -826,7 +984,10 @@ mod test_process_proposal {
             .compress_bridge_pool_roots(vec![bp_root])
             .expect("Test failed");
         ProtocolTxType::BridgePool(tx)
-            .sign(shell.mode.get_protocol_key().expect("Test failed"))
+            .sign(
+                shell.mode.get_protocol_key().expect("Test failed"),
+                shell.chain_id.clone(),
+            )
             .to_bytes()
     }
 
@@ -836,8 +997,7 @@ mod test_process_proposal {
     #[cfg(feature = "abcipp")]
     fn test_more_than_one_vext_digest_rejected() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
-        let (mut shell, _recv, _, _) = test_utils::setup();
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
+        let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let vote_extension_digest = {
             let validator_addr = wallet::defaults::validator_address();
@@ -864,7 +1024,7 @@ mod test_process_proposal {
             }
         };
         let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
-            .sign(&protocol_key)
+            .sign(&protocol_key, shell.chain_id.clone())
             .to_bytes();
         let request = ProcessProposal {
             txs: vec![tx.clone(), tx],
@@ -880,11 +1040,14 @@ mod test_process_proposal {
     #[cfg(feature = "abcipp")]
     #[test]
     fn check_multiple_bp_root_vexts_rejected() {
-        let (mut shell, _recv, _, _) = setup_at_height(3u64);
+        let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let vext = shell.extend_vote_with_bp_roots().expect("Test failed");
         let tx =
             ProtocolTxType::BridgePool(MultiSignedVext(HashSet::from([vext])))
-                .sign(shell.mode.get_protocol_key().expect("Test failed."))
+                .sign(
+                    shell.mode.get_protocol_key().expect("Test failed."),
+                    shell.chain_id.clone(),
+                )
                 .to_bytes();
         assert!(
             shell
@@ -902,7 +1065,7 @@ mod test_process_proposal {
         protocol_key: common::SecretKey,
     ) {
         let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
-            .sign(&protocol_key)
+            .sign(&protocol_key, shell.chain_id.clone())
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
         let response = if let Err(TestError::RejectProposal(resp)) =
@@ -926,7 +1089,7 @@ mod test_process_proposal {
     /// if the bridge is not active.
     #[test]
     fn check_rejected_eth_events_bridge_inactive() {
-        let (mut shell, _, _, _) = setup_at_height(3);
+        let (mut shell, _, _, _) = test_utils::setup_at_height(3);
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
         let addr = shell.mode.get_validator_address().expect("Test failed");
         let event = EthereumEvent::TransfersToNamada {
@@ -941,7 +1104,7 @@ mod test_process_proposal {
         }
         .sign(protocol_key);
         let tx = ProtocolTxType::EthEventsVext(ext)
-            .sign(protocol_key)
+            .sign(protocol_key, shell.chain_id.clone())
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
 
@@ -976,7 +1139,7 @@ mod test_process_proposal {
     /// if the bridge is not active.
     #[test]
     fn check_rejected_bp_roots_bridge_inactive() {
-        let (mut shell, _a, _b, _c) = setup_at_height(3);
+        let (mut shell, _a, _b, _c) = test_utils::setup_at_height(3);
         shell.wl_storage.storage.block.height =
             shell.wl_storage.storage.last_height;
         shell.commit();
@@ -995,7 +1158,7 @@ mod test_process_proposal {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         let tx = ProtocolTxType::BridgePoolVext(vote_ext)
-            .sign(protocol_key)
+            .sign(protocol_key, shell.chain_id.clone())
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
 
@@ -1032,7 +1195,7 @@ mod test_process_proposal {
     #[cfg(feature = "abcipp")]
     #[test]
     fn check_rejected_vext_bridge_inactive() {
-        let (mut shell, _a, _b, _c) = setup_at_height(3);
+        let (mut shell, _a, _b, _c) = test_utils::setup_at_height(3);
         shell.wl_storage.storage.block.height =
             shell.wl_storage.storage.last_height;
         shell.commit();
@@ -1052,7 +1215,7 @@ mod test_process_proposal {
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         let mut txs = vec![
             ProtocolTxType::BridgePool(vote_ext.into())
-                .sign(protocol_key)
+                .sign(protocol_key, shell.chain_id.clone())
                 .to_bytes(),
         ];
 
@@ -1090,7 +1253,7 @@ mod test_process_proposal {
         };
         txs.push(
             ProtocolTxType::EthereumEvents(vote_extension_digest)
-                .sign(protocol_key)
+                .sign(protocol_key, shell.chain_id.clone())
                 .to_bytes(),
         );
         let request = ProcessProposal { txs };
@@ -1130,7 +1293,7 @@ mod test_process_proposal {
         protocol_key: common::SecretKey,
     ) {
         let tx = ProtocolTxType::EthEventsVext(vote_extension)
-            .sign(&protocol_key)
+            .sign(&protocol_key, shell.chain_id.clone())
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
         let response = if let Err(TestError::RejectProposal(resp)) =
@@ -1155,8 +1318,7 @@ mod test_process_proposal {
     #[test]
     fn test_drop_vext_with_invalid_sigs() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
-        let (mut shell, _recv, _, _) = test_utils::setup();
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
+        let (mut shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let addr = wallet::defaults::validator_address();
         let event = EthereumEvent::TransfersToNamada {
@@ -1220,8 +1382,7 @@ mod test_process_proposal {
         const INVALID_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 - 1);
         #[cfg(not(feature = "abcipp"))]
         const INVALID_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 + 1);
-        let (mut shell, _recv, _, _) = test_utils::setup();
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
+        let (mut shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let addr = wallet::defaults::validator_address();
         let event = EthereumEvent::TransfersToNamada {
@@ -1274,8 +1435,7 @@ mod test_process_proposal {
     #[test]
     fn test_drop_vext_with_invalid_validators() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
-        let (mut shell, _recv, _, _) = test_utils::setup();
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
+        let (mut shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
         let (addr, protocol_key) = {
             let bertha_key = wallet::defaults::bertha_keypair();
             let bertha_addr = wallet::defaults::bertha_address();
@@ -1326,7 +1486,7 @@ mod test_process_proposal {
         }
     }
 
-    /// Test that if a wrapper tx is not signed, it is rejected
+    /// Test that if a wrapper tx is not signed, the block is rejected
     /// by [`process_proposal`].
     #[test]
     fn test_unsigned_wrapper_rejected() {
@@ -1335,6 +1495,8 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -1352,6 +1514,8 @@ mod test_process_proposal {
         let tx = Tx::new(
             vec![],
             Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")),
+            shell.chain_id.clone(),
+            None,
         )
         .to_bytes();
 
@@ -1364,25 +1528,29 @@ mod test_process_proposal {
                     get_bp_roots_vext(&shell),
                 ],
             };
-            if let [resp, _, _] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp, _, _] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
-                panic!("Test failed");
+                panic!("Test failed")
             }
         };
         #[cfg(not(feature = "abcipp"))]
         let response = {
             let request = ProcessProposal { txs: vec![tx] };
-            if let [resp] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
                 panic!("Test failed")
             }
@@ -1395,7 +1563,8 @@ mod test_process_proposal {
         );
     }
 
-    /// Test that a wrapper tx with invalid signature is rejected
+    /// Test that a block including a wrapper tx with invalid signature is
+    /// rejected
     #[test]
     fn test_wrapper_bad_signature_rejected() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
@@ -1403,6 +1572,8 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
         );
         let timestamp = tx.timestamp;
         let mut wrapper = WrapperTx::new(
@@ -1418,7 +1589,7 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair)
+        .sign(&keypair, shell.chain_id.clone(), None)
         .expect("Test failed");
         let new_tx = if let Some(Ok(SignedTxData {
             data: Some(data),
@@ -1443,7 +1614,7 @@ mod test_process_proposal {
                 .try_to_vec()
                 .expect("Test failed");
             Tx {
-                code: vec![],
+                code_or_hash: vec![],
                 data: Some(
                     SignedTxData {
                         sig,
@@ -1453,6 +1624,8 @@ mod test_process_proposal {
                     .expect("Test failed"),
                 ),
                 timestamp,
+                chain_id: shell.chain_id.clone(),
+                expiration: None,
             }
         } else {
             panic!("Test failed");
@@ -1466,15 +1639,16 @@ mod test_process_proposal {
                     get_bp_roots_vext(&shell),
                 ],
             };
-
-            if let [resp, _, _] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp, _, _] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
-                panic!("Test failed");
+                panic!("Test failed")
             }
         };
         #[cfg(not(feature = "abcipp"))]
@@ -1482,12 +1656,14 @@ mod test_process_proposal {
             let request = ProcessProposal {
                 txs: vec![new_tx.to_bytes()],
             };
-            if let [resp] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
                 panic!("Test failed")
             }
@@ -1503,7 +1679,7 @@ mod test_process_proposal {
     }
 
     /// Test that if the account submitting the tx is not known and the fee is
-    /// non-zero, [`process_proposal`] rejects that tx
+    /// non-zero, [`process_proposal`] rejects that block
     #[test]
     fn test_wrapper_unknown_address() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
@@ -1519,6 +1695,8 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -1533,7 +1711,7 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair)
+        .sign(&keypair, shell.chain_id.clone(), None)
         .expect("Test failed");
         #[cfg(feature = "abcipp")]
         let response = {
@@ -1544,14 +1722,16 @@ mod test_process_proposal {
                     get_bp_roots_vext(&shell),
                 ],
             };
-            if let [resp, _, _] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp, _, _] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
-                panic!("Test failed");
+                panic!("Test failed")
             }
         };
         #[cfg(not(feature = "abcipp"))]
@@ -1559,12 +1739,14 @@ mod test_process_proposal {
             let request = ProcessProposal {
                 txs: vec![wrapper.to_bytes()],
             };
-            if let [resp] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
                 panic!("Test failed")
             }
@@ -1579,7 +1761,7 @@ mod test_process_proposal {
 
     /// Test that if the account submitting the tx does
     /// not have sufficient balance to pay the fee,
-    /// [`process_proposal`] rejects that tx
+    /// [`process_proposal`] rejects the entire block
     #[test]
     fn test_wrapper_insufficient_balance_address() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
@@ -1591,12 +1773,12 @@ mod test_process_proposal {
         );
         shell
             .wl_storage
-            .storage
+            .write_log
             .write(&balance_key, Amount::whole(99).try_to_vec().unwrap())
             .unwrap();
         shell
             .wl_storage
-            .storage
+            .write_log
             .write(
                 &get_wrapper_tx_fees_key(),
                 token::Amount::whole(MIN_FEE).try_to_vec().unwrap(),
@@ -1606,6 +1788,8 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -1620,7 +1804,7 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair)
+        .sign(&keypair, shell.chain_id.clone(), None)
         .expect("Test failed");
 
         #[cfg(feature = "abcipp")]
@@ -1632,14 +1816,16 @@ mod test_process_proposal {
                     get_bp_roots_vext(&shell),
                 ],
             };
-            if let [resp, _, _] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp, _, _] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
-                panic!("Test failed");
+                panic!("Test failed")
             }
         };
         #[cfg(not(feature = "abcipp"))]
@@ -1647,12 +1833,14 @@ mod test_process_proposal {
             let request = ProcessProposal {
                 txs: vec![wrapper.to_bytes()],
             };
-            if let [resp] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
                 panic!("Test failed")
             }
@@ -1677,6 +1865,8 @@ mod test_process_proposal {
             let tx = Tx::new(
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
+                shell.chain_id.clone(),
+                None,
             );
             let wrapper = WrapperTx::new(
                 Fee {
@@ -1692,11 +1882,14 @@ mod test_process_proposal {
                 None,
             );
             shell.enqueue_tx(wrapper);
-            txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                tx,
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: false,
-            })));
+            let mut decrypted_tx =
+                Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                    tx,
+                    #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow: false,
+                }));
+            decrypted_tx.chain_id = shell.chain_id.clone();
+            txs.push(decrypted_tx);
         }
         #[cfg(feature = "abcipp")]
         let response = {
@@ -1745,7 +1938,7 @@ mod test_process_proposal {
         );
     }
 
-    /// Test that a tx incorrectly labelled as undecryptable
+    /// Test that a block containing a tx incorrectly labelled as undecryptable
     /// is rejected by [`process_proposal`]
     #[test]
     fn test_incorrectly_labelled_as_undecryptable() {
@@ -1755,6 +1948,8 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -1771,8 +1966,9 @@ mod test_process_proposal {
         );
         shell.enqueue_tx(wrapper.clone());
 
-        let tx =
+        let mut tx =
             Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)));
+        tx.chain_id = shell.chain_id.clone();
 
         #[cfg(feature = "abcipp")]
         let response = {
@@ -1783,14 +1979,16 @@ mod test_process_proposal {
                     get_bp_roots_vext(&shell),
                 ],
             };
-            if let [resp, _, _] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp, _, _] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
-                panic!("Test failed");
+                panic!("Test failed")
             }
         };
         #[cfg(not(feature = "abcipp"))]
@@ -1798,12 +1996,14 @@ mod test_process_proposal {
             let request = ProcessProposal {
                 txs: vec![tx.to_bytes()],
             };
-            if let [resp] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
                 panic!("Test failed")
             }
@@ -1829,6 +2029,8 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
         );
         let mut wrapper = WrapperTx::new(
             Fee {
@@ -1846,10 +2048,11 @@ mod test_process_proposal {
         wrapper.tx_hash = Hash([0; 32]);
 
         shell.enqueue_tx(wrapper.clone());
-        let tx = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
+        let mut tx = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
             #[allow(clippy::redundant_clone)]
             wrapper.clone(),
         )));
+        tx.chain_id = shell.chain_id.clone();
 
         #[cfg(feature = "abcipp")]
         let response = {
@@ -1914,10 +2117,13 @@ mod test_process_proposal {
         };
 
         shell.enqueue_tx(wrapper.clone());
-        let signed = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
-            #[allow(clippy::redundant_clone)]
-            wrapper.clone(),
-        )));
+        let mut signed =
+            Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
+                #[allow(clippy::redundant_clone)]
+                wrapper.clone(),
+            )));
+        signed.chain_id = shell.chain_id.clone();
+
         #[cfg(feature = "abcipp")]
         let response = {
             let request = ProcessProposal {
@@ -1964,13 +2170,16 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
         );
 
-        let tx = Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+        let mut tx = Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
             tx,
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
         }));
+        tx.chain_id = shell.chain_id.clone();
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
@@ -1993,7 +2202,7 @@ mod test_process_proposal {
         );
     }
 
-    /// Process Proposal should reject a RawTx, but not panic
+    /// Process Proposal should reject a block containing a RawTx, but not panic
     #[test]
     fn test_raw_tx_rejected() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
@@ -2001,8 +2210,12 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
         );
-        let tx = Tx::from(TxType::Raw(tx));
+        let mut tx = Tx::from(TxType::Raw(tx));
+        tx.chain_id = shell.chain_id.clone();
+
         #[cfg(feature = "abcipp")]
         let response = {
             let request = ProcessProposal {
@@ -2012,14 +2225,16 @@ mod test_process_proposal {
                     get_bp_roots_vext(&shell),
                 ],
             };
-            if let [resp, _, _] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp, _, _] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
-                panic!("Test failed");
+                panic!("Test failed")
             }
         };
         #[cfg(not(feature = "abcipp"))]
@@ -2027,12 +2242,14 @@ mod test_process_proposal {
             let request = ProcessProposal {
                 txs: vec![tx.to_bytes()],
             };
-            if let [resp] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                if let [resp] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
             } else {
                 panic!("Test failed")
             }
@@ -2047,6 +2264,516 @@ mod test_process_proposal {
         );
     }
 
+    /// Test that if the unsigned wrapper tx hash is known (replay attack), the
+    /// block is rejected
+    #[test]
+    fn test_wrapper_tx_hash() {
+        let (mut shell, _recv, _, _) = test_utils::setup();
+
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let signed = wrapper
+            .sign(&keypair, shell.chain_id.clone(), None)
+            .expect("Test failed");
+
+        // Write wrapper hash to storage
+        let wrapper_unsigned_hash = Hash(signed.unsigned_hash());
+        let hash_key =
+            replay_protection::get_tx_hash_key(&wrapper_unsigned_hash);
+        shell
+            .wl_storage
+            .storage
+            .write(&hash_key, vec![])
+            .expect("Test failed");
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![signed.to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::ReplayTx)
+                );
+                assert_eq!(
+                    response[0].result.info,
+                    format!(
+                        "Wrapper transaction hash {} already in storage, \
+                         replay attempt",
+                        wrapper_unsigned_hash
+                    )
+                );
+            }
+        }
+    }
+
+    /// Test that a block containing two identical wrapper txs is rejected
+    #[test]
+    fn test_wrapper_tx_hash_same_block() {
+        let (mut shell, _recv, _, _) = test_utils::setup();
+
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        // Add unshielded balance for fee payment
+        let balance_key = token::balance_key(
+            &shell.wl_storage.storage.native_token,
+            &Address::from(&keypair.ref_to()),
+        );
+        shell
+            .wl_storage
+            .storage
+            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
+            .unwrap();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let signed = wrapper
+            .sign(&keypair, shell.chain_id.clone(), None)
+            .expect("Test failed");
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![signed.to_bytes(); 2],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(response[0].result.code, u32::from(ErrorCodes::Ok));
+                assert_eq!(
+                    response[1].result.code,
+                    u32::from(ErrorCodes::ReplayTx)
+                );
+                // The checks happens on the inner hash first, so the tx is
+                // rejected because of this hash, not the
+                // wrapper one
+                assert_eq!(
+                    response[1].result.info,
+                    format!(
+                        "Inner transaction hash {} already in storage, replay \
+                         attempt",
+                        wrapper.tx_hash
+                    )
+                );
+            }
+        }
+    }
+
+    /// Test that if the unsigned inner tx hash is known (replay attack), the
+    /// block is rejected
+    #[test]
+    fn test_inner_tx_hash() {
+        let (mut shell, _recv, _, _) = test_utils::setup();
+
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let inner_unsigned_hash = wrapper.tx_hash.clone();
+        let signed = wrapper
+            .sign(&keypair, shell.chain_id.clone(), None)
+            .expect("Test failed");
+
+        // Write inner hash to storage
+        let hash_key = replay_protection::get_tx_hash_key(&inner_unsigned_hash);
+        shell
+            .wl_storage
+            .storage
+            .write(&hash_key, vec![])
+            .expect("Test failed");
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![signed.to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::ReplayTx)
+                );
+                assert_eq!(
+                    response[0].result.info,
+                    format!(
+                        "Inner transaction hash {} already in storage, replay \
+                         attempt",
+                        inner_unsigned_hash
+                    )
+                );
+            }
+        }
+    }
+
+    /// Test that a block containing two identical inner transactions is
+    /// rejected
+    #[test]
+    fn test_inner_tx_hash_same_block() {
+        let (mut shell, _recv, _, _) = test_utils::setup();
+
+        let keypair = crate::wallet::defaults::daewon_keypair();
+        let keypair_2 = crate::wallet::defaults::daewon_keypair();
+
+        // Add unshielded balance for fee payment
+        let balance_key = token::balance_key(
+            &shell.wl_storage.storage.native_token,
+            &Address::from(&keypair.ref_to()),
+        );
+        shell
+            .wl_storage
+            .storage
+            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
+            .unwrap();
+
+        // Add unshielded balance for fee payment
+        let balance_key = token::balance_key(
+            &shell.wl_storage.storage.native_token,
+            &Address::from(&keypair_2.ref_to()),
+        );
+        shell
+            .wl_storage
+            .storage
+            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
+            .unwrap();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx.clone(),
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let inner_unsigned_hash = wrapper.tx_hash.clone();
+        let signed = wrapper
+            .sign(&keypair, shell.chain_id.clone(), None)
+            .expect("Test failed");
+
+        let new_wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair_2,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let new_signed = new_wrapper
+            .sign(&keypair, shell.chain_id.clone(), None)
+            .expect("Test failed");
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![signed.to_bytes(), new_signed.to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(response[0].result.code, u32::from(ErrorCodes::Ok));
+                assert_eq!(
+                    response[1].result.code,
+                    u32::from(ErrorCodes::ReplayTx)
+                );
+                assert_eq!(
+                    response[1].result.info,
+                    format!(
+                        "Inner transaction hash {} already in storage, replay \
+                         attempt",
+                        inner_unsigned_hash
+                    )
+                );
+            }
+        }
+    }
+
+    /// Test that a wrapper or protocol transaction with a mismatching chain id
+    /// causes the entire block to be rejected
+    #[test]
+    fn test_wrong_chain_id() {
+        let (mut shell, _recv, _, _) = test_utils::setup();
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx.clone(),
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let wrong_chain_id = ChainId("Wrong chain id".to_string());
+        let signed = wrapper
+            .sign(&keypair, wrong_chain_id.clone(), None)
+            .expect("Test failed");
+
+        let protocol_tx = ProtocolTxType::NewDkgKeypair(tx)
+            .sign(&keypair, wrong_chain_id.clone());
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![signed.to_bytes(), protocol_tx.to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                for res in response {
+                    assert_eq!(
+                        res.result.code,
+                        u32::from(ErrorCodes::InvalidChainId)
+                    );
+                    assert_eq!(
+                        res.result.info,
+                        format!(
+                            "Tx carries a wrong chain id: expected {}, found \
+                             {}",
+                            shell.chain_id, wrong_chain_id
+                        )
+                    );
+                }
+            }
+        }
+    }
+
+    /// Test that a decrypted transaction with a mismatching chain id gets
+    /// rejected without rejecting the entire block
+    #[test]
+    fn test_decrypted_wong_chain_id() {
+        let (mut shell, _recv, _, _) = test_utils::setup();
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let wrong_chain_id = ChainId("Wrong chain id".to_string());
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("new transaction data".as_bytes().to_owned()),
+            wrong_chain_id.clone(),
+            None,
+        );
+        let decrypted: Tx = DecryptedTx::Decrypted {
+            tx: tx.clone(),
+            has_valid_pow: false,
+        }
+        .into();
+        let signed_decrypted = decrypted.sign(&keypair);
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let wrapper_in_queue = WrapperTxInQueue {
+            tx: wrapper,
+            has_valid_pow: false,
+        };
+        shell.wl_storage.storage.tx_queue.push(wrapper_in_queue);
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![signed_decrypted.to_bytes()],
+        };
+
+        match shell.process_proposal(request) {
+            Ok(response) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::InvalidDecryptedChainId)
+                );
+                assert_eq!(
+                    response[0].result.info,
+                    format!(
+                        "Decrypted tx carries a wrong chain id: expected {}, \
+                         found {}",
+                        shell.chain_id, wrong_chain_id
+                    )
+                )
+            }
+            Err(_) => panic!("Test failed"),
+        }
+    }
+
+    /// Test that an expired wrapper transaction causes a block rejection
+    #[test]
+    fn test_expired_wrapper() {
+        let (mut shell, _recv, _, _) = test_utils::setup();
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let signed = wrapper
+            .sign(&keypair, shell.chain_id.clone(), Some(DateTimeUtc::now()))
+            .expect("Test failed");
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![signed.to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::ExpiredTx)
+                );
+            }
+        }
+    }
+
+    /// Test that an expired decrypted transaction is correctly marked as so
+    /// without rejecting the entire block
+    #[test]
+    fn test_expired_decrypted() {
+        let (mut shell, _recv, _, _) = test_utils::setup();
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("new transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            Some(DateTimeUtc::now()),
+        );
+        let decrypted: Tx = DecryptedTx::Decrypted {
+            tx: tx.clone(),
+            has_valid_pow: false,
+        }
+        .into();
+        let signed_decrypted = decrypted.sign(&keypair);
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let wrapper_in_queue = WrapperTxInQueue {
+            tx: wrapper,
+            has_valid_pow: false,
+        };
+        shell.wl_storage.storage.tx_queue.push(wrapper_in_queue);
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![signed_decrypted.to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(response) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::ExpiredDecryptedTx)
+                );
+            }
+            Err(_) => panic!("Test failed"),
+        }
+    }
+
     /// Test if we reject wrapper txs when they shouldn't be included in blocks.
     ///
     /// Currently, the conditions to reject wrapper
@@ -2059,6 +2786,8 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some(b"transaction data".to_vec()),
+            shell.chain_id.clone(),
+            None,
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -2073,7 +2802,7 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair)
+        .sign(&keypair, shell.chain_id.clone(), None)
         .expect("Test failed")
         .to_bytes();
         for height in [1u64, 2] {

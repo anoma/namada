@@ -172,7 +172,7 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Amt<H> {
         value: StorageBytes,
     ) -> Result<Hash, Error> {
         let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
-        let value = TreeBytes::from(value.as_ref().to_owned());
+        let value = TreeBytes::from(value.to_vec());
         self.update(key, value)
             .map(Into::into)
             .map_err(|err| Error::MerkleTree(err.to_string()))
@@ -307,7 +307,7 @@ impl Value for TreeBytes {
 }
 
 /// The storage hasher used for the merkle tree.
-pub trait StorageHasher: Hasher + Default {
+pub trait StorageHasher: Hasher + fmt::Debug + Default {
     /// Hash the value to store
     fn hash(value: impl AsRef<[u8]>) -> H256;
 }
@@ -357,6 +357,12 @@ impl fmt::Debug for Sha256Hasher {
 /// A Keccak hasher algorithm.
 pub struct KeccakHasher(tiny_keccak::Keccak);
 
+impl fmt::Debug for KeccakHasher {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "KeccakHasher")
+    }
+}
+
 impl Default for KeccakHasher {
     fn default() -> Self {
         Self(tiny_keccak::Keccak::v256())
@@ -387,6 +393,7 @@ impl Hasher for KeccakHasher {
 }
 
 /// A [`StorageHasher`] which can never be called.
+#[derive(Debug)]
 pub enum DummyHasher {}
 
 const DUMMY_HASHER_PANIC_MSG: &str = "A storage hasher was called, which \

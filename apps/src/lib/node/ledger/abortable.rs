@@ -1,11 +1,9 @@
 use std::future::Future;
 use std::pin::Pin;
 
+use namada::types::control_flow::{install_shutdown_signal, ShutdownSignal};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
-
-use crate::control_flow::install_shutdown_signal;
 
 /// Serves to identify an aborting async task, which is spawned
 /// with an [`AbortableSpawner`].
@@ -14,7 +12,7 @@ pub type AbortingTask = &'static str;
 /// An [`AbortableSpawner`] will spawn abortable tasks into the asynchronous
 /// runtime.
 pub struct AbortableSpawner {
-    shutdown_recv: oneshot::Receiver<()>,
+    shutdown_recv: ShutdownSignal,
     abort_send: UnboundedSender<AbortingTask>,
     abort_recv: UnboundedReceiver<AbortingTask>,
     cleanup_jobs: Vec<Pin<Box<dyn Future<Output = ()>>>>,

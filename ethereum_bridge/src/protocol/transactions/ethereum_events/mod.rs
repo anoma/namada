@@ -273,6 +273,7 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
+    use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
     use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::ledger::storage_api::StorageRead;
     use namada_core::types::address;
@@ -450,7 +451,7 @@ mod tests {
         assert!(tx_result.vps_result.rejected_vps.is_empty());
         assert!(tx_result.vps_result.errors.is_empty());
         assert!(tx_result.initialized_accounts.is_empty());
-        assert!(tx_result.ibc_event.is_none());
+        assert!(tx_result.ibc_events.is_empty());
     }
 
     /// Test calling apply_derived_tx for an event that isn't backed by enough
@@ -666,7 +667,7 @@ mod tests {
         let prev_keys = vote_tallies::Keys::from(&event);
 
         // commit then update the epoch
-        wl_storage.storage.commit_block().unwrap();
+        wl_storage.storage.commit_block(MockDBWriteBatch).unwrap();
         let unbonding_len = namada_proof_of_stake::read_pos_params(&wl_storage)
             .expect("Test failed")
             .unbonding_len
@@ -805,7 +806,7 @@ mod tests {
         });
 
         // commit then update the epoch
-        wl_storage.storage.commit_block().unwrap();
+        wl_storage.storage.commit_block(MockDBWriteBatch).unwrap();
         let unbonding_len = namada_proof_of_stake::read_pos_params(&wl_storage)
             .expect("Test failed")
             .unbonding_len

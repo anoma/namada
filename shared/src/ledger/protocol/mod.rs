@@ -12,6 +12,7 @@ use crate::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
 use crate::ledger::native_vp::ethereum_bridge::vp::EthBridge;
 use crate::ledger::native_vp::governance::GovernanceVp;
 use crate::ledger::native_vp::parameters::{self, ParametersVp};
+use crate::ledger::native_vp::replay_protection::ReplayProtectionVp;
 use crate::ledger::native_vp::slash_fund::SlashFundVp;
 use crate::ledger::native_vp::{self, NativeVp};
 use crate::ledger::pos::{self, PosVP};
@@ -63,6 +64,10 @@ pub enum Error {
     EthBridgeNativeVpError(native_vp::ethereum_bridge::vp::Error),
     #[error("Ethereum bridge pool native VP error: {0}")]
     BridgePoolNativeVpError(native_vp::ethereum_bridge::bridge_pool_vp::Error),
+    #[error("Replay protection native VP error: {0}")]
+    ReplayProtectionNativeVpError(
+        crate::ledger::native_vp::replay_protection::Error,
+    ),
     #[error("Access to an internal address {0} is forbidden")]
     AccessForbidden(InternalAddress),
 }
@@ -139,13 +144,19 @@ where
         }
         TxType::Wrapper(_)
         | TxType::Decrypted(DecryptedTx::Undecryptable(_)) => {
-            // do nothing.
+            // do not apply db updates, but charge gas anyway.
             // 1) we can only apply state updates on encrypted txs
             // at the next block height
             // 2) undecryptable txs should not perform any state
             // updates either. errors are emitted at a layer above,
             // in `Shell::finalize_block()`.
-            Ok(TxResult::default())
+            let gas_used = block_gas_meter
+                .finalize_transaction()
+                .map_err(Error::GasError)?;
+            Ok(TxResult {
+                gas_used,
+                ..Default::default()
+            })
         }
     }
 }
@@ -225,14 +236,14 @@ where
         .map_err(Error::GasError)?;
     let initialized_accounts = write_log.get_initialized_accounts();
     let changed_keys = write_log.get_keys();
-    let ibc_event = write_log.take_ibc_event();
+    let ibc_events = write_log.take_ibc_events();
 
     Ok(TxResult {
         gas_used,
         changed_keys,
         vps_result,
         initialized_accounts,
-        ibc_event,
+        ibc_events,
     })
 }
 
@@ -320,9 +331,6 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    gas_meter
-        .add_compiling_fee(tx.code.len())
-        .map_err(Error::GasError)?;
     let empty = vec![];
     let tx_data = tx.data.as_ref().unwrap_or(&empty);
     wasm::run::tx(
@@ -330,7 +338,7 @@ where
         write_log,
         gas_meter,
         tx_index,
-        &tx.code,
+        &tx.code_or_hash,
         tx_data,
         vp_wasm_cache,
         tx_wasm_cache,
@@ -427,19 +435,16 @@ where
             let mut gas_meter = VpGasMeter::new(initial_gas);
             let accept = match &addr {
                 Address::Implicit(_) | Address::Established(_) => {
-                    let (vp, gas) = storage
+                    let (vp_hash, gas) = storage
                         .validity_predicate(addr)
                         .map_err(Error::StorageError)?;
                     gas_meter.add(gas).map_err(Error::GasError)?;
-                    let vp =
-                        vp.ok_or_else(|| Error::MissingAddress(addr.clone()))?;
-
-                    gas_meter
-                        .add_compiling_fee(vp.len())
-                        .map_err(Error::GasError)?;
+                    let Some(vp_code_hash) = vp_hash else {
+                        return Err(Error::MissingAddress(addr.clone()));
+                    };
 
                     wasm::run::vp(
-                        vp,
+                        &vp_code_hash,
                         tx,
                         tx_index,
                         addr,
@@ -570,6 +575,16 @@ where
                                 .validate_tx(tx_data, &keys_changed, &verifiers)
                                 .map_err(Error::BridgePoolNativeVpError);
                             gas_meter = bridge_pool.ctx.gas_meter.into_inner();
+                            result
+                        }
+                        InternalAddress::ReplayProtection => {
+                            let replay_protection_vp =
+                                ReplayProtectionVp { ctx };
+                            let result = replay_protection_vp
+                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .map_err(Error::ReplayProtectionNativeVpError);
+                            gas_meter =
+                                replay_protection_vp.ctx.gas_meter.into_inner();
                             result
                         }
                     };

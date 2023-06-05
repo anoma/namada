@@ -1,1 +1,6 @@
 book/
+
+# pagetoc generated (from https://github.com/slowsage/mdbook-pagetoc#configuration)
+theme/index.hbs
+theme/pagetoc.css
+theme/pagetoc.js

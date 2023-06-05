@@ -1,0 +1,1 @@
+- Remove wasm code from tx ([#1297](https://github.com/anoma/namada/issues/1297))

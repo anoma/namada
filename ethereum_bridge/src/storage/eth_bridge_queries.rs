@@ -68,8 +68,8 @@ pub trait EthBridgeQueries {
 
 impl<D, H> EthBridgeQueries for WlStorage<D, H>
 where
-    D: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + storage::StorageHasher,
 {
     type Storage = Self;
 
@@ -101,8 +101,8 @@ impl<'db, DB> Copy for EthBridgeQueriesHook<'db, DB> {}
 
 impl<'db, D, H> EthBridgeQueriesHook<'db, WlStorage<D, H>>
 where
-    D: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + storage::StorageHasher,
 {
     /// Return a handle to the inner [`WlStorage`].
     #[inline]
@@ -240,15 +240,9 @@ where
     pub fn get_bridge_pool_root_at_height(
         self,
         height: BlockHeight,
-    ) -> KeccakHash {
-        self.wl_storage
-            .storage
-            .db
-            .read_merkle_tree_stores(height)
-            .expect("We should always be able to read the database")
-            .expect("Every root should correspond to an existing block height")
-            .get_root(StoreType::BridgePool)
-            .into()
+    ) -> Option<KeccakHash> {
+        let base_tree = self.wl_storage.storage.get_merkle_tree(height).ok()?;
+        Some(base_tree.sub_root(&StoreType::BridgePool).into())
     }
 
     /// Determines if it is possible to send a validator set update vote
@@ -403,8 +397,8 @@ where
 /// validators in Namada, at some given epoch.
 pub struct ConsensusEthAddresses<'db, D, H>
 where
-    D: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + storage::StorageHasher,
 {
     epoch: Epoch,
     wl_storage: &'db WlStorage<D, H>,
@@ -413,8 +407,8 @@ where
 
 impl<'db, D, H> ConsensusEthAddresses<'db, D, H>
 where
-    D: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + storage::StorageHasher,
 {
     /// Iterate over the Ethereum addresses of the set of consensus validators
     /// in Namada, at some given epoch.

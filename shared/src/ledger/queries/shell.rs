@@ -6,7 +6,7 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
-use namada_core::types::storage::BlockResults;
+use namada_core::types::storage::{BlockResults, KeySeg};
 
 use self::eth_bridge::{EthBridge, ETH_BRIDGE};
 use crate::ledger::events::log::dumb_queries;
@@ -116,12 +116,13 @@ where
         ctx.wl_storage.storage.block.height.0 as usize + 1
     ];
     iter.for_each(|(key, value, _gas)| {
-        let key = key
-            .parse::<usize>()
-            .expect("expected integer for block height");
+        let key = u64::parse(key).expect("expected integer for block height");
         let value = BlockResults::try_from_slice(&value)
             .expect("expected BlockResults bytes");
-        results[key] = value;
+        let idx: usize = key
+            .try_into()
+            .expect("expected block height to fit into usize");
+        results[idx] = value;
     });
     Ok(results)
 }
@@ -344,14 +345,15 @@ where
 mod test {
 
     use borsh::BorshDeserialize;
+    use namada_test_utils::TestWasms;
 
     use crate::ledger::queries::testing::TestClient;
     use crate::ledger::queries::RPC;
     use crate::ledger::storage_api::{self, StorageWrite};
     use crate::proto::Tx;
+    use crate::types::hash::Hash;
+    use crate::types::storage::Key;
     use crate::types::{address, token};
-
-    const TX_NO_OP_WASM: &str = "../wasm_for_tests/tx_no_op.wasm";
 
     #[test]
     fn test_shell_queries_router_paths() {
@@ -379,6 +381,11 @@ mod test {
     {
         // Initialize the `TestClient`
         let mut client = TestClient::new(RPC);
+        // store the wasm code
+        let tx_no_op = TestWasms::TxNoOp.read_bytes();
+        let tx_hash = Hash::sha256(&tx_no_op);
+        let key = Key::wasm_code(&tx_hash);
+        client.wl_storage.storage.write(&key, &tx_no_op).unwrap();
 
         // Request last committed epoch
         let read_epoch = RPC.shell().epoch(&client).await.unwrap();
@@ -386,8 +393,12 @@ mod test {
         assert_eq!(current_epoch, read_epoch);
 
         // Request dry run tx
-        let tx_no_op = std::fs::read(TX_NO_OP_WASM).expect("cannot load wasm");
-        let tx = Tx::new(tx_no_op, None);
+        let tx = Tx::new(
+            tx_hash.to_vec(),
+            None,
+            client.wl_storage.storage.chain_id.clone(),
+            None,
+        );
         let tx_bytes = tx.to_bytes();
         let result = RPC
             .shell()

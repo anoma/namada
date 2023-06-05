@@ -1,8 +1,7 @@
 //! Files defyining the types used in governance.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::{self, Display};
-use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use rust_decimal::Decimal;
@@ -14,10 +13,33 @@ use crate::types::hash::Hash;
 use crate::types::key::common::{self, Signature};
 use crate::types::key::SigScheme;
 use crate::types::storage::Epoch;
-use crate::types::token::SCALE;
+use crate::types::token::{Amount, SCALE};
 
 /// Type alias for vote power
 pub type VotePower = u128;
+
+/// A PGF cocuncil composed of the address and spending cap
+pub type Council = (Address, Amount);
+
+/// The type of a governance vote with the optional associated Memo
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+    Eq,
+)]
+pub enum VoteType {
+    /// A default vote without Memo
+    Default,
+    /// A vote for the PGF council
+    PGFCouncil(HashSet<Council>),
+    /// A vote for ETH bridge carrying the signature over the proposed message
+    ETHBridge(Signature),
+}
 
 #[derive(
     Debug,
@@ -32,7 +54,7 @@ pub type VotePower = u128;
 /// The vote for a proposal
 pub enum ProposalVote {
     /// Yes
-    Yay,
+    Yay(VoteType),
     /// No
     Nay,
 }
@@ -40,17 +62,40 @@ pub enum ProposalVote {
 impl ProposalVote {
     /// Check if a vote is yay
     pub fn is_yay(&self) -> bool {
-        match self {
-            ProposalVote::Yay => true,
-            ProposalVote::Nay => false,
-        }
+        matches!(self, ProposalVote::Yay(_))
+    }
+
+    /// Check if vote is of type default
+    pub fn is_default_vote(&self) -> bool {
+        matches!(
+            self,
+            ProposalVote::Yay(VoteType::Default) | ProposalVote::Nay
+        )
     }
 }
 
 impl Display for ProposalVote {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProposalVote::Yay => write!(f, "yay"),
+            ProposalVote::Yay(vote_type) => match vote_type {
+                VoteType::Default => write!(f, "yay"),
+                VoteType::PGFCouncil(councils) => {
+                    writeln!(f, "yay with councils:")?;
+                    for (address, spending_cap) in councils {
+                        writeln!(
+                            f,
+                            "Council: {}, spending cap: {}",
+                            address, spending_cap
+                        )?
+                    }
+
+                    Ok(())
+                }
+                VoteType::ETHBridge(sig) => {
+                    write!(f, "yay with signature: {:#?}", sig)
+                }
+            },
+
             ProposalVote::Nay => write!(f, "nay"),
         }
     }
@@ -63,28 +108,22 @@ pub enum ProposalVoteParseError {
     InvalidVote,
 }
 
-impl FromStr for ProposalVote {
-    type Err = ProposalVoteParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.eq("yay") {
-            Ok(ProposalVote::Yay)
-        } else if s.eq("nay") {
-            Ok(ProposalVote::Nay)
-        } else {
-            Err(ProposalVoteParseError::InvalidVote)
-        }
-    }
+/// The type of the tally
+pub enum Tally {
+    /// Default proposal
+    Default,
+    /// PGF proposal
+    PGFCouncil(Council),
+    /// ETH Bridge proposal
+    ETHBridge,
 }
 
 /// The result of a proposal
 pub enum TallyResult {
-    /// Proposal was accepted
-    Passed,
+    /// Proposal was accepted with the associated value
+    Passed(Tally),
     /// Proposal was rejected
     Rejected,
-    /// A critical error in tally computation
-    Failed,
 }
 
 /// The result with votes of a proposal
@@ -121,11 +160,30 @@ impl Display for ProposalResult {
 impl Display for TallyResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TallyResult::Passed => write!(f, "passed"),
+            TallyResult::Passed(vote) => match vote {
+                Tally::Default | Tally::ETHBridge => write!(f, "passed"),
+                Tally::PGFCouncil((council, cap)) => write!(
+                    f,
+                    "passed with PGF council address: {}, spending cap: {}",
+                    council, cap
+                ),
+            },
             TallyResult::Rejected => write!(f, "rejected"),
-            TallyResult::Failed => write!(f, "failed"),
         }
     }
+}
+
+/// The type of a governance proposal
+#[derive(
+    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+)]
+pub enum ProposalType {
+    /// A default proposal with the optional path to wasm code
+    Default(Option<String>),
+    /// A PGF council proposal
+    PGFCouncil,
+    /// An ETH bridge proposal
+    ETHBridge,
 }
 
 #[derive(
@@ -139,14 +197,14 @@ pub struct Proposal {
     pub content: BTreeMap<String, String>,
     /// The proposal author address
     pub author: Address,
+    /// The proposal type
+    pub r#type: ProposalType,
     /// The epoch from which voting is allowed
     pub voting_start_epoch: Epoch,
     /// The epoch from which voting is stopped
     pub voting_end_epoch: Epoch,
     /// The epoch from which this changes are executed
     pub grace_epoch: Epoch,
-    /// The code containing the storage changes
-    pub proposal_code_path: Option<String>,
 }
 
 impl Display for Proposal {

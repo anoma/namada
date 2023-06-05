@@ -11,7 +11,8 @@ pub mod decrypted_tx {
 
     use super::EllipticCurve;
     use crate::proto::Tx;
-    use crate::types::transaction::{hash_tx, Hash, TxType, WrapperTx};
+    use crate::types::chain::ChainId;
+    use crate::types::transaction::{Hash, TxType, WrapperTx};
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
     #[allow(clippy::large_enum_variant)]
@@ -56,14 +57,15 @@ pub mod decrypted_tx {
         }
 
         /// Return the hash used as a commitment to the tx's contents in the
-        /// wrapper tx that includes this tx as an encrypted payload.
+        /// wrapper tx that includes this tx as an encrypted payload. The
+        /// commitment is computed on the unsigned tx if tx is signed
         pub fn hash_commitment(&self) -> Hash {
             match self {
                 DecryptedTx::Decrypted {
                     tx,
                     #[cfg(not(feature = "mainnet"))]
                         has_valid_pow: _,
-                } => hash_tx(&tx.to_bytes()),
+                } => Hash(tx.unsigned_hash()),
                 DecryptedTx::Undecryptable(wrapper) => wrapper.tx_hash.clone(),
             }
         }
@@ -91,6 +93,14 @@ pub mod decrypted_tx {
                         .try_to_vec()
                         .expect("Encrypting transaction should not fail"),
                 ),
+                // If undecrytable we cannot extract the ChainId and
+                // expiration. If instead the tx gets decrypted
+                // successfully, the correct chain id and
+                // expiration are serialized inside the data field
+                // of the Tx, while the ones available
+                // in the chain_id and expiration field are just placeholders
+                ChainId(String::new()),
+                None,
             )
         }
     }

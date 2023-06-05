@@ -1,5 +1,6 @@
 //! Types definitions.
 
+pub mod control_flow;
 pub mod ibc;
 pub mod key;
 

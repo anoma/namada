@@ -419,6 +419,7 @@ mod tests {
     use namada_core::ledger::eth_bridge;
     use namada_core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use namada_core::ledger::storage_api::StorageWrite;
+    use namada_core::types::chain::ChainId;
     use namada_ethereum_bridge::parameters::{
         Contracts, EthereumBridgeConfig, UpgradeableContract,
     };
@@ -670,7 +671,7 @@ mod tests {
         let verifiers = BTreeSet::from([BRIDGE_POOL_ADDRESS]);
 
         // set up the VP
-        let tx = Tx::new(vec![], None);
+        let tx = Tx::new(vec![], None, ChainId::default(), None);
         let vp = EthBridge {
             ctx: setup_ctx(
                 &tx,
@@ -724,7 +725,7 @@ mod tests {
         let verifiers = BTreeSet::from([BRIDGE_POOL_ADDRESS]);
 
         // set up the VP
-        let tx = Tx::new(vec![], None);
+        let tx = Tx::new(vec![], None, ChainId::default(), None);
         let vp = EthBridge {
             ctx: setup_ctx(
                 &tx,
@@ -781,7 +782,7 @@ mod tests {
         let verifiers = BTreeSet::from([]);
 
         // set up the VP
-        let tx = Tx::new(vec![], None);
+        let tx = Tx::new(vec![], None, ChainId::default(), None);
         let vp = EthBridge {
             ctx: setup_ctx(
                 &tx,

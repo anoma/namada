@@ -203,6 +203,7 @@ mod tests {
     // Use this as `#[test]` annotation to enable logging
     use namada::ledger::pos::{GenesisValidator, PosParams};
     use namada::types::storage::Epoch;
+    use namada_test_utils::TestWasms;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::tx::{self, tx_host_env, TestTxEnv};
@@ -214,9 +215,6 @@ mod tests {
     use storage::testing::arb_account_storage_key_no_vp;
 
     use super::*;
-
-    const VP_ALWAYS_TRUE_WASM: &str =
-        "../../wasm_for_tests/vp_always_true.wasm";
 
     /// Test that no-op transaction (i.e. no storage modifications) accepted.
     #[test]
@@ -777,8 +775,10 @@ mod tests {
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
         let vp_owner: Address = (&public_key).into();
-        let vp_code =
-            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+        let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
+        let vp_hash = sha256(&vp_code);
+        // for the update
+        tx_env.store_wasm_code(vp_code);
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
@@ -787,7 +787,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_code)
+                .update_validity_predicate(address, &vp_hash)
                 .unwrap();
         });
 
@@ -812,10 +812,11 @@ mod tests {
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
         let vp_owner: Address = (&public_key).into();
-        let vp_code =
-            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
-
+        let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
         let vp_hash = sha256(&vp_code);
+        // for the update
+        tx_env.store_wasm_code(vp_code);
+
         tx_env.init_parameters(
             None,
             Some(vec![vp_hash.to_string()]),
@@ -831,7 +832,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_code)
+                .update_validity_predicate(address, &vp_hash)
                 .unwrap();
         });
 
@@ -858,8 +859,10 @@ mod tests {
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
         let vp_owner: Address = (&public_key).into();
-        let vp_code =
-            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+        let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
+        let vp_hash = sha256(&vp_code);
+        // for the update
+        tx_env.store_wasm_code(vp_code);
 
         // hardcoded hash of VP_ALWAYS_TRUE_WASM
         tx_env.init_parameters(None, None, Some(vec!["E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855".to_string()]));
@@ -873,7 +876,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_code)
+                .update_validity_predicate(address, &vp_hash)
                 .unwrap();
         });
 

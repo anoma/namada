@@ -20,7 +20,7 @@ build:
 	$(cargo) build
 
 build-test:
-	$(cargo) build --tests
+	$(cargo) +$(nightly) build --tests -Z unstable-options
 
 build-release:
 	NAMADA_DEV=false $(cargo) build --release --package namada_apps --manifest-path Cargo.toml
@@ -44,14 +44,6 @@ check:
 	make -C $(wasms_for_tests) check && \
 	$(foreach wasm,$(wasm_templates),$(check-wasm) && ) true
 
-check-abcipp:
-	$(cargo) check \
-		--workspace \
-		--exclude namada_tests \
-		--all-targets \
-		--no-default-features \
-		--features "abcipp ibc-mocks-abcipp testing"
-
 check-mainnet:
 	$(cargo) check --workspace --features "mainnet"
 
@@ -62,28 +54,6 @@ clippy:
 	make -C $(wasms) clippy && \
 	make -C $(wasms_for_tests) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
-
-clippy-abcipp:
-	NAMADA_DEV=false $(cargo) +$(nightly) clippy --all-targets \
-		--manifest-path ./apps/Cargo.toml \
-		--no-default-features \
-		--features "std testing abcipp" && \
-	$(cargo) +$(nightly) clippy --all-targets \
-		--manifest-path ./proof_of_stake/Cargo.toml \
-		--features "testing" && \
-	$(cargo) +$(nightly) clippy --all-targets \
-		--manifest-path ./core/Cargo.toml \
-		--no-default-features \
-		--features "testing wasm-runtime abcipp ibc-mocks-abcipp ferveo-tpke"
-	$(cargo) +$(nightly) clippy --all-targets \
-		--manifest-path ./shared/Cargo.toml \
-		--no-default-features \
-		--features "testing wasm-runtime abcipp ibc-mocks-abcipp ferveo-tpke" && \
-	$(cargo) +$(nightly) clippy \
-		--all-targets \
-		--manifest-path ./vm_env/Cargo.toml \
-		--no-default-features \
-		--features "abcipp"
 
 clippy-mainnet:
 	$(cargo) +$(nightly) clippy --all-targets --features "mainnet" -- -D warnings
@@ -114,66 +84,44 @@ audit:
 
 test: test-unit test-e2e test-wasm
 
+# NOTE: `unstable-options` are used twice for all unit tests - 1st to compile 
+# with allowing to use unstable features in test, 2nd to run with `report-time`
 test-unit-coverage:
-	$(cargo) llvm-cov --output-dir target --features namada/testing --html -- --skip e2e -Z unstable-options --report-time
+	$(cargo) +$(nightly) llvm-cov --output-dir target \
+		--features namada/testing \
+		--html \
+		-Z unstable-options \
+		-- --skip e2e -Z unstable-options --report-time
 
 test-e2e:
 	RUST_BACKTRACE=1 $(cargo) test e2e \
+		-Z unstable-options \
 		-- \
 		--test-threads=1 \
 		-Z unstable-options --report-time
 
-test-unit-abcipp:
-	$(cargo) test \
-		--manifest-path ./apps/Cargo.toml \
-		--no-default-features \
-		--features "testing std abcipp" \
-			$(TEST_FILTER) -- \
-			-Z unstable-options --report-time && \
-	$(cargo) test \
-		--manifest-path \
-		./proof_of_stake/Cargo.toml \
-		--features "testing" \
-			$(TEST_FILTER) -- \
-			-Z unstable-options --report-time && \
-	$(cargo) test \
-		--manifest-path ./core/Cargo.toml \
-		--no-default-features \
-		--features "testing wasm-runtime abcipp ibc-mocks-abcipp ferveo-tpke" \
-			$(TEST_FILTER) -- \
-			-Z unstable-options --report-time && \
-	$(cargo) test \
-		--manifest-path ./shared/Cargo.toml \
-		--no-default-features \
-		--features "testing wasm-runtime abcipp ibc-mocks-abcipp ferveo-tpke" \
-			$(TEST_FILTER) -- \
-			-Z unstable-options --report-time && \
-	$(cargo) test \
-		--manifest-path ./vm_env/Cargo.toml \
-		--no-default-features \
-		--features "namada_core/abcipp" \
-			$(TEST_FILTER) -- \
-			-Z unstable-options --report-time
-
 test-unit:
-	$(cargo) test \
-			$(TEST_FILTER) -- \
-			--skip e2e \
-			-Z unstable-options --report-time
+	$(cargo) +$(nightly) test \
+		$(TEST_FILTER) \
+		-Z unstable-options \
+		-- --skip e2e \
+		-Z unstable-options --report-time
 
 test-unit-mainnet:
-	$(cargo) test \
+	$(cargo) +$(nightly) test \
 		--features "mainnet" \
-		$(TEST_FILTER) -- \
-		--skip e2e \
+		$(TEST_FILTER) \
+		-Z unstable-options \
+		-- --skip e2e \
 		-Z unstable-options --report-time
 
 test-unit-debug:
-	$(debug-cargo) test \
-			$(TEST_FILTER) -- \
-			--skip e2e \
-			--nocapture \
-			-Z unstable-options --report-time
+	$(debug-cargo) +$(nightly) test \
+		$(TEST_FILTER) \
+		-Z unstable-options \
+		-- --skip e2e \
+		--nocapture \
+		-Z unstable-options --report-time
 
 test-wasm:
 	make -C $(wasms) test
@@ -187,6 +135,7 @@ test-wasm-templates:
 
 test-debug:
 	$(debug-cargo) test \
+		-Z unstable-options \
 		-- \
 		--nocapture \
 		-Z unstable-options --report-time
@@ -262,4 +211,4 @@ test-miri:
 	MIRIFLAGS="-Zmiri-disable-isolation" $(cargo) +$(nightly) miri test
 
 
-.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker debug-wasm-scripts-docker build-wasm-scripts debug-wasm-scripts clean-wasm-scripts dev-deps test-miri test-unit test-unit-abcipp clippy-abcipp
+.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker debug-wasm-scripts-docker build-wasm-scripts debug-wasm-scripts clean-wasm-scripts dev-deps test-miri test-unit

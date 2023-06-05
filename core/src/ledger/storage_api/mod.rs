@@ -12,7 +12,9 @@ use borsh::{BorshDeserialize, BorshSerialize};
 pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
 
 use crate::types::address::Address;
-use crate::types::storage::{self, BlockHash, BlockHeight, Epoch, TxIndex};
+use crate::types::storage::{
+    self, BlockHash, BlockHeight, Epoch, Header, TxIndex,
+};
 
 /// Common storage read interface
 ///
@@ -78,6 +80,9 @@ pub trait StorageRead {
     /// Getting the block height. The height is that of the block to which the
     /// current transaction is being applied.
     fn get_block_height(&self) -> Result<BlockHeight>;
+
+    /// Getting the block header.
+    fn get_block_header(&self, height: BlockHeight) -> Result<Option<Header>>;
 
     /// Getting the block hash. The height is that of the block to which the
     /// current transaction is being applied.
@@ -178,6 +183,66 @@ where
             Err(err) => {
                 // Propagate `iter_next` errors into Iterator's Item
                 Some(Err(err))
+            }
+        }
+    });
+    Ok(iter)
+}
+
+/// Iterate Borsh encoded items matching the given prefix and passing the given
+/// `filter` predicate, ordered by the storage keys.
+///
+/// The `filter` predicate is a function from a storage key to bool and only
+/// the items that return `true` will be returned from the iterator.
+///
+/// Note that this is preferable over the regular `iter_prefix` combined with
+/// the iterator's `filter` function as it avoids trying to decode values that
+/// don't pass the filter. For `iter_prefix_bytes`, `filter` works fine.
+pub fn iter_prefix_with_filter<'a, T, F>(
+    storage: &'a impl StorageRead,
+    prefix: &crate::types::storage::Key,
+    filter: F,
+) -> Result<impl Iterator<Item = Result<(storage::Key, T)>> + 'a>
+where
+    T: BorshDeserialize,
+    F: Fn(&storage::Key) -> bool + 'a,
+{
+    let iter = storage.iter_prefix(prefix)?;
+    let iter = itertools::unfold(iter, move |iter| {
+        // The loop is for applying filter - we `continue` when the current key
+        // doesn't pass the predicate.
+        loop {
+            match storage.iter_next(iter) {
+                Ok(Some((key, val))) => {
+                    let key =
+                        match storage::Key::parse(key).into_storage_result() {
+                            Ok(key) => key,
+                            Err(err) => {
+                                // Propagate key encoding errors into Iterator's
+                                // Item
+                                return Some(Err(err));
+                            }
+                        };
+                    // Check the predicate
+                    if !filter(&key) {
+                        continue;
+                    }
+                    let val =
+                        match T::try_from_slice(&val).into_storage_result() {
+                            Ok(val) => val,
+                            Err(err) => {
+                                // Propagate val encoding errors into Iterator's
+                                // Item
+                                return Some(Err(err));
+                            }
+                        };
+                    return Some(Ok((key, val)));
+                }
+                Ok(None) => return None,
+                Err(err) => {
+                    // Propagate `iter_next` errors into Iterator's Item
+                    return Some(Err(err));
+                }
             }
         }
     });

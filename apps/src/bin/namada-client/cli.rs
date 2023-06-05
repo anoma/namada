@@ -1,109 +1,393 @@
 //! Namada client CLI.
 
 use color_eyre::eyre::Result;
-use namada_apps::cli;
+use namada::ledger::eth_bridge::bridge_pool;
+use namada::ledger::rpc::wait_until_node_is_synched;
+use namada_apps::cli::args::CliToSdk;
 use namada_apps::cli::cmds::*;
-use namada_apps::client::eth_bridge::{bridge_pool, validator_set};
+use namada_apps::cli::{self, safe_exit};
 use namada_apps::client::{rpc, tx, utils};
+use namada_apps::facade::tendermint_rpc::HttpClient;
 
 pub async fn main() -> Result<()> {
     match cli::namada_client_cli()? {
         cli::NamadaClient::WithContext(cmd_box) => {
-            let (cmd, ctx) = *cmd_box;
+            let (cmd, mut ctx) = *cmd_box;
             use NamadaClientWithContext as Sub;
             match cmd {
                 // Ledger cmds
-                Sub::TxCustom(TxCustom(args)) => {
-                    tx::submit_custom(ctx, args).await;
+                Sub::TxCustom(TxCustom(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    let dry_run = args.tx.dry_run;
+                    tx::submit_custom::<HttpClient>(&client, &mut ctx, args)
+                        .await?;
+                    if !dry_run {
+                        namada_apps::wallet::save(&ctx.wallet)
+                            .unwrap_or_else(|err| eprintln!("{}", err));
+                    } else {
+                        println!(
+                            "Transaction dry run. No addresses have been \
+                             saved."
+                        )
+                    }
                 }
-                Sub::TxTransfer(TxTransfer(args)) => {
-                    tx::submit_transfer(ctx, args).await;
+                Sub::TxTransfer(TxTransfer(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_transfer(&client, ctx, args).await?;
                 }
-                Sub::TxIbcTransfer(TxIbcTransfer(args)) => {
-                    tx::submit_ibc_transfer(ctx, args).await;
+                Sub::TxIbcTransfer(TxIbcTransfer(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_ibc_transfer::<HttpClient>(&client, ctx, args)
+                        .await?;
                 }
-                Sub::TxUpdateVp(TxUpdateVp(args)) => {
-                    tx::submit_update_vp(ctx, args).await;
+                Sub::TxUpdateVp(TxUpdateVp(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_update_vp::<HttpClient>(&client, &mut ctx, args)
+                        .await?;
                 }
-                Sub::TxInitAccount(TxInitAccount(args)) => {
-                    tx::submit_init_account(ctx, args).await;
+                Sub::TxInitAccount(TxInitAccount(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    let dry_run = args.tx.dry_run;
+                    tx::submit_init_account::<HttpClient>(
+                        &client, &mut ctx, args,
+                    )
+                    .await?;
+                    if !dry_run {
+                        namada_apps::wallet::save(&ctx.wallet)
+                            .unwrap_or_else(|err| eprintln!("{}", err));
+                    } else {
+                        println!(
+                            "Transaction dry run. No addresses have been \
+                             saved."
+                        )
+                    }
                 }
-                Sub::TxInitValidator(TxInitValidator(args)) => {
-                    tx::submit_init_validator(ctx, args).await;
+                Sub::TxInitValidator(TxInitValidator(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_init_validator::<HttpClient>(&client, ctx, args)
+                        .await;
                 }
-                Sub::TxInitProposal(TxInitProposal(args)) => {
-                    tx::submit_init_proposal(ctx, args).await;
+                Sub::TxInitProposal(TxInitProposal(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_init_proposal::<HttpClient>(&client, ctx, args)
+                        .await?;
                 }
-                Sub::TxVoteProposal(TxVoteProposal(args)) => {
-                    tx::submit_vote_proposal(ctx, args).await;
+                Sub::TxVoteProposal(TxVoteProposal(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_vote_proposal::<HttpClient>(&client, ctx, args)
+                        .await?;
                 }
-                Sub::TxRevealPk(TxRevealPk(args)) => {
-                    tx::submit_reveal_pk(ctx, args).await;
+                Sub::TxRevealPk(TxRevealPk(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_reveal_pk::<HttpClient>(&client, &mut ctx, args)
+                        .await?;
                 }
-                Sub::Bond(Bond(args)) => {
-                    tx::submit_bond(ctx, args).await;
+                Sub::Bond(Bond(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_bond::<HttpClient>(&client, &mut ctx, args)
+                        .await?;
                 }
-                Sub::Unbond(Unbond(args)) => {
-                    tx::submit_unbond(ctx, args).await;
+                Sub::Unbond(Unbond(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_unbond::<HttpClient>(&client, &mut ctx, args)
+                        .await?;
                 }
-                Sub::Withdraw(Withdraw(args)) => {
-                    tx::submit_withdraw(ctx, args).await;
+                Sub::Withdraw(Withdraw(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_withdraw::<HttpClient>(&client, ctx, args)
+                        .await?;
                 }
                 // Eth bridge
                 Sub::AddToEthBridgePool(args) => {
-                    bridge_pool::add_to_eth_bridge_pool(ctx, args.0).await;
-                }
-                Sub::SubmitValidatorSetUpdate(SubmitValidatorSetUpdate(
-                    args,
-                )) => {
-                    validator_set::submit_validator_set_update(ctx, args).await;
+                    let mut args = args.0;
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    let chain_id = ctx.config.ledger.chain_id.clone();
+                    bridge_pool::add_to_eth_bridge_pool(
+                        &client,
+                        &mut ctx.wallet,
+                        chain_id,
+                        args,
+                    )
+                    .await;
                 }
                 // Ledger queries
-                Sub::QueryEpoch(QueryEpoch(args)) => {
-                    rpc::query_and_print_epoch(args).await;
+                Sub::QueryEpoch(QueryEpoch(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    rpc::query_and_print_epoch(&client).await;
                 }
-                Sub::QueryTransfers(QueryTransfers(args)) => {
-                    rpc::query_transfers(ctx, args).await;
+                Sub::QueryTransfers(QueryTransfers(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_transfers(
+                        &client,
+                        &mut ctx.wallet,
+                        &mut ctx.shielded,
+                        args,
+                    )
+                    .await;
                 }
-                Sub::QueryConversions(QueryConversions(args)) => {
-                    rpc::query_conversions(ctx, args).await;
+                Sub::QueryConversions(QueryConversions(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_conversions(&client, &mut ctx.wallet, args)
+                        .await;
                 }
-                Sub::QueryBlock(QueryBlock(args)) => {
-                    rpc::query_block(args).await;
+                Sub::QueryBlock(QueryBlock(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    rpc::query_block(&client).await;
                 }
-                Sub::QueryBalance(QueryBalance(args)) => {
-                    rpc::query_balance(ctx, args).await;
+                Sub::QueryBalance(QueryBalance(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_balance(
+                        &client,
+                        &mut ctx.wallet,
+                        &mut ctx.shielded,
+                        args,
+                    )
+                    .await;
                 }
-                Sub::QueryBonds(QueryBonds(args)) => {
-                    rpc::query_bonds(ctx, args).await;
+                Sub::QueryBonds(QueryBonds(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_bonds(&client, &mut ctx.wallet, args)
+                        .await
+                        .expect("expected successful query of bonds");
                 }
-                Sub::QueryBondedStake(QueryBondedStake(args)) => {
-                    rpc::query_bonded_stake(ctx, args).await;
+                Sub::QueryBondedStake(QueryBondedStake(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_bonded_stake(&client, args).await;
                 }
-                Sub::QueryCommissionRate(QueryCommissionRate(args)) => {
-                    rpc::query_and_print_commission_rate(ctx, args).await;
+                Sub::QueryCommissionRate(QueryCommissionRate(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_and_print_commission_rate(
+                        &client,
+                        &mut ctx.wallet,
+                        args,
+                    )
+                    .await;
                 }
-                Sub::QuerySlashes(QuerySlashes(args)) => {
-                    rpc::query_slashes(ctx, args).await;
+                Sub::QuerySlashes(QuerySlashes(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_slashes(&client, &mut ctx.wallet, args).await;
                 }
-                Sub::QueryDelegations(QueryDelegations(args)) => {
-                    rpc::query_delegations(ctx, args).await;
+                Sub::QueryDelegations(QueryDelegations(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_delegations(&client, &mut ctx.wallet, args)
+                        .await;
                 }
-                Sub::QueryResult(QueryResult(args)) => {
-                    rpc::query_result(ctx, args).await;
+                Sub::QueryResult(QueryResult(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_result(&client, args).await;
                 }
-                Sub::QueryRawBytes(QueryRawBytes(args)) => {
-                    rpc::query_raw_bytes(ctx, args).await;
+                Sub::QueryRawBytes(QueryRawBytes(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_raw_bytes(&client, args).await;
                 }
 
-                Sub::QueryProposal(QueryProposal(args)) => {
-                    rpc::query_proposal(ctx, args).await;
+                Sub::QueryProposal(QueryProposal(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_proposal(&client, args).await;
                 }
-                Sub::QueryProposalResult(QueryProposalResult(args)) => {
-                    rpc::query_proposal_result(ctx, args).await;
+                Sub::QueryProposalResult(QueryProposalResult(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_proposal_result(&client, args).await;
                 }
-                Sub::QueryProtocolParameters(QueryProtocolParameters(args)) => {
-                    rpc::query_protocol_parameters(ctx, args).await;
+                Sub::QueryProtocolParameters(QueryProtocolParameters(
+                    mut args,
+                )) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    if wait_until_node_is_synched(&client).await.is_break() {
+                        safe_exit(1);
+                    }
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_protocol_parameters(&client, args).await;
                 }
             }
         }
@@ -120,6 +404,9 @@ pub async fn main() -> Result<()> {
             }
             Utils::InitGenesisValidator(InitGenesisValidator(args)) => {
                 utils::init_genesis_validator(global_args, args)
+            }
+            Utils::PkToTmAddress(PkToTmAddress(args)) => {
+                utils::pk_to_tm_address(global_args, args)
             }
         },
     }

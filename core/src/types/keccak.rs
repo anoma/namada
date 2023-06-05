@@ -42,6 +42,15 @@ pub enum TryFromError {
 )]
 pub struct KeccakHash(pub [u8; 32]);
 
+impl KeccakHash {
+    /// Check if this [`KeccakHash`] is comprised solely of bytes with
+    /// a value of zero.
+    #[inline]
+    pub fn is_zero(&self) -> bool {
+        self.0 == [0; 32]
+    }
+}
+
 impl Display for KeccakHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for byte in &self.0 {

@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::ibc::signer::Signer;
 use crate::types::ethereum_events::EthAddress;
 use crate::types::key;
 use crate::types::key::PublicKeyHash;
@@ -45,6 +46,8 @@ pub const POS: Address = Address::Internal(InternalAddress::PoS);
 /// Internal PoS slash pool address
 pub const POS_SLASH_POOL: Address =
     Address::Internal(InternalAddress::PosSlashPool);
+/// Internal Governance address
+pub const GOV: Address = Address::Internal(InternalAddress::Governance);
 
 /// Raw strings used to produce internal addresses. All the strings must begin
 /// with `PREFIX_INTERNAL` and be `FIXED_LEN_STRING_BYTES` characters long.
@@ -72,6 +75,8 @@ mod internal {
         "ano::ETH Bridge Address                      ";
     pub const ETH_BRIDGE_POOL: &str =
         "ano::ETH Bridge Pool Address                 ";
+    pub const REPLAY_PROTECTION: &str =
+        "ano::Replay Protection                       ";
 }
 
 /// Fixed-length address strings prefix for established addresses.
@@ -103,15 +108,7 @@ pub type Result<T> = std::result::Result<T, DecodeError>;
 
 /// An account's address
 #[derive(
-    Clone,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
+    Clone, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq, Hash,
 )]
 pub enum Address {
     /// An established address is generated on-chain
@@ -120,6 +117,21 @@ pub enum Address {
     Implicit(ImplicitAddress),
     /// An internal address represents a module with a native VP
     Internal(InternalAddress),
+}
+
+// We're using the string format of addresses (bech32m) for ordering to ensure
+// that addresses as strings, storage keys and storage keys as strings preserve
+// the order.
+impl PartialOrd for Address {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.encode().partial_cmp(&other.encode())
+    }
+}
+
+impl Ord for Address {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.encode().cmp(&other.encode())
+    }
 }
 
 impl Address {
@@ -204,6 +216,9 @@ impl Address {
                     InternalAddress::EthBridgePool => {
                         internal::ETH_BRIDGE_POOL.to_string()
                     }
+                    InternalAddress::ReplayProtection => {
+                        internal::REPLAY_PROTECTION.to_string()
+                    }
                 };
                 debug_assert_eq!(string.len(), FIXED_LEN_STRING_BYTES);
                 string
@@ -259,6 +274,9 @@ impl Address {
                 }
                 internal::ETH_BRIDGE_POOL => {
                     Ok(Address::Internal(InternalAddress::EthBridgePool))
+                }
+                internal::REPLAY_PROTECTION => {
+                    Ok(Address::Internal(InternalAddress::ReplayProtection))
                 }
                 _ => Err(Error::new(
                     ErrorKind::InvalidData,
@@ -352,6 +370,15 @@ impl FromStr for Address {
 
     fn from_str(s: &str) -> Result<Self> {
         Address::decode(s)
+    }
+}
+
+/// for IBC signer
+impl TryFrom<Signer> for Address {
+    type Error = DecodeError;
+
+    fn try_from(signer: Signer) -> Result<Self> {
+        Address::decode(signer.as_ref())
     }
 }
 
@@ -477,6 +504,8 @@ pub enum InternalAddress {
     EthBridge,
     /// The pool of transactions to be relayed to Ethereum
     EthBridgePool,
+    /// Replay protection contains transactions' hash
+    ReplayProtection,
 }
 
 impl InternalAddress {
@@ -512,6 +541,7 @@ impl Display for InternalAddress {
                 Self::IbcMint => "IbcMint".to_string(),
                 Self::EthBridge => "EthBridge".to_string(),
                 Self::EthBridgePool => "EthBridgePool".to_string(),
+                Self::ReplayProtection => "ReplayProtection".to_string(),
             }
         )
     }
@@ -576,22 +606,6 @@ pub const fn wnam() -> EthAddress {
         222, 173, 190, 239, 222, 173, 190, 239, 222, 173, 190, 239, 222, 173,
         190, 239, 222, 173, 190, 239,
     ])
-}
-
-/// Temporary helper for testing, a hash map of tokens addresses with their
-/// informal currency codes.
-pub fn tokens() -> HashMap<Address, &'static str> {
-    vec![
-        (nam(), "NAM"),
-        (btc(), "BTC"),
-        (eth(), "ETH"),
-        (dot(), "DOT"),
-        (schnitzel(), "Schnitzel"),
-        (apfel(), "Apfel"),
-        (kartoffel(), "Kartoffel"),
-    ]
-    .into_iter()
-    .collect()
 }
 
 /// Temporary helper for testing, a hash map of tokens addresses with their
@@ -691,6 +705,13 @@ pub fn gen_established_address(seed: impl AsRef<str>) -> Address {
     key_gen.generate_address(rng_source)
 }
 
+/// Generate a new established address. Unlike `gen_established_address`, this
+/// will give the same address for the same `seed`.
+pub fn gen_deterministic_established_address(seed: impl AsRef<str>) -> Address {
+    let mut key_gen = EstablishedAddressGen::new(seed);
+    key_gen.generate_address("")
+}
+
 /// Helpers for testing with addresses.
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
@@ -707,7 +728,7 @@ pub mod testing {
 
     /// Derive an established address from a simple seed (`u64`).
     pub fn address_from_simple_seed(seed: u64) -> Address {
-        super::gen_established_address(seed.to_string())
+        super::gen_deterministic_established_address(seed.to_string())
     }
 
     /// Generate a new implicit address.
@@ -799,8 +820,10 @@ pub mod testing {
             InternalAddress::IbcBurn => {}
             InternalAddress::IbcMint => {}
             InternalAddress::EthBridge => {}
-            InternalAddress::EthBridgePool => {} /* Add new addresses in the
-                                                  * `prop_oneof` below. */
+            InternalAddress::EthBridgePool => {}
+            InternalAddress::ReplayProtection => {} /* Add new addresses in
+                                                     * the
+                                                     * `prop_oneof` below. */
         };
         prop_oneof![
             Just(InternalAddress::PoS),
@@ -816,6 +839,7 @@ pub mod testing {
             Just(InternalAddress::SlashFund),
             Just(InternalAddress::EthBridge),
             Just(InternalAddress::EthBridgePool),
+            Just(InternalAddress::ReplayProtection)
         ]
     }
 

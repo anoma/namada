@@ -3,9 +3,9 @@ pub mod events_endpoint;
 #[cfg(test)]
 pub mod mock_web3_client {
     use std::borrow::Cow;
-    use std::cell::RefCell;
     use std::fmt::Debug;
     use std::marker::PhantomData;
+    use std::sync::{Arc, Mutex};
 
     use ethbridge_events::EventCodec;
     use num256::Uint256;
@@ -37,14 +37,43 @@ pub mod mock_web3_client {
 
     /// A pointer to a mock Web3 client. The
     /// reason is for interior mutability.
-    pub struct Web3(RefCell<Web3Client>);
+    pub struct Web3(Arc<Mutex<Web3Client>>);
+
+    /// Command sender for [`Web3`] instances.
+    pub struct Web3Controller(Arc<Mutex<Web3Client>>);
+
+    impl Web3Controller {
+        /// Apply new oracle command.
+        pub fn apply_cmd(&self, cmd: TestCmd) {
+            let mut oracle = self.0.lock().unwrap();
+            match cmd {
+                TestCmd::Normal => oracle.active = true,
+                TestCmd::Unresponsive => oracle.active = false,
+                TestCmd::NewHeight(height) => {
+                    oracle.latest_block_height = height
+                }
+                TestCmd::NewEvent {
+                    event_type: ty,
+                    data,
+                    height,
+                    seen,
+                } => oracle.events.push((ty, data, height, seen)),
+            }
+        }
+    }
+
+    impl Clone for Web3Controller {
+        #[inline]
+        fn clone(&self) -> Self {
+            Self(Arc::clone(&self.0))
+        }
+    }
 
     /// A mock of a web3 api client connected to an ethereum fullnode.
     /// It is not connected to a full node and is fully controllable
     /// via a channel to allow us to mock different behavior for
     /// testing purposes.
     pub struct Web3Client {
-        cmd_channel: UnboundedReceiver<TestCmd>,
         active: bool,
         latest_block_height: Uint256,
         events: Vec<(MockEventType, Vec<u8>, u32, Sender<()>)>,
@@ -65,45 +94,24 @@ pub mod mock_web3_client {
 
         /// Return a new client and a separate sender
         /// to send in admin commands
-        pub fn setup()
-        -> (UnboundedSender<TestCmd>, UnboundedReceiver<Uint256>, Self)
-        {
-            // we can only send one command at a time.
-            let (cmd_sender, cmd_channel) = unbounded_channel();
+        pub fn setup() -> (UnboundedReceiver<Uint256>, Self) {
             let (block_processed_send, block_processed_recv) =
                 unbounded_channel();
             (
-                cmd_sender,
                 block_processed_recv,
-                Self(RefCell::new(Web3Client {
-                    cmd_channel,
+                Self(Arc::new(Mutex::new(Web3Client {
                     active: true,
                     latest_block_height: Default::default(),
                     events: vec![],
                     blocks_processed: block_processed_send,
                     last_block_processed: None,
-                })),
+                }))),
             )
         }
 
-        /// Check and apply new incoming commands
-        fn check_cmd_channel(&self) {
-            let mut oracle = self.0.borrow_mut();
-            while let Ok(cmd) = oracle.cmd_channel.try_recv() {
-                match cmd {
-                    TestCmd::Normal => oracle.active = true,
-                    TestCmd::Unresponsive => oracle.active = false,
-                    TestCmd::NewHeight(height) => {
-                        oracle.latest_block_height = height
-                    }
-                    TestCmd::NewEvent {
-                        event_type: ty,
-                        data,
-                        height,
-                        seen,
-                    } => oracle.events.push((ty, data, height, seen)),
-                }
-            }
+        /// Get a new [`Web3Controller`] for the current oracle.
+        pub fn controller(&self) -> Web3Controller {
+            Web3Controller(Arc::clone(&self.0))
         }
 
         /// Gets the latest block number send in from the
@@ -112,8 +120,7 @@ pub mod mock_web3_client {
         pub async fn eth_block_number(
             &self,
         ) -> std::result::Result<Uint256, Error> {
-            self.check_cmd_channel();
-            Ok(self.0.borrow().latest_block_height.clone())
+            Ok(self.0.lock().unwrap().latest_block_height.clone())
         }
 
         pub async fn syncing(&self) -> std::result::Result<SyncStatus, Error> {
@@ -133,12 +140,11 @@ pub mod mock_web3_client {
             _: impl Debug,
             mut events: Vec<MockEventType>,
         ) -> eyre::Result<Vec<Log>> {
-            self.check_cmd_channel();
-            if self.0.borrow().active {
+            let mut client = self.0.lock().unwrap();
+            if client.active {
                 let ty = events.remove(0);
                 let mut logs = vec![];
                 let mut events = vec![];
-                let mut client = self.0.borrow_mut();
                 std::mem::swap(&mut client.events, &mut events);
                 for (event_ty, data, height, seen) in events.into_iter() {
                     if event_ty == ty && block_to_check >= Uint256::from(height)

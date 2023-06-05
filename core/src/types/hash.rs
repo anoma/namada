@@ -33,6 +33,8 @@ pub type HashResult<T> = std::result::Result<T, Error>;
     Clone,
     Debug,
     Default,
+    PartialOrd,
+    Ord,
     Hash,
     PartialEq,
     Eq,
@@ -103,6 +105,7 @@ impl FromStr for Hash {
     }
 }
 
+#[allow(clippy::len_without_is_empty)]
 impl Hash {
     /// Compute sha256 of some bytes
     pub fn sha256(data: impl AsRef<[u8]>) -> Self {
@@ -110,13 +113,29 @@ impl Hash {
         Self(*digest.as_ref())
     }
 
-    fn zero() -> Self {
+    /// Return zeros
+    pub fn zero() -> Self {
         Self([0u8; HASH_LENGTH])
     }
 
     /// Check if the hash is all zeros
     pub fn is_zero(&self) -> bool {
         self == &Self::zero()
+    }
+
+    /// Return the length of the hash.
+    pub const fn len(&self) -> usize {
+        HASH_LENGTH
+    }
+
+    /// Convert this [`Hash`] to a [`Vec`].
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.0.to_vec()
+    }
+
+    /// Return the inner pointer to the hash data.
+    pub const fn as_ptr(&self) -> *const u8 {
+        self.0.as_ptr()
     }
 }
 

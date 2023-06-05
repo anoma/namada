@@ -89,6 +89,12 @@ mod tx_queue {
         pub fn is_empty(&self) -> bool {
             self.0.is_empty()
         }
+
+        /// Get reference to the element at the given index.
+        /// Returns [`None`] if index exceeds the queue lenght.
+        pub fn get(&self, index: usize) -> Option<&WrapperTxInQueue> {
+            self.0.get(index)
+        }
     }
 }
 

@@ -95,7 +95,12 @@ impl Shell {
         match req {
             Request::InitChain(init) => {
                 tracing::debug!("Request InitChain");
-                self.init_chain(init).map(Response::InitChain)
+                self.init_chain(
+                    init,
+                    #[cfg(feature = "dev")]
+                    1,
+                )
+                .map(Response::InitChain)
             }
             Request::Info(_) => Ok(Response::Info(self.last_state())),
             Request::Query(query) => Ok(Response::Query(self.query(query))),
@@ -211,6 +216,7 @@ pub fn dump_db(
     args::LedgerDumpDb {
         // block_height,
         out_file_path,
+        historic,
     }: args::LedgerDumpDb,
 ) {
     use namada::ledger::storage::DB;
@@ -219,66 +225,12 @@ pub fn dump_db(
     let db_path = config.shell.db_dir(&chain_id);
 
     let db = storage::PersistentDB::open(db_path, None);
-    db.dump_last_block(out_file_path);
+    db.dump_last_block(out_file_path, historic);
 }
 
-/// Delete a value from storage.
-// TODO: recalculate merkle roots? maybe this should be
-// a new argument
-pub fn db_delete_value(
-    config: config::Ledger,
-    args: args::LedgerDbDeleteValue,
-) {
-    use namada::ledger::storage::DB;
-
-    let chain_id = config.chain_id;
-    let db_path = config.shell.db_dir(&chain_id);
-
-    let mut db = storage::PersistentDB::open(db_path, None);
-    let latest_block = match db.read_last_block() {
-        Ok(Some(data)) => {
-            tracing::info!(
-                last_height = ?data.height,
-                "Read the last committed block's data."
-            );
-            data
-        }
-        Ok(None) => {
-            tracing::error!("No block has been committed yet.");
-            return;
-        }
-        Err(reason) => {
-            tracing::error!(%reason, "Failed to read the last block's data.");
-            return;
-        }
-    };
-
-    tracing::info!(
-        key = %args.storage_key,
-        last_height = ?latest_block.height,
-        "Deleting value from storage subspace key..."
-    );
-    if let Err(reason) =
-        db.delete_subspace_val(latest_block.height, &args.storage_key)
-    {
-        tracing::error!(
-            %reason,
-            key = %args.storage_key,
-            "Failed to delete value from database."
-        );
-        return;
-    }
-
-    tracing::debug!("Flushing changes...");
-    if let Err(reason) = db.flush(true) {
-        tracing::error!(%reason, "Failed to flush database changes.");
-        return;
-    }
-
-    tracing::info!(
-        key = %args.storage_key,
-        "Value successfully deleted from the database."
-    );
+/// Roll Namada state back to the previous height
+pub fn rollback(config: config::Ledger) -> Result<(), shell::Error> {
+    shell::rollback(config)
 }
 
 /// Runs and monitors a few concurrent tasks.
@@ -511,8 +463,7 @@ fn start_abci_broadcaster_shell(
 
     // Setup DB cache, it must outlive the DB instance that's in the shell
     let db_cache =
-        rocksdb::Cache::new_lru_cache(db_block_cache_size_bytes as usize)
-            .unwrap();
+        rocksdb::Cache::new_lru_cache(db_block_cache_size_bytes as usize);
 
     // Construct our ABCI application.
     let tendermint_mode = config.tendermint.tendermint_mode.clone();
@@ -520,8 +471,8 @@ fn start_abci_broadcaster_shell(
     #[cfg(not(feature = "dev"))]
     let genesis = genesis::genesis(&config.shell.base_dir, &config.chain_id);
     #[cfg(feature = "dev")]
-    let genesis = genesis::genesis();
-    let (shell, abci_service) = AbcippShim::new(
+    let genesis = genesis::genesis(1);
+    let (shell, abci_service, service_handle) = AbcippShim::new(
         config,
         wasm_dir,
         broadcaster_sender,
@@ -538,8 +489,13 @@ fn start_abci_broadcaster_shell(
     // Start the ABCI server
     let abci = spawner
         .spawn_abortable("ABCI", move |aborter| async move {
-            let res =
-                run_abci(abci_service, ledger_address, abci_abort_recv).await;
+            let res = run_abci(
+                abci_service,
+                service_handle,
+                ledger_address,
+                abci_abort_recv,
+            )
+            .await;
 
             drop(aborter);
             res
@@ -572,6 +528,7 @@ fn start_abci_broadcaster_shell(
 /// mempool, snapshot, and info.
 async fn run_abci(
     abci_service: AbciService,
+    service_handle: tokio::sync::broadcast::Sender<()>,
     ledger_address: SocketAddr,
     abort_recv: tokio::sync::oneshot::Receiver<()>,
 ) -> shell::Result<()> {
@@ -598,13 +555,13 @@ async fn run_abci(
         )
         .finish()
         .unwrap();
-
     tokio::select! {
         // Run the server with the ABCI service
         status = server.listen(ledger_address) => {
             status.map_err(|err| Error::TowerServer(err.to_string()))
         },
         resp_sender = abort_recv => {
+            _ = service_handle.send(());
             match resp_sender {
                 Ok(()) => {
                     tracing::info!("Shutting down ABCI server...");

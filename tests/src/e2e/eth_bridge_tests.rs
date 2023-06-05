@@ -4,7 +4,7 @@ use std::num::NonZeroU64;
 use std::ops::ControlFlow;
 use std::str::FromStr;
 
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use color_eyre::eyre::{eyre, Result};
 use namada::eth_bridge::oracle;
 use namada::eth_bridge::storage::vote_tallies;
@@ -13,18 +13,20 @@ use namada::ledger::eth_bridge::{
     UpgradeableContract,
 };
 use namada::types::address::wnam;
+use namada::types::control_flow::time::SleepStrategy;
 use namada::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
 use namada::types::ethereum_events::EthAddress;
-use namada::types::storage::Epoch;
+use namada::types::storage::{self, Epoch};
 use namada::types::{address, token};
 use namada_apps::config::ethereum_bridge;
-use namada_apps::control_flow::timeouts::SleepStrategy;
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::{
     EthereumEvent, TransferToEthereum, TransferToNamada,
 };
 use namada_core::types::token::Amount;
+use namada_test_utils::tx_data::TxWriteData;
+use namada_test_utils::TestWasms;
 use tokio::time::{Duration, Instant};
 
 use super::setup::set_ethereum_bridge_mode;
@@ -40,12 +42,10 @@ use crate::e2e::helpers::{
 };
 use crate::e2e::setup;
 use crate::e2e::setup::constants::{
-    wasm_abs_path, ALBERT, ALBERT_KEY, BERTHA, BERTHA_KEY, NAM, TX_WRITE_WASM,
+    ALBERT, ALBERT_KEY, BERTHA, BERTHA_KEY, NAM,
 };
 use crate::e2e::setup::{Bin, Who};
 use crate::{run, run_as};
-
-const ETH_BRIDGE_ADDRESS: &str = "atest1v9hx7w36g42ysgzzwf5kgem9ypqkgerjv4ehxgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq8f99ew";
 
 /// # Examples
 ///
@@ -54,84 +54,7 @@ const ETH_BRIDGE_ADDRESS: &str = "atest1v9hx7w36g42ysgzzwf5kgem9ypqkgerjv4ehxgpq
 /// assert_eq!(storage_key, "#atest1v9hx7w36g42ysgzzwf5kgem9ypqkgerjv4ehxgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq8f99ew/queue");
 /// ```
 fn storage_key(path: &str) -> String {
-    format!("#{ETH_BRIDGE_ADDRESS}/{}", path)
-}
-
-#[test]
-#[ignore]
-// this test is outdated, so it is ignored
-fn everything() {
-    const LEDGER_STARTUP_TIMEOUT_SECONDS: u64 = 30;
-    const CLIENT_COMMAND_TIMEOUT_SECONDS: u64 = 30;
-    const SOLE_VALIDATOR: Who = Who::Validator(0);
-
-    let test = setup::single_node_net().unwrap();
-
-    let mut namadan_ledger = run_as!(
-        test,
-        SOLE_VALIDATOR,
-        Bin::Node,
-        &["ledger"],
-        Some(LEDGER_STARTUP_TIMEOUT_SECONDS)
-    )
-    .unwrap();
-    namadan_ledger
-        .exp_string("Namada ledger node started")
-        .unwrap();
-    namadan_ledger
-        .exp_string("Tendermint node started")
-        .unwrap();
-    namadan_ledger.exp_string("Committed block hash").unwrap();
-    let _bg_ledger = namadan_ledger.background();
-
-    let tx_data_path = test.test_dir.path().join("queue_storage_key.txt");
-    std::fs::write(&tx_data_path, &storage_key("queue")[..]).unwrap();
-
-    let tx_code_path = wasm_abs_path(TX_WRITE_WASM);
-
-    let tx_data_path = tx_data_path.to_string_lossy().to_string();
-    let tx_code_path = tx_code_path.to_string_lossy().to_string();
-    let ledger_addr = get_actor_rpc(&test, &SOLE_VALIDATOR);
-    let tx_args = vec![
-        "tx",
-        "--signer",
-        ALBERT,
-        "--code-path",
-        &tx_code_path,
-        "--data-path",
-        &tx_data_path,
-        "--ledger-address",
-        &ledger_addr,
-    ];
-
-    for &dry_run in &[true, false] {
-        let tx_args = if dry_run {
-            vec![tx_args.clone(), vec!["--dry-run"]].concat()
-        } else {
-            tx_args.clone()
-        };
-        let mut namadac_tx = run!(
-            test,
-            Bin::Client,
-            tx_args,
-            Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
-        )
-        .unwrap();
-
-        if !dry_run {
-            namadac_tx.exp_string("Transaction accepted").unwrap();
-            namadac_tx.exp_string("Transaction applied").unwrap();
-        }
-        // TODO: we should check here explicitly with the ledger via a
-        //  Tendermint RPC call that the path `value/#EthBridge/queue`
-        //  is unchanged rather than relying solely  on looking at namadac
-        //  stdout.
-        namadac_tx.exp_string("Transaction is invalid").unwrap();
-        namadac_tx
-            .exp_string(&format!("Rejected: {}", ETH_BRIDGE_ADDRESS))
-            .unwrap();
-        namadac_tx.assert_success();
-    }
+    format!("#{BRIDGE_ADDRESS}/{path}")
 }
 
 /// Tests that we can start the ledger with an endpoint for submitting Ethereum
@@ -1384,4 +1307,73 @@ async fn test_submit_validator_set_udpate() -> Result<()> {
         .await?;
 
     Ok(())
+}
+
+/// Test that a regular transaction cannot modify arbitrary keys of the Ethereum
+/// bridge VP.
+#[test]
+fn test_unauthorized_tx_cannot_write_storage() {
+    const LEDGER_STARTUP_TIMEOUT_SECONDS: u64 = 30;
+    const CLIENT_COMMAND_TIMEOUT_SECONDS: u64 = 30;
+    const SOLE_VALIDATOR: Who = Who::Validator(0);
+
+    let test = setup::single_node_net().unwrap();
+
+    let mut ledger = run_as!(
+        test,
+        SOLE_VALIDATOR,
+        Bin::Node,
+        &["ledger"],
+        Some(LEDGER_STARTUP_TIMEOUT_SECONDS)
+    )
+    .unwrap();
+    ledger.exp_string("Namada ledger node started").unwrap();
+    ledger.exp_string("Tendermint node started").unwrap();
+    ledger.exp_string("Committed block hash").unwrap();
+    let _bg_ledger = ledger.background();
+
+    let tx_data_path = test.test_dir.path().join("arbitrary_storage_key.txt");
+    std::fs::write(
+        &tx_data_path,
+        TxWriteData {
+            key: storage::Key::from_str(&storage_key("arbitrary")).unwrap(),
+            value: b"arbitrary value".to_vec(),
+        }
+        .try_to_vec()
+        .unwrap(),
+    )
+    .unwrap();
+
+    let tx_code_path = TestWasms::TxWriteStorageKey.path();
+
+    let tx_data_path = tx_data_path.to_string_lossy().to_string();
+    let tx_code_path = tx_code_path.to_string_lossy().to_string();
+    let ledger_addr = get_actor_rpc(&test, &SOLE_VALIDATOR);
+    let tx_args = vec![
+        "tx",
+        "--signer",
+        ALBERT,
+        "--code-path",
+        &tx_code_path,
+        "--data-path",
+        &tx_data_path,
+        "--node",
+        &ledger_addr,
+    ];
+
+    let mut client_tx = run!(
+        test,
+        Bin::Client,
+        tx_args,
+        Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
+    )
+    .unwrap();
+
+    client_tx.exp_string("Transaction accepted").unwrap();
+    client_tx.exp_string("Transaction applied").unwrap();
+    client_tx.exp_string("Transaction is invalid").unwrap();
+    client_tx
+        .exp_string(&format!("Rejected: {BRIDGE_ADDRESS}"))
+        .unwrap();
+    client_tx.assert_success();
 }

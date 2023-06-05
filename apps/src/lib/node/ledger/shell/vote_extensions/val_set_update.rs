@@ -304,8 +304,6 @@ where
 
 #[cfg(test)]
 mod test_vote_extensions {
-    use std::default::Default;
-
     #[cfg(feature = "abcipp")]
     #[cfg(feature = "abcipp")]
     use borsh::BorshSerialize;
@@ -339,7 +337,6 @@ mod test_vote_extensions {
     #[cfg(feature = "abcipp")]
     use crate::facade::tower_abci::request;
     use crate::node::ledger::shell::test_utils;
-    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
     /// Test if a [`validator_set_update::Vext`] that incorrectly labels what
@@ -578,13 +575,7 @@ mod test_vote_extensions {
                 .expect("Test failed");
         }
         // we advance forward to the next epoch
-        let mut req = FinalizeBlock::default();
-        req.header.time = namada::types::time::DateTimeUtc::now();
-        shell.wl_storage.storage.last_height =
-            shell.wl_storage.pos_queries().get_current_decision_height() + 11;
-        shell.finalize_block(req).expect("Test failed");
-        shell.commit();
-        assert_eq!(shell.wl_storage.storage.get_current_epoch().0.0, 1);
+        assert_eq!(shell.start_new_epoch().0, 1);
         assert!(
             shell
                 .wl_storage

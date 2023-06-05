@@ -3,8 +3,7 @@ use std::fmt::Display;
 use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::storage as gov_storage;
-use crate::ledger::storage::types::encode;
-use crate::ledger::storage::{self, Storage};
+use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::token::Amount;
 
 #[derive(
@@ -66,10 +65,9 @@ impl Default for GovParams {
 
 impl GovParams {
     /// Initialize governance parameters into storage
-    pub fn init_storage<DB, H>(&self, storage: &mut Storage<DB, H>)
+    pub fn init_storage<S>(&self, storage: &mut S) -> storage_api::Result<()>
     where
-        DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: storage::traits::StorageHasher,
+        S: StorageRead + StorageWrite,
     {
         let Self {
             min_proposal_fund,
@@ -82,49 +80,31 @@ impl GovParams {
 
         let min_proposal_fund_key = gov_storage::get_min_proposal_fund_key();
         let amount = Amount::whole(*min_proposal_fund);
-        storage
-            .write(&min_proposal_fund_key, encode(&amount))
-            .unwrap();
+        storage.write(&min_proposal_fund_key, amount)?;
 
         let max_proposal_code_size_key =
             gov_storage::get_max_proposal_code_size_key();
-        storage
-            .write(&max_proposal_code_size_key, encode(max_proposal_code_size))
-            .unwrap();
+        storage.write(&max_proposal_code_size_key, max_proposal_code_size)?;
 
         let min_proposal_period_key =
             gov_storage::get_min_proposal_period_key();
-        storage
-            .write(&min_proposal_period_key, encode(min_proposal_period))
-            .unwrap();
+        storage.write(&min_proposal_period_key, min_proposal_period)?;
 
         let max_proposal_period_key =
             gov_storage::get_max_proposal_period_key();
-        storage
-            .write(&max_proposal_period_key, encode(max_proposal_period))
-            .unwrap();
+        storage.write(&max_proposal_period_key, max_proposal_period)?;
 
         let max_proposal_content_size_key =
             gov_storage::get_max_proposal_content_key();
         storage
-            .write(
-                &max_proposal_content_size_key,
-                encode(max_proposal_content_size),
-            )
-            .expect("Should be able to write to storage");
+            .write(&max_proposal_content_size_key, max_proposal_content_size)?;
 
         let min_proposal_grace_epoch_key =
             gov_storage::get_min_proposal_grace_epoch_key();
         storage
-            .write(
-                &min_proposal_grace_epoch_key,
-                encode(min_proposal_grace_epochs),
-            )
-            .expect("Should be able to write to storage");
+            .write(&min_proposal_grace_epoch_key, min_proposal_grace_epochs)?;
 
         let counter_key = gov_storage::get_counter_key();
-        storage
-            .write(&counter_key, encode(&u64::MIN))
-            .expect("Should be able to write to storage");
+        storage.write(&counter_key, u64::MIN)
     }
 }

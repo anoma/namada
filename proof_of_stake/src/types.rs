@@ -11,7 +11,9 @@ use std::ops::Sub;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::ledger::storage_api::collections::lazy_map::NestedMap;
-use namada_core::ledger::storage_api::collections::{LazyMap, LazyVec};
+use namada_core::ledger::storage_api::collections::{
+    LazyMap, LazySet, LazyVec,
+};
 use namada_core::ledger::storage_api::{self, StorageRead};
 use namada_core::types::address::Address;
 use namada_core::types::key::common;
@@ -144,6 +146,9 @@ pub type Bonds = crate::epoched::EpochedDelta<
 /// Epochs validator's unbonds
 pub type Unbonds = NestedMap<Epoch, LazyMap<Epoch, token::Amount>>;
 
+/// Consensus keys set, used to ensure uniqueness
+pub type ConsensusKeys = LazySet<common::PublicKey>;
+
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 /// Commission rate and max commission rate change per epoch for a validator
 pub struct CommissionPair {
@@ -152,6 +157,13 @@ pub struct CommissionPair {
     /// Validator max commission rate change per epoch
     pub max_commission_change_per_epoch: Decimal,
 }
+
+/// Epoched rewards products
+pub type RewardsProducts = LazyMap<Epoch, Decimal>;
+
+/// Consensus validator rewards accumulator (for tracking the fractional block
+/// rewards owed over the course of an epoch)
+pub type RewardsAccumulator = LazyMap<Address, Decimal>;
 
 // --------------------------------------------------------------------------------------------
 
@@ -351,7 +363,7 @@ pub struct Slash {
     pub epoch: Epoch,
     /// Block height at which the slashable event occurred.
     pub block_height: u64,
-    /// A type of slashsable event.
+    /// A type of slashable event.
     pub r#type: SlashType,
 }
 
@@ -377,6 +389,16 @@ pub enum SlashType {
     DuplicateVote,
     /// Light client attack.
     LightClientAttack,
+}
+
+/// VoteInfo inspired from tendermint for validators whose signature was
+/// included in the last block
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
+pub struct VoteInfo {
+    /// Validator address
+    pub validator_address: Address,
+    /// validator voting power
+    pub validator_vp: u64,
 }
 
 /// Bonds and unbonds with all details (slashes and rewards, if any)
@@ -408,7 +430,9 @@ pub struct BondDetails {
 }
 
 /// Unbond with all its details
-#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema)]
+#[derive(
+    Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema, PartialEq,
+)]
 pub struct UnbondDetails {
     /// The first epoch in which the source bond of this unbond contributed to
     /// a stake
