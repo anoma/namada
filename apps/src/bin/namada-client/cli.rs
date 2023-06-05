@@ -3,56 +3,20 @@
 use std::time::Duration;
 
 use color_eyre::eyre::Result;
-use eyre::Chain;
 use namada_apps::cli::cmds::*;
-use namada_apps::cli::{self, args, Context, safe_exit};
+use namada_apps::cli::{self, safe_exit};
 use namada_apps::client::{rpc, tx, utils};
 use namada_apps::facade::tendermint::block::Height;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient};
 use tokio::time::sleep;
-use namada::types::chain::ChainId;
-use namada::types::token::{Amount, DenominatedAmount, Denomination};
-use namada_apps::cli::args::{InputAmount, Tx};
-use namada_apps::cli::context::FromContext;
-use namada_apps::config::TendermintMode;
 
 pub async fn main() -> Result<()> {
-    let test_cmd = NamadaClientWithContext::TxTransfer(TxTransfer(args::TxTransfer{
-        tx: Tx {
-            dry_run: false,
-            dump_tx: false,
-            force: false,
-            broadcast_only: false,
-            ledger_address: TendermintAddress::Tcp {peer_id: None, host: "127.0.0.1".to_string(), port: 27657},
-            initialized_account_alias: None,
-            fee_amount: InputAmount::Unvalidated(DenominatedAmount { amount: Amount::zero(), denom: Denomination(6) }),
-            fee_token: FromContext::new("NAM".into()),
-            gas_limit: Default::default(),
-            expiration: None,
-            signing_key: None,
-            signer: Some(FromContext::new("Bertha".into())),
-        },
-        source: FromContext::new("xsktest1qqqqqqqqqqqqqqpagte43rsza46v55dlz8cffahv0fnr6eqacvnrkyuf9lmndgal7c2k4r7f7zu2yr5rjwr374unjjeuzrh6mquzy6grfdcnnu5clzaq2llqhr70a8yyx0p62aajqvrqjxrht3myuyypsvm725uyt5vm0fqzrzuuedtf6fala4r4nnazm9y9hq5yu6pq24arjskmpv4mdgfn3spffxxv8ugvym36kmnj45jcvvmm227vqjm5fq8882yhjsq97p7xrwqqd82s0".into()),
-        target: FromContext::new("Christel".into()),
-        token: FromContext::new("ETH".into()),
-        sub_prefix: None,
-        amount: InputAmount::Unvalidated(DenominatedAmount { amount: Amount::from_uint(30, 0).unwrap(), denom: Denomination(0) }),
-    }));
-    //match cli::namada_client_cli()? {
-        //cli::NamadaClient::WithContext(cmd_box) => {
-            //let (cmd, ctx) = *cmd_box;
+    match cli::namada_client_cli()? {
+        cli::NamadaClient::WithContext(cmd_box) => {
+            let (cmd, ctx) = *cmd_box;
             use NamadaClientWithContext as Sub;
-            let global_args = args::Global {
-                chain_id: Some(ChainId("e2e-test.1842a9ed7737c1c61d588".into())),
-                base_dir: "/tmp/.tmpmalzmo".into(),
-                wasm_dir: None,
-                mode: Some(TendermintMode::Full)
-            };
-
-            let ctx = Context::new(global_args).unwrap();
-
-            match test_cmd {
+            match cmd {
                 // Ledger cmds
                 Sub::TxCustom(TxCustom(args)) => {
                     wait_until_node_is_synched(&args.tx.ledger_address).await;
@@ -178,7 +142,7 @@ pub async fn main() -> Result<()> {
                     rpc::query_protocol_parameters(ctx, args).await;
                 }
             }
-        /*}
+        }
         cli::NamadaClient::WithoutContext(cmd, global_args) => match cmd {
             // Utils cmds
             Utils::JoinNetwork(JoinNetwork(args)) => {
@@ -194,7 +158,7 @@ pub async fn main() -> Result<()> {
                 utils::init_genesis_validator(global_args, args)
             }
         },
-    }*/
+    }
     Ok(())
 }
 

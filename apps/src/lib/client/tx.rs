@@ -1158,9 +1158,12 @@ impl ShieldedContext {
         input: &mut MaspAmount,
         output: &mut MaspAmount,
     ) {
+        // we do not need to convert negative values
+        if value <= 0 {
+            return;
+        }
         // If conversion if possible, accumulate the exchanged amount
         let conv: Amount = conv.into();
-        //println!("apply converson: {:?}", conv);
         // The amount required of current asset to qualify for conversion
         let masp_asset = make_asset_type(
             Some(asset_type.0),
@@ -1169,7 +1172,6 @@ impl ShieldedContext {
             asset_type.2
         );
         let threshold = -conv[&masp_asset];
-        //println!("threshold {}, value {}", threshold, value);
         if threshold == 0 {
             eprintln!(
                 "Asset threshold of selected conversion for asset type {} is \
@@ -1180,7 +1182,6 @@ impl ShieldedContext {
         // We should use an amount of the AllowedConversion that almost
         // cancels the original amount
         let required = value / threshold;
-        //println!("required: {}", required);
         // Forget about the trace amount left over because we cannot
         // realize its value
         let trace = MaspAmount(HashMap::from([((asset_type.0 , asset_type.1), Change::from(value % threshold))]));
@@ -1209,8 +1210,6 @@ impl ShieldedContext {
         let mut output = MaspAmount::default();
         // Repeatedly exchange assets until it is no longer possible
         loop {
-            println!("\n\nInput {:?}\n\n", input);
-
             let Some(((asset_epoch, token_addr), value)) = input.pop() else { break };
             for denom in MaspDenom::iter() {
                 let target_asset_type = make_asset_type(
@@ -1228,7 +1227,7 @@ impl ShieldedContext {
                 let at_target_asset_type = target_epoch == asset_epoch;
 
                 let denom_value = denom.denominate_i128(&value);
-                _ = self
+                self
                     .query_allowed_conversion(
                         client.clone(),
                         target_asset_type,
@@ -1259,7 +1258,7 @@ impl ShieldedContext {
                     .await;
                     break;
                 }
-                _ = self
+                self
                     .query_allowed_conversion(
                         client.clone(),
                         asset_type,
