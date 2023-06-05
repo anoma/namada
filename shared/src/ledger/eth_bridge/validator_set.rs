@@ -4,6 +4,7 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::future::Future;
 use std::sync::Arc;
+use std::task::Poll;
 
 use data_encoding::HEXLOWER;
 use ethbridge_governance_contract::Governance;
@@ -388,10 +389,12 @@ where
 
     loop {
         let should_exit = if let Some(fut) = shutdown_receiver.as_mut() {
-            let fut = future::maybe_done(fut);
+            let fut = future::poll_fn(|cx| match fut.poll_unpin(cx) {
+                Poll::Pending => Poll::Ready(false),
+                Poll::Ready(_) => Poll::Ready(true),
+            });
             futures::pin_mut!(fut);
-            fut.as_mut().await;
-            fut.as_mut().take_output().is_some()
+            fut.as_mut().await
         } else {
             false
         };
