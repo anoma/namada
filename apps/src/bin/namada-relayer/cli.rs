@@ -1,12 +1,17 @@
 //! Namada relayer CLI.
 
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{eyre, Report, Result};
 use namada::ledger::eth_bridge::{bridge_pool, validator_set};
 use namada::ledger::rpc::wait_until_node_is_synched;
+use namada::types::control_flow::ProceedOrElse;
 use namada_apps::cli::args::CliToSdkCtxless;
-use namada_apps::cli::{self, cmds, safe_exit};
+use namada_apps::cli::{self, cmds};
 use namada_apps::client::utils;
 use namada_apps::facade::tendermint_rpc::HttpClient;
+
+fn error() -> Report {
+    eyre!("Fatal error")
+}
 
 pub async fn main() -> Result<()> {
     let (cmd, _) = cli::namada_relayer_cli()?;
@@ -17,42 +22,48 @@ pub async fn main() -> Result<()> {
                     &mut args.query.ledger_address,
                 ))
                 .unwrap();
-                if wait_until_node_is_synched(&client).await.is_break() {
-                    safe_exit(1);
-                }
+                wait_until_node_is_synched(&client)
+                    .await
+                    .proceed_or_else(error)?;
                 let args = args.to_sdk_ctxless();
-                bridge_pool::recommend_batch(&client, args).await;
+                bridge_pool::recommend_batch(&client, args)
+                    .await
+                    .proceed_or_else(error)?;
             }
             cmds::EthBridgePool::ConstructProof(mut args) => {
                 let client = HttpClient::new(utils::take_config_address(
                     &mut args.query.ledger_address,
                 ))
                 .unwrap();
-                if wait_until_node_is_synched(&client).await.is_break() {
-                    safe_exit(1);
-                }
+                wait_until_node_is_synched(&client)
+                    .await
+                    .proceed_or_else(error)?;
                 let args = args.to_sdk_ctxless();
-                bridge_pool::construct_proof(&client, args).await;
+                bridge_pool::construct_proof(&client, args)
+                    .await
+                    .proceed_or_else(error)?;
             }
             cmds::EthBridgePool::RelayProof(mut args) => {
                 let client = HttpClient::new(utils::take_config_address(
                     &mut args.query.ledger_address,
                 ))
                 .unwrap();
-                if wait_until_node_is_synched(&client).await.is_break() {
-                    safe_exit(1);
-                }
+                wait_until_node_is_synched(&client)
+                    .await
+                    .proceed_or_else(error)?;
                 let args = args.to_sdk_ctxless();
-                bridge_pool::relay_bridge_pool_proof(&client, args).await;
+                bridge_pool::relay_bridge_pool_proof(&client, args)
+                    .await
+                    .proceed_or_else(error)?;
             }
             cmds::EthBridgePool::QueryPool(mut query) => {
                 let client = HttpClient::new(utils::take_config_address(
                     &mut query.ledger_address,
                 ))
                 .unwrap();
-                if wait_until_node_is_synched(&client).await.is_break() {
-                    safe_exit(1);
-                }
+                wait_until_node_is_synched(&client)
+                    .await
+                    .proceed_or_else(error)?;
                 bridge_pool::query_bridge_pool(&client).await;
             }
             cmds::EthBridgePool::QuerySigned(mut query) => {
@@ -60,19 +71,21 @@ pub async fn main() -> Result<()> {
                     &mut query.ledger_address,
                 ))
                 .unwrap();
-                if wait_until_node_is_synched(&client).await.is_break() {
-                    safe_exit(1);
-                }
-                bridge_pool::query_signed_bridge_pool(&client).await;
+                wait_until_node_is_synched(&client)
+                    .await
+                    .proceed_or_else(error)?;
+                bridge_pool::query_signed_bridge_pool(&client)
+                    .await
+                    .proceed_or_else(error)?;
             }
             cmds::EthBridgePool::QueryRelays(mut query) => {
                 let client = HttpClient::new(utils::take_config_address(
                     &mut query.ledger_address,
                 ))
                 .unwrap();
-                if wait_until_node_is_synched(&client).await.is_break() {
-                    safe_exit(1);
-                }
+                wait_until_node_is_synched(&client)
+                    .await
+                    .proceed_or_else(error)?;
                 bridge_pool::query_relay_progress(&client).await;
             }
         },
@@ -82,9 +95,9 @@ pub async fn main() -> Result<()> {
                     &mut args.query.ledger_address,
                 ))
                 .unwrap();
-                if wait_until_node_is_synched(&client).await.is_break() {
-                    safe_exit(1);
-                }
+                wait_until_node_is_synched(&client)
+                    .await
+                    .proceed_or_else(error)?;
                 let args = args.to_sdk_ctxless();
                 validator_set::query_validator_set_args(&client, args).await;
             }
@@ -93,9 +106,9 @@ pub async fn main() -> Result<()> {
                     &mut args.query.ledger_address,
                 ))
                 .unwrap();
-                if wait_until_node_is_synched(&client).await.is_break() {
-                    safe_exit(1);
-                }
+                wait_until_node_is_synched(&client)
+                    .await
+                    .proceed_or_else(error)?;
                 let args = args.to_sdk_ctxless();
                 validator_set::query_validator_set_update_proof(&client, args)
                     .await;
@@ -105,11 +118,13 @@ pub async fn main() -> Result<()> {
                     &mut args.query.ledger_address,
                 ))
                 .unwrap();
-                if wait_until_node_is_synched(&client).await.is_break() {
-                    safe_exit(1);
-                }
+                wait_until_node_is_synched(&client)
+                    .await
+                    .proceed_or_else(error)?;
                 let args = args.to_sdk_ctxless();
-                validator_set::relay_validator_set_update(&client, args).await;
+                validator_set::relay_validator_set_update(&client, args)
+                    .await
+                    .proceed_or_else(error)?;
             }
         },
     }
