@@ -92,7 +92,7 @@ pub async fn main() -> Result<()> {
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_init_validator::<HttpClient>(&client, ctx, args)
-                        .await;
+                        .await?;
                 }
                 Sub::TxInitProposal(TxInitProposal(args)) => {
                     wait_until_node_is_synched(&args.tx.ledger_address).await;
