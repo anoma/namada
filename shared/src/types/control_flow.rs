@@ -27,6 +27,37 @@ pub const fn proceed<T>(value: T) -> Halt<T> {
     ControlFlow::Continue(value)
 }
 
+/// Convert from [`Halt`] to [`Result`].
+#[allow(missing_docs)]
+pub trait ProceedOrElse<T> {
+    fn proceed_or_else<F, E>(self, error: F) -> Result<T, E>
+    where
+        Self: Sized,
+        F: FnOnce() -> E;
+
+    #[inline]
+    fn proceed_or<E>(self, error: E) -> Result<T, E>
+    where
+        Self: Sized,
+    {
+        self.proceed_or_else(move || error)
+    }
+}
+
+impl<T> ProceedOrElse<T> for Halt<T> {
+    #[inline]
+    fn proceed_or_else<F, E>(self, error: F) -> Result<T, E>
+    where
+        Self: Sized,
+        F: FnOnce() -> E,
+    {
+        match self {
+            ControlFlow::Continue(x) => Ok(x),
+            ControlFlow::Break(()) => Err(error()),
+        }
+    }
+}
+
 /// Halting abstraction to obtain [`ControlFlow`] actions.
 pub trait TryHalt<T, E> {
     /// Possibly exit from some context, if we encounter an
