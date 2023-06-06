@@ -3,7 +3,6 @@
 use std::future::Future;
 use std::ops::ControlFlow;
 
-use namada_core::hints;
 use thiserror::Error;
 
 /// Future task related errors.
@@ -132,6 +131,83 @@ pub struct Sleep<S> {
     pub strategy: S,
 }
 
+/// Zero cost abstraction to check if we should exit
+/// a running [`SleepStrategy`].
+pub trait SleepRunUntil {
+    /// The output type to return.
+    type Output<T>;
+
+    /// Exit with success, returning a value.
+    ///
+    /// Consumes the [`SleepRunUntil`] instance.
+    fn success<T>(self, ret: T) -> Self::Output<T>;
+
+    /// Exit with an error.
+    ///
+    /// Consumes the [`SleepRunUntil`] instance.
+    fn error<T>(self) -> Self::Output<T>;
+
+    /// Check if an error has occurred,
+    /// prompting an early exit.
+    fn poll_error(&mut self) -> bool;
+}
+
+/// Run a fallible task forever.
+pub struct RunForever;
+
+impl SleepRunUntil for RunForever {
+    type Output<T> = T;
+
+    #[inline]
+    fn success<T>(self, ret: T) -> Self::Output<T> {
+        ret
+    }
+
+    #[cold]
+    fn error<T>(self) -> Self::Output<T> {
+        unreachable!("Run forever never reaches an error")
+    }
+
+    #[inline]
+    fn poll_error(&mut self) -> bool {
+        false
+    }
+}
+
+/// A [`SleepRunUntil`] implementation, for running a
+/// fallible task a certain number of times before
+/// ultimately giving up.
+pub struct RunWithRetries {
+    /// The number of times to run the fallible task.
+    ///
+    /// When the counter reaches zero, [`Sleep`] exits
+    /// with an error.
+    pub counter: usize,
+}
+
+impl SleepRunUntil for RunWithRetries {
+    type Output<T> = Result<T, Error>;
+
+    #[inline]
+    fn success<T>(self, ret: T) -> Self::Output<T> {
+        Ok(ret)
+    }
+
+    #[inline]
+    fn error<T>(self) -> Self::Output<T> {
+        Err(Error::MaxRetriesExceeded)
+    }
+
+    #[inline]
+    fn poll_error(&mut self) -> bool {
+        if self.counter == 0 {
+            return true;
+        }
+        self.counter -= 1;
+        false
+    }
+}
+
 impl<S: SleepStrategy> Sleep<S> {
     /// Update the sleep strategy state, and sleep for the given backoff.
     async fn sleep_update(&self, state: &mut S::State) {
@@ -142,26 +218,29 @@ impl<S: SleepStrategy> Sleep<S> {
     /// Run a future as many times as `iter_times`
     /// yields a value, or break preemptively if
     /// the future returns with [`ControlFlow::Break`].
-    async fn run_times<T, F, G>(
+    pub async fn run_until<T, F, G, R>(
         &self,
-        iter_times: impl Iterator<Item = ()>,
+        mut sleep_run: R,
         mut future_gen: G,
-    ) -> Result<T, Error>
+    ) -> R::Output<T>
     where
+        R: SleepRunUntil,
         G: FnMut() -> F,
         F: Future<Output = ControlFlow<T>>,
     {
         let mut state = S::new_state();
-        for _ in iter_times {
+        loop {
+            if sleep_run.poll_error() {
+                break sleep_run.error();
+            }
             let fut = future_gen();
             match fut.await {
                 ControlFlow::Continue(()) => {
                     self.sleep_update(&mut state).await;
                 }
-                ControlFlow::Break(ret) => return Ok(ret),
+                ControlFlow::Break(ret) => break sleep_run.success(ret),
             }
         }
-        Err(Error::MaxRetriesExceeded)
     }
 
     /// Execute a fallible task.
@@ -174,14 +253,7 @@ impl<S: SleepStrategy> Sleep<S> {
         G: FnMut() -> F,
         F: Future<Output = ControlFlow<T>>,
     {
-        match self.run_times(std::iter::repeat(()), future_gen).await {
-            Ok(x) => x,
-            _ => {
-                // the iterator never returns `None`
-                hints::cold();
-                unreachable!();
-            }
-        }
+        self.run_until(RunForever, future_gen).await
     }
 
     /// Run a time constrained task until the given deadline.
@@ -218,8 +290,13 @@ impl<S: SleepStrategy> Sleep<S> {
         G: FnMut() -> F,
         F: Future<Output = ControlFlow<T>>,
     {
-        self.run_times(std::iter::repeat(()).take(max_retries), future_gen)
-            .await
+        self.run_until(
+            RunWithRetries {
+                counter: max_retries,
+            },
+            future_gen,
+        )
+        .await
     }
 }
 
