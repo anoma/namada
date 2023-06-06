@@ -1,6 +1,6 @@
 //! SDK RPC queries
 use std::collections::{HashMap, HashSet};
-use std::time::Duration;
+use std::ops::ControlFlow;
 
 use borsh::BorshDeserialize;
 use masp_primitives::asset_type::AssetType;
@@ -24,7 +24,7 @@ use crate::tendermint::merkle::proof::Proof;
 use crate::tendermint_rpc::error::Error as TError;
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
-use crate::types::control_flow::{self, time, Halt};
+use crate::types::control_flow::{self, time, Halt, TryHalt};
 use crate::types::governance::{ProposalVote, VotePower};
 use crate::types::hash::Hash;
 use crate::types::key::*;
@@ -36,47 +36,48 @@ use crate::types::{storage, token};
 ///
 /// If a response is not delivered until `deadline`, we exit the cli with an
 /// error.
-pub async fn query_tx_status<C: crate::ledger::queries::Client + Sync>(
+pub async fn query_tx_status<C>(
     client: &C,
     status: TxEventQuery<'_>,
-    deadline: Duration,
-) -> Event {
-    const ONE_SECOND: Duration = Duration::from_secs(1);
-    // sleep for the duration of `backoff`,
-    // and update the underlying value
-    async fn sleep_update(query: TxEventQuery<'_>, backoff: &mut Duration) {
-        tracing::debug!(
-            ?query,
-            duration = ?backoff,
-            "Retrying tx status query after timeout",
-        );
-        // simple linear backoff - if an event is not available,
-        // increase the backoff duration by one second
-        async_std::task::sleep(*backoff).await;
-        *backoff += ONE_SECOND;
+    deadline: time::Instant,
+) -> Halt<Event>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
+    time::SleepStrategy::LinearBackoff {
+        delta: time::Duration::from_secs(1),
     }
-
-    let mut backoff = ONE_SECOND;
-    loop {
+    .timeout(deadline, || async {
         tracing::debug!(query = ?status, "Querying tx status");
         let maybe_event = match query_tx_events(client, status).await {
             Ok(response) => response,
-            Err(_err) => {
-                // tracing::debug!(%err, "ABCI query failed");
-                sleep_update(status, &mut backoff).await;
-                continue;
+            Err(err) => {
+                tracing::debug!(
+                    query = ?status,
+                    %err,
+                    "ABCI query failed, retrying tx status query \
+                     after timeout",
+                );
+                return ControlFlow::Continue(());
             }
         };
         if let Some(e) = maybe_event {
-            break e;
-        } else if deadline < backoff {
-            panic!(
-                "Transaction status query deadline of {deadline:?} exceeded"
-            );
+            tracing::debug!(event = ?e, "Found tx event");
+            ControlFlow::Break(e)
         } else {
-            sleep_update(status, &mut backoff).await;
+            tracing::debug!(
+                query = ?status,
+                "No tx events found, retrying tx status query \
+                 after timeout",
+            );
+            ControlFlow::Continue(())
         }
-    }
+    })
+    .await
+    .try_halt(|_| {
+        eprintln!("Transaction status query deadline of {deadline:?} exceeded");
+    })
 }
 
 /// Query the epoch of the last committed block
