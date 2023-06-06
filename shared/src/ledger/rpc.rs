@@ -1,4 +1,6 @@
 //! SDK RPC queries
+
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::ops::ControlFlow;
 
@@ -24,7 +26,7 @@ use crate::tendermint::merkle::proof::Proof;
 use crate::tendermint_rpc::error::Error as TError;
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
-use crate::types::control_flow::{self, time, Halt, TryHalt};
+use crate::types::control_flow::{time, Halt, TryHalt};
 use crate::types::governance::{ProposalVote, VotePower};
 use crate::types::hash::Hash;
 use crate::types::key::*;
@@ -892,16 +894,21 @@ pub async fn get_bond_amount_at<C: crate::ledger::queries::Client + Sync>(
 }
 
 /// Wait for a first block and node to be synced.
-// TODO: refactor this to use `SleepStrategy`
 pub async fn wait_until_node_is_synched<C>(client: &C) -> Halt<()>
 where
     C: crate::ledger::queries::Client + Sync,
 {
     let height_one = Height::try_from(1_u64).unwrap();
-    let mut try_count = 0_u64;
-    const MAX_TRIES: u64 = 5;
+    let try_count = Cell::new(1_u64);
+    const MAX_TRIES: usize = 5;
 
-    loop {
+    time::Sleep {
+        strategy: time::ExponentialBackoff {
+            base: 2,
+            as_duration: time::Duration::from_secs,
+        },
+    }
+    .retry(MAX_TRIES, || async {
         let node_status = client.status().await;
         match node_status {
             Ok(status) => {
@@ -909,37 +916,32 @@ where
                 let is_catching_up = status.sync_info.catching_up;
                 let is_at_least_height_one = latest_block_height >= height_one;
                 if is_at_least_height_one && !is_catching_up {
-                    return control_flow::proceed(());
-                } else {
-                    if try_count > MAX_TRIES {
-                        println!(
-                            "Node is still catching up, wait for it to finish \
-                             synching."
-                        );
-                        return control_flow::halt();
-                    } else {
-                        println!(
-                            " Waiting for {} ({}/{} tries)...",
-                            if is_at_least_height_one {
-                                "a first block"
-                            } else {
-                                "node to sync"
-                            },
-                            try_count + 1,
-                            MAX_TRIES
-                        );
-                        time::sleep(time::Duration::from_secs(
-                            (try_count + 1).pow(2),
-                        ))
-                        .await;
-                    }
-                    try_count += 1;
+                    return ControlFlow::Break(Ok(()));
                 }
+                println!(
+                    " Waiting for {} ({}/{} tries)...",
+                    if is_at_least_height_one {
+                        "a first block"
+                    } else {
+                        "node to sync"
+                    },
+                    try_count.get(),
+                    MAX_TRIES,
+                );
+                try_count.set(try_count.get() + 1);
+                ControlFlow::Continue(())
             }
             Err(e) => {
                 eprintln!("Failed to query node status with error: {}", e);
-                return control_flow::halt();
+                ControlFlow::Break(Err(()))
             }
         }
-    }
+    })
+    .await
+    // maybe time out
+    .try_halt(|_| {
+        println!("Node is still catching up, wait for it to finish synching.");
+    })?
+    // error querying rpc
+    .try_halt(|_| ())
 }
