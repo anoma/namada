@@ -128,6 +128,7 @@ pub async fn submit_init_validator<
                 None,
             )
             .expect("Key generation should not fail.")
+            .expect("No existing alias expected.")
             .1
             .ref_to()
     });
@@ -154,6 +155,7 @@ pub async fn submit_init_validator<
                     None,
                 )
                 .expect("Key generation should not fail.")
+                .expect("No existing alias expected.")
                 .1
         });
 

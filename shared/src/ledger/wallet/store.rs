@@ -235,6 +235,8 @@ impl Store {
     /// Optionally, use a given random seed and a BIP44 derivation path.
     /// Returns the alias of the key and a reference-counting pointer to the
     /// key.
+    /// Returns None if the alias already exists and the user decides to skip
+    /// it. No changes in the wallet store are made.
     pub fn gen_key<U: WalletUtils>(
         &mut self,
         scheme: SchemeType,
@@ -242,7 +244,7 @@ impl Store {
         alias_force: bool,
         seed_and_derivation_path: Option<(Seed, DerivationPath)>,
         password: Option<Zeroizing<String>>,
-    ) -> (Alias, common::SecretKey) {
+    ) -> Option<(Alias, common::SecretKey)> {
         let sk = if let Some((seed, derivation_path)) = seed_and_derivation_path
         {
             gen_sk_from_seed_and_derivation_path(
@@ -257,24 +259,19 @@ impl Store {
         let (keypair_to_store, raw_keypair) = StoredKeypair::new(sk, password);
         let address = Address::Implicit(ImplicitAddress(pkh.clone()));
         let alias: Alias = alias.unwrap_or_else(|| pkh.clone().into()).into();
-        if self
-            .insert_keypair::<U>(
-                alias.clone(),
-                keypair_to_store,
-                pkh,
-                alias_force,
-            )
-            .is_none()
-        {
-            panic!("Action cancelled, no changes persisted.");
-        }
+        let alias = self.insert_keypair::<U>(
+            alias,
+            keypair_to_store,
+            pkh,
+            alias_force,
+        )?;
         if self
             .insert_address::<U>(alias.clone(), address, alias_force)
             .is_none()
         {
             panic!("Action cancelled, no changes persisted.");
         }
-        (alias, raw_keypair)
+        Some((alias, raw_keypair))
     }
 
     /// Generate a spending key similarly to how it's done for keypairs
