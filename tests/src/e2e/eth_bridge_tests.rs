@@ -13,7 +13,7 @@ use namada::ledger::eth_bridge::{
     UpgradeableContract,
 };
 use namada::types::address::wnam;
-use namada::types::control_flow::time::SleepStrategy;
+use namada::types::control_flow::time::{Constant, Sleep};
 use namada::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
 use namada::types::ethereum_events::EthAddress;
 use namada::types::storage::{self, Epoch};
@@ -1161,53 +1161,56 @@ async fn test_submit_validator_set_udpate() -> Result<()> {
 
     // wait for epoch E > 1 to be installed
     let instant = Instant::now() + Duration::from_secs(180);
-    SleepStrategy::Constant(Duration::from_millis(500))
-        .timeout(instant, || async {
-            match rpc_client_do(&rpc_addr, &(), |rpc, client, ()| async move {
-                rpc.shell().epoch(&client).await.ok()
-            })
-            .await
-            {
-                Some(epoch) if epoch.0 > 0 => ControlFlow::Break(()),
-                _ => ControlFlow::Continue(()),
-            }
+    Sleep {
+        strategy: Constant(Duration::from_millis(500)),
+    }
+    .timeout(instant, || async {
+        match rpc_client_do(&rpc_addr, &(), |rpc, client, ()| async move {
+            rpc.shell().epoch(&client).await.ok()
         })
-        .await?;
+        .await
+        {
+            Some(epoch) if epoch.0 > 0 => ControlFlow::Break(()),
+            _ => ControlFlow::Continue(()),
+        }
+    })
+    .await?;
 
     // check that we have a complete proof for E=1
     let valset_upd_keys = vote_tallies::Keys::from(&Epoch(1));
     let seen_key = valset_upd_keys.seen();
-    SleepStrategy::Constant(Duration::from_millis(500))
-        .timeout(instant, || async {
-            rpc_client_do(
-                &rpc_addr,
-                &seen_key,
-                |rpc, client, seen_key| async move {
-                    rpc.shell()
-                        .storage_value(&client, None, None, false, seen_key)
-                        .await
-                        .map_or_else(
-                            |_| {
-                                unreachable!(
-                                    "By the end of epoch 0, a proof should be \
-                                     available"
-                                )
-                            },
-                            |rsp| {
-                                let seen =
-                                    bool::try_from_slice(&rsp.data).unwrap();
-                                assert!(
-                                    seen,
-                                    "No valset upd complete proof in storage"
-                                );
-                                ControlFlow::Break(())
-                            },
-                        )
-                },
-            )
-            .await
-        })
-        .await?;
+    Sleep {
+        strategy: Constant(Duration::from_millis(500)),
+    }
+    .timeout(instant, || async {
+        rpc_client_do(
+            &rpc_addr,
+            &seen_key,
+            |rpc, client, seen_key| async move {
+                rpc.shell()
+                    .storage_value(&client, None, None, false, seen_key)
+                    .await
+                    .map_or_else(
+                        |_| {
+                            unreachable!(
+                                "By the end of epoch 0, a proof should be \
+                                 available"
+                            )
+                        },
+                        |rsp| {
+                            let seen = bool::try_from_slice(&rsp.data).unwrap();
+                            assert!(
+                                seen,
+                                "No valset upd complete proof in storage"
+                            );
+                            ControlFlow::Break(())
+                        },
+                    )
+            },
+        )
+        .await
+    })
+    .await?;
 
     // shut down ledger
     let mut ledger = bg_ledger.foreground();
@@ -1232,32 +1235,32 @@ async fn test_submit_validator_set_udpate() -> Result<()> {
     let (test, _bg_ledger) = run_single_node_test_from(test)?;
 
     // check that no complete proof is available for E=1 anymore
-    SleepStrategy::Constant(Duration::from_millis(500))
-        .timeout(instant, || async {
-            rpc_client_do(
-                &rpc_addr,
-                &seen_key,
-                |rpc, client, seen_key| async move {
-                    rpc.shell()
-                        .storage_value(&client, None, None, false, seen_key)
-                        .await
-                        .map_or_else(
-                            |_| unreachable!("The RPC does not error out"),
-                            |rsp| {
-                                assert_eq!(
-                                    rsp.info,
-                                    format!(
-                                        "No value found for key: {seen_key}"
-                                    )
-                                );
-                                ControlFlow::Break(())
-                            },
-                        )
-                },
-            )
-            .await
-        })
-        .await?;
+    Sleep {
+        strategy: Constant(Duration::from_millis(500)),
+    }
+    .timeout(instant, || async {
+        rpc_client_do(
+            &rpc_addr,
+            &seen_key,
+            |rpc, client, seen_key| async move {
+                rpc.shell()
+                    .storage_value(&client, None, None, false, seen_key)
+                    .await
+                    .map_or_else(
+                        |_| unreachable!("The RPC does not error out"),
+                        |rsp| {
+                            assert_eq!(
+                                rsp.info,
+                                format!("No value found for key: {seen_key}")
+                            );
+                            ControlFlow::Break(())
+                        },
+                    )
+            },
+        )
+        .await
+    })
+    .await?;
 
     // submit valset upd vote extension protocol tx for E=1
     let tx_args = vec![
@@ -1273,38 +1276,36 @@ async fn test_submit_validator_set_udpate() -> Result<()> {
     drop(namadac_tx);
 
     // check that a complete proof is once more available for E=1
-    SleepStrategy::Constant(Duration::from_millis(500))
-        .timeout(instant, || async {
-            rpc_client_do(
-                &rpc_addr,
-                &seen_key,
-                |rpc, client, seen_key| async move {
-                    rpc.shell()
-                        .storage_value(&client, None, None, false, seen_key)
-                        .await
-                        .map_or_else(
-                            |_| ControlFlow::Continue(()),
-                            |rsp| {
-                                if rsp
-                                    .info
-                                    .starts_with("No value found for key")
-                                {
-                                    return ControlFlow::Continue(());
-                                }
-                                let seen =
-                                    bool::try_from_slice(&rsp.data).unwrap();
-                                assert!(
-                                    seen,
-                                    "No valset upd complete proof in storage"
-                                );
-                                ControlFlow::Break(())
-                            },
-                        )
-                },
-            )
-            .await
-        })
-        .await?;
+    Sleep {
+        strategy: Constant(Duration::from_millis(500)),
+    }
+    .timeout(instant, || async {
+        rpc_client_do(
+            &rpc_addr,
+            &seen_key,
+            |rpc, client, seen_key| async move {
+                rpc.shell()
+                    .storage_value(&client, None, None, false, seen_key)
+                    .await
+                    .map_or_else(
+                        |_| ControlFlow::Continue(()),
+                        |rsp| {
+                            if rsp.info.starts_with("No value found for key") {
+                                return ControlFlow::Continue(());
+                            }
+                            let seen = bool::try_from_slice(&rsp.data).unwrap();
+                            assert!(
+                                seen,
+                                "No valset upd complete proof in storage"
+                            );
+                            ControlFlow::Break(())
+                        },
+                    )
+            },
+        )
+        .await
+    })
+    .await?;
 
     Ok(())
 }

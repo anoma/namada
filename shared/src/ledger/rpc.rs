@@ -45,8 +45,10 @@ where
     C: crate::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    time::SleepStrategy::LinearBackoff {
-        delta: time::Duration::from_secs(1),
+    time::Sleep {
+        strategy: time::LinearBackoff {
+            delta: time::Duration::from_secs(1),
+        },
     }
     .timeout(deadline, || async {
         tracing::debug!(query = ?status, "Querying tx status");
