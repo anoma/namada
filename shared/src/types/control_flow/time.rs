@@ -18,29 +18,125 @@ pub enum Error {
 }
 
 /// A sleep strategy to be applied to fallible runs of arbitrary tasks.
-#[derive(Debug, Clone)]
-pub enum SleepStrategy {
-    /// Constant sleep.
-    Constant(Duration),
-    /// Linear backoff sleep.
-    LinearBackoff {
-        /// The amount of time added to each consecutive run.
-        delta: Duration,
-    },
+pub trait SleepStrategy {
+    /// The state of the sleep strategy.
+    type State;
+
+    /// Return a new sleep strategy state.
+    fn new_state() -> Self::State;
+
+    /// Calculate a duration from a sleep strategy state.
+    fn backoff(&self, state: &Self::State) -> Duration;
+
+    /// Update the state of the sleep strategy.
+    fn next_state(&self, state: &mut Self::State);
 }
 
-impl SleepStrategy {
-    /// Sleep and update the `backoff` timeout, if necessary.
-    async fn sleep_update(&self, backoff: &mut Duration) {
-        match self {
-            Self::Constant(sleep_duration) => {
-                sleep(*sleep_duration).await;
-            }
-            Self::LinearBackoff { delta } => {
-                *backoff += *delta;
-                sleep(*backoff).await;
-            }
+/// Constant sleep strategy.
+#[derive(Debug, Clone)]
+pub struct Constant(pub Duration);
+
+impl Default for Constant {
+    fn default() -> Self {
+        Self(Duration::from_secs(1))
+    }
+}
+
+impl SleepStrategy for Constant {
+    type State = ();
+
+    fn new_state() {
+        // NOOP
+    }
+
+    fn backoff(&self, _: &()) -> Duration {
+        self.0
+    }
+
+    fn next_state(&self, _: &mut ()) {
+        // NOOP
+    }
+}
+
+/// Linear backoff sleep strategy.
+#[derive(Debug, Clone)]
+pub struct LinearBackoff {
+    /// The amount of time added to each consecutive sleep.
+    pub delta: Duration,
+}
+
+impl Default for LinearBackoff {
+    fn default() -> Self {
+        Self {
+            delta: Duration::from_secs(1),
         }
+    }
+}
+
+impl SleepStrategy for LinearBackoff {
+    type State = Duration;
+
+    fn new_state() -> Duration {
+        Duration::from_secs(0)
+    }
+
+    fn backoff(&self, state: &Duration) -> Duration {
+        *state
+    }
+
+    fn next_state(&self, state: &mut Duration) {
+        *state += self.delta;
+    }
+}
+
+/// Exponential backoff sleep strategy.
+#[derive(Debug, Clone)]
+pub struct ExponentialBackoff {
+    /// The base of the exponentiation.
+    pub base: u64,
+    /// Retrieve a duration from a [`u64`].
+    pub as_duration: fn(u64) -> Duration,
+}
+
+impl Default for ExponentialBackoff {
+    fn default() -> Self {
+        Self {
+            base: 2,
+            as_duration: Duration::from_secs,
+        }
+    }
+}
+
+impl SleepStrategy for ExponentialBackoff {
+    type State = u32;
+
+    fn new_state() -> u32 {
+        0
+    }
+
+    fn backoff(&self, state: &u32) -> Duration {
+        (self.as_duration)(self.base.saturating_pow(*state))
+    }
+
+    fn next_state(&self, state: &mut Self::State) {
+        *state = state.saturating_add(1);
+    }
+}
+
+/// A [`SleepStrategy`] adaptor, to run async tasks with custom
+/// sleep durations.
+#[repr(transparent)]
+#[derive(Debug, Clone)]
+pub struct Sleep<S> {
+    /// The sleep strategy to use.
+    pub strategy: S,
+}
+
+impl<S: SleepStrategy> Sleep<S> {
+    /// Update the sleep strategy state, and sleep for the given backoff.
+    async fn sleep_update(&self, state: &mut S::State) {
+        self.strategy.next_state(state);
+        sleep(self.strategy.backoff(state)).await;
     }
 
     /// Run a future as many times as `iter_times`
@@ -55,12 +151,12 @@ impl SleepStrategy {
         G: FnMut() -> F,
         F: Future<Output = ControlFlow<T>>,
     {
-        let mut backoff = Duration::from_secs(0);
+        let mut state = S::new_state();
         for _ in iter_times {
             let fut = future_gen();
             match fut.await {
                 ControlFlow::Continue(()) => {
-                    self.sleep_update(&mut backoff).await;
+                    self.sleep_update(&mut state).await;
                 }
                 ControlFlow::Break(ret) => return Ok(ret),
             }
