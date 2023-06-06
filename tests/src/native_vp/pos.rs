@@ -148,9 +148,10 @@ mod tests {
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use namada_tx_prelude::Address;
     use proptest::prelude::*;
-    use proptest::prop_state_machine;
-    use proptest::state_machine::{ReferenceStateMachine, StateMachineTest};
     use proptest::test_runner::Config;
+    use proptest_state_machine::{
+        prop_state_machine, ReferenceStateMachine, StateMachineTest,
+    };
     use test_log::test;
 
     use super::testing::{

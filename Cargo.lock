@@ -4149,6 +4149,7 @@ dependencies = [
  "namada_core",
  "once_cell",
  "proptest",
+ "proptest-state-machine",
  "rust_decimal",
  "rust_decimal_macros",
  "test-log",
@@ -4193,6 +4194,7 @@ dependencies = [
  "namada_vp_prelude",
  "pretty_assertions",
  "proptest",
+ "proptest-state-machine",
  "prost",
  "rand 0.8.5",
  "regex",
@@ -4979,8 +4981,9 @@ dependencies = [
 
 [[package]]
 name = "proptest"
-version = "1.1.0"
-source = "git+https://github.com/heliaxdev/proptest?rev=8f1b4abe7ebd35c0781bf9a00a4ee59833ffa2a1#8f1b4abe7ebd35c0781bf9a00a4ee59833ffa2a1"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e35c06b98bf36aba164cc17cb25f7e232f5c4aeea73baa14b8a9f0d92dbfa65"
 dependencies = [
  "bit-set",
  "bitflags",
@@ -4994,6 +4997,15 @@ dependencies = [
  "rusty-fork",
  "tempfile",
  "unarray",
+]
+
+[[package]]
+name = "proptest-state-machine"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b52a714915de2d16a5289616d2265a934780f50a9dd30359322b687403fa2ac2"
+dependencies = [
+ "proptest",
 ]
 
 [[package]]
