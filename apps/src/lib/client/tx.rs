@@ -39,11 +39,15 @@ use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::node::ledger::tendermint_node;
 use crate::wallet::{gen_validator_keys, read_and_confirm_pwd, CliWalletUtils};
 
-pub async fn submit_custom<C: namada::ledger::queries::Client + Sync>(
+pub async fn submit_custom<C>(
     client: &C,
     ctx: &mut Context,
     mut args: args::TxCustom,
-) -> Result<(), tx::Error> {
+) -> Result<(), tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     args.tx.chain_id = args
         .tx
         .chain_id
@@ -51,11 +55,15 @@ pub async fn submit_custom<C: namada::ledger::queries::Client + Sync>(
     tx::submit_custom::<C, _>(client, &mut ctx.wallet, args).await
 }
 
-pub async fn submit_update_vp<C: namada::ledger::queries::Client + Sync>(
+pub async fn submit_update_vp<C>(
     client: &C,
     ctx: &mut Context,
     mut args: args::TxUpdateVp,
-) -> Result<(), tx::Error> {
+) -> Result<(), tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     args.tx.chain_id = args
         .tx
         .chain_id
@@ -63,11 +71,15 @@ pub async fn submit_update_vp<C: namada::ledger::queries::Client + Sync>(
     tx::submit_update_vp::<C, _>(client, &mut ctx.wallet, args).await
 }
 
-pub async fn submit_init_account<C: namada::ledger::queries::Client + Sync>(
+pub async fn submit_init_account<C>(
     client: &C,
     ctx: &mut Context,
     mut args: args::TxInitAccount,
-) -> Result<(), tx::Error> {
+) -> Result<(), tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     args.tx.chain_id = args
         .tx
         .chain_id
@@ -75,9 +87,7 @@ pub async fn submit_init_account<C: namada::ledger::queries::Client + Sync>(
     tx::submit_init_account::<C, _>(client, &mut ctx.wallet, args).await
 }
 
-pub async fn submit_init_validator<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn submit_init_validator<C>(
     client: &C,
     mut ctx: Context,
     args::TxInitValidator {
@@ -95,7 +105,10 @@ pub async fn submit_init_validator<
         unsafe_dont_encrypt,
         tx_code_path: _,
     }: args::TxInitValidator,
-) {
+) where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     let tx_args = args::Tx {
         chain_id: tx_args
             .clone()
@@ -465,11 +478,15 @@ pub async fn submit_transfer(
     tx::submit_transfer(client, &mut ctx.wallet, &mut ctx.shielded, args).await
 }
 
-pub async fn submit_ibc_transfer<C: namada::ledger::queries::Client + Sync>(
+pub async fn submit_ibc_transfer<C>(
     client: &C,
     mut ctx: Context,
     mut args: args::TxIbcTransfer,
-) -> Result<(), tx::Error> {
+) -> Result<(), tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     args.tx.chain_id = args
         .tx
         .chain_id
@@ -477,11 +494,15 @@ pub async fn submit_ibc_transfer<C: namada::ledger::queries::Client + Sync>(
     tx::submit_ibc_transfer::<C, _>(client, &mut ctx.wallet, args).await
 }
 
-pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
+pub async fn submit_init_proposal<C>(
     client: &C,
     mut ctx: Context,
     mut args: args::InitProposal,
-) -> Result<(), tx::Error> {
+) -> Result<(), tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     args.tx.chain_id = args
         .tx
         .chain_id
@@ -635,11 +656,15 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
     }
 }
 
-pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
+pub async fn submit_vote_proposal<C>(
     client: &C,
     mut ctx: Context,
     mut args: args::VoteProposal,
-) -> Result<(), tx::Error> {
+) -> Result<(), tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     args.tx.chain_id = args
         .tx
         .chain_id
@@ -889,11 +914,15 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
     }
 }
 
-pub async fn submit_reveal_pk<C: namada::ledger::queries::Client + Sync>(
+pub async fn submit_reveal_pk<C>(
     client: &C,
     ctx: &mut Context,
     mut args: args::RevealPk,
-) -> Result<(), tx::Error> {
+) -> Result<(), tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     args.tx.chain_id = args
         .tx
         .chain_id
@@ -901,12 +930,16 @@ pub async fn submit_reveal_pk<C: namada::ledger::queries::Client + Sync>(
     tx::submit_reveal_pk::<C, _>(client, &mut ctx.wallet, args).await
 }
 
-pub async fn reveal_pk_if_needed<C: namada::ledger::queries::Client + Sync>(
+pub async fn reveal_pk_if_needed<C>(
     client: &C,
     ctx: &mut Context,
     public_key: &common::PublicKey,
     args: &args::Tx,
-) -> Result<bool, tx::Error> {
+) -> Result<bool, tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     let args = args::Tx {
         chain_id: args
             .clone()
@@ -918,19 +951,24 @@ pub async fn reveal_pk_if_needed<C: namada::ledger::queries::Client + Sync>(
         .await
 }
 
-pub async fn has_revealed_pk<C: namada::ledger::queries::Client + Sync>(
-    client: &C,
-    addr: &Address,
-) -> bool {
+pub async fn has_revealed_pk<C>(client: &C, addr: &Address) -> bool
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     tx::has_revealed_pk(client, addr).await
 }
 
-pub async fn submit_reveal_pk_aux<C: namada::ledger::queries::Client + Sync>(
+pub async fn submit_reveal_pk_aux<C>(
     client: &C,
     ctx: &mut Context,
     public_key: &common::PublicKey,
     args: &args::Tx,
-) -> Result<(), tx::Error> {
+) -> Result<(), tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     let args = args::Tx {
         chain_id: args
             .clone()
@@ -945,22 +983,30 @@ pub async fn submit_reveal_pk_aux<C: namada::ledger::queries::Client + Sync>(
 /// Check if current epoch is in the last third of the voting period of the
 /// proposal. This ensures that it is safe to optimize the vote writing to
 /// storage.
-async fn is_safe_voting_window<C: namada::ledger::queries::Client + Sync>(
+async fn is_safe_voting_window<C>(
     client: &C,
     proposal_id: u64,
     proposal_start_epoch: Epoch,
-) -> Result<bool, tx::Error> {
+) -> Result<bool, tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     tx::is_safe_voting_window(client, proposal_id, proposal_start_epoch).await
 }
 
 /// Removes validators whose vote corresponds to that of the delegator (needless
 /// vote)
-async fn filter_delegations<C: namada::ledger::queries::Client + Sync>(
+async fn filter_delegations<C>(
     client: &C,
     delegations: HashSet<Address>,
     proposal_id: u64,
     delegator_vote: &ProposalVote,
-) -> HashSet<Address> {
+) -> HashSet<Address>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     // Filter delegations by their validator's vote concurrently
     let delegations = futures::future::join_all(
         delegations
@@ -992,11 +1038,15 @@ async fn filter_delegations<C: namada::ledger::queries::Client + Sync>(
     delegations.into_iter().flatten().collect()
 }
 
-pub async fn submit_bond<C: namada::ledger::queries::Client + Sync>(
+pub async fn submit_bond<C>(
     client: &C,
     ctx: &mut Context,
     mut args: args::Bond,
-) -> Result<(), tx::Error> {
+) -> Result<(), tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     args.tx.chain_id = args
         .tx
         .chain_id
@@ -1004,11 +1054,15 @@ pub async fn submit_bond<C: namada::ledger::queries::Client + Sync>(
     tx::submit_bond::<C, _>(client, &mut ctx.wallet, args).await
 }
 
-pub async fn submit_unbond<C: namada::ledger::queries::Client + Sync>(
+pub async fn submit_unbond<C>(
     client: &C,
     ctx: &mut Context,
     mut args: args::Unbond,
-) -> Result<(), tx::Error> {
+) -> Result<(), tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     args.tx.chain_id = args
         .tx
         .chain_id
@@ -1016,11 +1070,15 @@ pub async fn submit_unbond<C: namada::ledger::queries::Client + Sync>(
     tx::submit_unbond::<C, _>(client, &mut ctx.wallet, args).await
 }
 
-pub async fn submit_withdraw<C: namada::ledger::queries::Client + Sync>(
+pub async fn submit_withdraw<C>(
     client: &C,
     mut ctx: Context,
     mut args: args::Withdraw,
-) -> Result<(), tx::Error> {
+) -> Result<(), tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     args.tx.chain_id = args
         .tx
         .chain_id
@@ -1028,13 +1086,15 @@ pub async fn submit_withdraw<C: namada::ledger::queries::Client + Sync>(
     tx::submit_withdraw::<C, _>(client, &mut ctx.wallet, args).await
 }
 
-pub async fn submit_validator_commission_change<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn submit_validator_commission_change<C>(
     client: &C,
     mut ctx: Context,
     mut args: args::TxCommissionRateChange,
-) -> Result<(), tx::Error> {
+) -> Result<(), tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     args.tx.chain_id = args
         .tx
         .chain_id
@@ -1049,14 +1109,18 @@ pub async fn submit_validator_commission_change<
 
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
-async fn process_tx<C: namada::ledger::queries::Client + Sync>(
+async fn process_tx<C>(
     client: &C,
     mut ctx: Context,
     args: &args::Tx,
     tx: Tx,
     default_signer: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> Result<(Context, Vec<Address>), tx::Error> {
+) -> Result<(Context, Vec<Address>), tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     let args = args::Tx {
         chain_id: args.clone().chain_id.or_else(|| Some(tx.chain_id.clone())),
         ..args.clone()
@@ -1087,10 +1151,14 @@ pub async fn save_initialized_accounts<U: WalletUtils>(
 /// the tx has been successfully included into the mempool of a validator
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn broadcast_tx<C: namada::ledger::queries::Client + Sync>(
+pub async fn broadcast_tx<C>(
     rpc_cli: &C,
     to_broadcast: &TxBroadcastData,
-) -> Result<Response, tx::Error> {
+) -> Result<Response, tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     tx::broadcast_tx(rpc_cli, to_broadcast).await
 }
 
@@ -1102,9 +1170,13 @@ pub async fn broadcast_tx<C: namada::ledger::queries::Client + Sync>(
 /// 3. The decrypted payload of the tx has been included on the blockchain.
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn submit_tx<C: namada::ledger::queries::Client + Sync>(
+pub async fn submit_tx<C>(
     client: &C,
     to_broadcast: TxBroadcastData,
-) -> Result<TxResponse, tx::Error> {
+) -> Result<TxResponse, tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     tx::submit_tx(client, to_broadcast).await
 }

@@ -82,15 +82,17 @@ pub enum TxSigningKey {
 /// signer. Return the given signing key or public key of the given signer if
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, an `Error` is returned.
-pub async fn tx_signer<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
+pub async fn tx_signer<C, U>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     default: TxSigningKey,
-) -> Result<common::SecretKey, Error> {
+) -> Result<common::SecretKey, Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+    U: WalletUtils,
+{
     // Override the default signing key source if possible
     let default = if let Some(signing_key) = &args.signing_key {
         TxSigningKey::WalletKeypair(signing_key.clone())
@@ -145,17 +147,19 @@ pub async fn tx_signer<
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
-pub async fn sign_tx<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
+pub async fn sign_tx<C, U>(
     client: &C,
     wallet: &mut Wallet<U>,
     tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> Result<TxBroadcastData, Error> {
+) -> Result<TxBroadcastData, Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+    U: WalletUtils,
+{
     let keypair = tx_signer::<C, U>(client, wallet, args, default).await?;
     let tx = tx.sign(&keypair);
 
