@@ -3,14 +3,18 @@
 use std::future::Future;
 use std::ops::ControlFlow;
 
+use namada_core::hints;
 use thiserror::Error;
 
-/// Timeout related errors.
+/// Future task related errors.
 #[derive(Error, Debug)]
 pub enum Error {
     /// A future timed out.
     #[error("The future timed out")]
     Elapsed,
+    /// A future ran for the max number of allowed times.
+    #[error("Maximum number of retries exceeded")]
+    MaxRetriesExceeded,
 }
 
 /// A sleep strategy to be applied to fallible runs of arbitrary tasks.
@@ -39,23 +43,47 @@ impl SleepStrategy {
         }
     }
 
-    /// Execute a fallible task.
-    ///
-    /// Different retries will result in a sleep operation,
-    /// with the current [`SleepStrategy`].
-    pub async fn run<T, F, G>(&self, mut future_gen: G) -> T
+    /// Run a future as many times as `iter_times`
+    /// yields a value, or break preemptively if
+    /// the future returns with [`ControlFlow::Break`].
+    async fn run_times<T, F, G>(
+        &self,
+        iter_times: impl Iterator<Item = ()>,
+        mut future_gen: G,
+    ) -> Result<T, Error>
     where
         G: FnMut() -> F,
         F: Future<Output = ControlFlow<T>>,
     {
         let mut backoff = Duration::from_secs(0);
-        loop {
+        for _ in iter_times {
             let fut = future_gen();
             match fut.await {
                 ControlFlow::Continue(()) => {
                     self.sleep_update(&mut backoff).await;
                 }
-                ControlFlow::Break(ret) => break ret,
+                ControlFlow::Break(ret) => return Ok(ret),
+            }
+        }
+        Err(Error::MaxRetriesExceeded)
+    }
+
+    /// Execute a fallible task.
+    ///
+    /// Different retries will result in a sleep operation,
+    /// with the current [`SleepStrategy`].
+    #[inline]
+    pub async fn run<T, F, G>(&self, future_gen: G) -> T
+    where
+        G: FnMut() -> F,
+        F: Future<Output = ControlFlow<T>>,
+    {
+        match self.run_times(std::iter::repeat(()), future_gen).await {
+            Ok(x) => x,
+            _ => {
+                // the iterator never returns `None`
+                hints::cold();
+                unreachable!();
             }
         }
     }
@@ -77,6 +105,25 @@ impl SleepStrategy {
         internal_timeout_at(deadline, async move { self.run(future_gen).await })
             .await
             .map_err(|_| Error::Elapsed)
+    }
+
+    /// Retry running a fallible task for a limited number of times,
+    /// until it succeeds or exhausts the maximum number of tries.
+    ///
+    /// Different retries will result in a sleep operation,
+    /// with the current [`SleepStrategy`].
+    #[inline]
+    pub async fn retry<T, F, G>(
+        &self,
+        max_retries: usize,
+        future_gen: G,
+    ) -> Result<T, Error>
+    where
+        G: FnMut() -> F,
+        F: Future<Output = ControlFlow<T>>,
+    {
+        self.run_times(std::iter::repeat(()).take(max_retries), future_gen)
+            .await
     }
 }
 
