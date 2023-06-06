@@ -501,6 +501,16 @@ impl Store {
         address: Address,
         force: bool,
     ) -> Option<Alias> {
+        // abort if the address already exists in the wallet
+        if self.addresses.contains_right(&address) && !force {
+            println!(
+                "Address {} already exists in the wallet with alias {}",
+                address.encode(),
+                self.addresses.get_by_right(&address).unwrap()
+            );
+            return None;
+        }
+
         if alias.is_empty() {
             println!("Empty alias given, defaulting to {}.", address.encode());
         }
