@@ -27,7 +27,9 @@ pub const ADDRESS_LEN: usize = 79 + ADDRESS_HRP.len();
 const ADDRESS_HRP: &str = "atest";
 /// We're using "Bech32m" variant
 pub const BECH32M_VARIANT: bech32::Variant = Variant::Bech32m;
-pub(crate) const HASH_LEN: usize = 40;
+
+/// Length of a hash of an address as a hexadecimal string
+pub(crate) const HASH_HEX_LEN: usize = 40;
 
 /// An address string before bech32m encoding must be this size.
 pub const FIXED_LEN_STRING_BYTES: usize = 45;
@@ -233,7 +235,7 @@ impl Address {
         }
         match string.split_once("::") {
             Some((PREFIX_ESTABLISHED, hash)) => {
-                if hash.len() == HASH_LEN {
+                if hash.len() == HASH_HEX_LEN {
                     Ok(Address::Established(EstablishedAddress {
                         hash: hash.to_string(),
                     }))
@@ -285,7 +287,7 @@ impl Address {
                 internal::IBC_MINT => {
                     Ok(Address::Internal(InternalAddress::IbcMint))
                 }
-                _ if raw.len() == HASH_LEN => Ok(Address::Internal(
+                _ if raw.len() == HASH_HEX_LEN => Ok(Address::Internal(
                     InternalAddress::IbcToken(raw.to_string()),
                 )),
                 _ => Err(Error::new(
@@ -420,7 +422,8 @@ impl EstablishedAddressGen {
         let bytes = [&gen_bytes, rng_source.as_ref()].concat();
         hasher.update(bytes);
         // hex of the first 40 chars of the hash
-        let hash = format!("{:.width$X}", hasher.finalize(), width = HASH_LEN);
+        let hash =
+            format!("{:.width$X}", hasher.finalize(), width = HASH_HEX_LEN);
         self.last_hash = hash.clone();
         Address::Established(EstablishedAddress { hash })
     }
@@ -507,7 +510,8 @@ impl InternalAddress {
         let mut hasher = Sha256::new();
         let s = format!("{}/{}/{}", port_id, channel_id, token);
         hasher.update(&s);
-        let hash = format!("{:.width$x}", hasher.finalize(), width = HASH_LEN);
+        let hash =
+            format!("{:.width$x}", hasher.finalize(), width = HASH_HEX_LEN);
         InternalAddress::IbcToken(hash)
     }
 }
@@ -831,7 +835,7 @@ pub mod testing {
             );
             hasher.update(&s);
             let hash =
-                format!("{:.width$x}", hasher.finalize(), width = HASH_LEN);
+                format!("{:.width$x}", hasher.finalize(), width = HASH_HEX_LEN);
             InternalAddress::IbcToken(hash)
         })
     }
