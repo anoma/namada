@@ -35,12 +35,6 @@ pub trait SleepStrategy {
 #[derive(Debug, Clone)]
 pub struct Constant(pub Duration);
 
-impl Default for Constant {
-    fn default() -> Self {
-        Self(Duration::from_secs(1))
-    }
-}
-
 impl SleepStrategy for Constant {
     type State = ();
 
@@ -62,14 +56,6 @@ impl SleepStrategy for Constant {
 pub struct LinearBackoff {
     /// The amount of time added to each consecutive sleep.
     pub delta: Duration,
-}
-
-impl Default for LinearBackoff {
-    fn default() -> Self {
-        Self {
-            delta: Duration::from_secs(1),
-        }
-    }
 }
 
 impl SleepStrategy for LinearBackoff {
@@ -95,15 +81,6 @@ pub struct ExponentialBackoff {
     pub base: u64,
     /// Retrieve a duration from a [`u64`].
     pub as_duration: fn(u64) -> Duration,
-}
-
-impl Default for ExponentialBackoff {
-    fn default() -> Self {
-        Self {
-            base: 2,
-            as_duration: Duration::from_secs,
-        }
-    }
 }
 
 impl SleepStrategy for ExponentialBackoff {
