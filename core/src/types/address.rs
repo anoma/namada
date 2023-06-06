@@ -1,6 +1,7 @@
 //! Implements transparent addresses as described in [Accounts
 //! Addresses](docs/src/explore/design/ledger/accounts.md#addresses).
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
@@ -8,6 +9,7 @@ use std::str::FromStr;
 
 use bech32::{self, FromBase32, ToBase32, Variant};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use data_encoding::HEXUPPER;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -17,7 +19,7 @@ use crate::types::key;
 use crate::types::key::PublicKeyHash;
 
 /// The length of an established [`Address`] encoded with Borsh.
-pub const ESTABLISHED_ADDRESS_BYTES_LEN: usize = 45;
+pub const ESTABLISHED_ADDRESS_BYTES_LEN: usize = 21;
 
 /// The length of [`Address`] encoded with Bech32m.
 pub const ADDRESS_LEN: usize = 79 + ADDRESS_HRP.len();
@@ -30,6 +32,20 @@ pub const BECH32M_VARIANT: bech32::Variant = Variant::Bech32m;
 
 /// Length of a hash of an address as a hexadecimal string
 pub(crate) const HASH_HEX_LEN: usize = 40;
+
+/// Length of a trimmed hash of an address.
+pub(crate) const HASH_LEN: usize = 20;
+
+/// SHA-256 hash len
+///
+/// ```
+/// use sha2::Digest;
+/// assert_eq!(
+///     sha2::Sha256::output_size(),
+///     namada_core::types::address::SHA_HASH_LEN
+/// );
+/// ```
+pub const SHA_HASH_LEN: usize = 32;
 
 /// An address string before bech32m encoding must be this size.
 pub const FIXED_LEN_STRING_BYTES: usize = 45;
@@ -168,10 +184,15 @@ impl Address {
 
     /// Try to get a raw hash of an address, only defined for established and
     /// implicit addresses.
-    pub fn raw_hash(&self) -> Option<&str> {
+    pub fn raw_hash(&self) -> Option<Cow<str>> {
         match self {
-            Address::Established(established) => Some(&established.hash),
-            Address::Implicit(ImplicitAddress(implicit)) => Some(&implicit.0),
+            Address::Established(established) => {
+                let hash_hex = HEXUPPER.encode(&established.hash);
+                Some(Cow::Owned(hash_hex))
+            }
+            Address::Implicit(ImplicitAddress(implicit)) => {
+                Some(Cow::Borrowed(&implicit.0))
+            }
             Address::Internal(_) => None,
         }
     }
@@ -180,7 +201,10 @@ impl Address {
     fn to_fixed_len_string(&self) -> Vec<u8> {
         let mut string = match self {
             Address::Established(EstablishedAddress { hash }) => {
-                format!("{}::{}", PREFIX_ESTABLISHED, hash)
+                // The bech32m's data is a hex of the first 40 chars of the hash
+                let hash_hex = HEXUPPER.encode(hash);
+                debug_assert_eq!(hash_hex.len(), HASH_HEX_LEN);
+                format!("{}::{}", PREFIX_ESTABLISHED, hash_hex)
             }
             Address::Implicit(ImplicitAddress(pkh)) => {
                 format!("{}::{}", PREFIX_IMPLICIT, pkh)
@@ -236,9 +260,23 @@ impl Address {
         match string.split_once("::") {
             Some((PREFIX_ESTABLISHED, hash)) => {
                 if hash.len() == HASH_HEX_LEN {
-                    Ok(Address::Established(EstablishedAddress {
-                        hash: hash.to_string(),
-                    }))
+                    let raw =
+                        HEXUPPER.decode(hash.as_bytes()).map_err(|e| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::InvalidInput,
+                                e,
+                            )
+                        })?;
+                    if raw.len() != HASH_LEN {
+                        return Err(Error::new(
+                            ErrorKind::InvalidData,
+                            "Established address hash must be 40 characters \
+                             long",
+                        ));
+                    }
+                    let mut hash: [u8; HASH_LEN] = Default::default();
+                    hash.copy_from_slice(&raw);
+                    Ok(Address::Established(EstablishedAddress { hash }))
                 } else {
                     Err(Error::new(
                         ErrorKind::InvalidData,
@@ -391,20 +429,20 @@ impl TryFrom<Signer> for Address {
     Deserialize,
 )]
 pub struct EstablishedAddress {
-    hash: String,
+    hash: [u8; HASH_LEN],
 }
 
 /// A generator of established addresses
 #[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
 pub struct EstablishedAddressGen {
-    last_hash: String,
+    last_hash: [u8; SHA_HASH_LEN],
 }
 
 impl EstablishedAddressGen {
     /// Initialize a new address generator with a given randomness seed.
     pub fn new(seed: impl AsRef<str>) -> Self {
         Self {
-            last_hash: seed.as_ref().to_owned(),
+            last_hash: Sha256::digest(seed.as_ref().as_bytes()).into(),
         }
     }
 
@@ -418,13 +456,12 @@ impl EstablishedAddressGen {
         let gen_bytes = self
             .try_to_vec()
             .expect("Encoding established addresses generator shouldn't fail");
-        let mut hasher = Sha256::new();
         let bytes = [&gen_bytes, rng_source.as_ref()].concat();
-        hasher.update(bytes);
-        // hex of the first 40 chars of the hash
-        let hash =
-            format!("{:.width$X}", hasher.finalize(), width = HASH_HEX_LEN);
-        self.last_hash = hash.clone();
+        let full_hash = Sha256::digest(&bytes);
+        // take first 20 bytes of the hash
+        let mut hash: [u8; HASH_LEN] = Default::default();
+        hash.copy_from_slice(&full_hash[..HASH_LEN]);
+        self.last_hash = full_hash.into();
         Address::Established(EstablishedAddress { hash })
     }
 }
