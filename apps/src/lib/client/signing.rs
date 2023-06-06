@@ -59,7 +59,7 @@ pub async fn sign_tx<
     wallet: &mut Wallet<U>,
     tx: &mut Tx,
     args: &args::Tx,
-    default: TxSigningKey,
+    default: &common::PublicKey,
 ) -> Result<(), tx::Error> {
     namada::ledger::signing::sign_tx::<C, U>(
         client,

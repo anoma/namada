@@ -135,12 +135,17 @@ pub async fn tx_signer<
     args: &args::Tx,
     default: TxSigningKey,
 ) -> Result<common::SecretKey, Error> {
-    // Override the default signing key source if possible
-    let default = if let Some(signing_key) = &args.signing_key {
+    let default = if args.dry_run {
+        // We cannot override the signer if we're doing a dry run
+        default
+    } else if let Some(signing_key) = &args.signing_key {
+        // Otherwise use the signing key override provided by user
         return Ok(signing_key.clone());
     } else if let Some(signer) = &args.signer {
+        // Otherwise use the signer address provided by user
         TxSigningKey::WalletAddress(signer.clone())
     } else {
+        // Otherwise use the signer determined by the caller
         default
     };
     // Now actually fetch the signing key and apply it
@@ -148,25 +153,17 @@ pub async fn tx_signer<
         TxSigningKey::WalletAddress(signer) if signer == masp() => {
             Ok(masp_tx_key())
         },
+        TxSigningKey::WalletAddress(signer) if signer == (&masp_tx_key().ref_to()).into() => {
+            Ok(masp_tx_key())
+        },
         TxSigningKey::WalletAddress(signer) => {
-            let signer = signer;
-            let signing_key = find_keypair::<C, U>(
+            find_keypair::<C, U>(
                 client,
                 wallet,
                 &signer,
                 args.password.clone(),
             )
-            .await?;
-            // Check if the signer is implicit account that needs to reveal its
-            // PK first
-            if matches!(signer, Address::Implicit(_)) {
-                let pk: common::PublicKey = signing_key.ref_to();
-                super::tx::reveal_pk_if_needed::<C, U>(
-                    client, wallet, &pk, args,
-                )
-                .await?;
-            }
-            Ok(signing_key)
+            .await
         }
         TxSigningKey::None => other_err(
             "All transactions must be signed; please either specify the key \
@@ -192,9 +189,9 @@ pub async fn sign_tx<
     wallet: &mut Wallet<U>,
     tx: &mut Tx,
     args: &args::Tx,
-    default: TxSigningKey,
+    keypair: &common::PublicKey,
 ) -> Result<(), Error> {
-    let keypair = tx_signer::<C, U>(client, wallet, args, default).await?;
+    let keypair = tx_signer::<C, U>(client, wallet, args, TxSigningKey::WalletAddress(keypair.into())).await?;
     // Sign over the transacttion data
     tx.add_section(Section::Signature(Signature::new(
         tx.data_sechash(),
