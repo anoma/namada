@@ -237,17 +237,17 @@ pub async fn prepare_tx<
     tx: Tx,
     default_signer: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> Result<(Tx, TxSigningKey), Error> {
+) -> Result<(Tx, common::PublicKey), Error> {
+    let keypair = tx_signer::<C, U>(
+        client,
+        wallet,
+        args,
+        default_signer.clone(),
+    ).await?
+        .ref_to();
     if args.dry_run {
-        Ok((tx, default_signer))
+        Ok((tx, keypair))
     } else {
-        let keypair = tx_signer::<C, U>(
-            client,
-            wallet,
-            args,
-            default_signer.clone(),
-        ).await?
-            .ref_to();
         let epoch = rpc::query_epoch(client).await;
         Ok((wrap_tx(
             client,
@@ -259,7 +259,7 @@ pub async fn prepare_tx<
             #[cfg(not(feature = "mainnet"))]
             requires_pow,
         )
-            .await, default_signer))
+            .await, keypair))
     }
 }
 
@@ -323,47 +323,41 @@ pub async fn process_tx<
 }
 
 /// Submit transaction to reveal public key
-pub async fn submit_reveal_pk<
+pub async fn build_reveal_pk<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::RevealPk,
-) -> Result<(), Error> {
+) -> Result<Option<(Tx, common::PublicKey)>, Error> {
     let args::RevealPk {
         tx: args,
         public_key,
     } = args;
     let public_key = public_key;
-    if !reveal_pk_if_needed::<C, U>(client, wallet, &public_key, &args).await? {
+    if !is_reveal_pk_needed::<C, U>(client, &public_key, &args).await? {
         let addr: Address = (&public_key).into();
         println!("PK for {addr} is already revealed, nothing to do.");
-        Ok(())
+        Ok(None)
     } else {
-        Ok(())
+        // If not, submit it
+        Ok(Some(build_reveal_pk_aux::<C, U>(client, wallet, &public_key, &args).await?))
     }
 }
 
 /// Submit transaction to rveeal public key if needed
-pub async fn reveal_pk_if_needed<
+pub async fn is_reveal_pk_needed<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
-    wallet: &mut Wallet<U>,
     public_key: &common::PublicKey,
     args: &args::Tx,
 ) -> Result<bool, Error> {
     let addr: Address = public_key.into();
     // Check if PK revealed
-    if args.force || !has_revealed_pk(client, &addr).await {
-        // If not, submit it
-        submit_reveal_pk_aux::<C, U>(client, wallet, public_key, args).await?;
-        Ok(true)
-    } else {
-        Ok(false)
-    }
+    Ok(args.force || !has_revealed_pk(client, &addr).await)
 }
 
 /// Check if the public key for the given address has been revealed
@@ -375,7 +369,7 @@ pub async fn has_revealed_pk<C: crate::ledger::queries::Client + Sync>(
 }
 
 /// Submit transaction to reveal the given public key
-pub async fn submit_reveal_pk_aux<
+pub async fn build_reveal_pk_aux<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
@@ -383,7 +377,7 @@ pub async fn submit_reveal_pk_aux<
     wallet: &mut Wallet<U>,
     public_key: &common::PublicKey,
     args: &args::Tx,
-) -> Result<ProcessTxResponse, Error> {
+) -> Result<(Tx, common::PublicKey), Error> {
     let addr: Address = public_key.into();
     println!("Submitting a tx to reveal the public key for address {addr}...");
     let tx_data = public_key.try_to_vec().map_err(Error::EncodeKeyFailure)?;
@@ -401,58 +395,16 @@ pub async fn submit_reveal_pk_aux<
     tx.set_data(Data::new(tx_data));
     tx.set_code(Code::from_hash(tx_code_hash));
 
-    // submit_tx without signing the inner tx
-    let keypair = if let Some(signing_key) = &args.signing_key {
-        Ok(signing_key.clone())
-    } else if let Some(signer) = args.signer.as_ref() {
-        find_keypair(client, wallet, signer, args.password.clone()).await
-    } else {
-        find_keypair(client, wallet, &addr, args.password.clone()).await
-    }?;
-    tx.add_section(Section::Signature(Signature::new(
-        tx.data_sechash(),
-        &keypair,
-    )));
-    tx.add_section(Section::Signature(Signature::new(
-        tx.code_sechash(),
-        &keypair,
-    )));
-    let epoch = rpc::query_epoch(client).await;
-    let to_broadcast = if args.dry_run {
-        TxBroadcastData::DryRun(tx)
-    } else {
-        super::signing::sign_wrapper(
-            client,
-            wallet,
-            args,
-            epoch,
-            tx,
-            &keypair,
-            #[cfg(not(feature = "mainnet"))]
-            false,
-        )
-        .await
-    };
-
-    if args.dry_run {
-        expect_dry_broadcast(to_broadcast, client).await
-    } else {
-        // Either broadcast or submit transaction and collect result into
-        // sum type
-        let result = if args.broadcast_only {
-            Left(broadcast_tx(client, &to_broadcast).await)
-        } else {
-            Right(submit_tx(client, to_broadcast).await)
-        };
-        // Return result based on executed operation, otherwise deal with
-        // the encountered errors uniformly
-        match result {
-            Right(Err(err)) => Err(err),
-            Left(Err(err)) => Err(err),
-            Right(Ok(response)) => Ok(ProcessTxResponse::Applied(response)),
-            Left(Ok(response)) => Ok(ProcessTxResponse::Broadcast(response)),
-        }
-    }
+    prepare_tx::<C, U>(
+        client,
+        wallet,
+        &args,
+        tx,
+        TxSigningKey::WalletAddress(addr),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await
 }
 
 /// Broadcast a transaction to be included in the blockchain and checks that
@@ -629,7 +581,7 @@ pub async fn build_validator_commission_change<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxCommissionRateChange,
-) -> Result<(Tx, TxSigningKey), Error> {
+) -> Result<(Tx, common::PublicKey), Error> {
     let epoch = rpc::query_epoch(client).await;
 
     let tx_code_hash =
@@ -725,7 +677,7 @@ pub async fn build_unjail_validator<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxUnjailValidator,
-) -> Result<(Tx, TxSigningKey), Error> {
+) -> Result<(Tx, common::PublicKey), Error> {
     if !rpc::is_validator(client, &args.validator).await {
         eprintln!("The given address {} is not a validator.", &args.validator);
         if !args.tx.force {
@@ -770,7 +722,7 @@ pub async fn build_withdraw<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Withdraw,
-) -> Result<(Tx, TxSigningKey), Error> {
+) -> Result<(Tx, common::PublicKey), Error> {
     let epoch = rpc::query_epoch(client).await;
 
     let validator =
@@ -838,7 +790,7 @@ pub async fn build_unbond<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Unbond,
-) -> Result<(Tx, TxSigningKey, Option<(Epoch, token::Amount)>), Error> {
+) -> Result<(Tx, common::PublicKey, Option<(Epoch, token::Amount)>), Error> {
     let source = args.source.clone();
     // Check the source's current bond amount
     let bond_source = source.clone().unwrap_or_else(|| args.validator.clone());
@@ -979,7 +931,7 @@ pub async fn build_bond<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Bond,
-) -> Result<(Tx, TxSigningKey), Error> {
+) -> Result<(Tx, common::PublicKey), Error> {
     let validator =
         known_validator_or_err(args.validator.clone(), args.tx.force, client)
             .await?;
@@ -1077,7 +1029,7 @@ pub async fn build_ibc_transfer<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxIbcTransfer,
-) -> Result<(Tx, TxSigningKey), Error> {
+) -> Result<(Tx, common::PublicKey), Error> {
     // Check that the source address exists on chain
     let source =
         source_exists_or_err(args.source.clone(), args.tx.force, client)
@@ -1259,7 +1211,7 @@ pub async fn build_transfer<
     wallet: &mut Wallet<V>,
     shielded: &mut ShieldedContext<U>,
     args: args::TxTransfer,
-) -> Result<(Tx, TxSigningKey, Option<Epoch>), Error> {
+) -> Result<(Tx, common::PublicKey, Option<Epoch>), Error> {
     let source = args.source.effective_address();
     let target = args.target.effective_address();
     let token = args.token.clone();
@@ -1426,7 +1378,7 @@ pub async fn build_init_account<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxInitAccount,
-) -> Result<(Tx, TxSigningKey), Error> {
+) -> Result<(Tx, common::PublicKey), Error> {
     let public_key = args.public_key;
 
     let vp_code_hash =
@@ -1474,7 +1426,7 @@ pub async fn build_update_vp<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxUpdateVp,
-) -> Result<(Tx, TxSigningKey), Error> {
+) -> Result<(Tx, common::PublicKey), Error> {
     let addr = args.addr.clone();
 
     // Check that the address is established and exists on chain
@@ -1562,7 +1514,7 @@ pub async fn build_custom<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxCustom,
-) -> Result<(Tx, TxSigningKey), Error> {
+) -> Result<(Tx, common::PublicKey), Error> {
     let mut tx = Tx::new(TxType::Raw);
     tx.header.chain_id = args.tx.chain_id.clone().unwrap();
     tx.header.expiration = args.tx.expiration;
