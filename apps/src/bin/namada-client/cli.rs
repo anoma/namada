@@ -1,13 +1,18 @@
 //! Namada client CLI.
 
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{eyre, Report, Result};
 use namada::ledger::eth_bridge::bridge_pool;
 use namada::ledger::rpc::wait_until_node_is_synched;
+use namada::types::control_flow::ProceedOrElse;
+use namada_apps::cli;
 use namada_apps::cli::args::CliToSdk;
 use namada_apps::cli::cmds::*;
-use namada_apps::cli::{self, safe_exit};
 use namada_apps::client::{rpc, tx, utils};
 use namada_apps::facade::tendermint_rpc::HttpClient;
+
+fn error() -> Report {
+    eyre!("Fatal error")
+}
 
 pub async fn main() -> Result<()> {
     match cli::namada_client_cli()? {
@@ -21,9 +26,9 @@ pub async fn main() -> Result<()> {
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     let dry_run = args.tx.dry_run;
                     tx::submit_custom::<HttpClient>(&client, &mut ctx, args)
@@ -43,9 +48,9 @@ pub async fn main() -> Result<()> {
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_transfer(&client, ctx, args).await?;
                 }
@@ -54,9 +59,9 @@ pub async fn main() -> Result<()> {
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_ibc_transfer::<HttpClient>(&client, ctx, args)
                         .await?;
@@ -66,9 +71,9 @@ pub async fn main() -> Result<()> {
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_update_vp::<HttpClient>(&client, &mut ctx, args)
                         .await?;
@@ -78,9 +83,9 @@ pub async fn main() -> Result<()> {
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     let dry_run = args.tx.dry_run;
                     tx::submit_init_account::<HttpClient>(
@@ -102,9 +107,9 @@ pub async fn main() -> Result<()> {
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_init_validator::<HttpClient>(&client, ctx, args)
                         .await;
@@ -114,9 +119,9 @@ pub async fn main() -> Result<()> {
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_init_proposal::<HttpClient>(&client, ctx, args)
                         .await?;
@@ -126,9 +131,9 @@ pub async fn main() -> Result<()> {
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_vote_proposal::<HttpClient>(&client, ctx, args)
                         .await?;
@@ -138,9 +143,9 @@ pub async fn main() -> Result<()> {
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_reveal_pk::<HttpClient>(&client, &mut ctx, args)
                         .await?;
@@ -150,9 +155,9 @@ pub async fn main() -> Result<()> {
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_bond::<HttpClient>(&client, &mut ctx, args)
                         .await?;
@@ -162,9 +167,9 @@ pub async fn main() -> Result<()> {
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_unbond::<HttpClient>(&client, &mut ctx, args)
                         .await?;
@@ -174,9 +179,9 @@ pub async fn main() -> Result<()> {
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_withdraw::<HttpClient>(&client, ctx, args)
                         .await?;
@@ -188,9 +193,9 @@ pub async fn main() -> Result<()> {
                         &mut args.tx.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     let chain_id = ctx.config.ledger.chain_id.clone();
                     bridge_pool::add_to_eth_bridge_pool(
@@ -207,9 +212,9 @@ pub async fn main() -> Result<()> {
                         &mut args.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     rpc::query_and_print_epoch(&client).await;
                 }
                 Sub::QueryTransfers(QueryTransfers(mut args)) => {
@@ -217,9 +222,9 @@ pub async fn main() -> Result<()> {
                         &mut args.query.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_transfers(
                         &client,
@@ -234,9 +239,9 @@ pub async fn main() -> Result<()> {
                         &mut args.query.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_conversions(&client, &mut ctx.wallet, args)
                         .await;
@@ -246,9 +251,9 @@ pub async fn main() -> Result<()> {
                         &mut args.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     rpc::query_block(&client).await;
                 }
                 Sub::QueryBalance(QueryBalance(mut args)) => {
@@ -256,9 +261,9 @@ pub async fn main() -> Result<()> {
                         &mut args.query.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_balance(
                         &client,
@@ -273,9 +278,9 @@ pub async fn main() -> Result<()> {
                         &mut args.query.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_bonds(&client, &mut ctx.wallet, args)
                         .await
@@ -286,9 +291,9 @@ pub async fn main() -> Result<()> {
                         &mut args.query.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_bonded_stake(&client, args).await;
                 }
@@ -297,9 +302,9 @@ pub async fn main() -> Result<()> {
                         &mut args.query.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_and_print_commission_rate(
                         &client,
@@ -313,9 +318,9 @@ pub async fn main() -> Result<()> {
                         &mut args.query.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_slashes(&client, &mut ctx.wallet, args).await;
                 }
@@ -324,9 +329,9 @@ pub async fn main() -> Result<()> {
                         &mut args.query.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_delegations(&client, &mut ctx.wallet, args)
                         .await;
@@ -336,9 +341,9 @@ pub async fn main() -> Result<()> {
                         &mut args.query.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_result(&client, args).await;
                 }
@@ -347,9 +352,9 @@ pub async fn main() -> Result<()> {
                         &mut args.query.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_raw_bytes(&client, args).await;
                 }
@@ -359,9 +364,9 @@ pub async fn main() -> Result<()> {
                         &mut args.query.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_proposal(&client, args).await;
                 }
@@ -370,9 +375,9 @@ pub async fn main() -> Result<()> {
                         &mut args.query.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_proposal_result(&client, args).await;
                 }
@@ -383,9 +388,9 @@ pub async fn main() -> Result<()> {
                         &mut args.query.ledger_address,
                     ))
                     .unwrap();
-                    if wait_until_node_is_synched(&client).await.is_break() {
-                        safe_exit(1);
-                    }
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_protocol_parameters(&client, args).await;
                 }
