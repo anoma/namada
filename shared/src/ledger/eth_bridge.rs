@@ -12,7 +12,6 @@ pub use namada_core::ledger::eth_bridge::{ADDRESS, INTERNAL_ADDRESS};
 pub use namada_ethereum_bridge::parameters::*;
 pub use namada_ethereum_bridge::storage::eth_bridge_queries::*;
 use num256::Uint256;
-use tokio::task::LocalSet;
 
 use crate::types::control_flow::time::{
     Constant, Duration, Error as TimeoutError, Instant, LinearBackoff, Sleep,
@@ -112,12 +111,9 @@ where
         strategy: LinearBackoff { delta: delta_sleep },
     }
     .timeout(deadline, || async {
-        let local_set = LocalSet::new();
-        let status_fut =
-            local_set.run_until(async { eth_syncing_status(client).await });
-        let Ok(status) = status_fut.await else {
-                return ControlFlow::Continue(());
-            };
+        let Ok(status) = eth_syncing_status(client).await else {
+            return ControlFlow::Continue(());
+        };
         if status.is_synchronized() {
             ControlFlow::Break(())
         } else {
@@ -143,10 +139,7 @@ where
     C::Error: std::fmt::Debug + std::fmt::Display,
     F: FnMut() -> T,
 {
-    let local_set = LocalSet::new();
-    let status_fut =
-        local_set.run_until(async { eth_syncing_status(client).await });
-    let is_synchronized = status_fut
+    let is_synchronized = eth_syncing_status(client)
         .await
         .map(|status| status.is_synchronized())
         .try_halt(|err| {
