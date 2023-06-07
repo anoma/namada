@@ -29,6 +29,48 @@ pub trait SleepStrategy {
 
     /// Update the state of the sleep strategy.
     fn next_state(&self, state: &mut Self::State);
+
+    /// Map a function to the duration returned from a
+    /// sleep strategy.
+    fn map<M>(self, map: M) -> Map<Self, M>
+    where
+        M: Fn(Duration) -> Duration,
+        Self: Sized,
+    {
+        Map {
+            map,
+            strategy: self,
+        }
+    }
+}
+
+/// Map a function to the duration returned from a
+/// sleep strategy.
+pub struct Map<S, M> {
+    strategy: S,
+    map: M,
+}
+
+impl<S, M> SleepStrategy for Map<S, M>
+where
+    S: SleepStrategy,
+    M: Fn(Duration) -> Duration,
+{
+    type State = S::State;
+
+    fn new_state() -> S::State {
+        S::new_state()
+    }
+
+    #[inline]
+    fn backoff(&self, state: &S::State) -> Duration {
+        (self.map)(self.strategy.backoff(state))
+    }
+
+    #[inline]
+    fn next_state(&self, state: &mut S::State) {
+        self.strategy.next_state(state)
+    }
 }
 
 /// Constant sleep strategy.
