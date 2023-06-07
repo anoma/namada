@@ -479,10 +479,6 @@ pub fn find_valid_diversifier<R: RngCore + CryptoRng>(
 /// Determine if using the current note would actually bring us closer to our
 /// target
 pub fn is_amount_required(src: Amount, dest: Amount, delta: Amount) -> bool {
-    println!("delta: {:?}", delta);
-    println!("src: {:?}", src);
-    println!("dest: {:?}", dest);
-
     let gap = dest - src;
     for (asset_type, value) in gap.components() {
         if *value >= 0 && delta[asset_type] >= 0 {
@@ -520,7 +516,7 @@ pub struct MaspAmount(HashMap<(Epoch, TokenAddress), token::Change>);
 
 impl MaspAmount {
     pub fn pop(&mut self) -> Option<((Epoch, TokenAddress), token::Change)> {
-        let key = self.keys().find(|(e, _)| e.0 != 0)?.clone();
+        let key = self.keys().next().cloned()?;
         let value = self.remove(&key).unwrap();
         Some((key, value))
     }
@@ -560,7 +556,6 @@ impl std::ops::AddAssign for MaspAmount {
     }
 }
 
-// please stop copying and pasting make a function
 impl std::ops::Sub for MaspAmount {
     type Output = MaspAmount;
 
@@ -570,6 +565,7 @@ impl std::ops::Sub for MaspAmount {
                 .and_modify(|val| *val -= value)
                 .or_insert(value);
         }
+        self.0.retain(|_, v| !v.is_zero());
         self
     }
 }
@@ -1166,6 +1162,7 @@ impl ShieldedContext {
         }
         // If conversion if possible, accumulate the exchanged amount
         let conv: Amount = conv.into();
+        println!("conv: {:?}", conv);
         // The amount required of current asset to qualify for conversion
         let masp_asset = make_asset_type(
             Some(asset_type.0),
@@ -1212,7 +1209,10 @@ impl ShieldedContext {
         let mut output = MaspAmount::default();
         // Repeatedly exchange assets until it is no longer possible
         loop {
-            let Some(((asset_epoch, token_addr), value)) = input.pop() else { break };
+            let (asset_epoch, token_addr, value) = match input.iter().next() {
+                Some(((e, a), v)) => (*e, a.clone(), *v),
+                _ => break
+            };
             for denom in MaspDenom::iter() {
                 let target_asset_type = make_asset_type(
                     Some(target_epoch),
@@ -1229,16 +1229,20 @@ impl ShieldedContext {
                 let at_target_asset_type = target_epoch == asset_epoch;
 
                 let denom_value = denom.denominate_i128(&value);
-                self
-                    .query_allowed_conversion(
+                self.query_allowed_conversion(
                         client.clone(),
                         target_asset_type,
                         &mut conversions,
                     )
                     .await;
-
+                self.query_allowed_conversion(
+                    client.clone(),
+                    asset_type,
+                    &mut conversions,
+                )
+                .await;
                 if let (Some((conv, _wit, usage)), false) = (
-                    conversions.get_mut(&target_asset_type),
+                    conversions.get_mut(&asset_type),
                     at_target_asset_type,
                 ) {
                     println!(
@@ -1258,22 +1262,13 @@ impl ShieldedContext {
                         &mut output,
                     )
                     .await;
-                    break;
-                }
-                self
-                    .query_allowed_conversion(
-                        client.clone(),
-                        asset_type,
-                        &mut conversions,
-                    )
-                    .await;
-                if let (Some((conv, _wit, usage)), false) =
-                    (conversions.get_mut(&asset_type), at_target_asset_type)
+                } else if let (Some((conv, _wit, usage)), false) =
+                    (conversions.get_mut(&target_asset_type), at_target_asset_type)
                 {
                     println!(
                         "converting latest asset type to target asset type..."
                     );
-                    // Not at the target asset type, yes at the latest asset
+                    // Not at the target asset type, yet at the latest asset
                     // type. Apply inverse conversion to get
                     // from latest asset type to the target
                     // asset type.
@@ -1293,23 +1288,15 @@ impl ShieldedContext {
                     let mut comp = MaspAmount::default();
                     comp.insert((asset_epoch, token_addr.clone()), denom_value.into());
                     for ((e, key), val) in input.iter() {
-                        if *key == token_addr {
+                        if *key == token_addr && *e == asset_epoch {
                             comp.insert((*e, key.clone()), *val);
                         }
                     }
-                    output += comp;
+                    output += comp.clone();
+                    input -= comp;
                 }
             }
         }
-        // finally convert the rewards in epoch 0.
-        let mut comp = MaspAmount::default();
-        for ((_, key), val) in input.drain() {
-            comp.insert((target_epoch, key), val);
-
-        }
-        output += comp;
-        println!("\n\noutput {:?}\n\n", output);
-        println!("\n\nconversions {:?}\n\n", conversions);
         (output.into(), conversions)
     }
 
@@ -1351,7 +1338,6 @@ impl ShieldedContext {
                 // The amount contributed by this note before conversion
                 let pre_contr = Amount::from_pair(note.asset_type, note.value)
                     .expect("received note has invalid value or asset type");
-                println!("note.asset_type: {:?}, note.value {:?}", note.asset_type, note.value);
                 let input = self.decode_all_amounts(&client, pre_contr).await;
                 let (contr, proposed_convs) = self
                     .compute_exchanged_amount(
@@ -1381,8 +1367,6 @@ impl ShieldedContext {
                 }
             }
         }
-        println!("val_acc {:?}", val_acc);
-        println!("notes {:?}", notes);
         (val_acc, notes, conversions)
     }
 
@@ -1689,7 +1673,6 @@ async fn gen_shielded_transfer(
                 epoch,
             )
             .await;
-        //println!("used convs: {:?}", used_convs);
         // Commit the notes found to our transaction
         for (diversifier, note, merkle_path) in unspent_notes {
             let decoded = ctx.shielded.decode_asset_type(client.clone(), note.asset_type.clone()).await.unwrap();
@@ -1762,8 +1745,6 @@ async fn gen_shielded_transfer(
             target_enc.as_ref(),
         ));
         for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter()) {
-            let decoded = ctx.shielded.decode_asset_type(client.clone(), asset_type.clone()).await.unwrap();
-            println!("Adding transparent outpt: {:?}: {}", decoded, denom.denominate(&amt));
             builder.add_transparent_output(
                 &TransparentAddress::PublicKey(hash.into()),
                 *asset_type,
