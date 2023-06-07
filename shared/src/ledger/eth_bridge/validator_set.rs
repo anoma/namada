@@ -8,6 +8,7 @@ use std::task::Poll;
 
 use data_encoding::HEXLOWER;
 use ethbridge_governance_contract::Governance;
+use ethers::providers::Middleware;
 use futures::future::{self, FutureExt};
 use namada_core::hints;
 use namada_core::types::storage::Epoch;
@@ -15,7 +16,6 @@ use namada_core::types::storage::Epoch;
 use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit, BlockOnEthSync};
 use crate::eth_bridge::ethers::abi::{AbiDecode, AbiType, Tokenizable};
 use crate::eth_bridge::ethers::core::types::TransactionReceipt;
-use crate::eth_bridge::ethers::providers::{Http, Provider};
 use crate::eth_bridge::structs::{Signature, ValidatorSetArgs};
 use crate::ledger::args;
 use crate::ledger::queries::{Client, RPC};
@@ -157,20 +157,27 @@ trait ShouldRelay {
     type RelayResult: GetStatus + From<Option<TransactionReceipt>>;
 
     /// Returns [`Ok`] if the relay should happen.
-    fn should_relay(
+    fn should_relay<E>(
         _: Epoch,
-        _: &Governance<Provider<Http>>,
-    ) -> Result<(), Self::RelayResult>;
+        _: &Governance<E>,
+    ) -> Result<(), Self::RelayResult>
+    where
+        E: Middleware,
+        E::Error: std::fmt::Display;
 }
 
 impl ShouldRelay for DoNotCheckNonce {
     type RelayResult = Option<TransactionReceipt>;
 
     #[inline]
-    fn should_relay(
+    fn should_relay<E>(
         _: Epoch,
-        _: &Governance<Provider<Http>>,
-    ) -> Result<(), Self::RelayResult> {
+        _: &Governance<E>,
+    ) -> Result<(), Self::RelayResult>
+    where
+        E: Middleware,
+        E::Error: std::fmt::Display,
+    {
         Ok(())
     }
 }
@@ -178,10 +185,14 @@ impl ShouldRelay for DoNotCheckNonce {
 impl ShouldRelay for CheckNonce {
     type RelayResult = RelayResult;
 
-    fn should_relay(
+    fn should_relay<E>(
         epoch: Epoch,
-        governance: &Governance<Provider<Http>>,
-    ) -> Result<(), Self::RelayResult> {
+        governance: &Governance<E>,
+    ) -> Result<(), Self::RelayResult>
+    where
+        E: Middleware,
+        E::Error: std::fmt::Display,
+    {
         let task = async move {
             let governance_epoch_prep_call = governance.validator_set_nonce();
             let governance_epoch_fut =
@@ -296,38 +307,44 @@ pub async fn query_validator_set_args<C>(
 }
 
 /// Relay a validator set update, signed off for a given epoch.
-pub async fn relay_validator_set_update<C>(
+pub async fn relay_validator_set_update<C, E>(
+    eth_client: Arc<E>,
     nam_client: &C,
     args: args::ValidatorSetUpdateRelay,
 ) -> Halt<()>
 where
     C: Client + Sync,
     C::Error: std::fmt::Debug + std::fmt::Display,
+    E: Middleware,
+    E::Error: std::fmt::Debug + std::fmt::Display,
 {
     let mut signal_receiver = args.safe_mode.then(install_shutdown_signal);
 
     if args.sync {
-        block_on_eth_sync(BlockOnEthSync {
-            url: &args.eth_rpc_endpoint,
-            deadline: Instant::now() + Duration::from_secs(60),
-            rpc_timeout: std::time::Duration::from_secs(3),
-            delta_sleep: Duration::from_secs(1),
-        })
+        block_on_eth_sync(
+            &*eth_client,
+            BlockOnEthSync {
+                deadline: Instant::now() + Duration::from_secs(60),
+                delta_sleep: Duration::from_secs(1),
+            },
+        )
         .await?;
     } else {
-        eth_sync_or_exit(&args.eth_rpc_endpoint).await?;
+        eth_sync_or_exit(&*eth_client).await?;
     }
 
     if args.daemon {
         relay_validator_set_update_daemon(
             args,
+            eth_client,
             nam_client,
             &mut signal_receiver,
         )
         .await
     } else {
-        relay_validator_set_update_once::<CheckNonce, _, _>(
+        relay_validator_set_update_once::<CheckNonce, _, _, _>(
             &args,
+            eth_client,
             nam_client,
             |relay_result| match relay_result {
                 RelayResult::GovernanceCallError(reason) => {
@@ -364,18 +381,21 @@ where
     }
 }
 
-async fn relay_validator_set_update_daemon<C, F>(
+async fn relay_validator_set_update_daemon<C, E, F>(
     mut args: args::ValidatorSetUpdateRelay,
+    eth_client: Arc<E>,
     nam_client: &C,
     shutdown_receiver: &mut Option<F>,
 ) -> Halt<()>
 where
     C: Client + Sync,
     C::Error: std::fmt::Debug + std::fmt::Display,
+    E: Middleware,
+    E::Error: std::fmt::Debug + std::fmt::Display,
     F: Future<Output = ()> + Unpin,
 {
-    let eth_client =
-        Arc::new(Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap());
+    // let eth_client =
+    //    Arc::new(Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap());
 
     const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(1);
     const DEFAULT_SUCCESS_DURATION: Duration = Duration::from_secs(10);
@@ -413,7 +433,7 @@ where
         time::sleep(sleep_for).await;
 
         let is_synchronizing =
-            eth_sync_or(&args.eth_rpc_endpoint, || ()).await.is_break();
+            eth_sync_or(&*eth_client, || ()).await.is_break();
         if is_synchronizing {
             tracing::debug!("The Ethereum node is synchronizing");
             last_call_succeeded = false;
@@ -483,8 +503,9 @@ where
         let new_epoch = gov_current_epoch + 1u64;
         args.epoch = Some(new_epoch);
 
-        let result = relay_validator_set_update_once::<DoNotCheckNonce, _, _>(
+        let result = relay_validator_set_update_once::<DoNotCheckNonce, _, _, _>(
             &args,
+            Arc::clone(&eth_client),
             nam_client,
             |transf_result| {
                 let Some(receipt) = transf_result else {
@@ -510,13 +531,14 @@ where
     }
 }
 
-async fn get_governance_contract<C>(
+async fn get_governance_contract<C, E>(
     nam_client: &C,
-    eth_client: Arc<Provider<Http>>,
-) -> Result<Governance<Provider<Http>>, Error>
+    eth_client: Arc<E>,
+) -> Result<Governance<E>, Error>
 where
     C: Client + Sync,
     C::Error: std::fmt::Debug + std::fmt::Display,
+    E: Middleware,
 {
     let governance_contract = RPC
         .shell()
@@ -527,14 +549,17 @@ where
     Ok(Governance::new(governance_contract.address, eth_client))
 }
 
-async fn relay_validator_set_update_once<R, F, C>(
+async fn relay_validator_set_update_once<R, F, C, E>(
     args: &args::ValidatorSetUpdateRelay,
+    eth_client: Arc<E>,
     nam_client: &C,
     mut action: F,
 ) -> Result<(), Error>
 where
     C: Client + Sync,
     C::Error: std::fmt::Debug + std::fmt::Display,
+    E: Middleware,
+    E::Error: std::fmt::Debug + std::fmt::Display,
     R: ShouldRelay,
     F: FnMut(R::RelayResult),
 {
@@ -575,14 +600,6 @@ where
     let consensus_set: ValidatorSetArgs =
         abi_decode_struct(encoded_validator_set_args);
 
-    let eth_client = Arc::new(
-        Provider::<Http>::try_from(&args.eth_rpc_endpoint).map_err(|err| {
-            Error::critical(format!(
-                "Invalid rpc endpoint: {:?}: {err}",
-                args.eth_rpc_endpoint
-            ))
-        })?,
-    );
     let governance = Governance::new(governance_contract.address, eth_client);
 
     if let Err(result) = R::should_relay(epoch_to_relay, &governance) {

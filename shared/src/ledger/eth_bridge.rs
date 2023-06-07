@@ -5,6 +5,7 @@ pub mod validator_set;
 
 use std::ops::ControlFlow;
 
+use ethers::providers::Middleware;
 use itertools::Either;
 pub use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
 pub use namada_core::ledger::eth_bridge::{ADDRESS, INTERNAL_ADDRESS};
@@ -12,8 +13,6 @@ pub use namada_ethereum_bridge::parameters::*;
 pub use namada_ethereum_bridge::storage::eth_bridge_queries::*;
 use num256::Uint256;
 use tokio::task::LocalSet;
-use web30::client::Web3;
-use web30::jsonrpc::error::Web3Error;
 
 use crate::types::control_flow::time::{
     Constant, Duration, Error as TimeoutError, Instant, LinearBackoff, Sleep,
@@ -40,9 +39,12 @@ impl SyncStatus {
 
 /// Fetch the sync status of an Ethereum node.
 #[inline]
-pub async fn eth_syncing_status(
-    client: &Web3,
-) -> Result<SyncStatus, TimeoutError> {
+pub async fn eth_syncing_status<C>(
+    client: &C,
+) -> Result<SyncStatus, TimeoutError>
+where
+    C: Middleware,
+{
     eth_syncing_status_timeout(
         client,
         DEFAULT_BACKOFF,
@@ -56,55 +58,63 @@ pub async fn eth_syncing_status(
 ///
 /// Queries to the Ethereum node are interspersed with constant backoff
 /// sleeps of `backoff_duration`, before ultimately timing out at `deadline`.
-pub async fn eth_syncing_status_timeout(
-    client: &Web3,
+pub async fn eth_syncing_status_timeout<C>(
+    client: &C,
     backoff_duration: Duration,
     deadline: Instant,
-) -> Result<SyncStatus, TimeoutError> {
+) -> Result<SyncStatus, TimeoutError>
+where
+    C: Middleware,
+{
     Sleep {
         strategy: Constant(backoff_duration),
     }
     .timeout(deadline, || async {
-        ControlFlow::Break(match client.eth_block_number().await {
-            Ok(height) if height == 0u64.into() => SyncStatus::Syncing,
-            Ok(height) => SyncStatus::AtHeight(height),
-            Err(Web3Error::SyncingNode(_)) => SyncStatus::Syncing,
-            Err(_) => return ControlFlow::Continue(()),
+        let fut_syncing = client.syncing();
+        let fut_block_num = client.get_block_number();
+        let Ok(status) = futures::try_join!(
+            fut_syncing,
+            fut_block_num,
+        ) else {
+            return ControlFlow::Continue(());
+        };
+        ControlFlow::Break(match status {
+            (ethers::types::SyncingStatus::IsFalse, height)
+                if height != 0u64.into() =>
+            {
+                SyncStatus::AtHeight(height.as_u64().into())
+            }
+            _ => SyncStatus::Syncing,
         })
     })
     .await
 }
 
 /// Arguments to [`block_on_eth_sync`].
-pub struct BlockOnEthSync<'rpc_url> {
+pub struct BlockOnEthSync {
     /// The deadline before we timeout in the CLI.
     pub deadline: Instant,
-    /// The RPC timeout duration. Should be shorter than
-    /// the value of `delta_sleep`.
-    pub rpc_timeout: Duration,
     /// The duration of sleep calls between each RPC timeout.
     pub delta_sleep: Duration,
-    /// The address of the Ethereum RPC.
-    pub url: &'rpc_url str,
 }
 
 /// Block until Ethereum finishes synchronizing.
-pub async fn block_on_eth_sync(args: BlockOnEthSync<'_>) -> Halt<()> {
+pub async fn block_on_eth_sync<C>(client: &C, args: BlockOnEthSync) -> Halt<()>
+where
+    C: Middleware,
+{
     let BlockOnEthSync {
         deadline,
-        rpc_timeout,
         delta_sleep,
-        url,
     } = args;
     tracing::info!("Attempting to synchronize with the Ethereum network");
-    let client = Web3::new(url, rpc_timeout);
     Sleep {
         strategy: LinearBackoff { delta: delta_sleep },
     }
     .timeout(deadline, || async {
         let local_set = LocalSet::new();
         let status_fut =
-            local_set.run_until(async { eth_syncing_status(&client).await });
+            local_set.run_until(async { eth_syncing_status(client).await });
         let Ok(status) = status_fut.await else {
                 return ControlFlow::Continue(());
             };
@@ -124,14 +134,18 @@ pub async fn block_on_eth_sync(args: BlockOnEthSync<'_>) -> Halt<()> {
 
 /// Check if Ethereum has finished synchronizing. In case it has
 /// not, perform `action`.
-pub async fn eth_sync_or<F, T>(url: &str, mut action: F) -> Halt<Either<T, ()>>
+pub async fn eth_sync_or<C, F, T>(
+    client: &C,
+    mut action: F,
+) -> Halt<Either<T, ()>>
 where
+    C: Middleware,
+    C::Error: std::fmt::Debug + std::fmt::Display,
     F: FnMut() -> T,
 {
-    let client = Web3::new(url, std::time::Duration::from_secs(3));
     let local_set = LocalSet::new();
     let status_fut =
-        local_set.run_until(async { eth_syncing_status(&client).await });
+        local_set.run_until(async { eth_syncing_status(client).await });
     let is_synchronized = status_fut
         .await
         .map(|status| status.is_synchronized())
@@ -150,8 +164,12 @@ where
 
 /// Check if Ethereum has finished synchronizing. In case it has
 /// not, end execution.
-pub async fn eth_sync_or_exit(url: &str) -> Halt<()> {
-    eth_sync_or(url, || {
+pub async fn eth_sync_or_exit<C>(client: &C) -> Halt<()>
+where
+    C: Middleware,
+    C::Error: std::fmt::Debug + std::fmt::Display,
+{
+    eth_sync_or(client, || {
         tracing::error!("The Ethereum node has not finished synchronizing");
     })
     .await?
