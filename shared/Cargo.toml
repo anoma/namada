@@ -80,7 +80,6 @@ namada-sdk = [
 ]
 
 [dependencies]
-async-std = "1.11.0"
 namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign-verify", "ethers-derive"]}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
 namada_ethereum_bridge = {path = "../ethereum_bridge", default-features = false}

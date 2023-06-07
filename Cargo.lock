@@ -4792,7 +4792,6 @@ name = "namada"
 version = "0.16.0"
 dependencies = [
  "assert_matches",
- "async-std",
  "async-trait",
  "bellman",
  "bimap",
