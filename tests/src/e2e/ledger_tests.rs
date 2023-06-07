@@ -1411,22 +1411,6 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    println!("{:?}", vec![
-        "transfer",
-        "--source",
-        B_SPENDING_KEY,
-        "--target",
-        CHRISTEL,
-        "--token",
-        ETH,
-        "--amount",
-        "10",
-        "--signer",
-        BERTHA,
-        "--node",
-        &validator_one_rpc
-    ]);
-    assert!(false);
     client.exp_string("Transaction accepted")?;
     client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is valid")?;

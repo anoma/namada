@@ -479,12 +479,14 @@ pub fn find_valid_diversifier<R: RngCore + CryptoRng>(
 /// Determine if using the current note would actually bring us closer to our
 /// target
 pub fn is_amount_required(src: Amount, dest: Amount, delta: Amount) -> bool {
-    if delta > Amount::zero() {
-        let gap = dest - src;
-        for (asset_type, value) in gap.components() {
-            if *value >= 0 && delta[asset_type] >= 0 {
-                return true;
-            }
+    println!("delta: {:?}", delta);
+    println!("src: {:?}", src);
+    println!("dest: {:?}", dest);
+
+    let gap = dest - src;
+    for (asset_type, value) in gap.components() {
+        if *value >= 0 && delta[asset_type] >= 0 {
+            return true;
         }
     }
     false
@@ -1303,9 +1305,11 @@ impl ShieldedContext {
         let mut comp = MaspAmount::default();
         for ((_, key), val) in input.drain() {
             comp.insert((target_epoch, key), val);
+
         }
         output += comp;
-        println!("\n\nconversions {:?}\n\n", output);
+        println!("\n\noutput {:?}\n\n", output);
+        println!("\n\nconversions {:?}\n\n", conversions);
         (output.into(), conversions)
     }
 
@@ -1347,6 +1351,7 @@ impl ShieldedContext {
                 // The amount contributed by this note before conversion
                 let pre_contr = Amount::from_pair(note.asset_type, note.value)
                     .expect("received note has invalid value or asset type");
+                println!("note.asset_type: {:?}, note.value {:?}", note.asset_type, note.value);
                 let input = self.decode_all_amounts(&client, pre_contr).await;
                 let (contr, proposed_convs) = self
                     .compute_exchanged_amount(

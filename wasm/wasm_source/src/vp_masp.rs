@@ -55,7 +55,13 @@ fn valid_transfer_amount(
              transparented value {}",
             unshielded_transfer_value,
             reporeted_transparent_value
-        )
+        );
+        log_string(format!(
+            "The unshielded amount {} disagrees with the calculated masp \
+             transparented value {}",
+            unshielded_transfer_value,
+            reporeted_transparent_value
+        ))
     }
     res
 }
@@ -165,6 +171,12 @@ fn validate_tx(
                      beteween 1 and 4 but is {}",
                     shielded_tx.vout.len()
                 );
+
+                log_string(format!(
+                    "Transparent output to a transaction to the masp must be \
+                     beteween 1 and 4 but is {}",
+                    shielded_tx.vout.len()
+                ));
                 return reject();
             }
 
@@ -194,10 +206,11 @@ fn validate_tx(
                     // This is encoded via the asset types.
                     continue;
                 }
-                if valid_transfer_amount(
+                if !valid_transfer_amount(
                     out.value,
                     denom.denominate(&transfer.amount.amount),
                 ) {
+                    log_string("Invalid transfer amount");
                     return reject();
                 }
 
@@ -229,6 +242,10 @@ fn validate_tx(
                                 "the public key of the output account does \
                                  not match the transfer target"
                             );
+                            log_string(format!(
+                                "the public key of the output account does \
+                                 not match the transfer target"
+                            ));
                             return reject();
                         }
                     }
@@ -238,6 +255,7 @@ fn validate_tx(
             // one or more of the denoms in the batch failed to verify
             // the asset derivation.
             if valid_count != out_length {
+                log_string("one or more of the denoms in the batch failed to verify the asset derivation.");
                 return reject();
             }
         } else {

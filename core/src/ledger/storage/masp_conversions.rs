@@ -66,7 +66,7 @@ where
     // have to use. This trick works under the assumption that reward tokens
     // from different epochs are exactly equivalent.
     let reward_asset =
-        encode_asset_type(address::nam(), &None, MaspDenom::Zero, Epoch(0));
+        encode_asset_type(address::nam(), &None, MaspDenom::Zero, wl_storage.storage.block.epoch);
     // Conversions from the previous to current asset for each address
     let mut current_convs =
         BTreeMap::<(Address, Option<Key>, MaspDenom), AllowedConversion>::new();
