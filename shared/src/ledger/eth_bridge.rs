@@ -16,7 +16,7 @@ use web30::client::Web3;
 use web30::jsonrpc::error::Web3Error;
 
 use crate::types::control_flow::time::{
-    Duration, Error as TimeoutError, Instant, SleepStrategy,
+    Constant, Duration, Error as TimeoutError, Instant, LinearBackoff, Sleep,
 };
 use crate::types::control_flow::{self, Halt, TryHalt};
 
@@ -61,16 +61,18 @@ pub async fn eth_syncing_status_timeout(
     backoff_duration: Duration,
     deadline: Instant,
 ) -> Result<SyncStatus, TimeoutError> {
-    SleepStrategy::Constant(backoff_duration)
-        .timeout(deadline, || async {
-            ControlFlow::Break(match client.eth_block_number().await {
-                Ok(height) if height == 0u64.into() => SyncStatus::Syncing,
-                Ok(height) => SyncStatus::AtHeight(height),
-                Err(Web3Error::SyncingNode(_)) => SyncStatus::Syncing,
-                Err(_) => return ControlFlow::Continue(()),
-            })
+    Sleep {
+        strategy: Constant(backoff_duration),
+    }
+    .timeout(deadline, || async {
+        ControlFlow::Break(match client.eth_block_number().await {
+            Ok(height) if height == 0u64.into() => SyncStatus::Syncing,
+            Ok(height) => SyncStatus::AtHeight(height),
+            Err(Web3Error::SyncingNode(_)) => SyncStatus::Syncing,
+            Err(_) => return ControlFlow::Continue(()),
         })
-        .await
+    })
+    .await
 }
 
 /// Arguments to [`block_on_eth_sync`].
@@ -96,26 +98,26 @@ pub async fn block_on_eth_sync(args: BlockOnEthSync<'_>) -> Halt<()> {
     } = args;
     tracing::info!("Attempting to synchronize with the Ethereum network");
     let client = Web3::new(url, rpc_timeout);
-    SleepStrategy::LinearBackoff { delta: delta_sleep }
-        .timeout(deadline, || async {
-            let local_set = LocalSet::new();
-            let status_fut = local_set
-                .run_until(async { eth_syncing_status(&client).await });
-            let Ok(status) = status_fut.await else {
+    Sleep {
+        strategy: LinearBackoff { delta: delta_sleep },
+    }
+    .timeout(deadline, || async {
+        let local_set = LocalSet::new();
+        let status_fut =
+            local_set.run_until(async { eth_syncing_status(&client).await });
+        let Ok(status) = status_fut.await else {
                 return ControlFlow::Continue(());
             };
-            if status.is_synchronized() {
-                ControlFlow::Break(())
-            } else {
-                ControlFlow::Continue(())
-            }
-        })
-        .await
-        .try_halt(|_| {
-            tracing::error!(
-                "Timed out while waiting for Ethereum to synchronize"
-            );
-        })?;
+        if status.is_synchronized() {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    })
+    .await
+    .try_halt(|_| {
+        tracing::error!("Timed out while waiting for Ethereum to synchronize");
+    })?;
     tracing::info!("The Ethereum node is up to date");
     control_flow::proceed(())
 }

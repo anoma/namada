@@ -12,8 +12,6 @@ use std::path::PathBuf;
 use async_trait::async_trait;
 use bellman::groth16::{prepare_verifying_key, PreparedVerifyingKey};
 use bls12_381::Bls12;
-// use async_std::io::prelude::WriteExt;
-// use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
 use itertools::Either;
 use masp_primitives::asset_type::AssetType;

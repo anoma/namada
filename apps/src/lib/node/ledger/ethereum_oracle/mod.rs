@@ -15,7 +15,7 @@ use namada::ledger::eth_bridge::eth_syncing_status_timeout;
 use namada::ledger::eth_bridge::SyncStatus;
 #[cfg(not(test))]
 use namada::types::control_flow::time::Instant;
-use namada::types::control_flow::time::{Duration, SleepStrategy};
+use namada::types::control_flow::time::{Constant, Duration, Sleep};
 use namada::types::ethereum_events::EthereumEvent;
 use num256::Uint256;
 use thiserror::Error;
@@ -249,7 +249,7 @@ async fn run_oracle_aux(mut oracle: Oracle) {
             ?next_block_to_process,
             "Checking Ethereum block for bridge events"
         );
-        let res = SleepStrategy::Constant(oracle.backoff).run(|| async {
+        let res = Sleep { strategy: Constant(oracle.backoff) }.run(|| async {
             tokio::select! {
                 result = process(&oracle, &config, next_block_to_process.clone()) => {
                     match result {

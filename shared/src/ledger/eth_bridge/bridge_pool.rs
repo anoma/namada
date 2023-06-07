@@ -42,7 +42,7 @@ pub async fn add_to_eth_bridge_pool<C, U>(
     args: args::EthereumBridgePool,
 ) where
     C: Client + Sync,
-    C::Error: std::fmt::Debug,
+    C::Error: std::fmt::Debug + std::fmt::Display,
     U: WalletUtils,
 {
     let args::EthereumBridgePool {
