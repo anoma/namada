@@ -118,14 +118,17 @@ impl SleepStrategy for LinearBackoff {
 
 /// Exponential backoff sleep strategy.
 #[derive(Debug, Clone)]
-pub struct ExponentialBackoff {
+pub struct ExponentialBackoff<D> {
     /// The base of the exponentiation.
     pub base: u64,
     /// Retrieve a duration from a [`u64`].
-    pub as_duration: fn(u64) -> Duration,
+    pub as_duration: D,
 }
 
-impl SleepStrategy for ExponentialBackoff {
+impl<D> SleepStrategy for ExponentialBackoff<D>
+where
+    D: Fn(u64) -> Duration,
+{
     type State = u32;
 
     fn new_state() -> u32 {
