@@ -4855,7 +4855,6 @@ dependencies = [
  "wasmer-engine-universal",
  "wasmer-vm",
  "wasmparser 0.83.0",
- "web30",
  "zeroize",
 ]
 
