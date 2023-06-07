@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::task::Poll;
 
@@ -157,10 +158,10 @@ trait ShouldRelay {
     type RelayResult: GetStatus + From<Option<TransactionReceipt>>;
 
     /// Returns [`Ok`] if the relay should happen.
-    fn should_relay<E>(
+    fn should_relay<'gov, E>(
         _: Epoch,
-        _: &Governance<E>,
-    ) -> Result<(), Self::RelayResult>
+        _: &'gov Governance<E>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), Self::RelayResult>> + 'gov>>
     where
         E: Middleware,
         E::Error: std::fmt::Display;
@@ -170,30 +171,30 @@ impl ShouldRelay for DoNotCheckNonce {
     type RelayResult = Option<TransactionReceipt>;
 
     #[inline]
-    fn should_relay<E>(
+    fn should_relay<'gov, E>(
         _: Epoch,
-        _: &Governance<E>,
-    ) -> Result<(), Self::RelayResult>
+        _: &'gov Governance<E>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), Self::RelayResult>> + 'gov>>
     where
         E: Middleware,
         E::Error: std::fmt::Display,
     {
-        Ok(())
+        Box::pin(async { Ok(()) })
     }
 }
 
 impl ShouldRelay for CheckNonce {
     type RelayResult = RelayResult;
 
-    fn should_relay<E>(
+    fn should_relay<'gov, E>(
         epoch: Epoch,
-        governance: &Governance<E>,
-    ) -> Result<(), Self::RelayResult>
+        governance: &'gov Governance<E>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), Self::RelayResult>> + 'gov>>
     where
         E: Middleware,
         E::Error: std::fmt::Display,
     {
-        let task = async move {
+        Box::pin(async move {
             let governance_epoch_prep_call = governance.validator_set_nonce();
             let governance_epoch_fut =
                 governance_epoch_prep_call.call().map(|result| {
@@ -213,13 +214,6 @@ impl ShouldRelay for CheckNonce {
                     contract: gov_current_epoch,
                 })
             }
-        };
-        // TODO: we should not rely on tokio for this. it won't
-        // work on a web browser, for the most part.
-        //
-        // see: https://github.com/tokio-rs/tokio/pull/4967
-        tokio::task::block_in_place(move || {
-            tokio::runtime::Handle::current().block_on(task)
         })
     }
 }
@@ -602,7 +596,7 @@ where
 
     let governance = Governance::new(governance_contract.address, eth_client);
 
-    if let Err(result) = R::should_relay(epoch_to_relay, &governance) {
+    if let Err(result) = R::should_relay(epoch_to_relay, &governance).await {
         action(result);
         return Err(Error::NoContext);
     }
