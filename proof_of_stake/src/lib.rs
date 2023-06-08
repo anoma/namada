@@ -3381,13 +3381,8 @@ where
                 validator_stake_at_offset - sum_post_bonds;
             assert!(slashable_stake_at_offset >= token::Change::default());
 
-            let change = if slashable_stake_at_offset + diff_slashed_amount
-                < token::Change::default()
-            {
-                -slashable_stake_at_offset
-            } else {
-                diff_slashed_amount
-            };
+            let change =
+                cmp::max(-slashable_stake_at_offset, diff_slashed_amount);
 
             let val_updates =
                 deltas_for_update.entry(validator.clone()).or_default();
