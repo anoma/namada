@@ -75,7 +75,7 @@ itertools = "0.10.0"
 libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
 # branch = "murisi/namada-integration"
 masp_primitives = { git = "https://github.com/anoma/masp", rev = "cfea8c95d3f73077ca3e25380fd27e5b46e828fd" }
-proptest = {git = "https://github.com/heliaxdev/proptest", rev = "8f1b4abe7ebd35c0781bf9a00a4ee59833ffa2a1", optional = true}
+proptest = {version = "1.2.0", optional = true}
 prost = "0.11.6"
 prost-types = "0.11.6"
 rand = {version = "0.8", optional = true}
@@ -96,8 +96,7 @@ zeroize = {version = "1.5.5", features = ["zeroize_derive"]}
 assert_matches = "1.5.0"
 libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9"}
 pretty_assertions = "0.7.2"
-# A fork with state machine testing
-proptest = {git = "https://github.com/heliaxdev/proptest", rev = "8f1b4abe7ebd35c0781bf9a00a4ee59833ffa2a1"}
+proptest = "1.2.0"
 rand = {version = "0.8"}
 rand_core = {version = "0.6"}
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}

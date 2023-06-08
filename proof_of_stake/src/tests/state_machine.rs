@@ -13,9 +13,10 @@ use namada_core::types::key;
 use namada_core::types::key::common::PublicKey;
 use namada_core::types::storage::Epoch;
 use proptest::prelude::*;
-use proptest::prop_state_machine;
-use proptest::state_machine::{ReferenceStateMachine, StateMachineTest};
 use proptest::test_runner::Config;
+use proptest_state_machine::{
+    prop_state_machine, ReferenceStateMachine, StateMachineTest,
+};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see
