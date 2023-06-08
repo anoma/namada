@@ -129,13 +129,13 @@ pub async fn tx_signer<
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     default: TxSigningKey,
-) -> Result<common::SecretKey, Error> {
-    let default = if args.dry_run {
+) -> Result<(Option<Address>, common::SecretKey), Error> {
+    let signer = if args.dry_run {
         // We cannot override the signer if we're doing a dry run
         default
     } else if let Some(signing_key) = &args.signing_key {
         // Otherwise use the signing key override provided by user
-        return Ok(signing_key.clone());
+        return Ok((None, signing_key.clone()));
     } else if let Some(signer) = &args.signer {
         // Otherwise use the signer address provided by user
         TxSigningKey::WalletAddress(signer.clone())
@@ -144,21 +144,18 @@ pub async fn tx_signer<
         default
     };
     // Now actually fetch the signing key and apply it
-    match default {
+    match signer {
         TxSigningKey::WalletAddress(signer) if signer == masp() => {
-            Ok(masp_tx_key())
-        },
-        TxSigningKey::WalletAddress(signer) if signer == (&masp_tx_key().ref_to()).into() => {
-            Ok(masp_tx_key())
+            Ok((None, masp_tx_key()))
         },
         TxSigningKey::WalletAddress(signer) => {
-            find_keypair::<C, U>(
+            Ok((Some(signer.clone()), find_keypair::<C, U>(
                 client,
                 wallet,
                 &signer,
                 args.password.clone(),
             )
-            .await
+            .await?))
         }
         TxSigningKey::None => other_err(
             "All transactions must be signed; please either specify the key \
@@ -177,16 +174,24 @@ pub async fn tx_signer<
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
 pub async fn sign_tx<
-    C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
-    client: &C,
     wallet: &mut Wallet<U>,
     tx: &mut Tx,
     args: &args::Tx,
     keypair: &common::PublicKey,
 ) -> Result<(), Error> {
-    let keypair = tx_signer::<C, U>(client, wallet, args, TxSigningKey::WalletAddress(keypair.into())).await?;
+    let keypair = if *keypair == masp_tx_key().ref_to() {
+        masp_tx_key()
+    } else {
+        wallet.find_key_by_pk(&keypair, args.password.clone()).map_err(|err| {
+            Error::Other(format!(
+                "Unable to load the keypair from the wallet for public \
+                 key {}. Failed with: {}",
+                keypair, err
+            ))
+        })?
+    };
     // Sign over the transacttion data
     tx.add_section(Section::Signature(Signature::new(
         tx.data_sechash(),
