@@ -470,7 +470,7 @@ where
         )?;
     }
 
-    tracing::debug!("FINISHED GENESIS");
+    tracing::debug!("Genesis initialized");
 
     Ok(())
 }
@@ -622,7 +622,6 @@ pub fn read_validator_stake<S>(
 where
     S: StorageRead,
 {
-    // tracing::debug!("Read validator stake at epoch {}", epoch);
     let handle = validator_deltas_handle(validator);
     let amount = handle
         .get_sum(storage, epoch, params)?
@@ -2172,6 +2171,7 @@ pub fn validator_set_update_tendermint<S, T>(
 where
     S: StorageRead,
 {
+    tracing::debug!("Communicating validator set updates to Tendermint.");
     // Because this is called 2 blocks before a start on an epoch, we're gonna
     // give Tendermint updates for the next epoch
     let next_epoch: Epoch = current_epoch.next();
@@ -3003,7 +3003,7 @@ pub fn slash<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    tracing::debug!(
+    tracing::info!(
         "Slashing validator {} on new evidence from epoch {} (current epoch = \
          {})",
         validator,
