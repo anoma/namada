@@ -210,32 +210,24 @@ pub async fn sign_tx<
     Ok(())
 }
 
-/// Create a wrapper tx from a normal tx. Get the hash of the
-/// wrapper and its payload which is needed for monitoring its
-/// progress on chain.
-pub async fn wrap_tx<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
+#[cfg(not(feature = "mainnet"))]
+/// Solve the PoW challenge if balance is insufficient to pay transaction fees
+/// or if solution is explicitly requested.
+pub async fn solve_pow_challenge<
+        C: crate::ledger::queries::Client + Sync,
+    >(
     client: &C,
-    #[allow(unused_variables)] wallet: &mut Wallet<U>,
     args: &args::Tx,
-    epoch: Epoch,
-    mut tx: Tx,
     keypair: &common::PublicKey,
-    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> Tx {
-    let fee_amount = if cfg!(feature = "mainnet") {
-        Amount::native_whole(MIN_FEE)
-    } else {
-        let wrapper_tx_fees_key = parameter_storage::get_wrapper_tx_fees_key();
-        rpc::query_storage_value::<C, token::Amount>(
-            client,
-            &wrapper_tx_fees_key,
-        )
+    requires_pow: bool,
+) -> (Option<crate::core::ledger::testnet_pow::Solution>, Fee) {
+    let wrapper_tx_fees_key = parameter_storage::get_wrapper_tx_fees_key();
+    let fee_amount = rpc::query_storage_value::<C, token::Amount>(
+        client,
+        &wrapper_tx_fees_key,
+    )
         .await
-        .unwrap_or_default()
-    };
+        .unwrap_or_default();
     let fee_token = &args.fee_token;
     let source = Address::from(keypair);
     let balance_key = token::balance_key(fee_token, &source);
@@ -256,34 +248,69 @@ pub async fn wrap_tx<
             );
         }
     }
-
-    #[cfg(not(feature = "mainnet"))]
+    let fee = Fee { amount: fee_amount, token: fee_token.clone() };
     // A PoW solution can be used to allow zero-fee testnet transactions
-    let pow_solution: Option<crate::core::ledger::testnet_pow::Solution> = {
-        // If the address derived from the keypair doesn't have enough balance
-        // to pay for the fee, allow to find a PoW solution instead.
-        if requires_pow || !is_bal_sufficient {
-            println!(
-                "The transaction requires the completion of a PoW challenge."
-            );
-            // Obtain a PoW challenge for faucet withdrawal
-            let challenge =
-                rpc::get_testnet_pow_challenge(client, source).await;
+    // If the address derived from the keypair doesn't have enough balance
+    // to pay for the fee, allow to find a PoW solution instead.
+    if requires_pow || !is_bal_sufficient {
+        println!(
+            "The transaction requires the completion of a PoW challenge."
+        );
+        // Obtain a PoW challenge for faucet withdrawal
+        let challenge =
+            rpc::get_testnet_pow_challenge(client, source).await;
 
-            // Solve the solution, this blocks until a solution is found
-            let solution = challenge.solve();
-            Some(solution)
-        } else {
-            None
-        }
-    };
+        // Solve the solution, this blocks until a solution is found
+        let solution = challenge.solve();
+        (Some(solution), fee)
+    } else {
+        (None, fee)
+    }
+}
 
+#[cfg(not(feature = "mainnet"))]
+/// Update the PoW challenge inside the given transaction
+pub async fn update_pow_challenge<
+        C: crate::ledger::queries::Client + Sync,
+    >(
+    client: &C,
+    args: &args::Tx,
+    tx: &mut Tx,
+    keypair: &common::PublicKey,
+    requires_pow: bool,
+) {
+    match &mut tx.header.tx_type {
+        TxType::Wrapper(wrapper) => {
+            let (pow_solution, fee) =
+                solve_pow_challenge(client, args, keypair, requires_pow).await;
+            wrapper.fee = fee;
+            wrapper.pow_solution = pow_solution;
+        },
+        _ => {},
+    }
+}
+
+/// Create a wrapper tx from a normal tx. Get the hash of the
+/// wrapper and its payload which is needed for monitoring its
+/// progress on chain.
+pub async fn wrap_tx<
+    C: crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
+    client: &C,
+    #[allow(unused_variables)] wallet: &mut Wallet<U>,
+    args: &args::Tx,
+    epoch: Epoch,
+    mut tx: Tx,
+    keypair: &common::PublicKey,
+    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
+) -> Tx {
+    #[cfg(not(feature = "mainnet"))]
+    let (pow_solution, fee) =
+        solve_pow_challenge(client, args, keypair, requires_pow).await;
     // This object governs how the payload will be processed
     tx.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
-        Fee {
-            amount: fee_amount,
-            token: fee_token.clone(),
-        },
+        fee,
         keypair.clone(),
         epoch,
         args.gas_limit.clone(),
