@@ -2329,7 +2329,6 @@ pub mod args {
     pub const SOURCE: Arg<WalletAddress> = arg("source");
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
-    pub const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
     pub const SUSPEND_ACTION: ArgFlag = flag("suspend");
     pub const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     pub const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
@@ -3009,7 +3008,6 @@ pub mod args {
                 source: ctx.get_cached(&self.source),
                 target: ctx.get(&self.target),
                 token: ctx.get(&self.token),
-                sub_prefix: self.sub_prefix,
                 amount: self.amount,
                 native_token: ctx.native_token.clone(),
                 tx_code_path: self.tx_code_path.to_path_buf(),
@@ -3023,7 +3021,6 @@ pub mod args {
             let source = TRANSFER_SOURCE.parse(matches);
             let target = TRANSFER_TARGET.parse(matches);
             let token = TOKEN.parse(matches);
-            let sub_prefix = SUB_PREFIX.parse(matches);
             let amount = AMOUNT.parse(matches);
             let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
             Self {
@@ -3031,7 +3028,6 @@ pub mod args {
                 source,
                 target,
                 token,
-                sub_prefix,
                 amount,
                 native_token: (),
                 tx_code_path,
@@ -3049,7 +3045,6 @@ pub mod args {
                      to produce the signature.",
                 ))
                 .arg(TOKEN.def().about("The transfer token."))
-                .arg(SUB_PREFIX.def().about("The token's sub prefix."))
                 .arg(AMOUNT.def().about("The amount to transfer in decimal."))
         }
     }
@@ -3061,7 +3056,6 @@ pub mod args {
                 source: ctx.get(&self.source),
                 receiver: self.receiver,
                 token: ctx.get(&self.token),
-                sub_prefix: self.sub_prefix,
                 amount: self.amount,
                 port_id: self.port_id,
                 channel_id: self.channel_id,
@@ -3078,7 +3072,6 @@ pub mod args {
             let source = SOURCE.parse(matches);
             let receiver = RECEIVER.parse(matches);
             let token = TOKEN.parse(matches);
-            let sub_prefix = SUB_PREFIX.parse(matches);
             let amount = AMOUNT.parse(matches);
             let port_id = PORT_ID.parse(matches);
             let channel_id = CHANNEL_ID.parse(matches);
@@ -3090,7 +3083,6 @@ pub mod args {
                 source,
                 receiver,
                 token,
-                sub_prefix,
                 amount,
                 port_id,
                 channel_id,
@@ -3110,7 +3102,6 @@ pub mod args {
                     "The receiver address on the destination chain as string.",
                 ))
                 .arg(TOKEN.def().about("The transfer token."))
-                .arg(SUB_PREFIX.def().about("The token's sub prefix."))
                 .arg(AMOUNT.def().about("The amount to transfer in decimal."))
                 .arg(PORT_ID.def().about("The port ID."))
                 .arg(CHANNEL_ID.def().about("The channel ID."))
@@ -3787,7 +3778,6 @@ pub mod args {
                 owner: self.owner.map(|x| ctx.get_cached(&x)),
                 token: self.token.map(|x| ctx.get(&x)),
                 no_conversions: self.no_conversions,
-                sub_prefix: self.sub_prefix,
             }
         }
     }
@@ -3798,13 +3788,11 @@ pub mod args {
             let owner = BALANCE_OWNER.parse(matches);
             let token = TOKEN_OPT.parse(matches);
             let no_conversions = NO_CONVERSIONS.parse(matches);
-            let sub_prefix = SUB_PREFIX.parse(matches);
             Self {
                 query,
                 owner,
                 token,
                 no_conversions,
-                sub_prefix,
             }
         }
 
@@ -3823,11 +3811,6 @@ pub mod args {
                 .arg(
                     NO_CONVERSIONS.def().about(
                         "Whether not to automatically perform conversions.",
-                    ),
-                )
-                .arg(
-                    SUB_PREFIX.def().about(
-                        "The token's sub prefix whose balance to query.",
                     ),
                 )
         }

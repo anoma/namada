@@ -28,9 +28,7 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
         if let Some(address) = key::is_pk_key(key) {
             Self::Pk(address)
-        } else if let Some(address) = token::is_any_token_balance_key(key) {
-            Self::Token(address)
-        } else if let Some((_, address)) = token::is_multitoken_balance_key(key)
+        } else if let Some((_, address)) = token::is_any_token_balance_key(key)
         {
             Self::Token(address)
         } else if proof_of_stake::is_pos_key(key) {
@@ -339,7 +337,7 @@ mod tests {
 
         // Credit the tokens to the source before running the transaction to be
         // able to transfer from it
-        tx_env.credit_tokens(&source, &token, None, amount);
+        tx_env.credit_tokens(&source, &token, amount);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -349,7 +347,6 @@ mod tests {
                 &source,
                 address,
                 &token,
-                None,
                 amount,
                 &None,
                 &None,
@@ -414,7 +411,7 @@ mod tests {
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
-        tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        tx_env.credit_tokens(&vp_owner, &token, amount);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
@@ -487,7 +484,7 @@ mod tests {
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
-        tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        tx_env.credit_tokens(&vp_owner, &token, amount);
 
         tx_env.write_public_key(&vp_owner, &public_key);
 
@@ -538,7 +535,7 @@ mod tests {
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
-        tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        tx_env.credit_tokens(&vp_owner, &token, amount);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -548,7 +545,6 @@ mod tests {
                 address,
                 &target,
                 &token,
-                None,
                 amount,
                 &None,
                 &None,
@@ -588,7 +584,7 @@ mod tests {
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
-        tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        tx_env.credit_tokens(&vp_owner, &token, amount);
 
         tx_env.write_public_key(&vp_owner, &public_key);
 
@@ -600,7 +596,6 @@ mod tests {
                 address,
                 &target,
                 &token,
-                None,
                 amount,
                 &None,
                 &None,
@@ -646,7 +641,7 @@ mod tests {
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
-        tx_env.credit_tokens(&source, &token, None, amount);
+        tx_env.credit_tokens(&source, &token, amount);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -657,7 +652,6 @@ mod tests {
                 &source,
                 &target,
                 &token,
-                None,
                 amount,
                 &None,
                 &None,

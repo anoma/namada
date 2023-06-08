@@ -5,8 +5,8 @@ use crate::ledger::storage_api;
 use crate::types::address::Address;
 use crate::types::token;
 pub use crate::types::token::{
-    balance_key, is_balance_key, is_total_supply_key, total_supply_key, Amount,
-    Change,
+    balance_key, is_balance_key, is_minted_balance_key, minted_balance_key,
+    minter_key, Amount, Change,
 };
 
 /// Read the balance of a given token and owner.
@@ -31,7 +31,7 @@ pub fn read_total_supply<S>(
 where
     S: StorageRead,
 {
-    let key = token::total_supply_key(token);
+    let key = token::minted_balance_key(token);
     let balance = storage.read::<token::Amount>(&key)?.unwrap_or_default();
     Ok(balance)
 }
@@ -91,7 +91,7 @@ where
         storage_api::Error::new_const("Token balance overflow")
     })?;
 
-    let total_supply_key = token::total_supply_key(token);
+    let total_supply_key = token::minted_balance_key(token);
     let cur_supply = storage
         .read::<Amount>(&total_supply_key)?
         .unwrap_or_default();

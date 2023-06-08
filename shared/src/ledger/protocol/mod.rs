@@ -551,9 +551,7 @@ where
                             gas_meter = slash_fund.ctx.gas_meter.into_inner();
                             result
                         }
-                        InternalAddress::Multitoken
-                        | InternalAddress::IbcToken(_)
-                        | InternalAddress::Mint => {
+                        InternalAddress::Multitoken => {
                             let multitoken = MultitokenVp { ctx };
                             let result = multitoken
                                 .validate_tx(tx, &keys_changed, &verifiers)
@@ -586,6 +584,13 @@ where
                             gas_meter =
                                 replay_protection_vp.ctx.gas_meter.into_inner();
                             result
+                        }
+                        InternalAddress::IbcToken(_)
+                        | InternalAddress::Mint => {
+                            // These addresses should be a part of a multitoken
+                            // key
+                            gas_meter = ctx.gas_meter.into_inner();
+                            Ok(true)
                         }
                     };
 

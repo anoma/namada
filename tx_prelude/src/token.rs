@@ -14,21 +14,14 @@ pub fn transfer(
     src: &Address,
     dest: &Address,
     token: &Address,
-    sub_prefix: Option<Address>,
     amount: Amount,
     key: &Option<String>,
     shielded_hash: &Option<Hash>,
     shielded: &Option<Transaction>,
 ) -> TxResult {
     if amount != Amount::default() {
-        let src_key = match &sub_prefix {
-            Some(sub_prefix) => token::multitoken_balance_key(sub_prefix, src),
-            None => token::balance_key(token, src),
-        };
-        let dest_key = match &sub_prefix {
-            Some(sub_prefix) => token::multitoken_balance_key(sub_prefix, dest),
-            None => token::balance_key(token, dest),
-        };
+        let src_key = token::balance_key(token, src);
+        let dest_key = token::balance_key(token, dest);
         let src_bal: Option<Amount> = ctx.read(&src_key)?;
         let mut src_bal = src_bal.unwrap_or_else(|| {
             log_string(format!("src {} has no balance", src_key));
@@ -63,8 +56,6 @@ pub fn transfer(
             source: src.clone(),
             target: dest.clone(),
             token: token.clone(),
-            // todo: build asset types for multitokens
-            sub_prefix: None,
             amount,
             key: key.clone(),
             shielded: *shielded_hash,
@@ -94,21 +85,21 @@ pub fn mint(
     ctx: &mut Ctx,
     minter: &Address,
     target: &Address,
-    sub_prefix: &Address,
+    token: &Address,
     amount: Amount,
 ) -> TxResult {
-    let target_key = token::multitoken_balance_key(sub_prefix, target);
+    let target_key = token::balance_key(token, target);
     let mut target_bal: Amount = ctx.read(&target_key)?.unwrap_or_default();
     target_bal.receive(&amount);
 
-    let minted_key = token::multitoken_minted_key(sub_prefix);
+    let minted_key = token::minted_balance_key(token);
     let mut minted_bal: Amount = ctx.read(&minted_key)?.unwrap_or_default();
     minted_bal.receive(&amount);
 
     ctx.write(&target_key, target_bal)?;
     ctx.write(&minted_key, minted_bal)?;
 
-    let minter_key = token::multitoken_minter_key(sub_prefix);
+    let minter_key = token::minter_key(token);
     ctx.write(&minter_key, minter)?;
 
     Ok(())
@@ -118,15 +109,15 @@ pub fn mint(
 pub fn burn(
     ctx: &mut Ctx,
     target: &Address,
-    sub_prefix: &Address,
+    token: &Address,
     amount: Amount,
 ) -> TxResult {
-    let target_key = token::multitoken_balance_key(sub_prefix, target);
+    let target_key = token::balance_key(token, target);
     let mut target_bal: Amount = ctx.read(&target_key)?.unwrap_or_default();
     target_bal.spend(&amount);
 
     // burn the minted amount
-    let minted_key = token::multitoken_minted_key(sub_prefix);
+    let minted_key = token::minted_balance_key(token);
     let mut minted_bal: Amount = ctx.read(&minted_key)?.unwrap_or_default();
     minted_bal.spend(&amount);
 

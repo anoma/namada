@@ -45,7 +45,7 @@ use crate::types::control_flow::{time, ProceedOrElse};
 use crate::types::hash::Hash;
 use crate::types::key::*;
 use crate::types::masp::TransferTarget;
-use crate::types::storage::{Epoch, RESERVED_ADDRESS_PREFIX};
+use crate::types::storage::Epoch;
 use crate::types::time::DateTimeUtc;
 use crate::types::transaction::{pos, InitAccount, TxType, UpdateVp};
 use crate::types::{storage, token};
@@ -1060,21 +1060,7 @@ where
     let token = token_exists_or_err(args.token, args.tx.force, client).await?;
 
     // Check source balance
-    let (sub_prefix, balance_key) = match args.sub_prefix {
-        Some(sp) => {
-            let sub_prefix = Address::decode(&sp).map_err(|e| {
-                Error::Other(format!(
-                    "The sub_prefix was not an Address: sub_prefix {}, error \
-                     {}",
-                    sp, e
-                ))
-            })?;
-            let balance_key =
-                token::multitoken_balance_key(&sub_prefix, &source);
-            (Some(sub_prefix), balance_key)
-        }
-        None => (None, token::balance_key(&token, &source)),
-    };
+    let balance_key = token::balance_key(&token, &source);
 
     check_balance_too_low_err(
         &token,
@@ -1091,13 +1077,8 @@ where
             .await
             .unwrap();
 
-    let denom = match sub_prefix {
-        // To parse IbcToken address, remove the address prefix
-        Some(sp) => sp.to_string().replace(RESERVED_ADDRESS_PREFIX, ""),
-        None => token.to_string(),
-    };
     let token = Coin {
-        denom,
+        denom: token.to_string(),
         amount: args.amount.to_string(),
     };
 
@@ -1250,22 +1231,9 @@ where
     // Check that the token address exists on chain
     token_exists_or_err(token.clone(), args.tx.force, client).await?;
     // Check source balance
-    let (sub_prefix, balance_key) = match &args.sub_prefix {
-        Some(sp) => {
-            let sub_prefix = Address::decode(sp).map_err(|e| {
-                Error::Other(format!(
-                    "The sub_prefix was not an Address: sub_prefix {}, error \
-                     {}",
-                    sp, e
-                ))
-            })?;
-            let balance_key =
-                token::multitoken_balance_key(&sub_prefix, &source);
-            (Some(sub_prefix), balance_key)
-        }
-        None => (None, token::balance_key(&token, &source)),
-    };
-    check_balance_too_low_err::<C>(
+    let balance_key = token::balance_key(&token, &source);
+
+    check_balance_too_low_err(
         &token,
         &source,
         args.amount,
@@ -1381,7 +1349,6 @@ where
             source: source.clone(),
             target: target.clone(),
             token: token.clone(),
-            sub_prefix: sub_prefix.clone(),
             amount,
             key: key.clone(),
             // Link the Transfer to the MASP Transaction by hash code

@@ -425,7 +425,6 @@ fn ledger_txs_and_queries() -> Result<()> {
         source: find_address(&test, BERTHA).unwrap(),
         target: find_address(&test, ALBERT).unwrap(),
         token: find_address(&test, NAM).unwrap(),
-        sub_prefix: None,
         amount: token::Amount::whole(10),
         key: None,
         shielded: None,

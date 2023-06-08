@@ -106,12 +106,7 @@ mod tests {
                 // bond first.
                 // First, credit the bond's source with the initial stake,
                 // before we initialize the bond below
-                tx_env.credit_tokens(
-                    source,
-                    &native_token,
-                    None,
-                    initial_stake,
-                );
+                tx_env.credit_tokens(source, &native_token, initial_stake);
             }
             native_token
         });

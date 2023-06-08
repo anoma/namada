@@ -76,23 +76,22 @@ impl IbcStorageContext for Ctx {
         src: &Address,
         dest: &Address,
         token: &Address,
-        sub_prefix: Option<Address>,
         amount: Amount,
     ) -> std::result::Result<(), Self::Error> {
-        transfer(self, src, dest, token, sub_prefix, amount, &None, &None)
+        transfer(self, src, dest, token, amount, &None, &None, &None)
     }
 
     fn mint_token(
         &mut self,
         target: &Address,
-        sub_prefix: &Address,
+        token: &Address,
         amount: Amount,
     ) -> Result<(), Self::Error> {
         mint(
             self,
             &Address::Internal(InternalAddress::Ibc),
             target,
-            sub_prefix,
+            token,
             amount,
         )
     }
@@ -100,10 +99,10 @@ impl IbcStorageContext for Ctx {
     fn burn_token(
         &mut self,
         target: &Address,
-        sub_prefix: &Address,
+        token: &Address,
         amount: Amount,
     ) -> Result<(), Self::Error> {
-        burn(self, target, sub_prefix, amount)
+        burn(self, target, token, amount)
     }
 
     fn get_height(&self) -> std::result::Result<BlockHeight, Self::Error> {
