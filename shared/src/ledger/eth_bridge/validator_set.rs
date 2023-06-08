@@ -161,15 +161,7 @@ trait ShouldRelay {
     type Future<'gov>: Future<Output = Result<(), Self::RelayResult>> + 'gov;
 
     /// Returns [`Ok`] if the relay should happen.
-    // idk what the deal is with clippy complaining about
-    // needless lifetimes. how else are we supposed to say
-    // the lifetime of governance and the one in the future
-    // are the same?
-    #[allow(clippy::needless_lifetimes)]
-    fn should_relay<'gov, E>(
-        _: Epoch,
-        _: &'gov Governance<E>,
-    ) -> Self::Future<'gov>
+    fn should_relay<E>(_: Epoch, _: &Governance<E>) -> Self::Future<'_>
     where
         E: Middleware,
         E::Error: std::fmt::Display;
@@ -180,11 +172,7 @@ impl ShouldRelay for DoNotCheckNonce {
     type RelayResult = Option<TransactionReceipt>;
 
     #[inline]
-    #[allow(clippy::needless_lifetimes)]
-    fn should_relay<'gov, E>(
-        _: Epoch,
-        _: &'gov Governance<E>,
-    ) -> Self::Future<'gov>
+    fn should_relay<E>(_: Epoch, _: &Governance<E>) -> Self::Future<'_>
     where
         E: Middleware,
         E::Error: std::fmt::Display,
@@ -198,11 +186,10 @@ impl ShouldRelay for CheckNonce {
         Pin<Box<dyn Future<Output = Result<(), Self::RelayResult>> + 'gov>>;
     type RelayResult = RelayResult;
 
-    #[allow(clippy::needless_lifetimes)]
-    fn should_relay<'gov, E>(
+    fn should_relay<E>(
         epoch: Epoch,
-        governance: &'gov Governance<E>,
-    ) -> Self::Future<'gov>
+        governance: &Governance<E>,
+    ) -> Self::Future<'_>
     where
         E: Middleware,
         E::Error: std::fmt::Display,
