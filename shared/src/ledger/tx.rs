@@ -272,22 +272,6 @@ pub async fn process_tx<
 ) -> Result<ProcessTxResponse, Error> {
     // Remove all the sensitive sections
     tx.protocol_filter();
-    // Encrypt all sections not relating to the header
-    tx.encrypt(&Default::default());
-    // We use this to determine when the wrapper tx makes it on-chain
-    let wrapper_hash = tx.header_hash().to_string();
-    // We use this to determine when the decrypted inner tx makes it
-    // on-chain
-    let decrypted_hash = tx
-        .clone()
-        .update_header(TxType::Raw)
-        .header_hash()
-        .to_string();
-    let to_broadcast = TxBroadcastData::Wrapper {
-        tx,
-        wrapper_hash,
-        decrypted_hash,
-    };
     // NOTE: use this to print the request JSON body:
 
     // let request =
@@ -299,8 +283,24 @@ pub async fn process_tx<
     // println!("HTTP request body: {}", request_body);
 
     if args.dry_run {
-        expect_dry_broadcast(to_broadcast, client).await
+        expect_dry_broadcast(TxBroadcastData::DryRun(tx), client).await
     } else {
+        // Encrypt all sections not relating to the header
+        tx.encrypt(&Default::default());
+        // We use this to determine when the wrapper tx makes it on-chain
+        let wrapper_hash = tx.header_hash().to_string();
+        // We use this to determine when the decrypted inner tx makes it
+        // on-chain
+        let decrypted_hash = tx
+            .clone()
+            .update_header(TxType::Raw)
+            .header_hash()
+            .to_string();
+        let to_broadcast = TxBroadcastData::Wrapper {
+            tx,
+            wrapper_hash,
+            decrypted_hash,
+        };
         // Either broadcast or submit transaction and collect result into
         // sum type
         if args.broadcast_only {
