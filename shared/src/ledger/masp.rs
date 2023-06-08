@@ -1387,20 +1387,13 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             }
         }
 
-        let prover = if let Ok(params_dir) = env::var(ENV_VAR_MASP_PARAMS_DIR) {
-            let params_dir = PathBuf::from(params_dir);
-            let spend_path = params_dir.join(SPEND_NAME);
-            let convert_path = params_dir.join(CONVERT_NAME);
-            let output_path = params_dir.join(OUTPUT_NAME);
-            LocalTxProver::new(&spend_path, &output_path, &convert_path)
-        } else {
-            LocalTxProver::with_default_location()
-                .expect("unable to load MASP Parameters")
-        };
         // Build and return the constructed transaction
         builder
             .clone()
-            .build(&prover, &FeeRule::non_standard(tx_fee))
+            .build(
+                &self.utils.local_tx_prover(),
+                &FeeRule::non_standard(tx_fee),
+            )
             .map(|(tx, metadata)| {
                 Some((builder.map_builder(WalletMap), tx, metadata, epoch))
             })
