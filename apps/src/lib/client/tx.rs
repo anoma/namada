@@ -56,17 +56,21 @@ pub async fn submit_custom<C: namada::ledger::queries::Client + Sync>(
         .tx
         .chain_id
         .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
-    let (mut tx, pk) = tx::build_custom(client, &mut ctx.wallet, args.clone())
-        .await?;
+    let (mut tx, addr, pk) =
+        tx::build_custom(client, &mut ctx.wallet, args.clone()).await?;
     // Build a transaction to reveal the signer of this transaction
-    let reveal_pk = tx::build_reveal_pk(
-        client,
-        &mut ctx.wallet,
-        args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
-    ).await?;
-    if let Some((mut rtx, pk)) = reveal_pk {
+    let reveal_pk = if let Some(Address::Implicit(_)) = addr {
+        tx::build_reveal_pk(
+            client,
+            &mut ctx.wallet,
+            args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
+        ).await?
+    } else {
+        None
+    };
+    if let Some((mut rtx, _, pk)) = reveal_pk {
         // Sign the reveal public key transaction with the fee payer
-        signing::sign_tx(client, &mut ctx.wallet, &mut rtx, &args.tx, &pk)
+        signing::sign_tx(&mut ctx.wallet, &mut rtx, &args.tx, &pk)
             .await?;
         // Submit the reveal public key transaction first
         tx::process_tx(client, &mut ctx.wallet, &args.tx, rtx).await?;
@@ -75,7 +79,7 @@ pub async fn submit_custom<C: namada::ledger::queries::Client + Sync>(
         signing::update_pow_challenge(client, &args.tx, &mut tx, &pk, false)
             .await;
     }
-    signing::sign_tx(client, &mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
     tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
@@ -89,17 +93,21 @@ pub async fn submit_update_vp<C: namada::ledger::queries::Client + Sync>(
         .tx
         .chain_id
         .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
-    let (mut tx, pk) =
+    let (mut tx, addr, pk) =
         tx::build_update_vp(client, &mut ctx.wallet, args.clone()).await?;
     // Build a transaction to reveal the signer of this transaction
-    let reveal_pk = tx::build_reveal_pk(
-        client,
-        &mut ctx.wallet,
-        args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
-    ).await?;
-    if let Some((mut rtx, pk)) = reveal_pk {
+    let reveal_pk = if let Some(Address::Implicit(_)) = addr {
+        tx::build_reveal_pk(
+            client,
+            &mut ctx.wallet,
+            args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
+        ).await?
+    } else {
+        None
+    };
+    if let Some((mut rtx, _, pk)) = reveal_pk {
         // Sign the reveal public key transaction with the fee payer
-        signing::sign_tx(client, &mut ctx.wallet, &mut rtx, &args.tx, &pk)
+        signing::sign_tx(&mut ctx.wallet, &mut rtx, &args.tx, &pk)
             .await?;
         // Submit the reveal public key transaction first
         tx::process_tx(client, &mut ctx.wallet, &args.tx, rtx).await?;
@@ -108,7 +116,7 @@ pub async fn submit_update_vp<C: namada::ledger::queries::Client + Sync>(
         signing::update_pow_challenge(client, &args.tx, &mut tx, &pk, false)
             .await;
     }
-    signing::sign_tx(client, &mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
     tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
@@ -122,17 +130,21 @@ pub async fn submit_init_account<C: namada::ledger::queries::Client + Sync>(
         .tx
         .chain_id
         .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
-    let (mut tx, pk) =
+    let (mut tx, addr, pk) =
         tx::build_init_account(client, &mut ctx.wallet, args.clone()).await?;
     // Build a transaction to reveal the signer of this transaction
-    let reveal_pk = tx::build_reveal_pk(
-        client,
-        &mut ctx.wallet,
-        args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
-    ).await?;
-    if let Some((mut rtx, pk)) = reveal_pk {
+    let reveal_pk = if let Some(Address::Implicit(_)) = addr {
+        tx::build_reveal_pk(
+            client,
+            &mut ctx.wallet,
+            args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
+        ).await?
+    } else {
+        None
+    };
+    if let Some((mut rtx, _, pk)) = reveal_pk {
         // Sign the reveal public key transaction with the fee payer
-        signing::sign_tx(client, &mut ctx.wallet, &mut rtx, &args.tx, &pk)
+        signing::sign_tx(&mut ctx.wallet, &mut rtx, &args.tx, &pk)
             .await?;
         // Submit the reveal public key transaction first
         tx::process_tx(client, &mut ctx.wallet, &args.tx, rtx).await?;
@@ -141,7 +153,7 @@ pub async fn submit_init_account<C: namada::ledger::queries::Client + Sync>(
         signing::update_pow_challenge(client, &args.tx, &mut tx, &pk, false)
             .await;
     }
-    signing::sign_tx(client, &mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
     tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
@@ -293,7 +305,7 @@ pub async fn submit_init_validator<
     tx.set_data(Data::new(data));
     tx.set_code(Code::from_hash(tx_code_hash));
 
-    let (mut tx, pk) = tx::prepare_tx(
+    let (mut tx, addr, pk) = tx::prepare_tx(
         client,
         &mut ctx.wallet,
         &tx_args,
@@ -304,14 +316,18 @@ pub async fn submit_init_validator<
     )
         .await?;
     // Build a transaction to reveal the signer of this transaction
-    let reveal_pk = tx::build_reveal_pk(
-        client,
-        &mut ctx.wallet,
-        args::RevealPk { tx: tx_args.clone(), public_key: pk.clone() },
-    ).await?;
-    if let Some((mut rtx, pk)) = reveal_pk {
+    let reveal_pk = if let Some(Address::Implicit(_)) = addr {
+        tx::build_reveal_pk(
+            client,
+            &mut ctx.wallet,
+            args::RevealPk { tx: tx_args.clone(), public_key: pk.clone() },
+        ).await?
+    } else {
+        None
+    };
+    if let Some((mut rtx, _, pk)) = reveal_pk {
         // Sign the reveal public key transaction with the fee payer
-        signing::sign_tx(client, &mut ctx.wallet, &mut rtx, &tx_args, &pk)
+        signing::sign_tx(&mut ctx.wallet, &mut rtx, &tx_args, &pk)
             .await?;
         // Submit the reveal public key transaction first
         tx::process_tx(client, &mut ctx.wallet, &tx_args, rtx).await?;
@@ -320,7 +336,7 @@ pub async fn submit_init_validator<
         signing::update_pow_challenge(client, &tx_args, &mut tx, &pk, false)
             .await;
     }
-    signing::sign_tx(client, &mut ctx.wallet, &mut tx, &tx_args, &pk).await?;
+    signing::sign_tx(&mut ctx.wallet, &mut tx, &tx_args, &pk).await?;
     let result = tx::process_tx(client, &mut ctx.wallet, &tx_args, tx).await?
         .initialized_accounts();
 
@@ -537,18 +553,22 @@ pub async fn submit_transfer(
         .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
     for _ in 0..2 {
         let arg = args.clone();
-        let (mut tx, pk, tx_epoch, isf) =
+        let (mut tx, addr, pk, tx_epoch, isf) =
             tx::build_transfer(client, &mut ctx.wallet, &mut ctx.shielded, arg)
             .await?;
         // Build a transaction to reveal the signer of this transaction
-        let reveal_pk = tx::build_reveal_pk(
-            client,
-            &mut ctx.wallet,
-            args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
-        ).await?;
-        if let Some((mut rtx, pk)) = reveal_pk {
+        let reveal_pk = if let Some(Address::Implicit(_)) = addr {
+            tx::build_reveal_pk(
+                client,
+                &mut ctx.wallet,
+                args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
+            ).await?
+        } else {
+            None
+        };
+        if let Some((mut rtx, _, pk)) = reveal_pk {
             // Sign the reveal public key transaction with the fee payer
-            signing::sign_tx(client, &mut ctx.wallet, &mut rtx, &args.tx, &pk)
+            signing::sign_tx(&mut ctx.wallet, &mut rtx, &args.tx, &pk)
                 .await?;
             // Submit the reveal public key transaction first
             tx::process_tx(client, &mut ctx.wallet, &args.tx, rtx).await?;
@@ -557,7 +577,7 @@ pub async fn submit_transfer(
             signing::update_pow_challenge(client, &args.tx, &mut tx, &pk, isf)
                 .await;
         }
-        signing::sign_tx(client, &mut ctx.wallet, &mut tx, &args.tx, &pk)
+        signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk)
             .await?;
         let result = tx::process_tx(client, &mut ctx.wallet, &args.tx, tx)
             .await?;
@@ -597,17 +617,21 @@ pub async fn submit_ibc_transfer<C: namada::ledger::queries::Client + Sync>(
         .tx
         .chain_id
         .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
-    let (mut tx, pk) =
+    let (mut tx, addr, pk) =
         tx::build_ibc_transfer(client, &mut ctx.wallet, args.clone()).await?;
     // Build a transaction to reveal the signer of this transaction
-    let reveal_pk = tx::build_reveal_pk(
-        client,
-        &mut ctx.wallet,
-        args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
-    ).await?;
-    if let Some((mut rtx, pk)) = reveal_pk {
+    let reveal_pk = if let Some(Address::Implicit(_)) = addr {
+        tx::build_reveal_pk(
+            client,
+            &mut ctx.wallet,
+            args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
+        ).await?
+    } else {
+        None
+    };
+    if let Some((mut rtx, _, pk)) = reveal_pk {
         // Sign the reveal public key transaction with the fee payer
-        signing::sign_tx(client, &mut ctx.wallet, &mut rtx, &args.tx, &pk)
+        signing::sign_tx(&mut ctx.wallet, &mut rtx, &args.tx, &pk)
             .await?;
         // Submit the reveal public key transaction first
         tx::process_tx(client, &mut ctx.wallet, &args.tx, rtx).await?;
@@ -616,7 +640,7 @@ pub async fn submit_ibc_transfer<C: namada::ledger::queries::Client + Sync>(
         signing::update_pow_challenge(client, &args.tx, &mut tx, &pk, false)
             .await;
     }
-    signing::sign_tx(client, &mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
     tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
@@ -765,7 +789,7 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
         tx.set_data(Data::new(data));
         tx.set_code(Code::from_hash(tx_code_hash));
 
-        let (mut tx, pk) = tx::prepare_tx(
+        let (mut tx, addr, pk) = tx::prepare_tx(
             client,
             &mut ctx.wallet,
             &args.tx,
@@ -776,14 +800,18 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
         )
             .await?;
         // Build a transaction to reveal the signer of this transaction
-        let reveal_pk = tx::build_reveal_pk(
-            client,
-            &mut ctx.wallet,
-            args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
-        ).await?;
-        if let Some((mut rtx, pk)) = reveal_pk {
+        let reveal_pk = if let Some(Address::Implicit(_)) = addr {
+            tx::build_reveal_pk(
+                client,
+                &mut ctx.wallet,
+                args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
+            ).await?
+        } else {
+            None
+        };
+        if let Some((mut rtx, _, pk)) = reveal_pk {
             // Sign the reveal public key transaction with the fee payer
-            signing::sign_tx(client, &mut ctx.wallet, &mut rtx, &args.tx, &pk)
+            signing::sign_tx(&mut ctx.wallet, &mut rtx, &args.tx, &pk)
                 .await?;
             // Submit the reveal public key transaction first
             tx::process_tx(client, &mut ctx.wallet, &args.tx, rtx).await?;
@@ -792,7 +820,7 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
             signing::update_pow_challenge(client, &args.tx, &mut tx, &pk, false)
                 .await;
         }
-        signing::sign_tx(client, &mut ctx.wallet, &mut tx, &args.tx, &pk)
+        signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk)
             .await?;
         tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
         Ok(())
@@ -1043,7 +1071,7 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
                 tx.set_data(Data::new(data));
                 tx.set_code(Code::from_hash(tx_code_hash));
 
-                let (mut tx, pk) = tx::prepare_tx(
+                let (mut tx, addr, pk) = tx::prepare_tx(
                     client,
                     &mut ctx.wallet,
                     &args.tx,
@@ -1054,14 +1082,18 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
                 )
                     .await?;
                 // Build a transaction to reveal the signer of this transaction
-                let reveal_pk = tx::build_reveal_pk(
-                    client,
-                    &mut ctx.wallet,
-                    args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
-                ).await?;
-                if let Some((mut rtx, pk)) = reveal_pk {
+                let reveal_pk = if let Some(Address::Implicit(_)) = addr {
+                    tx::build_reveal_pk(
+                        client,
+                        &mut ctx.wallet,
+                        args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
+                    ).await?
+                } else {
+                    None
+                };
+                if let Some((mut rtx, _, pk)) = reveal_pk {
                     // Sign the reveal public key transaction with the fee payer
-                    signing::sign_tx(client, &mut ctx.wallet, &mut rtx, &args.tx, &pk)
+                    signing::sign_tx(&mut ctx.wallet, &mut rtx, &args.tx, &pk)
                         .await?;
                     // Submit the reveal public key transaction first
                     tx::process_tx(client, &mut ctx.wallet, &args.tx, rtx).await?;
@@ -1070,7 +1102,7 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
                     signing::update_pow_challenge(client, &args.tx, &mut tx, &pk, false)
                         .await;
                 }
-                signing::sign_tx(client, &mut ctx.wallet, &mut tx, &args.tx, &pk)
+                signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk)
                     .await?;
                 tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
                 Ok(())
@@ -1097,8 +1129,8 @@ pub async fn submit_reveal_pk<C: namada::ledger::queries::Client + Sync>(
         .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
     let reveal_tx =
         tx::build_reveal_pk(client, &mut ctx.wallet, args.clone()).await?;
-    if let Some((mut tx, pk)) = reveal_tx {
-        signing::sign_tx(client, &mut ctx.wallet, &mut tx, &args.tx, &pk)
+    if let Some((mut tx, _, pk)) = reveal_tx {
+        signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk)
             .await?;
         tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
@@ -1164,16 +1196,20 @@ pub async fn submit_bond<C: namada::ledger::queries::Client + Sync>(
         .tx
         .chain_id
         .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
-    let (mut tx, pk) = tx::build_bond::<C, _>(client, &mut ctx.wallet, args.clone()).await?;
+    let (mut tx, addr, pk) = tx::build_bond::<C, _>(client, &mut ctx.wallet, args.clone()).await?;
     // Build a transaction to reveal the signer of this transaction
-    let reveal_pk = tx::build_reveal_pk(
-        client,
-        &mut ctx.wallet,
-        args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
-    ).await?;
-    if let Some((mut rtx, pk)) = reveal_pk {
+    let reveal_pk = if let Some(Address::Implicit(_)) = addr {
+        tx::build_reveal_pk(
+            client,
+            &mut ctx.wallet,
+            args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
+        ).await?
+    } else {
+        None
+    };
+    if let Some((mut rtx, _, pk)) = reveal_pk {
         // Sign the reveal public key transaction with the fee payer
-        signing::sign_tx(client, &mut ctx.wallet, &mut rtx, &args.tx, &pk)
+        signing::sign_tx(&mut ctx.wallet, &mut rtx, &args.tx, &pk)
             .await?;
         // Submit the reveal public key transaction first
         tx::process_tx(client, &mut ctx.wallet, &args.tx, rtx).await?;
@@ -1182,7 +1218,7 @@ pub async fn submit_bond<C: namada::ledger::queries::Client + Sync>(
         signing::update_pow_challenge(client, &args.tx, &mut tx, &pk, false)
             .await;
     }
-    signing::sign_tx(client, &mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
     tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
@@ -1196,17 +1232,21 @@ pub async fn submit_unbond<C: namada::ledger::queries::Client + Sync>(
         .tx
         .chain_id
         .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
-    let (mut tx, pk, latest_withdrawal_pre) =
+    let (mut tx, addr, pk, latest_withdrawal_pre) =
         tx::build_unbond(client, &mut ctx.wallet, args.clone()).await?;
     // Build a transaction to reveal the signer of this transaction
-    let reveal_pk = tx::build_reveal_pk(
-        client,
-        &mut ctx.wallet,
-        args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
-    ).await?;
-    if let Some((mut rtx, pk)) = reveal_pk {
+    let reveal_pk = if let Some(Address::Implicit(_)) = addr {
+        tx::build_reveal_pk(
+            client,
+            &mut ctx.wallet,
+            args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
+        ).await?
+    } else {
+        None
+    };
+    if let Some((mut rtx, _, pk)) = reveal_pk {
         // Sign the reveal public key transaction with the fee payer
-        signing::sign_tx(client, &mut ctx.wallet, &mut rtx, &args.tx, &pk)
+        signing::sign_tx(&mut ctx.wallet, &mut rtx, &args.tx, &pk)
             .await?;
         // Submit the reveal public key transaction first
         tx::process_tx(client, &mut ctx.wallet, &args.tx, rtx).await?;
@@ -1215,7 +1255,7 @@ pub async fn submit_unbond<C: namada::ledger::queries::Client + Sync>(
         signing::update_pow_challenge(client, &args.tx, &mut tx, &pk, false)
             .await;
     }
-    signing::sign_tx(client, &mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
     tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     tx::query_unbonds(client, args.clone(), latest_withdrawal_pre).await?;
     Ok(())
@@ -1230,17 +1270,21 @@ pub async fn submit_withdraw<C: namada::ledger::queries::Client + Sync>(
         .tx
         .chain_id
         .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
-    let (mut tx, pk) = tx::build_withdraw(client, &mut ctx.wallet, args.clone())
+    let (mut tx, addr, pk) = tx::build_withdraw(client, &mut ctx.wallet, args.clone())
         .await?;
     // Build a transaction to reveal the signer of this transaction
-    let reveal_pk = tx::build_reveal_pk(
-        client,
-        &mut ctx.wallet,
-        args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
-    ).await?;
-    if let Some((mut rtx, pk)) = reveal_pk {
+    let reveal_pk = if let Some(Address::Implicit(_)) = addr {
+        tx::build_reveal_pk(
+            client,
+            &mut ctx.wallet,
+            args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
+        ).await?
+    } else {
+        None
+    };
+    if let Some((mut rtx, _, pk)) = reveal_pk {
         // Sign the reveal public key transaction with the fee payer
-        signing::sign_tx(client, &mut ctx.wallet, &mut rtx, &args.tx, &pk)
+        signing::sign_tx(&mut ctx.wallet, &mut rtx, &args.tx, &pk)
             .await?;
         // Submit the reveal public key transaction first
         tx::process_tx(client, &mut ctx.wallet, &args.tx, rtx).await?;
@@ -1249,7 +1293,7 @@ pub async fn submit_withdraw<C: namada::ledger::queries::Client + Sync>(
         signing::update_pow_challenge(client, &args.tx, &mut tx, &pk, false)
             .await;
     }
-    signing::sign_tx(client, &mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
     tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
@@ -1266,18 +1310,22 @@ pub async fn submit_validator_commission_change<
         .chain_id
         .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
     let arg = args.clone();
-    let (mut tx, pk) =
+    let (mut tx, addr, pk) =
         tx::build_validator_commission_change(client, &mut ctx.wallet, arg)
         .await?;
     // Build a transaction to reveal the signer of this transaction
-    let reveal_pk = tx::build_reveal_pk(
-        client,
-        &mut ctx.wallet,
-        args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
-    ).await?;
-    if let Some((mut rtx, pk)) = reveal_pk {
+    let reveal_pk = if let Some(Address::Implicit(_)) = addr {
+        tx::build_reveal_pk(
+            client,
+            &mut ctx.wallet,
+            args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
+        ).await?
+    } else {
+        None
+    };
+    if let Some((mut rtx, _, pk)) = reveal_pk {
         // Sign the reveal public key transaction with the fee payer
-        signing::sign_tx(client, &mut ctx.wallet, &mut rtx, &args.tx, &pk)
+        signing::sign_tx(&mut ctx.wallet, &mut rtx, &args.tx, &pk)
             .await?;
         // Submit the reveal public key transaction first
         tx::process_tx(client, &mut ctx.wallet, &args.tx, rtx).await?;
@@ -1286,7 +1334,7 @@ pub async fn submit_validator_commission_change<
         signing::update_pow_challenge(client, &args.tx, &mut tx, &pk, false)
             .await;
     }
-    signing::sign_tx(client, &mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
     tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
@@ -1302,18 +1350,22 @@ pub async fn submit_unjail_validator<
         .tx
         .chain_id
         .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
-    let (mut tx, pk) =
+    let (mut tx, addr, pk) =
         tx::build_unjail_validator(client, &mut ctx.wallet, args.clone())
         .await?;
     // Build a transaction to reveal the signer of this transaction
-    let reveal_pk = tx::build_reveal_pk(
-        client,
-        &mut ctx.wallet,
-        args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
-    ).await?;
-    if let Some((mut rtx, pk)) = reveal_pk {
+    let reveal_pk = if let Some(Address::Implicit(_)) = addr {
+        tx::build_reveal_pk(
+            client,
+            &mut ctx.wallet,
+            args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
+        ).await?
+    } else {
+        None
+    };
+    if let Some((mut rtx, _, pk)) = reveal_pk {
         // Sign the reveal public key transaction with the fee payer
-        signing::sign_tx(client, &mut ctx.wallet, &mut rtx, &args.tx, &pk)
+        signing::sign_tx(&mut ctx.wallet, &mut rtx, &args.tx, &pk)
             .await?;
         // Submit the reveal public key transaction first
         tx::process_tx(client, &mut ctx.wallet, &args.tx, rtx).await?;
@@ -1322,7 +1374,7 @@ pub async fn submit_unjail_validator<
         signing::update_pow_challenge(client, &args.tx, &mut tx, &pk, false)
             .await;
     }
-    signing::sign_tx(client, &mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
     tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
