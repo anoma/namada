@@ -36,7 +36,7 @@ use crate::ledger::args;
 use crate::ledger::governance::storage as gov_storage;
 use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
 use crate::ledger::rpc::{self, TxBroadcastData, TxResponse};
-use crate::ledger::signing::{find_keypair, tx_signer, TxSigningKey, wrap_tx};
+use crate::ledger::signing::{find_pk, tx_signer, TxSigningKey, wrap_tx};
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::{Code, Data, MaspBuilder, Section, Signature, Tx};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -245,7 +245,7 @@ pub async fn prepare_tx<
         default_signer.clone(),
     ).await?;
     if args.dry_run {
-        Ok((tx, signer_addr, signer_pk.ref_to()))
+        Ok((tx, signer_addr, signer_pk))
     } else {
         let epoch = rpc::query_epoch(client).await;
         Ok((wrap_tx(
@@ -254,11 +254,11 @@ pub async fn prepare_tx<
             args,
             epoch,
             tx.clone(),
-            &signer_pk.ref_to(),
+            &signer_pk,
             #[cfg(not(feature = "mainnet"))]
             requires_pow,
         )
-            .await, signer_addr, signer_pk.ref_to()))
+            .await, signer_addr, signer_pk))
     }
 }
 
@@ -1267,8 +1267,7 @@ pub async fn build_transfer<
     let chosen_signer =
         tx_signer::<C, V>(client, wallet, &args.tx, default_signer.clone())
         .await?
-        .1
-        .ref_to();
+        .1;
     let shielded_gas = masp_tx_key().ref_to() == chosen_signer;
     // Determine whether to pin this transaction to a storage key
     let key = match &args.target {

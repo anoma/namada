@@ -61,7 +61,7 @@ const ENV_VAR_TX_LOG_PATH: &str = "NAMADA_TX_LOG_PATH";
 /// for it from the wallet. If the keypair is encrypted but a password is not
 /// supplied, then it is interactively prompted. Errors if the key cannot be
 /// found or loaded.
-pub async fn find_keypair<
+pub async fn find_pk<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
@@ -69,41 +69,57 @@ pub async fn find_keypair<
     wallet: &mut Wallet<U>,
     addr: &Address,
     password: Option<Zeroizing<String>>,
-) -> Result<common::SecretKey, Error> {
+) -> Result<common::PublicKey, Error> {
     match addr {
         Address::Established(_) => {
             println!(
                 "Looking-up public key of {} from the ledger...",
                 addr.encode()
             );
-            let public_key = rpc::get_public_key(client, addr).await.ok_or(
+            rpc::get_public_key(client, addr).await.ok_or(
                 Error::Other(format!(
                     "No public key found for the address {}",
                     addr.encode()
                 )),
-            )?;
-            wallet.find_key_by_pk(&public_key, password).map_err(|err| {
-                Error::Other(format!(
-                    "Unable to load the keypair from the wallet for public \
-                     key {}. Failed with: {}",
-                    public_key, err
-                ))
-            })
+            )
         }
         Address::Implicit(ImplicitAddress(pkh)) => {
-            wallet.find_key_by_pkh(pkh, password).map_err(|err| {
+            Ok(wallet.find_key_by_pkh(pkh, password).map_err(|err| {
                 Error::Other(format!(
                     "Unable to load the keypair from the wallet for the \
                      implicit address {}. Failed with: {}",
                     addr.encode(),
                     err
                 ))
-            })
+            })?.ref_to())
         }
         Address::Internal(_) => other_err(format!(
             "Internal address {} doesn't have any signing keys.",
             addr
         )),
+    }
+}
+
+/// Load the secret key corresponding to the given public key from the wallet.
+/// If the keypair is encrypted but a password is not supplied, then it is
+/// interactively prompted. Errors if the key cannot be found or loaded.
+pub fn find_key_by_pk<U: WalletUtils>(
+    wallet: &mut Wallet<U>,
+    args: &args::Tx,
+    keypair: &common::PublicKey,
+) -> Result<common::SecretKey, Error> {
+    if *keypair == masp_tx_key().ref_to() {
+        Ok(masp_tx_key())
+    } else if args.signing_key.as_ref().map(|x| x.ref_to() == *keypair).unwrap_or(false) {
+        Ok(args.signing_key.clone().unwrap())
+    } else {
+        wallet.find_key_by_pk(&keypair, args.password.clone()).map_err(|err| {
+            Error::Other(format!(
+                "Unable to load the keypair from the wallet for public \
+                 key {}. Failed with: {}",
+                keypair, err
+            ))
+        })
     }
 }
 
@@ -129,13 +145,13 @@ pub async fn tx_signer<
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     default: TxSigningKey,
-) -> Result<(Option<Address>, common::SecretKey), Error> {
+) -> Result<(Option<Address>, common::PublicKey), Error> {
     let signer = if args.dry_run {
         // We cannot override the signer if we're doing a dry run
         default
     } else if let Some(signing_key) = &args.signing_key {
         // Otherwise use the signing key override provided by user
-        return Ok((None, signing_key.clone()));
+        return Ok((None, signing_key.ref_to()));
     } else if let Some(signer) = &args.signer {
         // Otherwise use the signer address provided by user
         TxSigningKey::WalletAddress(signer.clone())
@@ -146,10 +162,10 @@ pub async fn tx_signer<
     // Now actually fetch the signing key and apply it
     match signer {
         TxSigningKey::WalletAddress(signer) if signer == masp() => {
-            Ok((None, masp_tx_key()))
+            Ok((None, masp_tx_key().ref_to()))
         },
         TxSigningKey::WalletAddress(signer) => {
-            Ok((Some(signer.clone()), find_keypair::<C, U>(
+            Ok((Some(signer.clone()), find_pk::<C, U>(
                 client,
                 wallet,
                 &signer,
@@ -181,17 +197,7 @@ pub async fn sign_tx<
     args: &args::Tx,
     keypair: &common::PublicKey,
 ) -> Result<(), Error> {
-    let keypair = if *keypair == masp_tx_key().ref_to() {
-        masp_tx_key()
-    } else {
-        wallet.find_key_by_pk(&keypair, args.password.clone()).map_err(|err| {
-            Error::Other(format!(
-                "Unable to load the keypair from the wallet for public \
-                 key {}. Failed with: {}",
-                keypair, err
-            ))
-        })?
-    };
+    let keypair = find_key_by_pk(wallet, args, keypair)?;
     // Sign over the transacttion data
     tx.add_section(Section::Signature(Signature::new(
         tx.data_sechash(),
