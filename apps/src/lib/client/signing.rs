@@ -14,15 +14,15 @@ use crate::cli::args;
 
 /// Find the public key for the given address and try to load the keypair
 /// for it from the wallet. Panics if the key cannot be found or loaded.
-pub async fn find_keypair<
+pub async fn find_pk<
     C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
     addr: &Address,
-) -> Result<common::SecretKey, tx::Error> {
-    namada::ledger::signing::find_keypair::<C, U>(client, wallet, addr, None)
+) -> Result<common::PublicKey, tx::Error> {
+    namada::ledger::signing::find_pk(client, wallet, addr, None)
         .await
 }
 
@@ -38,7 +38,7 @@ pub async fn tx_signer<
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     default: TxSigningKey,
-) -> Result<(Option<Address>, common::SecretKey), tx::Error> {
+) -> Result<(Option<Address>, common::PublicKey), tx::Error> {
     namada::ledger::signing::tx_signer::<C, U>(client, wallet, args, default)
         .await
 }

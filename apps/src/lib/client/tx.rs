@@ -37,7 +37,7 @@ use super::rpc;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::query_wasm_code_hash;
-use crate::client::signing::find_keypair;
+use crate::client::signing::find_pk;
 use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -344,40 +344,12 @@ pub async fn submit_init_validator<
         let (validator_address_alias, validator_address) = match &result[..] {
             // There should be 1 account for the validator itself
             [validator_address] => {
-                let validator_address_alias = match tx_args
-                    .initialized_account_alias
-                {
-                    Some(alias) => alias,
-                    None => {
-                        print!("Choose an alias for the validator address: ");
-                        io::stdout().flush().await.unwrap();
-                        let mut alias = String::new();
-                        io::stdin().read_line(&mut alias).await.unwrap();
-                        alias.trim().to_owned()
-                    }
-                };
-                let validator_address_alias =
-                    if validator_address_alias.is_empty() {
-                        println!(
-                            "Empty alias given, using {} as the alias.",
-                            validator_address.encode()
-                        );
-                        validator_address.encode()
-                    } else {
-                        validator_address_alias
-                    };
-                if let Some(new_alias) = ctx.wallet.add_address(
-                    validator_address_alias.clone(),
-                    validator_address.clone(),
-                    tx_args.wallet_alias_force,
-                ) {
-                    println!(
-                        "Added alias {} for address {}.",
-                        new_alias,
-                        validator_address.encode()
-                    );
+                if let Some(alias)  = ctx.wallet.find_alias(validator_address) {
+                    (alias.clone(), validator_address.clone())
+                } else {
+                    eprintln!("Expected one account to be created");
+                    safe_exit(1)
                 }
-                (validator_address_alias, validator_address.clone())
             }
             _ => {
                 eprintln!("Expected one account to be created");
@@ -718,9 +690,9 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
 
     if args.offline {
         let signer = ctx.get(&signer);
+        let key = find_pk(client, &mut ctx.wallet, &signer).await?;
         let signing_key =
-            find_keypair::<C, CliWalletUtils>(client, &mut ctx.wallet, &signer)
-                .await?;
+            signing::find_key_by_pk(&mut ctx.wallet, &args.tx, &key)?;
         let offline_proposal =
             OfflineProposal::new(proposal, signer, &signing_key);
         let proposal_filename = args
@@ -921,9 +893,9 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
             safe_exit(1)
         }
 
+        let key = find_pk(client, &mut ctx.wallet, signer).await?;
         let signing_key =
-            find_keypair::<C, CliWalletUtils>(client, &mut ctx.wallet, signer)
-                .await?;
+            signing::find_key_by_pk(&mut ctx.wallet, &args.tx, &key)?;
         let offline_vote = OfflineVote::new(
             &proposal,
             proposal_vote,
