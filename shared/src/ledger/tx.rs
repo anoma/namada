@@ -1238,7 +1238,7 @@ pub async fn build_transfer<
     wallet: &mut Wallet<V>,
     shielded: &mut ShieldedContext<U>,
     args: args::TxTransfer,
-) -> Result<(Tx, common::PublicKey, Option<Epoch>), Error> {
+) -> Result<(Tx, common::PublicKey, Option<Epoch>, bool), Error> {
     let source = args.source.effective_address();
     let target = args.target.effective_address();
     let token = args.token.clone();
@@ -1419,7 +1419,7 @@ pub async fn build_transfer<
         is_source_faucet,
     )
         .await?;
-    Ok((tx, def_key, shielded_tx_epoch))
+    Ok((tx, def_key, shielded_tx_epoch, is_source_faucet))
 }
 
 /// Submit a transaction to initialize an account
