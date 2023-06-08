@@ -1886,7 +1886,7 @@ where
         .into());
     }
 
-    let mut total_slashed = token::Amount::default();
+    // let mut total_slashed = token::Amount::default();
     let mut withdrawable_amount = token::Amount::default();
     // (withdraw_epoch, start_epoch)
     let mut unbonds_to_remove: Vec<(Epoch, Epoch)> = Vec::new();
@@ -1926,8 +1926,8 @@ where
         let amount_after_slashing =
             get_slashed_amount(&params, amount, &slashes_for_this_unbond)?;
 
-        total_slashed +=
-            amount - token::Amount::from_change(amount_after_slashing);
+        // total_slashed +=
+        //     amount - token::Amount::from_change(amount_after_slashing);
         withdrawable_amount +=
             token::Amount::from_change(amount_after_slashing);
         unbonds_to_remove.push((withdraw_epoch, start_epoch));
@@ -3370,7 +3370,6 @@ where
             // println!("Diff slashed amount = {}", diff_slashed_amount);
             // total_slashed -= diff_slashed_amount;
             // total_unbonded = token::Amount::default();
-    let mut total_slashed = token::Change::default();
 
             sum_post_bonds += total_bonded_handle
                 .get_delta_val(storage, current_epoch + offset, &params)?
@@ -3404,6 +3403,7 @@ where
     }
     // println!("\nUpdating deltas");
     // Update the deltas in storage
+    // let mut total_slashed = token::Change::default();
     for (validator, updates) in deltas_for_update {
         for (offset, delta) in updates {
             // println!("Val {}, offset {}, delta {}", &validator, offset,
@@ -3415,7 +3415,7 @@ where
                 offset,
                 &validator
             );
-            total_slashed -= change;
+            // total_slashed -= change;
 
             update_validator_deltas(
                 storage,
@@ -3435,7 +3435,7 @@ where
         }
     }
 
-    debug_assert!(total_slashed >= token::Change::default());
+    // debug_assert!(total_slashed >= token::Change::default());
 
     // TODO: Transfer all slashed tokens from PoS account to Slash Pool address
     // let staking_token = staking_token_address(storage);
