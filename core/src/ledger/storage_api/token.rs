@@ -7,8 +7,8 @@ use crate::types::storage::DbKeySeg::StringSeg;
 use crate::types::storage::Key;
 use crate::types::token;
 pub use crate::types::token::{
-    balance_key, is_balance_key, is_total_supply_key, total_supply_key, Amount,
-    Change,
+    balance_key, is_balance_key, is_minted_balance_key, minted_balance_key,
+    minter_key, Amount, Change,
 };
 
 /// Read the balance of a given token and owner.
@@ -33,7 +33,7 @@ pub fn read_total_supply<S>(
 where
     S: StorageRead,
 {
-    let key = token::total_supply_key(token);
+    let key = token::minted_balance_key(token);
     let balance = storage.read::<token::Amount>(&key)?.unwrap_or_default();
     Ok(balance)
 }
@@ -44,17 +44,11 @@ where
 pub fn read_denom<S>(
     storage: &S,
     token: &Address,
-    sub_prefix: Option<&Key>,
 ) -> storage_api::Result<Option<token::Denomination>>
 where
     S: StorageRead,
 {
-    if let Some(sub_prefix) = sub_prefix {
-        if sub_prefix.segments.contains(&StringSeg("ibc".to_string())) {
-            return Ok(Some(token::NATIVE_MAX_DECIMAL_PLACES.into()));
-        }
-    }
-    let key = token::denom_key(token, sub_prefix);
+    let key = token::denom_key(token);
     storage.read(&key).map(|opt_denom| {
         Some(
             opt_denom
@@ -67,13 +61,12 @@ where
 pub fn write_denom<S>(
     storage: &mut S,
     token: &Address,
-    sub_prefix: Option<&Key>,
     denom: token::Denomination,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    let key = token::denom_key(token, sub_prefix);
+    let key = token::denom_key(token);
     storage.write(&key, denom)
 }
 
@@ -132,7 +125,7 @@ where
         storage_api::Error::new_const("Token balance overflow")
     })?;
 
-    let total_supply_key = token::total_supply_key(token);
+    let total_supply_key = token::minted_balance_key(token);
     let cur_supply = storage
         .read::<Amount>(&total_supply_key)?
         .unwrap_or_default();

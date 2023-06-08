@@ -21,7 +21,7 @@ use namada::types::address::Address;
 use namada::types::dec::Dec;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
-use namada::types::token::{total_supply_key, Amount};
+use namada::types::token::{minted_balance_key, Amount};
 use namada::types::transaction::protocol::{
     ethereum_tx_data_variants, ProtocolTxType,
 };
@@ -707,7 +707,7 @@ where
             .expect("PoS inflation amount should exist in storage");
         // Read from PoS storage
         let total_tokens = self
-            .read_storage_key(&total_supply_key(&staking_token_address(
+            .read_storage_key(&minted_balance_key(&staking_token_address(
                 &self.wl_storage,
             )))
             .expect("Total NAM balance should exist in storage");

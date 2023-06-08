@@ -422,7 +422,6 @@ fn ledger_txs_and_queries() -> Result<()> {
         source: find_address(&test, BERTHA).unwrap(),
         target: find_address(&test, ALBERT).unwrap(),
         token: find_address(&test, NAM).unwrap(),
-        sub_prefix: None,
         amount: token::DenominatedAmount {
             amount: token::Amount::native_whole(10),
             denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),

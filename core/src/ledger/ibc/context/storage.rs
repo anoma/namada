@@ -58,7 +58,6 @@ pub trait IbcStorageContext {
         src: &Address,
         dest: &Address,
         token: &Address,
-        sub_prefix: Option<Address>,
         amount: Amount,
     ) -> Result<(), Self::Error>;
 
@@ -66,7 +65,7 @@ pub trait IbcStorageContext {
     fn mint_token(
         &mut self,
         target: &Address,
-        sub_prefix: &Address,
+        token: &Address,
         amount: Amount,
     ) -> Result<(), Self::Error>;
 
@@ -74,7 +73,7 @@ pub trait IbcStorageContext {
     fn burn_token(
         &mut self,
         target: &Address,
-        sub_prefix: &Address,
+        token: &Address,
         amount: Amount,
     ) -> Result<(), Self::Error>;
 

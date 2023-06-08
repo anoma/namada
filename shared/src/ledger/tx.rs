@@ -44,7 +44,7 @@ use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::control_flow::{time, ProceedOrElse};
 use crate::types::key::*;
 use crate::types::masp::TransferTarget;
-use crate::types::storage::{Epoch, RESERVED_ADDRESS_PREFIX};
+use crate::types::storage::Epoch;
 use crate::types::time::DateTimeUtc;
 use crate::types::transaction::{pos, InitAccount, TxType, UpdateVp};
 use crate::types::{storage, token};
@@ -1144,21 +1144,7 @@ pub async fn build_ibc_transfer<
     let token = token_exists_or_err(args.token, args.tx.force, client).await?;
 
     // Check source balance
-    let (sub_prefix, balance_key) = match args.sub_prefix {
-        Some(sp) => {
-            let sub_prefix = Address::decode(&sp).map_err(|e| {
-                Error::Other(format!(
-                    "The sub_prefix was not an Address: sub_prefix {}, error \
-                     {}",
-                    sp, e
-                ))
-            })?;
-            let balance_key =
-                token::multitoken_balance_key(&sub_prefix, &source);
-            (Some(sub_prefix), balance_key)
-        }
-        None => (None, token::balance_key(&token, &source)),
-    };
+    let balance_key = token::balance_key(&token, &source);
 
     check_balance_too_low_err(
         &token,
@@ -1175,11 +1161,6 @@ pub async fn build_ibc_transfer<
             .await
             .unwrap();
 
-    let denom = match sub_prefix {
-        // To parse IbcToken address, remove the address prefix
-        Some(sp) => sp.to_string().replace(RESERVED_ADDRESS_PREFIX, ""),
-        None => token.to_string(),
-    };
     let amount = args
         .amount
         .to_string_native()
@@ -1187,7 +1168,10 @@ pub async fn build_ibc_transfer<
         .next()
         .expect("invalid amount")
         .to_string();
-    let token = Coin { denom, amount };
+    let token = Coin {
+        denom: token.to_string(),
+        amount,
+    };
 
     // this height should be that of the destination chain, not this chain
     let timeout_height = match args.timeout_height {
@@ -1337,21 +1321,7 @@ pub async fn build_transfer<
     // Check that the token address exists on chain
     token_exists_or_err(token.clone(), args.tx.force, client).await?;
     // Check source balance
-    let (sub_prefix, balance_key) = match &args.sub_prefix {
-        Some(sp) => {
-            let sub_prefix = Address::decode(sp).map_err(|e| {
-                Error::Other(format!(
-                    "The sub_prefix was not an Address: sub_prefix {}, error \
-                     {}",
-                    sp, e
-                ))
-            })?;
-            let balance_key =
-                token::multitoken_balance_key(&sub_prefix, &source);
-            (Some(sub_prefix), balance_key)
-        }
-        None => (None, token::balance_key(&token, &source)),
-    };
+    let balance_key = token::balance_key(&token, &source);
 
     // validate the amount given
     let validated_amount = validate_amount(
@@ -1476,7 +1446,6 @@ pub async fn build_transfer<
         source: source.clone(),
         target: target.clone(),
         token: token.clone(),
-        sub_prefix: sub_prefix.clone(),
         amount: validated_amount,
         key: key.clone(),
         // Link the Transfer to the MASP Transaction by hash code

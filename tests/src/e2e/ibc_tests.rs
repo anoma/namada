@@ -718,7 +718,6 @@ fn transfer_token(
         &Amount::native_whole(100000),
         port_channel_id_a,
         None,
-        None,
     )?;
     let packet = match get_event(test_a, height)? {
         Some(IbcEvent::SendPacket(event)) => event.packet,
@@ -787,8 +786,6 @@ fn transfer_received_token(
         "--target",
         ALBERT,
         "--token",
-        NAM,
-        "--sub-prefix",
         &ibc_token,
         "--amount",
         &amount,
@@ -830,10 +827,9 @@ fn transfer_back(
         test_b,
         BERTHA,
         &receiver,
-        NAM,
+        ibc_token,
         &Amount::native_whole(50000),
         port_channel_id_b,
-        Some(ibc_token),
         None,
     )?;
     let packet = match get_event(test_b, height)? {
@@ -892,7 +888,6 @@ fn transfer_timeout(
         NAM,
         &Amount::native_whole(100000),
         port_channel_id_a,
-        None,
         Some(Duration::new(5, 0)),
     )?;
     let packet = match get_event(test_a, height)? {
@@ -1026,7 +1021,6 @@ fn transfer(
     token: impl AsRef<str>,
     amount: &Amount,
     port_channel_id: &PortChannelId,
-    sub_prefix: Option<String>,
     timeout_sec: Option<Duration>,
 ) -> Result<u32> {
     let rpc = get_actor_rpc(test, &Who::Validator(0));
@@ -1054,11 +1048,7 @@ fn transfer(
         "--node",
         &rpc,
     ];
-    let sp = sub_prefix.clone().unwrap_or_default();
-    if sub_prefix.is_some() {
-        tx_args.push("--sub-prefix");
-        tx_args.push(&sp);
-    }
+
     let timeout = timeout_sec.unwrap_or_default().as_secs().to_string();
     if timeout_sec.is_some() {
         tx_args.push("--timeout-sec-offset");
@@ -1278,17 +1268,9 @@ fn check_balances(
     let ibc_token = ibc_token(denom).to_string();
     let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
     let query_args = vec![
-        "balance",
-        "--owner",
-        BERTHA,
-        "--token",
-        NAM,
-        "--sub-prefix",
-        &ibc_token,
-        "--node",
-        &rpc_b,
+        "balance", "--owner", BERTHA, "--token", &ibc_token, "--node", &rpc_b,
     ];
-    let expected = format!("nam with {}: 100000", ibc_token);
+    let expected = format!("{}: 100000", ibc_token);
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
@@ -1311,34 +1293,18 @@ fn check_balances_after_non_ibc(
     // Check the source
     let rpc = get_actor_rpc(test, &Who::Validator(0));
     let query_args = vec![
-        "balance",
-        "--owner",
-        BERTHA,
-        "--token",
-        NAM,
-        "--sub-prefix",
-        &ibc_token,
-        "--node",
-        &rpc,
+        "balance", "--owner", BERTHA, "--token", &ibc_token, "--node", &rpc,
     ];
-    let expected = format!("nam with {}: 50000", ibc_token);
+    let expected = format!("{}: 50000", ibc_token);
     let mut client = run!(test, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
 
     // Check the traget
     let query_args = vec![
-        "balance",
-        "--owner",
-        ALBERT,
-        "--token",
-        NAM,
-        "--sub-prefix",
-        &ibc_token,
-        "--node",
-        &rpc,
+        "balance", "--owner", ALBERT, "--token", &ibc_token, "--node", &rpc,
     ];
-    let expected = format!("nam with {}: 50000", ibc_token);
+    let expected = format!("{}: 50000", ibc_token);
     let mut client = run!(test, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
@@ -1377,17 +1343,9 @@ fn check_balances_after_back(
     let ibc_token = ibc_token(denom).to_string();
     let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
     let query_args = vec![
-        "balance",
-        "--owner",
-        BERTHA,
-        "--token",
-        NAM,
-        "--sub-prefix",
-        &ibc_token,
-        "--node",
-        &rpc_b,
+        "balance", "--owner", BERTHA, "--token", &ibc_token, "--node", &rpc_b,
     ];
-    let expected = format!("nam with {}: 0", ibc_token);
+    let expected = format!("{}: 0", ibc_token);
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();

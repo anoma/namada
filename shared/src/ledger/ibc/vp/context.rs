@@ -120,17 +120,10 @@ where
         src: &Address,
         dest: &Address,
         token: &Address,
-        sub_prefix: Option<Address>,
         amount: Amount,
     ) -> Result<(), Self::Error> {
-        let src_key = match &sub_prefix {
-            Some(sub_prefix) => token::multitoken_balance_key(sub_prefix, src),
-            None => token::balance_key(token, src),
-        };
-        let dest_key = match &sub_prefix {
-            Some(sub_prefix) => token::multitoken_balance_key(sub_prefix, dest),
-            None => token::balance_key(token, dest),
-        };
+        let src_key = token::balance_key(token, src);
+        let dest_key = token::balance_key(token, dest);
         let src_bal: Option<Amount> =
             self.ctx.read(&src_key).map_err(Error::NativeVpError)?;
         let mut src_bal = src_bal.expect("The source has no balance");
@@ -155,10 +148,10 @@ where
     fn mint_token(
         &mut self,
         target: &Address,
-        sub_prefix: &Address,
+        token: &Address,
         amount: Amount,
     ) -> Result<(), Self::Error> {
-        let target_key = token::multitoken_balance_key(sub_prefix, target);
+        let target_key = token::balance_key(token, target);
         let mut target_bal: Amount = self
             .ctx
             .read(&target_key)
@@ -166,7 +159,7 @@ where
             .unwrap_or_default();
         target_bal.receive(&amount);
 
-        let minted_key = token::multitoken_minted_key(sub_prefix);
+        let minted_key = token::minted_balance_key(token);
         let mut minted_bal: Amount = self
             .ctx
             .read(&minted_key)
@@ -183,7 +176,7 @@ where
             minted_bal.try_to_vec().expect("encoding shouldn't failed"),
         )?;
 
-        let minter_key = token::multitoken_minter_key(sub_prefix);
+        let minter_key = token::minter_key(token);
         self.write(
             &minter_key,
             Address::Internal(InternalAddress::Ibc)
@@ -195,10 +188,10 @@ where
     fn burn_token(
         &mut self,
         target: &Address,
-        sub_prefix: &Address,
+        token: &Address,
         amount: Amount,
     ) -> Result<(), Self::Error> {
-        let target_key = token::multitoken_balance_key(sub_prefix, target);
+        let target_key = token::balance_key(token, target);
         let mut target_bal: Amount = self
             .ctx
             .read(&target_key)
@@ -206,7 +199,7 @@ where
             .unwrap_or_default();
         target_bal.spend(&amount);
 
-        let minted_key = token::multitoken_minted_key(sub_prefix);
+        let minted_key = token::minted_balance_key(token);
         let mut minted_bal: Amount = self
             .ctx
             .read(&minted_key)
@@ -320,7 +313,6 @@ where
         _src: &Address,
         _dest: &Address,
         _token: &Address,
-        _sub_prefix: Option<Address>,
         _amount: Amount,
     ) -> Result<(), Self::Error> {
         unimplemented!("Validation doesn't transfer")
@@ -329,7 +321,7 @@ where
     fn mint_token(
         &mut self,
         _target: &Address,
-        _sub_prefix: &Address,
+        _token: &Address,
         _amount: Amount,
     ) -> Result<(), Self::Error> {
         unimplemented!("Validation doesn't mint")
@@ -338,7 +330,7 @@ where
     fn burn_token(
         &mut self,
         _target: &Address,
-        _sub_prefix: &Address,
+        _token: &Address,
         _amount: Amount,
     ) -> Result<(), Self::Error> {
         unimplemented!("Validation doesn't burn")

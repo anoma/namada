@@ -305,43 +305,17 @@ pub async fn query_transparent_balance<
     let tokens = wallet.get_addresses_with_vp_type(AddressVpType::Token);
     match (args.token, args.owner) {
         (Some(token), Some(owner)) => {
-            let key = match &args.sub_prefix {
-                Some(sp) => {
-                    let sub_prefix =
-                        Address::decode(sp).expect("Invalid sub_prefix");
-                    token::multitoken_balance_key(
-                        &sub_prefix,
-                        &owner.address().unwrap(),
-                    )
-                }
-                None => (
-                    token::balance_key(&token, &owner.address().unwrap()),
-                    None,
-                ),
-            };
+            let balance_key =
+                token::balance_key(&token, &owner.address().unwrap());
             let token_alias = lookup_alias(wallet, &token);
             match query_storage_value::<C, token::Amount>(client, &balance_key)
                 .await
             {
                 Some(balance) => {
-                    let balance = format_denominated_amount(
-                        client,
-                        &TokenAddress {
-                            address: token,
-                            sub_prefix,
-                        },
-                        balance,
-                    )
-                    .await;
-                    match &args.sub_prefix {
-                        Some(sub_prefix) => {
-                            println!(
-                                "{} with {}: {}",
-                                token_alias, sub_prefix, balance
-                            );
-                        }
-                        None => println!("{}: {}", token_alias, balance),
-                    }
+                    let balance =
+                        format_denominated_amount(client, &token, balance)
+                            .await;
+                    println!("{}: {}", token_alias, balance);
                 }
                 None => {
                     println!("No {} balance found for {}", token_alias, owner)
@@ -558,35 +532,16 @@ async fn print_balances<C: namada::ledger::queries::Client + Sync>(
 
     let print_num = balances
         .filter_map(|(key, balance)| {
-            match token::is_multitoken_balance_key(&key) {
-                Some((sub_prefix, owner)) => Some((
+            token::is_balance_key(token, &key).map(|owner| {
+                (
                     owner.clone(),
                     format!(
-                        "with {}: {}, owned by {}",
-                        sub_prefix,
-                        balance,
+                        ": {}, owned by {}",
+                        format_denominated_amount(client, token, balance).await,
                         lookup_alias(wallet, owner)
                     ),
-                )),
-                None => token::is_any_token_balance_key(&key).map(|owner| {
-                    (
-                        owner.clone(),
-                        format!(
-                            ": {}, owned by {}",
-                            format_denominated_amount(
-                                client,
-                                &TokenAddress {
-                                    address: tok.clone(),
-                                    sub_prefix: None
-                                },
-                                balance
-                            )
-                            .await,
-                            lookup_alias(wallet, owner)
-                        ),
-                    )
-                }),
-            }
+                )
+            })
         })
         .filter_map(|(o, s)| match target {
             Some(t) if o == *t => Some(s),

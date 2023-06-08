@@ -1061,13 +1061,13 @@ pub async fn format_denominated_amount<
     C: crate::ledger::queries::Client + Sync,
 >(
     client: &C,
-    token: &TokenAddress,
+    token: &Address,
     amount: token::Amount,
 ) -> String {
     let denom = unwrap_client_response::<C, Option<Denomination>>(
         RPC.vp()
             .token()
-            .denomination(client, &token.address, &token.sub_prefix)
+            .denomination(client, &token.address)
             .await,
     )
     .unwrap_or_else(|| {

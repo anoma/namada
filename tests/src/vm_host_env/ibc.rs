@@ -765,5 +765,5 @@ pub fn packet_from_message(
 
 pub fn balance_key_with_ibc_prefix(denom: String, owner: &Address) -> Key {
     let ibc_token = ibc_token(denom);
-    token::multitoken_balance_key(&ibc_token, owner)
+    token::balance_key(&ibc_token, owner)
 }

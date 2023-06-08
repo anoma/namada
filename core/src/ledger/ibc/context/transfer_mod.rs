@@ -447,14 +447,14 @@ where
         let (token, amount) = get_token_amount(coin)?;
 
         let ibc_token = if coin.denom.trace_path.is_empty() {
-            None
+            token
         } else {
-            Some(storage::ibc_token(coin.denom.to_string()))
+            storage::ibc_token(coin.denom.to_string())
         };
 
         self.ctx
             .borrow_mut()
-            .transfer_token(from, to, &token, ibc_token, amount)
+            .transfer_token(from, to, &ibc_token, amount)
             .map_err(|_| {
                 TokenTransferError::ContextError(ContextError::ChannelError(
                     ChannelError::Other {
