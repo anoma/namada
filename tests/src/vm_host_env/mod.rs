@@ -29,7 +29,6 @@ mod tests {
     use namada::ledger::tx_env::TxEnv;
     use namada::proto::{Code, Data, Section, Signature, Tx};
     use namada::types::address::{Address, InternalAddress};
-    use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
@@ -1254,15 +1253,12 @@ mod tests {
         // the origin-specific token
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
         let ibc_token = ibc_storage::ibc_token(&denom);
-        let balance_key = token::multitoken_balance_key(&ibc_token, &sender);
+        let balance_key = token::balance_key(&ibc_token, &sender);
         let init_bal = Amount::whole(100);
         writes.insert(balance_key.clone(), init_bal.try_to_vec().unwrap());
-        let minted_key = token::multitoken_balance_key(
-            &ibc_token,
-            &Address::Internal(InternalAddress::Mint),
-        );
+        let minted_key = token::minted_balance_key(&ibc_token);
         writes.insert(minted_key.clone(), init_bal.try_to_vec().unwrap());
-        let minter_key = token::multitoken_minter_key(&ibc_token);
+        let minter_key = token::minter_key(&ibc_token);
         writes.insert(
             minter_key,
             Address::Internal(InternalAddress::Ibc)
@@ -1385,7 +1381,7 @@ mod tests {
         // Check if the token was minted
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
         let ibc_token = ibc::ibc_token(&denom);
-        let minted_key = token::multitoken_minted_key(&ibc_token);
+        let minted_key = token::minted_balance_key(&ibc_token);
         let result =
             ibc::validate_multitoken_vp_from_tx(&env, &tx, &minted_key);
         assert!(result.expect("token validation failed unexpectedly"));

@@ -15,6 +15,5 @@ pub mod eth_bridge_tests;
 pub mod helpers;
 pub mod ibc_tests;
 pub mod ledger_tests;
-pub mod multitoken_tests;
 pub mod setup;
 pub mod wallet_tests;

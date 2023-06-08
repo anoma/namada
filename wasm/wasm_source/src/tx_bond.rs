@@ -92,7 +92,7 @@ mod tests {
             // Ensure that the bond's source has enough tokens for the bond
             let target = bond.source.as_ref().unwrap_or(&bond.validator);
             let native_token = tx_env.wl_storage.storage.native_token.clone();
-            tx_env.credit_tokens(target, &native_token, None, bond.amount);
+            tx_env.credit_tokens(target, &native_token, bond.amount);
             native_token
         });
 

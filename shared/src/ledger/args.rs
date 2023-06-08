@@ -93,8 +93,6 @@ pub struct TxTransfer<C: NamadaTypes = SdkTypes> {
     pub target: C::TransferTarget,
     /// Transferred token address
     pub token: C::Address,
-    /// Transferred token address
-    pub sub_prefix: Option<String>,
     /// Transferred token amount
     pub amount: token::Amount,
     /// Native token address
@@ -114,8 +112,6 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub receiver: String,
     /// Transferred token address
     pub token: C::Address,
-    /// Transferred token address
-    pub sub_prefix: Option<String>,
     /// Transferred token amount
     pub amount: token::Amount,
     /// Port ID
@@ -280,8 +276,6 @@ pub struct QueryBalance<C: NamadaTypes = SdkTypes> {
     pub token: Option<C::Address>,
     /// Whether not to convert balances
     pub no_conversions: bool,
-    /// Sub prefix of an account
-    pub sub_prefix: Option<String>,
 }
 
 /// Query historical transfer(s)

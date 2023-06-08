@@ -23,49 +23,7 @@ use super::setup::{
     ENV_VAR_USE_PREBUILT_BINARIES,
 };
 use crate::e2e::setup::{Bin, Who, APPS_PACKAGE};
-use crate::{run, run_as};
-
-/// Sets up a test chain with a single validator node running in the background,
-/// and returns the [`Test`] handle and [`NamadaBgCmd`] for the validator node.
-/// It blocks until the node is ready to receive RPC requests from
-/// `namadac`.
-pub fn setup_single_node_test() -> Result<(Test, NamadaBgCmd)> {
-    let test = setup::single_node_net()?;
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-    ledger.exp_string("Namada ledger node started")?;
-    // TODO(namada#867): we only need to wait until the RPC server is available,
-    // not necessarily for a block to be committed
-    // ledger.exp_string("Starting RPC HTTP server on")?;
-    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
-    Ok((test, ledger.background()))
-}
-
-pub fn init_established_account(
-    test: &Test,
-    rpc_addr: &str,
-    source_alias: &str,
-    key_alias: &str,
-    established_alias: &str,
-) -> Result<()> {
-    let init_account_args = vec![
-        "init-account",
-        "--source",
-        source_alias,
-        "--public-key",
-        key_alias,
-        "--alias",
-        established_alias,
-        "--ledger-address",
-        rpc_addr,
-    ];
-    let mut client_init_account =
-        run!(test, Bin::Client, init_account_args, Some(40))?;
-    client_init_account.exp_string("Transaction is valid.")?;
-    client_init_account.exp_string("Transaction applied")?;
-    client_init_account.assert_success();
-    Ok(())
-}
+use crate::run;
 
 /// Find the address of an account by its alias from the wallet
 pub fn find_address(test: &Test, alias: impl AsRef<str>) -> Result<Address> {

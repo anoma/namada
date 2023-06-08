@@ -51,13 +51,19 @@ fn token_checks(
     keys_touched: &BTreeSet<storage::Key>,
     verifiers: &BTreeSet<Address>,
 ) -> VpResult {
-    let mut change: token::Change = 0;
     for key in keys_touched.iter() {
         let owner: Option<&Address> = token::is_balance_key(token, key);
 
         match owner {
             None => {
-                if token::is_total_supply_key(key, token) {
+                if key.segments.get(0) == Some(&token.to_db_key()) {
+                    // Unknown changes to this address space are disallowed, but
+                    // unknown changes anywhere else are permitted
+                    return reject();
+                }
+            }
+            Some(owner) => {
+                if token::is_minted_balance_key(token, key) {
                     // check if total supply is changed, which it should never
                     // be from a tx
                     let total_pre: token::Amount = ctx.read_pre(key)?.unwrap();
@@ -66,29 +72,25 @@ fn token_checks(
                     if total_pre != total_post {
                         return reject();
                     }
-                } else if key.segments.get(0) == Some(&token.to_db_key()) {
-                    // Unknown changes to this address space are disallowed, but
-                    // unknown changes anywhere else are permitted
-                    return reject();
-                }
-            }
-            Some(owner) => {
-                // accumulate the change
-                let pre: token::Amount = ctx.read_pre(key)?.unwrap_or_default();
-                let post: token::Amount =
-                    ctx.read_post(key)?.unwrap_or_default();
-                let this_change = post.change() - pre.change();
-                change += this_change;
-                // make sure that the spender approved the transaction
-                if this_change < 0
-                    && !(verifiers.contains(owner) || *owner == address::masp())
-                {
-                    return reject();
+                } else {
+                    // accumulate the change
+                    let pre: token::Amount =
+                        ctx.read_pre(key)?.unwrap_or_default();
+                    let post: token::Amount =
+                        ctx.read_post(key)?.unwrap_or_default();
+                    // make sure that the spender approved the transaction
+                    if post < pre
+                        && !(verifiers.contains(owner)
+                            || *owner == address::masp())
+                    {
+                        return reject();
+                    }
                 }
             }
         }
     }
-    Ok(change == 0)
+    // The total change should be validated by multitoken VP
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -222,7 +224,7 @@ mod tests {
         // Commit the initial state
         tx_env.commit_tx_and_block();
 
-        let total_supply_key = token::total_supply_key(&token);
+        let total_supply_key = token::minted_balance_key(&token);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(token.clone(), tx_env, |_address| {
