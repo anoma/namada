@@ -600,7 +600,10 @@ where
         &self,
         prefix: &Key,
     ) -> (<D as DBIter<'_>>::PrefixIter, u64) {
-        (self.db.iter_prefix(prefix), prefix.len() as _)
+        (
+            self.db.iter_optional_prefix(Some(prefix)),
+            prefix.len() as _,
+        )
     }
 
     /// Returns a prefix iterator and the gas cost
