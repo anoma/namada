@@ -39,7 +39,7 @@ pub mod mock_web3_client {
     }
 
     /// The type of events supported
-    pub type MockEventType = &'static str;
+    pub type MockEventType = Cow<'static, str>;
 
     /// A pointer to a mock Web3 client. The
     /// reason is for interior mutability.
@@ -106,7 +106,7 @@ pub mod mock_web3_client {
             &self,
             block: BlockHeight,
             addr: Address,
-            ty: MockEventType,
+            ty: &str,
         ) -> Result<Vec<Self::Log>, Error> {
             let block_to_check: Uint256 = block.into();
             let mut client = self.0.lock().unwrap();
@@ -180,15 +180,10 @@ pub mod mock_web3_client {
     }
 
     /// Get the signature of the given Ethereum event.
-    pub fn event_signature<C>() -> &'static str
+    pub fn event_signature<C>() -> Cow<'static, str>
     where
         PhantomData<C>: EventCodec,
     {
-        match PhantomData::<C>.event_signature() {
-            Cow::Borrowed(s) => s,
-            _ => unreachable!(
-                "All Ethereum events should have a static ABI signature"
-            ),
-        }
+        PhantomData::<C>.event_signature()
     }
 }

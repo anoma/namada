@@ -2,7 +2,6 @@ pub mod control;
 pub mod events;
 pub mod test_tools;
 
-use std::borrow::Cow;
 use std::ops::ControlFlow;
 
 use async_trait::async_trait;
@@ -10,6 +9,8 @@ use ethabi::Address;
 use ethbridge_events::{event_codecs, EventKind};
 use namada::core::hints;
 use namada::core::types::ethereum_structs;
+use namada::eth_bridge::ethers;
+use namada::eth_bridge::ethers::providers::{Http, Middleware, Provider};
 use namada::eth_bridge::oracle::config::Config;
 use namada::ledger::eth_bridge::{eth_syncing_status_timeout, SyncStatus};
 use namada::types::control_flow::time::{Constant, Duration, Instant, Sleep};
@@ -53,22 +54,7 @@ pub trait IntoEthAbiLog {
     fn into_ethabi_log(self) -> ethabi::RawLog;
 }
 
-impl IntoEthAbiLog for web30::types::Log {
-    fn into_ethabi_log(self) -> ethabi::RawLog {
-        let topics = self
-            .topics
-            .iter()
-            .filter_map(|topic| {
-                (topic.len() == 32)
-                    .then(|| ethabi::Hash::from_slice(topic.as_slice()))
-            })
-            .collect();
-        let data = self.data.0;
-        ethabi::RawLog { topics, data }
-    }
-}
-
-impl IntoEthAbiLog for namada::eth_bridge::ethers::types::Log {
+impl IntoEthAbiLog for ethers::types::Log {
     #[inline]
     fn into_ethabi_log(self) -> ethabi::RawLog {
         self.into()
@@ -101,8 +87,7 @@ pub trait RpcClient {
         &self,
         block: ethereum_structs::BlockHeight,
         address: Address,
-        // TODO: remove static once web3 is gone
-        abi_signature: &'static str,
+        abi_signature: &str,
     ) -> Result<Vec<Self::Log>, Error>;
 
     /// Check if the fullnode we are connected to is syncing or is up
@@ -119,67 +104,73 @@ pub trait RpcClient {
 }
 
 #[async_trait(?Send)]
-impl RpcClient for web30::client::Web3 {
-    type Log = web30::types::Log;
+impl RpcClient for Provider<Http> {
+    type Log = ethers::types::Log;
 
     #[inline]
     fn new_client(url: &str) -> Self
     where
         Self: Sized,
     {
-        web30::client::Web3::new(url, std::time::Duration::from_secs(30))
+        // TODO: return a result here?
+        Provider::<Http>::try_from(url).expect("Invalid Ethereum RPC url")
     }
 
     async fn check_events_in_block(
         &self,
         block: ethereum_structs::BlockHeight,
-        addr: Address,
-        abi_signature: &'static str,
+        contract_address: Address,
+        abi_signature: &str,
     ) -> Result<Vec<Self::Log>, Error> {
-        let sig = abi_signature;
-        let block = Uint256::from(block);
-        self.check_for_events(block.clone(), Some(block), vec![addr], vec![sig])
-            .await
-            .map_err(|error| {
-                Error::CheckEvents(sig.into(), addr, error.to_string())
-            })
+        let height = {
+            let n: Uint256 = block.into();
+            let n: u64 =
+                n.0.try_into().expect("Ethereum block number overflow");
+            n
+        };
+        self.get_logs(
+            &ethers::types::Filter::new()
+                .from_block(height)
+                .to_block(height)
+                .event(abi_signature)
+                .address(contract_address),
+        )
+        .await
+        .map_err(|error| {
+            Error::CheckEvents(
+                abi_signature.into(),
+                contract_address,
+                error.to_string(),
+            )
+        })
     }
 
     async fn syncing(
         &self,
-        _last_processed_block: Option<&ethereum_structs::BlockHeight>,
-        _backoff: Duration,
-        _deadline: Instant,
+        last_processed_block: Option<&ethereum_structs::BlockHeight>,
+        backoff: Duration,
+        deadline: Instant,
     ) -> Result<SyncStatus, Error> {
-        _ = eth_syncing_status_timeout::<
-            namada::eth_bridge::ethers::providers::Provider<
-                namada::eth_bridge::ethers::providers::Http,
-            >,
-        >;
-        todo!()
-        // let client: &namada::eth_bridge::ethers::providers::Provider<
-        //     namada::eth_bridge::ethers::providers::Http,
-        // > = todo!();
-        // match eth_syncing_status_timeout(client, backoff, deadline)
-        //     .await
-        //     .map_err(|_| Error::Timeout)?
-        // {
-        //     s @ SyncStatus::Syncing => Ok(s),
-        //     SyncStatus::AtHeight(height) => match last_processed_block {
-        //         Some(last) if <&Uint256>::from(last) < &height => {
-        //             Ok(SyncStatus::AtHeight(height))
-        //         }
-        //         None => Ok(SyncStatus::AtHeight(height)),
-        //         _ => Err(Error::FallenBehind),
-        //     },
-        // }
+        match eth_syncing_status_timeout(self, backoff, deadline)
+            .await
+            .map_err(|_| Error::Timeout)?
+        {
+            s @ SyncStatus::Syncing => Ok(s),
+            SyncStatus::AtHeight(height) => match last_processed_block {
+                Some(last) if <&Uint256>::from(last) < &height => {
+                    Ok(SyncStatus::AtHeight(height))
+                }
+                None => Ok(SyncStatus::AtHeight(height)),
+                _ => Err(Error::FallenBehind),
+            },
+        }
     }
 }
 
 /// A client that can talk to geth and parse
 /// and relay events relevant to Namada to the
 /// ledger process
-pub struct Oracle<C = web30::client::Web3> {
+pub struct Oracle<C = Provider<Http>> {
     /// The client that talks to the Ethereum fullnode
     client: C,
     /// A channel for sending processed and confirmed
@@ -269,8 +260,6 @@ pub fn run_oracle<C: RpcClient>(
     spawner: &mut AbortableSpawner,
 ) -> tokio::task::JoinHandle<()> {
     let url = url.as_ref().to_owned();
-    // we have to run the oracle in a [`LocalSet`] due to the web30
-    // crate
     let blocking_handle = tokio::task::spawn_blocking(move || {
         let rt = tokio::runtime::Handle::current();
         rt.block_on(async move {
@@ -442,15 +431,10 @@ async fn process<C: RpcClient>(
     // check for events in Ethereum blocks that have reached the minimum number
     // of confirmations
     for codec in event_codecs() {
-        let sig = match codec.event_signature() {
-            Cow::Borrowed(s) => s,
-            _ => unreachable!(
-                "All Ethereum events should have a static ABI signature"
-            ),
-        };
+        let sig = codec.event_signature();
         let addr: Address = match codec.kind() {
-            EventKind::Bridge => config.bridge_contract.0.into(),
-            EventKind::Governance => config.governance_contract.0.into(),
+            EventKind::Bridge => config.bridge_contract.into(),
+            EventKind::Governance => config.governance_contract.into(),
         };
         tracing::debug!(
             ?block_to_process,
@@ -462,7 +446,7 @@ async fn process<C: RpcClient>(
         let mut events = {
             let logs = oracle
                 .client
-                .check_events_in_block(block_to_process.clone(), addr, sig)
+                .check_events_in_block(block_to_process.clone(), addr, &sig)
                 .await?;
             if !logs.is_empty() {
                 tracing::info!(
