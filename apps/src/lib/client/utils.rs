@@ -507,7 +507,8 @@ pub fn init_network(
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let (_alias, keypair) = wallet
                 .gen_key(SchemeType::Ed25519, Some(alias), true, password, None)
-                .expect("Key generation should not fail.");
+                .expect("Key generation should not fail.")
+                .expect("No existing alias expected.");
 
             // Write consensus key for Tendermint
             tendermint_node::write_validator_key(&tm_home_dir, &keypair);
@@ -526,7 +527,8 @@ pub fn init_network(
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let (_alias, keypair) = wallet
                 .gen_key(SchemeType::Ed25519, Some(alias), true, password, None)
-                .expect("Key generation should not fail.");
+                .expect("Key generation should not fail.")
+                .expect("No existing alias expected.");
             keypair.ref_to()
         });
 
@@ -541,7 +543,8 @@ pub fn init_network(
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let (_alias, keypair) = wallet
                 .gen_key(SchemeType::Ed25519, Some(alias), true, password, None)
-                .expect("Key generation should not fail.");
+                .expect("Key generation should not fail.")
+                .expect("No existing alias expected.");
             keypair.ref_to()
         });
 
@@ -632,7 +635,8 @@ pub fn init_network(
                         password,
                         None,
                     )
-                    .expect("Key generation should not fail.");
+                    .expect("Key generation should not fail.")
+                    .expect("No existing alias expected.");
                 let public_key =
                     genesis_config::HexString(keypair.ref_to().to_string());
                 config.public_key = Some(public_key);
@@ -888,7 +892,8 @@ fn init_established_account(
                 password,
                 None, // do not use mnemonic code / HD derivation path
             )
-            .expect("Key generation should not fail.");
+            .expect("Key generation should not fail.")
+            .expect("No existing alias expected.");
         let public_key =
             genesis_config::HexString(keypair.ref_to().to_string());
         config.public_key = Some(public_key);
