@@ -748,9 +748,10 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Restores a keypair from the given mnemonic code and \
-                     derives the implicit address from its public key. Stores \
-                     the keypair and the address with the given alias.",
+                    "Restores a keypair from the given mnemonic code and HD \
+                     derivation path and derives the implicit address from \
+                     its public key. Stores the keypair and the address with \
+                     the given alias.",
                 )
                 .add_args::<args::KeyAndAddressRestore>()
         }
