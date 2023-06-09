@@ -1,6 +1,9 @@
 //! Namada relayer CLI.
 
+use std::sync::Arc;
+
 use color_eyre::eyre::{eyre, Report, Result};
+use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::ledger::eth_bridge::{bridge_pool, validator_set};
 use namada::ledger::rpc::wait_until_node_is_synched;
 use namada::types::control_flow::ProceedOrElse;
@@ -51,8 +54,11 @@ pub async fn main() -> Result<()> {
                 wait_until_node_is_synched(&client)
                     .await
                     .proceed_or_else(error)?;
+                let eth_client = Arc::new(
+                    Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap(),
+                );
                 let args = args.to_sdk_ctxless();
-                bridge_pool::relay_bridge_pool_proof(&client, args)
+                bridge_pool::relay_bridge_pool_proof(eth_client, &client, args)
                     .await
                     .proceed_or_else(error)?;
             }
@@ -121,10 +127,15 @@ pub async fn main() -> Result<()> {
                 wait_until_node_is_synched(&client)
                     .await
                     .proceed_or_else(error)?;
+                let eth_client = Arc::new(
+                    Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap(),
+                );
                 let args = args.to_sdk_ctxless();
-                validator_set::relay_validator_set_update(&client, args)
-                    .await
-                    .proceed_or_else(error)?;
+                validator_set::relay_validator_set_update(
+                    eth_client, &client, args,
+                )
+                .await
+                .proceed_or_else(error)?;
             }
         },
     }
