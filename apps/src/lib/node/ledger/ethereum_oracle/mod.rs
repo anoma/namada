@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use std::ops::ControlFlow;
 
 use async_trait::async_trait;
-use clarity::Address;
+use ethabi::Address;
 use ethbridge_events::{event_codecs, EventKind};
 use namada::core::hints;
 use namada::core::types::ethereum_structs;

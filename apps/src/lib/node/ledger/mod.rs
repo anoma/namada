@@ -14,6 +14,7 @@ use std::thread;
 
 use byte_unit::Byte;
 use futures::future::TryFutureExt;
+use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::ledger::governance::storage as gov_storage;
 use namada::types::storage::Key;
 use once_cell::unsync::Lazy;
@@ -675,7 +676,7 @@ async fn maybe_start_ethereum_oracle(
 
     match config.ethereum_bridge.mode {
         ethereum_bridge::ledger::Mode::RemoteEndpoint => {
-            let handle = oracle::run_oracle::<web30::client::Web3>(
+            let handle = oracle::run_oracle::<Provider<Http>>(
                 ethereum_url,
                 eth_sender,
                 control_receiver,

@@ -8,7 +8,7 @@ pub mod mock_web3_client {
     use std::sync::{Arc, Mutex};
 
     use async_trait::async_trait;
-    use clarity::Address;
+    use ethabi::Address;
     use ethbridge_events::EventCodec;
     use namada::core::types::ethereum_structs::BlockHeight;
     use namada::types::control_flow::time::{Duration, Instant};
