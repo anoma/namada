@@ -1221,9 +1221,9 @@ impl DB for RocksDB {
 impl<'iter> DBIter<'iter> for RocksDB {
     type PrefixIter = PersistentPrefixIterator<'iter>;
 
-    fn iter_prefix(
+    fn iter_optional_prefix(
         &'iter self,
-        prefix: &Key,
+        prefix: Option<&Key>,
     ) -> PersistentPrefixIterator<'iter> {
         iter_subspace_prefix(self, prefix)
     }
@@ -1261,13 +1261,17 @@ impl<'iter> DBIter<'iter> for RocksDB {
 
 fn iter_subspace_prefix<'iter>(
     db: &'iter RocksDB,
-    prefix: &Key,
+    prefix: Option<&Key>,
 ) -> PersistentPrefixIterator<'iter> {
     let subspace_cf = db
         .get_column_family(SUBSPACE_CF)
         .expect("{SUBSPACE_CF} column family should exist");
     let db_prefix = "".to_owned();
-    iter_prefix(db, subspace_cf, db_prefix, prefix.to_string())
+    let prefix_string = match prefix {
+        Some(prefix) => prefix.to_string(),
+        None => "".to_string(),
+    };
+    iter_prefix(db, subspace_cf, db_prefix, prefix_string)
 }
 
 fn iter_diffs_prefix(

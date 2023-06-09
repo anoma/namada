@@ -325,7 +325,20 @@ pub trait DBIter<'iter> {
     ///
     /// Read account subspace key value pairs with the given prefix from the DB,
     /// ordered by the storage keys.
-    fn iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter;
+    fn iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter {
+        self.iter_optional_prefix(Some(prefix))
+    }
+
+    /// Iterate over all subspace keys
+    fn iter_all(&'iter self) -> Self::PrefixIter {
+        self.iter_optional_prefix(None)
+    }
+
+    /// Iterate over subspace keys, with optional prefix
+    fn iter_optional_prefix(
+        &'iter self,
+        prefix: Option<&Key>,
+    ) -> Self::PrefixIter;
 
     /// Read results subspace key value pairs from the DB
     fn iter_results(&'iter self) -> Self::PrefixIter;
