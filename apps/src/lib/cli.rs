@@ -1892,6 +1892,7 @@ pub mod args {
     pub const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> =
         arg_opt("validator-code-path");
     pub const VALUE: ArgOpt<String> = arg_opt("value");
+    pub const VERIFICATION_KEY: ArgOpt<WalletPublicKey> = arg_opt("verification-key");
     pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
@@ -3288,6 +3289,7 @@ pub mod args {
                 fee_token: ctx.get(&self.fee_token),
                 gas_limit: self.gas_limit,
                 signing_key: self.signing_key.map(|x| ctx.get_cached(&x)),
+                verification_key: self.verification_key.map(|x| ctx.get_cached(&x)),
                 signer: self.signer.map(|x| ctx.get(&x)),
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
@@ -3351,7 +3353,8 @@ pub mod args {
                          public key, public key hash or alias from your \
                          wallet.",
                     )
-                    .conflicts_with(SIGNER.name),
+                    .conflicts_with(SIGNER.name)
+                    .conflicts_with(VERIFICATION_KEY.name),
             )
             .arg(
                 SIGNER
@@ -3360,7 +3363,19 @@ pub mod args {
                         "Sign the transaction with the keypair of the public \
                          key of the given address.",
                     )
-                    .conflicts_with(SIGNING_KEY_OPT.name),
+                    .conflicts_with(SIGNING_KEY_OPT.name)
+                    .conflicts_with(VERIFICATION_KEY.name),
+            )
+                .arg(
+                    VERIFICATION_KEY
+                        .def()
+                        .about(
+                            "Sign the transaction with the key for the given \
+                             public key, public key hash or alias from your \
+                             wallet.",
+                        )
+                        .conflicts_with(SIGNER.name)
+                        .conflicts_with(SIGNING_KEY_OPT.name),
             )
         }
 
@@ -3377,6 +3392,7 @@ pub mod args {
             let gas_limit = GAS_LIMIT.parse(matches).into();
             let expiration = EXPIRATION_OPT.parse(matches);
             let signing_key = SIGNING_KEY_OPT.parse(matches);
+            let verification_key = VERIFICATION_KEY.parse(matches);
             let signer = SIGNER.parse(matches);
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
@@ -3394,6 +3410,7 @@ pub mod args {
                 gas_limit,
                 expiration,
                 signing_key,
+                verification_key,
                 signer,
                 tx_reveal_code_path,
                 password,

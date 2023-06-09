@@ -109,10 +109,13 @@ pub fn find_key_by_pk<U: WalletUtils>(
     keypair: &common::PublicKey,
 ) -> Result<common::SecretKey, Error> {
     if *keypair == masp_tx_key().ref_to() {
+        // We already know the secret key corresponding to the MASP sentinal key
         Ok(masp_tx_key())
     } else if args.signing_key.as_ref().map(|x| x.ref_to() == *keypair).unwrap_or(false) {
+        // We can lookup the secret key from the CLI arguments in this case
         Ok(args.signing_key.clone().unwrap())
     } else {
+        // Otherwise we need to search the wallet for the secret key
         wallet.find_key_by_pk(&keypair, args.password.clone()).map_err(|err| {
             Error::Other(format!(
                 "Unable to load the keypair from the wallet for public \
@@ -152,6 +155,8 @@ pub async fn tx_signer<
     } else if let Some(signing_key) = &args.signing_key {
         // Otherwise use the signing key override provided by user
         return Ok((None, signing_key.ref_to()));
+    } else if let Some(verification_key) = &args.verification_key {
+        return Ok((None, verification_key.clone()));
     } else if let Some(signer) = &args.signer {
         // Otherwise use the signer address provided by user
         TxSigningKey::WalletAddress(signer.clone())
