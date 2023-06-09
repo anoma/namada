@@ -388,9 +388,6 @@ where
     E::Error: std::fmt::Debug + std::fmt::Display,
     F: Future<Output = ()> + Unpin,
 {
-    // let eth_client =
-    //    Arc::new(Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap());
-
     const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(1);
     const DEFAULT_SUCCESS_DURATION: Duration = Duration::from_secs(10);
 

@@ -314,8 +314,6 @@ where
     let bp_proof =
         construct_bridge_pool_proof(nam_client, &args.transfers, args.relayer)
             .await?;
-    // let eth_client =
-    //    Arc::new(Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap());
     let bridge = match RPC
         .shell()
         .eth_bridge()
