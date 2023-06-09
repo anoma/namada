@@ -307,7 +307,7 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
 #[serde(transparent)]
 pub struct PublicKeyHash(pub(crate) String);
 
-const PKH_HASH_LEN: usize = address::HASH_LEN;
+const PKH_HASH_LEN: usize = address::HASH_HEX_LEN;
 
 impl From<PublicKeyHash> for String {
     fn from(pkh: PublicKeyHash) -> Self {
