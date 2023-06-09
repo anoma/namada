@@ -399,10 +399,10 @@ async fn process<C: RpcClient>(
     let pending = &mut queue;
     // update the latest block height
 
-    let backoff = oracle.backoff;
-    let deadline = Instant::now() + oracle.ceiling;
     let last_processed_block_ref = oracle.last_processed_block.borrow();
     let last_processed_block = last_processed_block_ref.as_ref();
+    let backoff = oracle.backoff;
+    let deadline = Instant::now() + oracle.ceiling;
     let latest_block = match oracle
         .client
         .syncing(last_processed_block, backoff, deadline)
