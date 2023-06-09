@@ -52,7 +52,7 @@ use namada::types::storage::{
     BlockHeight, Epoch, Key, KeySeg, TxIndex, RESERVED_ADDRESS_PREFIX,
 };
 use namada::types::time::DateTimeUtc;
-use namada::types::token::{Change, DenominatedAmount, MaspDenom, TokenAddress, Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX, Denomination};
+use namada::types::token::{Change, DenominatedAmount, MaspDenom, TokenAddress, Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX};
 use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
 };
@@ -72,6 +72,7 @@ use crate::client::rpc::{
 };
 use crate::client::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
 use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
+use crate::client::utils::with_spinny_wheel;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
@@ -1162,7 +1163,6 @@ impl ShieldedContext {
         }
         // If conversion if possible, accumulate the exchanged amount
         let conv: Amount = conv.into();
-        println!("conv: {:?}", conv);
         // The amount required of current asset to qualify for conversion
         let masp_asset = make_asset_type(
             Some(asset_type.0),
@@ -1549,20 +1549,11 @@ fn convert_amount(
     sub_prefix: &Option<&String>,
     val: &token::Amount,
 ) -> ([AssetType; 4], Amount) {
-    println!(
-        "{}",
-        DenominatedAmount {
-            amount: val.clone(),
-            denom: 18.into()
-        }
-    );
     let mut amount = Amount::zero();
     let asset_types: [AssetType; 4] = MaspDenom::iter()
         .map(|denom| {
             let asset_type =
                 make_asset_type(Some(epoch), token, sub_prefix, denom);
-            let inner = denom.denominate(val);
-            println!("{}", inner);
             // Combine the value and unit into one amount
             amount +=
                 Amount::from_nonnegative(asset_type, denom.denominate(val))
@@ -1675,14 +1666,11 @@ async fn gen_shielded_transfer(
             .await;
         // Commit the notes found to our transaction
         for (diversifier, note, merkle_path) in unspent_notes {
-            let decoded = ctx.shielded.decode_asset_type(client.clone(), note.asset_type.clone()).await.unwrap();
-            println!("Adding note value: {:?}: {:?}", decoded, note.value);
             builder.add_sapling_spend(sk, diversifier, note, merkle_path)?;
         }
         // Commit the conversion notes used during summation
         for (conv, wit, value) in used_convs.values() {
             if value.is_positive() {
-                println!("adding conversion {:?} -> {}", conv.assets, *value as u64);
                 builder.add_convert(
                     conv.clone(),
                     *value as u64,
@@ -1745,18 +1733,24 @@ async fn gen_shielded_transfer(
             target_enc.as_ref(),
         ));
         for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter()) {
-            builder.add_transparent_output(
-                &TransparentAddress::PublicKey(hash.into()),
-                *asset_type,
-                denom.denominate(&amt),
-            )?;
+            let vout = denom.denominate(&amt);
+            if vout != 0 {
+                builder.add_transparent_output(
+                    &TransparentAddress::PublicKey(hash.into()),
+                    *asset_type,
+                    vout,
+                )?;
+            }
         }
     }
 
     // Build and return the constructed transaction
-    builder
-        .build(consensus_branch_id, &prover)
-        .map(|(a, b)| Some((a, b, epoch)))
+    with_spinny_wheel(
+        "Building proofs for MASP transaction (this can take some time) ... ",
+        move || builder
+            .build(consensus_branch_id, &prover)
+            .map(|(a, b)| Some((a, b, epoch)))
+    )
 }
 
 pub async fn submit_transfer(mut ctx: Context, mut args: args::TxTransfer) {

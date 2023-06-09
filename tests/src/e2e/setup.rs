@@ -26,6 +26,7 @@ use namada_apps::{config, wallet};
 use rand::Rng;
 use serde_json;
 use tempfile::{tempdir, TempDir};
+use namada_apps::client::utils::REDUCED_CLI_PRINTING;
 
 use crate::e2e::helpers::generate_bin_command;
 
@@ -125,7 +126,7 @@ pub fn network(
             eprintln!("Failed setting up colorful error reports {}", err);
         }
     });
-
+    env::set_var(REDUCED_CLI_PRINTING, "true");
     let working_dir = working_dir();
     let test_dir = TestDir::new();
 

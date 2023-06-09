@@ -44,6 +44,41 @@ const DEFAULT_NETWORK_CONFIGS_SERVER: &str =
 /// We do pre-genesis validator set up in this directory
 pub const PRE_GENESIS_DIR: &str = "pre-genesis";
 
+/// Environment variable set to reduce the amount of printing the CLI
+/// tools perform. Extra prints, while good for UI, clog up test tooling.
+pub const REDUCED_CLI_PRINTING: &str = "REDUCED_CLI_PRINTING";
+
+macro_rules! cli_print {
+    ($($arg:tt)*) => {{
+        if std::env::var(REDUCED_CLI_PRINTING)
+        .map(|v| if v.to_lowercase().trim() == "true" {
+            false
+        } else {
+            true
+        }).unwrap_or(true) {
+            let mut stdout = std::io::stdout().lock();
+            _ = stdout.write_all(format!("{}", std::format_args!($($arg)*)).as_bytes());
+            _ = stdout.flush();
+        }
+    }};
+}
+
+#[allow(unused)]
+macro_rules! cli_println {
+    ($($arg:tt)*) => {{
+        if std::env::var(REDUCED_CLI_PRINTING)
+        .map(|v| if v.to_lowercase().trim() == "true" {
+            false
+        } else {
+            true
+        }).unwrap_or(true) {
+            let mut stdout = std::io::stdout().lock();
+            _ = stdout.write_all(format!("{}\n", std::format_args!($($arg)*)).as_bytes());
+            _ = stdout.flush();
+        }
+    }};
+}
+
 /// Configure Namada to join an existing network. The chain must be released in
 /// the <https://github.com/heliaxdev/anoma-network-config> repository.
 pub async fn join_network(
@@ -1066,6 +1101,30 @@ pub fn validator_pre_genesis_dir(base_dir: &Path, alias: &str) -> PathBuf {
     base_dir.join(PRE_GENESIS_DIR).join(alias)
 }
 
+/// Add a spinning wheel to a message for long running commands.
+/// Can be turned off for E2E tests by setting the `REDUCED_CLI_PRINTING`
+/// environment variable.
+pub fn with_spinny_wheel<F, Out>(msg: &str, func: F) -> Out
+where
+    F: FnOnce() -> Out + Send + 'static,
+    Out: Send + 'static
+{
+    let task = std::thread::spawn(func);
+    let spinny_wheel = "|/-\\";
+    print!("{}", msg);
+    _ = std::io::stdout().flush();
+    for c in spinny_wheel.chars().cycle() {
+        cli_print!("{}", c);
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        cli_print!("{}", (8u8 as char));
+        if task.is_finished() {
+            break;
+        }
+    }
+    println!("");
+    task.join().unwrap()
+}
+
 fn is_valid_validator_for_current_chain(
     tendermint_node_pk: &common::PublicKey,
     genesis_config: &GenesisConfig,
@@ -1078,3 +1137,4 @@ fn is_valid_validator_for_current_chain(
         }
     })
 }
+

@@ -28,7 +28,7 @@ use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
 use namada_core::types::token::{
-    DenominatedAmount, Denomination, NATIVE_MAX_DECIMAL_PLACES,
+    DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES,
 };
 use namada_test_utils::TestWasms;
 use serde_json::json;
@@ -833,7 +833,7 @@ fn masp_txs_and_queries() -> Result<()> {
             } else {
                 tx_args.clone()
             };
-            let mut client = run!(test, Bin::Client, tx_args, Some(300))?;
+            let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
 
             if *tx_result == "Transaction is valid" && !dry_run {
                 client.exp_string("Transaction accepted")?;
@@ -863,7 +863,7 @@ fn masp_pinned_txs() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                epochs_per_year: epochs_per_year_from_min_duration(60),
+                epochs_per_year: epochs_per_year_from_min_duration(120),
                 ..genesis.parameters
             };
             GenesisConfig {
@@ -926,6 +926,9 @@ fn masp_pinned_txs() -> Result<()> {
     client.exp_string("has not yet been consumed")?;
     client.assert_success();
 
+    // Wait till epoch boundary
+    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+
     // Send 20 BTC from Albert to PPA(C)
     let mut client = run!(
         test,
@@ -945,6 +948,8 @@ fn masp_pinned_txs() -> Result<()> {
         ],
         Some(300)
     )?;
+    client.exp_string("Transaction accepted")?;
+    client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is valid")?;
     client.assert_success();
 

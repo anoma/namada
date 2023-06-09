@@ -650,6 +650,7 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
                 )
                 .await
         }
+
         // Now print out the received quantities according to CLI arguments
         match (balance, args.token.as_ref(), args.sub_prefix.as_ref()) {
             (Err(PinnedBalanceError::InvalidViewingKey), _, _) => println!(
@@ -668,8 +669,7 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
                     sub_prefix: sub_prefix
                         .map(|string| Key::parse(string).unwrap()),
                 };
-
-                let total_balance = balance[&(epoch, token_address.clone())];
+                let total_balance = balance.get(&(epoch, token_address.clone())).cloned().unwrap_or_default();
 
                 if total_balance.is_zero() {
                     println!(
