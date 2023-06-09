@@ -361,9 +361,9 @@ async fn wait_until_node_is_synched(ledger_address: &TendermintAddress) {
                         println!(
                             " Waiting for {} ({}/{} tries)...",
                             if is_at_least_height_one {
-                                "a first block"
-                            } else {
                                 "node to sync"
+                            } else {
+                                "a first block"
                             },
                             try_count + 1,
                             MAX_TRIES
