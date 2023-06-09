@@ -411,7 +411,7 @@ where
         };
 
         if should_exit {
-            return control_flow::halt();
+            return control_flow::proceed(());
         }
 
         let sleep_for = if last_call_succeeded {
