@@ -3346,7 +3346,8 @@ pub mod args {
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
                 expiration: self.expiration,
-                chain_id: self.chain_id,
+                chain_id: self.chain_id
+                    .or_else(|| Some(ctx.config.ledger.chain_id.clone())),
             }
         }
     }
