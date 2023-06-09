@@ -675,7 +675,7 @@ async fn maybe_start_ethereum_oracle(
 
     match config.ethereum_bridge.mode {
         ethereum_bridge::ledger::Mode::RemoteEndpoint => {
-            let handle = oracle::run_oracle(
+            let handle = oracle::run_oracle::<web30::client::Web3>(
                 ethereum_url,
                 eth_sender,
                 control_receiver,

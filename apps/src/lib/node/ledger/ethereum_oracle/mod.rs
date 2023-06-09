@@ -3,7 +3,7 @@ pub mod events;
 pub mod test_tools;
 
 use std::borrow::Cow;
-use std::ops::{ControlFlow, Deref};
+use std::ops::ControlFlow;
 
 use async_trait::async_trait;
 use clarity::Address;
@@ -11,9 +11,7 @@ use ethbridge_events::{event_codecs, EventKind};
 use namada::core::hints;
 use namada::core::types::ethereum_structs;
 use namada::eth_bridge::oracle::config::Config;
-#[cfg(not(test))]
-use namada::ledger::eth_bridge::eth_syncing_status_timeout;
-use namada::ledger::eth_bridge::SyncStatus;
+use namada::ledger::eth_bridge::{eth_syncing_status_timeout, SyncStatus};
 use namada::types::control_flow::time::{Constant, Duration, Instant, Sleep};
 use namada::types::ethereum_events::EthereumEvent;
 use num256::Uint256;
@@ -21,12 +19,8 @@ use thiserror::Error;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::Sender as BoundedSender;
 use tokio::task::LocalSet;
-#[cfg(not(test))]
-use web30::client::Web3;
 
 use self::events::PendingEvent;
-#[cfg(test)]
-use self::test_tools::mock_web3_client::Web3;
 use super::abortable::AbortableSpawner;
 use crate::node::ledger::oracle::control::Command;
 
@@ -74,10 +68,17 @@ impl IntoEthAbiLog for web30::types::Log {
     }
 }
 
-impl<L: Into<ethabi::RawLog>> IntoEthAbiLog for L {
+impl IntoEthAbiLog for namada::eth_bridge::ethers::types::Log {
     #[inline]
     fn into_ethabi_log(self) -> ethabi::RawLog {
         self.into()
+    }
+}
+
+impl IntoEthAbiLog for ethabi::RawLog {
+    #[inline]
+    fn into_ethabi_log(self) -> ethabi::RawLog {
+        self
     }
 }
 
@@ -85,14 +86,14 @@ impl<L: Into<ethabi::RawLog>> IntoEthAbiLog for L {
 /// Geth JSONRPC protocol.
 #[async_trait(?Send)]
 pub trait RpcClient {
-    /// Error type used for fallible operations.
-    type Error;
-
-    /// The ABI signature of the events to be queried.
-    type EventSignature<'sig>: AsRef<str> + 'sig;
-
     /// Ethereum event log.
     type Log: IntoEthAbiLog;
+
+    /// Instantiate a new client, pointing to the
+    /// given RPC url.
+    fn new_client(rpc_url: &str) -> Self
+    where
+        Self: Sized;
 
     /// Query a block for Ethereum events from a given ABI type
     /// and contract address.
@@ -100,8 +101,9 @@ pub trait RpcClient {
         &self,
         block: ethereum_structs::BlockHeight,
         address: Address,
-        abi_signature: Self::EventSignature<'_>,
-    ) -> Result<Vec<Self::Log>, Self::Error>;
+        // TODO: remove static once web3 is gone
+        abi_signature: &'static str,
+    ) -> Result<Vec<Self::Log>, Error>;
 
     /// Check if the fullnode we are connected to is syncing or is up
     /// to date with the Ethereum (an return the block height).
@@ -113,14 +115,20 @@ pub trait RpcClient {
         last_processed_block: Option<&ethereum_structs::BlockHeight>,
         backoff: Duration,
         deadline: Instant,
-    ) -> Result<SyncStatus, Self::Error>;
+    ) -> Result<SyncStatus, Error>;
 }
 
 #[async_trait(?Send)]
 impl RpcClient for web30::client::Web3 {
-    type Error = Error;
-    type EventSignature<'sig> = &'static str;
     type Log = web30::types::Log;
+
+    #[inline]
+    fn new_client(url: &str) -> Self
+    where
+        Self: Sized,
+    {
+        web30::client::Web3::new(url, std::time::Duration::from_secs(30))
+    }
 
     async fn check_events_in_block(
         &self,
@@ -139,33 +147,41 @@ impl RpcClient for web30::client::Web3 {
 
     async fn syncing(
         &self,
-        last_processed_block: Option<&ethereum_structs::BlockHeight>,
-        backoff: Duration,
-        deadline: Instant,
+        _last_processed_block: Option<&ethereum_structs::BlockHeight>,
+        _backoff: Duration,
+        _deadline: Instant,
     ) -> Result<SyncStatus, Error> {
-        let client = todo!();
-        match eth_syncing_status_timeout(client, backoff, deadline)
-            .await
-            .map_err(|_| Error::Timeout)?
-        {
-            s @ SyncStatus::Syncing => Ok(s),
-            SyncStatus::AtHeight(height) => match last_processed_block {
-                Some(last) if <&Uint256>::from(last) < &height => {
-                    Ok(SyncStatus::AtHeight(height))
-                }
-                None => Ok(SyncStatus::AtHeight(height)),
-                _ => Err(Error::FallenBehind),
-            },
-        }
+        _ = eth_syncing_status_timeout::<
+            namada::eth_bridge::ethers::providers::Provider<
+                namada::eth_bridge::ethers::providers::Http,
+            >,
+        >;
+        todo!()
+        // let client: &namada::eth_bridge::ethers::providers::Provider<
+        //     namada::eth_bridge::ethers::providers::Http,
+        // > = todo!();
+        // match eth_syncing_status_timeout(client, backoff, deadline)
+        //     .await
+        //     .map_err(|_| Error::Timeout)?
+        // {
+        //     s @ SyncStatus::Syncing => Ok(s),
+        //     SyncStatus::AtHeight(height) => match last_processed_block {
+        //         Some(last) if <&Uint256>::from(last) < &height => {
+        //             Ok(SyncStatus::AtHeight(height))
+        //         }
+        //         None => Ok(SyncStatus::AtHeight(height)),
+        //         _ => Err(Error::FallenBehind),
+        //     },
+        // }
     }
 }
 
 /// A client that can talk to geth and parse
 /// and relay events relevant to Namada to the
 /// ledger process
-pub struct Oracle {
+pub struct Oracle<C = web30::client::Web3> {
     /// The client that talks to the Ethereum fullnode
-    client: Web3,
+    client: C,
     /// A channel for sending processed and confirmed
     /// events to the ledger process
     sender: BoundedSender<EthereumEvent>,
@@ -174,21 +190,12 @@ pub struct Oracle {
     /// How long the oracle should wait between checking blocks
     backoff: Duration,
     /// How long the oracle should allow the fullnode to be unresponsive
-    #[cfg_attr(test, allow(dead_code))]
     ceiling: Duration,
     /// A channel for controlling and configuring the oracle.
     control: control::Receiver,
 }
 
-impl Deref for Oracle {
-    type Target = Web3;
-
-    fn deref(&self) -> &Self::Target {
-        &self.client
-    }
-}
-
-impl Oracle {
+impl<C: RpcClient> Oracle<C> {
     /// Construct a new [`Oracle`]. Note that it can not do anything until it
     /// has been sent a configuration via the passed in `control` channel.
     pub fn new(
@@ -200,39 +207,12 @@ impl Oracle {
         control: control::Receiver,
     ) -> Self {
         Self {
-            client: Web3::new(url, std::time::Duration::from_secs(30)),
+            client: C::new_client(url),
             sender,
             backoff,
             ceiling,
             last_processed_block,
             control,
-        }
-    }
-
-    /// Check if the fullnode we are connected
-    /// to is syncing or is up to date with the
-    /// Ethereum (an return the block height).
-    ///
-    /// Note that the syncing call may return false
-    /// inaccurately. In that case, we must check if the block
-    /// number is 0 or not.
-    #[cfg(not(test))]
-    async fn syncing(&self) -> Result<SyncStatus, Error> {
-        let deadline = Instant::now() + self.ceiling;
-        match eth_syncing_status_timeout(&self.client, self.backoff, deadline)
-            .await
-            .map_err(|_| Error::Timeout)?
-        {
-            s @ SyncStatus::Syncing => Ok(s),
-            SyncStatus::AtHeight(height) => {
-                match &*self.last_processed_block.borrow() {
-                    Some(last) if <&Uint256>::from(last) < &height => {
-                        Ok(SyncStatus::AtHeight(height))
-                    }
-                    None => Ok(SyncStatus::AtHeight(height)),
-                    _ => Err(Error::FallenBehind),
-                }
-            }
         }
     }
 
@@ -281,7 +261,7 @@ async fn await_initial_configuration(
 
 /// Set up an Oracle and run the process where the Oracle
 /// processes and forwards Ethereum events to the ledger
-pub fn run_oracle(
+pub fn run_oracle<C: RpcClient>(
     url: impl AsRef<str>,
     sender: BoundedSender<EthereumEvent>,
     control: control::Receiver,
@@ -298,7 +278,7 @@ pub fn run_oracle(
                 .run_until(async move {
                     tracing::info!(?url, "Ethereum event oracle is starting");
 
-                    let oracle = Oracle::new(
+                    let oracle = Oracle::<C>::new(
                         &url,
                         sender,
                         last_processed_block,
@@ -329,7 +309,7 @@ pub fn run_oracle(
 ///
 /// It also checks that once the specified number of confirmations
 /// is reached, an event is forwarded to the ledger process
-async fn run_oracle_aux(mut oracle: Oracle) {
+async fn run_oracle_aux<C: RpcClient>(mut oracle: Oracle<C>) {
     tracing::info!("Oracle is awaiting initial configuration");
     let mut config =
         match await_initial_configuration(&mut oracle.control).await {
@@ -421,8 +401,8 @@ async fn run_oracle_aux(mut oracle: Oracle) {
 
 /// Checks if the given block has any events relating to the bridge, and if so,
 /// sends them to the oracle's `sender` channel
-async fn process(
-    oracle: &Oracle,
+async fn process<C: RpcClient>(
+    oracle: &Oracle<C>,
     config: &Config,
     block_to_process: ethereum_structs::BlockHeight,
 ) -> Result<(), Error> {
@@ -430,7 +410,15 @@ async fn process(
     let pending = &mut queue;
     // update the latest block height
 
-    let latest_block = match oracle.syncing().await? {
+    let backoff = oracle.backoff;
+    let deadline = Instant::now() + oracle.ceiling;
+    let last_processed_block_ref = oracle.last_processed_block.borrow();
+    let last_processed_block = last_processed_block_ref.as_ref();
+    let latest_block = match oracle
+        .client
+        .syncing(last_processed_block, backoff, deadline)
+        .await?
+    {
         SyncStatus::AtHeight(height) => height,
         SyncStatus::Syncing => return Err(Error::FallenBehind),
     }
@@ -472,24 +460,10 @@ async fn process(
         );
         // fetch the events for matching the given signature
         let mut events = {
-            let logs = match oracle
-                .check_for_events(
-                    block_to_process.clone().into(),
-                    Some(block_to_process.clone().into()),
-                    vec![addr],
-                    vec![sig],
-                )
-                .await
-            {
-                Ok(logs) => logs,
-                Err(error) => {
-                    return Err(Error::CheckEvents(
-                        sig.into(),
-                        addr,
-                        error.to_string(),
-                    ));
-                }
-            };
+            let logs = oracle
+                .client
+                .check_events_in_block(block_to_process.clone(), addr, sig)
+                .await?;
             if !logs.is_empty() {
                 tracing::info!(
                     ?block_to_process,
@@ -500,7 +474,7 @@ async fn process(
                 )
             }
             logs.into_iter()
-                .map(Web30LogExt::into_ethabi)
+                .map(IntoEthAbiLog::into_ethabi_log)
                 .filter_map(|log| {
                     match PendingEvent::decode(
                         codec,
@@ -574,28 +548,6 @@ fn process_queue(
     confirmed
 }
 
-/// Extra methods for [`web30::types::Log`] instances.
-trait Web30LogExt {
-    /// Convert a [`web30`] event log to the corresponding
-    /// [`ethabi`] type.
-    fn into_ethabi(self) -> ethabi::RawLog;
-}
-
-impl Web30LogExt for web30::types::Log {
-    fn into_ethabi(self) -> ethabi::RawLog {
-        let topics = self
-            .topics
-            .iter()
-            .filter_map(|topic| {
-                (topic.len() == 32)
-                    .then(|| ethabi::Hash::from_slice(topic.as_slice()))
-            })
-            .collect();
-        let data = self.data.0;
-        ethabi::RawLog { topics, data }
-    }
-}
-
 pub mod last_processed_block {
     //! Functionality to do with publishing which blocks we have processed.
     use namada::core::types::ethereum_structs;
@@ -629,12 +581,12 @@ mod test_oracle {
 
     use super::*;
     use crate::node::ledger::ethereum_oracle::test_tools::mock_web3_client::{
-        event_signature, TestCmd, Web3, Web3Controller,
+        event_signature, TestCmd, TestOracle, Web3Client, Web3Controller,
     };
 
     /// The data returned from setting up a test
     struct TestPackage {
-        oracle: Oracle,
+        oracle: TestOracle,
         controller: Web3Controller,
         eth_recv: tokio::sync::mpsc::Receiver<EthereumEvent>,
         control_sender: control::Sender,
@@ -645,7 +597,7 @@ mod test_oracle {
     /// initializes it with a simple default configuration that is appropriate
     /// for tests.
     async fn start_with_default_config(
-        oracle: Oracle,
+        oracle: TestOracle,
         control_sender: &mut control::Sender,
         config: Config,
     ) -> tokio::task::JoinHandle<()> {
@@ -667,13 +619,13 @@ mod test_oracle {
 
     /// Set up an oracle with a mock web3 client that we can control
     fn setup() -> TestPackage {
-        let (blocks_processed_recv, client) = Web3::setup();
+        let (blocks_processed_recv, client) = Web3Client::setup();
         let (eth_sender, eth_receiver) = tokio::sync::mpsc::channel(1000);
         let (last_processed_block_sender, _) = last_processed_block::channel();
         let (control_sender, control_receiver) = control::channel();
         let controller = client.controller();
         TestPackage {
-            oracle: Oracle {
+            oracle: TestOracle {
                 client,
                 sender: eth_sender,
                 last_processed_block: last_processed_block_sender,
