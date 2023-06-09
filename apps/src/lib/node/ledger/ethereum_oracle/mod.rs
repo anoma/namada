@@ -5,6 +5,7 @@ pub mod test_tools;
 use std::borrow::Cow;
 use std::ops::{ControlFlow, Deref};
 
+use async_trait::async_trait;
 use clarity::Address;
 use ethbridge_events::{event_codecs, EventKind};
 use namada::core::hints;
@@ -13,9 +14,7 @@ use namada::eth_bridge::oracle::config::Config;
 #[cfg(not(test))]
 use namada::ledger::eth_bridge::eth_syncing_status_timeout;
 use namada::ledger::eth_bridge::SyncStatus;
-#[cfg(not(test))]
-use namada::types::control_flow::time::Instant;
-use namada::types::control_flow::time::{Constant, Duration, Sleep};
+use namada::types::control_flow::time::{Constant, Duration, Instant, Sleep};
 use namada::types::ethereum_events::EthereumEvent;
 use num256::Uint256;
 use thiserror::Error;
@@ -51,6 +50,114 @@ pub enum Error {
     MoreConfirmations,
     #[error("The Ethereum oracle timed out")]
     Timeout,
+}
+
+/// Convert values to [`ethabi`] Ethereum event logs.
+pub trait IntoEthAbiLog {
+    /// Convert an Ethereum event log to the corresponding
+    /// [`ethabi`] type.
+    fn into_ethabi_log(self) -> ethabi::RawLog;
+}
+
+impl IntoEthAbiLog for web30::types::Log {
+    fn into_ethabi_log(self) -> ethabi::RawLog {
+        let topics = self
+            .topics
+            .iter()
+            .filter_map(|topic| {
+                (topic.len() == 32)
+                    .then(|| ethabi::Hash::from_slice(topic.as_slice()))
+            })
+            .collect();
+        let data = self.data.0;
+        ethabi::RawLog { topics, data }
+    }
+}
+
+impl<L: Into<ethabi::RawLog>> IntoEthAbiLog for L {
+    #[inline]
+    fn into_ethabi_log(self) -> ethabi::RawLog {
+        self.into()
+    }
+}
+
+/// Client implementations that speak a subset of the
+/// Geth JSONRPC protocol.
+#[async_trait(?Send)]
+pub trait RpcClient {
+    /// Error type used for fallible operations.
+    type Error;
+
+    /// The ABI signature of the events to be queried.
+    type EventSignature<'sig>: AsRef<str> + 'sig;
+
+    /// Ethereum event log.
+    type Log: IntoEthAbiLog;
+
+    /// Query a block for Ethereum events from a given ABI type
+    /// and contract address.
+    async fn check_events_in_block(
+        &self,
+        block: ethereum_structs::BlockHeight,
+        address: Address,
+        abi_signature: Self::EventSignature<'_>,
+    ) -> Result<Vec<Self::Log>, Self::Error>;
+
+    /// Check if the fullnode we are connected to is syncing or is up
+    /// to date with the Ethereum (an return the block height).
+    ///
+    /// Note that the syncing call may return false inaccurately. In
+    /// that case, we must check if the block number is 0 or not.
+    async fn syncing(
+        &self,
+        last_processed_block: Option<&ethereum_structs::BlockHeight>,
+        backoff: Duration,
+        deadline: Instant,
+    ) -> Result<SyncStatus, Self::Error>;
+}
+
+#[async_trait(?Send)]
+impl RpcClient for web30::client::Web3 {
+    type Error = Error;
+    type EventSignature<'sig> = &'static str;
+    type Log = web30::types::Log;
+
+    async fn check_events_in_block(
+        &self,
+        block: ethereum_structs::BlockHeight,
+        addr: Address,
+        abi_signature: &'static str,
+    ) -> Result<Vec<Self::Log>, Error> {
+        let sig = abi_signature;
+        let block = Uint256::from(block);
+        self.check_for_events(block.clone(), Some(block), vec![addr], vec![sig])
+            .await
+            .map_err(|error| {
+                Error::CheckEvents(sig.into(), addr, error.to_string())
+            })
+    }
+
+    async fn syncing(
+        &self,
+        last_processed_block: Option<&ethereum_structs::BlockHeight>,
+        backoff: Duration,
+        deadline: Instant,
+    ) -> Result<SyncStatus, Error> {
+        let client = todo!();
+        match eth_syncing_status_timeout(client, backoff, deadline)
+            .await
+            .map_err(|_| Error::Timeout)?
+        {
+            s @ SyncStatus::Syncing => Ok(s),
+            SyncStatus::AtHeight(height) => match last_processed_block {
+                Some(last) if <&Uint256>::from(last) < &height => {
+                    Ok(SyncStatus::AtHeight(height))
+                }
+                None => Ok(SyncStatus::AtHeight(height)),
+                _ => Err(Error::FallenBehind),
+            },
+        }
+    }
 }
 
 /// A client that can talk to geth and parse
