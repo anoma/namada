@@ -235,7 +235,7 @@ where
     D: DB + for<'iter_> DBIter<'iter_>,
     H: StorageHasher,
 {
-    let storage_iter = storage.db.iter_prefix(prefix).peekable();
+    let storage_iter = storage.db.iter_prefix(Some(prefix)).peekable();
     let write_log_iter = write_log.iter_prefix_pre(prefix).peekable();
     (
         PrefixIter {
@@ -260,7 +260,7 @@ where
     D: DB + for<'iter_> DBIter<'iter_>,
     H: StorageHasher,
 {
-    let storage_iter = storage.db.iter_prefix(prefix).peekable();
+    let storage_iter = storage.db.iter_prefix(Some(prefix)).peekable();
     let write_log_iter = write_log.iter_prefix_post(prefix).peekable();
     (
         PrefixIter {
