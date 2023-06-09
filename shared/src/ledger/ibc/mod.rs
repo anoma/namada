@@ -1,11 +1,10 @@
 //! IBC integration
 
-pub use namada_core::ledger::ibc::{actions as handler, storage};
+pub use namada_core::ledger::ibc::storage;
 pub mod vp;
 
 use namada_core::ledger::ibc::storage::{
-    capability_index_key, channel_counter_key, client_counter_key,
-    connection_counter_key,
+    channel_counter_key, client_counter_key, connection_counter_key,
 };
 use namada_core::ledger::storage::WlStorage;
 use namada_core::ledger::storage_api::StorageWrite;
@@ -41,11 +40,4 @@ where
     storage
         .write_bytes(&key, value)
         .expect("Unable to write the initial channel counter");
-
-    // the capability index
-    let key = capability_index_key();
-    let value = 0_u64.to_be_bytes().to_vec();
-    storage
-        .write_bytes(&key, value)
-        .expect("Unable to write the initial capability index");
 }

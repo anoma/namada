@@ -1,16 +1,18 @@
 //! A basic fungible token
 
 use std::fmt::Display;
+use std::iter::Sum;
 use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use masp_primitives::transaction::Transaction;
 use rust_decimal::prelude::{Decimal, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::ibc::applications::transfer::Amount as IbcAmount;
 use crate::types::address::{masp, Address, DecodeError as AddressError};
+use crate::types::hash::Hash;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
 /// Amount in micro units. For different granularity another representation
@@ -149,13 +151,13 @@ impl<'de> serde::Deserialize<'de> for Amount {
 
 impl From<Amount> for Decimal {
     fn from(amount: Amount) -> Self {
-        Into::<Decimal>::into(amount.micro) / Into::<Decimal>::into(SCALE)
+        Into::<Decimal>::into(amount.micro)
     }
 }
 
 impl From<Decimal> for Amount {
     fn from(micro: Decimal) -> Self {
-        let res = (micro * Into::<Decimal>::into(SCALE)).to_u64().unwrap();
+        let res = micro.to_u64().unwrap();
         Self { micro: res }
     }
 }
@@ -238,6 +240,12 @@ impl SubAssign for Amount {
     }
 }
 
+impl Sum for Amount {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Amount::default(), |acc, next| acc + next)
+    }
+}
+
 impl KeySeg for Amount {
     fn parse(string: String) -> super::storage::Result<Self>
     where
@@ -306,6 +314,18 @@ impl Display for Amount {
 impl From<Amount> for Change {
     fn from(amount: Amount) -> Self {
         amount.micro as i128
+    }
+}
+
+impl TryFrom<IbcAmount> for Amount {
+    type Error = AmountParseError;
+
+    fn try_from(amount: IbcAmount) -> Result<Self, Self::Error> {
+        // TODO: https://github.com/anoma/namada/issues/1089
+        if amount > u64::MAX.into() {
+            return Err(AmountParseError::InvalidRange);
+        }
+        Self::from_str(&amount.to_string())
     }
 }
 
@@ -478,7 +498,7 @@ pub struct Transfer {
     /// The unused storage location at which to place TxId
     pub key: Option<String>,
     /// Shielded transaction part
-    pub shielded: Option<Transaction>,
+    pub shielded: Option<Hash>,
 }
 
 #[allow(missing_docs)]
@@ -490,35 +510,6 @@ pub enum TransferError {
     Amount(AmountParseError),
     #[error("No token is specified")]
     NoToken,
-}
-
-#[cfg(any(feature = "abciplus", feature = "abcipp"))]
-impl TryFrom<crate::ledger::ibc::data::FungibleTokenPacketData> for Transfer {
-    type Error = TransferError;
-
-    fn try_from(
-        data: crate::ledger::ibc::data::FungibleTokenPacketData,
-    ) -> Result<Self, Self::Error> {
-        let source =
-            Address::decode(&data.sender).map_err(TransferError::Address)?;
-        let target =
-            Address::decode(&data.receiver).map_err(TransferError::Address)?;
-        let token_str =
-            data.denom.split('/').last().ok_or(TransferError::NoToken)?;
-        let token =
-            Address::decode(token_str).map_err(TransferError::Address)?;
-        let amount =
-            Amount::from_str(&data.amount).map_err(TransferError::Amount)?;
-        Ok(Self {
-            source,
-            target,
-            token,
-            sub_prefix: None,
-            amount,
-            key: None,
-            shielded: None,
-        })
-    }
 }
 
 #[cfg(test)]

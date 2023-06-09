@@ -34,21 +34,8 @@ jobs:
         mdbook_open_on_gh: [badboy/mdbook-open-on-gh@v2.2.0]
         mdbook_admonish: [tommilligan/mdbook-admonish@v1.7.0]
         mdbook_katex: [lzanini/mdbook-katex@v0.4.0]
+        mdbook_pagetoc: [slowsage/mdbook-pagetoc@v0.1.7]
         make:
-          - name: Build specs
-            folder: documentation/specs
-            bucket: namada-specs-static-website
-            command: cd documentation/specs && mdbook build
-            cache_subkey: specs
-            cache_version: v1
-            distribution_id: E2Y9R2H4P5LYED
-          - name: Build docs
-            folder: documentation/docs
-            bucket: namada-docs-static-website
-            command: cd documentation/docs && mdbook build
-            cache_subkey: docs
-            cache_version: v1
-            distribution_id: E2T9UML53913RV
           - name: Build development docs
             folder: documentation/dev
             bucket: namada-dev-static-website
@@ -121,6 +108,7 @@ jobs:
             curl https://i.jpillora.com/${{ matrix.mdbook_open_on_gh }}! | bash
             curl https://i.jpillora.com/${{ matrix.mdbook_admonish }}! | bash
             curl https://i.jpillora.com/${{ matrix.mdbook_katex }}! | bash
+            curl https://i.jpillora.com/${{ matrix.mdbook_pagetoc }}! | bash
             cd ${{ matrix.make.folder }} && mdbook-admonish install
       - name: ${{ matrix.make.name }}
         run: ${{ matrix.make.command }}

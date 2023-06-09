@@ -8,6 +8,7 @@ use namada_core::types::storage::Key;
 use thiserror::Error;
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
+use crate::proto::Tx;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -43,7 +44,7 @@ where
 
     fn validate_tx(
         &self,
-        _tx_data: &[u8],
+        _tx_data: &Tx,
         _keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {

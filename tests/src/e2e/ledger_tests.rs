@@ -23,7 +23,7 @@ use namada::types::address::{btc, eth, masp_rewards, Address};
 use namada::types::governance::ProposalType;
 use namada::types::storage::Epoch;
 use namada::types::token;
-use namada_apps::client::tx::ShieldedContext;
+use namada_apps::client::tx::CLIShieldedUtils;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
@@ -129,7 +129,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     // 4. Check that all the nodes processed the tx with the same result
     let mut validator_0 = bg_validator_0.foreground();
     let mut validator_1 = bg_validator_1.foreground();
-    let expected_result = "successful txs: 1";
+    let expected_result = "successful inner txs: 1";
     // We cannot check this on non-validator node as it might sync without
     // applying the tx itself, but its state should be the same, checked below.
     validator_0.exp_string(expected_result)?;
@@ -223,7 +223,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 
     // 2. Shut it down
     let mut ledger = bg_ledger.foreground();
-    ledger.send_control('c')?;
+    ledger.interrupt()?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
     ledger.exp_string("Namada ledger node has shut down.")?;
@@ -240,7 +240,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     ledger.exp_string("Last state root hash:")?;
 
     // 4. Shut it down
-    ledger.send_control('c')?;
+    ledger.interrupt()?;
     // Wait for it to stop
     ledger.exp_eof()?;
     drop(ledger);
@@ -304,7 +304,7 @@ fn suspend_ledger() -> Result<()> {
 
     // 3. Shut it down
     let mut ledger = bg_ledger.foreground();
-    ledger.send_control('c')?;
+    ledger.interrupt()?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
     ledger.exp_string("Namada ledger node has shut down.")?;
@@ -580,7 +580,7 @@ fn ledger_txs_and_queries() -> Result<()> {
 #[test]
 fn masp_txs_and_queries() -> Result<()> {
     // Download the shielded pool parameters before starting node
-    let _ = ShieldedContext::new(PathBuf::new());
+    let _ = CLIShieldedUtils::new(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.
@@ -850,7 +850,7 @@ fn masp_txs_and_queries() -> Result<()> {
 #[test]
 fn masp_pinned_txs() -> Result<()> {
     // Download the shielded pool parameters before starting node
-    let _ = ShieldedContext::new(PathBuf::new());
+    let _ = CLIShieldedUtils::new(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.
@@ -1011,7 +1011,7 @@ fn masp_pinned_txs() -> Result<()> {
 #[test]
 fn masp_incentives() -> Result<()> {
     // Download the shielded pool parameters before starting node
-    let _ = ShieldedContext::new(PathBuf::new());
+    let _ = CLIShieldedUtils::new(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.
@@ -1775,13 +1775,13 @@ fn invalid_transactions() -> Result<()> {
 
     client.assert_success();
     let mut ledger = bg_ledger.foreground();
-    ledger.exp_string("rejected txs: 1")?;
+    ledger.exp_string("rejected inner txs: 1")?;
 
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
 
     // 3. Shut it down
-    ledger.send_control('c')?;
+    ledger.interrupt()?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
     ledger.exp_string("Namada ledger node has shut down.")?;
@@ -4004,7 +4004,7 @@ fn test_genesis_validators() -> Result<()> {
     let mut validator_0 = bg_validator_0.foreground();
     let mut validator_1 = bg_validator_1.foreground();
 
-    let expected_result = "successful txs: 1";
+    let expected_result = "successful inner txs: 1";
     // We cannot check this on non-validator node as it might sync without
     // applying the tx itself, but its state should be the same, checked below.
     validator_0.exp_string(expected_result)?;

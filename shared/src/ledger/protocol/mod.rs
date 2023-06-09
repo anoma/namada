@@ -28,6 +28,8 @@ use crate::vm::{self, wasm, WasmCacheAccess};
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Missing wasm code error")]
+    MissingCode,
     #[error("Storage error: {0}")]
     StorageError(crate::ledger::storage::Error),
     #[error("Error decoding a transaction from bytes: {0}")]
@@ -78,7 +80,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// but no further validations.
 #[allow(clippy::too_many_arguments)]
 pub fn apply_tx<D, H, CA>(
-    tx: TxType,
+    tx: Tx,
     tx_length: usize,
     tx_index: TxIndex,
     block_gas_meter: &mut BlockGasMeter,
@@ -96,10 +98,9 @@ where
     block_gas_meter
         .add_base_transaction_fee(tx_length)
         .map_err(Error::GasError)?;
-    match tx {
-        TxType::Raw(_) => Err(Error::TxTypeError),
+    match tx.header().tx_type {
+        TxType::Raw => Err(Error::TxTypeError),
         TxType::Decrypted(DecryptedTx::Decrypted {
-            tx,
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow,
         }) => {
@@ -130,14 +131,14 @@ where
                 .map_err(Error::GasError)?;
             let initialized_accounts = write_log.get_initialized_accounts();
             let changed_keys = write_log.get_keys();
-            let ibc_event = write_log.take_ibc_event();
+            let ibc_events = write_log.take_ibc_events();
 
             Ok(TxResult {
                 gas_used,
                 changed_keys,
                 vps_result,
                 initialized_accounts,
-                ibc_event,
+                ibc_events,
             })
         }
         _ => {
@@ -167,15 +168,12 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let empty = vec![];
-    let tx_data = tx.data.as_ref().unwrap_or(&empty);
     wasm::run::tx(
         storage,
         write_log,
         gas_meter,
         tx_index,
-        &tx.code_or_hash,
-        tx_data,
+        tx,
         vp_wasm_cache,
         tx_wasm_cache,
     )
@@ -295,10 +293,6 @@ where
                         &verifiers,
                         vp_wasm_cache.clone(),
                     );
-                    let tx_data = match tx.data.as_ref() {
-                        Some(data) => &data[..],
-                        None => &[],
-                    };
 
                     let accepted: Result<bool> = match internal_addr {
                         InternalAddress::PoS => {
@@ -313,7 +307,7 @@ where
                             let result = match panic::catch_unwind(move || {
                                 pos_ref
                                     .validate_tx(
-                                        tx_data,
+                                        tx,
                                         keys_changed_ref,
                                         verifiers_addr_ref,
                                     )
@@ -335,7 +329,7 @@ where
                         InternalAddress::Ibc => {
                             let ibc = Ibc { ctx };
                             let result = ibc
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::IbcNativeVpError);
                             // Take the gas meter back out of the context
                             gas_meter = ibc.ctx.gas_meter.into_inner();
@@ -344,7 +338,7 @@ where
                         InternalAddress::Parameters => {
                             let parameters = ParametersVp { ctx };
                             let result = parameters
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::ParametersNativeVpError);
                             // Take the gas meter back out of the context
                             gas_meter = parameters.ctx.gas_meter.into_inner();
@@ -360,7 +354,7 @@ where
                         InternalAddress::Governance => {
                             let governance = GovernanceVp { ctx };
                             let result = governance
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::GovernanceNativeVpError);
                             gas_meter = governance.ctx.gas_meter.into_inner();
                             result
@@ -368,7 +362,7 @@ where
                         InternalAddress::SlashFund => {
                             let slash_fund = SlashFundVp { ctx };
                             let result = slash_fund
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::SlashFundNativeVpError);
                             gas_meter = slash_fund.ctx.gas_meter.into_inner();
                             result
@@ -380,7 +374,7 @@ where
                             // validate the transfer
                             let ibc_token = IbcToken { ctx };
                             let result = ibc_token
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::IbcTokenNativeVpError);
                             gas_meter = ibc_token.ctx.gas_meter.into_inner();
                             result
@@ -388,7 +382,7 @@ where
                         InternalAddress::EthBridge => {
                             let bridge = EthBridge { ctx };
                             let result = bridge
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::EthBridgeNativeVpError);
                             gas_meter = bridge.ctx.gas_meter.into_inner();
                             result
@@ -397,7 +391,7 @@ where
                             let replay_protection_vp =
                                 ReplayProtectionVp { ctx };
                             let result = replay_protection_vp
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::ReplayProtectionNativeVpError);
                             gas_meter =
                                 replay_protection_vp.ctx.gas_meter.into_inner();

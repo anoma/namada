@@ -1,5 +1,6 @@
 use masp_primitives::transaction::Transaction;
 use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::hash::Hash;
 use namada_core::types::storage::KeySeg;
 use namada_core::types::token;
 pub use namada_core::types::token::*;
@@ -16,6 +17,7 @@ pub fn transfer(
     sub_prefix: Option<storage::Key>,
     amount: Amount,
     key: &Option<String>,
+    shielded_hash: &Option<Hash>,
     shielded: &Option<Transaction>,
 ) -> TxResult {
     if amount != Amount::default() {
@@ -108,17 +110,16 @@ pub fn transfer(
             sub_prefix: None,
             amount,
             key: key.clone(),
-            shielded: Some(shielded.clone()),
+            shielded: *shielded_hash,
         };
-        ctx.write(
-            &current_tx_key,
-            (
-                ctx.get_block_epoch()?,
-                ctx.get_block_height()?,
-                ctx.get_tx_index()?,
-                transfer,
-            ),
-        )?;
+        let record: (Epoch, BlockHeight, TxIndex, Transfer, Transaction) = (
+            ctx.get_block_epoch()?,
+            ctx.get_block_height()?,
+            ctx.get_tx_index()?,
+            transfer,
+            shielded.clone(),
+        );
+        ctx.write(&current_tx_key, record)?;
         ctx.write(&head_tx_key, current_tx_idx + 1)?;
         // If storage key has been supplied, then pin this transaction to it
         if let Some(key) = key {
@@ -138,7 +139,7 @@ pub fn transfer_with_keys(
     dest_key: &storage::Key,
     amount: Amount,
 ) -> TxResult {
-    let src_owner = is_any_multitoken_balance_key(src_key).map(|(_, o)| o);
+    let src_owner = is_any_token_balance_key(src_key);
     let src_bal: Option<Amount> = match src_owner {
         Some(Address::Internal(InternalAddress::IbcMint)) => {
             Some(Amount::max())
@@ -147,37 +148,20 @@ pub fn transfer_with_keys(
             log_string("invalid transfer from the burn address");
             unreachable!()
         }
-        Some(_) => ctx.read(src_key)?,
-        None => {
-            // the key is not a multitoken key
-            match is_any_token_balance_key(src_key) {
-                Some(_) => ctx.read(src_key)?,
-                None => {
-                    log_string(format!("invalid balance key: {}", src_key));
-                    unreachable!()
-                }
-            }
-        }
+        _ => ctx.read(src_key)?,
     };
     let mut src_bal = src_bal.unwrap_or_else(|| {
         log_string(format!("src {} has no balance", src_key));
         unreachable!()
     });
     src_bal.spend(&amount);
-    let dest_owner = is_any_multitoken_balance_key(dest_key).map(|(_, o)| o);
+    let dest_owner = is_any_token_balance_key(dest_key);
     let mut dest_bal: Amount = match dest_owner {
         Some(Address::Internal(InternalAddress::IbcMint)) => {
             log_string("invalid transfer to the mint address");
             unreachable!()
         }
-        Some(_) => ctx.read(dest_key)?.unwrap_or_default(),
-        None => match is_any_token_balance_key(dest_key) {
-            Some(_) => ctx.read(dest_key)?.unwrap_or_default(),
-            None => {
-                log_string(format!("invalid balance key: {}", dest_key));
-                unreachable!()
-            }
-        },
+        _ => ctx.read(dest_key)?.unwrap_or_default(),
     };
     dest_bal.receive(&amount);
     match src_owner {

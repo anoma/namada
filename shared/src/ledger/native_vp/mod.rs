@@ -20,7 +20,9 @@ use crate::ledger::storage::{Storage, StorageHasher};
 use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
-use crate::types::storage::{BlockHash, BlockHeight, Epoch, Key, TxIndex};
+use crate::types::storage::{
+    BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
+};
 use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::WasmCacheAccess;
 
@@ -40,7 +42,7 @@ pub trait NativeVp {
     /// Run the validity predicate
     fn validate_tx(
         &self,
-        tx_data: &[u8],
+        tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> std::result::Result<bool, Self::Error>;
@@ -237,6 +239,13 @@ where
         self.ctx.get_block_height()
     }
 
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, storage_api::Error> {
+        self.ctx.get_block_header(height)
+    }
+
     fn get_block_hash(&self) -> Result<BlockHash, storage_api::Error> {
         self.ctx.get_block_hash()
     }
@@ -321,6 +330,13 @@ where
         self.ctx.get_block_height()
     }
 
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, storage_api::Error> {
+        self.ctx.get_block_header(height)
+    }
+
     fn get_block_hash(&self) -> Result<BlockHash, storage_api::Error> {
         self.ctx.get_block_hash()
     }
@@ -397,6 +413,18 @@ where
         .into_storage_result()
     }
 
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, storage_api::Error> {
+        vp_host_fns::get_block_header(
+            &mut self.gas_meter.borrow_mut(),
+            self.storage,
+            height,
+        )
+        .into_storage_result()
+    }
+
     fn get_block_hash(&self) -> Result<BlockHash, storage_api::Error> {
         vp_host_fns::get_block_hash(
             &mut self.gas_meter.borrow_mut(),
@@ -445,7 +473,7 @@ where
     fn eval(
         &self,
         vp_code_hash: Hash,
-        input_data: Vec<u8>,
+        input_data: Tx,
     ) -> Result<bool, storage_api::Error> {
         #[cfg(feature = "wasm-runtime")]
         {
@@ -496,7 +524,7 @@ where
         #[cfg(not(feature = "wasm-runtime"))]
         {
             // This line is here to prevent unused var clippy warning
-            let _ = (vp_code, input_data);
+            let _ = (vp_code_hash, input_data);
             unimplemented!(
                 "The \"wasm-runtime\" feature must be enabled to use the \
                  `eval` function."
@@ -504,19 +532,11 @@ where
         }
     }
 
-    fn verify_tx_signature(
-        &self,
-        pk: &crate::types::key::common::PublicKey,
-        sig: &crate::types::key::common::Signature,
-    ) -> Result<bool, storage_api::Error> {
-        Ok(self.tx.verify_sig(pk, sig).is_ok())
-    }
-
     fn verify_masp(&self, _tx: Vec<u8>) -> Result<bool, storage_api::Error> {
         unimplemented!("no masp native vp")
     }
 
-    fn get_tx_code_hash(&self) -> Result<Hash, storage_api::Error> {
+    fn get_tx_code_hash(&self) -> Result<Option<Hash>, storage_api::Error> {
         vp_host_fns::get_tx_code_hash(&mut self.gas_meter.borrow_mut(), self.tx)
             .into_storage_result()
     }

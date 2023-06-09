@@ -20,6 +20,7 @@ use crate::ledger::native_vp::{self, governance, Ctx, NativeVp};
 // };
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::ledger::storage_api::StorageRead;
+use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Key, KeySeg};
 use crate::vm::WasmCacheAccess;
@@ -93,7 +94,7 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &[u8],
+        tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
@@ -105,14 +106,19 @@ where
         // let mut changes: Vec<DataUpdate> = vec![];
         let _current_epoch = self.ctx.pre().get_block_epoch()?;
 
-        println!("\nVALIDATING TX\n");
+        tracing::debug!("\nValidating PoS Tx\n");
 
         for key in keys_changed {
             // println!("KEY: {}\n", key);
             if is_params_key(key) {
+                let data = if let Some(data) = tx_data.data() {
+                    data
+                } else {
+                    return Ok(false);
+                };
                 if !governance::utils::is_proposal_accepted(
                     &self.ctx.pre(),
-                    tx_data,
+                    &data,
                 )
                 .map_err(Error::NativeVpError)?
                 {
@@ -122,14 +128,13 @@ where
                 // Unknown changes to this address space are disallowed
                 // tracing::info!("PoS unrecognized key change {} rejected",
                 // key);
-                tracing::info!(
-                    "PoS unrecognized key change {} typically rejected but \
-                     letting pass for now while implementing new lazy PoS \
-                     storage",
+                tracing::debug!(
+                    "PoS key change {} - No action is taken currently.",
                     key
                 );
                 // return Ok(false);
             } else {
+                tracing::debug!("PoS unrecognized key change {}", key);
                 // Unknown changes anywhere else are permitted
             }
         }

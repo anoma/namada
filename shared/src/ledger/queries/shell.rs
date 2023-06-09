@@ -4,7 +4,7 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
-use namada_core::types::storage::BlockResults;
+use namada_core::types::storage::{BlockResults, KeySeg};
 
 use crate::ledger::events::log::dumb_queries;
 use crate::ledger::events::Event;
@@ -74,16 +74,10 @@ where
     use crate::ledger::storage::write_log::WriteLog;
     use crate::proto::Tx;
     use crate::types::storage::TxIndex;
-    use crate::types::transaction::{DecryptedTx, TxType};
 
     let mut gas_meter = BlockGasMeter::default();
     let mut write_log = WriteLog::default();
     let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
-    let tx = TxType::Decrypted(DecryptedTx::Decrypted {
-        tx,
-        #[cfg(not(feature = "mainnet"))]
-        has_valid_pow: true,
-    });
     let data = protocol::apply_tx(
         tx,
         request.data.len(),
@@ -117,12 +111,13 @@ where
         ctx.wl_storage.storage.block.height.0 as usize + 1
     ];
     iter.for_each(|(key, value, _gas)| {
-        let key = key
-            .parse::<usize>()
-            .expect("expected integer for block height");
+        let key = u64::parse(key).expect("expected integer for block height");
         let value = BlockResults::try_from_slice(&value)
             .expect("expected BlockResults bytes");
-        results[key] = value;
+        let idx: usize = key
+            .try_into()
+            .expect("expected block height to fit into usize");
+        results[idx] = value;
     });
     Ok(results)
 }
@@ -349,9 +344,11 @@ mod test {
     use crate::ledger::queries::testing::TestClient;
     use crate::ledger::queries::RPC;
     use crate::ledger::storage_api::{self, StorageWrite};
-    use crate::proto::Tx;
+    use crate::proto::{Code, Data, Tx};
     use crate::types::hash::Hash;
     use crate::types::storage::Key;
+    use crate::types::transaction::decrypted::DecryptedTx;
+    use crate::types::transaction::TxType;
     use crate::types::{address, token};
 
     #[test]
@@ -392,13 +389,16 @@ mod test {
         assert_eq!(current_epoch, read_epoch);
 
         // Request dry run tx
-        let tx = Tx::new(
-            tx_hash.to_vec(),
-            None,
-            client.wl_storage.storage.chain_id.clone(),
-            None,
-        );
-        let tx_bytes = tx.to_bytes();
+        let mut outer_tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
+            #[cfg(not(feature = "mainnet"))]
+            // To be able to dry-run testnet faucet withdrawal, pretend 
+            // that we got a valid PoW
+            has_valid_pow: true,
+        }));
+        outer_tx.header.chain_id = client.wl_storage.storage.chain_id.clone();
+        outer_tx.set_code(Code::from_hash(tx_hash));
+        outer_tx.set_data(Data::new(vec![]));
+        let tx_bytes = outer_tx.to_bytes();
         let result = RPC
             .shell()
             .dry_run_tx(&client, Some(tx_bytes), None, false)

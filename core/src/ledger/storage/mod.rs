@@ -168,6 +168,8 @@ pub struct BlockStateRead {
     pub next_epoch_min_start_height: BlockHeight,
     /// Minimum block time at which the next epoch may start
     pub next_epoch_min_start_time: DateTimeUtc,
+    /// Update epoch delay
+    pub update_epoch_blocks_delay: Option<u32>,
     /// Established address generator
     pub address_gen: EstablishedAddressGen,
     /// Results of applying transactions
@@ -195,6 +197,8 @@ pub struct BlockStateWrite<'a> {
     pub next_epoch_min_start_height: BlockHeight,
     /// Minimum block time at which the next epoch may start
     pub next_epoch_min_start_time: DateTimeUtc,
+    /// Update epoch delay
+    pub update_epoch_blocks_delay: Option<u32>,
     /// Established address generator
     pub address_gen: &'a EstablishedAddressGen,
     /// Results of applying transactions
@@ -228,6 +232,7 @@ pub trait DB: std::fmt::Debug {
     fn write_block(
         &mut self,
         state: BlockStateWrite,
+        batch: &mut Self::WriteBatch,
         is_full_commit: bool,
     ) -> Result<()>;
 
@@ -303,6 +308,7 @@ pub trait DB: std::fmt::Debug {
     /// Prune Merkle tree stores at the given epoch
     fn prune_merkle_tree_stores(
         &mut self,
+        batch: &mut Self::WriteBatch,
         pruned_epoch: Epoch,
         pred_epochs: &Epochs,
     ) -> Result<()>;
@@ -332,17 +338,7 @@ pub trait DBIter<'iter> {
 }
 
 /// Atomic batch write.
-pub trait DBWriteBatch {
-    /// Insert a value into the database under the given key.
-    fn put<K, V>(&mut self, key: K, value: V)
-    where
-        K: AsRef<[u8]>,
-        V: AsRef<[u8]>;
-
-    /// Removes the database entry for key. Does nothing if the key was not
-    /// found.
-    fn delete<K: AsRef<[u8]>>(&mut self, key: K);
-}
+pub trait DBWriteBatch {}
 
 impl<D, H> Storage<D, H>
 where
@@ -398,6 +394,7 @@ where
             pred_epochs,
             next_epoch_min_start_height,
             next_epoch_min_start_time,
+            update_epoch_blocks_delay,
             results,
             address_gen,
             #[cfg(feature = "ferveo-tpke")]
@@ -413,6 +410,7 @@ where
             self.last_epoch = epoch;
             self.next_epoch_min_start_height = next_epoch_min_start_height;
             self.next_epoch_min_start_time = next_epoch_min_start_time;
+            self.update_epoch_blocks_delay = update_epoch_blocks_delay;
             self.address_gen = address_gen;
             // Rebuild Merkle tree
             self.block.tree = MerkleTree::new(merkle_tree_stores)
@@ -456,7 +454,7 @@ where
     }
 
     /// Persist the current block's state to the database
-    pub fn commit_block(&mut self) -> Result<()> {
+    pub fn commit_block(&mut self, mut batch: D::WriteBatch) -> Result<()> {
         // All states are written only when the first height or a new epoch
         let is_full_commit =
             self.block.height.0 == 1 || self.last_epoch != self.block.epoch;
@@ -470,19 +468,20 @@ where
             pred_epochs: &self.block.pred_epochs,
             next_epoch_min_start_height: self.next_epoch_min_start_height,
             next_epoch_min_start_time: self.next_epoch_min_start_time,
+            update_epoch_blocks_delay: self.update_epoch_blocks_delay,
             address_gen: &self.address_gen,
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: &self.tx_queue,
         };
-        self.db.write_block(state, is_full_commit)?;
+        self.db.write_block(state, &mut batch, is_full_commit)?;
         self.last_height = self.block.height;
         self.last_epoch = self.block.epoch;
         self.header = None;
         if is_full_commit {
             // prune old merkle tree stores
-            self.prune_merkle_tree_stores()?;
+            self.prune_merkle_tree_stores(&mut batch)?;
         }
-        Ok(())
+        self.db.exec_batch(batch)
     }
 
     /// Find the root hash of the merkle tree
@@ -901,7 +900,10 @@ where
 
     // Prune merkle tree stores. Use after updating self.block.height in the
     // commit.
-    fn prune_merkle_tree_stores(&mut self) -> Result<()> {
+    fn prune_merkle_tree_stores(
+        &mut self,
+        batch: &mut D::WriteBatch,
+    ) -> Result<()> {
         if let Some(limit) = self.storage_read_past_height_limit {
             if self.last_height.0 <= limit {
                 return Ok(());
@@ -917,13 +919,13 @@ where
                     // height of the epoch would be used
                     // to restore stores at a height (> min_height) in the epoch
                     self.db.prune_merkle_tree_stores(
+                        batch,
                         epoch.prev(),
                         &self.block.pred_epochs,
                     )?;
                 }
             }
         }
-
         Ok(())
     }
 }
@@ -1210,7 +1212,6 @@ mod tests {
             let time_of_update = time_of_update + Duration::seconds(1);
             wl_storage.update_epoch(height_of_update, time_of_update).unwrap();
             assert_eq!(wl_storage.storage.block.epoch, epoch_before.next());
-            assert!(wl_storage.storage.update_epoch_blocks_delay.is_none());
         }
     }
 }
