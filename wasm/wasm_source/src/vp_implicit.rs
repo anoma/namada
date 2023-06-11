@@ -11,7 +11,7 @@
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
-use namada_vp_prelude::storage::{Key, KeySeg};
+use namada_vp_prelude::storage::KeySeg;
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
 
@@ -19,8 +19,6 @@ enum KeyType<'a> {
     /// Public key - written once revealed
     Pk(&'a Address),
     Token {
-        token: &'a Address,
-        sub_prefix: Option<Key>,
         owner: &'a Address,
     },
     PoS,
@@ -32,22 +30,12 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
         if let Some(address) = key::is_pk_key(key) {
             Self::Pk(address)
-        } else if let Some([token, owner]) =
-            token::is_any_token_balance_key(key)
-        {
-            Self::Token {
-                token,
-                owner,
-                sub_prefix: None,
-            }
-        } else if let Some((sub, [token, owner])) =
+        } else if let Some([_, owner]) = token::is_any_token_balance_key(key) {
+            Self::Token { owner }
+        } else if let Some((_, [_, owner])) =
             token::is_any_multitoken_balance_key(key)
         {
-            Self::Token {
-                token,
-                owner,
-                sub_prefix: Some(sub),
-            }
+            Self::Token { owner }
         } else if proof_of_stake::is_pos_key(key) {
             Self::PoS
         } else if gov_storage::is_vote_key(key) {

@@ -1066,7 +1066,12 @@ mod tests {
     #[test]
     fn test_serialization_round_trip() {
         let amount: Amount = serde_json::from_str(r#""1000000000""#).unwrap();
-        assert_eq!(amount, Amount{raw: Uint::from(1000000000)});
+        assert_eq!(
+            amount,
+            Amount {
+                raw: Uint::from(1000000000)
+            }
+        );
         let serialized = serde_json::to_string(&amount).unwrap();
         assert_eq!(serialized, r#""1000000000""#);
     }

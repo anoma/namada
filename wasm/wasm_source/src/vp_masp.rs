@@ -56,11 +56,6 @@ fn valid_transfer_amount(
             unshielded_transfer_value,
             reporeted_transparent_value
         );
-        log_string(format!(
-            "The unshielded amount {} disagrees with the calculated masp \
-             transparented value {}",
-            unshielded_transfer_value, reporeted_transparent_value
-        ))
     }
     res
 }
@@ -117,7 +112,6 @@ fn validate_tx(
         transparent_tx_pool += shielded_tx.value_balance.clone();
 
         if transfer.source != masp() {
-            log_string("transparent input");
             // Handle transparent input
             // Note that the asset type is timestamped so shields
             // where the shielded value has an incorrect timestamp
@@ -131,7 +125,6 @@ fn validate_tx(
                     denom,
                 );
 
-                log_string(format!("transparent amount: {:?}", transp_amt));
                 // Non-masp sources add to transparent tx pool
                 transparent_tx_pool += transp_amt;
             }
@@ -153,7 +146,6 @@ fn validate_tx(
         }
 
         if transfer.target != masp() {
-            log_string("transparent output");
             // Handle transparent output
             // The following boundary conditions must be satisfied
             // 1. One to 4 transparent outputs
@@ -171,11 +163,6 @@ fn validate_tx(
                     shielded_tx.vout.len()
                 );
 
-                log_string(format!(
-                    "Transparent output to a transaction to the masp must be \
-                     beteween 1 and 4 but is {}",
-                    shielded_tx.vout.len()
-                ));
                 return reject();
             }
 
@@ -209,7 +196,6 @@ fn validate_tx(
                     out.value,
                     denom.denominate(&transfer.amount.amount),
                 ) {
-                    log_string("Invalid transfer amount");
                     return reject();
                 }
 
@@ -241,10 +227,6 @@ fn validate_tx(
                                 "the public key of the output account does \
                                  not match the transfer target"
                             );
-                            log_string(format!(
-                                "the public key of the output account does \
-                                 not match the transfer target"
-                            ));
                             return reject();
                         }
                     }
@@ -254,10 +236,6 @@ fn validate_tx(
             // one or more of the denoms in the batch failed to verify
             // the asset derivation.
             if valid_count != out_length {
-                log_string(
-                    "one or more of the denoms in the batch failed to verify \
-                     the asset derivation.",
-                );
                 return reject();
             }
         } else {
@@ -267,7 +245,6 @@ fn validate_tx(
 
             // Satisfies 1.
             if !shielded_tx.vout.is_empty() {
-                log_string(format!("transparent vout {:?}", shielded_tx.vout));
                 debug_log!(
                     "Transparent output to a transaction from the masp must \
                      be 0 but is {}",
@@ -286,11 +263,6 @@ fn validate_tx(
                 );
                 // Section 3.4: The remaining value in the transparent
                 // transaction value pool MUST be nonnegative.
-                log_string(format!(
-                    "would give the masp a negative balance; transparent tx \
-                     {:?}",
-                    transparent_tx_pool
-                ));
                 return reject();
             }
             _ => {}
@@ -298,6 +270,5 @@ fn validate_tx(
     }
 
     // Do the expensive proof verification in the VM at the end.
-    log_string("reached proof verification");
     ctx.verify_masp(data)
 }

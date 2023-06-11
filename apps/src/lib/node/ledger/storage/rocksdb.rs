@@ -380,9 +380,8 @@ impl RocksDB {
         let batch = Mutex::new(batch);
 
         tracing::info!("Restoring previous hight subspace diffs");
-        self.iter_prefix(None)
-            .par_bridge()
-            .try_for_each(|(key, _value, _gas)| -> Result<()> {
+        self.iter_prefix(None).par_bridge().try_for_each(
+            |(key, _value, _gas)| -> Result<()> {
                 // Restore previous height diff if present, otherwise delete the
                 // subspace key
 
@@ -401,7 +400,8 @@ impl RocksDB {
                 }
 
                 Ok(())
-            })?;
+            },
+        )?;
 
         // Delete any height-prepended key, including subspace diff keys
         let mut batch = batch.into_inner().unwrap();

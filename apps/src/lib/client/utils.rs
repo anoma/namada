@@ -1121,7 +1121,7 @@ where
             break;
         }
     }
-    println!("");
+    println!();
     task.join().unwrap()
 }
 

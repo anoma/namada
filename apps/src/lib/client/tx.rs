@@ -1214,11 +1214,11 @@ impl ShieldedContext {
         // Where we will store our exchanged value
         let mut output = MaspAmount::default();
         // Repeatedly exchange assets until it is no longer possible
-        loop {
-            let (asset_epoch, token_addr, value) = match input.iter().next() {
-                Some(((e, a), v)) => (*e, a.clone(), *v),
-                _ => break,
-            };
+        while let Some(((asset_epoch, token_addr), value)) = input.iter().next()
+        {
+            let value = *value;
+            let asset_epoch = *asset_epoch;
+            let token_addr = token_addr.clone();
             for denom in MaspDenom::iter() {
                 let target_asset_type = make_asset_type(
                     Some(target_epoch),
