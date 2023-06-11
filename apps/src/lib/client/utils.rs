@@ -1107,7 +1107,7 @@ pub fn validator_pre_genesis_dir(base_dir: &Path, alias: &str) -> PathBuf {
 pub fn with_spinny_wheel<F, Out>(msg: &str, func: F) -> Out
 where
     F: FnOnce() -> Out + Send + 'static,
-    Out: Send + 'static
+    Out: Send + 'static,
 {
     let task = std::thread::spawn(func);
     let spinny_wheel = "|/-\\";
@@ -1137,4 +1137,3 @@ fn is_valid_validator_for_current_chain(
         }
     })
 }
-

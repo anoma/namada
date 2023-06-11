@@ -380,7 +380,7 @@ impl RocksDB {
         let batch = Mutex::new(batch);
 
         tracing::info!("Restoring previous hight subspace diffs");
-        self.iter_prefix(&Key::default())
+        self.iter_prefix(None)
             .par_bridge()
             .try_for_each(|(key, _value, _gas)| -> Result<()> {
                 // Restore previous height diff if present, otherwise delete the
@@ -1138,7 +1138,7 @@ impl<'iter> DBIter<'iter> for RocksDB {
 
     fn iter_prefix(
         &'iter self,
-        prefix: &Key,
+        prefix: Option<&Key>,
     ) -> PersistentPrefixIterator<'iter> {
         iter_subspace_prefix(self, prefix)
     }
@@ -1180,10 +1180,11 @@ impl<'iter> DBIter<'iter> for RocksDB {
 
 fn iter_subspace_prefix<'iter>(
     db: &'iter RocksDB,
-    prefix: &Key,
+    prefix: Option<&Key>,
 ) -> PersistentPrefixIterator<'iter> {
     let db_prefix = "subspace/".to_owned();
-    let prefix = format!("{}{}", db_prefix, prefix);
+    let prefix_str = prefix.map(|k| k.to_string()).unwrap_or_default();
+    let prefix = format!("{}{}", db_prefix, prefix_str);
     iter_prefix(db, db_prefix, prefix)
 }
 

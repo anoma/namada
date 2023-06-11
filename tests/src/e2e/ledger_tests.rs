@@ -27,9 +27,7 @@ use namada_apps::client::tx::ShieldedContext;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
-use namada_core::types::token::{
-    DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES,
-};
+use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use namada_test_utils::TestWasms;
 use serde_json::json;
 use setup::constants::*;

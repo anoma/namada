@@ -21,12 +21,12 @@ use eyre::{eyre, Context};
 use itertools::{Either, Itertools};
 use namada::types::chain::ChainId;
 use namada_apps::client::utils;
+use namada_apps::client::utils::REDUCED_CLI_PRINTING;
 use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
 use namada_apps::{config, wallet};
 use rand::Rng;
 use serde_json;
 use tempfile::{tempdir, TempDir};
-use namada_apps::client::utils::REDUCED_CLI_PRINTING;
 
 use crate::e2e::helpers::generate_bin_command;
 

@@ -52,7 +52,10 @@ use namada::types::storage::{
     BlockHeight, Epoch, Key, KeySeg, TxIndex, RESERVED_ADDRESS_PREFIX,
 };
 use namada::types::time::DateTimeUtc;
-use namada::types::token::{Change, DenominatedAmount, MaspDenom, TokenAddress, Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX};
+use namada::types::token::{
+    Change, DenominatedAmount, MaspDenom, TokenAddress, Transfer, HEAD_TX_KEY,
+    PIN_KEY_PREFIX, TX_KEY_PREFIX,
+};
 use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
 };
@@ -1168,7 +1171,7 @@ impl ShieldedContext {
             Some(asset_type.0),
             &asset_type.1.address,
             &asset_type.1.sub_prefix,
-            asset_type.2
+            asset_type.2,
         );
         let threshold = -conv[&masp_asset];
         if threshold == 0 {
@@ -1183,7 +1186,10 @@ impl ShieldedContext {
         let required = value / threshold;
         // Forget about the trace amount left over because we cannot
         // realize its value
-        let trace = MaspAmount(HashMap::from([((asset_type.0 , asset_type.1), Change::from(value % threshold))]));
+        let trace = MaspAmount(HashMap::from([(
+            (asset_type.0, asset_type.1),
+            Change::from(value % threshold),
+        )]));
         // Record how much more of the given conversion has been used
         *usage += required;
         // Apply the conversions to input and move the trace amount to output
@@ -1211,7 +1217,7 @@ impl ShieldedContext {
         loop {
             let (asset_epoch, token_addr, value) = match input.iter().next() {
                 Some(((e, a), v)) => (*e, a.clone(), *v),
-                _ => break
+                _ => break,
             };
             for denom in MaspDenom::iter() {
                 let target_asset_type = make_asset_type(
@@ -1230,21 +1236,20 @@ impl ShieldedContext {
 
                 let denom_value = denom.denominate_i128(&value);
                 self.query_allowed_conversion(
-                        client.clone(),
-                        target_asset_type,
-                        &mut conversions,
-                    )
-                    .await;
+                    client.clone(),
+                    target_asset_type,
+                    &mut conversions,
+                )
+                .await;
                 self.query_allowed_conversion(
                     client.clone(),
                     asset_type,
                     &mut conversions,
                 )
                 .await;
-                if let (Some((conv, _wit, usage)), false) = (
-                    conversions.get_mut(&asset_type),
-                    at_target_asset_type,
-                ) {
+                if let (Some((conv, _wit, usage)), false) =
+                    (conversions.get_mut(&asset_type), at_target_asset_type)
+                {
                     println!(
                         "converting current asset type to latest asset type..."
                     );
@@ -1262,9 +1267,10 @@ impl ShieldedContext {
                         &mut output,
                     )
                     .await;
-                } else if let (Some((conv, _wit, usage)), false) =
-                    (conversions.get_mut(&target_asset_type), at_target_asset_type)
-                {
+                } else if let (Some((conv, _wit, usage)), false) = (
+                    conversions.get_mut(&target_asset_type),
+                    at_target_asset_type,
+                ) {
                     println!(
                         "converting latest asset type to target asset type..."
                     );
@@ -1281,12 +1287,15 @@ impl ShieldedContext {
                         &mut input,
                         &mut output,
                     )
-                        .await;
+                    .await;
                 } else {
                     // At the target asset type. Then move component over to
                     // output.
                     let mut comp = MaspAmount::default();
-                    comp.insert((asset_epoch, token_addr.clone()), denom_value.into());
+                    comp.insert(
+                        (asset_epoch, token_addr.clone()),
+                        denom_value.into(),
+                    );
                     for ((e, key), val) in input.iter() {
                         if *key == token_addr && *e == asset_epoch {
                             comp.insert((*e, key.clone()), *val);
@@ -1747,9 +1756,11 @@ async fn gen_shielded_transfer(
     // Build and return the constructed transaction
     with_spinny_wheel(
         "Building proofs for MASP transaction (this can take some time) ... ",
-        move || builder
-            .build(consensus_branch_id, &prover)
-            .map(|(a, b)| Some((a, b, epoch)))
+        move || {
+            builder
+                .build(consensus_branch_id, &prover)
+                .map(|(a, b)| Some((a, b, epoch)))
+        },
     )
 }
 

@@ -392,12 +392,10 @@ impl<'de> serde::Deserialize<'de> for Amount {
     where
         D: serde::Deserializer<'de>,
     {
-        use serde::de::Error;
         let amount_string: String =
             serde::Deserialize::deserialize(deserializer)?;
-        Ok(Self {
-            raw: Uint::from_str(&amount_string).map_err(D::Error::custom)?,
-        })
+        let amt = DenominatedAmount::from_str(&amount_string).unwrap();
+        Ok(amt.amount)
     }
 }
 
@@ -1066,6 +1064,14 @@ mod tests {
     }
 
     #[test]
+    fn test_serialization_round_trip() {
+        let amount: Amount = serde_json::from_str(r#""1000000000""#).unwrap();
+        assert_eq!(amount, Amount{raw: Uint::from(1000000000)});
+        let serialized = serde_json::to_string(&amount).unwrap();
+        assert_eq!(serialized, r#""1000000000""#);
+    }
+
+    #[test]
     fn test_amount_checked_add() {
         let max = Amount::max();
         let max_signed = Amount::max_signed();
@@ -1149,21 +1155,6 @@ mod tests {
 
         let non_zero = Amount::from_uint(1, 0).expect("Test failed");
         assert!(!non_zero.is_zero());
-    }
-
-    #[test]
-    fn testy_poo() {
-        let change = Change::from(30000000000000000000i128);
-        let output = Change::from(6893488147419103231i128);
-
-        let amt = DenominatedAmount {
-            amount: Amount::from(change),
-            denom: 18.into(),
-        };
-        println!("{}", amt);
-        println!("{:?}", change.0.0);
-        println!("{:?}", output.0.0);
-        assert!(false);
     }
 }
 

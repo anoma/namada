@@ -59,8 +59,7 @@ fn valid_transfer_amount(
         log_string(format!(
             "The unshielded amount {} disagrees with the calculated masp \
              transparented value {}",
-            unshielded_transfer_value,
-            reporeted_transparent_value
+            unshielded_transfer_value, reporeted_transparent_value
         ))
     }
     res
@@ -255,7 +254,10 @@ fn validate_tx(
             // one or more of the denoms in the batch failed to verify
             // the asset derivation.
             if valid_count != out_length {
-                log_string("one or more of the denoms in the batch failed to verify the asset derivation.");
+                log_string(
+                    "one or more of the denoms in the batch failed to verify \
+                     the asset derivation.",
+                );
                 return reject();
             }
         } else {
