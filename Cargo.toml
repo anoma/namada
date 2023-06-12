@@ -53,7 +53,7 @@ byteorder = "1.4.2"
 borsh = "0.9.0"
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
 circular-queue = "0.2.6"
-clap = {git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2", default-features = false, features = ["std", "suggestions", "color", "cargo"]}
+clap = "3.2.25"
 clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
 color-eyre = "0.5.10"
 concat-idents = "1.1.2"
