@@ -2,6 +2,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
+use namada_core::ledger::storage::LastBlock;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::{BlockResults, KeySeg};
@@ -28,6 +29,9 @@ type Conversion = (
 router! {SHELL,
     // Epoch of the last committed block
     ( "epoch" ) -> Epoch = epoch,
+
+    // Query the last committed block
+    ( "last_block" ) -> Option<LastBlock> = last_block,
 
     // Raw storage access - read value
     ( "value" / [storage_key: storage::Key] )
@@ -174,6 +178,16 @@ where
 {
     let data = ctx.wl_storage.storage.last_epoch;
     Ok(data)
+}
+
+fn last_block<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+) -> storage_api::Result<Option<LastBlock>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    Ok(ctx.wl_storage.storage.last_block.clone())
 }
 
 /// Returns data with `vec![]` when the storage key is not found. For all
