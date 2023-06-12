@@ -258,7 +258,7 @@ where
     #[inline]
     /// Retrieves the [`BlockHeight`] that is currently being decided.
     pub fn get_current_decision_height(self) -> BlockHeight {
-        self.wl_storage.storage.last_height + 1
+        self.wl_storage.storage.get_last_block_height() + 1
     }
 
     /// Retrieve the `max_proposal_bytes` consensus parameter from storage.

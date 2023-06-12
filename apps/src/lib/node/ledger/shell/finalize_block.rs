@@ -536,7 +536,7 @@ where
         hash: BlockHash,
         byzantine_validators: Vec<Evidence>,
     ) -> (BlockHeight, bool) {
-        let height = self.wl_storage.storage.last_height + 1;
+        let height = self.wl_storage.storage.get_last_block_height() + 1;
 
         self.gas_meter.reset();
 
