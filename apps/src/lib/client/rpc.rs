@@ -314,7 +314,8 @@ pub async fn query_transparent_balance<
         }
         (None, Some(owner)) => {
             for token in tokens {
-                let prefix = token::balance_key(&token, &owner.address().unwrap());
+                let prefix =
+                    token::balance_key(&token, &owner.address().unwrap());
                 let balances =
                     query_storage_prefix::<C, token::Amount>(client, &prefix)
                         .await;
