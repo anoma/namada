@@ -112,6 +112,12 @@ pub struct Rfc3339String(pub String);
 #[serde(try_from = "Rfc3339String", into = "Rfc3339String")]
 pub struct DateTimeUtc(pub DateTime<Utc>);
 
+impl Display for DateTimeUtc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_rfc3339())
+    }
+}
+
 impl DateTimeUtc {
     /// Returns a DateTimeUtc which corresponds to the current date.
     pub fn now() -> Self {
