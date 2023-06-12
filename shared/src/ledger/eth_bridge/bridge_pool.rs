@@ -7,13 +7,13 @@ use std::sync::Arc;
 
 use borsh::BorshSerialize;
 use ethbridge_bridge_contract::Bridge;
+use ethers::providers::Middleware;
 use namada_core::types::chain::ChainId;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 
 use super::{block_on_eth_sync, eth_sync_or_exit, BlockOnEthSync};
 use crate::eth_bridge::ethers::abi::AbiDecode;
-use crate::eth_bridge::ethers::prelude::{Http, Provider};
 use crate::eth_bridge::structs::RelayProof;
 use crate::ledger::args;
 use crate::ledger::queries::{Client, RPC};
@@ -285,33 +285,35 @@ where
 }
 
 /// Relay a validator set update, signed off for a given epoch.
-pub async fn relay_bridge_pool_proof<C>(
+pub async fn relay_bridge_pool_proof<C, E>(
+    eth_client: Arc<E>,
     nam_client: &C,
     args: args::RelayBridgePoolProof,
 ) -> Halt<()>
 where
     C: Client + Sync,
     C::Error: std::fmt::Debug + std::fmt::Display,
+    E: Middleware,
+    E::Error: std::fmt::Debug + std::fmt::Display,
 {
     let _signal_receiver = args.safe_mode.then(install_shutdown_signal);
 
     if args.sync {
-        block_on_eth_sync(BlockOnEthSync {
-            url: &args.eth_rpc_endpoint,
-            deadline: Instant::now() + Duration::from_secs(60),
-            rpc_timeout: std::time::Duration::from_secs(3),
-            delta_sleep: Duration::from_secs(1),
-        })
+        block_on_eth_sync(
+            &*eth_client,
+            BlockOnEthSync {
+                deadline: Instant::now() + Duration::from_secs(60),
+                delta_sleep: Duration::from_secs(1),
+            },
+        )
         .await?;
     } else {
-        eth_sync_or_exit(&args.eth_rpc_endpoint).await?;
+        eth_sync_or_exit(&*eth_client).await?;
     }
 
     let bp_proof =
         construct_bridge_pool_proof(nam_client, &args.transfers, args.relayer)
             .await?;
-    let eth_client =
-        Arc::new(Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap());
     let bridge = match RPC
         .shell()
         .eth_bridge()

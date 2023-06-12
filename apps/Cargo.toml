@@ -82,7 +82,6 @@ byte-unit = "4.0.13"
 byteorder = "1.4.2"
 # https://github.com/clap-rs/clap/issues/1037
 clap = {git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2", default-features = false, features = ["std", "suggestions", "color", "cargo"]}
-clarity = "0.5.1"
 color-eyre = "0.5.10"
 config = "0.11.0"
 data-encoding = "2.3.2"
@@ -145,7 +144,6 @@ tower-abci = {version = "0.1.0", optional = true}
 tracing = "0.1.30"
 tracing-log = "0.1.2"
 tracing-subscriber = {version = "0.3.7", features = ["env-filter", "json"]}
-web30 = "0.19.1"
 websocket = "0.26.2"
 winapi = "0.3.9"
 #libmasp = { git = "https://github.com/anoma/masp", branch = "murisi/masp-incentive" }
