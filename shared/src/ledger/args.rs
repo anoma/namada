@@ -41,6 +41,8 @@ pub trait NamadaTypes: Clone + std::fmt::Debug {
     type Keypair: Clone + std::fmt::Debug;
     /// Represents the address of a Tendermint endpoint
     type TendermintAddress: Clone + std::fmt::Debug;
+    /// Represents the address of an Ethereum endpoint
+    type EthereumAddress: Clone + std::fmt::Debug;
     /// Represents a viewing key
     type ViewingKey: Clone + std::fmt::Debug;
     /// Represents the owner of a balance
@@ -63,6 +65,7 @@ impl NamadaTypes for SdkTypes {
     type Address = Address;
     type BalanceOwner = namada_core::types::masp::BalanceOwner;
     type Data = Vec<u8>;
+    type EthereumAddress = ();
     type Keypair = namada_core::types::key::common::SecretKey;
     type NativeAddress = Address;
     type PublicKey = namada_core::types::key::common::PublicKey;
@@ -611,7 +614,7 @@ pub struct RelayBridgePoolProof<C: NamadaTypes = SdkTypes> {
     /// The number of confirmations to wait for on Ethereum
     pub confirmations: u64,
     /// The Ethereum RPC endpoint.
-    pub eth_rpc_endpoint: String,
+    pub eth_rpc_endpoint: C::EthereumAddress,
     /// The Ethereum gas that can be spent during
     /// the relay call.
     pub gas: Option<u64>,
@@ -658,7 +661,7 @@ pub struct ValidatorSetUpdateRelay<C: NamadaTypes = SdkTypes> {
     /// The number of block confirmations on Ethereum.
     pub confirmations: u64,
     /// The Ethereum RPC endpoint.
-    pub eth_rpc_endpoint: String,
+    pub eth_rpc_endpoint: C::EthereumAddress,
     /// The epoch of the validator set to relay.
     pub epoch: Option<Epoch>,
     /// The Ethereum gas that can be spent during

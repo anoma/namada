@@ -2626,7 +2626,7 @@ pub mod args {
                 transfers: self.transfers,
                 relayer: self.relayer,
                 confirmations: self.confirmations,
-                eth_rpc_endpoint: self.eth_rpc_endpoint,
+                eth_rpc_endpoint: (),
                 gas: self.gas,
                 gas_price: self.gas_price,
                 eth_addr: self.eth_addr,
@@ -2772,7 +2772,7 @@ pub mod args {
                 daemon: self.daemon,
                 query: self.query.to_sdk_ctxless(),
                 confirmations: self.confirmations,
-                eth_rpc_endpoint: self.eth_rpc_endpoint,
+                eth_rpc_endpoint: (),
                 epoch: self.epoch,
                 gas: self.gas,
                 gas_price: self.gas_price,
@@ -4019,6 +4019,7 @@ pub mod args {
         type Address = WalletAddress;
         type BalanceOwner = WalletBalanceOwner;
         type Data = PathBuf;
+        type EthereumAddress = String;
         type Keypair = WalletKeypair;
         type NativeAddress = ();
         type PublicKey = WalletPublicKey;
