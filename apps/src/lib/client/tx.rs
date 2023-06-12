@@ -39,6 +39,7 @@ use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::query_wasm_code_hash;
 use crate::client::signing::find_keypair;
 use crate::client::tx::tx::ProcessTxResponse;
+use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::node::ledger::tendermint_node;
 use crate::wallet::{
@@ -291,6 +292,18 @@ pub async fn submit_init_validator<
         let tendermint_home = ctx.config.ledger.tendermint_dir();
         tendermint_node::write_validator_key(&tendermint_home, &consensus_key);
         tendermint_node::write_validator_state(tendermint_home);
+
+        // Write Namada config stuff or figure out how to do the above
+        // tendermint_node things two epochs in the future!!!
+        ctx.config.ledger.tendermint.tendermint_mode =
+            TendermintMode::Validator;
+        ctx.config
+            .write(
+                &ctx.config.ledger.shell.base_dir,
+                &ctx.config.ledger.chain_id,
+                true,
+            )
+            .unwrap();
 
         println!();
         println!(
