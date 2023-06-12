@@ -59,7 +59,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     if request.height != BlockHeight(0)
-        && request.height != ctx.wl_storage.storage.last_height
+        && request.height != ctx.wl_storage.storage.get_last_block_height()
     {
         return Err(storage_api::Error::new_const(
             "This query doesn't support arbitrary block heights, only the \

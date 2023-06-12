@@ -663,7 +663,7 @@ where
         tracing::info!(
             "Committed block hash: {}, height: {}",
             root,
-            self.wl_storage.storage.last_height,
+            self.wl_storage.storage.get_last_block_height(),
         );
         response.data = root.0;
         response
