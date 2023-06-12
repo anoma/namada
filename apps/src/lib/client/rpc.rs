@@ -77,8 +77,19 @@ pub async fn query_and_print_epoch<
 /// Query the last committed block
 pub async fn query_block<C: namada::ledger::queries::Client + Sync>(
     client: &C,
-) -> crate::facade::tendermint_rpc::endpoint::block::Response {
-    namada::ledger::rpc::query_block(client).await
+) {
+    let block = namada::ledger::rpc::query_block(client).await;
+    match block {
+        Some(block) => {
+            println!(
+                "Last committed block ID: {}, height: {}, time: {}",
+                block.hash, block.height, block.time
+            );
+        }
+        None => {
+            println!("No block has been committed yet.");
+        }
+    }
 }
 
 /// Query the results of the last committed block
