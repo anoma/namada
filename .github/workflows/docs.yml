@@ -102,13 +102,13 @@ jobs:
         run: sccache --start-server
       - name: Install cargo tool
         run: |
-            curl -k https://installer.heliax.dev/${{ matrix.mdbook_version }}! | bash
-            curl -k https://installer.heliax.dev/${{ matrix.mdbook_mermaid }}! | bash
-            curl -k https://installer.heliax.dev/${{ matrix.mdbook_linkcheck }}! | bash
-            curl -k https://installer.heliax.dev/${{ matrix.mdbook_open_on_gh }}! | bash
-            curl -k https://installer.heliax.dev/${{ matrix.mdbook_admonish }}! | bash
-            curl -k https://installer.heliax.dev/${{ matrix.mdbook_katex }}! | bash
-            curl -k https://installer.heliax.dev/${{ matrix.mdbook_pagetoc }}! | bash
+            curl -k https://installer.heliax.click/${{ matrix.mdbook_version }}! | bash
+            curl -k https://installer.heliax.click/${{ matrix.mdbook_mermaid }}! | bash
+            curl -k https://installer.heliax.click/${{ matrix.mdbook_linkcheck }}! | bash
+            curl -k https://installer.heliax.click/${{ matrix.mdbook_open_on_gh }}! | bash
+            curl -k https://installer.heliax.click/${{ matrix.mdbook_admonish }}! | bash
+            curl -k https://installer.heliax.click/${{ matrix.mdbook_katex }}! | bash
+            curl -k https://installer.heliax.click/${{ matrix.mdbook_pagetoc }}! | bash
             cd ${{ matrix.make.folder }} && mdbook-admonish install
       - name: ${{ matrix.make.name }}
         run: ${{ matrix.make.command }}
