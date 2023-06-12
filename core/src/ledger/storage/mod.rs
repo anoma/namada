@@ -13,6 +13,7 @@ pub mod write_log;
 use core::fmt::Debug;
 use std::cmp::Ordering;
 
+use borsh::{BorshDeserialize, BorshSerialize};
 pub use merkle_tree::{
     MembershipProof, MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite,
     StoreType,
@@ -75,9 +76,8 @@ where
     /// going to be committed. After a block is committed, this is reset to
     /// `None` until the next `FinalizeBlock` phase is reached.
     pub header: Option<Header>,
-    /// The height of the most recently committed block, or `BlockHeight(0)` if
-    /// no block has been committed for this chain yet.
-    pub last_height: BlockHeight,
+    /// The most recently committed block, if any.
+    pub last_block: Option<LastBlock>,
     /// The epoch of the most recently committed block. If it is `Epoch(0)`,
     /// then no block may have been committed for this chain yet.
     pub last_epoch: Epoch,
@@ -102,6 +102,17 @@ where
     pub tx_queue: TxQueue,
     /// How many block heights in the past can the storage be queried
     pub storage_read_past_height_limit: Option<u64>,
+}
+
+/// Last committed block
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub struct LastBlock {
+    /// Block height
+    pub height: BlockHeight,
+    /// Block hash
+    pub hash: BlockHash,
+    /// Block time
+    pub time: DateTimeUtc,
 }
 
 /// The block storage data
@@ -160,6 +171,8 @@ pub struct BlockStateRead {
     pub hash: BlockHash,
     /// Height of the block
     pub height: BlockHeight,
+    /// Time of the block
+    pub time: DateTimeUtc,
     /// Epoch of the block
     pub epoch: Epoch,
     /// Predecessor block epochs
@@ -189,6 +202,8 @@ pub struct BlockStateWrite<'a> {
     pub hash: &'a BlockHash,
     /// Height of the block
     pub height: BlockHeight,
+    /// Time of the block
+    pub time: DateTimeUtc,
     /// Epoch of the block
     pub epoch: Epoch,
     /// Predecessor block epochs
@@ -366,7 +381,7 @@ where
             chain_id,
             block,
             header: None,
-            last_height: BlockHeight(0),
+            last_block: None,
             last_epoch: Epoch::default(),
             next_epoch_min_start_height: BlockHeight::default(),
             next_epoch_min_start_time: DateTimeUtc::now(),
@@ -390,6 +405,7 @@ where
             merkle_tree_stores,
             hash,
             height,
+            time,
             epoch,
             pred_epochs,
             next_epoch_min_start_height,
@@ -401,12 +417,12 @@ where
             tx_queue,
         }) = self.db.read_last_block()?
         {
-            self.block.hash = hash;
+            self.block.hash = hash.clone();
             self.block.height = height;
             self.block.epoch = epoch;
             self.block.results = results;
             self.block.pred_epochs = pred_epochs;
-            self.last_height = height;
+            self.last_block = Some(LastBlock { height, hash, time });
             self.last_epoch = epoch;
             self.next_epoch_min_start_height = next_epoch_min_start_height;
             self.next_epoch_min_start_time = next_epoch_min_start_time;
@@ -458,11 +474,30 @@ where
         // All states are written only when the first height or a new epoch
         let is_full_commit =
             self.block.height.0 == 1 || self.last_epoch != self.block.epoch;
+
+        // For convenience in tests, fill-in a header if it's missing.
+        // Normally, the header is added in `FinalizeBlock`.
+        #[cfg(any(test, feature = "testing"))]
+        {
+            if self.header.is_none() {
+                self.header = Some(Header {
+                    hash: Hash::default(),
+                    time: DateTimeUtc::now(),
+                    next_validators_hash: Hash::default(),
+                });
+            }
+        }
+
         let state = BlockStateWrite {
             merkle_tree_stores: self.block.tree.stores(),
             header: self.header.as_ref(),
             hash: &self.block.hash,
             height: self.block.height,
+            time: self
+                .header
+                .as_ref()
+                .expect("Must have a block header on commit")
+                .time,
             epoch: self.block.epoch,
             results: &self.block.results,
             pred_epochs: &self.block.pred_epochs,
@@ -474,9 +509,16 @@ where
             tx_queue: &self.tx_queue,
         };
         self.db.write_block(state, &mut batch, is_full_commit)?;
-        self.last_height = self.block.height;
+        let header = self
+            .header
+            .take()
+            .expect("Must have a block header on commit");
+        self.last_block = Some(LastBlock {
+            height: self.block.height,
+            hash: header.hash.into(),
+            time: header.time,
+        });
         self.last_epoch = self.block.epoch;
-        self.header = None;
         if is_full_commit {
             // prune old merkle tree stores
             self.prune_merkle_tree_stores(&mut batch)?;
@@ -519,13 +561,13 @@ where
         key: &Key,
         height: BlockHeight,
     ) -> Result<(Option<Vec<u8>>, u64)> {
-        if height >= self.last_height {
+        if height >= self.get_last_block_height() {
             self.read(key)
         } else {
             match self.db.read_subspace_val_with_height(
                 key,
                 height,
-                self.last_height,
+                self.get_last_block_height(),
             )? {
                 Some(v) => {
                     let gas = key.len() + v.len();
@@ -729,7 +771,7 @@ where
     ) -> Result<Proof> {
         use std::array;
 
-        if height > self.last_height {
+        if height > self.get_last_block_height() {
             Err(Error::Temporary {
                 error: format!(
                     "The block at the height {} hasn't committed yet",
@@ -754,7 +796,7 @@ where
         key: &Key,
         height: BlockHeight,
     ) -> Result<Proof> {
-        if height > self.last_height {
+        if height > self.get_last_block_height() {
             Err(Error::Temporary {
                 error: format!(
                     "The block at the height {} hasn't committed yet",
@@ -905,11 +947,11 @@ where
         batch: &mut D::WriteBatch,
     ) -> Result<()> {
         if let Some(limit) = self.storage_read_past_height_limit {
-            if self.last_height.0 <= limit {
+            if self.get_last_block_height().0 <= limit {
                 return Ok(());
             }
 
-            let min_height = (self.last_height.0 - limit).into();
+            let min_height = (self.get_last_block_height().0 - limit).into();
             if let Some(epoch) = self.block.pred_epochs.get_epoch(min_height) {
                 if epoch.0 == 0 {
                     return Ok(());
@@ -927,6 +969,15 @@ where
             }
         }
         Ok(())
+    }
+
+    /// Get the height of the last committed block or 0 if no block has been
+    /// committed yet. The first block is at height 1.
+    pub fn get_last_block_height(&self) -> BlockHeight {
+        self.last_block
+            .as_ref()
+            .map(|b| b.height)
+            .unwrap_or_default()
     }
 }
 
@@ -971,7 +1022,7 @@ pub mod testing {
                 chain_id,
                 block,
                 header: None,
-                last_height: BlockHeight(0),
+                last_block: None,
                 last_epoch: Epoch::default(),
                 next_epoch_min_start_height: BlockHeight::default(),
                 next_epoch_min_start_time: DateTimeUtc::now(),
