@@ -4019,7 +4019,9 @@ fn test_genesis_validators() -> Result<()> {
     // Find the block height on the validator
     let after_tx_height = get_height(&test, &validator_0_rpc)?;
 
-    // Wait for the non-validator to be synced to at least the same height
+    // Wait for the second validator and non-validator to be synced to at least
+    // the same height
+    wait_for_block_height(&test, &validator_1_rpc, after_tx_height, 10)?;
     wait_for_block_height(&test, &non_validator_rpc, after_tx_height, 10)?;
 
     let query_balance_args = |ledger_rpc| {
