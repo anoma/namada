@@ -18,7 +18,6 @@ pub trait Cmd: Sized {
     fn parse(matches: &ArgMatches) -> Option<Self>;
 
     fn parse_or_print_help(app: App) -> Result<(Self, Context)> {
-        let mut app = Self::add_sub(app);
         let matches = app.clone().get_matches();
         match Self::parse(&matches) {
             Some(cmd) => {
@@ -27,6 +26,7 @@ pub trait Cmd: Sized {
                 Ok((cmd, context))
             }
             None => {
+                let mut app = app;
                 app.print_help().unwrap();
                 safe_exit(2);
             }
@@ -257,7 +257,9 @@ where
     <T as FromStr>::Err: Debug,
 {
     pub fn def(&self) -> ClapArg {
-        ClapArg::new(self.name).long(self.name).multiple(true)
+        ClapArg::new(self.name)
+            .long(self.name)
+            .multiple_occurrences(true)
     }
 
     pub fn parse(&self, matches: &ArgMatches) -> Vec<T> {

@@ -74,8 +74,7 @@ blake2b-rs = "0.2.0"
 borsh = "0.9.0"
 byte-unit = "4.0.13"
 byteorder = "1.4.2"
-# https://github.com/clap-rs/clap/issues/1037
-clap = {git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2", default-features = false, features = ["std", "suggestions", "color", "cargo"]}
+clap = "3.2.25"
 color-eyre = "0.5.10"
 config = "0.11.0"
 data-encoding = "2.3.2"
