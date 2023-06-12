@@ -474,6 +474,20 @@ where
         // All states are written only when the first height or a new epoch
         let is_full_commit =
             self.block.height.0 == 1 || self.last_epoch != self.block.epoch;
+
+        // For convenience in tests, fill-in a header if it's missing.
+        // Normally, the header is added in `FinalizeBlock`.
+        #[cfg(any(test, feature = "testing"))]
+        {
+            if self.header.is_none() {
+                self.header = Some(Header {
+                    hash: Hash::default(),
+                    time: DateTimeUtc::now(),
+                    next_validators_hash: Hash::default(),
+                });
+            }
+        }
+
         let state = BlockStateWrite {
             merkle_tree_stores: self.block.tree.stores(),
             header: self.header.as_ref(),
