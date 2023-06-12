@@ -1268,11 +1268,11 @@ fn iter_subspace_prefix<'iter>(
         .expect("{SUBSPACE_CF} column family should exist");
     let db_prefix = "".to_owned();
     iter_prefix(
-      db,
-      subspace_cf,
-      db_prefix,
-      prefix.map(|k| k.to_string()).unwrap_or_default()
-  )
+        db,
+        subspace_cf,
+        db_prefix,
+        prefix.map(|k| k.to_string()).unwrap_or_default(),
+    )
 }
 
 fn iter_diffs_prefix(
