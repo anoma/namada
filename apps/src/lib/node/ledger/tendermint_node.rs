@@ -63,7 +63,9 @@ fn from_env_or_default() -> Result<String> {
             tracing::info!("Using tendermint path from env variable: {}", path);
             Ok(path)
         }
-        Err(std::env::VarError::NotPresent) => Ok(String::from("tendermint")),
+        Err(std::env::VarError::NotPresent) => {
+            Ok(String::from(config::TENDERMINT_DIR))
+        }
         Err(std::env::VarError::NotUnicode(msg)) => {
             Err(Error::TendermintPath(msg))
         }
