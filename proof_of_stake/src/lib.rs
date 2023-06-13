@@ -3003,13 +3003,6 @@ pub fn slash<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    tracing::info!(
-        "Slashing validator {} on new evidence from epoch {} (current epoch = \
-         {})",
-        validator,
-        evidence_epoch,
-        current_epoch
-    );
     let evidence_block_height: u64 = evidence_block_height.into();
     let slash = Slash {
         epoch: evidence_epoch,
