@@ -40,7 +40,7 @@ use crate::{
     bond_tokens, bonds_and_unbonds, consensus_validator_set_handle,
     copy_validator_sets_and_positions, find_validator_by_raw_hash,
     get_num_consensus_validators, init_genesis,
-    insert_validator_into_validator_set, process_slashes,
+    insert_validator_into_validator_set, is_validator, process_slashes,
     read_below_capacity_validator_set_addresses_with_stake,
     read_consensus_validator_set_addresses_with_stake, read_total_stake,
     read_validator_delta_value, read_validator_stake, slash,
@@ -789,6 +789,7 @@ fn test_become_validator_aux(
         min(validators.len() as u64, params.max_validator_slots),
         num_consensus_before
     );
+    assert!(!is_validator(&s, &new_validator).unwrap());
 
     // Initialize the validator account
     let consensus_key = new_validator_consensus_key.to_public();
@@ -802,6 +803,7 @@ fn test_become_validator_aux(
         Decimal::new(5, 2),
     )
     .unwrap();
+    assert!(is_validator(&s, &new_validator).unwrap());
 
     let num_consensus_after =
         get_num_consensus_validators(&s, current_epoch + params.pipeline_len)
