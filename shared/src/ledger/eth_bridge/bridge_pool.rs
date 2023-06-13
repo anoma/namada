@@ -395,6 +395,23 @@ where
 }
 
 mod recommendations {
+    use super::*;
+
+    pub async fn recommend_batch<C>(
+        _: &C,
+        _: args::RecommendBatch,
+    ) -> Halt<()>
+    where
+        C: Client + Sync,
+        C::Error: std::fmt::Debug,
+    {
+        todo!()
+    }
+}
+
+// TODO: fix the code in this module
+#[cfg(FALSE)]
+mod recommendations {
     use borsh::BorshDeserialize;
 
     use super::*;
