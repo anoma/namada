@@ -4,7 +4,7 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
-use namada_core::types::storage::{BlockHeight, BlockResults, Key};
+use namada_core::types::storage::{BlockHeight, BlockResults, Key, KeySeg};
 use namada_core::types::token::MaspDenom;
 
 use crate::ledger::events::log::dumb_queries;
@@ -123,12 +123,13 @@ where
         ctx.wl_storage.storage.block.height.0 as usize + 1
     ];
     iter.for_each(|(key, value, _gas)| {
-        let key = key
-            .parse::<usize>()
-            .expect("expected integer for block height");
+        let key = u64::parse(key).expect("expected integer for block height");
         let value = BlockResults::try_from_slice(&value)
             .expect("expected BlockResults bytes");
-        results[key] = value;
+        let idx: usize = key
+            .try_into()
+            .expect("expected block height to fit into usize");
+        results[idx] = value;
     });
     Ok(results)
 }

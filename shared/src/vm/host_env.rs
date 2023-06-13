@@ -23,7 +23,7 @@ use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
 use crate::types::internal::HostEnvResult;
 use crate::types::key::*;
-use crate::types::storage::{Key, TxIndex};
+use crate::types::storage::{BlockHeight, Key, TxIndex};
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use crate::vm::{HostRef, MutHostRef};
@@ -604,7 +604,7 @@ where
     let (log_val, gas) = write_log.read(&key);
     tx_add_gas(env, gas)?;
     Ok(match log_val {
-        Some(&write_log::StorageModification::Write { ref value }) => {
+        Some(write_log::StorageModification::Write { ref value }) => {
             let len: i64 = value
                 .len()
                 .try_into()
@@ -617,7 +617,7 @@ where
             // fail, given key has been deleted
             HostEnvResult::Fail.to_i64()
         }
-        Some(&write_log::StorageModification::InitAccount {
+        Some(write_log::StorageModification::InitAccount {
             ref vp_code_hash,
         }) => {
             // read the VP of a new account
@@ -629,7 +629,7 @@ where
             result_buffer.replace(vp_code_hash.to_vec());
             len
         }
-        Some(&write_log::StorageModification::Temp { ref value }) => {
+        Some(write_log::StorageModification::Temp { ref value }) => {
             let len: i64 = value
                 .len()
                 .try_into()
@@ -749,7 +749,7 @@ where
         );
         tx_add_gas(env, iter_gas + log_gas)?;
         match log_val {
-            Some(&write_log::StorageModification::Write { ref value }) => {
+            Some(write_log::StorageModification::Write { ref value }) => {
                 let key_val = KeyVal {
                     key,
                     val: value.clone(),
@@ -772,7 +772,7 @@ where
                 // a VP of a new account doesn't need to be iterated
                 continue;
             }
-            Some(&write_log::StorageModification::Temp { ref value }) => {
+            Some(write_log::StorageModification::Temp { ref value }) => {
                 let key_val = KeyVal {
                     key,
                     val: value.clone(),
@@ -985,7 +985,7 @@ where
     let event: IbcEvent = BorshDeserialize::try_from_slice(&event)
         .map_err(TxRuntimeError::EncodingError)?;
     let write_log = unsafe { env.ctx.write_log.get() };
-    let gas = write_log.set_ibc_event(event);
+    let gas = write_log.emit_ibc_event(event);
     tx_add_gas(env, gas)
 }
 
@@ -1579,6 +1579,38 @@ where
     tx_add_gas(env, gas)
 }
 
+/// Getting the block header function exposed to the wasm VM Tx environment.
+pub fn tx_get_block_header<MEM, DB, H, CA>(
+    env: &TxVmEnv<MEM, DB, H, CA>,
+    height: u64,
+) -> TxResult<i64>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let storage = unsafe { env.ctx.storage.get() };
+    let (header, gas) = storage
+        .get_block_header(Some(BlockHeight(height)))
+        .map_err(TxRuntimeError::StorageError)?;
+    Ok(match header {
+        Some(h) => {
+            let value =
+                h.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
+            let len: i64 = value
+                .len()
+                .try_into()
+                .map_err(TxRuntimeError::NumConversionError)?;
+            let result_buffer = unsafe { env.ctx.result_buffer.get() };
+            result_buffer.replace(value);
+            tx_add_gas(env, gas)?;
+            len
+        }
+        None => HostEnvResult::Fail.to_i64(),
+    })
+}
+
 /// Getting the chain ID function exposed to the wasm VM VP environment.
 pub fn vp_get_chain_id<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
@@ -1620,36 +1652,35 @@ where
     Ok(height.0)
 }
 
-/// Getting the block time function exposed to the wasm VM Tx
-/// environment. The time is that of the block header to which the current
-/// transaction is being applied.
-pub fn tx_get_block_time<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
-) -> TxResult<i64>
+/// Getting the block header function exposed to the wasm VM VP environment.
+pub fn vp_get_block_header<MEM, DB, H, EVAL, CA>(
+    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    height: u64,
+) -> vp_host_fns::EnvResult<i64>
 where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let storage = unsafe { env.ctx.storage.get() };
     let (header, gas) = storage
-        .get_block_header(None)
-        .map_err(TxRuntimeError::StorageError)?;
+        .get_block_header(Some(BlockHeight(height)))
+        .map_err(vp_host_fns::RuntimeError::StorageError)?;
+    vp_host_fns::add_gas(gas_meter, gas)?;
     Ok(match header {
         Some(h) => {
-            let time = h
-                .time
-                .to_rfc3339()
+            let value = h
                 .try_to_vec()
-                .map_err(TxRuntimeError::EncodingError)?;
-            let len: i64 = time
+                .map_err(vp_host_fns::RuntimeError::EncodingError)?;
+            let len: i64 = value
                 .len()
                 .try_into()
-                .map_err(TxRuntimeError::NumConversionError)?;
+                .map_err(vp_host_fns::RuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
-            result_buffer.replace(time);
-            tx_add_gas(env, gas)?;
+            result_buffer.replace(value);
             len
         }
         None => HostEnvResult::Fail.to_i64(),

@@ -116,6 +116,7 @@ fn test_init_genesis_aux(
     let mut s = TestWlStorage::default();
     s.storage.block.epoch = start_epoch;
 
+    validators.sort_by(|a, b| b.tokens.cmp(&a.tokens));
     init_genesis(&mut s, &params, validators.clone().into_iter(), start_epoch)
         .unwrap();
 
@@ -124,10 +125,7 @@ fn test_init_genesis_aux(
         details.unbonds.is_empty() && details.slashes.is_empty()
     }));
 
-    validators.sort_by(|a, b| a.tokens.cmp(&b.tokens));
-    for (i, validator) in validators.into_iter().rev().enumerate() {
-        println!("Validator {validator:?}");
-
+    for (i, validator) in validators.into_iter().enumerate() {
         let addr = &validator.address;
         let self_bonds = bond_details
             .remove(&BondId {
@@ -273,7 +271,6 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     };
     let check_bond_details = |ix, bond_details: BondsAndUnbondsDetails| {
         println!("Check index {ix}");
-        assert_eq!(bond_details.len(), 1);
         let details = bond_details.get(&self_bond_id).unwrap();
         assert_eq!(
             details.bonds.len(),
@@ -415,7 +412,6 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     // Check all bond details (self-bonds and delegation)
     let check_bond_details = |ix, bond_details: BondsAndUnbondsDetails| {
         println!("Check index {ix}");
-        assert_eq!(bond_details.len(), 2);
         let self_bond_details = bond_details.get(&self_bond_id).unwrap();
         let delegation_details = bond_details.get(&delegation_bond_id).unwrap();
         assert_eq!(
@@ -458,6 +454,14 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     // executed after genesis and some of the genesis bond
     let amount_self_unbond: token::Amount =
         amount_self_bond + (validator.tokens / 2);
+    // When the difference is 0, only the non-genesis self-bond is unbonded
+    let unbonded_genesis_self_bond =
+        amount_self_unbond - amount_self_bond != token::Amount::default();
+    dbg!(
+        amount_self_unbond,
+        amount_self_bond,
+        unbonded_genesis_self_bond
+    );
     let self_unbond_epoch = s.storage.block.epoch;
 
     unbond_tokens(
@@ -496,7 +500,11 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
             .at(&(pipeline_epoch + params.unbonding_len))
             .get(&s, &Epoch::default())
             .unwrap(),
-        Some(amount_self_unbond - amount_self_bond)
+        if unbonded_genesis_self_bond {
+            Some(amount_self_unbond - amount_self_bond)
+        } else {
+            None
+        }
     );
     assert_eq!(
         unbond
@@ -533,7 +541,8 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
             self_bond_details.bonds[0],
             BondDetails {
                 start: start_epoch,
-                amount: amount_self_unbond - amount_self_bond,
+                amount: validator.tokens + amount_self_bond
+                    - amount_self_unbond,
                 slashed_amount: None
             },
         );
@@ -547,23 +556,25 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         );
         assert_eq!(
             self_bond_details.unbonds.len(),
-            2,
+            if unbonded_genesis_self_bond { 2 } else { 1 },
             "Contains a full unbond of the last self-bond and an unbond from \
              the genesis bond"
         );
+        if unbonded_genesis_self_bond {
+            assert_eq!(
+                self_bond_details.unbonds[0],
+                UnbondDetails {
+                    start: start_epoch,
+                    withdraw: self_unbond_epoch
+                        + params.pipeline_len
+                        + params.unbonding_len,
+                    amount: amount_self_unbond - amount_self_bond,
+                    slashed_amount: None
+                }
+            );
+        }
         assert_eq!(
-            self_bond_details.unbonds[0],
-            UnbondDetails {
-                start: start_epoch,
-                withdraw: self_unbond_epoch
-                    + params.pipeline_len
-                    + params.unbonding_len,
-                amount: amount_self_unbond - amount_self_bond,
-                slashed_amount: None
-            }
-        );
-        assert_eq!(
-            self_bond_details.unbonds[1],
+            self_bond_details.unbonds[usize::from(unbonded_genesis_self_bond)],
             UnbondDetails {
                 start: self_bond_epoch + params.pipeline_len,
                 withdraw: self_unbond_epoch

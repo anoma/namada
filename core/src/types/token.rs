@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::dec::POS_DECIMAL_PRECISION;
+use crate::ibc::applications::transfer::Amount as IbcAmount;
 use crate::ledger::storage_api::token::read_denom;
 use crate::ledger::storage_api::StorageRead;
 use crate::types::address::{masp, Address, DecodeError as AddressError};
@@ -704,6 +705,19 @@ impl MaspDenom {
     }
 }
 
+impl TryFrom<IbcAmount> for Amount {
+    type Error = AmountParseError;
+
+    fn try_from(amount: IbcAmount) -> Result<Self, Self::Error> {
+        // TODO: https://github.com/anoma/namada/issues/1089
+        // TODO: OVERFLOW CHECK PLEASE (PATCH IBC TO ALLOW GETTING
+        // IBCAMOUNT::MAX OR SIMILAR) if amount > u64::MAX.into() {
+        //    return Err(AmountParseError::InvalidRange);
+        //}
+        DenominatedAmount::from_str(&amount.to_string()).map(|a| a.amount)
+    }
+}
+
 /// Key segment for a balance key
 pub const BALANCE_STORAGE_KEY: &str = "balance";
 /// Key segment for a denomination key
@@ -899,6 +913,16 @@ pub fn is_any_multitoken_balance_key(
     }
 }
 
+/// Check if the given storage key is token or multitoken balance key for unspecified
+/// token. If it is, returns the token and owner addresses.
+pub fn is_any_token_or_multitoken_balance_key(
+    key: &Key,
+) -> Option<[&Address; 2]> {
+    is_any_multitoken_balance_key(key)
+        .map(|a| a.1)
+        .or_else(|| is_any_token_balance_key(key))
+}
+
 fn multitoken_balance_owner(key: &Key) -> Option<(Key, &Address)> {
     let len = key.segments.len();
     if len < 4 {
@@ -961,35 +985,6 @@ pub enum TransferError {
     Amount(AmountParseError),
     #[error("No token is specified")]
     NoToken,
-}
-
-#[cfg(any(feature = "abciplus", feature = "abcipp"))]
-impl TryFrom<crate::ledger::ibc::data::FungibleTokenPacketData> for Transfer {
-    type Error = TransferError;
-
-    fn try_from(
-        data: crate::ledger::ibc::data::FungibleTokenPacketData,
-    ) -> Result<Self, Self::Error> {
-        let source =
-            Address::decode(&data.sender).map_err(TransferError::Address)?;
-        let target =
-            Address::decode(&data.receiver).map_err(TransferError::Address)?;
-        let token_str =
-            data.denom.split('/').last().ok_or(TransferError::NoToken)?;
-        let token =
-            Address::decode(token_str).map_err(TransferError::Address)?;
-        let amount = DenominatedAmount::from_str(&data.amount)
-            .map_err(TransferError::Amount)?;
-        Ok(Self {
-            source,
-            target,
-            token,
-            sub_prefix: None,
-            amount,
-            key: None,
-            shielded: None,
-        })
-    }
 }
 
 #[cfg(test)]

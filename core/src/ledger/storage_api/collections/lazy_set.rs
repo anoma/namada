@@ -107,6 +107,10 @@ where
         }
     }
 
+    fn is_data_sub_key(&self, key: &storage::Key) -> bool {
+        matches!(self.is_valid_sub_key(key), Ok(Some(_)))
+    }
+
     fn read_sub_key_data<ENV>(
         env: &ENV,
         storage_key: &storage::Key,

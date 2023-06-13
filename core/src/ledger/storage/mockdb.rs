@@ -176,6 +176,7 @@ impl DB for MockDB {
     fn write_block(
         &mut self,
         state: BlockStateWrite,
+        _batch: &mut Self::WriteBatch,
         _is_full_commit: bool,
     ) -> Result<()> {
         let BlockStateWrite {
@@ -445,6 +446,7 @@ impl DB for MockDB {
 
     fn prune_merkle_tree_stores(
         &mut self,
+        _batch: &mut Self::WriteBatch,
         epoch: Epoch,
         pred_epochs: &Epochs,
     ) -> Result<()> {
@@ -555,21 +557,7 @@ impl Iterator for PrefixIterator<MockIterator> {
     }
 }
 
-impl DBWriteBatch for MockDBWriteBatch {
-    fn put<K, V>(&mut self, _key: K, _value: V)
-    where
-        K: AsRef<[u8]>,
-        V: AsRef<[u8]>,
-    {
-        // Nothing to do - in MockDB, batch writes are committed directly from
-        // `batch_write_subspace_val` and `batch_delete_subspace_val`.
-    }
-
-    fn delete<K: AsRef<[u8]>>(&mut self, _key: K) {
-        // Nothing to do - in MockDB, batch writes are committed directly from
-        // `batch_write_subspace_val` and `batch_delete_subspace_val`.
-    }
-}
+impl DBWriteBatch for MockDBWriteBatch {}
 
 fn unknown_key_error(key: &str) -> Result<()> {
     Err(Error::UnknownKey {
