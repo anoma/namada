@@ -50,18 +50,19 @@ mod tests {
         /// that this transaction is accepted by the PoS validity predicate.
         #[test]
         fn test_tx_change_validator_commissions(
-            commission_state_change in arb_commission_info(),
+            (initial_rate, max_change, commission_change) in arb_commission_info(),
             // A key to sign the transaction
             key in arb_common_keypair(),
             pos_params in arb_pos_params(None)) {
-            test_tx_change_validator_commission_aux(commission_state_change.2, commission_state_change.0, commission_state_change.1, key, pos_params).unwrap()
+            test_tx_change_validator_commission_aux(
+                initial_rate, max_change, commission_change, key, pos_params).unwrap()
         }
     }
 
     fn test_tx_change_validator_commission_aux(
-        commission_change: transaction::pos::CommissionChange,
         initial_rate: Decimal,
         max_change: Decimal,
+        commission_change: transaction::pos::CommissionChange,
         key: key::common::SecretKey,
         pos_params: PosParams,
     ) -> TxResult {
