@@ -808,14 +808,12 @@ where
 pub fn is_validator<S>(
     storage: &S,
     address: &Address,
-    params: &PosParams,
-    epoch: namada_core::types::storage::Epoch,
 ) -> storage_api::Result<bool>
 where
     S: StorageRead + StorageWrite,
 {
-    let state = validator_state_handle(address).get(storage, epoch, params)?;
-    Ok(state.is_some())
+    let rate = read_validator_max_commission_rate_change(storage, address)?;
+    Ok(rate.is_some())
 }
 
 /// Check if the provided address is a delegator address, optionally at a
@@ -868,9 +866,7 @@ where
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
     if let Some(source) = source {
-        if source != validator
-            && is_validator(storage, source, &params, pipeline_epoch)?
-        {
+        if source != validator && is_validator(storage, source)? {
             return Err(
                 BondError::SourceMustNotBeAValidator(source.clone()).into()
             );
@@ -1534,16 +1530,14 @@ where
 
     // Make sure source is not some other validator
     if let Some(source) = source {
-        if source != validator
-            && is_validator(storage, source, &params, pipeline_epoch)?
-        {
+        if source != validator && is_validator(storage, source)? {
             return Err(
                 BondError::SourceMustNotBeAValidator(source.clone()).into()
             );
         }
     }
     // Make sure the target is actually a validator
-    if !is_validator(storage, validator, &params, pipeline_epoch)? {
+    if !is_validator(storage, validator)? {
         return Err(BondError::NotAValidator(validator.clone()).into());
     }
     // Make sure the validator is not currently frozen
