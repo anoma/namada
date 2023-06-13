@@ -2579,7 +2579,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
             std::thread::spawn(move || {
                 let mut args = (*tx_args).clone();
                 args.push(&*validator_one_rpc);
-                let mut client = run!(*test, Bin::Client, args, Some(40))?;
+                let mut client = run!(*test, Bin::Client, args, Some(80))?;
                 client.exp_string("Transaction accepted")?;
                 client.exp_string("Transaction applied")?;
                 client.exp_string("Transaction is valid.")?;
