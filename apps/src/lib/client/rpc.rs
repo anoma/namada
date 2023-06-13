@@ -1512,9 +1512,7 @@ pub async fn query_slashes<C: namada::ledger::queries::Client + Sync>(
                     writeln!(
                         w,
                         "Slash epoch {}, type {}, rate {}",
-                        slash.epoch,
-                        slash.r#type,
-                        slash.r#type.get_slash_rate(&params)
+                        slash.epoch, slash.r#type, slash.rate
                     )
                     .unwrap();
                 }
