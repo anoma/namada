@@ -23,6 +23,7 @@
 //!       - `root`: root hash
 //!       - `store`: the tree's store
 //!     - `hash`: block hash
+//!     - `time`: block time
 //!     - `epoch`: block epoch
 //!     - `address_gen`: established address generator
 //!     - `header`: block's header
@@ -570,6 +571,7 @@ impl DB for RocksDB {
         read_opts.set_iterate_upper_bound(next_height_prefix);
         let mut merkle_tree_stores = MerkleTreeStoresRead::default();
         let mut hash = None;
+        let mut time = None;
         let mut epoch = None;
         let mut pred_epochs = None;
         let mut address_gen = None;
@@ -618,6 +620,11 @@ impl DB for RocksDB {
                             types::decode(bytes).map_err(Error::CodingError)?,
                         )
                     }
+                    "time" => {
+                        time = Some(
+                            types::decode(bytes).map_err(Error::CodingError)?,
+                        )
+                    }
                     "epoch" => {
                         epoch = Some(
                             types::decode(bytes).map_err(Error::CodingError)?,
@@ -638,22 +645,27 @@ impl DB for RocksDB {
                 None => unknown_key_error(path)?,
             }
         }
-        match (hash, epoch, pred_epochs, address_gen) {
-            (Some(hash), Some(epoch), Some(pred_epochs), Some(address_gen)) => {
-                Ok(Some(BlockStateRead {
-                    merkle_tree_stores,
-                    hash,
-                    height,
-                    epoch,
-                    pred_epochs,
-                    results,
-                    next_epoch_min_start_height,
-                    next_epoch_min_start_time,
-                    update_epoch_blocks_delay,
-                    address_gen,
-                    tx_queue,
-                }))
-            }
+        match (hash, time, epoch, pred_epochs, address_gen) {
+            (
+                Some(hash),
+                Some(time),
+                Some(epoch),
+                Some(pred_epochs),
+                Some(address_gen),
+            ) => Ok(Some(BlockStateRead {
+                merkle_tree_stores,
+                hash,
+                height,
+                time,
+                epoch,
+                pred_epochs,
+                results,
+                next_epoch_min_start_height,
+                next_epoch_min_start_time,
+                update_epoch_blocks_delay,
+                address_gen,
+                tx_queue,
+            })),
             _ => Err(Error::Temporary {
                 error: "Essential data couldn't be read from the DB"
                     .to_string(),
@@ -672,6 +684,7 @@ impl DB for RocksDB {
             header,
             hash,
             height,
+            time,
             epoch,
             pred_epochs,
             next_epoch_min_start_height,
@@ -802,6 +815,15 @@ impl DB for RocksDB {
             batch
                 .0
                 .put_cf(block_cf, key.to_string(), types::encode(&hash));
+        }
+        // Block time
+        {
+            let key = prefix_key
+                .push(&"time".to_owned())
+                .map_err(Error::KeyError)?;
+            batch
+                .0
+                .put_cf(block_cf, key.to_string(), types::encode(&time));
         }
         // Block epoch
         {
@@ -1444,6 +1466,7 @@ mod test {
         let merkle_tree = MerkleTree::<Sha256Hasher>::default();
         let merkle_tree_stores = merkle_tree.stores();
         let hash = BlockHash::default();
+        let time = DateTimeUtc::now();
         let epoch = Epoch::default();
         let pred_epochs = Epochs::default();
         let height = BlockHeight::default();
@@ -1458,6 +1481,7 @@ mod test {
             header: None,
             hash: &hash,
             height,
+            time,
             epoch,
             results: &results,
             pred_epochs: &pred_epochs,

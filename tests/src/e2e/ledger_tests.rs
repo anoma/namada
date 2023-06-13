@@ -4019,7 +4019,9 @@ fn test_genesis_validators() -> Result<()> {
     // Find the block height on the validator
     let after_tx_height = get_height(&test, &validator_0_rpc)?;
 
-    // Wait for the non-validator to be synced to at least the same height
+    // Wait for the second validator and non-validator to be synced to at least
+    // the same height
+    wait_for_block_height(&test, &validator_1_rpc, after_tx_height, 10)?;
     wait_for_block_height(&test, &non_validator_rpc, after_tx_height, 10)?;
 
     let query_balance_args = |ledger_rpc| {
@@ -4148,6 +4150,8 @@ fn double_signing_gets_slashed() -> Result<()> {
     )?;
     validator_0_copy.exp_string("Namada ledger node started")?;
     validator_0_copy.exp_string("This node is a validator")?;
+    // Wait for a first block
+    validator_0_copy.exp_string("Committed block hash")?;
     let _bg_validator_0_copy = validator_0_copy.background();
 
     // 5. Submit a valid token transfer tx to validator 0

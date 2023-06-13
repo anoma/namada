@@ -5,6 +5,7 @@ use borsh::BorshDeserialize;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
+use namada_core::ledger::storage::LastBlock;
 use namada_core::ledger::testnet_pow;
 use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
@@ -86,18 +87,13 @@ pub async fn query_epoch<C: crate::ledger::queries::Client + Sync>(
     epoch
 }
 
-/// Query the last committed block
+/// Query the last committed block, if any.
 pub async fn query_block<C: crate::ledger::queries::Client + Sync>(
     client: &C,
-) -> crate::tendermint_rpc::endpoint::block::Response {
-    let response = client.latest_block().await.unwrap();
-    println!(
-        "Last committed block ID: {}, height: {}, time: {}",
-        response.block_id,
-        response.block.header.height,
-        response.block.header.time
-    );
-    response
+) -> Option<LastBlock> {
+    // NOTE: We're not using `client.latest_block()` because it may return an
+    // updated block from pre-commit before it's actually committed
+    unwrap_client_response::<C, _>(RPC.shell().last_block(client).await)
 }
 
 /// A helper to unwrap client's response. Will shut down process on error.
