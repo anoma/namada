@@ -4169,9 +4169,10 @@ fn double_signing_gets_slashed() -> Result<()> {
         "--node",
         &validator_one_rpc,
     ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction is valid.")?;
-    client.assert_success();
+    let _client = run!(test, Bin::Client, tx_args, Some(40))?;
+    // We don't wait for tx result - sometimes the node may crash before while
+    // it's being applied, because the slashed validator will stop voting and
+    // rewards calculation then fails with `InsufficientVotes`.
 
     // 6. Wait for double signing evidence
     let mut validator_1 = bg_validator_1.foreground();
