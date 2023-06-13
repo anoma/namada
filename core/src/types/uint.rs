@@ -3,7 +3,7 @@
 //! the backing type of token amounts.
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
-use std::ops::{Add, AddAssign, BitAnd, BitXor, Div, Mul, Neg, Rem, Sub, SubAssign};
+use std::ops::{Add, AddAssign, BitAnd, Div, Mul, Neg, Rem, Sub, SubAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use impl_num_traits::impl_uint_num_traits;
@@ -119,17 +119,14 @@ impl Uint {
 
     /// Compute the two's complement of a number.
     fn negate(&self) -> Self {
-        Self(
-            self.0
-                .into_iter()
-                .map(|byte| byte.bitxor(u64::MAX))
-                .collect::<Vec<_>>()
-                .try_into()
-                .expect("This cannot fail"),
-        )
-        .overflowing_add(Uint::from(1u64))
-        .0
-        .canonical()
+        let mut output = self.0;
+        for byte in output.iter_mut() {
+            *byte ^= u64::MAX;
+        }
+        Self(output)
+            .overflowing_add(Uint::from(1u64))
+            .0
+            .canonical()
     }
 
     /// There are two valid representations of zero: plus and
