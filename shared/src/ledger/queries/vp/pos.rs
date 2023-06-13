@@ -98,13 +98,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let params = namada_proof_of_stake::read_pos_params(ctx.wl_storage)?;
-    namada_proof_of_stake::is_validator(
-        ctx.wl_storage,
-        &addr,
-        &params,
-        ctx.wl_storage.storage.block.epoch,
-    )
+    namada_proof_of_stake::is_validator(ctx.wl_storage, &addr)
 }
 
 /// Find if the given address is a delegator
