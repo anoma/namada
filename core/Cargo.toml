@@ -81,6 +81,7 @@ itertools = "0.10.0"
 libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
 masp_primitives = { git = "https://github.com/anoma/masp", rev = "ea4fcc68d9412b94042c1c2f0ea0212394e1be37" }
 num256 = "0.3.5"
+num-integer = "0.1.45"
 num-rational = "0.4.1"
 num-traits = "0.2.15"
 proptest = {git = "https://github.com/heliaxdev/proptest", rev = "8f1b4abe7ebd35c0781bf9a00a4ee59833ffa2a1", optional = true}

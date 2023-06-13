@@ -72,9 +72,9 @@ impl From<PendingTransfer> for ethbridge_structs::Erc20Transfer {
         Self {
             from: pending.transfer.asset.0.into(),
             to: pending.transfer.recipient.0.into(),
-            amount: u64::from(pending.transfer.amount).into(),
+            amount: pending.transfer.amount.into(),
             fee_from: pending.gas_fee.payer.to_string(),
-            fee: u64::from(pending.gas_fee.amount).into(),
+            fee: pending.gas_fee.amount.into(),
             sender: pending.transfer.sender.to_string(),
         }
     }
@@ -86,9 +86,9 @@ impl Encode<8> for PendingTransfer {
         let version = Token::Uint(1.into());
         let namespace = Token::String(NAMESPACE.into());
         let from = Token::Address(self.transfer.asset.0.into());
-        let fee = Token::Uint(u64::from(self.gas_fee.amount).into());
+        let fee = Token::Uint(self.gas_fee.amount.into());
         let to = Token::Address(self.transfer.recipient.0.into());
-        let amount = Token::Uint(u64::from(self.transfer.amount).into());
+        let amount = Token::Uint(self.transfer.amount.into());
         let fee_from = Token::String(self.gas_fee.payer.to_string());
         let sender = Token::String(self.transfer.sender.to_string());
         [version, namespace, from, to, amount, fee_from, fee, sender]

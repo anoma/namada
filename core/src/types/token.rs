@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
+use ethabi::ethereum_types::U256;
 use masp_primitives::transaction::Transaction;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -443,6 +444,12 @@ impl From<u64> for Amount {
         Amount {
             raw: Uint::from(val),
         }
+    }
+}
+
+impl From<Amount> for U256 {
+    fn from(amt: Amount) -> Self {
+        Self(amt.raw.0)
     }
 }
 

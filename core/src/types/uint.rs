@@ -3,10 +3,11 @@
 //! the backing type of token amounts.
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
-use std::ops::{Add, AddAssign, BitXor, Div, Mul, Neg, Rem, Sub, SubAssign};
+use std::ops::{Add, AddAssign, BitAnd, BitXor, Div, Mul, Neg, Rem, Sub, SubAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use impl_num_traits::impl_uint_num_traits;
+use num_integer::Integer;
 use serde::{Deserialize, Serialize};
 use uint::construct_uint;
 
@@ -28,6 +29,63 @@ construct_uint! {
 }
 
 impl_uint_num_traits!(Uint, 4);
+
+impl Integer for Uint {
+    fn div_floor(&self, other: &Self) -> Self {
+        self.div(other)
+    }
+
+    fn mod_floor(&self, other: &Self) -> Self {
+        let (_, rem) = self.div_mod(*other);
+        rem
+    }
+
+    fn gcd(&self, other: &Self) -> Self {
+        if self.is_zero() { return *self; }
+        if other.is_zero() { return *other; }
+
+        let shift = (*self | *other).trailing_zeros();
+        let mut u = *self;
+        let mut v = *other;
+        u >>= shift;
+        v >>= shift;
+        u >>= u.trailing_zeros();
+
+        loop {
+            v >>= v.trailing_zeros();
+            if u > v {
+                std::mem::swap(&mut u, &mut v);
+            }
+            v -= u; // here v >= u
+            if v.is_zero() { break; }
+        }
+        u << shift
+    }
+
+    fn lcm(&self, other: &Self) -> Self {
+        (*self * *other).div(self.gcd(other))
+    }
+
+    fn divides(&self, other: &Self) -> bool {
+        other.rem(self).is_zero()
+    }
+
+    fn is_multiple_of(&self, other: &Self) -> bool {
+        self.divides(other)
+    }
+
+    fn is_even(&self) -> bool {
+        self.bitand(Self::one()) != Self::one()
+    }
+
+    fn is_odd(&self) -> bool {
+        !self.is_even()
+    }
+
+    fn div_rem(&self, other: &Self) -> (Self, Self) {
+        self.div_mod(*other)
+    }
+}
 
 /// The maximum 256 bit integer
 pub const MAX_VALUE: Uint = Uint([u64::MAX; 4]);

@@ -59,7 +59,6 @@ use storage::{
     RewardsAccumulator, UnbondDetails,
 };
 use thiserror::Error;
-use namada_core::types::dec::Dec;
 use types::{
     BelowCapacityValidatorSet, BelowCapacityValidatorSets, BondId, Bonds,
     CommissionRates, ConsensusValidator, ConsensusValidatorSet,
@@ -67,7 +66,7 @@ use types::{
     SlashType, Slashes, TotalDeltas, Unbonds, ValidatorConsensusKeys,
     ValidatorDeltas, ValidatorPositionAddresses, ValidatorSetPositions,
     ValidatorSetUpdate, ValidatorState, ValidatorStates, VoteInfo,
-    WeightedValidator,
+    WeightedValidator, ValidatorEthColdKeys, ValidatorEthHotKeys
 };
 
 /// Address of the PoS account implemented as a native VP

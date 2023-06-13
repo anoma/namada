@@ -170,7 +170,7 @@ where
         self,
         pk: &key::common::PublicKey,
         epoch: Option<Epoch>,
-    ) -> Result<TendermintValidator<EllipticCurve>> {
+    ) -> Result<WeightedValidator> {
         let pk_bytes = pk
             .try_to_vec()
             .expect("Serializing public key should not fail");
@@ -183,29 +183,6 @@ where
                 match self.wl_storage.storage.read(&pk_key) {
                     Ok((Some(bytes), _)) => bytes == pk_bytes,
                     _ => false,
-                }
-            })
-            .map(|validator| {
-                let dkg_key =
-                    key::dkg_session_keys::dkg_pk_key(&validator.address);
-                let bytes = self
-                    .wl_storage
-                    .storage
-                    .read(&dkg_key)
-                    .expect("Validator should have public dkg key")
-                    .0
-                    .expect("Validator should have public dkg key");
-                let dkg_publickey =
-                    &<DkgPublicKey as BorshDeserialize>::deserialize(
-                        &mut bytes.as_ref(),
-                    )
-                    .expect(
-                        "DKG public key in storage should be deserializable",
-                    );
-                TendermintValidator {
-                    power: validator.bonded_stake.into(),
-                    address: validator.address.to_string(),
-                    public_key: dkg_publickey.into(),
                 }
             })
             .ok_or_else(|| Error::NotValidatorKey(pk.to_string(), epoch))
