@@ -20,6 +20,7 @@ use thiserror::Error;
 
 use super::address::Address;
 use super::storage::{self, DbKeySeg, Key, KeySeg};
+use crate::ledger::storage::StorageHasher;
 use crate::types::address;
 
 const PK_STORAGE_KEY: &str = "public_key";
@@ -260,6 +261,8 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     type PublicKey: 'static + PublicKey;
     /// Represents the secret key for this scheme
     type SecretKey: 'static + SecretKey;
+    /// Represents the data hasher for this scheme
+    type Hasher: 'static + StorageHasher;
     /// The scheme type of this implementation
     const TYPE: SchemeType;
     /// Generate a keypair.
@@ -270,18 +273,13 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     /// Sign the data with a key.
     fn sign(
         keypair: &Self::SecretKey,
-        data: impl AsRef<[u8]>,
+        data: impl SignableBytes,
     ) -> Self::Signature;
+
     /// Check that the public key matches the signature on the given data.
-    fn verify_signature<T: BorshSerialize + BorshDeserialize>(
+    fn verify_signature(
         pk: &Self::PublicKey,
-        data: &T,
-        sig: &Self::Signature,
-    ) -> Result<(), VerifySigError>;
-    /// Check that the public key matches the signature on the given raw data.
-    fn verify_signature_raw(
-        pk: &Self::PublicKey,
-        data: &[u8],
+        data: &impl SignableBytes,
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError>;
 }
@@ -384,6 +382,33 @@ pub fn tm_raw_hash_to_string(raw_hash: impl AsRef<[u8]>) -> String {
     HEXUPPER.encode(raw_hash.as_ref())
 }
 
+/// Helper trait to compress arbitrary bytes to a hash value,
+/// which can be signed over.
+pub trait SignableBytes: Sized + AsRef<[u8]> {
+    /// Calculate a hash value to sign over.
+    fn signable_hash<H: StorageHasher>(&self) -> [u8; 32] {
+        H::hash(self.as_ref()).into()
+    }
+}
+
+impl SignableBytes for Vec<u8> {}
+impl SignableBytes for &Vec<u8> {}
+impl SignableBytes for &[u8] {}
+impl<const N: usize> SignableBytes for [u8; N] {}
+impl<const N: usize> SignableBytes for &[u8; N] {}
+
+impl SignableBytes for crate::types::hash::Hash {
+    fn signable_hash<H: StorageHasher>(&self) -> [u8; 32] {
+        self.0
+    }
+}
+
+impl SignableBytes for crate::types::keccak::KeccakHash {
+    fn signable_hash<H: StorageHasher>(&self) -> [u8; 32] {
+        self.0
+    }
+}
+
 /// Helpers for testing with keys.
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
@@ -423,6 +448,32 @@ pub mod testing {
             .unwrap()
     }
 
+    /// An Ethereum keypair for tests
+    pub fn keypair_3() -> <common::SigScheme as SigScheme>::SecretKey {
+        let bytes = [
+            0xf3, 0x78, 0x78, 0x80, 0xba, 0x85, 0x0b, 0xa4, 0xc5, 0x74, 0x50,
+            0x5a, 0x23, 0x54, 0x6d, 0x46, 0x74, 0xa1, 0x3f, 0x09, 0x75, 0x0c,
+            0xf4, 0xb5, 0xb8, 0x17, 0x69, 0x64, 0xf4, 0x08, 0xd4, 0x80,
+        ];
+        secp256k1::SecretKey::try_from_slice(bytes.as_ref())
+            .unwrap()
+            .try_to_sk()
+            .unwrap()
+    }
+
+    /// An Ethereum keypair for tests
+    pub fn keypair_4() -> <common::SigScheme as SigScheme>::SecretKey {
+        let bytes = [
+            0x68, 0xab, 0xce, 0x64, 0x54, 0x07, 0x7e, 0xf5, 0x1a, 0xb4, 0x31,
+            0x7a, 0xb8, 0x8b, 0x98, 0x30, 0x27, 0x11, 0x4e, 0x58, 0x69, 0xd6,
+            0x45, 0x94, 0xdc, 0x90, 0x8d, 0x94, 0xee, 0x58, 0x46, 0x91,
+        ];
+        secp256k1::SecretKey::try_from_slice(bytes.as_ref())
+            .unwrap()
+            .try_to_sk()
+            .unwrap()
+    }
+
     /// Generate an arbitrary [`super::SecretKey`].
     pub fn arb_keypair<S: SigScheme>() -> impl Strategy<Value = S::SecretKey> {
         any::<[u8; 32]>().prop_map(move |seed| {
@@ -431,9 +482,16 @@ pub mod testing {
         })
     }
 
-    /// Generate an arbitrary [`common::SecretKey`].
+    /// Generate an arbitrary `ed25519` [`common::SecretKey`].
     pub fn arb_common_keypair() -> impl Strategy<Value = common::SecretKey> {
         arb_keypair::<ed25519::SigScheme>()
+            .prop_map(|keypair| keypair.try_to_sk().unwrap())
+    }
+
+    /// Generate an arbitrary `secp256k1` [`common::SecretKey`].
+    pub fn arb_common_secp256k1_keypair()
+    -> impl Strategy<Value = common::SecretKey> {
+        arb_keypair::<secp256k1::SigScheme>()
             .prop_map(|keypair| keypair.try_to_sk().unwrap())
     }
 
@@ -490,7 +548,7 @@ macro_rules! sigscheme_test {
                 let sk = <$type>::generate(&mut rng);
                 let sig = <$type>::sign(&sk, b"hello");
                 assert!(
-                    <$type>::verify_signature_raw(&sk.ref_to(), b"hello", &sig)
+                    <$type>::verify_signature(&sk.ref_to(), b"hello", &sig)
                         .is_ok()
                 );
             }

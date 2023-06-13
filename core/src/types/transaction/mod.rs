@@ -185,6 +185,11 @@ pub struct InitValidator {
     pub account_key: common::PublicKey,
     /// A key to be used for signing blocks and votes on blocks.
     pub consensus_key: common::PublicKey,
+    /// An Eth bridge governance public key
+    pub eth_cold_key: secp256k1::PublicKey,
+    /// An Eth bridge hot signing public key used for validator set updates and
+    /// cross-chain transactions
+    pub eth_hot_key: secp256k1::PublicKey,
     /// Public key used to sign protocol transactions
     pub protocol_key: common::PublicKey,
     /// Serialization of the public session key used in the DKG

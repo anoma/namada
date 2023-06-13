@@ -39,6 +39,12 @@ doc = false
 name = "namadaw"
 path = "src/bin/namada-wallet/main.rs"
 
+# Namada relayer
+[[bin]]
+doc = false
+name = "namadar"
+path = "src/bin/namada-relayer/main.rs"
+
 [features]
 default = ["std", "abciplus"]
 mainnet = [
@@ -48,16 +54,6 @@ dev = ["namada/dev"]
 std = ["ed25519-consensus/std", "rand/std", "rand_core/std"]
 # for integration tests and test utilies
 testing = ["dev"]
-
-abcipp = [
-    "namada/abcipp",
-    "namada/tendermint-rpc-abcipp",
-    "tendermint-abcipp",
-    "tendermint-config-abcipp",
-    "tendermint-proto-abcipp",
-    "tendermint-rpc-abcipp",
-    "tower-abci-abcipp",
-]
 
 abciplus = [
     "namada/abciplus",
@@ -92,6 +88,10 @@ data-encoding = "2.3.2"
 derivative = "2.2.0"
 directories = "4.0.1"
 ed25519-consensus = "1.2.0"
+ethabi = "18.0.0"
+ethbridge-bridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.18.0"}
+ethbridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.18.0"}
+ethbridge-governance-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.18.0"}
 ferveo = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 eyre = "0.6.5"
@@ -101,6 +101,8 @@ futures = "0.3"
 itertools = "0.10.1"
 libc = "0.2.97"
 libloading = "0.7.2"
+message-io = {version = "0.14.3", default-features = false, features = ["websocket"]}
+num256 = "0.3.5"
 num-derive = "0.3.3"
 num-rational = "0.4.1"
 num-traits = "0.2.14"
@@ -120,16 +122,14 @@ rpassword = "5.0.1"
 serde = {version = "1.0.125", features = ["derive"]}
 serde_bytes = "0.11.5"
 serde_json = {version = "1.0.62", features = ["raw_value"]}
+serde_regex = "1.1.0"
+semver = "1.0.14"
 sha2 = "0.9.3"
 signal-hook = "0.3.9"
 # sysinfo with disabled multithread feature
 sysinfo = {version = "=0.21.1", default-features = false}
 tar = "0.4.37"
 # temporarily using fork work-around
-tendermint-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "4db3c5ea09fae4057008d22bf9e96bf541b55b35", optional = true}
-tendermint-config-abcipp = {package = "tendermint-config", git = "https://github.com/heliaxdev/tendermint-rs", rev = "4db3c5ea09fae4057008d22bf9e96bf541b55b35", optional = true}
-tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", rev = "4db3c5ea09fae4057008d22bf9e96bf541b55b35", optional = true}
-tendermint-rpc-abcipp = {package = "tendermint-rpc", git = "https://github.com/heliaxdev/tendermint-rs", rev = "4db3c5ea09fae4057008d22bf9e96bf541b55b35", features = ["http-client", "websocket-client"], optional = true}
 tendermint = {version = "0.23.6", optional = true}
 tendermint-config = {version = "0.23.6", optional = true}
 tendermint-proto = {version = "0.23.6", optional = true}
@@ -141,7 +141,6 @@ tonic = "0.8.3"
 tower = "0.4"
 # Also, using the same version of tendermint-rs as we do here.
 # with a patch for https://github.com/penumbra-zone/tower-abci/issues/7.
-tower-abci-abcipp = {package = "tower-abci", git = "https://github.com/heliaxdev/tower-abci", rev = "a31ce06533f5fbd943508676059d44de27395792", optional = true}
 tower-abci = {version = "0.1.0", optional = true}
 tracing = "0.1.30"
 tracing-log = "0.1.2"
@@ -153,7 +152,11 @@ masp_primitives = { git = "https://github.com/anoma/masp", rev = "ea4fcc68d9412b
 masp_proofs = { git = "https://github.com/anoma/masp", rev = "ea4fcc68d9412b94042c1c2f0ea0212394e1be37", features = ["bundled-prover", "download-params"] }
 bimap = {version = "0.6.2", features = ["serde"]}
 
+warp = "0.3.2"
+bytes = "1.1.0"
+
 [dev-dependencies]
+assert_matches = "1.5.0"
 namada = {path = "../shared", default-features = false, features = ["testing", "wasm-runtime"]}
 namada_test_utils = {path = "../test_utils"}
 bit-set = "0.5.2"

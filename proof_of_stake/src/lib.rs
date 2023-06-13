@@ -59,6 +59,7 @@ use storage::{
     RewardsAccumulator, UnbondDetails,
 };
 use thiserror::Error;
+use namada_core::types::dec::Dec;
 use types::{
     BelowCapacityValidatorSet, BelowCapacityValidatorSets, BondId, Bonds,
     CommissionRates, ConsensusValidator, ConsensusValidatorSet,
@@ -240,6 +241,22 @@ pub fn validator_consensus_key_handle(
     ValidatorConsensusKeys::open(key)
 }
 
+/// Get the storage handle to a PoS validator's eth hot key.
+pub fn validator_eth_hot_key_handle(
+    validator: &Address,
+) -> ValidatorEthHotKeys {
+    let key = storage::validator_eth_hot_key_key(validator);
+    ValidatorEthHotKeys::open(key)
+}
+
+/// Get the storage handle to a PoS validator's eth cold key.
+pub fn validator_eth_cold_key_handle(
+    validator: &Address,
+) -> ValidatorEthColdKeys {
+    let key = storage::validator_eth_cold_key_key(validator);
+    ValidatorEthColdKeys::open(key)
+}
+
 /// Get the storage handle to a PoS validator's state
 pub fn validator_state_handle(validator: &Address) -> ValidatorStates {
     let key = storage::validator_state_key(validator);
@@ -328,7 +345,7 @@ pub fn delegator_rewards_products_handle(
 pub fn init_genesis<S>(
     storage: &mut S,
     params: &PosParams,
-    validators: impl Iterator<Item = GenesisValidator> + Clone,
+    validators: impl Iterator<Item = GenesisValidator>,
     current_epoch: namada_core::types::storage::Epoch,
 ) -> storage_api::Result<()>
 where
@@ -346,6 +363,8 @@ where
         address,
         tokens,
         consensus_key,
+        eth_cold_key,
+        eth_hot_key,
         commission_rate,
         max_commission_rate_change,
     } in validators
@@ -377,6 +396,16 @@ where
         validator_consensus_key_handle(&address).init_at_genesis(
             storage,
             consensus_key,
+            current_epoch,
+        )?;
+        validator_eth_hot_key_handle(&address).init_at_genesis(
+            storage,
+            eth_hot_key,
+            current_epoch,
+        )?;
+        validator_eth_cold_key_handle(&address).init_at_genesis(
+            storage,
+            eth_cold_key,
             current_epoch,
         )?;
         let delta = token::Change::from(tokens);
@@ -1575,19 +1604,47 @@ where
     Ok(())
 }
 
+/// Arguments to [`become_validator`].
+pub struct BecomeValidator<'a, S> {
+    /// Storage implementation.
+    pub storage: &'a mut S,
+    /// Proof-of-stake parameters.
+    pub params: &'a PosParams,
+    /// The validator's address.
+    pub address: &'a Address,
+    /// The validator's consensus key, used by Tendermint.
+    pub consensus_key: &'a common::PublicKey,
+    /// The validator's Ethereum bridge cold key.
+    pub eth_cold_key: &'a common::PublicKey,
+    /// The validator's Ethereum bridge hot key.
+    pub eth_hot_key: &'a common::PublicKey,
+    /// The numeric value of the current epoch.
+    pub current_epoch: Epoch,
+    /// Commission rate.
+    pub commission_rate: Dec,
+    /// Max commission rate change.
+    pub max_commission_rate_change: Dec,
+}
+
 /// Initialize data for a new validator.
 pub fn become_validator<S>(
-    storage: &mut S,
-    params: &PosParams,
-    address: &Address,
-    consensus_key: &common::PublicKey,
-    current_epoch: Epoch,
-    commission_rate: Dec,
-    max_commission_rate_change: Dec,
+    args: BecomeValidator<'_, S>,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
+    let BecomeValidator {
+        storage,
+        params,
+        address,
+        consensus_key,
+        eth_cold_key,
+        eth_hot_key,
+        current_epoch,
+        commission_rate,
+        max_commission_rate_change,
+    } = args;
+
     // This will fail if the key is already being used
     try_insert_consensus_key(storage, consensus_key)?;
 
@@ -1603,6 +1660,18 @@ where
     validator_consensus_key_handle(address).set(
         storage,
         consensus_key.clone(),
+        current_epoch,
+        params.pipeline_len,
+    )?;
+    validator_eth_hot_key_handle(address).set(
+        storage,
+        eth_hot_key.clone(),
+        current_epoch,
+        params.pipeline_len,
+    )?;
+    validator_eth_cold_key_handle(address).set(
+        storage,
+        eth_cold_key.clone(),
         current_epoch,
         params.pipeline_len,
     )?;

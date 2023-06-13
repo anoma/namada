@@ -11,10 +11,11 @@ mod governance;
 mod init_chain;
 mod prepare_proposal;
 mod process_proposal;
-mod queries;
+pub(super) mod queries;
 mod stats;
+mod vote_extensions;
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::mem;
 use std::path::{Path, PathBuf};
@@ -22,26 +23,30 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada::core::ledger::eth_bridge;
+use namada::ledger::eth_bridge::{EthBridgeQueries, EthereumBridgeConfig};
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::BlockGasMeter;
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
 };
+use namada::ledger::protocol::ShellParams;
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, WlStorage, DB,
 };
 use namada::ledger::storage_api::{self, StorageRead};
-use namada::ledger::{ibc, pos, protocol, replay_protection};
+use namada::ledger::{pos, protocol, replay_protection};
 use namada::proof_of_stake::{self, read_pos_params, slash};
 use namada::proto::{self, Tx};
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::chain::ChainId;
+use namada::types::ethereum_events::EthereumEvent;
 use namada::types::internal::WrapperTxInQueue;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
-use namada::types::time::{DateTimeUtc, TimeZone, Utc};
+use namada::types::time::DateTimeUtc;
 use namada::types::token::{self};
 #[cfg(not(feature = "mainnet"))]
 use namada::types::transaction::MIN_FEE;
@@ -55,12 +60,11 @@ use namada::vm::WasmCacheRwAccess;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 use thiserror::Error;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
+use super::ethereum_oracle::{self as oracle, last_processed_block};
 use crate::config;
 use crate::config::{genesis, TendermintMode};
-#[cfg(feature = "abcipp")]
-use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
 use crate::facade::tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
 };
@@ -70,8 +74,10 @@ use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{storage, tendermint_node};
+#[cfg(feature = "dev")]
+use crate::wallet;
 #[allow(unused_imports)]
-use crate::wallet::ValidatorData;
+use crate::wallet::{ValidatorData, ValidatorKeys};
 
 fn key_to_tendermint(
     pk: &common::PublicKey,
@@ -100,6 +106,8 @@ pub enum Error {
     GasOverflow,
     #[error("{0}")]
     Tendermint(tendermint_node::Error),
+    #[error("{0}")]
+    Ethereum(super::ethereum_oracle::Error),
     #[error("Server error: {0}")]
     TowerServer(String),
     #[error("{0}")]
@@ -141,6 +149,7 @@ pub enum ErrorCodes {
     ReplayTx = 10,
     InvalidChainId = 11,
     ExpiredTx = 12,
+    InvalidVoteExtension = 13,
 }
 
 impl ErrorCodes {
@@ -157,7 +166,7 @@ impl ErrorCodes {
             | WasmRuntimeError => true,
             InvalidTx | InvalidSig | InvalidOrder | ExtraTxs
             | Undecryptable | AllocationError | ReplayTx | InvalidChainId
-            | ExpiredTx => false,
+            | ExpiredTx | InvalidVoteExtension => false,
         }
     }
 }
@@ -211,25 +220,138 @@ pub(super) enum ShellMode {
     Validator {
         data: ValidatorData,
         broadcast_sender: UnboundedSender<Vec<u8>>,
+        eth_oracle: Option<EthereumOracleChannels>,
     },
     Full,
     Seed,
 }
 
-#[allow(dead_code)]
+/// A channel for pulling events from the Ethereum oracle
+/// and queueing them up for inclusion in vote extensions
+#[derive(Debug)]
+pub(super) struct EthereumReceiver {
+    channel: Receiver<EthereumEvent>,
+    queue: BTreeSet<EthereumEvent>,
+}
+
+impl EthereumReceiver {
+    /// Create a new [`EthereumReceiver`] from a channel connected
+    /// to an Ethereum oracle
+    pub fn new(channel: Receiver<EthereumEvent>) -> Self {
+        Self {
+            channel,
+            queue: BTreeSet::new(),
+        }
+    }
+
+    /// Pull messages from the channel and add to queue
+    /// Since vote extensions require ordering of ethereum
+    /// events, we do that here. We also de-duplicate events
+    pub fn fill_queue(&mut self) {
+        let mut new_events = 0;
+        while let Ok(eth_event) = self.channel.try_recv() {
+            if self.queue.insert(eth_event) {
+                new_events += 1;
+            };
+        }
+        if new_events > 0 {
+            tracing::info!(n = new_events, "received Ethereum events");
+        }
+    }
+
+    /// Get a copy of the queue
+    pub fn get_events(&self) -> Vec<EthereumEvent> {
+        self.queue.iter().cloned().collect()
+    }
+
+    /// Remove the given [`EthereumEvent`] from the queue, if present.
+    ///
+    /// **INVARIANT:** This method preserves the sorting and de-duplication
+    /// of events in the queue.
+    pub fn remove_event(&mut self, event: &EthereumEvent) {
+        self.queue.remove(event);
+    }
+}
+
 impl ShellMode {
     /// Get the validator address if ledger is in validator mode
-    pub fn get_validator_address(&self) -> Option<&address::Address> {
+    pub fn get_validator_address(&self) -> Option<&Address> {
         match &self {
             ShellMode::Validator { data, .. } => Some(&data.address),
             _ => None,
         }
     }
+
+    /// Remove an Ethereum event from the internal queue
+    pub fn dequeue_eth_event(&mut self, event: &EthereumEvent) {
+        if let ShellMode::Validator {
+            eth_oracle:
+                Some(EthereumOracleChannels {
+                    ethereum_receiver, ..
+                }),
+            ..
+        } = self
+        {
+            ethereum_receiver.remove_event(event);
+        }
+    }
+
+    /// Get the protocol keypair for this validator.
+    pub fn get_protocol_key(&self) -> Option<&common::SecretKey> {
+        match self {
+            ShellMode::Validator {
+                data:
+                    ValidatorData {
+                        keys:
+                            ValidatorKeys {
+                                protocol_keypair, ..
+                            },
+                        ..
+                    },
+                ..
+            } => Some(protocol_keypair),
+            _ => None,
+        }
+    }
+
+    /// Get the Ethereum bridge keypair for this validator.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn get_eth_bridge_keypair(&self) -> Option<&common::SecretKey> {
+        match self {
+            ShellMode::Validator {
+                data:
+                    ValidatorData {
+                        keys:
+                            ValidatorKeys {
+                                eth_bridge_keypair, ..
+                            },
+                        ..
+                    },
+                ..
+            } => Some(eth_bridge_keypair),
+            _ => None,
+        }
+    }
+
+    /// If this node is a validator, broadcast a tx
+    /// to the mempool using the broadcaster subprocess
+    #[cfg_attr(feature = "abcipp", allow(dead_code))]
+    pub fn broadcast(&self, data: Vec<u8>) {
+        if let Self::Validator {
+            broadcast_sender, ..
+        } = self
+        {
+            broadcast_sender
+                .send(data)
+                .expect("The broadcaster should be running for a validator");
+        }
+    }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum MempoolTxType {
     /// A transaction that has not been validated by this node before
+    #[default]
     NewTransaction,
     /// A transaction that has been validated at some previous level that may
     /// need to be validated again
@@ -256,14 +378,14 @@ where
     #[allow(dead_code)]
     base_dir: PathBuf,
     /// Path to the WASM directory for files used in the genesis block.
-    wasm_dir: PathBuf,
+    pub(super) wasm_dir: PathBuf,
     /// Information about the running shell instance
     #[allow(dead_code)]
     mode: ShellMode,
     /// VP WASM compilation cache
-    vp_wasm_cache: VpCache<WasmCacheRwAccess>,
+    pub(super) vp_wasm_cache: VpCache<WasmCacheRwAccess>,
     /// Tx WASM compilation cache
-    tx_wasm_cache: TxCache<WasmCacheRwAccess>,
+    pub(super) tx_wasm_cache: TxCache<WasmCacheRwAccess>,
     /// Taken from config `storage_read_past_height_limit`. When set, will
     /// limit the how many block heights in the past can the storage be
     /// queried for reading values.
@@ -274,6 +396,28 @@ where
     event_log: EventLog,
 }
 
+/// Channels for communicating with an Ethereum oracle.
+#[derive(Debug)]
+pub struct EthereumOracleChannels {
+    ethereum_receiver: EthereumReceiver,
+    control_sender: oracle::control::Sender,
+    last_processed_block_receiver: last_processed_block::Receiver,
+}
+
+impl EthereumOracleChannels {
+    pub fn new(
+        events_receiver: Receiver<EthereumEvent>,
+        control_sender: oracle::control::Sender,
+        last_processed_block_receiver: last_processed_block::Receiver,
+    ) -> Self {
+        Self {
+            ethereum_receiver: EthereumReceiver::new(events_receiver),
+            control_sender,
+            last_processed_block_receiver,
+        }
+    }
+}
+
 impl<D, H> Shell<D, H>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -281,10 +425,12 @@ where
 {
     /// Create a new shell from a path to a database and a chain id. Looks
     /// up the database with this data and tries to load the last state.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         config: config::Ledger,
         wasm_dir: PathBuf,
         broadcast_sender: UnboundedSender<Vec<u8>>,
+        eth_oracle: Option<EthereumOracleChannels>,
         db_cache: Option<&D::Cache>,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
@@ -314,7 +460,6 @@ where
                 tracing::error!("Cannot load the last state from the DB {}", e);
             })
             .expect("PersistentStorage cannot be initialized");
-
         let vp_wasm_cache_dir =
             base_dir.join(chain_id.as_str()).join("vp_wasm_cache");
         let tx_wasm_cache_dir =
@@ -331,7 +476,7 @@ where
                         "{}",
                         wallet_path.as_path().to_str().unwrap()
                     );
-                    let mut wallet = crate::wallet::load_or_new_from_genesis(
+                    let wallet = crate::wallet::load_or_new_from_genesis(
                         wallet_path,
                         genesis::genesis_config::open_genesis_config(
                             genesis_path,
@@ -339,10 +484,11 @@ where
                         .unwrap(),
                     );
                     wallet
-                        .take_validator_data()
+                        .into_validator_data()
                         .map(|data| ShellMode::Validator {
                             data: data.clone(),
                             broadcast_sender,
+                            eth_oracle,
                         })
                         .expect(
                             "Validator data should have been stored in the \
@@ -351,18 +497,19 @@ where
                 }
                 #[cfg(feature = "dev")]
                 {
-                    let validator_keys =
-                        crate::wallet::defaults::validator_keys();
+                    let (protocol_keypair, eth_bridge_keypair, dkg_keypair) =
+                        wallet::defaults::validator_keys();
                     ShellMode::Validator {
-                        data: crate::wallet::ValidatorData {
-                            address: crate::wallet::defaults::validator_address(
-                            ),
-                            keys: crate::wallet::ValidatorKeys {
-                                protocol_keypair: validator_keys.0,
-                                dkg_keypair: Some(validator_keys.1),
+                        data: wallet::ValidatorData {
+                            address: wallet::defaults::validator_address(),
+                            keys: wallet::ValidatorKeys {
+                                protocol_keypair,
+                                eth_bridge_keypair,
+                                dkg_keypair: Some(dkg_keypair),
                             },
                         },
                         broadcast_sender,
+                        eth_oracle,
                     }
                 }
             }
@@ -374,7 +521,7 @@ where
             storage,
             write_log: WriteLog::default(),
         };
-        Self {
+        let mut shell = Self {
             chain_id,
             wl_storage,
             gas_meter: BlockGasMeter::default(),
@@ -394,7 +541,9 @@ where
             proposal_data: HashSet::new(),
             // TODO: config event log params
             event_log: EventLog::default(),
-        }
+        };
+        shell.update_eth_oracle();
+        shell
     }
 
     /// Return a reference to the [`EventLog`].
@@ -428,7 +577,7 @@ where
                     root,
                     height
                 );
-                response.last_block_app_hash = root.0;
+                response.last_block_app_hash = root.0.to_vec();
                 response.last_block_height =
                     height.try_into().expect("Invalid block height");
             }
@@ -606,26 +755,6 @@ where
         }
     }
 
-    /// INVARIANT: This method must be stateless.
-    #[cfg(feature = "abcipp")]
-    pub fn extend_vote(
-        &self,
-        _req: request::ExtendVote,
-    ) -> response::ExtendVote {
-        Default::default()
-    }
-
-    /// INVARIANT: This method must be stateless.
-    #[cfg(feature = "abcipp")]
-    pub fn verify_vote_extension(
-        &self,
-        _req: request::VerifyVoteExtension,
-    ) -> response::VerifyVoteExtension {
-        response::VerifyVoteExtension {
-            status: VerifyStatus::Accept as i32,
-        }
-    }
-
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.
     pub fn commit(&mut self) -> response::Commit {
@@ -638,39 +767,189 @@ where
             )
         });
 
+        // NOTE: the oracle isn't started through governance votes, so we don't
+        // check to see if we need to start it after epoch transitions
+
         let root = self.wl_storage.storage.merkle_root();
         tracing::info!(
             "Committed block hash: {}, height: {}",
             root,
             self.wl_storage.storage.last_height,
         );
-        response.data = root.0;
+        response.data = root.0.to_vec();
+
+        if let ShellMode::Validator {
+            eth_oracle: Some(eth_oracle),
+            ..
+        } = &self.mode
+        {
+            let last_processed_block = eth_oracle
+                .last_processed_block_receiver
+                .borrow()
+                .as_ref()
+                .cloned();
+            match last_processed_block {
+                Some(eth_height) => {
+                    tracing::info!(
+                        "Ethereum oracle's most recently processed Ethereum \
+                         block is {}",
+                        eth_height
+                    );
+                    self.wl_storage.storage.ethereum_height = Some(eth_height);
+                }
+                None => tracing::info!(
+                    "Ethereum oracle has not yet fully processed any Ethereum \
+                     blocks"
+                ),
+            }
+        }
+
+        #[cfg(not(feature = "abcipp"))]
+        {
+            use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
+
+            if let ShellMode::Validator { .. } = &self.mode {
+                let ext = self.craft_extension();
+
+                let protocol_key = self
+                    .mode
+                    .get_protocol_key()
+                    .expect("Validators should have protocol keys");
+
+                let protocol_txs = iter_protocol_txs(ext).map(|protocol_tx| {
+                    protocol_tx
+                        .sign(protocol_key, self.chain_id.clone())
+                        .to_bytes()
+                });
+
+                for tx in protocol_txs {
+                    self.mode.broadcast(tx);
+                }
+            }
+        }
         response
+    }
+
+    /// If a handle to an Ethereum oracle was provided to the [`Shell`], attempt
+    /// to send it an updated configuration, using an initial configuration
+    /// based on Ethereum bridge parameters in blockchain storage.
+    ///
+    /// This method must be safe to call even before ABCI `InitChain` has been
+    /// called (i.e. when storage is empty), as we may want to do this check
+    /// every time the shell starts up (including the first time ever at which
+    /// time storage will be empty).
+    fn update_eth_oracle(&mut self) {
+        if let ShellMode::Validator {
+            eth_oracle: Some(EthereumOracleChannels { control_sender, .. }),
+            ..
+        } = &mut self.mode
+        {
+            // We *always* expect a value describing the status of the Ethereum
+            // bridge to be present under [`eth_bridge::storage::active_key`],
+            // once a chain has been initialized. We need to explicitly check if
+            // this key is present here because we may be starting up the shell
+            // for the first time ever, in which case the chain hasn't been
+            // initialized yet.
+            let has_key = self
+                .wl_storage
+                .has_key(&eth_bridge::storage::active_key())
+                .expect(
+                    "We should always be able to check whether a key exists \
+                     in storage or not",
+                );
+            if !has_key {
+                tracing::info!(
+                    "Not starting oracle yet as storage has not been \
+                     initialized"
+                );
+                return;
+            }
+            if !self.wl_storage.ethbridge_queries().is_bridge_active() {
+                tracing::info!(
+                    "Not starting oracle as the Ethereum bridge is disabled"
+                );
+                return;
+            }
+            let Some(config) = EthereumBridgeConfig::read(&self.wl_storage) else {
+                tracing::info!(
+                    "Not starting oracle as the Ethereum bridge config couldn't be found in storage"
+                );
+                return;
+            };
+            let start_block = self
+                .wl_storage
+                .storage
+                .ethereum_height
+                .clone()
+                .unwrap_or_else(|| {
+                    self.wl_storage
+                        .read(&eth_bridge::storage::eth_start_height_key())
+                        .expect(
+                            "Failed to read Ethereum start height from storage",
+                        )
+                        .expect(
+                            "The Ethereum start height should be in storage",
+                        )
+                });
+            tracing::info!(
+                ?start_block,
+                "Found Ethereum height from which the Ethereum oracle should \
+                 start"
+            );
+            let config = namada::eth_bridge::oracle::config::Config {
+                min_confirmations: config.min_confirmations.into(),
+                bridge_contract: config.contracts.bridge.address,
+                governance_contract: config.contracts.governance.address,
+                start_block,
+            };
+            tracing::info!(
+                ?config,
+                "Starting the Ethereum oracle using values from block storage"
+            );
+            if let Err(error) = control_sender
+                .try_send(oracle::control::Command::UpdateConfig(config))
+            {
+                match error {
+                    tokio::sync::mpsc::error::TrySendError::Full(_) => {
+                        panic!(
+                            "The Ethereum oracle communication channel is \
+                             full!"
+                        )
+                    }
+                    tokio::sync::mpsc::error::TrySendError::Closed(_) => {
+                        panic!(
+                            "The Ethereum oracle can no longer be \
+                             communicated with"
+                        )
+                    }
+                }
+            }
+        }
     }
 
     /// Validate a transaction request. On success, the transaction will
     /// included in the mempool and propagated to peers, otherwise it will be
     /// rejected.
-    ///
-    /// Error codes:
-    ///    0: Ok
-    ///    1: Invalid tx
-    ///    2: Tx is invalidly signed
-    ///    7: Replay attack
-    ///    8: Invalid chain id in tx
     pub fn mempool_validate(
         &self,
         tx_bytes: &[u8],
         r#_type: MempoolTxType,
     ) -> response::CheckTx {
+        use namada::types::transaction::protocol::ProtocolTx;
+        #[cfg(not(feature = "abcipp"))]
+        use namada::types::transaction::protocol::ProtocolTxType;
+
         let mut response = response::CheckTx::default();
+
+        const VALID_MSG: &str = "Mempool validation passed";
+        const INVALID_MSG: &str = "Mempool validation failed";
 
         // Tx format check
         let tx = match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
             Ok(t) => t,
             Err(msg) => {
                 response.code = ErrorCodes::InvalidTx.into();
-                response.log = msg.to_string();
+                response.log = format!("{INVALID_MSG}: {msg}");
                 return response;
             }
         };
@@ -679,7 +958,8 @@ where
         if tx.chain_id != self.chain_id {
             response.code = ErrorCodes::InvalidChainId.into();
             response.log = format!(
-                "Tx carries a wrong chain id: expected {}, found {}",
+                "{INVALID_MSG}: Tx carries a wrong chain id: expected {}, \
+                 found {}",
                 self.chain_id, tx.chain_id
             );
             return response;
@@ -692,8 +972,8 @@ where
             if last_block_timestamp > exp {
                 response.code = ErrorCodes::ExpiredTx.into();
                 response.log = format!(
-                    "Tx expired at {:#?}, last committed block time: {:#?}",
-                    exp, last_block_timestamp
+                    "{INVALID_MSG}: Tx expired at {exp:#?}, last committed \
+                     block time: {last_block_timestamp:#?}",
                 );
                 return response;
             }
@@ -704,131 +984,171 @@ where
             Ok(ty) => ty,
             Err(msg) => {
                 response.code = ErrorCodes::InvalidSig.into();
-                response.log = msg.to_string();
+                response.log = format!("{INVALID_MSG}: {msg}");
                 return response;
             }
         };
 
-        // Tx type check
-        if let TxType::Wrapper(wrapper) = tx_type {
-            // Replay protection check
-            let inner_hash_key =
-                replay_protection::get_tx_hash_key(&wrapper.tx_hash);
-            if self
-                .wl_storage
-                .storage
-                .has_key(&inner_hash_key)
-                .expect("Error while checking inner tx hash key in storage")
-                .0
-            {
-                response.code = ErrorCodes::ReplayTx.into();
-                response.log = format!(
-                    "Inner transaction hash {} already in storage, replay \
-                     attempt",
-                    wrapper.tx_hash
-                );
-                return response;
-            }
-
-            let tx =
-                Tx::try_from(tx_bytes).expect("Deserialization shouldn't fail");
-            let wrapper_hash = hash::Hash(tx.unsigned_hash());
-            let wrapper_hash_key =
-                replay_protection::get_tx_hash_key(&wrapper_hash);
-            if self
-                .wl_storage
-                .storage
-                .has_key(&wrapper_hash_key)
-                .expect("Error while checking wrapper tx hash key in storage")
-                .0
-            {
-                response.code = ErrorCodes::ReplayTx.into();
-                response.log = format!(
-                    "Wrapper transaction hash {} already in storage, replay \
-                     attempt",
-                    wrapper_hash
-                );
-                return response;
-            }
-
-            // Check balance for fee
-            let fee_payer = if wrapper.pk != masp_tx_key().ref_to() {
-                wrapper.fee_payer()
-            } else {
-                masp()
-            };
-            // check that the fee payer has sufficient balance
-            let balance = self.get_balance(&wrapper.fee.token, &fee_payer);
-
-            // In testnets with a faucet, tx is allowed to skip fees if
-            // it includes a valid PoW
-            #[cfg(not(feature = "mainnet"))]
-            let has_valid_pow = self.has_valid_pow_solution(&wrapper);
-            #[cfg(feature = "mainnet")]
-            let has_valid_pow = false;
-
-            if !has_valid_pow && self.get_wrapper_tx_fees() > balance {
-                response.code = ErrorCodes::InvalidTx.into();
-                response.log = String::from(
-                    "The given address does not have a sufficient balance to \
-                     pay fee",
-                );
-                return response;
-            }
-        } else {
-            response.code = ErrorCodes::InvalidTx.into();
-            response.log = "Unsupported tx type".to_string();
-            return response;
-        }
-
-        response.log = "Mempool validation passed".to_string();
-
-        response
-    }
-
-    #[allow(dead_code)]
-    /// Simulate validation and application of a transaction.
-    fn dry_run_tx(&self, tx_bytes: &[u8]) -> response::Query {
-        let mut response = response::Query::default();
-        let mut gas_meter = BlockGasMeter::default();
-        let mut write_log = WriteLog::default();
-        let mut vp_wasm_cache = self.vp_wasm_cache.read_only();
-        let mut tx_wasm_cache = self.tx_wasm_cache.read_only();
-        match Tx::try_from(tx_bytes) {
-            Ok(tx) => {
-                let tx = TxType::Decrypted(DecryptedTx::Decrypted {
-                    tx,
-                    #[cfg(not(feature = "mainnet"))]
-                    // To be able to dry-run testnet faucet withdrawal, pretend 
-                    // that we got a valid PoW
-                    has_valid_pow: true,
-                });
-                match protocol::apply_tx(
-                    tx,
-                    tx_bytes.len(),
-                    TxIndex::default(),
-                    &mut gas_meter,
-                    &mut write_log,
-                    &self.wl_storage.storage,
-                    &mut vp_wasm_cache,
-                    &mut tx_wasm_cache,
-                )
-                .map_err(Error::TxApply)
-                {
-                    Ok(result) => response.info = result.to_string(),
-                    Err(error) => {
-                        response.code = 1;
-                        response.log = format!("{}", error);
-                    }
+        match tx_type {
+            #[cfg(not(feature = "abcipp"))]
+            TxType::Protocol(ProtocolTx {
+                tx: ProtocolTxType::EthEventsVext(ext),
+                ..
+            }) => {
+                if let Err(err) = self.validate_eth_events_vext_and_get_it_back(
+                    ext,
+                    self.wl_storage.storage.last_height,
+                ) {
+                    response.code = ErrorCodes::InvalidVoteExtension.into();
+                    response.log = format!(
+                        "{INVALID_MSG}: Invalid Ethereum events vote \
+                         extension: {err}",
+                    );
+                } else {
+                    response.log = String::from(VALID_MSG);
                 }
-                response
             }
-            Err(err) => {
-                response.code = 1;
-                response.log = format!("{}", Error::TxDecoding(err));
-                response
+            #[cfg(not(feature = "abcipp"))]
+            TxType::Protocol(ProtocolTx {
+                tx: ProtocolTxType::BridgePoolVext(ext),
+                ..
+            }) => {
+                if let Err(err) = self.validate_bp_roots_vext_and_get_it_back(
+                    ext,
+                    self.wl_storage.storage.last_height,
+                ) {
+                    response.code = ErrorCodes::InvalidVoteExtension.into();
+                    response.log = format!(
+                        "{INVALID_MSG}: Invalid Brige pool roots vote \
+                         extension: {err}",
+                    );
+                } else {
+                    response.log = String::from(VALID_MSG);
+                }
+            }
+            #[cfg(not(feature = "abcipp"))]
+            TxType::Protocol(ProtocolTx {
+                tx: ProtocolTxType::ValSetUpdateVext(ext),
+                ..
+            }) => {
+                if let Err(err) = self.validate_valset_upd_vext_and_get_it_back(
+                    ext,
+                    // n.b. only accept validator set updates
+                    // issued at the last committed epoch
+                    // (signing off on the validators of the
+                    // next epoch). at the second height
+                    // within an epoch, the new epoch is
+                    // committed to storage, so `last_epoch`
+                    // reflects the current value of the
+                    // epoch.
+                    self.wl_storage.storage.last_epoch,
+                ) {
+                    response.code = ErrorCodes::InvalidVoteExtension.into();
+                    response.log = format!(
+                        "{INVALID_MSG}: Invalid validator set update vote \
+                         extension: {err}",
+                    );
+                } else {
+                    response.log = String::from(VALID_MSG);
+                    // validator set update votes should be decided
+                    // as soon as possible
+                    response.priority = i64::MAX;
+                }
+            }
+            TxType::Protocol(ProtocolTx { .. }) => {
+                response.code = ErrorCodes::InvalidTx.into();
+                response.log = format!(
+                    "{INVALID_MSG}: The given protocol tx cannot be added to \
+                     the mempool"
+                );
+            }
+            TxType::Wrapper(wrapper) => {
+                // Replay protection check
+                let inner_hash_key =
+                    replay_protection::get_tx_hash_key(&wrapper.tx_hash);
+                if self
+                    .wl_storage
+                    .storage
+                    .has_key(&inner_hash_key)
+                    .expect("Error while checking inner tx hash key in storage")
+                    .0
+                {
+                    response.code = ErrorCodes::ReplayTx.into();
+                    response.log = format!(
+                        "{INVALID_MSG}: Inner transaction hash {} already in \
+                         storage, replay attempt",
+                        wrapper.tx_hash
+                    );
+                    return response;
+                }
+
+                let tx = Tx::try_from(tx_bytes)
+                    .expect("Deserialization shouldn't fail");
+                let wrapper_hash = hash::Hash(tx.unsigned_hash());
+                let wrapper_hash_key =
+                    replay_protection::get_tx_hash_key(&wrapper_hash);
+                if self
+                    .wl_storage
+                    .storage
+                    .has_key(&wrapper_hash_key)
+                    .expect(
+                        "Error while checking wrapper tx hash key in storage",
+                    )
+                    .0
+                {
+                    response.code = ErrorCodes::ReplayTx.into();
+                    response.log = format!(
+                        "{INVALID_MSG}: Wrapper transaction hash {} already \
+                         in storage, replay attempt",
+                        wrapper_hash
+                    );
+                    return response;
+                }
+
+                // Check balance for fee
+                let fee_payer = if wrapper.pk != masp_tx_key().ref_to() {
+                    wrapper.fee_payer()
+                } else {
+                    masp()
+                };
+                // check that the fee payer has sufficient balance
+                let balance = self.get_balance(&wrapper.fee.token, &fee_payer);
+
+                // In testnets with a faucet, tx is allowed to skip fees if
+                // it includes a valid PoW
+                #[cfg(not(feature = "mainnet"))]
+                let has_valid_pow = self.has_valid_pow_solution(&wrapper);
+                #[cfg(feature = "mainnet")]
+                let has_valid_pow = false;
+
+                if !has_valid_pow && self.get_wrapper_tx_fees() > balance {
+                    response.code = ErrorCodes::InvalidTx.into();
+                    response.log = format!(
+                        "{INVALID_MSG}: The given address does not have a \
+                         sufficient balance to pay fee",
+                    );
+                    return response;
+                }
+            }
+            TxType::Raw(_) => {
+                response.code = ErrorCodes::InvalidTx.into();
+                response.log = format!(
+                    "{INVALID_MSG}: Raw transactions cannot be accepted into \
+                     the mempool"
+                );
+            }
+            TxType::Decrypted(_) => {
+                response.code = ErrorCodes::InvalidTx.into();
+                response.log = format!(
+                    "{INVALID_MSG}: Decrypted txs cannot be sent by clients"
+                );
             }
         }
+
+        if response.code == u32::from(ErrorCodes::Ok) {
+            response.log = VALID_MSG.into();
+        }
+        response
     }
 
     /// Lookup a validator's keypair for their established account from their
@@ -924,6 +1244,22 @@ where
     }
 }
 
+impl<'a, D, H> From<&'a mut Shell<D, H>>
+    for ShellParams<'a, D, H, namada::vm::WasmCacheRwAccess>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    fn from(shell: &'a mut Shell<D, H>) -> Self {
+        ShellParams::Mutating {
+            block_gas_meter: &mut shell.gas_meter,
+            wl_storage: &mut shell.wl_storage,
+            vp_wasm_cache: &mut shell.vp_wasm_cache,
+            tx_wasm_cache: &mut shell.tx_wasm_cache,
+        }
+    }
+}
+
 /// Helper functions and types for writing unit tests
 /// for the shell
 #[cfg(test)]
@@ -931,17 +1267,27 @@ mod test_utils {
     use std::ops::{Deref, DerefMut};
     use std::path::PathBuf;
 
+    use namada::core::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::{update_allowed_conversions, Sha256Hasher};
+    use namada::ledger::storage_api::StorageWrite;
+    use namada::proto::{SignedTxData, Tx};
+    use namada::types::address;
     use namada::types::chain::ChainId;
+    use namada::types::ethereum_events::Uint;
     use namada::types::hash::Hash;
+    use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
-    use namada::types::storage::{BlockHash, Epoch, Epochs, Header};
-    use namada::types::transaction::{Fee, WrapperTx};
+    use namada::types::storage::{BlockHash, Epoch, Header};
+    use namada::types::time::DateTimeUtc;
+    use namada::types::transaction::protocol::ProtocolTxType;
+    use namada::types::transaction::{Fee, TxType, WrapperTx};
+    use namada::types::vote_extensions::ethereum_events;
     use tempfile::tempdir;
-    use tokio::sync::mpsc::UnboundedReceiver;
+    use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
     use super::*;
+    use crate::config::ethereum_bridge::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
     use crate::facade::tendermint_proto::abci::{
         RequestInitChain, RequestProcessProposal,
     };
@@ -949,6 +1295,7 @@ mod test_utils {
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
+    use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
     use crate::node::ledger::storage::{PersistentDB, PersistentStorageHasher};
 
     #[derive(Error, Debug)]
@@ -972,12 +1319,93 @@ mod test_utils {
     }
 
     /// Generate a random public/private keypair
+    #[inline]
     pub(super) fn gen_keypair() -> common::SecretKey {
+        gen_ed25519_keypair()
+    }
+
+    /// Generate a random ed25519 public/private keypair
+    pub(super) fn gen_ed25519_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
         use rand::thread_rng;
 
         let mut rng: ThreadRng = thread_rng();
         ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
+    }
+
+    /// Generate a random secp256k1 public/private keypair
+    pub(super) fn gen_secp256k1_keypair() -> common::SecretKey {
+        use rand::prelude::ThreadRng;
+        use rand::thread_rng;
+
+        let mut rng: ThreadRng = thread_rng();
+        secp256k1::SigScheme::generate(&mut rng)
+            .try_to_sk()
+            .unwrap()
+    }
+
+    /// Invalidate a valid signature `sig`.
+    pub(super) fn invalidate_signature(
+        sig: common::Signature,
+    ) -> common::Signature {
+        match sig {
+            common::Signature::Ed25519(ed25519::Signature(ref sig)) => {
+                let mut sig_bytes = sig.to_bytes();
+                sig_bytes[0] = sig_bytes[0].wrapping_add(1);
+                common::Signature::Ed25519(ed25519::Signature(sig_bytes.into()))
+            }
+            common::Signature::Secp256k1(secp256k1::Signature(
+                ref sig,
+                ref recovery_id,
+            )) => {
+                let mut sig_bytes = sig.serialize();
+                let recovery_id_bytes = recovery_id.serialize();
+                sig_bytes[0] = sig_bytes[0].wrapping_add(1);
+                let bytes: [u8; 65] =
+                    [sig_bytes.as_slice(), [recovery_id_bytes].as_slice()]
+                        .concat()
+                        .try_into()
+                        .unwrap();
+                common::Signature::Secp256k1((&bytes).try_into().unwrap())
+            }
+        }
+    }
+
+    /// Get the default bridge pool vext bytes to be signed.
+    pub fn get_bp_bytes_to_sign() -> KeccakHash {
+        use namada::types::keccak::{Hasher, Keccak};
+
+        let root = [0; 32];
+        let nonce = Uint::from(0).to_bytes();
+
+        let mut output = [0u8; 32];
+        let mut hasher = Keccak::v256();
+        hasher.update(&root);
+        hasher.update(&nonce);
+        hasher.finalize(&mut output);
+
+        KeccakHash(output)
+    }
+
+    /// Extract an [`ethereum_events::SignedVext`], from a set of
+    /// serialized [`TxBytes`].
+    #[allow(dead_code)]
+    pub fn extract_eth_events_vext(
+        tx_bytes: TxBytes,
+    ) -> ethereum_events::SignedVext {
+        let got = Tx::try_from(&tx_bytes[..]).unwrap();
+        let got_signed_tx =
+            SignedTxData::try_from_slice(&got.data.unwrap()[..]).unwrap();
+        let protocol_tx =
+            TxType::try_from_slice(&got_signed_tx.data.unwrap()[..]).unwrap();
+        let protocol_tx = match protocol_tx {
+            TxType::Protocol(protocol_tx) => protocol_tx.tx,
+            _ => panic!("Test failed"),
+        };
+        match protocol_tx {
+            ProtocolTxType::EthEventsVext(ext) => ext,
+            _ => panic!("Test failed"),
+        }
     }
 
     /// A wrapper around the shell that implements
@@ -1010,31 +1438,64 @@ mod test_utils {
     }
 
     impl TestShell {
-        /// Returns a new shell paired with a broadcast receiver, which will
-        /// receives any protocol txs sent by the shell.
-        pub fn new() -> (Self, UnboundedReceiver<Vec<u8>>) {
+        /// Returns a new shell with
+        ///    - A broadcast receiver, which will receive any protocol txs sent
+        ///      by the shell.
+        ///    - A sender that can send Ethereum events into the ledger, mocking
+        ///      the Ethereum fullnode process
+        ///    - A receiver for control commands sent by the shell to the
+        ///      Ethereum oracle
+        pub fn new_at_height<H: Into<BlockHeight>>(
+            height: H,
+        ) -> (
+            Self,
+            UnboundedReceiver<Vec<u8>>,
+            Sender<EthereumEvent>,
+            Receiver<oracle::control::Command>,
+        ) {
             let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+            let (eth_sender, eth_receiver) =
+                tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
+            let (_, last_processed_block_receiver) =
+                last_processed_block::channel();
+            let (control_sender, control_receiver) = oracle::control::channel();
+            let eth_oracle = EthereumOracleChannels::new(
+                eth_receiver,
+                control_sender,
+                last_processed_block_receiver,
+            );
             let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
             let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
             let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
-            (
-                Self {
-                    shell: Shell::<MockDB, Sha256Hasher>::new(
-                        config::Ledger::new(
-                            base_dir,
-                            Default::default(),
-                            TendermintMode::Validator,
-                        ),
-                        top_level_directory().join("wasm"),
-                        sender,
-                        None,
-                        vp_wasm_compilation_cache,
-                        tx_wasm_compilation_cache,
-                        address::nam(),
-                    ),
-                },
-                receiver,
-            )
+            let mut shell = Shell::<MockDB, Sha256Hasher>::new(
+                config::Ledger::new(
+                    base_dir,
+                    Default::default(),
+                    TendermintMode::Validator,
+                ),
+                top_level_directory().join("wasm"),
+                sender,
+                Some(eth_oracle),
+                None,
+                vp_wasm_compilation_cache,
+                tx_wasm_compilation_cache,
+                address::nam(),
+            );
+            shell.wl_storage.storage.block.height = height.into();
+            (Self { shell }, receiver, eth_sender, control_receiver)
+        }
+
+        /// Same as [`TestShell::new_at_height`], but returns a shell at block
+        /// height 0.
+        #[inline]
+        #[allow(dead_code)]
+        pub fn new() -> (
+            Self,
+            UnboundedReceiver<Vec<u8>>,
+            Sender<EthereumEvent>,
+            Receiver<oracle::control::Command>,
+        ) {
+            Self::new_at_height(BlockHeight(1))
         }
 
         /// Forward a InitChain request and expect a success
@@ -1100,15 +1561,81 @@ mod test_utils {
                     has_valid_pow: false,
                 });
         }
+
+        /// Start a counter for the next epoch in `num_blocks`.
+        pub fn start_new_epoch_in(&mut self, num_blocks: u64) {
+            self.wl_storage.storage.next_epoch_min_start_height =
+                self.wl_storage.storage.last_height + num_blocks;
+            self.wl_storage.storage.next_epoch_min_start_time =
+                DateTimeUtc::now();
+        }
+
+        /// Simultaneously call the `FinalizeBlock` and
+        /// `Commit` handlers.
+        pub fn finalize_and_commit(&mut self) {
+            let mut req = FinalizeBlock::default();
+            req.header.time = DateTimeUtc::now();
+            self.finalize_block(req).expect("Test failed");
+            self.commit();
+        }
+
+        /// Immediately change to the next epoch.
+        pub fn start_new_epoch(&mut self) -> Epoch {
+            self.start_new_epoch_in(1);
+
+            self.wl_storage.storage.last_height =
+                self.wl_storage.storage.next_epoch_min_start_height;
+            self.finalize_and_commit();
+
+            for _i in 0..EPOCH_SWITCH_BLOCKS_DELAY {
+                self.finalize_and_commit();
+            }
+            self.wl_storage.storage.get_current_epoch().0
+        }
+    }
+
+    /// Get the only validator's voting power.
+    #[inline]
+    #[cfg(not(feature = "abcipp"))]
+    #[allow(dead_code)]
+    pub fn get_validator_bonded_stake() -> namada::types::token::Amount {
+        200_000_000_000.into()
+    }
+
+    /// Config parameters to set up a test shell.
+    pub struct SetupCfg<H> {
+        /// The last comitted block height.
+        pub last_height: H,
+        /// The number of validators to configure
+        // in `InitChain`.
+        pub num_validators: u64,
+    }
+
+    impl<H: Default> Default for SetupCfg<H> {
+        fn default() -> Self {
+            Self {
+                last_height: H::default(),
+                num_validators: 1,
+            }
+        }
     }
 
     /// Start a new test shell and initialize it. Returns the shell paired with
     /// a broadcast receiver, which will receives any protocol txs sent by the
     /// shell.
-    pub(super) fn setup(
-        num_validators: u64,
-    ) -> (TestShell, UnboundedReceiver<Vec<u8>>) {
-        let (mut test, receiver) = TestShell::new();
+    pub(super) fn setup_with_cfg<H: Into<BlockHeight>>(
+        SetupCfg {
+            last_height,
+            num_validators,
+        }: SetupCfg<H>,
+    ) -> (
+        TestShell,
+        UnboundedReceiver<Vec<u8>>,
+        Sender<EthereumEvent>,
+        Receiver<oracle::control::Command>,
+    ) {
+        let (mut test, receiver, eth_receiver, control_receiver) =
+            TestShell::new_at_height(last_height);
         test.init_chain(
             RequestInitChain {
                 time: Some(Timestamp {
@@ -1120,7 +1647,38 @@ mod test_utils {
             },
             num_validators,
         );
-        (test, receiver)
+        test.wl_storage.commit_block().expect("Test failed");
+        (test, receiver, eth_receiver, control_receiver)
+    }
+
+    /// Same as [`setup_at_height`], but returns a shell at the given block
+    /// height, with a single validator.
+    #[inline]
+    pub(super) fn setup_at_height<H: Into<BlockHeight>>(
+        last_height: H,
+    ) -> (
+        TestShell,
+        UnboundedReceiver<Vec<u8>>,
+        Sender<EthereumEvent>,
+        Receiver<oracle::control::Command>,
+    ) {
+        let last_height = last_height.into();
+        setup_with_cfg(SetupCfg {
+            last_height,
+            ..Default::default()
+        })
+    }
+
+    /// Same as [`setup_with_cfg`], but returns a shell at block height 0,
+    /// with a single validator.
+    #[inline]
+    pub(super) fn setup() -> (
+        TestShell,
+        UnboundedReceiver<Vec<u8>>,
+        Sender<EthereumEvent>,
+        Receiver<oracle::control::Command>,
+    ) {
+        setup_with_cfg(SetupCfg::<u64>::default())
     }
 
     /// This is just to be used in testing. It is not
@@ -1142,6 +1700,19 @@ mod test_utils {
         }
     }
 
+    /// Set the Ethereum bridge to be inactive
+    pub(super) fn deactivate_bridge(shell: &mut TestShell) {
+        use namada::eth_bridge::storage::active_key;
+        use namada::eth_bridge::storage::eth_bridge_queries::EthBridgeStatus;
+        shell
+            .wl_storage
+            .write_bytes(
+                &active_key(),
+                EthBridgeStatus::Disabled.try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+    }
+
     /// We test that on shell shutdown, the tx queue gets persisted in a DB, and
     /// on startup it is read successfully
     #[test]
@@ -1149,6 +1720,16 @@ mod test_utils {
         let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
         // we have to use RocksDB for this test
         let (sender, _) = tokio::sync::mpsc::unbounded_channel();
+        let (_, eth_receiver) =
+            tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
+        let (control_sender, _) = oracle::control::channel();
+        let (_, last_processed_block_receiver) =
+            last_processed_block::channel();
+        let eth_oracle = EthereumOracleChannels::new(
+            eth_receiver,
+            control_sender,
+            last_processed_block_receiver,
+        );
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let native_token = address::nam();
@@ -1160,6 +1741,7 @@ mod test_utils {
             ),
             top_level_directory().join("wasm"),
             sender.clone(),
+            Some(eth_oracle),
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
@@ -1198,15 +1780,28 @@ mod test_utils {
         });
         // Artificially increase the block height so that chain
         // will read the new block when restarted
-        let mut pred_epochs: Epochs = Default::default();
-        pred_epochs.new_epoch(BlockHeight(1), 1000);
+        shell
+            .wl_storage
+            .storage
+            .block
+            .pred_epochs
+            .new_epoch(BlockHeight(1), 1000);
         update_allowed_conversions(&mut shell.wl_storage)
             .expect("update conversions failed");
         shell.wl_storage.commit_block().expect("commit failed");
 
         // Drop the shell
         std::mem::drop(shell);
-
+        let (_, eth_receiver) =
+            tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
+        let (control_sender, _) = oracle::control::channel();
+        let (_, last_processed_block_receiver) =
+            last_processed_block::channel();
+        let eth_oracle = EthereumOracleChannels::new(
+            eth_receiver,
+            control_sender,
+            last_processed_block_receiver,
+        );
         // Reboot the shell and check that the queue was restored from DB
         let shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
             config::Ledger::new(
@@ -1216,6 +1811,7 @@ mod test_utils {
             ),
             top_level_directory().join("wasm"),
             sender,
+            Some(eth_oracle),
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
@@ -1225,20 +1821,121 @@ mod test_utils {
     }
 }
 
-/// Test the failure cases of [`mempool_validate`]
+#[cfg(all(test, not(feature = "abcipp")))]
+mod abciplus_mempool_tests {
+    use namada::proto::{SignableEthMessage, Signed};
+    use namada::types::ethereum_events::EthereumEvent;
+    use namada::types::key::RefTo;
+    use namada::types::storage::BlockHeight;
+    use namada::types::transaction::protocol::ProtocolTxType;
+    use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
+
+    use super::*;
+    use crate::node::ledger::shell::test_utils;
+    use crate::wallet;
+
+    /// Test that we do not include protocol txs in the mempool,
+    /// voting on ethereum events or signing bridge pool roots
+    /// and nonces if the bridge is inactive.
+    #[test]
+    fn test_mempool_filter_protocol_txs_bridge_inactive() {
+        let (mut shell, _, _, _) = test_utils::setup_at_height(3);
+        test_utils::deactivate_bridge(&mut shell);
+        let address = shell
+            .mode
+            .get_validator_address()
+            .expect("Test failed")
+            .clone();
+        let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
+        let ethereum_event = EthereumEvent::TransfersToNamada {
+            nonce: 0u64.into(),
+            transfers: vec![],
+            valid_transfers_map: vec![],
+        };
+        let eth_vext = ProtocolTxType::EthEventsVext(
+            ethereum_events::Vext {
+                validator_addr: address.clone(),
+                block_height: shell.wl_storage.storage.last_height,
+                ethereum_events: vec![ethereum_event],
+            }
+            .sign(protocol_key),
+        )
+        .sign(protocol_key, shell.chain_id.clone())
+        .to_bytes();
+
+        let to_sign = test_utils::get_bp_bytes_to_sign();
+        let hot_key = shell.mode.get_eth_bridge_keypair().expect("Test failed");
+        let sig = Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig;
+        let bp_vext = ProtocolTxType::BridgePoolVext(
+            bridge_pool_roots::Vext {
+                block_height: shell.wl_storage.storage.last_height,
+                validator_addr: address,
+                sig,
+            }
+            .sign(protocol_key),
+        )
+        .sign(protocol_key, shell.chain_id.clone())
+        .to_bytes();
+        let txs_to_validate = [
+            (eth_vext, "Incorrectly validated eth events vext"),
+            (bp_vext, "Incorrectly validated bp roots vext"),
+        ];
+        for (tx_bytes, err_msg) in txs_to_validate {
+            let rsp = shell.mempool_validate(&tx_bytes, Default::default());
+            assert!(
+                rsp.code == u32::from(ErrorCodes::InvalidVoteExtension),
+                "{err_msg}"
+            );
+        }
+    }
+
+    /// Test if Ethereum events validation behaves as expected,
+    /// considering honest validators.
+    #[test]
+    fn test_mempool_eth_events_vext_normal_op() {
+        const LAST_HEIGHT: BlockHeight = BlockHeight(3);
+
+        let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
+
+        let (protocol_key, _, _) = wallet::defaults::validator_keys();
+        let validator_addr = wallet::defaults::validator_address();
+
+        let ethereum_event = EthereumEvent::TransfersToNamada {
+            nonce: 0u64.into(),
+            transfers: vec![],
+            valid_transfers_map: vec![],
+        };
+        let ext = {
+            let ext = ethereum_events::Vext {
+                validator_addr,
+                block_height: LAST_HEIGHT,
+                ethereum_events: vec![ethereum_event],
+            }
+            .sign(&protocol_key);
+            assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+            ext
+        };
+        let tx = ProtocolTxType::EthEventsVext(ext)
+            .sign(&protocol_key, shell.chain_id.clone())
+            .to_bytes();
+        let rsp = shell.mempool_validate(&tx, Default::default());
+        assert_eq!(rsp.code, 0);
+    }
+}
+
 #[cfg(test)]
 mod test_mempool_validate {
     use namada::proof_of_stake::Epoch;
     use namada::proto::SignedTxData;
+    use namada::types::time::DateTimeUtc;
     use namada::types::transaction::{Fee, WrapperTx};
 
-    use super::test_utils::TestShell;
-    use super::{MempoolTxType, *};
+    use super::*;
 
     /// Mempool validation must reject unsigned wrappers
     #[test]
     fn test_missing_signature() {
-        let (shell, _) = TestShell::new();
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let keypair = super::test_utils::gen_keypair();
 
@@ -1294,7 +1991,7 @@ mod test_mempool_validate {
     /// Mempool validation must reject wrappers with an invalid signature
     #[test]
     fn test_invalid_signature() {
-        let (shell, _) = TestShell::new();
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let keypair = super::test_utils::gen_keypair();
 
@@ -1376,7 +2073,7 @@ mod test_mempool_validate {
     /// Mempool validation must reject non-wrapper txs
     #[test]
     fn test_wrong_tx_type() {
-        let (shell, _) = TestShell::new();
+        let (shell, _recv, _, _) = test_utils::setup();
 
         // Test Raw TxType
         let tx = Tx::new(
@@ -1390,15 +2087,19 @@ mod test_mempool_validate {
             tx.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::InvalidTx));
-        assert_eq!(result.log, "Unsupported tx type")
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidTx),);
+        assert_eq!(
+            result.log,
+            "Mempool validation failed: Raw transactions cannot be accepted \
+             into the mempool"
+        )
     }
 
     /// Mempool validation must reject already applied wrapper and decrypted
     /// transactions
     #[test]
     fn test_replay_attack() {
-        let (mut shell, _) = TestShell::new();
+        let (mut shell, _recv, _, _) = test_utils::setup();
 
         let keypair = super::test_utils::gen_keypair();
 
@@ -1450,8 +2151,8 @@ mod test_mempool_validate {
         assert_eq!(
             result.log,
             format!(
-                "Wrapper transaction hash {} already in storage, replay \
-                 attempt",
+                "Mempool validation failed: Wrapper transaction hash {} \
+                 already in storage, replay attempt",
                 wrapper_hash
             )
         );
@@ -1464,8 +2165,8 @@ mod test_mempool_validate {
         assert_eq!(
             result.log,
             format!(
-                "Wrapper transaction hash {} already in storage, replay \
-                 attempt",
+                "Mempool validation failed: Wrapper transaction hash {} \
+                 already in storage, replay attempt",
                 wrapper_hash
             )
         );
@@ -1488,7 +2189,8 @@ mod test_mempool_validate {
         assert_eq!(
             result.log,
             format!(
-                "Inner transaction hash {} already in storage, replay attempt",
+                "Mempool validation failed: Inner transaction hash {} already \
+                 in storage, replay attempt",
                 tx_type.tx_hash
             )
         );
@@ -1501,7 +2203,8 @@ mod test_mempool_validate {
         assert_eq!(
             result.log,
             format!(
-                "Inner transaction hash {} already in storage, replay attempt",
+                "Mempool validation failed: Inner transaction hash {} already \
+                 in storage, replay attempt",
                 tx_type.tx_hash
             )
         )
@@ -1510,7 +2213,7 @@ mod test_mempool_validate {
     /// Check that a transaction with a wrong chain id gets discarded
     #[test]
     fn test_wrong_chain_id() {
-        let (shell, _) = TestShell::new();
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let keypair = super::test_utils::gen_keypair();
 
@@ -1531,7 +2234,8 @@ mod test_mempool_validate {
         assert_eq!(
             result.log,
             format!(
-                "Tx carries a wrong chain id: expected {}, found {}",
+                "Mempool validation failed: Tx carries a wrong chain id: \
+                 expected {}, found {}",
                 shell.chain_id, wrong_chain_id
             )
         )
@@ -1540,7 +2244,7 @@ mod test_mempool_validate {
     /// Check that an expired transaction gets rejected
     #[test]
     fn test_expired_tx() {
-        let (shell, _) = TestShell::new();
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let keypair = super::test_utils::gen_keypair();
 
@@ -1557,5 +2261,60 @@ mod test_mempool_validate {
             MempoolTxType::NewTransaction,
         );
         assert_eq!(result.code, u32::from(ErrorCodes::ExpiredTx));
+    }
+
+    /// Test that the mempool rejects invalid txs.
+    #[test]
+    fn test_mempool_rejects_invalid_tx() {
+        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
+        let non_wrapper_tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction_data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        )
+        .to_bytes();
+        let rsp = shell.mempool_validate(&non_wrapper_tx, Default::default());
+        assert!(rsp.code != u32::from(ErrorCodes::Ok));
+    }
+
+    /// Test that if an error is encountered while trying to process a tx,
+    /// it is prohibited from making its way onto the mempool.
+    #[test]
+    fn test_mempool_error_in_processing_tx() {
+        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
+        let keypair = test_utils::gen_keypair();
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction_data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        // an unsigned wrapper will cause an error in processing
+        let wrapper = Tx::new(
+            "".as_bytes().to_owned(),
+            Some(
+                WrapperTx::new(
+                    Fee {
+                        amount: 0.into(),
+                        token: shell.wl_storage.storage.native_token.clone(),
+                    },
+                    &keypair,
+                    Epoch(0),
+                    0.into(),
+                    tx,
+                    Default::default(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
+                )
+                .try_to_vec()
+                .expect("Test failed"),
+            ),
+            shell.chain_id.clone(),
+            None,
+        )
+        .to_bytes();
+        let rsp = shell.mempool_validate(&wrapper, Default::default());
+        assert_eq!(rsp.code, u32::from(ErrorCodes::InvalidSig));
     }
 }

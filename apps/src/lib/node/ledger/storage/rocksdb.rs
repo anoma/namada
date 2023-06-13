@@ -2,6 +2,10 @@
 //!
 //! The current storage tree is:
 //! - `state`: the latest ledger state
+//!   - `ethereum_height`: the height of the last eth block processed by the
+//!     oracle
+//!   - `eth_events_queue`: a queue of confirmed ethereum events to be processed
+//!     in order
 //!   - `height`: the last committed block height
 //!   - `tx_queue`: txs to be decrypted in the next block
 //!   - `next_epoch_min_start_height`: minimum block height from which the next
@@ -9,6 +13,7 @@
 //!   - `next_epoch_min_start_time`: minimum block time from which the next
 //!     epoch can start
 //!   - `pred`: predecessor values of the top-level keys of the same name
+//!     - `tx_queue`
 //!     - `next_epoch_min_start_height`
 //!     - `next_epoch_min_start_time`
 //! - `subspace`: accounts sub-spaces
@@ -34,6 +39,7 @@ use std::sync::Mutex;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
+use namada::core::types::ethereum_structs;
 use namada::ledger::storage::types::PrefixIterator;
 use namada::ledger::storage::{
     types, BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error,
@@ -41,8 +47,8 @@ use namada::ledger::storage::{
 };
 use namada::types::internal::TxQueue;
 use namada::types::storage::{
-    BlockHeight, BlockResults, Epoch, Epochs, Header, Key, KeySeg,
-    KEY_SEGMENT_SEPARATOR,
+    BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue, Header, Key,
+    KeySeg, KEY_SEGMENT_SEPARATOR,
 };
 use namada::types::time::DateTimeUtc;
 use rayon::prelude::*;
@@ -59,11 +65,44 @@ use crate::config::utils::num_of_threads;
 const ENV_VAR_ROCKSDB_COMPACTION_THREADS: &str =
     "NAMADA_ROCKSDB_COMPACTION_THREADS";
 
-/// Column family names
-const SUBSPACE_CF: &str = "subspace";
-const DIFFS_CF: &str = "diffs";
-const STATE_CF: &str = "state";
-const BLOCK_CF: &str = "block";
+/// RocksDB column families.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+enum ColumnFamilies {
+    /// Subspace column family.
+    ///
+    /// This column family is optimized to store
+    /// update and read-intensive values.
+    Subspace,
+    /// Diffs column family.
+    ///
+    /// This column family is optimized to store
+    /// insertion-intensive values, which are
+    /// never updated.
+    Diffs,
+    /// Block column family.
+    ///
+    /// This column family is optimized to store
+    /// insertion-intensive values, which are
+    /// never updated.
+    Block,
+    /// State column family.
+    ///
+    /// This column family is optimized to store
+    /// update-intensive values.
+    State,
+}
+
+impl ColumnFamilies {
+    /// Return the name of a RocksDB column family.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            ColumnFamilies::Subspace => "subspace",
+            ColumnFamilies::Diffs => "diffs",
+            ColumnFamilies::Block => "block",
+            ColumnFamilies::State => "state",
+        }
+    }
+}
 
 /// RocksDB handle
 #[derive(Debug)]
@@ -125,7 +164,10 @@ pub fn open(
     subspace_cf_opts.set_level_compaction_dynamic_level_bytes(true);
     subspace_cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
     subspace_cf_opts.set_block_based_table_factory(&table_opts);
-    cfs.push(ColumnFamilyDescriptor::new(SUBSPACE_CF, subspace_cf_opts));
+    cfs.push(ColumnFamilyDescriptor::new(
+        ColumnFamilies::Subspace.as_str(),
+        subspace_cf_opts,
+    ));
 
     // for diffs (insert-intensive)
     let mut diffs_cf_opts = Options::default();
@@ -133,7 +175,10 @@ pub fn open(
     diffs_cf_opts.set_compression_options(0, 0, 0, 1024 * 1024);
     diffs_cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Universal);
     diffs_cf_opts.set_block_based_table_factory(&table_opts);
-    cfs.push(ColumnFamilyDescriptor::new(DIFFS_CF, diffs_cf_opts));
+    cfs.push(ColumnFamilyDescriptor::new(
+        ColumnFamilies::Diffs.as_str(),
+        diffs_cf_opts,
+    ));
 
     // for the ledger state (update-intensive)
     let mut state_cf_opts = Options::default();
@@ -141,7 +186,10 @@ pub fn open(
     state_cf_opts.set_level_compaction_dynamic_level_bytes(true);
     state_cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
     state_cf_opts.set_block_based_table_factory(&table_opts);
-    cfs.push(ColumnFamilyDescriptor::new(STATE_CF, state_cf_opts));
+    cfs.push(ColumnFamilyDescriptor::new(
+        ColumnFamilies::State.as_str(),
+        state_cf_opts,
+    ));
 
     // for blocks (insert-intensive)
     let mut block_cf_opts = Options::default();
@@ -149,7 +197,10 @@ pub fn open(
     block_cf_opts.set_compression_options(0, 0, 0, 1024 * 1024);
     block_cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Universal);
     block_cf_opts.set_block_based_table_factory(&table_opts);
-    cfs.push(ColumnFamilyDescriptor::new(BLOCK_CF, block_cf_opts));
+    cfs.push(ColumnFamilyDescriptor::new(
+        ColumnFamilies::Block.as_str(),
+        block_cf_opts,
+    ));
 
     rocksdb::DB::open_cf_descriptors(&db_opts, path, cfs)
         .map(RocksDB)
@@ -186,7 +237,7 @@ impl RocksDB {
         old_value: Option<&[u8]>,
         new_value: Option<&[u8]>,
     ) -> Result<()> {
-        let cf = self.get_column_family(DIFFS_CF)?;
+        let cf = self.get_column_family(ColumnFamilies::Diffs.as_str())?;
         let key_prefix = Key::from(height.to_db_key());
 
         if let Some(old_value) = old_value {
@@ -223,7 +274,7 @@ impl RocksDB {
         old_value: Option<&[u8]>,
         new_value: Option<&[u8]>,
     ) -> Result<()> {
-        let cf = self.get_column_family(DIFFS_CF)?;
+        let cf = self.get_column_family(ColumnFamilies::Diffs.as_str())?;
         let key_prefix = Key::from(height.to_db_key());
 
         if let Some(old_value) = old_value {
@@ -260,7 +311,7 @@ impl RocksDB {
     ) {
         // Find the last block height
         let state_cf = self
-            .get_column_family(STATE_CF)
+            .get_column_family(ColumnFamilies::State.as_str())
             .expect("State column family should exist");
         let height: BlockHeight = types::decode(
             self.0
@@ -294,21 +345,21 @@ impl RocksDB {
 
             // Diffs
             let cf = self
-                .get_column_family(DIFFS_CF)
+                .get_column_family(ColumnFamilies::Diffs.as_str())
                 .expect("Diffs column family should exist");
             let prefix = height.raw();
             self.dump_it(cf, Some(prefix.clone()), &mut file);
 
             // Block
             let cf = self
-                .get_column_family(BLOCK_CF)
+                .get_column_family(ColumnFamilies::Block.as_str())
                 .expect("Block column family should exist");
             self.dump_it(cf, Some(prefix), &mut file);
         }
 
         // subspace
         let cf = self
-            .get_column_family(SUBSPACE_CF)
+            .get_column_family(ColumnFamilies::Subspace.as_str())
             .expect("Subspace column family should exist");
         self.dump_it(cf, None, &mut file);
 
@@ -377,7 +428,8 @@ impl RocksDB {
         let previous_height =
             BlockHeight::from(u64::from(last_block.height) - 1);
 
-        let state_cf = self.get_column_family(STATE_CF)?;
+        let state_cf =
+            self.get_column_family(ColumnFamilies::State.as_str())?;
         // Revert the non-height-prepended metadata storage keys which get
         // updated with every block. Because of the way we save these
         // three keys in storage we can only perform one rollback before
@@ -404,7 +456,8 @@ impl RocksDB {
         }
 
         // Delete block results for the last block
-        let block_cf = self.get_column_family(BLOCK_CF)?;
+        let block_cf =
+            self.get_column_family(ColumnFamilies::Block.as_str())?;
         tracing::info!("Removing last block results");
         batch.delete_cf(block_cf, format!("results/{}", last_block.height));
 
@@ -416,7 +469,8 @@ impl RocksDB {
             |(key, _value, _gas)| -> Result<()> {
                 // Restore previous height diff if present, otherwise delete the
                 // subspace key
-                let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
+                let subspace_cf =
+                    self.get_column_family(ColumnFamilies::Subspace.as_str())?;
                 match self.read_subspace_val_with_height(
                     &Key::from(key.to_db_key()),
                     previous_height,
@@ -452,7 +506,8 @@ impl RocksDB {
             }
         };
         // Delete any height-prepended key in subspace diffs
-        let diffs_cf = self.get_column_family(DIFFS_CF)?;
+        let diffs_cf =
+            self.get_column_family(ColumnFamilies::Diffs.as_str())?;
         delete_keys(diffs_cf);
         // Delete any height-prepended key in the block
         delete_keys(block_cf);
@@ -484,7 +539,8 @@ impl DB for RocksDB {
 
     fn read_last_block(&mut self) -> Result<Option<BlockStateRead>> {
         // Block height
-        let state_cf = self.get_column_family(STATE_CF)?;
+        let state_cf =
+            self.get_column_family(ColumnFamilies::State.as_str())?;
         let height: BlockHeight = match self
             .0
             .get_cf(state_cf, "height")
@@ -499,7 +555,8 @@ impl DB for RocksDB {
         };
 
         // Block results
-        let block_cf = self.get_column_family(BLOCK_CF)?;
+        let block_cf =
+            self.get_column_family(ColumnFamilies::Block.as_str())?;
         let results_path = format!("results/{}", height.raw());
         let results: BlockResults = match self
             .0
@@ -549,7 +606,33 @@ impl DB for RocksDB {
             }
         };
 
-        // Load block data at the height
+        let ethereum_height: Option<ethereum_structs::BlockHeight> = match self
+            .0
+            .get_cf(state_cf, "ethereum_height")
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            None => {
+                tracing::error!("Couldn't load ethereum height from the DB");
+                return Ok(None);
+            }
+        };
+
+        let eth_events_queue: EthEventsQueue = match self
+            .0
+            .get_cf(state_cf, "eth_events_queue")
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            None => {
+                tracing::error!(
+                    "Couldn't load the eth events queue from the DB"
+                );
+                return Ok(None);
+            }
+        };
+
+        // Load data at the height
         let prefix = format!("{}/", height.raw());
         let mut read_opts = ReadOptions::default();
         read_opts.set_total_order_seek(false);
@@ -638,6 +721,8 @@ impl DB for RocksDB {
                     next_epoch_min_start_time,
                     address_gen,
                     tx_queue,
+                    ethereum_height,
+                    eth_events_queue,
                 }))
             }
             _ => Err(Error::Temporary {
@@ -665,10 +750,13 @@ impl DB for RocksDB {
             next_epoch_min_start_time,
             address_gen,
             tx_queue,
+            ethereum_height,
+            eth_events_queue,
         }: BlockStateWrite = state;
 
         // Epoch start height and time
-        let state_cf = self.get_column_family(STATE_CF)?;
+        let state_cf =
+            self.get_column_family(ColumnFamilies::State.as_str())?;
         if let Some(current_value) = self
             .0
             .get_cf(state_cf, "next_epoch_min_start_height")
@@ -716,8 +804,19 @@ impl DB for RocksDB {
         batch
             .0
             .put_cf(state_cf, "tx_queue", types::encode(&tx_queue));
+        batch.0.put_cf(
+            state_cf,
+            "ethereum_height",
+            types::encode(&ethereum_height),
+        );
+        batch.0.put_cf(
+            state_cf,
+            "eth_events_queue",
+            types::encode(&eth_events_queue),
+        );
 
-        let block_cf = self.get_column_family(BLOCK_CF)?;
+        let block_cf =
+            self.get_column_family(ColumnFamilies::Block.as_str())?;
         let prefix_key = Key::from(height.to_db_key());
         // Merkle tree
         {
@@ -816,7 +915,8 @@ impl DB for RocksDB {
     }
 
     fn read_block_header(&self, height: BlockHeight) -> Result<Option<Header>> {
-        let block_cf = self.get_column_family(BLOCK_CF)?;
+        let block_cf =
+            self.get_column_family(ColumnFamilies::Block.as_str())?;
         let prefix_key = Key::from(height.to_db_key());
         let key = prefix_key
             .push(&"header".to_owned())
@@ -839,7 +939,8 @@ impl DB for RocksDB {
         height: BlockHeight,
     ) -> Result<Option<(BlockHeight, MerkleTreeStoresRead)>> {
         // Get the latest height at which the tree stores were written
-        let block_cf = self.get_column_family(BLOCK_CF)?;
+        let block_cf =
+            self.get_column_family(ColumnFamilies::Block.as_str())?;
         let height_key = Key::from(height.to_db_key());
         let key = height_key
             .push(&"pred_epochs".to_owned())
@@ -898,7 +999,8 @@ impl DB for RocksDB {
     }
 
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>> {
-        let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
+        let subspace_cf =
+            self.get_column_family(ColumnFamilies::Subspace.as_str())?;
         self.0
             .get_cf(subspace_cf, key.to_string())
             .map_err(|e| Error::DBError(e.into_string()))
@@ -911,7 +1013,8 @@ impl DB for RocksDB {
         last_height: BlockHeight,
     ) -> Result<Option<Vec<u8>>> {
         // Check if the value changed at this height
-        let diffs_cf = self.get_column_family(DIFFS_CF)?;
+        let diffs_cf =
+            self.get_column_family(ColumnFamilies::Diffs.as_str())?;
         let key_prefix = Key::from(height.to_db_key());
         let new_val_key = key_prefix
             .push(&"new".to_owned())
@@ -1004,7 +1107,8 @@ impl DB for RocksDB {
         key: &Key,
         value: impl AsRef<[u8]>,
     ) -> Result<i64> {
-        let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
+        let subspace_cf =
+            self.get_column_family(ColumnFamilies::Subspace.as_str())?;
         let value = value.as_ref();
         let size_diff = match self
             .0
@@ -1040,7 +1144,8 @@ impl DB for RocksDB {
         height: BlockHeight,
         key: &Key,
     ) -> Result<i64> {
-        let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
+        let subspace_cf =
+            self.get_column_family(ColumnFamilies::Subspace.as_str())?;
 
         // Check the length of previous value, if any
         let prev_len = match self
@@ -1080,7 +1185,8 @@ impl DB for RocksDB {
         value: impl AsRef<[u8]>,
     ) -> Result<i64> {
         let value = value.as_ref();
-        let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
+        let subspace_cf =
+            self.get_column_family(ColumnFamilies::Subspace.as_str())?;
         let size_diff = match self
             .0
             .get_cf(subspace_cf, key.to_string())
@@ -1122,7 +1228,8 @@ impl DB for RocksDB {
         height: BlockHeight,
         key: &Key,
     ) -> Result<i64> {
-        let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
+        let subspace_cf =
+            self.get_column_family(ColumnFamilies::Subspace.as_str())?;
 
         // Check the length of previous value, if any
         let prev_len = match self
@@ -1157,7 +1264,8 @@ impl DB for RocksDB {
         epoch: Epoch,
         pred_epochs: &Epochs,
     ) -> Result<()> {
-        let block_cf = self.get_column_family(BLOCK_CF)?;
+        let block_cf =
+            self.get_column_family(ColumnFamilies::Block.as_str())?;
         match pred_epochs.get_start_height_of_epoch(epoch) {
             Some(height) => {
                 let prefix_key = Key::from(height.to_db_key())
@@ -1198,9 +1306,12 @@ impl<'iter> DBIter<'iter> for RocksDB {
         let db_prefix = "results/".to_owned();
         let prefix = "results".to_owned();
 
+        let block_cf_key = ColumnFamilies::Block.as_str();
         let block_cf = self
-            .get_column_family(BLOCK_CF)
-            .expect("{BLOCK_CF} column family should exist");
+            .get_column_family(ColumnFamilies::Block.as_str())
+            .unwrap_or_else(|err| {
+                panic!("{block_cf_key} column family should exist: {err}")
+            });
         let read_opts = make_iter_read_opts(Some(prefix.clone()));
         let iter = self.0.iterator_cf_opt(
             block_cf,
@@ -1229,9 +1340,11 @@ fn iter_subspace_prefix<'iter>(
     db: &'iter RocksDB,
     prefix: Option<&Key>,
 ) -> PersistentPrefixIterator<'iter> {
-    let subspace_cf = db
-        .get_column_family(SUBSPACE_CF)
-        .expect("{SUBSPACE_CF} column family should exist");
+    let subspace_cf_key = ColumnFamilies::Subspace.as_str();
+    let subspace_cf =
+        db.get_column_family(subspace_cf_key).unwrap_or_else(|err| {
+            panic!("{subspace_cf_key} column family should exist: {err}")
+        });
     let db_prefix = "".to_owned();
     let prefix = prefix.map(|k| k.to_string()).unwrap_or_default();
     iter_prefix(db, subspace_cf, db_prefix, prefix)
@@ -1242,9 +1355,10 @@ fn iter_diffs_prefix(
     height: BlockHeight,
     is_old: bool,
 ) -> PersistentPrefixIterator {
-    let diffs_cf = db
-        .get_column_family(DIFFS_CF)
-        .expect("{DIFFS_CF} column family should exist");
+    let diffs_cf_key = ColumnFamilies::Diffs.as_str();
+    let diffs_cf = db.get_column_family(diffs_cf_key).unwrap_or_else(|err| {
+        panic!("{diffs_cf_key} column family should exist: {err}")
+    });
     let prefix = if is_old { "old" } else { "new" };
     let db_prefix = format!("{}/{}/", height.0.raw(), prefix);
     // get keys without a prefix
@@ -1381,7 +1495,8 @@ mod imp {
 
 #[cfg(test)]
 mod test {
-    use namada::ledger::storage::{MerkleTree, Sha256Hasher};
+    use namada::ledger::storage::traits::Sha256Hasher;
+    use namada::ledger::storage::MerkleTree;
     use namada::types::address::EstablishedAddressGen;
     use namada::types::storage::{BlockHash, Epoch, Epochs};
     use tempfile::tempdir;
@@ -1415,6 +1530,7 @@ mod test {
         let address_gen = EstablishedAddressGen::new("whatever");
         let tx_queue = TxQueue::default();
         let results = BlockResults::default();
+        let eth_events_queue = EthEventsQueue::default();
         let block = BlockStateWrite {
             merkle_tree_stores,
             header: None,
@@ -1427,6 +1543,8 @@ mod test {
             next_epoch_min_start_time,
             address_gen: &address_gen,
             tx_queue: &tx_queue,
+            ethereum_height: None,
+            eth_events_queue: &eth_events_queue,
         };
 
         db.write_block(block, &mut batch, true).unwrap();

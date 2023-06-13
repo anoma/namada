@@ -74,6 +74,8 @@ mod tests {
         let is_delegation = matches!(
             &withdraw.source, Some(source) if *source != withdraw.validator);
         let consensus_key = key::testing::keypair_1().ref_to();
+        let eth_cold_key = key::testing::keypair_3().ref_to();
+        let eth_hot_key = key::testing::keypair_4().ref_to();
         let commission_rate = Dec::new(5, 2).expect("Cannot fail");
         let max_commission_rate_change = Dec::new(1, 2).expect("Cannot fail");
 
@@ -88,6 +90,8 @@ mod tests {
                 initial_stake
             },
             consensus_key,
+            eth_cold_key,
+            eth_hot_key,
             commission_rate,
             max_commission_rate_change,
         }];

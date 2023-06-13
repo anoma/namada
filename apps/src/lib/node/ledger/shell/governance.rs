@@ -165,15 +165,14 @@ where
                 .wl_storage
                 .write(&pending_execution_key, ())
                 .expect("Should be able to write to storage.");
-            let tx_result = protocol::apply_tx(
+            let tx_result = protocol::dispatch_tx(
                 tx_type,
                 0, /*  this is used to compute the fee
                     * based on the code size. We dont
                     * need it here. */
                 TxIndex::default(),
                 &mut BlockGasMeter::default(),
-                &mut shell.wl_storage.write_log,
-                &shell.wl_storage.storage,
+                &mut shell.wl_storage,
                 &mut shell.vp_wasm_cache,
                 &mut shell.tx_wasm_cache,
             );

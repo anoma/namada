@@ -83,6 +83,18 @@ pub type ValidatorConsensusKeys = crate::epoched::Epoched<
     crate::epoched::OffsetPipelineLen,
 >;
 
+/// Epoched validator's eth hot key.
+pub type ValidatorEthHotKeys = crate::epoched::Epoched<
+    common::PublicKey,
+    crate::epoched::OffsetPipelineLen,
+>;
+
+/// Epoched validator's eth cold key.
+pub type ValidatorEthColdKeys = crate::epoched::Epoched<
+    common::PublicKey,
+    crate::epoched::OffsetPipelineLen,
+>;
+
 /// Epoched validator's state.
 pub type ValidatorStates =
     crate::epoched::Epoched<ValidatorState, crate::epoched::OffsetPipelineLen>;
@@ -178,6 +190,11 @@ pub struct GenesisValidator {
     pub tokens: token::Amount,
     /// A public key used for signing validator's consensus actions
     pub consensus_key: common::PublicKey,
+    /// An Eth bridge governance public key
+    pub eth_cold_key: common::PublicKey,
+    /// An Eth bridge hot signing public key used for validator set updates and
+    /// cross-chain transactions
+    pub eth_hot_key: common::PublicKey,
     /// Commission rate charged on rewards for delegators (bounded inside 0-1)
     pub commission_rate: Dec,
     /// Maximum change in commission rate permitted per epoch

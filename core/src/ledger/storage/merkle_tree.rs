@@ -14,13 +14,17 @@ use thiserror::Error;
 
 use super::traits::{StorageHasher, SubTreeRead, SubTreeWrite};
 use crate::bytes::ByteBuf;
-use crate::ledger::storage::ics23_specs::{self, ibc_leaf_spec};
-use crate::ledger::storage::types;
+use crate::ledger::eth_bridge::storage::bridge_pool::{
+    is_pending_transfer_key, BridgePoolTree,
+};
+use crate::ledger::storage::ics23_specs::ibc_leaf_spec;
+use crate::ledger::storage::{ics23_specs, types, BlockHeight};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
+use crate::types::keccak::KeccakHash;
 use crate::types::storage::{
-    self, DbKeySeg, Error as StorageError, Key, StringKey, TreeBytes,
-    TreeKeyError, IBC_KEY_LIMIT,
+    self, DbKeySeg, Error as StorageError, Key, MembershipProof, StringKey,
+    TreeBytes, TreeKeyError, IBC_KEY_LIMIT,
 };
 
 #[allow(missing_docs)]
@@ -54,10 +58,13 @@ type Result<T> = std::result::Result<T, Error>;
 /// Type alias for bytes to be put into the Merkle storage
 pub(super) type StorageBytes<'a> = &'a [u8];
 
-/// Type aliases for the different merkle trees and backing stores
+// Type aliases for the different merkle trees and backing stores
+/// Sparse-merkle-tree store
 pub type SmtStore = DefaultStore<SmtHash, Hash, 32>;
 /// Arse-merkle-tree store
 pub type AmtStore = DefaultStore<StringKey, TreeBytes, IBC_KEY_LIMIT>;
+/// Bridge pool store
+pub type BridgePoolStore = std::collections::BTreeMap<KeccakHash, BlockHeight>;
 /// Sparse-merkle-tree
 pub type Smt<H> = ArseMerkleTree<H, SmtHash, Hash, SmtStore, 32>;
 /// Arse-merkle-tree
@@ -85,6 +92,8 @@ pub enum StoreType {
     Ibc,
     /// For PoS-related data
     PoS,
+    /// For the Ethereum bridge Pool transfers
+    BridgePool,
 }
 
 /// Backing storage for merkle trees
@@ -97,6 +106,8 @@ pub enum Store {
     Ibc(AmtStore),
     /// For PoS-related data
     PoS(SmtStore),
+    /// For the Ethereum bridge Pool transfers
+    BridgePool(BridgePoolStore),
 }
 
 impl Store {
@@ -107,6 +118,7 @@ impl Store {
             Self::Account(store) => StoreRef::Account(store),
             Self::Ibc(store) => StoreRef::Ibc(store),
             Self::PoS(store) => StoreRef::PoS(store),
+            Self::BridgePool(store) => StoreRef::BridgePool(store),
         }
     }
 }
@@ -121,26 +133,30 @@ pub enum StoreRef<'a> {
     Ibc(&'a AmtStore),
     /// For PoS-related data
     PoS(&'a SmtStore),
+    /// For the Ethereum bridge Pool transfers
+    BridgePool(&'a BridgePoolStore),
 }
 
 impl<'a> StoreRef<'a> {
-    /// Convert to an owned `Store`.
+    /// Get owned copies of backing stores of our Merkle tree.
     pub fn to_owned(&self) -> Store {
         match *self {
             Self::Base(store) => Store::Base(store.to_owned()),
             Self::Account(store) => Store::Account(store.to_owned()),
             Self::Ibc(store) => Store::Ibc(store.to_owned()),
             Self::PoS(store) => Store::PoS(store.to_owned()),
+            Self::BridgePool(store) => Store::BridgePool(store.to_owned()),
         }
     }
 
-    /// Encode a `StoreRef`.
+    /// Borsh Seriliaze the backing stores of our Merkle tree.
     pub fn encode(&self) -> Vec<u8> {
         match self {
             Self::Base(store) => store.try_to_vec(),
             Self::Account(store) => store.try_to_vec(),
             Self::Ibc(store) => store.try_to_vec(),
             Self::PoS(store) => store.try_to_vec(),
+            Self::BridgePool(store) => store.try_to_vec(),
         }
         .expect("Serialization failed")
     }
@@ -149,11 +165,12 @@ impl<'a> StoreRef<'a> {
 impl StoreType {
     /// Get an iterator for the base tree and subtrees
     pub fn iter() -> std::slice::Iter<'static, Self> {
-        static SUB_TREE_TYPES: [StoreType; 4] = [
+        static SUB_TREE_TYPES: [StoreType; 5] = [
             StoreType::Base,
             StoreType::Account,
             StoreType::PoS,
             StoreType::Ibc,
+            StoreType::BridgePool,
         ];
         SUB_TREE_TYPES.iter()
     }
@@ -170,6 +187,15 @@ impl StoreType {
                     }
                     InternalAddress::Ibc => {
                         Ok((StoreType::Ibc, key.sub_key()?))
+                    }
+                    InternalAddress::EthBridgePool => {
+                        // the root of this sub-tree is kept in accounts
+                        // storage along with a quorum of validator signatures
+                        if is_pending_transfer_key(key) {
+                            Ok((StoreType::BridgePool, key.sub_key()?))
+                        } else {
+                            Ok((StoreType::Account, key.clone()))
+                        }
                     }
                     // use the same key for Parameters
                     _ => Ok((StoreType::Account, key.clone())),
@@ -199,6 +225,9 @@ impl StoreType {
             Self::PoS => Ok(Store::PoS(
                 types::decode(bytes).map_err(Error::CodingError)?,
             )),
+            Self::BridgePool => Ok(Store::BridgePool(
+                types::decode(bytes).map_err(Error::CodingError)?,
+            )),
         }
     }
 }
@@ -212,6 +241,7 @@ impl FromStr for StoreType {
             "account" => Ok(StoreType::Account),
             "ibc" => Ok(StoreType::Ibc),
             "pos" => Ok(StoreType::PoS),
+            "eth_bridge_pool" => Ok(StoreType::BridgePool),
             _ => Err(Error::StoreType(s.to_string())),
         }
     }
@@ -224,6 +254,7 @@ impl fmt::Display for StoreType {
             StoreType::Account => write!(f, "account"),
             StoreType::Ibc => write!(f, "ibc"),
             StoreType::PoS => write!(f, "pos"),
+            StoreType::BridgePool => write!(f, "eth_bridge_pool"),
         }
     }
 }
@@ -235,6 +266,7 @@ pub struct MerkleTree<H: StorageHasher + Default> {
     account: Smt<H>,
     ibc: Amt<H>,
     pos: Smt<H>,
+    bridge_pool: BridgePoolTree,
 }
 
 impl<H: StorageHasher + Default> core::fmt::Debug for MerkleTree<H> {
@@ -253,11 +285,14 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         let account = Smt::new(stores.account.0.into(), stores.account.1);
         let ibc = Amt::new(stores.ibc.0.into(), stores.ibc.1);
         let pos = Smt::new(stores.pos.0.into(), stores.pos.1);
+        let bridge_pool =
+            BridgePoolTree::new(stores.bridge_pool.0, stores.bridge_pool.1);
         let tree = Self {
             base,
             account,
             ibc,
             pos,
+            bridge_pool,
         };
 
         // validate
@@ -267,13 +302,17 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         let ibc_root = tree.base.get(&ibc_key.into())?;
         let pos_key = H::hash(StoreType::PoS.to_string());
         let pos_root = tree.base.get(&pos_key.into())?;
-        if (tree.base.root().is_zero()
+        let bp_key = H::hash(StoreType::BridgePool.to_string());
+        let bp_root = tree.base.get(&bp_key.into())?;
+        if tree.base.root().is_zero()
             && tree.account.root().is_zero()
             && tree.ibc.root().is_zero()
-            && tree.pos.root().is_zero())
+            && tree.pos.root().is_zero()
+            && tree.bridge_pool.root().is_zero()
             || (account_root == tree.account.root().into()
                 && ibc_root == tree.ibc.root().into()
-                && pos_root == tree.pos.root().into())
+                && pos_root == tree.pos.root().into()
+                && bp_root == tree.bridge_pool.root().into())
         {
             Ok(tree)
         } else {
@@ -289,6 +328,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
             StoreType::Account => Box::new(&self.account),
             StoreType::Ibc => Box::new(&self.ibc),
             StoreType::PoS => Box::new(&self.pos),
+            StoreType::BridgePool => Box::new(&self.bridge_pool),
         }
     }
 
@@ -301,6 +341,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
             StoreType::Account => Box::new(&mut self.account),
             StoreType::Ibc => Box::new(&mut self.ibc),
             StoreType::PoS => Box::new(&mut self.pos),
+            StoreType::BridgePool => Box::new(&mut self.bridge_pool),
         }
     }
 
@@ -327,6 +368,12 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         self.tree(&store_type).subtree_has_key(&sub_key)
     }
 
+    /// Get the value in the tree
+    pub fn get(&self, key: &Key) -> Result<Vec<u8>> {
+        let (store_type, sub_key) = StoreType::sub_key(key)?;
+        self.tree(&store_type).subtree_get(&sub_key)
+    }
+
     /// Update the tree with the given key and value
     pub fn update(&mut self, key: &Key, value: impl AsRef<[u8]>) -> Result<()> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
@@ -349,6 +396,11 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         self.base.root().into()
     }
 
+    /// Get the root of a sub-tree
+    pub fn sub_root(&self, store_type: &StoreType) -> MerkleRoot {
+        self.tree(store_type).root()
+    }
+
     /// Get the stores of the base and sub trees
     pub fn stores(&self) -> MerkleTreeStoresWrite {
         MerkleTreeStoresWrite {
@@ -356,6 +408,10 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
             account: (self.account.root().into(), self.account.store()),
             ibc: (self.ibc.root().into(), self.ibc.store()),
             pos: (self.pos.root().into(), self.pos.store()),
+            bridge_pool: (
+                self.bridge_pool.root().into(),
+                self.bridge_pool.store(),
+            ),
         }
     }
 
@@ -455,18 +511,30 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
 }
 
 /// The root hash of the merkle tree as bytes
-pub struct MerkleRoot(pub Vec<u8>);
+pub struct MerkleRoot(pub [u8; 32]);
 
 impl From<H256> for MerkleRoot {
     fn from(root: H256) -> Self {
-        Self(root.as_slice().to_vec())
+        Self(root.into())
     }
 }
 
 impl From<&H256> for MerkleRoot {
     fn from(root: &H256) -> Self {
         let root = *root;
-        Self(root.as_slice().to_vec())
+        Self(root.into())
+    }
+}
+
+impl From<KeccakHash> for MerkleRoot {
+    fn from(root: KeccakHash) -> Self {
+        Self(root.0)
+    }
+}
+
+impl From<MerkleRoot> for KeccakHash {
+    fn from(root: MerkleRoot) -> Self {
+        Self(root.0)
     }
 }
 
@@ -483,6 +551,7 @@ pub struct MerkleTreeStoresRead {
     account: (Hash, SmtStore),
     ibc: (Hash, AmtStore),
     pos: (Hash, SmtStore),
+    bridge_pool: (KeccakHash, BridgePoolStore),
 }
 
 impl MerkleTreeStoresRead {
@@ -493,6 +562,7 @@ impl MerkleTreeStoresRead {
             StoreType::Account => self.account.0 = root,
             StoreType::Ibc => self.ibc.0 = root,
             StoreType::PoS => self.pos.0 = root,
+            StoreType::BridgePool => self.bridge_pool.0 = root.into(),
         }
     }
 
@@ -503,6 +573,29 @@ impl MerkleTreeStoresRead {
             Store::Account(store) => self.account.1 = store,
             Store::Ibc(store) => self.ibc.1 = store,
             Store::PoS(store) => self.pos.1 = store,
+            Store::BridgePool(store) => self.bridge_pool.1 = store,
+        }
+    }
+
+    /// Read the backing store of the requested type
+    pub fn get_store(&self, store_type: StoreType) -> StoreRef {
+        match store_type {
+            StoreType::Base => StoreRef::Base(&self.base.1),
+            StoreType::Account => StoreRef::Account(&self.account.1),
+            StoreType::Ibc => StoreRef::Ibc(&self.ibc.1),
+            StoreType::PoS => StoreRef::PoS(&self.pos.1),
+            StoreType::BridgePool => StoreRef::BridgePool(&self.bridge_pool.1),
+        }
+    }
+
+    /// Read the merkle root of the requested type
+    pub fn get_root(&self, store_type: StoreType) -> Hash {
+        match store_type {
+            StoreType::Base => self.base.0.clone(),
+            StoreType::Account => self.account.0.clone(),
+            StoreType::Ibc => self.ibc.0.clone(),
+            StoreType::PoS => self.pos.0.clone(),
+            StoreType::BridgePool => self.bridge_pool.0.clone().into(),
         }
     }
 }
@@ -513,6 +606,7 @@ pub struct MerkleTreeStoresWrite<'a> {
     account: (Hash, &'a SmtStore),
     ibc: (Hash, &'a AmtStore),
     pos: (Hash, &'a SmtStore),
+    bridge_pool: (Hash, &'a BridgePoolStore),
 }
 
 impl<'a> MerkleTreeStoresWrite<'a> {
@@ -523,6 +617,7 @@ impl<'a> MerkleTreeStoresWrite<'a> {
             StoreType::Account => &self.account.0,
             StoreType::Ibc => &self.ibc.0,
             StoreType::PoS => &self.pos.0,
+            StoreType::BridgePool => &self.bridge_pool.0,
         }
     }
 
@@ -533,6 +628,7 @@ impl<'a> MerkleTreeStoresWrite<'a> {
             StoreType::Account => StoreRef::Account(self.account.1),
             StoreType::Ibc => StoreRef::Ibc(self.ibc.1),
             StoreType::PoS => StoreRef::PoS(self.pos.1),
+            StoreType::BridgePool => StoreRef::BridgePool(self.bridge_pool.1),
         }
     }
 }
@@ -546,18 +642,6 @@ impl From<StorageError> for Error {
 impl From<MtError> for Error {
     fn from(error: MtError) -> Self {
         Error::MerkleTree(error.to_string())
-    }
-}
-
-/// Type of membership proof from a merkle tree
-pub enum MembershipProof {
-    /// ICS23 compliant membership proof
-    ICS23(CommitmentProof),
-}
-
-impl From<CommitmentProof> for MembershipProof {
-    fn from(proof: CommitmentProof) -> Self {
-        Self::ICS23(proof)
     }
 }
 
@@ -749,12 +833,16 @@ mod test {
         tree.update(&pos_key, pos_val).unwrap();
 
         let specs = ibc_proof_specs::<Sha256Hasher>();
-        let MembershipProof::ICS23(proof) = tree
+        let proof = match tree
             .get_sub_tree_existence_proof(
                 std::array::from_ref(&ibc_key),
                 vec![&ibc_val],
             )
-            .unwrap();
+            .unwrap()
+        {
+            MembershipProof::ICS23(proof) => proof,
+            _ => panic!("Test failed"),
+        };
         let proof = tree.get_sub_tree_proof(&ibc_key, proof).unwrap();
         let (store_type, sub_key) = StoreType::sub_key(&ibc_key).unwrap();
         let paths = vec![sub_key.to_string(), store_type.to_string()];
@@ -808,12 +896,17 @@ mod test {
         tree.update(&pos_key, pos_val.clone()).unwrap();
 
         let specs = proof_specs::<Sha256Hasher>();
-        let MembershipProof::ICS23(proof) = tree
+        let proof = match tree
             .get_sub_tree_existence_proof(
                 std::array::from_ref(&pos_key),
                 vec![&pos_val],
             )
-            .unwrap();
+            .unwrap()
+        {
+            MembershipProof::ICS23(proof) => proof,
+            _ => panic!("Test failed"),
+        };
+
         let proof = tree.get_sub_tree_proof(&pos_key, proof).unwrap();
         let (store_type, sub_key) = StoreType::sub_key(&pos_key).unwrap();
         let paths = vec![sub_key.to_string(), store_type.to_string()];

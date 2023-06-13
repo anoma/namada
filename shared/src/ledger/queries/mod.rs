@@ -13,9 +13,9 @@ use vp::VP;
 // Re-export to show in rustdoc!
 pub use vp::{Pos, Vp};
 
-use super::storage::{DBIter, StorageHasher, DB};
+use super::storage::traits::StorageHasher;
+use super::storage::{DBIter, DB};
 use super::storage_api;
-use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::storage::BlockHeight;
 
 #[macro_use]
@@ -101,6 +101,7 @@ mod testing {
     use super::*;
     use crate::ledger::events::log::EventLog;
     use crate::ledger::storage::testing::TestWlStorage;
+    use crate::tendermint_rpc::error::Error as RpcError;
     use crate::types::storage::BlockHeight;
     use crate::vm::wasm::{self, TxCache, VpCache};
     use crate::vm::WasmCacheRoAccess;
@@ -183,8 +184,11 @@ mod testing {
                 tx_wasm_cache: self.tx_wasm_cache.clone(),
                 storage_read_past_height_limit: None,
             };
-            let response = self.rpc.handle(ctx, &request).unwrap();
-            Ok(response)
+            // TODO: this is a hack to propagate errors to the caller, we should
+            // really permit error types other than [`std::io::Error`]
+            self.rpc.handle(ctx, &request).map_err(|err| {
+                std::io::Error::new(std::io::ErrorKind::Other, err.to_string())
+            })
         }
 
         async fn perform<R>(&self, _request: R) -> Result<R::Response, RpcError>

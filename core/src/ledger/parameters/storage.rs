@@ -12,6 +12,7 @@ struct Keys {
     epochs_per_year: &'static str,
     implicit_vp: &'static str,
     max_expected_time_per_block: &'static str,
+    min_confirmations: &'static str,
     pos_gain_d: &'static str,
     pos_gain_p: &'static str,
     pos_inflation_amount: &'static str,

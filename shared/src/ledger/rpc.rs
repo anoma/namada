@@ -1,5 +1,8 @@
 //! SDK RPC queries
+
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
+use std::ops::ControlFlow;
 
 use borsh::BorshDeserialize;
 use masp_primitives::asset_type::AssetType;
@@ -11,7 +14,6 @@ use namada_core::types::storage::Key;
 use namada_core::types::token::{Amount, Denomination, MaspDenom};
 use namada_proof_of_stake::types::CommissionPair;
 use serde::Serialize;
-use tokio::time::Duration;
 
 use crate::ledger::args::InputAmount;
 use crate::ledger::events::Event;
@@ -20,10 +22,12 @@ use crate::ledger::governance::storage as gov_storage;
 use crate::ledger::native_vp::governance::utils::Votes;
 use crate::ledger::queries::RPC;
 use crate::proto::Tx;
+use crate::tendermint::block::Height;
 use crate::tendermint::merkle::proof::Proof;
 use crate::tendermint_rpc::error::Error as TError;
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
+use crate::types::control_flow::{time, Halt, TryHalt};
 use crate::types::governance::{ProposalVote, VotePower};
 use crate::types::hash::Hash;
 use crate::types::key::*;
@@ -35,47 +39,50 @@ use crate::types::{storage, token};
 ///
 /// If a response is not delivered until `deadline`, we exit the cli with an
 /// error.
-pub async fn query_tx_status<C: crate::ledger::queries::Client + Sync>(
+pub async fn query_tx_status<C>(
     client: &C,
     status: TxEventQuery<'_>,
-    deadline: Duration,
-) -> Event {
-    const ONE_SECOND: Duration = Duration::from_secs(1);
-    // sleep for the duration of `backoff`,
-    // and update the underlying value
-    async fn sleep_update(query: TxEventQuery<'_>, backoff: &mut Duration) {
-        tracing::debug!(
-            ?query,
-            duration = ?backoff,
-            "Retrying tx status query after timeout",
-        );
-        // simple linear backoff - if an event is not available,
-        // increase the backoff duration by one second
-        async_std::task::sleep(*backoff).await;
-        *backoff += ONE_SECOND;
+    deadline: time::Instant,
+) -> Halt<Event>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
+    time::Sleep {
+        strategy: time::LinearBackoff {
+            delta: time::Duration::from_secs(1),
+        },
     }
-
-    let mut backoff = ONE_SECOND;
-    loop {
+    .timeout(deadline, || async {
         tracing::debug!(query = ?status, "Querying tx status");
         let maybe_event = match query_tx_events(client, status).await {
             Ok(response) => response,
-            Err(_err) => {
-                // tracing::debug!(%err, "ABCI query failed");
-                sleep_update(status, &mut backoff).await;
-                continue;
+            Err(err) => {
+                tracing::debug!(
+                    query = ?status,
+                    %err,
+                    "ABCI query failed, retrying tx status query \
+                     after timeout",
+                );
+                return ControlFlow::Continue(());
             }
         };
         if let Some(e) = maybe_event {
-            break e;
-        } else if deadline < backoff {
-            panic!(
-                "Transaction status query deadline of {deadline:?} exceeded"
-            );
+            tracing::debug!(event = ?e, "Found tx event");
+            ControlFlow::Break(e)
         } else {
-            sleep_update(status, &mut backoff).await;
+            tracing::debug!(
+                query = ?status,
+                "No tx events found, retrying tx status query \
+                 after timeout",
+            );
+            ControlFlow::Continue(())
         }
-    }
+    })
+    .await
+    .try_halt(|_| {
+        eprintln!("Transaction status query deadline of {deadline:?} exceeded");
+    })
 }
 
 /// Query the epoch of the last committed block
@@ -953,4 +960,57 @@ pub async fn validate_amount<C: crate::ledger::queries::Client + Sync>(
             }
         }
     }
+}
+
+/// Wait for a first block and node to be synced.
+pub async fn wait_until_node_is_synched<C>(client: &C) -> Halt<()>
+where
+    C: crate::ledger::queries::Client + Sync,
+{
+    let height_one = Height::try_from(1_u64).unwrap();
+    let try_count = Cell::new(1_u64);
+    const MAX_TRIES: usize = 5;
+
+    time::Sleep {
+        strategy: time::ExponentialBackoff {
+            base: 2,
+            as_duration: time::Duration::from_secs,
+        },
+    }
+    .retry(MAX_TRIES, || async {
+        let node_status = client.status().await;
+        match node_status {
+            Ok(status) => {
+                let latest_block_height = status.sync_info.latest_block_height;
+                let is_catching_up = status.sync_info.catching_up;
+                let is_at_least_height_one = latest_block_height >= height_one;
+                if is_at_least_height_one && !is_catching_up {
+                    return ControlFlow::Break(Ok(()));
+                }
+                println!(
+                    " Waiting for {} ({}/{} tries)...",
+                    if is_at_least_height_one {
+                        "a first block"
+                    } else {
+                        "node to sync"
+                    },
+                    try_count.get(),
+                    MAX_TRIES,
+                );
+                try_count.set(try_count.get() + 1);
+                ControlFlow::Continue(())
+            }
+            Err(e) => {
+                eprintln!("Failed to query node status with error: {}", e);
+                ControlFlow::Break(Err(()))
+            }
+        }
+    })
+    .await
+    // maybe time out
+    .try_halt(|_| {
+        println!("Node is still catching up, wait for it to finish synching.");
+    })?
+    // error querying rpc
+    .try_halt(|_| ())
 }

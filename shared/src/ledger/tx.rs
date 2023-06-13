@@ -2,6 +2,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
+use std::time::Duration;
 
 use borsh::BorshSerialize;
 use itertools::Either::*;
@@ -14,7 +15,6 @@ use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::CommissionPair;
 use prost::EncodeError;
 use thiserror::Error;
-use tokio::time::Duration;
 
 use super::rpc::query_wasm_code_hash;
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
@@ -33,6 +33,7 @@ use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::Tx;
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
+use crate::types::control_flow::{time, ProceedOrElse};
 use crate::types::key::*;
 use crate::types::masp::TransferTarget;
 use crate::types::storage::{Epoch, RESERVED_ADDRESS_PREFIX};
@@ -49,6 +50,12 @@ const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 /// Errors to do with transaction events.
 #[derive(Error, Debug)]
 pub enum Error {
+    /// Accepted tx timeout
+    #[error("Timed out waiting for tx to be accepted")]
+    AcceptTimeout,
+    /// Applied tx timeout
+    #[error("Timed out waiting for tx to be applied")]
+    AppliedTimeout,
     /// Expect a dry running transaction
     #[error(
         "Expected a dry-run transaction, received a wrapper transaction \
@@ -164,17 +171,19 @@ pub enum Error {
 
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
-pub async fn process_tx<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
+pub async fn process_tx<C, U>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     tx: Tx,
     default_signer: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> Result<Vec<Address>, Error> {
+) -> Result<Vec<Address>, Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+    U: WalletUtils,
+{
     let to_broadcast = sign_tx::<C, U>(
         client,
         wallet,
@@ -217,14 +226,16 @@ pub async fn process_tx<
 }
 
 /// Submit transaction to reveal public key
-pub async fn submit_reveal_pk<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
+pub async fn submit_reveal_pk<C, U>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::RevealPk,
-) -> Result<(), Error> {
+) -> Result<(), Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+    U: WalletUtils,
+{
     let args::RevealPk {
         tx: args,
         public_key,
@@ -240,15 +251,17 @@ pub async fn submit_reveal_pk<
 }
 
 /// Submit transaction to rveeal public key if needed
-pub async fn reveal_pk_if_needed<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
+pub async fn reveal_pk_if_needed<C, U>(
     client: &C,
     wallet: &mut Wallet<U>,
     public_key: &common::PublicKey,
     args: &args::Tx,
-) -> Result<bool, Error> {
+) -> Result<bool, Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+    U: WalletUtils,
+{
     let addr: Address = public_key.into();
     // Check if PK revealed
     if args.force || !has_revealed_pk(client, &addr).await {
@@ -269,15 +282,17 @@ pub async fn has_revealed_pk<C: crate::ledger::queries::Client + Sync>(
 }
 
 /// Submit transaction to reveal the given public key
-pub async fn submit_reveal_pk_aux<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
+pub async fn submit_reveal_pk_aux<C, U>(
     client: &C,
     wallet: &mut Wallet<U>,
     public_key: &common::PublicKey,
     args: &args::Tx,
-) -> Result<(), Error> {
+) -> Result<(), Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+    U: WalletUtils,
+{
     let addr: Address = public_key.into();
     println!("Submitting a tx to reveal the public key for address {addr}...");
     let tx_data = public_key.try_to_vec().map_err(Error::EncodeKeyFailure)?;
@@ -388,10 +403,14 @@ pub async fn broadcast_tx<C: crate::ledger::queries::Client + Sync>(
 /// 3. The decrypted payload of the tx has been included on the blockchain.
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn submit_tx<C: crate::ledger::queries::Client + Sync>(
+pub async fn submit_tx<C>(
     client: &C,
     to_broadcast: TxBroadcastData,
-) -> Result<TxResponse, Error> {
+) -> Result<TxResponse, Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     let (_, wrapper_hash, decrypted_hash) = match &to_broadcast {
         TxBroadcastData::Wrapper {
             tx,
@@ -404,8 +423,10 @@ pub async fn submit_tx<C: crate::ledger::queries::Client + Sync>(
     // Broadcast the supplied transaction
     broadcast_tx(client, &to_broadcast).await?;
 
-    let deadline =
-        Duration::from_secs(DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS);
+    let deadline = time::Instant::now()
+        + time::Duration::from_secs(
+            DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS,
+        );
 
     tracing::debug!(
         transaction = ?to_broadcast,
@@ -416,7 +437,9 @@ pub async fn submit_tx<C: crate::ledger::queries::Client + Sync>(
     let parsed = {
         let wrapper_query =
             crate::ledger::rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
-        let event = rpc::query_tx_status(client, wrapper_query, deadline).await;
+        let event = rpc::query_tx_status(client, wrapper_query, deadline)
+            .await
+            .proceed_or(Error::AcceptTimeout)?;
         let parsed = TxResponse::from_event(event);
 
         println!(
@@ -430,8 +453,9 @@ pub async fn submit_tx<C: crate::ledger::queries::Client + Sync>(
             // payload makes its way onto the blockchain
             let decrypted_query =
                 rpc::TxEventQuery::Applied(decrypted_hash.as_str());
-            let event =
-                rpc::query_tx_status(client, decrypted_query, deadline).await;
+            let event = rpc::query_tx_status(client, decrypted_query, deadline)
+                .await
+                .proceed_or(Error::AppliedTimeout)?;
             let parsed = TxResponse::from_event(event);
             println!(
                 "Transaction applied with result: {}",
@@ -521,14 +545,16 @@ pub async fn save_initialized_accounts<U: WalletUtils>(
 }
 
 /// Submit validator comission rate change
-pub async fn submit_validator_commission_change<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
+pub async fn submit_validator_commission_change<C, U>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxCommissionRateChange,
-) -> Result<(), Error> {
+) -> Result<(), Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+    U: WalletUtils,
+{
     let epoch = rpc::query_epoch(client).await;
 
     let tx_code = args.tx_code_path;
@@ -620,14 +646,16 @@ pub async fn submit_validator_commission_change<
 }
 
 /// Submit transaction to withdraw an unbond
-pub async fn submit_withdraw<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
+pub async fn submit_withdraw<C, U>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Withdraw,
-) -> Result<(), Error> {
+) -> Result<(), Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+    U: WalletUtils,
+{
     let epoch = rpc::query_epoch(client).await;
 
     let validator =
@@ -686,14 +714,16 @@ pub async fn submit_withdraw<
 }
 
 /// Submit a transaction to unbond
-pub async fn submit_unbond<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
+pub async fn submit_unbond<C, U>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Unbond,
-) -> Result<(), Error> {
+) -> Result<(), Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+    U: WalletUtils,
+{
     let validator =
         known_validator_or_err(args.validator.clone(), args.tx.force, client)
             .await?;
@@ -812,14 +842,16 @@ pub async fn submit_unbond<
 }
 
 /// Submit a transaction to bond
-pub async fn submit_bond<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
+pub async fn submit_bond<C, U>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Bond,
-) -> Result<(), Error> {
+) -> Result<(), Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+    U: WalletUtils,
+{
     let validator =
         known_validator_or_err(args.validator.clone(), args.tx.force, client)
             .await?;
@@ -905,14 +937,16 @@ pub async fn is_safe_voting_window<C: crate::ledger::queries::Client + Sync>(
 }
 
 /// Submit an IBC transfer
-pub async fn submit_ibc_transfer<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
+pub async fn submit_ibc_transfer<C, U>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxIbcTransfer,
-) -> Result<(), Error> {
+) -> Result<(), Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+    U: WalletUtils,
+{
     // Check that the source address exists on chain
     let source =
         source_exists_or_err(args.source.clone(), args.tx.force, client)
@@ -1008,16 +1042,18 @@ pub async fn submit_ibc_transfer<
 }
 
 /// Submit an ordinary transfer
-pub async fn submit_transfer<
-    C: crate::ledger::queries::Client + Sync,
-    V: WalletUtils,
-    U: ShieldedUtils<C = C>,
->(
+pub async fn submit_transfer<C, U, V>(
     client: &C,
     wallet: &mut Wallet<V>,
     shielded: &mut ShieldedContext<U>,
-    mut args: args::TxTransfer,
-) -> Result<(), Error> {
+    args: args::TxTransfer,
+) -> Result<(), Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+    V: WalletUtils,
+    U: ShieldedUtils<C = C>,
+{
     // Check that the source address exists on chain
     let force = args.tx.force;
     let transfer_source = args.source.clone();
@@ -1173,14 +1209,16 @@ pub async fn submit_transfer<
 }
 
 /// Submit a transaction to initialize an account
-pub async fn submit_init_account<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
+pub async fn submit_init_account<C, U>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxInitAccount,
-) -> Result<(), Error> {
+) -> Result<(), Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+    U: WalletUtils,
+{
     let public_key = args.public_key;
     let vp_code = args.vp_code;
     // Validate the VP code
@@ -1216,14 +1254,16 @@ pub async fn submit_init_account<
 }
 
 /// Submit a transaction to update a VP
-pub async fn submit_update_vp<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
+pub async fn submit_update_vp<C, U>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxUpdateVp,
-) -> Result<(), Error> {
+) -> Result<(), Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+    U: WalletUtils,
+{
     let addr = args.addr.clone();
 
     // Check that the address is established and exists on chain
@@ -1295,14 +1335,16 @@ pub async fn submit_update_vp<
 }
 
 /// Submit a custom transaction
-pub async fn submit_custom<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
+pub async fn submit_custom<C, U>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxCustom,
-) -> Result<(), Error> {
+) -> Result<(), Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+    U: WalletUtils,
+{
     let tx_code = args.code_path;
     let data = args.data_path;
     let chain_id = args.tx.chain_id.clone().unwrap();

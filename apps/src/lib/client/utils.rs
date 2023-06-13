@@ -584,6 +584,40 @@ pub fn init_network(
             keypair.ref_to()
         });
 
+        let eth_hot_pk = try_parse_public_key(
+            format!("validator {name} eth hot key"),
+            &config.eth_hot_key,
+        )
+        .unwrap_or_else(|| {
+            let alias = format!("{}-eth-hot-key", name);
+            println!("Generating validator {} eth hot key...", name);
+            let password = read_and_confirm_pwd(unsafe_dont_encrypt);
+            let (_alias, keypair) = wallet.gen_key(
+                SchemeType::Secp256k1,
+                Some(alias),
+                password,
+                true,
+            );
+            keypair.ref_to()
+        });
+
+        let eth_cold_pk = try_parse_public_key(
+            format!("validator {name} eth cold key"),
+            &config.eth_cold_key,
+        )
+        .unwrap_or_else(|| {
+            let alias = format!("{}-eth-cold-key", name);
+            println!("Generating validator {} eth cold key...", name);
+            let password = read_and_confirm_pwd(unsafe_dont_encrypt);
+            let (_alias, keypair) = wallet.gen_key(
+                SchemeType::Secp256k1,
+                Some(alias),
+                password,
+                true,
+            );
+            keypair.ref_to()
+        });
+
         let dkg_pk = &config
             .dkg_public_key
             .as_ref()
@@ -602,6 +636,7 @@ pub fn init_network(
 
                 let validator_keys = crate::wallet::gen_validator_keys(
                     &mut wallet,
+                    Some(eth_hot_pk.clone()),
                     Some(protocol_pk.clone()),
                     SchemeType::Ed25519,
                 )
@@ -616,6 +651,10 @@ pub fn init_network(
             Some(genesis_config::HexString(consensus_pk.to_string()));
         config.account_public_key =
             Some(genesis_config::HexString(account_pk.to_string()));
+        config.eth_cold_key =
+            Some(genesis_config::HexString(eth_cold_pk.to_string()));
+        config.eth_hot_key =
+            Some(genesis_config::HexString(eth_hot_pk.to_string()));
 
         config.protocol_public_key =
             Some(genesis_config::HexString(protocol_pk.to_string()));
@@ -988,6 +1027,12 @@ pub fn init_genesis_validator(
                 consensus_public_key: Some(HexString(
                     pre_genesis.consensus_key.ref_to().to_string(),
                 )),
+                eth_cold_key: Some(HexString(
+                    pre_genesis.eth_cold_key.ref_to().to_string(),
+                )),
+                eth_hot_key: Some(HexString(
+                    pre_genesis.eth_hot_key.ref_to().to_string(),
+                )),
                 account_public_key: Some(HexString(
                     pre_genesis.account_key.ref_to().to_string(),
                 )),
@@ -1154,4 +1199,17 @@ fn is_valid_validator_for_current_chain(
             false
         }
     })
+}
+
+/// Replace the contents of `addr` with a dummy address.
+#[inline]
+pub fn take_config_address(addr: &mut TendermintAddress) -> TendermintAddress {
+    std::mem::replace(
+        addr,
+        TendermintAddress::Tcp {
+            peer_id: None,
+            host: String::new(),
+            port: 0,
+        },
+    )
 }

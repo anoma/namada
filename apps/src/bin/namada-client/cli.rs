@@ -1,16 +1,18 @@
 //! Namada client CLI.
 
-use std::time::Duration;
-
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{eyre, Report, Result};
+use namada::ledger::eth_bridge::bridge_pool;
+use namada::ledger::rpc::wait_until_node_is_synched;
+use namada::types::control_flow::ProceedOrElse;
+use namada_apps::cli;
 use namada_apps::cli::args::CliToSdk;
 use namada_apps::cli::cmds::*;
-use namada_apps::cli::{self, safe_exit};
 use namada_apps::client::{rpc, tx, utils};
-use namada_apps::facade::tendermint::block::Height;
-use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
-use namada_apps::facade::tendermint_rpc::{Client, HttpClient};
-use tokio::time::sleep;
+use namada_apps::facade::tendermint_rpc::HttpClient;
+
+fn error() -> Report {
+    eyre!("Fatal error")
+}
 
 pub async fn main() -> Result<()> {
     match cli::namada_client_cli()? {
@@ -19,11 +21,14 @@ pub async fn main() -> Result<()> {
             use NamadaClientWithContext as Sub;
             match cmd {
                 // Ledger cmds
-                Sub::TxCustom(TxCustom(args)) => {
-                    wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    let client =
-                        HttpClient::new(args.tx.ledger_address.clone())
-                            .unwrap();
+                Sub::TxCustom(TxCustom(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     let dry_run = args.tx.dry_run;
                     tx::submit_custom::<HttpClient>(&client, &mut ctx, args)
@@ -38,37 +43,49 @@ pub async fn main() -> Result<()> {
                         )
                     }
                 }
-                Sub::TxTransfer(TxTransfer(args)) => {
-                    wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    let client =
-                        HttpClient::new(args.tx.ledger_address.clone())
-                            .unwrap();
+                Sub::TxTransfer(TxTransfer(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_transfer(&client, ctx, args).await?;
                 }
-                Sub::TxIbcTransfer(TxIbcTransfer(args)) => {
-                    wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    let client =
-                        HttpClient::new(args.tx.ledger_address.clone())
-                            .unwrap();
+                Sub::TxIbcTransfer(TxIbcTransfer(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_ibc_transfer::<HttpClient>(&client, ctx, args)
                         .await?;
                 }
-                Sub::TxUpdateVp(TxUpdateVp(args)) => {
-                    wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    let client =
-                        HttpClient::new(args.tx.ledger_address.clone())
-                            .unwrap();
+                Sub::TxUpdateVp(TxUpdateVp(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_update_vp::<HttpClient>(&client, &mut ctx, args)
                         .await?;
                 }
-                Sub::TxInitAccount(TxInitAccount(args)) => {
-                    wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    let client =
-                        HttpClient::new(args.tx.ledger_address.clone())
-                            .unwrap();
+                Sub::TxInitAccount(TxInitAccount(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     let dry_run = args.tx.dry_run;
                     tx::submit_init_account::<HttpClient>(
@@ -85,81 +102,129 @@ pub async fn main() -> Result<()> {
                         )
                     }
                 }
-                Sub::TxInitValidator(TxInitValidator(args)) => {
-                    wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    let client =
-                        HttpClient::new(args.tx.ledger_address.clone())
-                            .unwrap();
+                Sub::TxInitValidator(TxInitValidator(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_init_validator::<HttpClient>(&client, ctx, args)
                         .await;
                 }
-                Sub::TxInitProposal(TxInitProposal(args)) => {
-                    wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    let client =
-                        HttpClient::new(args.tx.ledger_address.clone())
-                            .unwrap();
+                Sub::TxInitProposal(TxInitProposal(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_init_proposal::<HttpClient>(&client, ctx, args)
                         .await?;
                 }
-                Sub::TxVoteProposal(TxVoteProposal(args)) => {
-                    wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    let client =
-                        HttpClient::new(args.tx.ledger_address.clone())
-                            .unwrap();
+                Sub::TxVoteProposal(TxVoteProposal(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_vote_proposal::<HttpClient>(&client, ctx, args)
                         .await?;
                 }
-                Sub::TxRevealPk(TxRevealPk(args)) => {
-                    wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    let client =
-                        HttpClient::new(args.tx.ledger_address.clone())
-                            .unwrap();
+                Sub::TxRevealPk(TxRevealPk(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_reveal_pk::<HttpClient>(&client, &mut ctx, args)
                         .await?;
                 }
-                Sub::Bond(Bond(args)) => {
-                    wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    let client =
-                        HttpClient::new(args.tx.ledger_address.clone())
-                            .unwrap();
+                Sub::Bond(Bond(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_bond::<HttpClient>(&client, &mut ctx, args)
                         .await?;
                 }
-                Sub::Unbond(Unbond(args)) => {
-                    wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    let client =
-                        HttpClient::new(args.tx.ledger_address.clone())
-                            .unwrap();
+                Sub::Unbond(Unbond(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_unbond::<HttpClient>(&client, &mut ctx, args)
                         .await?;
                 }
-                Sub::Withdraw(Withdraw(args)) => {
-                    wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    let client =
-                        HttpClient::new(args.tx.ledger_address.clone())
-                            .unwrap();
+                Sub::Withdraw(Withdraw(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_withdraw::<HttpClient>(&client, ctx, args)
                         .await?;
                 }
+                // Eth bridge
+                Sub::AddToEthBridgePool(args) => {
+                    let mut args = args.0;
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
+                    let args = args.to_sdk(&mut ctx);
+                    let chain_id = ctx.config.ledger.chain_id.clone();
+                    bridge_pool::add_to_eth_bridge_pool(
+                        &client,
+                        &mut ctx.wallet,
+                        chain_id,
+                        args,
+                    )
+                    .await;
+                }
                 // Ledger queries
-                Sub::QueryEpoch(QueryEpoch(args)) => {
-                    wait_until_node_is_synched(&args.ledger_address).await;
-                    let client = HttpClient::new(args.ledger_address).unwrap();
+                Sub::QueryEpoch(QueryEpoch(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     rpc::query_and_print_epoch(&client).await;
                 }
-                Sub::QueryTransfers(QueryTransfers(args)) => {
-                    wait_until_node_is_synched(&args.query.ledger_address)
-                        .await;
-                    let client =
-                        HttpClient::new(args.query.ledger_address.clone())
-                            .unwrap();
+                Sub::QueryTransfers(QueryTransfers(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_transfers(
                         &client,
@@ -169,28 +234,36 @@ pub async fn main() -> Result<()> {
                     )
                     .await;
                 }
-                Sub::QueryConversions(QueryConversions(args)) => {
-                    wait_until_node_is_synched(&args.query.ledger_address)
-                        .await;
-                    let client =
-                        HttpClient::new(args.query.ledger_address.clone())
-                            .unwrap();
+                Sub::QueryConversions(QueryConversions(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_conversions(&client, &mut ctx.wallet, args)
                         .await;
                 }
-                Sub::QueryBlock(QueryBlock(args)) => {
-                    wait_until_node_is_synched(&args.ledger_address).await;
-                    let client =
-                        HttpClient::new(args.ledger_address.clone()).unwrap();
+                Sub::QueryBlock(QueryBlock(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     rpc::query_block(&client).await;
                 }
-                Sub::QueryBalance(QueryBalance(args)) => {
-                    wait_until_node_is_synched(&args.query.ledger_address)
-                        .await;
-                    let client =
-                        HttpClient::new(args.query.ledger_address.clone())
-                            .unwrap();
+                Sub::QueryBalance(QueryBalance(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_balance(
                         &client,
@@ -200,32 +273,38 @@ pub async fn main() -> Result<()> {
                     )
                     .await;
                 }
-                Sub::QueryBonds(QueryBonds(args)) => {
-                    wait_until_node_is_synched(&args.query.ledger_address)
-                        .await;
-                    let client =
-                        HttpClient::new(args.query.ledger_address.clone())
-                            .unwrap();
+                Sub::QueryBonds(QueryBonds(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_bonds(&client, &mut ctx.wallet, args)
                         .await
                         .expect("expected successful query of bonds");
                 }
-                Sub::QueryBondedStake(QueryBondedStake(args)) => {
-                    wait_until_node_is_synched(&args.query.ledger_address)
-                        .await;
-                    let client =
-                        HttpClient::new(args.query.ledger_address.clone())
-                            .unwrap();
+                Sub::QueryBondedStake(QueryBondedStake(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_bonded_stake(&client, args).await;
                 }
-                Sub::QueryCommissionRate(QueryCommissionRate(args)) => {
-                    wait_until_node_is_synched(&args.query.ledger_address)
-                        .await;
-                    let client =
-                        HttpClient::new(args.query.ledger_address.clone())
-                            .unwrap();
+                Sub::QueryCommissionRate(QueryCommissionRate(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_and_print_commission_rate(
                         &client,
@@ -234,69 +313,84 @@ pub async fn main() -> Result<()> {
                     )
                     .await;
                 }
-                Sub::QuerySlashes(QuerySlashes(args)) => {
-                    wait_until_node_is_synched(&args.query.ledger_address)
-                        .await;
-                    let client =
-                        HttpClient::new(args.query.ledger_address.clone())
-                            .unwrap();
+                Sub::QuerySlashes(QuerySlashes(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_slashes(&client, &mut ctx.wallet, args).await;
                 }
-                Sub::QueryDelegations(QueryDelegations(args)) => {
-                    wait_until_node_is_synched(&args.query.ledger_address)
-                        .await;
-                    let client =
-                        HttpClient::new(args.query.ledger_address.clone())
-                            .unwrap();
+                Sub::QueryDelegations(QueryDelegations(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_delegations(&client, &mut ctx.wallet, args)
                         .await;
                 }
-                Sub::QueryResult(QueryResult(args)) => {
-                    wait_until_node_is_synched(&args.query.ledger_address)
-                        .await;
-                    // Connect to the Tendermint server holding the transactions
-                    let client =
-                        HttpClient::new(args.query.ledger_address.clone())
-                            .unwrap();
+                Sub::QueryResult(QueryResult(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_result(&client, args).await;
                 }
-                Sub::QueryRawBytes(QueryRawBytes(args)) => {
-                    wait_until_node_is_synched(&args.query.ledger_address)
-                        .await;
-                    let client =
-                        HttpClient::new(args.query.ledger_address.clone())
-                            .unwrap();
+                Sub::QueryRawBytes(QueryRawBytes(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_raw_bytes(&client, args).await;
                 }
 
-                Sub::QueryProposal(QueryProposal(args)) => {
-                    wait_until_node_is_synched(&args.query.ledger_address)
-                        .await;
-                    let client =
-                        HttpClient::new(args.query.ledger_address.clone())
-                            .unwrap();
+                Sub::QueryProposal(QueryProposal(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_proposal(&client, args).await;
                 }
-                Sub::QueryProposalResult(QueryProposalResult(args)) => {
-                    wait_until_node_is_synched(&args.query.ledger_address)
-                        .await;
-                    let client =
-                        HttpClient::new(args.query.ledger_address.clone())
-                            .unwrap();
+                Sub::QueryProposalResult(QueryProposalResult(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_proposal_result(&client, args).await;
                 }
-                Sub::QueryProtocolParameters(QueryProtocolParameters(args)) => {
-                    wait_until_node_is_synched(&args.query.ledger_address)
-                        .await;
-                    let client =
-                        HttpClient::new(args.query.ledger_address.clone())
-                            .unwrap();
+                Sub::QueryProtocolParameters(QueryProtocolParameters(
+                    mut args,
+                )) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_protocol_parameters(&client, args).await;
                 }
@@ -322,52 +416,4 @@ pub async fn main() -> Result<()> {
         },
     }
     Ok(())
-}
-
-/// Wait for a first block and node to be synced. Will attempt to
-async fn wait_until_node_is_synched(ledger_address: &TendermintAddress) {
-    let client = HttpClient::new(ledger_address.clone()).unwrap();
-    let height_one = Height::try_from(1_u64).unwrap();
-    let mut try_count = 0_u64;
-    const MAX_TRIES: u64 = 5;
-
-    loop {
-        let node_status = client.status().await;
-        match node_status {
-            Ok(status) => {
-                let latest_block_height = status.sync_info.latest_block_height;
-                let is_catching_up = status.sync_info.catching_up;
-                let is_at_least_height_one = latest_block_height >= height_one;
-                if is_at_least_height_one && !is_catching_up {
-                    return;
-                } else {
-                    if try_count > MAX_TRIES {
-                        println!(
-                            "Node is still catching up, wait for it to finish \
-                             synching."
-                        );
-                        safe_exit(1)
-                    } else {
-                        println!(
-                            " Waiting for {} ({}/{} tries)...",
-                            if is_at_least_height_one {
-                                "a first block"
-                            } else {
-                                "node to sync"
-                            },
-                            try_count + 1,
-                            MAX_TRIES
-                        );
-                        sleep(Duration::from_secs((try_count + 1).pow(2)))
-                            .await;
-                    }
-                    try_count += 1;
-                }
-            }
-            Err(e) => {
-                eprintln!("Failed to query node status with error: {}", e);
-                safe_exit(1)
-            }
-        }
-    }
 }

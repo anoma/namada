@@ -1,5 +1,6 @@
 mod abortable;
 mod broadcaster;
+pub mod ethereum_oracle;
 mod shell;
 mod shims;
 pub mod storage;
@@ -13,22 +14,27 @@ use std::thread;
 
 use byte_unit::Byte;
 use futures::future::TryFutureExt;
+use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::ledger::governance::storage as gov_storage;
 use namada::types::storage::Key;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
+use tokio::sync::mpsc;
 use tokio::task;
 use tower::ServiceBuilder;
 
 use self::abortable::AbortableSpawner;
+use self::ethereum_oracle::last_processed_block;
+use self::shell::EthereumOracleChannels;
 use self::shims::abcipp_shim::AbciService;
 use crate::cli::args;
 use crate::config::utils::num_of_threads;
-use crate::config::TendermintMode;
+use crate::config::{ethereum_bridge, TendermintMode};
 use crate::facade::tendermint_proto::abci::CheckTxType;
 use crate::facade::tower_abci::{response, split, Server};
 use crate::node::ledger::broadcaster::Broadcaster;
 use crate::node::ledger::config::genesis;
+use crate::node::ledger::ethereum_oracle as oracle;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::AbcippShim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::{Request, Response};
@@ -235,6 +241,9 @@ pub fn rollback(config: config::Ledger) -> Result<(), shell::Error> {
 ///   - A shell which contains an ABCI server, for talking to the Tendermint
 ///     node.
 ///   - A [`Broadcaster`], for the ledger to submit txs to Tendermint's mempool.
+///   - An Ethereum full node.
+///   - An oracle, to receive events from the Ethereum full node, and forward
+///     them to the ledger.
 ///
 /// All must be alive for correct functioning.
 async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
@@ -247,10 +256,20 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     // Start Tendermint node
     let tendermint_node = start_tendermint(&mut spawner, &config);
 
+    // Start oracle if necessary
+    let (eth_oracle_channels, eth_oracle) =
+        match maybe_start_ethereum_oracle(&mut spawner, &config).await {
+            EthereumOracleTask::NotEnabled { handle } => (None, handle),
+            EthereumOracleTask::Enabled { handle, channels } => {
+                (Some(channels), handle)
+            }
+        };
+
     // Start ABCI server and broadcaster (the latter only if we are a validator
     // node)
     let (abci, broadcaster, shell_handler) = start_abci_broadcaster_shell(
         &mut spawner,
+        eth_oracle_channels,
         wasm_dir,
         setup_data,
         config,
@@ -260,10 +279,10 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     let aborted = spawner.wait_for_abort().await.child_terminated();
 
     // Wait for all managed tasks to finish.
-    let res = tokio::try_join!(tendermint_node, abci, broadcaster);
+    let res = tokio::try_join!(tendermint_node, abci, eth_oracle, broadcaster);
 
     match res {
-        Ok((tendermint_res, abci_res, _)) => {
+        Ok((tendermint_res, abci_res, _, _)) => {
             // we ignore errors on user-initiated shutdown
             if aborted {
                 if let Err(err) = tendermint_res {
@@ -392,14 +411,12 @@ async fn run_aux_setup(
     }
 }
 
-/// Launches two tasks into the asynchronous runtime:
-///
-///   1. An ABCI server.
-///   2. A service for broadcasting transactions via an HTTP client.
-///
-/// Lastly, this function executes an ABCI shell on a new OS thread.
+/// This function spawns an ABCI server and a [`Broadcaster`] into the
+/// asynchronous runtime. Additionally, it executes a shell in
+/// a new OS thread, to drive the ABCI server.
 fn start_abci_broadcaster_shell(
     spawner: &mut AbortableSpawner,
+    eth_oracle: Option<EthereumOracleChannels>,
     wasm_dir: PathBuf,
     setup_data: RunAuxSetup,
     config: config::Ledger,
@@ -417,8 +434,7 @@ fn start_abci_broadcaster_shell(
 
     // Channels for validators to send protocol txs to be broadcast to the
     // broadcaster service
-    let (broadcaster_sender, broadcaster_receiver) =
-        tokio::sync::mpsc::unbounded_channel();
+    let (broadcaster_sender, broadcaster_receiver) = mpsc::unbounded_channel();
 
     // Start broadcaster
     let broadcaster = if matches!(
@@ -461,6 +477,7 @@ fn start_abci_broadcaster_shell(
         config,
         wasm_dir,
         broadcaster_sender,
+        eth_oracle,
         &db_cache,
         vp_wasm_compilation_cache,
         tx_wasm_compilation_cache,
@@ -620,6 +637,116 @@ fn start_tendermint(
                 }
             }
         })
+}
+
+/// Represents a [`tokio::task`] in which an Ethereum oracle may be running, and
+/// if so, channels for communicating with it.
+enum EthereumOracleTask {
+    NotEnabled {
+        // TODO(namada#459): we have to return a dummy handle for the moment,
+        // until `run_aux` is refactored - at which point, we no longer need an
+        // enum to represent the Ethereum oracle being on/off.
+        handle: task::JoinHandle<()>,
+    },
+    Enabled {
+        handle: task::JoinHandle<()>,
+        channels: EthereumOracleChannels,
+    },
+}
+
+/// Potentially starts an Ethereum event oracle.
+async fn maybe_start_ethereum_oracle(
+    spawner: &mut AbortableSpawner,
+    config: &config::Ledger,
+) -> EthereumOracleTask {
+    if !matches!(config.tendermint.tendermint_mode, TendermintMode::Validator) {
+        return EthereumOracleTask::NotEnabled {
+            handle: spawn_dummy_task(()),
+        };
+    }
+
+    let ethereum_url = config.ethereum_bridge.oracle_rpc_endpoint.clone();
+
+    // Start the oracle for listening to Ethereum events
+    let (eth_sender, eth_receiver) =
+        mpsc::channel(config.ethereum_bridge.channel_buffer_size);
+    let (last_processed_block_sender, last_processed_block_receiver) =
+        last_processed_block::channel();
+    let (control_sender, control_receiver) = oracle::control::channel();
+
+    match config.ethereum_bridge.mode {
+        ethereum_bridge::ledger::Mode::RemoteEndpoint => {
+            let handle = oracle::run_oracle::<Provider<Http>>(
+                ethereum_url,
+                eth_sender,
+                control_receiver,
+                last_processed_block_sender,
+                spawner,
+            );
+
+            EthereumOracleTask::Enabled {
+                handle,
+                channels: EthereumOracleChannels::new(
+                    eth_receiver,
+                    control_sender,
+                    last_processed_block_receiver,
+                ),
+            }
+        }
+        ethereum_bridge::ledger::Mode::SelfHostedEndpoint => {
+            let (oracle_abort_send, oracle_abort_recv) =
+                tokio::sync::oneshot::channel::<tokio::sync::oneshot::Sender<()>>(
+                );
+            let handle = spawner
+                .spawn_abortable(
+                    "Ethereum Events Endpoint",
+                    move |aborter| async move {
+                        oracle::test_tools::events_endpoint::serve(
+                            ethereum_url,
+                            eth_sender,
+                            control_receiver,
+                            oracle_abort_recv,
+                        )
+                        .await;
+                        tracing::info!(
+                            "Ethereum events endpoint is no longer running."
+                        );
+
+                        drop(aborter);
+                    },
+                )
+                .with_cleanup(async move {
+                    let (oracle_abort_resp_send, oracle_abort_resp_recv) =
+                        tokio::sync::oneshot::channel::<()>();
+
+                    if let Ok(()) =
+                        oracle_abort_send.send(oracle_abort_resp_send)
+                    {
+                        match oracle_abort_resp_recv.await {
+                            Ok(()) => {}
+                            Err(err) => {
+                                tracing::error!(
+                                    "Failed to receive an abort response from \
+                                     the Ethereum events endpoint task: {}",
+                                    err
+                                );
+                            }
+                        }
+                    }
+                });
+            EthereumOracleTask::Enabled {
+                handle,
+                channels: EthereumOracleChannels::new(
+                    eth_receiver,
+                    control_sender,
+                    last_processed_block_receiver,
+                ),
+            }
+        }
+        ethereum_bridge::ledger::Mode::Off => EthereumOracleTask::NotEnabled {
+            handle: spawn_dummy_task(()),
+        },
+    }
 }
 
 /// Spawn a dummy asynchronous task into the runtime,

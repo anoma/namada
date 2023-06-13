@@ -23,6 +23,8 @@ use namada_core::types::dec::Dec;
 use namada_core::types::storage::Key;
 use namada_proof_of_stake::read_pos_params;
 use thiserror::Error;
+use namada_core::types::dec::Dec;
+use namada_core::types::key::testing::common_sk_from_simple_seed;
 pub use token::{Error as IbcTokenError, IbcToken};
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
@@ -228,7 +230,7 @@ pub fn get_dummy_header() -> crate::types::storage::Header {
 pub fn get_dummy_genesis_validator()
 -> namada_proof_of_stake::types::GenesisValidator {
     use crate::core::types::address::testing::established_address_1;
-    use crate::types::key::testing::common_sk_from_simple_seed;
+    use crate::types::key;
     use crate::types::token::Amount;
 
     let address = established_address_1();
@@ -240,10 +242,26 @@ pub fn get_dummy_genesis_validator()
         Dec::new(1, 1).expect("expected 0.1 to be a valid decimal");
     let max_commission_rate_change =
         Dec::new(1, 1).expect("expected 0.1 to be a valid decimal");
+    let eth_hot_sk =
+        key::common::SecretKey::Secp256k1(key::testing::gen_keypair::<
+            key::secp256k1::SigScheme,
+        >());
+    let eth_hot_key = eth_hot_sk.to_public();
+
+    let eth_cold_sk =
+        key::common::SecretKey::Secp256k1(key::testing::gen_keypair::<
+            key::secp256k1::SigScheme,
+        >());
+    let eth_cold_key = eth_cold_sk.to_public();
+
+    let commission_rate = Decimal::new(1, 1);
+    let max_commission_rate_change = Decimal::new(1, 1);
     namada_proof_of_stake::types::GenesisValidator {
         address,
         tokens,
         consensus_key,
+        eth_cold_key,
+        eth_hot_key,
         commission_rate,
         max_commission_rate_change,
     }

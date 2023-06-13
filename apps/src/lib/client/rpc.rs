@@ -6,7 +6,6 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::iter::Iterator;
 use std::str::FromStr;
-use std::time::Duration;
 
 use async_std::fs;
 use async_std::path::PathBuf;
@@ -55,18 +54,6 @@ use crate::cli::{self, args};
 use crate::facade::tendermint::merkle::proof::Proof;
 use crate::facade::tendermint_rpc::error::Error as TError;
 use crate::wallet::CliWalletUtils;
-
-/// Query the status of a given transaction.
-///
-/// If a response is not delivered until `deadline`, we exit the cli with an
-/// error.
-pub async fn query_tx_status<C: namada::ledger::queries::Client + Sync>(
-    client: &C,
-    status: namada::ledger::rpc::TxEventQuery<'_>,
-    deadline: Duration,
-) -> Event {
-    namada::ledger::rpc::query_tx_status(client, status, deadline).await
-}
 
 /// Query and print the epoch of the last committed block
 pub async fn query_and_print_epoch<

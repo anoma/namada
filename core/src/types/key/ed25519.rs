@@ -14,8 +14,9 @@ use zeroize::Zeroize;
 
 use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
-    SchemeType, SigScheme as SigSchemeTrait, VerifySigError,
+    SchemeType, SigScheme as SigSchemeTrait, SignableBytes, VerifySigError,
 };
+use crate::ledger::storage::Sha256Hasher;
 
 const PUBLIC_KEY_LENGTH: usize = 32;
 const SECRET_KEY_LENGTH: usize = 32;
@@ -322,6 +323,7 @@ impl PartialOrd for Signature {
 pub struct SigScheme;
 
 impl super::SigScheme for SigScheme {
+    type Hasher = Sha256Hasher;
     type PublicKey = PublicKey;
     type SecretKey = SecretKey;
     type Signature = Signature;
@@ -336,28 +338,16 @@ impl super::SigScheme for SigScheme {
         SecretKey(Box::new(ed25519_consensus::SigningKey::new(csprng)))
     }
 
-    fn sign(keypair: &SecretKey, data: impl AsRef<[u8]>) -> Self::Signature {
-        Signature(keypair.0.sign(data.as_ref()))
+    fn sign(keypair: &SecretKey, data: impl SignableBytes) -> Self::Signature {
+        Signature(keypair.0.sign(&data.signable_hash::<Self::Hasher>()))
     }
 
-    fn verify_signature<T: BorshSerialize>(
+    fn verify_signature(
         pk: &Self::PublicKey,
-        data: &T,
+        data: &impl SignableBytes,
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError> {
-        let bytes = data
-            .try_to_vec()
-            .map_err(VerifySigError::DataEncodingError)?;
-        pk.0.verify(&sig.0, &bytes)
-            .map_err(|err| VerifySigError::SigVerifyError(err.to_string()))
-    }
-
-    fn verify_signature_raw(
-        pk: &Self::PublicKey,
-        data: &[u8],
-        sig: &Self::Signature,
-    ) -> Result<(), VerifySigError> {
-        pk.0.verify(&sig.0, data)
+        pk.0.verify(&sig.0, &data.signable_hash::<Self::Hasher>())
             .map_err(|err| VerifySigError::SigVerifyError(err.to_string()))
     }
 }

@@ -131,7 +131,7 @@ impl Amount {
         })
     }
 
-    /// Checked subtraction. Returns `None` on underflow
+    /// Checked subtraction. Returns `None` on underflow.
     pub fn checked_sub(&self, amount: Amount) -> Option<Self> {
         self.raw
             .checked_sub(amount.raw)

@@ -166,15 +166,26 @@ fn new() -> Store {
 ///
 /// Note that this removes the validator data.
 pub fn gen_validator_keys(
+    eth_bridge_keypair: Option<common::SecretKey>,
     protocol_keypair: Option<common::SecretKey>,
-    scheme: SchemeType,
+    protocol_keypair_scheme: SchemeType,
 ) -> ValidatorKeys {
-    let protocol_keypair = protocol_keypair.unwrap_or_else(|| gen_sk(scheme));
+    let eth_bridge_keypair = eth_bridge_keypair
+        .map(|k| {
+            if !matches!(&k, common::SecretKey::Secp256k1(_)) {
+                panic!("Ethereum bridge keys can only be of kind Secp256k1");
+            }
+            k
+        })
+        .unwrap_or_else(|| gen_sk(SchemeType::Secp256k1));
+    let protocol_keypair =
+        protocol_keypair.unwrap_or_else(|| gen_sk(protocol_keypair_scheme));
     let dkg_keypair = ferveo_common::Keypair::<EllipticCurve>::new(
         &mut StdRng::from_entropy(),
     );
     ValidatorKeys {
         protocol_keypair,
+        eth_bridge_keypair,
         dkg_keypair: Some(dkg_keypair.into()),
     }
 }
@@ -188,7 +199,8 @@ mod test_wallet {
     #[test]
     fn test_toml_roundtrip_ed25519() {
         let mut store = new();
-        let validator_keys = gen_validator_keys(None, SchemeType::Ed25519);
+        let validator_keys =
+            gen_validator_keys(None, None, SchemeType::Ed25519);
         store.add_validator_data(
             Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
             validator_keys
@@ -200,7 +212,8 @@ mod test_wallet {
     #[test]
     fn test_toml_roundtrip_secp256k1() {
         let mut store = new();
-        let validator_keys = gen_validator_keys(None, SchemeType::Secp256k1);
+        let validator_keys =
+            gen_validator_keys(None, None, SchemeType::Secp256k1);
         store.add_validator_data(
             Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
             validator_keys

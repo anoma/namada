@@ -19,6 +19,7 @@ use wasmer::{Module, Store};
 use wasmer_cache::{FileSystemCache, Hash as CacheHash};
 
 use crate::core::types::hash::{Hash, HASH_LENGTH};
+use crate::types::control_flow::time::{ExponentialBackoff, SleepStrategy};
 use crate::vm::wasm::run::untrusted_wasm_store;
 use crate::vm::wasm::{self, memory};
 use crate::vm::{WasmCacheAccess, WasmCacheRoAccess};
@@ -142,6 +143,12 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
         drop(in_memory);
 
         let mut iter = 0;
+        let exponential_backoff = ExponentialBackoff {
+            base: 2,
+            as_duration: |backoff: u64| {
+                Duration::from_millis(backoff.saturating_mul(10))
+            },
+        };
         loop {
             let progress = self.progress.read().unwrap();
             match progress.get(hash) {
@@ -176,7 +183,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                         N::name(),
                         hash.to_string()
                     );
-                    exponential_backoff(iter);
+                    sleep(exponential_backoff.backoff(&iter));
                     iter += 1;
                     continue;
                 }
@@ -228,6 +235,12 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
         drop(in_memory);
 
         let mut iter = 0;
+        let exponential_backoff = ExponentialBackoff {
+            base: 2,
+            as_duration: |backoff: u64| {
+                Duration::from_millis(backoff.saturating_mul(10))
+            },
+        };
         loop {
             let progress = self.progress.read().unwrap();
             match progress.get(hash) {
@@ -258,7 +271,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                         N::name(),
                         hash.to_string()
                     );
-                    exponential_backoff(iter);
+                    sleep(exponential_backoff.backoff(&iter));
                     iter += 1;
                     continue;
                 }
@@ -428,10 +441,6 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
             access: Default::default(),
         }
     }
-}
-
-fn exponential_backoff(iteration: u64) {
-    sleep(Duration::from_millis(u64::pow(2, iteration as u32) * 10))
 }
 
 fn hash_of_code(code: impl AsRef<[u8]>) -> Hash {

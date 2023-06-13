@@ -4,10 +4,15 @@ use std::process::Stdio;
 use std::str::FromStr;
 
 use borsh::BorshSerialize;
+use eyre::{eyre, Context};
 use namada::types::chain::ChainId;
-use namada::types::key::*;
+use namada::types::key::{
+    common, ed25519, secp256k1, tm_consensus_key_raw_hash, ParseSecretKeyError,
+    RefTo, SecretKey,
+};
 use namada::types::storage::BlockHeight;
 use namada::types::time::DateTimeUtc;
+use semver::{Version, VersionReq};
 use serde_json::json;
 #[cfg(feature = "abciplus")]
 use tendermint::Moniker;
@@ -28,6 +33,47 @@ use crate::facade::tendermint_config::{
 
 /// Env. var to output Tendermint log to stdout
 pub const ENV_VAR_TM_STDOUT: &str = "NAMADA_TM_STDOUT";
+
+#[cfg(feature = "abciplus")]
+pub const VERSION_REQUIREMENTS: &str = ">= 0.37.0-alpha.2, <0.38.0";
+#[cfg(not(feature = "abciplus"))]
+// TODO: update from our v0.36-based fork to v0.38 for full ABCI++
+pub const VERSION_REQUIREMENTS: &str = "= 0.1.1-abcipp";
+
+/// Return the Tendermint version requirements for this build of Namada
+fn version_requirements() -> VersionReq {
+    VersionReq::parse(VERSION_REQUIREMENTS)
+        .expect("Unable to parse Tendermint version requirements!")
+}
+
+/// Return the [`Version`] of the Tendermint binary specified at
+/// `tendermint_path`
+async fn get_version(tendermint_path: &str) -> eyre::Result<Version> {
+    let version = run_version_command(tendermint_path).await?;
+    parse_version(&version)
+}
+
+/// Runs `tendermint version` and returns the output as a string
+async fn run_version_command(tendermint_path: &str) -> eyre::Result<String> {
+    let output = Command::new(tendermint_path)
+        .arg("version")
+        .output()
+        .await?;
+    let output = String::from_utf8(output.stdout)?;
+    Ok(output)
+}
+
+/// Parses the raw output of `tendermint version` (e.g. "v0.37.0-alpha.2\n")
+/// into a [`Version`]
+fn parse_version(version_cmd_output: &str) -> eyre::Result<Version> {
+    let version_str = version_cmd_output.trim_end().trim_start_matches('v');
+    Version::parse(version_str).wrap_err_with(|| {
+        eyre!(
+            "Couldn't parse semantic version from Tendermint version string: \
+             {version_str}"
+        )
+    })
+}
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -81,8 +127,36 @@ pub async fn run(
         tokio::sync::oneshot::Sender<()>,
     >,
 ) -> Result<()> {
-    let home_dir_string = home_dir.to_string_lossy().to_string();
     let tendermint_path = from_env_or_default()?;
+
+    let version_reqs = version_requirements();
+    match get_version(&tendermint_path).await {
+        Ok(version) => {
+            if version_reqs.matches(&version) {
+                tracing::info!(
+                    %tendermint_path,
+                    %version,
+                    %version_reqs,
+                    "Running with supported Tendermint version",
+                );
+            } else {
+                tracing::warn!(
+                    %tendermint_path,
+                    %version,
+                    %version_reqs,
+                    "Running with a Tendermint version which may not be supported - run at your own risk!",
+                );
+            }
+        }
+        Err(error) => tracing::warn!(
+            %tendermint_path,
+            %version_reqs,
+            %error,
+            "Couldn't check if Tendermint version is supported - run at your own risk!",
+        ),
+    };
+
+    let home_dir_string = home_dir.to_string_lossy().to_string();
     let mode = config.tendermint_mode.to_str().to_owned();
 
     #[cfg(feature = "dev")]
@@ -354,11 +428,9 @@ async fn update_tendermint_config(
     let path = home_dir.join("config").join("config.toml");
     let mut config =
         TendermintConfig::load_toml_file(&path).map_err(Error::LoadConfig)?;
-
     config.moniker =
         Moniker::from_str(&format!("{}-{}", config.moniker, namada_version()))
             .expect("Invalid moniker");
-
     config.p2p.laddr =
         TendermintAddress::from_str(&tendermint_config.p2p_address.to_string())
             .unwrap();
@@ -411,6 +483,7 @@ async fn update_tendermint_config(
         .open(path)
         .await
         .map_err(Error::OpenWriteConfig)?;
+
     let config_str =
         toml::to_string(&config).map_err(Error::ConfigSerializeToml)?;
     file.write_all(config_str.as_bytes())
@@ -478,4 +551,41 @@ async fn write_tm_genesis(
     file.write_all(&data[..])
         .await
         .expect("Couldn't write the Tendermint genesis file");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    /// This is really just a smoke test to make sure the
+    /// [`VERSION_REQUIREMENTS`] constant is always parseable to a
+    /// [`VersionReq`]
+    fn test_version_requirements() {
+        _ = version_requirements();
+    }
+
+    #[test]
+    fn test_parse_version() {
+        let version_str = "v0.37.0-alpha.2\n";
+        let version = parse_version(version_str).unwrap();
+        assert_eq!(version.major, 0);
+        assert_eq!(version.minor, 37);
+        assert_eq!(version.patch, 0);
+
+        let version_str = "v0.1.1-abcipp\n";
+        let version = parse_version(version_str).unwrap();
+        assert_eq!(version.major, 0);
+        assert_eq!(version.minor, 1);
+        assert_eq!(version.patch, 1);
+
+        let version_str = "v0.38.1\n";
+        let version = parse_version(version_str).unwrap();
+        assert_eq!(version.major, 0);
+        assert_eq!(version.minor, 38);
+        assert_eq!(version.patch, 1);
+
+        let version_str = "unparseable";
+        assert!(parse_version(version_str).is_err());
+    }
 }

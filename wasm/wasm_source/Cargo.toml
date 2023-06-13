@@ -13,6 +13,7 @@ crate-type = ["cdylib"]
 # Newly added wasms should also be added into the Makefile `$(wasms)` list.
 [features]
 tx_bond = ["namada_tx_prelude"]
+tx_bridge_pool = ["namada_tx_prelude"]
 tx_from_intent = ["namada_tx_prelude"]
 tx_ibc = ["namada_tx_prelude"]
 tx_init_account = ["namada_tx_prelude"]
