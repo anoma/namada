@@ -268,7 +268,10 @@ pub async fn query_transparent_balance<
     wallet: &mut Wallet<CliWalletUtils>,
     args: args::QueryBalance,
 ) {
-    let tokens = wallet.get_addresses_with_vp_type(AddressVpType::Token);
+    let prefix = Key::from(
+        Address::Internal(namada::types::address::InternalAddress::Multitoken)
+            .to_db_key(),
+    );
     match (args.token, args.owner) {
         (Some(token), Some(owner)) => {
             let key = token::balance_key(&token, &owner.address().unwrap());
@@ -281,20 +284,15 @@ pub async fn query_transparent_balance<
             }
         }
         (None, Some(owner)) => {
-            for token in tokens {
-                let prefix =
-                    token::balance_key(&token, &owner.address().unwrap());
-                let balances =
-                    query_storage_prefix::<C, token::Amount>(client, &prefix)
-                        .await;
-                if let Some(balances) = balances {
-                    print_balances(
-                        wallet,
-                        balances,
-                        &token,
-                        owner.address().as_ref(),
-                    );
-                }
+            let balances =
+                query_storage_prefix::<C, token::Amount>(client, &prefix).await;
+            if let Some(balances) = balances {
+                print_balances(
+                    wallet,
+                    balances,
+                    None,
+                    owner.address().as_ref(),
+                );
             }
         }
         (Some(token), None) => {
@@ -302,18 +300,14 @@ pub async fn query_transparent_balance<
             let balances =
                 query_storage_prefix::<C, token::Amount>(client, &prefix).await;
             if let Some(balances) = balances {
-                print_balances(wallet, balances, &token, None);
+                print_balances(wallet, balances, Some(&token), None);
             }
         }
         (None, None) => {
-            for token in tokens {
-                let key = token::balance_prefix(&token);
-                let balances =
-                    query_storage_prefix::<C, token::Amount>(client, &key)
-                        .await;
-                if let Some(balances) = balances {
-                    print_balances(wallet, balances, &token, None);
-                }
+            let balances =
+                query_storage_prefix::<C, token::Amount>(client, &prefix).await;
+            if let Some(balances) = balances {
+                print_balances(wallet, balances, None, None);
             }
         }
     }
@@ -448,19 +442,18 @@ pub async fn query_pinned_balance<
 fn print_balances(
     wallet: &Wallet<CliWalletUtils>,
     balances: impl Iterator<Item = (storage::Key, token::Amount)>,
-    token: &Address,
+    token: Option<&Address>,
     target: Option<&Address>,
 ) {
     let stdout = io::stdout();
     let mut w = stdout.lock();
 
-    let token_alias = lookup_alias(wallet, token);
-    writeln!(w, "Token {}", token_alias).unwrap();
-
+    let mut print_token = None;
     let print_num = balances
         .filter_map(|(key, balance)| {
-            token::is_balance_key(token, &key).map(|owner| {
+            token::is_any_token_balance_key(&key).map(|(token, owner)| {
                 (
+                    token.clone(),
                     owner.clone(),
                     format!(
                         ": {}, owned by {}",
@@ -470,25 +463,43 @@ fn print_balances(
                 )
             })
         })
-        .filter_map(|(o, s)| match target {
-            Some(t) if o == *t => Some(s),
-            Some(_) => None,
-            None => Some(s),
+        .filter_map(|(t, o, s)| match (token, target) {
+            (Some(token), Some(target)) if t == *token && o == *target => {
+                Some((t, s))
+            }
+            (Some(token), None) if t == *token => Some((t, s)),
+            (None, Some(target)) if o == *target => Some((t, s)),
+            (None, None) => Some((t, s)),
+            _ => None,
         })
-        .map(|s| {
+        .map(|(t, s)| {
+            match &print_token {
+                Some(token) if *token == t => {
+                    // the token was already printed
+                }
+                Some(_) | None => {
+                    let token_alias = lookup_alias(wallet, &t);
+                    writeln!(w, "Token {}", token_alias).unwrap();
+                    print_token = Some(t);
+                }
+            }
             writeln!(w, "{}", s).unwrap();
         })
         .count();
 
     if print_num == 0 {
-        match target {
-            Some(t) => {
-                writeln!(w, "No balances owned by {}", lookup_alias(wallet, t))
-                    .unwrap()
-            }
-            None => {
+        match (token, target) {
+            (Some(_), Some(target)) | (None, Some(target)) => writeln!(
+                w,
+                "No balances owned by {}",
+                lookup_alias(wallet, target)
+            )
+            .unwrap(),
+            (Some(token), None) => {
+                let token_alias = lookup_alias(wallet, token);
                 writeln!(w, "No balances for token {}", token_alias).unwrap()
             }
+            (None, None) => writeln!(w, "No balances").unwrap(),
         }
     }
 }
