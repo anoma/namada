@@ -764,9 +764,9 @@ fn test_become_validator_aux(
         eth_cold_key: &eth_cold_key,
         eth_hot_key: &eth_hot_key,
         current_epoch,
-        Dec::new(5, 2).expect("Dec creation failed"),
-        Dec::new(5, 2).expect("Dec creation failed"),
-    )
+        commission_rate: Dec::new(5, 2).expect("Dec creation failed"),
+        max_commission_rate_change: Dec::new(5, 2).expect("Dec creation failed"),
+    })
     .unwrap();
 
     let num_consensus_after = read_num_consensus_validators(&s).unwrap();

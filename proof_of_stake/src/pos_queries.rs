@@ -2,7 +2,6 @@
 //! data. This includes validator and epoch related data.
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::ferveo_common::TendermintValidator;
 use namada_core::ledger::parameters::storage::get_max_proposal_bytes_key;
 use namada_core::ledger::parameters::EpochDuration;
 use namada_core::ledger::storage::WlStorage;
@@ -12,9 +11,7 @@ use namada_core::tendermint_proto::google::protobuf;
 use namada_core::tendermint_proto::types::EvidenceParams;
 use namada_core::types::address::Address;
 use namada_core::types::chain::ProposalBytes;
-use namada_core::types::key::dkg_session_keys::DkgPublicKey;
 use namada_core::types::storage::{BlockHeight, Epoch};
-use namada_core::types::transaction::EllipticCurve;
 use namada_core::types::{key, token};
 use thiserror::Error;
 

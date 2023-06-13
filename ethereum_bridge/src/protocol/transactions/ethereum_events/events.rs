@@ -144,9 +144,12 @@ where
         let mut changed = if asset != &wrapped_native_erc20 {
             let changed =
                 mint_wrapped_erc20s(wl_storage, asset, receiver, amount)?;
+            // TODO: query denomination of the whitelisted token from storage,
+            // and print this amount with the proper formatting; for now, use
+            // NAM's formatting
             tracing::info!(
                 "Minted wrapped ERC20s - (receiver - {receiver}, amount - \
-                 {amount})",
+                 {})", amount.to_string_native(),
             );
             changed
         } else {
@@ -205,12 +208,12 @@ where
     )?;
 
     tracing::info!(
-        %amount,
+        amount = %amount.to_string_native(),
         %receiver,
-        %eth_bridge_native_token_balance_pre,
-        %eth_bridge_native_token_balance_post,
-        %receiver_native_token_balance_pre,
-        %receiver_native_token_balance_post,
+        eth_bridge_native_token_balance_pre = %eth_bridge_native_token_balance_pre.to_string_native(),
+        eth_bridge_native_token_balance_post = %eth_bridge_native_token_balance_post.to_string_native(),
+        receiver_native_token_balance_pre = %receiver_native_token_balance_pre.to_string_native(),
+        receiver_native_token_balance_post = %receiver_native_token_balance_post.to_string_native(),
         "Redeemed native token for wrapped ERC20 token"
     );
     Ok(BTreeSet::from([

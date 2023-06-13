@@ -210,7 +210,8 @@ mod tests {
     use namada_proof_of_stake::{
         become_validator, bond_tokens, write_pos_params, BecomeValidator,
     };
-    use rust_decimal_macros::dec;
+    use namada_core::types::dec::Dec;
+    use namada_core::types::token;
 
     use super::*;
     use crate::test_utils;
@@ -321,17 +322,17 @@ mod tests {
     fn test_voting_across_epoch_boundaries() {
         // the validators that will vote in the tally
         let validator_1 = address::testing::established_address_1();
-        let validator_1_stake = 100u64;
+        let validator_1_stake: token::Amount = 100u64.into();
 
         let validator_2 = address::testing::established_address_2();
-        let validator_2_stake = 100u64;
+        let validator_2_stake: token::Amount = 100u64.into();
 
         let validator_3 = address::testing::established_address_3();
-        let validator_3_stake = 100u64;
+        let validator_3_stake: token::Amount = 100u64.into();
 
         // start epoch 0 with validator 1
         let (mut wl_storage, _) = test_utils::setup_storage_with_validators(
-            HashMap::from([(validator_1.clone(), validator_1_stake.into())]),
+            HashMap::from([(validator_1.clone(), validator_1_stake)]),
         );
 
         // update the pos params
@@ -358,15 +359,15 @@ mod tests {
                 eth_cold_key,
                 eth_hot_key,
                 current_epoch: 0.into(),
-                commission_rate: dec!(0.05),
-                max_commission_rate_change: dec!(0.01),
+                commission_rate: Dec::new(5, 2).unwrap(),
+                max_commission_rate_change: Dec::new(1, 2).unwrap(),
             })
             .expect("Test failed");
             bond_tokens(
                 &mut wl_storage,
                 None,
                 validator,
-                stake.into(),
+                stake,
                 0.into(),
             )
             .expect("Test failed");
@@ -379,7 +380,7 @@ mod tests {
                 .get_consensus_validators(Some(epoch.into()))
                 .iter()
                 .map(|validator| {
-                    (validator.address, validator.bonded_stake.into())
+                    (validator.address, validator.bonded_stake)
                 })
                 .collect::<HashMap<_, _>>()
         };

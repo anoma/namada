@@ -40,7 +40,7 @@ impl From<&FractionalVotingPower> for EthBridgeVotingPower {
     fn from(ratio: &FractionalVotingPower) -> Self {
         // normalize the voting power
         // https://github.com/anoma/ethereum-bridge/blob/fe93d2e95ddb193a759811a79c8464ad4d709c12/test/utils/utilities.js#L29
-        const NORMALIZED_VOTING_POWER: Uint = Uint([1 << 32, 0, 0, 0]);
+        const NORMALIZED_VOTING_POWER: Uint = Uint::from_u64(1 << 32);
 
         let voting_power = ratio.0 * NORMALIZED_VOTING_POWER;
         let voting_power = voting_power.round().to_integer().low_u64();
@@ -78,19 +78,19 @@ pub struct FractionalVotingPower(Ratio<Uint>);
 impl FractionalVotingPower {
     /// Half of the voting power.
     pub const HALF: FractionalVotingPower =
-        FractionalVotingPower(Ratio::new_raw(Uint([1, 0, 0, 0]), Uint([2, 0, 0, 0])));
+        FractionalVotingPower(Ratio::new_raw(Uint::from_u64(1), Uint::from_u64(2)));
     /// Null voting power.
     pub const NULL: FractionalVotingPower =
-        FractionalVotingPower(Ratio::new_raw(Uint([0, 0, 0, 0]), Uint([1, 0, 0, 0])));
+        FractionalVotingPower(Ratio::new_raw(Uint::from_u64(0), Uint::from_u64(1)));
     /// One third of the voting power.
     pub const ONE_THIRD: FractionalVotingPower =
-        FractionalVotingPower(Ratio::new_raw(Uint([1, 0, 0, 0]), Uint([3, 0, 0, 0])));
+        FractionalVotingPower(Ratio::new_raw(Uint::from_u64(1), Uint::from_u64(3)));
     /// Two thirds of the voting power.
     pub const TWO_THIRDS: FractionalVotingPower =
-        FractionalVotingPower(Ratio::new_raw(Uint([2, 0, 0, 0]), Uint([3, 0, 0, 0])));
+        FractionalVotingPower(Ratio::new_raw(Uint::from_u64(2), Uint::from_u64(3)));
     /// 100% of the voting power.
     pub const WHOLE: FractionalVotingPower =
-        FractionalVotingPower(Ratio::new_raw(Uint([1, 0, 0, 0]), Uint([1, 0, 0, 0])));
+        FractionalVotingPower(Ratio::new_raw(Uint::from_u64(1), Uint::from_u64(1)));
 
     /// Create a new [`FractionalVotingPower`]. It must be between zero and one
     /// inclusive.
@@ -105,6 +105,16 @@ impl FractionalVotingPower {
             ));
         }
         Ok(Self(ratio))
+    }
+
+    /// Create a new [`FractionalVotingPower`], from a [`u64`]
+    /// numerator and denominator.
+    #[inline]
+    pub fn new_u64(numer: u64, denom: u64) -> Result<Self> {
+        Self::new(
+            Uint::from_u64(numer),
+            Uint::from_u64(denom),
+        )
     }
 }
 
@@ -281,8 +291,6 @@ impl<'de> Deserialize<'de> for FractionalVotingPower {
 #[cfg(test)]
 mod tests {
     use super::*;
-    const ZERO: Uint = Uint([0, 0, 0, 0]);
-    const ONE: Uint = Uint([1, 0, 0, 0]);
 
     /// Test that adding fractional voting powers together saturates
     /// on the value of `1/1`.
@@ -305,33 +313,33 @@ mod tests {
     fn test_fractional_voting_power_ord_eq() {
         assert!(
             FractionalVotingPower::TWO_THIRDS
-                > FractionalVotingPower::new(ONE, 4 * ONE).unwrap()
+                > FractionalVotingPower::new_u64(1, 4).unwrap()
         );
         assert!(
             FractionalVotingPower::ONE_THIRD
-                > FractionalVotingPower::new(ONE, 4 * ONE).unwrap()
+                > FractionalVotingPower::new_u64(1, 4).unwrap()
         );
         assert!(
             FractionalVotingPower::ONE_THIRD
-                == FractionalVotingPower::new(2 * ONE, 6 * ONE).unwrap()
+                == FractionalVotingPower::new_u64(2, 6).unwrap()
         );
     }
 
     /// Test error handling on the FractionalVotingPower type
     #[test]
     fn test_fractional_voting_power_valid_fractions() {
-        assert!(FractionalVotingPower::new(ZERO, ZERO).is_err());
-        assert!(FractionalVotingPower::new(ONE, ZERO).is_err());
-        assert!(FractionalVotingPower::new(ZERO, ONE).is_ok());
-        assert!(FractionalVotingPower::new(ONE, ONE).is_ok());
-        assert!(FractionalVotingPower::new(ONE, 2 * ONE).is_ok());
-        assert!(FractionalVotingPower::new(3 * ONE, 2 * ONE).is_err());
+        assert!(FractionalVotingPower::new_u64(0, 0).is_err());
+        assert!(FractionalVotingPower::new_u64(1, 0).is_err());
+        assert!(FractionalVotingPower::new_u64(0, 1).is_ok());
+        assert!(FractionalVotingPower::new_u64(1, 1).is_ok());
+        assert!(FractionalVotingPower::new_u64(1, 2).is_ok());
+        assert!(FractionalVotingPower::new_u64(3, 2).is_err());
     }
 
     /// Test that serde (de)-serializing pretty prints FractionalVotingPowers.
     #[test]
     fn test_serialize_fractional_voting_power() {
-        let vp = FractionalVotingPower::new(ONE, 2 * ONE).expect("Test failed");
+        let vp = FractionalVotingPower::new_u64(1, 2).expect("Test failed");
         let serialized = serde_json::to_string(&vp).expect("Test failed");
         assert_eq!(serialized.as_str(), r#""1 / 2""#);
         let deserialized: FractionalVotingPower =

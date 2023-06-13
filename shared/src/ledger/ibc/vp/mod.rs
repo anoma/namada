@@ -23,7 +23,6 @@ use namada_core::types::dec::Dec;
 use namada_core::types::storage::Key;
 use namada_proof_of_stake::read_pos_params;
 use thiserror::Error;
-use namada_core::types::dec::Dec;
 use namada_core::types::key::testing::common_sk_from_simple_seed;
 pub use token::{Error as IbcTokenError, IbcToken};
 
@@ -254,8 +253,8 @@ pub fn get_dummy_genesis_validator()
         >());
     let eth_cold_key = eth_cold_sk.to_public();
 
-    let commission_rate = Decimal::new(1, 1);
-    let max_commission_rate_change = Decimal::new(1, 1);
+    let commission_rate = Dec::new(1, 0);
+    let max_commission_rate_change = Dec::new(1, 0);
     namada_proof_of_stake::types::GenesisValidator {
         address,
         tokens,

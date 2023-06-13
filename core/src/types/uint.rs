@@ -14,6 +14,19 @@ use uint::construct_uint;
 use crate::types::token;
 use crate::types::token::{Amount, AmountParseError, MaspDenom};
 
+/// The value zero.
+pub const ZERO: Uint = Uint::from_u64(0);
+
+/// The value one.
+pub const ONE: Uint = Uint::from_u64(1);
+
+impl Uint {
+    /// Convert a [`u64`] to a [`Uint`].
+    pub const fn from_u64(x: u64) -> Uint {
+        Uint([x.to_le(), 0, 0, 0])
+    }
+}
+
 construct_uint! {
     /// Namada native type to replace for unsigned 256 bit
     /// integers.

@@ -281,20 +281,18 @@ mod test_valset_upd_state_changes {
         // have reached a complete proof
         let total_voting_power = wl_storage
             .pos_queries()
-            .get_total_voting_power(Some(signing_epoch))
-            .into();
-        let validator_voting_power: u64 = wl_storage
+            .get_total_voting_power(Some(signing_epoch));
+        let validator_voting_power = wl_storage
             .pos_queries()
             .get_validator_from_address(
                 &address::testing::established_address_1(),
                 Some(signing_epoch),
             )
             .expect("Test failed")
-            .0
-            .into();
+            .0;
         let voting_power = FractionalVotingPower::new(
-            validator_voting_power,
-            total_voting_power,
+            validator_voting_power.into(),
+            total_voting_power.into(),
         )
         .expect("Test failed");
 
@@ -380,20 +378,18 @@ mod test_valset_upd_state_changes {
         // make sure we do not have a complete proof yet
         let total_voting_power = wl_storage
             .pos_queries()
-            .get_total_voting_power(Some(signing_epoch))
-            .into();
-        let validator_voting_power: u64 = wl_storage
+            .get_total_voting_power(Some(signing_epoch));
+        let validator_voting_power = wl_storage
             .pos_queries()
             .get_validator_from_address(
                 &address::testing::established_address_1(),
                 Some(signing_epoch),
             )
             .expect("Test failed")
-            .0
-            .into();
+            .0;
         let voting_power = FractionalVotingPower::new(
-            validator_voting_power,
-            total_voting_power,
+            validator_voting_power.into(),
+            total_voting_power.into(),
         )
         .expect("Test failed");
 

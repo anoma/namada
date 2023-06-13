@@ -13,10 +13,10 @@ use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::key::{self, protocol_pk_key, RefTo};
 use namada_core::types::storage::{BlockHeight, Key};
+use namada_core::types::dec::Dec;
 use namada_core::types::token;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::GenesisValidator;
-use rust_decimal_macros::dec;
 
 use crate::parameters::{
     ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
@@ -155,8 +155,8 @@ pub fn init_storage_with_validators(
                 consensus_key,
                 eth_cold_key,
                 eth_hot_key,
-                commission_rate: dec!(0.05),
-                max_commission_rate_change: dec!(0.01),
+                commission_rate: Dec::new(5, 2).unwrap(),
+                max_commission_rate_change: Dec::new(1, 2).unwrap(),
             }
         });
 
