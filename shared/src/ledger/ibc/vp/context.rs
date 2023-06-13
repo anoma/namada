@@ -12,7 +12,8 @@ use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::ibc::IbcEvent;
 use namada_core::types::storage::{BlockHeight, Header, Key};
 use namada_core::types::token::{
-    self, is_any_token_balance_key, is_any_token_or_multitoken_balance_key, Amount,
+    self, is_any_token_balance_key, is_any_token_or_multitoken_balance_key,
+    Amount,
 };
 
 use super::Error;

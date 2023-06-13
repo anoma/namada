@@ -3,8 +3,6 @@
 use super::{StorageRead, StorageWrite};
 use crate::ledger::storage_api;
 use crate::types::address::Address;
-use crate::types::storage::DbKeySeg::StringSeg;
-use crate::types::storage::Key;
 use crate::types::token;
 pub use crate::types::token::{
     balance_key, is_balance_key, is_minted_balance_key, minted_balance_key,

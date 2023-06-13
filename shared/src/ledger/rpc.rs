@@ -1065,10 +1065,7 @@ pub async fn format_denominated_amount<
     amount: token::Amount,
 ) -> String {
     let denom = unwrap_client_response::<C, Option<Denomination>>(
-        RPC.vp()
-            .token()
-            .denomination(client, &token.address)
-            .await,
+        RPC.vp().token().denomination(client, &token.address).await,
     )
     .unwrap_or_else(|| {
         println!(

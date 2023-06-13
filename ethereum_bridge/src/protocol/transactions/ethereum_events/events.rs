@@ -26,9 +26,7 @@ use namada_core::types::ethereum_events::{
 };
 use namada_core::types::storage::{BlockHeight, Key, KeySeg};
 use namada_core::types::token;
-use namada_core::types::token::{
-    balance_key, multitoken_balance_key, multitoken_balance_prefix,
-};
+use namada_core::types::token::balance_key;
 
 use crate::parameters::read_native_erc20_address;
 use crate::protocol::transactions::update;
