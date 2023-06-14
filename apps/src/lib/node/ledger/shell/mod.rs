@@ -2301,7 +2301,7 @@ mod test_mempool_validate {
                     },
                     &keypair,
                     Epoch(0),
-                    0.into(),
+                    Default::default(),
                     tx,
                     Default::default(),
                     #[cfg(not(feature = "mainnet"))]

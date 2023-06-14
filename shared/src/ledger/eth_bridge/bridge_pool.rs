@@ -9,10 +9,13 @@ use borsh::BorshSerialize;
 use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
 use namada_core::types::chain::ChainId;
+use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
+use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 
 use super::{block_on_eth_sync, eth_sync_or_exit, BlockOnEthSync};
+use crate::ledger::rpc::validate_amount;
 use crate::eth_bridge::ethers::abi::AbiDecode;
 use crate::eth_bridge::structs::RelayProof;
 use crate::ledger::args;
@@ -31,7 +34,7 @@ use crate::types::eth_bridge_pool::{
     GasFee, PendingTransfer, TransferToEthereum,
 };
 use crate::types::keccak::KeccakHash;
-use crate::types::token::Amount;
+use crate::types::token::{Amount, DenominatedAmount};
 use crate::types::voting_power::FractionalVotingPower;
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
@@ -55,6 +58,11 @@ pub async fn add_to_eth_bridge_pool<C, U>(
         gas_payer,
         code_path,
     } = args;
+    let sub_prefix = Some(wrapped_erc20s::sub_prefix(&asset));
+    let DenominatedAmount { amount, .. } =
+        validate_amount(client, amount, &BRIDGE_ADDRESS, &sub_prefix, tx.force)
+            .await
+            .expect("Failed to validate amount");
     let transfer = PendingTransfer {
         transfer: TransferToEthereum {
             asset,

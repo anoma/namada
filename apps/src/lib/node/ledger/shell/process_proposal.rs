@@ -2805,7 +2805,7 @@ mod test_process_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
