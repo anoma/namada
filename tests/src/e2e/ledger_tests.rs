@@ -384,7 +384,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--amount",
             "10.1",
             "--gas-limit",
-            "100",
+            "40",
             "--node",
             &validator_one_rpc,
         ],
@@ -400,7 +400,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--amount",
             "10.1",
             "--gas-limit",
-            "100",
+            "40",
             "--node",
             &validator_one_rpc,
         ],
@@ -413,7 +413,7 @@ fn ledger_txs_and_queries() -> Result<()> {
              "--code-path",
              VP_USER_WASM,
              "--gas-limit",
-             "100",
+             "40",
             "--node",
             &validator_one_rpc,
         ],
@@ -427,7 +427,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--data-path",
             &tx_data_path,
             "--gas-limit",
-            "100",
+            "40",
             "--node",
             &validator_one_rpc
         ],
@@ -444,7 +444,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--alias",
             "Test-Account",
             "--gas-limit",
-            "100",
+            "40",
             "--node",
             &validator_one_rpc,
         ],
@@ -464,7 +464,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--signer",
             ALBERT,
             "--gas-limit",
-            "100",
+            "40",
             "--node",
             &validator_one_rpc,
         ],
@@ -583,25 +583,6 @@ fn wrapper_fee_unshielding() -> Result<()> {
     let txs_args = [
         (
             vec![
-                // 0. Remove some tokens from Albert's balance
-                "transfer",
-                "--source",
-                ALBERT,
-                "--target",
-                BERTHA,
-                "--token",
-                NAM,
-                "--amount",
-                "1",
-                "--gas-limit",
-                "30",
-                "--ledger-address",
-                &validator_one_rpc,
-            ],
-            "Transaction is valid",
-        ),
-        (
-            vec![
                 // 1. Shield some tokens
                 "transfer",
                 "--source",
@@ -613,7 +594,7 @@ fn wrapper_fee_unshielding() -> Result<()> {
                 "--amount",
                 "50000",
                 "--gas-limit",
-                "100",
+                "40",
                 "--ledger-address",
                 &validator_one_rpc,
             ],
@@ -638,7 +619,7 @@ fn wrapper_fee_unshielding() -> Result<()> {
                 "--ledger-address",
                 &validator_one_rpc,
             ],
-            "Error in fee unshielding",
+            "Insufficient transparent balance",
         ),
         // 3. Valid unshielding
         (
@@ -653,7 +634,7 @@ fn wrapper_fee_unshielding() -> Result<()> {
                 "--amount",
                 "1",
                 "--gas-limit",
-                "1",
+                "40",
                 "--fee-spending-key",
                 A_SPENDING_KEY,
                 "--ledger-address",
@@ -1217,7 +1198,9 @@ fn masp_incentives() -> Result<()> {
             "--amount",
             "20",
             "--gas-limit",
-            "100",
+            "150",
+            "--signer",
+            ALBERT,
             "--node",
             &validator_one_rpc
         ],
@@ -1411,7 +1394,9 @@ fn masp_incentives() -> Result<()> {
             "--amount",
             "30",
             "--gas-limit",
-            "100",
+            "150",
+            "--signer",
+            ALBERT,
             "--node",
             &validator_one_rpc
         ],
@@ -1824,7 +1809,7 @@ fn masp_incentives() -> Result<()> {
             "--signer",
             ALBERT,
             "--gas-limit",
-            "100",
+            "150",
             "--node",
             &validator_one_rpc
         ],
@@ -3366,7 +3351,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "--amount",
         "900",
         "--gas-limit",
-        "150",
+        "40",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3385,7 +3370,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
         "--gas-limit",
-        "150",
+        "40",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3403,7 +3388,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
         "--gas-limit",
-        "150",
+        "40",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3487,7 +3472,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "--signer",
         "validator-0",
         "--gas-limit",
-        "150",
+        "40",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3515,7 +3500,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "--signer",
         BERTHA,
         "--gas-limit",
-        "150",
+        "40",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3536,7 +3521,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "--signer",
         BERTHA,
         "--gas-limit",
-        "150",
+        "40",
         "--ledger-address",
         &validator_one_rpc,
     ];

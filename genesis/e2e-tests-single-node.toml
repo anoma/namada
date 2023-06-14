@@ -30,7 +30,7 @@ address = "atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvf
 vp = "vp_token"
 [token.NAM.balances]
 Albert = 1000000
-"Albert.public_key" = 100
+"Albert.public_key" = 1000
 Bertha = 1000000
 "Bertha.public_key" = 2000
 Christel = 1000000
