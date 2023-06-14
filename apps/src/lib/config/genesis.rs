@@ -14,7 +14,7 @@ use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
-use namada::types::address::Address;
+use namada::types::address::{wnam, Address};
 #[cfg(not(feature = "dev"))]
 use namada::types::chain::ChainId;
 use namada::types::chain::ProposalBytes;
@@ -25,7 +25,6 @@ use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
 use namada::types::token::Denomination;
 use namada::types::{storage, token};
-use namada::types::address::wnam;
 
 /// Genesis configuration file format
 pub mod genesis_config {

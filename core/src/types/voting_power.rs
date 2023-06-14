@@ -11,6 +11,7 @@ use num_rational::Ratio;
 use num_traits::ops::checked::CheckedAdd;
 use serde::de::Visitor;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+
 use crate::types::uint::Uint;
 
 /// Namada voting power, normalized to the range `0 - 2^32`.
@@ -77,20 +78,25 @@ pub struct FractionalVotingPower(Ratio<Uint>);
 
 impl FractionalVotingPower {
     /// Half of the voting power.
-    pub const HALF: FractionalVotingPower =
-        FractionalVotingPower(Ratio::new_raw(Uint::from_u64(1), Uint::from_u64(2)));
+    pub const HALF: FractionalVotingPower = FractionalVotingPower(
+        Ratio::new_raw(Uint::from_u64(1), Uint::from_u64(2)),
+    );
     /// Null voting power.
-    pub const NULL: FractionalVotingPower =
-        FractionalVotingPower(Ratio::new_raw(Uint::from_u64(0), Uint::from_u64(1)));
+    pub const NULL: FractionalVotingPower = FractionalVotingPower(
+        Ratio::new_raw(Uint::from_u64(0), Uint::from_u64(1)),
+    );
     /// One third of the voting power.
-    pub const ONE_THIRD: FractionalVotingPower =
-        FractionalVotingPower(Ratio::new_raw(Uint::from_u64(1), Uint::from_u64(3)));
+    pub const ONE_THIRD: FractionalVotingPower = FractionalVotingPower(
+        Ratio::new_raw(Uint::from_u64(1), Uint::from_u64(3)),
+    );
     /// Two thirds of the voting power.
-    pub const TWO_THIRDS: FractionalVotingPower =
-        FractionalVotingPower(Ratio::new_raw(Uint::from_u64(2), Uint::from_u64(3)));
+    pub const TWO_THIRDS: FractionalVotingPower = FractionalVotingPower(
+        Ratio::new_raw(Uint::from_u64(2), Uint::from_u64(3)),
+    );
     /// 100% of the voting power.
-    pub const WHOLE: FractionalVotingPower =
-        FractionalVotingPower(Ratio::new_raw(Uint::from_u64(1), Uint::from_u64(1)));
+    pub const WHOLE: FractionalVotingPower = FractionalVotingPower(
+        Ratio::new_raw(Uint::from_u64(1), Uint::from_u64(1)),
+    );
 
     /// Create a new [`FractionalVotingPower`]. It must be between zero and one
     /// inclusive.
@@ -111,10 +117,7 @@ impl FractionalVotingPower {
     /// numerator and denominator.
     #[inline]
     pub fn new_u64(numer: u64, denom: u64) -> Result<Self> {
-        Self::new(
-            Uint::from_u64(numer),
-            Uint::from_u64(denom),
-        )
+        Self::new(Uint::from_u64(numer), Uint::from_u64(denom))
     }
 }
 

@@ -20,10 +20,10 @@ use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
 use namada_core::proto::SignedTxData;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::dec::Dec;
+use namada_core::types::key::testing::common_sk_from_simple_seed;
 use namada_core::types::storage::Key;
 use namada_proof_of_stake::read_pos_params;
 use thiserror::Error;
-use namada_core::types::key::testing::common_sk_from_simple_seed;
 pub use token::{Error as IbcTokenError, IbcToken};
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};

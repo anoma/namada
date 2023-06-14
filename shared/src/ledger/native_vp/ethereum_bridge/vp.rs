@@ -393,7 +393,10 @@ pub(super) fn check_balance_changes(
 
 /// Return the delta between `balance_pre` and `balance_post`, erroring if there
 /// is an underflow
-fn calculate_delta(balance_pre: Change, balance_post: Change) -> Result<Change> {
+fn calculate_delta(
+    balance_pre: Change,
+    balance_post: Change,
+) -> Result<Change> {
     match balance_post.checked_sub(&balance_pre) {
         Some(result) => Ok(result),
         None => Err(eyre!(

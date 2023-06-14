@@ -168,10 +168,8 @@ pub trait VotingPowersMapExt {
     fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>, Vec<Token>) {
         let sorted = self.get_sorted();
 
-        let total_voting_power: token::Amount = sorted
-            .iter()
-            .map(|&(_, &voting_power)| voting_power)
-            .sum();
+        let total_voting_power: token::Amount =
+            sorted.iter().map(|&(_, &voting_power)| voting_power).sum();
 
         // split the vec into three portions
         sorted.into_iter().fold(

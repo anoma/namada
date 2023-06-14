@@ -879,8 +879,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         target_epoch: Epoch,
     ) -> Option<MaspAmount> {
         // First get the unexchanged balance
-        if let Some(balance) = self.compute_shielded_balance(client, vk).await
-        {
+        if let Some(balance) = self.compute_shielded_balance(client, vk).await {
             let exchanged_amount = self
                 .compute_exchanged_amount(
                     client,
@@ -993,13 +992,13 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     target_asset_type,
                     &mut conversions,
                 )
-                    .await;
+                .await;
                 self.query_allowed_conversion(
                     client,
                     asset_type,
                     &mut conversions,
                 )
-                    .await;
+                .await;
                 if let (Some((conv, _wit, usage)), false) =
                     (conversions.get_mut(&asset_type), at_target_asset_type)
                 {
@@ -1019,7 +1018,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                         &mut input,
                         &mut output,
                     )
-                        .await;
+                    .await;
                 } else if let (Some((conv, _wit, usage)), false) = (
                     conversions.get_mut(&target_asset_type),
                     at_target_asset_type,
@@ -1040,7 +1039,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                         &mut input,
                         &mut output,
                     )
-                        .await;
+                    .await;
                 } else {
                     // At the target asset type. Then move component over to
                     // output.
@@ -1239,8 +1238,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let mut res = HashMap::new();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
-            let decoded =
-                self.decode_asset_type(client, *asset_type).await;
+            let decoded = self.decode_asset_type(client, *asset_type).await;
             // Only assets with the target timestamp count
             match decoded {
                 Some(asset_type @ (_, _, _, epoch))
@@ -1386,7 +1384,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             }
             // Commit the conversion notes used during summation
             for (conv, wit, value) in used_convs.values() {
-                if  value.is_positive() {
+                if value.is_positive() {
                     builder.add_convert(
                         conv.clone(),
                         *value as u64,

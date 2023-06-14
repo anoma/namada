@@ -148,8 +148,8 @@ where
             // and print this amount with the proper formatting; for now, use
             // NAM's formatting
             tracing::info!(
-                "Minted wrapped ERC20s - (receiver - {receiver}, amount - \
-                 {})", amount.to_string_native(),
+                "Minted wrapped ERC20s - (receiver - {receiver}, amount - {})",
+                amount.to_string_native(),
             );
             changed
         } else {

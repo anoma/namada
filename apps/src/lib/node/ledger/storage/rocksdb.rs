@@ -1302,6 +1302,7 @@ impl<'iter> DBIter<'iter> for RocksDB {
     ) -> PersistentPrefixIterator<'iter> {
         iter_subspace_prefix(self, prefix)
     }
+
     fn iter_results(&'iter self) -> PersistentPrefixIterator<'iter> {
         let db_prefix = "results/".to_owned();
         let prefix = "results".to_owned();

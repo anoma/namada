@@ -136,7 +136,8 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
     let amount = token::DenominatedAmount {
         amount: transfer_amount,
         denom: 0u8.into(),
-    }.to_string();
+    }
+    .to_string();
     let dai_addr = DAI_ERC20_ETH_ADDRESS.to_string();
     let tx_args = vec![
         "add-erc20-transfer",
@@ -521,11 +522,10 @@ async fn test_wnam_transfer() -> Result<()> {
             let native_token = genesis.token.get_mut("NAM").unwrap();
             native_token_address =
                 Some(native_token.address.as_ref().unwrap().clone());
-            native_token
-                .balances
-                .as_mut()
-                .unwrap()
-                .insert(BRIDGE_ADDRESS.to_string(), BRIDGE_INITIAL_NAM_BALANCE.into());
+            native_token.balances.as_mut().unwrap().insert(
+                BRIDGE_ADDRESS.to_string(),
+                BRIDGE_INITIAL_NAM_BALANCE.into(),
+            );
             genesis
         },
         None,
@@ -996,7 +996,10 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
         &DAI_ERC20_ETH_ADDRESS,
         &bertha_established_addr,
     )?;
-    assert_eq!(bertha_established_wdai_balance, second_transfer_amount.amount);
+    assert_eq!(
+        bertha_established_wdai_balance,
+        second_transfer_amount.amount
+    );
 
     Ok(())
 }
@@ -1164,7 +1167,10 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
         &DAI_ERC20_ETH_ADDRESS,
         &bertha_established_addr,
     )?;
-    assert_eq!(bertha_established_wdai_balance, second_transfer_amount.amount);
+    assert_eq!(
+        bertha_established_wdai_balance,
+        second_transfer_amount.amount
+    );
 
     // TODO: invalid transfer
 

@@ -1002,11 +1002,7 @@ pub async fn query_shielded_balance<
                 print_decoded_balance_with_epoch(client, wallet, balance).await;
             } else {
                 let balance = shielded
-                    .compute_exchanged_balance(
-                        client,
-                        &viewing_key,
-                        epoch,
-                    )
+                    .compute_exchanged_balance(client, &viewing_key, epoch)
                     .await
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names

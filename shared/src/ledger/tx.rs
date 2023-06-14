@@ -486,7 +486,7 @@ pub fn decode_component<K, F>(
     K: Eq + std::hash::Hash,
 {
     let decoded_change = token::Change::from_masp_denominated(val, denom)
-            .expect("expected this to fit");
+        .expect("expected this to fit");
 
     res.entry(mk_key(addr, sub, epoch))
         .and_modify(|val| *val += decoded_change)

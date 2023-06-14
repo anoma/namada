@@ -428,7 +428,10 @@ mod test_apply_bp_roots_to_storage {
             .expect("Test failed")
             .expect("Test failed")
             .average_voting_power(&wl_storage);
-        assert_eq!(voting_power, FractionalVotingPower::new_u64(5, 12).unwrap());
+        assert_eq!(
+            voting_power,
+            FractionalVotingPower::new_u64(5, 12).unwrap()
+        );
 
         let hot_key = &keys[&validators[1]].eth_bridge;
         let vext = bridge_pool_roots::Vext {

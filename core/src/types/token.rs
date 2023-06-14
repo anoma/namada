@@ -194,11 +194,12 @@ impl Amount {
         sub_prefix: Option<&Key>,
         storage: &impl StorageRead,
     ) -> storage_api::Result<DenominatedAmount> {
-        let denom = read_denom(storage, token, sub_prefix)?.ok_or_else(|| {
-            storage_api::Error::SimpleMessage(
-                "No denomination found in storage for the given token",
-            )
-        })?;
+        let denom =
+            read_denom(storage, token, sub_prefix)?.ok_or_else(|| {
+                storage_api::Error::SimpleMessage(
+                    "No denomination found in storage for the given token",
+                )
+            })?;
         Ok(DenominatedAmount {
             amount: *self,
             denom,
@@ -937,8 +938,8 @@ pub fn is_any_multitoken_balance_key(
     }
 }
 
-/// Check if the given storage key is token or multitoken balance key for unspecified
-/// token. If it is, returns the token and owner addresses.
+/// Check if the given storage key is token or multitoken balance key for
+/// unspecified token. If it is, returns the token and owner addresses.
 pub fn is_any_token_or_multitoken_balance_key(
     key: &Key,
 ) -> Option<[&Address; 2]> {

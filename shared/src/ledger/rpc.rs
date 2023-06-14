@@ -930,18 +930,21 @@ pub async fn validate_amount<C: crate::ledger::queries::Client + Sync>(
             .token()
             .denomination(client, token, sub_prefix)
             .await,
-    ).or_else(|| if force {
-        println!(
-            "No denomination found for token: {token}, but --force was \
-             passed. Defaulting to the provided denomination."
-        );
-        Some(input_amount.denom)
-    } else {
-        println!(
-            "No denomination found for token: {token}, the input \
-            arguments could not be parsed."
-        );
-        None
+    )
+    .or_else(|| {
+        if force {
+            println!(
+                "No denomination found for token: {token}, but --force was \
+                 passed. Defaulting to the provided denomination."
+            );
+            Some(input_amount.denom)
+        } else {
+            println!(
+                "No denomination found for token: {token}, the input \
+                 arguments could not be parsed."
+            );
+            None
+        }
     })?;
     if denom < input_amount.denom && !force {
         println!(
@@ -954,7 +957,8 @@ pub async fn validate_amount<C: crate::ledger::queries::Client + Sync>(
             Ok(res) => Some(res),
             Err(_) => {
                 println!(
-                    "The amount provided requires more the 256 bits to represent."
+                    "The amount provided requires more the 256 bits to \
+                     represent."
                 );
                 None
             }

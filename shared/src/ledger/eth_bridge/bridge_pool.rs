@@ -8,18 +8,18 @@ use std::sync::Arc;
 use borsh::BorshSerialize;
 use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
-use namada_core::types::chain::ChainId;
-use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
+use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
+use namada_core::types::chain::ChainId;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 
 use super::{block_on_eth_sync, eth_sync_or_exit, BlockOnEthSync};
-use crate::ledger::rpc::validate_amount;
 use crate::eth_bridge::ethers::abi::AbiDecode;
 use crate::eth_bridge::structs::RelayProof;
 use crate::ledger::args;
 use crate::ledger::queries::{Client, RPC};
+use crate::ledger::rpc::validate_amount;
 use crate::ledger::signing::TxSigningKey;
 use crate::ledger::tx::process_tx;
 use crate::ledger::wallet::{Wallet, WalletUtils};
@@ -406,10 +406,7 @@ where
 mod recommendations {
     use super::*;
 
-    pub async fn recommend_batch<C>(
-        _: &C,
-        _: args::RecommendBatch,
-    ) -> Halt<()>
+    pub async fn recommend_batch<C>(_: &C, _: args::RecommendBatch) -> Halt<()>
     where
         C: Client + Sync,
         C::Error: std::fmt::Debug,

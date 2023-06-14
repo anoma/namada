@@ -422,6 +422,7 @@ mod test_prepare_proposal {
     use namada::types::key::common;
     use namada::types::key::RefTo;
     use namada::types::storage::BlockHeight;
+    use namada::types::token::Amount;
     use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::transaction::{Fee, TxType, WrapperTx};
     #[cfg(feature = "abcipp")]
@@ -429,7 +430,6 @@ mod test_prepare_proposal {
     use namada::types::vote_extensions::ethereum_events;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::VoteExtension;
-    use namada::types::token::Amount;
 
     use super::*;
     #[cfg(feature = "abcipp")]

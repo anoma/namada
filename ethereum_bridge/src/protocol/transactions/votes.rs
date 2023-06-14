@@ -203,15 +203,14 @@ mod tests {
     use std::collections::BTreeSet;
 
     use namada_core::ledger::storage::testing::TestWlStorage;
-    use namada_core::types::address;
+    use namada_core::types::dec::Dec;
     use namada_core::types::key::RefTo;
     use namada_core::types::storage::BlockHeight;
+    use namada_core::types::{address, token};
     use namada_proof_of_stake::parameters::PosParams;
     use namada_proof_of_stake::{
         become_validator, bond_tokens, write_pos_params, BecomeValidator,
     };
-    use namada_core::types::dec::Dec;
-    use namada_core::types::token;
 
     use super::*;
     use crate::test_utils;
@@ -363,14 +362,8 @@ mod tests {
                 max_commission_rate_change: Dec::new(1, 2).unwrap(),
             })
             .expect("Test failed");
-            bond_tokens(
-                &mut wl_storage,
-                None,
-                validator,
-                stake,
-                0.into(),
-            )
-            .expect("Test failed");
+            bond_tokens(&mut wl_storage, None, validator, stake, 0.into())
+                .expect("Test failed");
         }
 
         // query validators to make sure they were inserted correctly
@@ -379,9 +372,7 @@ mod tests {
                 .pos_queries()
                 .get_consensus_validators(Some(epoch.into()))
                 .iter()
-                .map(|validator| {
-                    (validator.address, validator.bonded_stake)
-                })
+                .map(|validator| (validator.address, validator.bonded_stake))
                 .collect::<HashMap<_, _>>()
         };
         let epoch_0_validators = query_validators(0);

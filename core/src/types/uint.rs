@@ -54,8 +54,12 @@ impl Integer for Uint {
     }
 
     fn gcd(&self, other: &Self) -> Self {
-        if self.is_zero() { return *self; }
-        if other.is_zero() { return *other; }
+        if self.is_zero() {
+            return *self;
+        }
+        if other.is_zero() {
+            return *other;
+        }
 
         let shift = (*self | *other).trailing_zeros();
         let mut u = *self;
@@ -70,7 +74,9 @@ impl Integer for Uint {
                 std::mem::swap(&mut u, &mut v);
             }
             v -= u; // here v >= u
-            if v.is_zero() { break; }
+            if v.is_zero() {
+                break;
+            }
         }
         u << shift
     }
@@ -123,10 +129,7 @@ impl Uint {
         for byte in output.iter_mut() {
             *byte ^= u64::MAX;
         }
-        Self(output)
-            .overflowing_add(Uint::from(1u64))
-            .0
-            .canonical()
+        Self(output).overflowing_add(Uint::from(1u64)).0.canonical()
     }
 
     /// There are two valid representations of zero: plus and

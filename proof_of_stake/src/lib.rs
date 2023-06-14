@@ -64,9 +64,9 @@ use types::{
     CommissionRates, ConsensusValidator, ConsensusValidatorSet,
     ConsensusValidatorSets, GenesisValidator, Position, RewardsProducts, Slash,
     SlashType, Slashes, TotalDeltas, Unbonds, ValidatorConsensusKeys,
-    ValidatorDeltas, ValidatorPositionAddresses, ValidatorSetPositions,
-    ValidatorSetUpdate, ValidatorState, ValidatorStates, VoteInfo,
-    WeightedValidator, ValidatorEthColdKeys, ValidatorEthHotKeys
+    ValidatorDeltas, ValidatorEthColdKeys, ValidatorEthHotKeys,
+    ValidatorPositionAddresses, ValidatorSetPositions, ValidatorSetUpdate,
+    ValidatorState, ValidatorStates, VoteInfo, WeightedValidator,
 };
 
 /// Address of the PoS account implemented as a native VP
