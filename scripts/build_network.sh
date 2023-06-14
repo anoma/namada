@@ -8,25 +8,24 @@
 # - Python 3
 # - toml Python pip library <https://pypi.org/project/toml/> (this is the
 #   `python3-toml` package on Ubuntu distributions)
-# - trash CLI tool (`brew install trash` on macOS or `sudo apt-get install
-#   trash-cli` on Ubuntu)
 #
 # ## How to run
 # This script should be run from the root of a Namada source code repo
 # (https://github.com/anoma/namada). *.wasm files must already have been built
 # and be present under the `wasm/` directory of the Namada repo. This can be
-# done by running `make build wasm-scripts`. The shell script takes three
-# arguments: The first argument is the path to a network config toml compatible
-# with the version of Namada being used. You can find example network config
-# tomls in the `templates/` directory of the anoma-network-configs repo
-# (https://github.com/heliaxdev/anoma-network-configs)` The second argument is
-# the BASE_DIR of the chain. This will depend on your setup. The third argument
-# is the path to the directory containing the Namada binaries
-# 
+# achieved by running `make build wasm-scripts`. 
+
+# The shell script takes two required arguments (and one optional argument): 
+# The first argument is the path to 
+# a network config toml compatible with the version of Namada being used.
+# You can find example network config tomls in the `templates/` directory 
+# of the anoma-network-configs repo (https://github.com/heliaxdev/anoma-network-configs)` 
+# The second argument is the path to the directory containing the Namada binaries
+# The third OPTIONAL argument is the BASE_DIR of the chain. This will depend on your setup.
 # 
 # Example command:
 # ```shell
-# ./scripts/build_network.sh network-configs/mainline-v0.12.1.toml '~/Library/Application Support/Namada'
+# ./scripts/build_network.sh anoma-network-configs/templates/devnet-0.17.toml ./target/debug
 # ````
 #
 # Once the script is finished, it should be possible to straight away start
@@ -150,9 +149,9 @@ validate_arguments() {
 package() {
 
     # Clean up any existing chain data
-    trash $BASE_DIR || true
+    rm -rf $BASE_DIR || true
     git checkout --ours -- wasm/checksums.json
-    trash nohup.out || true
+    rm -f nohup.out || true
 
     CHAIN_DIR='.hack/chains'
     mkdir -p $CHAIN_DIR
@@ -183,7 +182,7 @@ package() {
 
     basename *.tar.gz .tar.gz >${CHAIN_DIR}/chain-id
     NAMADA_CHAIN_ID="$(cat ${CHAIN_DIR}/chain-id)"
-    trash "$BASE_DIR/${NAMADA_CHAIN_ID}"
+    rm -rf "$BASE_DIR/${NAMADA_CHAIN_ID}"
     mv "${NAMADA_CHAIN_ID}.tar.gz" $CHAIN_DIR
 
     # clean up the http server when the script exits
@@ -204,9 +203,9 @@ package() {
     mv "${NAMADA_CHAIN_ID}.prebuilt.tar.gz" $CHAIN_DIR
 
     git checkout --ours -- wasm/checksums.json
-    trash nohup.out
+    rm -rf nohup.out
 
-    # don't trash namada - so we're ready to go with the chain
+    # don't delete namada - so we're ready to go with the chain
     echo "Run the ledger! (and when done follow the instructions to clean up)"
 }
 
