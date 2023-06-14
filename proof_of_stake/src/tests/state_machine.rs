@@ -252,13 +252,7 @@ impl StateMachineTest for ConcretePosState {
                 // This must be ensured by both transitions generator and
                 // pre-conditions!
                 assert!(
-                    crate::is_validator(
-                        &state.s,
-                        &id.validator,
-                        &params,
-                        pipeline,
-                    )
-                    .unwrap(),
+                    crate::is_validator(&state.s, &id.validator).unwrap(),
                     "{} is not a validator",
                     id.validator
                 );
