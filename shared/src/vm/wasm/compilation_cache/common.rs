@@ -65,7 +65,9 @@ impl WeightScale<Hash, Module> for ModuleCacheScale {
         // elements, so we use the size of the module as its scale
         // and subtract 1 from it to negate the increment of the cache length.
 
-        let size = loupe::size_of_val(&value) + HASH_LENGTH;
+        let size = 
+        // loupe::size_of_val(&value) + 
+        HASH_LENGTH;
         tracing::debug!(
             "WASM module hash {}, size including the hash {}",
             key.to_string(),
@@ -542,8 +544,7 @@ mod dylib {
     #[allow(dead_code)]
     pub fn store() -> Store {
         let compiler = wasmer_compiler_singlepass::Singlepass::default();
-        let engine = wasmer_engine_dylib::Dylib::new(compiler).engine();
-        Store::new_with_tunables(&engine, memory::vp_limit())
+        Store::new_with_tunables(compiler, memory::vp_limit())
     }
 }
 
@@ -1010,7 +1011,8 @@ mod test {
             );
             let (module, _store) =
                 cache.compile_or_fetch(&code).unwrap().unwrap();
-            loupe::size_of_val(&module) + HASH_LENGTH + extra_bytes
+            // loupe::size_of_val(&module) +
+            HASH_LENGTH + extra_bytes
         };
         println!(
             "Compiled module {} size including the hash: {} ({})",

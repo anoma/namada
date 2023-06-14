@@ -494,7 +494,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     ];
 
     for tx_args in &txs_args {
-        for &dry_run in &[true, false] {
+        for &dry_run in &[false, true] {
             let tx_args = if dry_run {
                 vec![tx_args.clone(), vec!["--dry-run"]].concat()
             } else {

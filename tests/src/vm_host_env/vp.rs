@@ -290,7 +290,9 @@ mod native_vp_host_env {
 
                             // Call the `host_env` function and unwrap any
                             // runtime errors
-                            $fn( &env, $($arg),* ).unwrap()
+                            // TODO: this is fucked
+                            // $fn( &env, $($arg),* ).unwrap()
+                            $fn( todo!(), $($arg),* ).unwrap()
                         })
                     }
                 });
@@ -337,7 +339,9 @@ mod native_vp_host_env {
 
                             // Call the `host_env` function and unwrap any
                             // runtime errors
-                            $fn( &env, $($arg),* ).unwrap()
+                            // TODO: this is fucked
+                            // $fn( &env, $($arg),* ).unwrap()
+                            $fn( todo!(), $($arg),* ).unwrap()
                         })
                     }
                 });

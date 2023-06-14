@@ -10,6 +10,7 @@ pub trait VmMemory: Clone + Send + Sync {
     /// Returns bytes read from memory together with the associated gas cost.
     fn read_bytes(
         &self,
+        store: &mut wasmer::StoreMut<'_>,
         offset: u64,
         len: usize,
     ) -> Result<(Vec<u8>, u64), Self::Error>;
@@ -17,6 +18,7 @@ pub trait VmMemory: Clone + Send + Sync {
     /// Write bytes to memory. Returns the gas cost.
     fn write_bytes(
         &self,
+        store: &mut wasmer::StoreMut<'_>,
         offset: u64,
         bytes: impl AsRef<[u8]>,
     ) -> Result<u64, Self::Error>;
@@ -24,6 +26,7 @@ pub trait VmMemory: Clone + Send + Sync {
     /// Returns string read from memory together with the associated gas cost.
     fn read_string(
         &self,
+        store: &mut wasmer::StoreMut<'_>,
         offset: u64,
         len: usize,
     ) -> Result<(String, u64), Self::Error>;
@@ -31,6 +34,7 @@ pub trait VmMemory: Clone + Send + Sync {
     /// Write string to memory. Returns the gas cost.
     fn write_string(
         &self,
+        store: &mut wasmer::StoreMut<'_>,
         offset: u64,
         string: String,
     ) -> Result<u64, Self::Error>;
@@ -56,6 +60,7 @@ pub mod testing {
 
         fn read_bytes(
             &self,
+            _store: &mut wasmer::StoreMut<'_>,
             offset: u64,
             len: usize,
         ) -> Result<(Vec<u8>, u64)> {
@@ -65,6 +70,7 @@ pub mod testing {
 
         fn write_bytes(
             &self,
+            _store: &mut wasmer::StoreMut<'_>,
             offset: u64,
             bytes: impl AsRef<[u8]>,
         ) -> Result<u64> {
@@ -78,6 +84,7 @@ pub mod testing {
 
         fn read_string(
             &self,
+            _store: &mut wasmer::StoreMut<'_>,
             offset: u64,
             len: usize,
         ) -> Result<(String, u64)> {
@@ -88,7 +95,12 @@ pub mod testing {
             Ok((string, 0))
         }
 
-        fn write_string(&self, offset: u64, string: String) -> Result<u64> {
+        fn write_string(
+            &self,
+            _store: &mut wasmer::StoreMut<'_>,
+            offset: u64,
+            string: String,
+        ) -> Result<u64> {
             let bytes = string.as_bytes();
             let len = bytes.len();
             let target =
