@@ -15,7 +15,8 @@ use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::rpc::{TxBroadcastData, TxResponse};
 use namada::ledger::signing::TxSigningKey;
 use namada::ledger::wallet::{Wallet, WalletUtils};
-use namada::ledger::{masp, tx};
+use namada::ledger::{masp, pos, tx};
+use namada::proof_of_stake::parameters::PosParams;
 use namada::proto::{Code, Data, Section, Tx};
 use namada::types::address::Address;
 use namada::types::governance::{
@@ -305,6 +306,11 @@ pub async fn submit_init_validator<
             )
             .unwrap();
 
+        let key = pos::params_key();
+        let pos_params = rpc::query_storage_value::<C, PosParams>(client, &key)
+            .await
+            .expect("Pos parameter should be defined.");
+
         println!();
         println!(
             "The validator's addresses and keys were stored in the wallet:"
@@ -315,6 +321,11 @@ pub async fn submit_init_validator<
         println!(
             "The ledger node has been setup to use this validator's address \
              and consensus key."
+        );
+        println!(
+            "Your validator will be active in {} epochs. Be sure to restart \
+             your node for the changes to take effect!",
+            pos_params.pipeline_len
         );
     } else {
         println!("Transaction dry run. No addresses have been saved.")
