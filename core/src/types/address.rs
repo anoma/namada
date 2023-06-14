@@ -1,7 +1,6 @@
 //! Implements transparent addresses as described in [Accounts
 //! Addresses](docs/src/explore/design/ledger/accounts.md#addresses).
 
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
@@ -184,14 +183,15 @@ impl Address {
 
     /// Try to get a raw hash of an address, only defined for established and
     /// implicit addresses.
-    pub fn raw_hash(&self) -> Option<Cow<str>> {
+    pub fn raw_hash(&self) -> Option<String> {
         match self {
             Address::Established(established) => {
                 let hash_hex = HEXUPPER.encode(&established.hash);
-                Some(Cow::Owned(hash_hex))
+                Some(hash_hex)
             }
             Address::Implicit(ImplicitAddress(implicit)) => {
-                Some(Cow::Borrowed(&implicit.0))
+                let hash_hex = HEXUPPER.encode(&implicit.0);
+                Some(hash_hex)
             }
             Address::Internal(_) => None,
         }
