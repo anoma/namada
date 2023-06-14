@@ -2147,11 +2147,15 @@ pub mod args {
     );
     pub const ETH_SYNC: ArgFlag = flag("sync");
     pub const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
-    pub const FEE_AMOUNT: ArgDefault<token::Amount> =
-        arg_default("fee-amount", DefaultFn(|| token::Amount::from(0)));
+    pub const FEE_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
+        "fee-amount",
+        DefaultFn(|| token::DenominatedAmount {
+            amount: token::Amount::default(),
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        }),
+    );
     pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
     pub const FORCE: ArgFlag = flag("force");
-    pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     pub const GAS_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
         "gas-amount",
         DefaultFn(|| token::DenominatedAmount {
@@ -2490,8 +2494,8 @@ pub mod args {
             let asset = ERC20.parse(matches);
             let recipient = ETH_ADDRESS.parse(matches);
             let sender = ADDRESS.parse(matches);
-            let amount = AMOUNT.parse(matches);
-            let gas_amount = FEE_AMOUNT.parse(matches);
+            let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
+            let gas_amount = FEE_AMOUNT.parse(matches).amount;
             let gas_payer = FEE_PAYER.parse(matches);
             let code_path = PathBuf::from(TX_BRIDGE_POOL_WASM);
             Self {

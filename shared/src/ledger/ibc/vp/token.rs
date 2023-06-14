@@ -269,7 +269,7 @@ where
             .map_err(|e| Error::Denom(e.to_string()))?;
         let amount =
             Amount::try_from(data.token.amount).map_err(Error::Amount)?;
-        let prefix = storage::ibc_token_prefix(&data.token.denom.to_string())
+        let prefix = storage::ibc_token_prefix(data.token.denom.to_string())
             .map_err(|e| Error::Denom(e.to_string()))?;
 
         let change = if is_receiver_chain_source(

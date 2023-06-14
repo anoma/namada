@@ -1419,7 +1419,7 @@ mod test_ethbridge_router {
         assert_matches!(result, Ok(None));
 
         // write tokens to storage
-        let amount = Amount::whole(12345);
+        let amount = Amount::native_whole(12345);
         let keys: wrapped_erc20s::Keys = (&ERC20_TOKEN).into();
         client
             .wl_storage

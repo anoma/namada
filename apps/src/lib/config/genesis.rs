@@ -25,6 +25,7 @@ use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
 use namada::types::token::Denomination;
 use namada::types::{storage, token};
+use namada::types::address::wnam;
 
 /// Genesis configuration file format
 pub mod genesis_config {

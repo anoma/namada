@@ -311,8 +311,7 @@ where
             if vp_code_path == "vp_testnet_faucet.wasm" {
                 let difficulty = faucet_pow_difficulty.unwrap_or_default();
                 // withdrawal limit defaults to 1000 NAM when not set
-                let withdrawal_limit = genesis
-                    .faucet_withdrawal_limit
+                let withdrawal_limit = faucet_withdrawal_limit
                     .unwrap_or_else(|| token::Amount::native_whole(1_000));
                 testnet_pow::init_faucet_storage(
                     &mut self.wl_storage,
@@ -569,7 +568,6 @@ mod test {
     use std::collections::BTreeMap;
 
     use namada::ledger::storage::DBIter;
-    use namada::types::storage;
 
     use crate::node::ledger::shell::test_utils::{self, TestShell};
 

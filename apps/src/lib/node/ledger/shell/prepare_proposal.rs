@@ -429,6 +429,7 @@ mod test_prepare_proposal {
     use namada::types::vote_extensions::ethereum_events;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::VoteExtension;
+    use namada::types::token::Amount;
 
     use super::*;
     #[cfg(feature = "abcipp")]

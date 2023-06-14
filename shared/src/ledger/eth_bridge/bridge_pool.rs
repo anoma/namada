@@ -394,6 +394,7 @@ where
     control_flow::proceed(())
 }
 
+#[allow(missing_docs)]
 mod recommendations {
     use super::*;
 

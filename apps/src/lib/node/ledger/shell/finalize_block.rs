@@ -930,7 +930,6 @@ fn pos_votes_from_abci(
 mod test_finalize_block {
     use std::collections::{BTreeMap, BTreeSet};
     use std::num::NonZeroU64;
-    use std::str::FromStr;
 
     use data_encoding::HEXUPPER;
     use namada::core::ledger::eth_bridge::storage::wrapped_erc20s;

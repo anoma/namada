@@ -826,7 +826,7 @@ where
                 println!(
                     "Amount {} withdrawable starting from epoch {}",
                     latest_withdraw_amount_post.to_string_native(),
-                    latest_withdraw_epoch_post.to_string()
+                    latest_withdraw_epoch_post
                 );
             }
         }
@@ -834,7 +834,7 @@ where
         println!(
             "Amount {} withdrawable starting from epoch {}",
             latest_withdraw_amount_post.to_string_native(),
-            latest_withdraw_epoch_post.to_string()
+            latest_withdraw_epoch_post
         );
     }
 
@@ -1046,7 +1046,7 @@ pub async fn submit_transfer<C, U, V>(
     client: &C,
     wallet: &mut Wallet<V>,
     shielded: &mut ShieldedContext<U>,
-    args: args::TxTransfer,
+    mut args: args::TxTransfer,
 ) -> Result<(), Error>
 where
     C: crate::ledger::queries::Client + Sync,
@@ -1091,7 +1091,7 @@ where
 
     // validate the amount given
     let validated_amount =
-        validate_amount(client, args.amount, &token, &sub_prefix, args.tx.force)
+        validate_amount(client, args.amount, token, &sub_prefix, args.tx.force)
             .await
             .expect("expected to validate amount");
     let validate_fee = validate_amount(

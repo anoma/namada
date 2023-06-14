@@ -241,6 +241,7 @@ pub fn get_dummy_genesis_validator()
         Dec::new(1, 1).expect("expected 0.1 to be a valid decimal");
     let max_commission_rate_change =
         Dec::new(1, 1).expect("expected 0.1 to be a valid decimal");
+
     let eth_hot_sk =
         key::common::SecretKey::Secp256k1(key::testing::gen_keypair::<
             key::secp256k1::SigScheme,
@@ -253,8 +254,6 @@ pub fn get_dummy_genesis_validator()
         >());
     let eth_cold_key = eth_cold_sk.to_public();
 
-    let commission_rate = Dec::new(1, 0);
-    let max_commission_rate_change = Dec::new(1, 0);
     namada_proof_of_stake::types::GenesisValidator {
         address,
         tokens,

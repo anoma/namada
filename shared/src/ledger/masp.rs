@@ -879,11 +879,11 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         target_epoch: Epoch,
     ) -> Option<MaspAmount> {
         // First get the unexchanged balance
-        if let Some(balance) = self.compute_shielded_balance(&client, vk).await
+        if let Some(balance) = self.compute_shielded_balance(client, vk).await
         {
             let exchanged_amount = self
                 .compute_exchanged_amount(
-                    client.clone(),
+                    client,
                     balance,
                     target_epoch,
                     HashMap::new(),
@@ -891,7 +891,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 .await
                 .0;
             // And then exchange balance into current asset types
-            Some(self.decode_all_amounts(&client, exchanged_amount).await)
+            Some(self.decode_all_amounts(client, exchanged_amount).await)
         } else {
             None
         }
@@ -902,6 +902,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// conversion used, the conversions are applied to the given input, and
     /// the trace amount that could not be converted is moved from input to
     /// output.
+    #[allow(clippy::too_many_arguments)]
     async fn apply_conversion(
         &mut self,
         client: &U::C,
@@ -988,13 +989,13 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
 
                 let denom_value = denom.denominate_i128(&value);
                 self.query_allowed_conversion(
-                    client.clone(),
+                    client,
                     target_asset_type,
                     &mut conversions,
                 )
                     .await;
                 self.query_allowed_conversion(
-                    client.clone(),
+                    client,
                     asset_type,
                     &mut conversions,
                 )
@@ -1010,7 +1011,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     // current asset type to the latest
                     // asset type.
                     self.apply_conversion(
-                        &client,
+                        client,
                         conv.clone(),
                         (asset_epoch, token_addr.clone(), denom),
                         denom_value,
@@ -1031,7 +1032,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     // from latest asset type to the target
                     // asset type.
                     self.apply_conversion(
-                        &client,
+                        client,
                         conv.clone(),
                         (asset_epoch, token_addr.clone(), denom),
                         denom_value,
@@ -1217,13 +1218,13 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let (amt, ep) =
             Self::compute_pinned_balance(client, owner, viewing_key).await?;
         // Establish connection with which to do exchange rate queries
-        let amount = self.decode_all_amounts(&client, amt).await;
+        let amount = self.decode_all_amounts(client, amt).await;
         // Finally, exchange the balance to the transaction's epoch
         let computed_amount = self
             .compute_exchanged_amount(client, amount, ep, HashMap::new())
             .await
             .0;
-        Ok((self.decode_all_amounts(&client, computed_amount).await, ep))
+        Ok((self.decode_all_amounts(client, computed_amount).await, ep))
     }
 
     /// Convert an amount whose units are AssetTypes to one whose units are
@@ -1239,7 +1240,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         for (asset_type, val) in amt.components() {
             // Decode the asset type
             let decoded =
-                self.decode_asset_type(client.clone(), *asset_type).await;
+                self.decode_asset_type(client, *asset_type).await;
             // Only assets with the target timestamp count
             match decoded {
                 Some(asset_type @ (_, _, _, epoch))
@@ -1273,7 +1274,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         for (asset_type, val) in amt.components() {
             // Decode the asset type
             if let Some(decoded) =
-                self.decode_asset_type(client.clone(), *asset_type).await
+                self.decode_asset_type(client, *asset_type).await
             {
                 decode_component(
                     decoded,
@@ -1344,7 +1345,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             epoch,
             &args.token,
             &args.sub_prefix.as_ref(),
-            amt.amount.clone(),
+            amt.amount,
         );
 
         // If there are shielded inputs
