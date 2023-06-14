@@ -16,8 +16,7 @@ use data_encoding::HEXLOWER;
 use itertools::Either;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
-use masp_primitives::primitives::ViewingKey;
-use masp_primitives::sapling::Node;
+use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::core::types::transaction::governance::ProposalType;
 use namada::ledger::args::InputAmount;
@@ -34,7 +33,7 @@ use namada::ledger::pos::{
     self, BondId, BondsAndUnbondsDetail, CommissionPair, PosParams, Slash,
 };
 use namada::ledger::queries::RPC;
-use namada::ledger::rpc::{query_epoch, TxResponse};
+use namada::ledger::rpc::{format_denominated_amount, query_epoch, TxResponse};
 use namada::ledger::storage::ConversionState;
 use namada::ledger::wallet::{AddressVpType, Wallet};
 use namada::proof_of_stake::types::WeightedValidator;
@@ -46,9 +45,7 @@ use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
-use namada::types::token::{
-    Change, DenominatedAmount, Denomination, MaspDenom, TokenAddress,
-};
+use namada::types::token::{Change, Denomination, MaspDenom, TokenAddress};
 use namada::types::{storage, token};
 
 use crate::cli::{self, args};
@@ -82,8 +79,19 @@ pub async fn query_and_print_epoch<
 /// Query the last committed block
 pub async fn query_block<C: namada::ledger::queries::Client + Sync>(
     client: &C,
-) -> crate::facade::tendermint_rpc::endpoint::block::Response {
-    namada::ledger::rpc::query_block(client).await
+) {
+    let block = namada::ledger::rpc::query_block(client).await;
+    match block {
+        Some(block) => {
+            println!(
+                "Last committed block ID: {}, height: {}, time: {}",
+                block.hash, block.height, block.time
+            );
+        }
+        None => {
+            println!("No block has been committed yet.");
+        }
+    }
 }
 
 /// Query the results of the last committed block
@@ -1745,6 +1753,30 @@ pub async fn query_delegations<C: namada::ledger::queries::Client + Sync>(
     }
 }
 
+pub async fn query_find_validator<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
+    args: args::QueryFindValidator,
+) {
+    let args::QueryFindValidator { query: _, tm_addr } = args;
+    if tm_addr.len() != 40 {
+        eprintln!(
+            "Expected 40 characters in Tendermint address, got {}",
+            tm_addr.len()
+        );
+        cli::safe_exit(1);
+    }
+    let tm_addr = tm_addr.to_ascii_uppercase();
+    let validator = unwrap_client_response::<C, _>(
+        RPC.vp().pos().validator_by_tm_addr(client, &tm_addr).await,
+    );
+    match validator {
+        Some(address) => println!("Found validator address \"{address}\"."),
+        None => {
+            println!("No validator with Tendermint address {tm_addr} found.")
+        }
+    }
+}
+
 /// Dry run a transaction
 pub async fn dry_run_tx<C: namada::ledger::queries::Client + Sync>(
     client: &C,
@@ -2275,31 +2307,6 @@ fn unwrap_client_response<C: namada::ledger::queries::Client, T>(
         eprintln!("Error in the query");
         cli::safe_exit(1)
     })
-}
-
-/// Look up the denomination of a token in order to format it
-/// correctly as a string.
-pub(super) async fn format_denominated_amount<
-    C: namada::ledger::queries::Client + Sync,
->(
-    client: &C,
-    token: &TokenAddress,
-    amount: token::Amount,
-) -> String {
-    let denom = unwrap_client_response::<C, Option<Denomination>>(
-        RPC.vp()
-            .token()
-            .denomination(client, &token.address, &token.sub_prefix)
-            .await,
-    )
-    .unwrap_or_else(|| {
-        println!(
-            "No denomination found for token: {token}, defaulting to zero \
-             decimal places"
-        );
-        0.into()
-    });
-    DenominatedAmount { amount, denom }.to_string()
 }
 
 /// Get the correct representation of the amount given the token type.

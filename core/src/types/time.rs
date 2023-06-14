@@ -96,8 +96,27 @@ impl From<std::time::Duration> for DurationNanos {
 pub struct Rfc3339String(pub String);
 
 /// A duration in seconds precision.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+#[serde(try_from = "Rfc3339String", into = "Rfc3339String")]
 pub struct DateTimeUtc(pub DateTime<Utc>);
+
+impl Display for DateTimeUtc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_rfc3339())
+    }
+}
 
 impl DateTimeUtc {
     /// Returns a DateTimeUtc which corresponds to the current date.
@@ -108,6 +127,11 @@ impl DateTimeUtc {
     /// Returns an rfc3339 string or an error.
     pub fn to_rfc3339(&self) -> String {
         chrono::DateTime::to_rfc3339(&self.0)
+    }
+
+    /// Returns the DateTimeUtc corresponding to one second in the future
+    pub fn next_second(&self) -> Self {
+        *self + DurationSecs(0)
     }
 }
 
@@ -154,7 +178,7 @@ impl BorshSerialize for DateTimeUtc {
         writer: &mut W,
     ) -> std::io::Result<()> {
         let raw = self.0.to_rfc3339();
-        raw.serialize(writer)
+        BorshSerialize::serialize(&raw, writer)
     }
 }
 

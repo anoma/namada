@@ -415,7 +415,7 @@ impl RequestQuery {
         let height = match height {
             0 => {
                 // `0` means last committed height
-                storage.storage.last_height
+                storage.storage.get_last_block_height()
             }
             _ => BlockHeight(height.try_into().map_err(|_| {
                 format!("Query height cannot be negative, got: {}", height)

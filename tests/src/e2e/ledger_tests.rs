@@ -130,7 +130,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     // 4. Check that all the nodes processed the tx with the same result
     let mut validator_0 = bg_validator_0.foreground();
     let mut validator_1 = bg_validator_1.foreground();
-    let expected_result = "successful txs: 1";
+    let expected_result = "successful inner txs: 1";
     // We cannot check this on non-validator node as it might sync without
     // applying the tx itself, but its state should be the same, checked below.
     validator_0.exp_string(expected_result)?;
@@ -224,7 +224,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 
     // 2. Shut it down
     let mut ledger = bg_ledger.foreground();
-    ledger.send_control('c')?;
+    ledger.interrupt()?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
     ledger.exp_string("Namada ledger node has shut down.")?;
@@ -241,7 +241,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     ledger.exp_string("Last state root hash:")?;
 
     // 4. Shut it down
-    ledger.send_control('c')?;
+    ledger.interrupt()?;
     // Wait for it to stop
     ledger.exp_eof()?;
     drop(ledger);
@@ -305,7 +305,7 @@ fn suspend_ledger() -> Result<()> {
 
     // 3. Shut it down
     let mut ledger = bg_ledger.foreground();
-    ledger.send_control('c')?;
+    ledger.interrupt()?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
     ledger.exp_string("Namada ledger node has shut down.")?;
@@ -1828,13 +1828,13 @@ fn invalid_transactions() -> Result<()> {
 
     client.assert_success();
     let mut ledger = bg_ledger.foreground();
-    ledger.exp_string("rejected txs: 1")?;
+    ledger.exp_string("rejected inner txs: 1")?;
 
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
 
     // 3. Shut it down
-    ledger.send_control('c')?;
+    ledger.interrupt()?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
     ledger.exp_string("Namada ledger node has shut down.")?;
@@ -4060,7 +4060,7 @@ fn test_genesis_validators() -> Result<()> {
     let mut validator_0 = bg_validator_0.foreground();
     let mut validator_1 = bg_validator_1.foreground();
 
-    let expected_result = "successful txs: 1";
+    let expected_result = "successful inner txs: 1";
     // We cannot check this on non-validator node as it might sync without
     // applying the tx itself, but its state should be the same, checked below.
     validator_0.exp_string(expected_result)?;
@@ -4075,7 +4075,9 @@ fn test_genesis_validators() -> Result<()> {
     // Find the block height on the validator
     let after_tx_height = get_height(&test, &validator_0_rpc)?;
 
-    // Wait for the non-validator to be synced to at least the same height
+    // Wait for the second validator and non-validator to be synced to at least
+    // the same height
+    wait_for_block_height(&test, &validator_1_rpc, after_tx_height, 10)?;
     wait_for_block_height(&test, &non_validator_rpc, after_tx_height, 10)?;
 
     let query_balance_args = |ledger_rpc| {
@@ -4204,6 +4206,8 @@ fn double_signing_gets_slashed() -> Result<()> {
     )?;
     validator_0_copy.exp_string("Namada ledger node started")?;
     validator_0_copy.exp_string("This node is a validator")?;
+    // Wait for a first block
+    validator_0_copy.exp_string("Committed block hash")?;
     let _bg_validator_0_copy = validator_0_copy.background();
 
     // 5. Submit a valid token transfer tx to validator 0

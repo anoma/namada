@@ -1,12 +1,12 @@
 //! A basic fungible token
 
 use std::fmt::{Display, Formatter};
+use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
-use masp_primitives::transaction::Transaction;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -16,6 +16,7 @@ use crate::ledger::storage_api::token::read_denom;
 use crate::ledger::storage_api::StorageRead;
 use crate::types::address::{masp, Address, DecodeError as AddressError};
 use crate::types::dec::Dec;
+use crate::types::hash::Hash;
 use crate::types::storage;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::uint::{self, Uint, I256};
@@ -497,18 +498,21 @@ impl Add<u64> for Amount {
     }
 }
 
-impl std::iter::Sum for Amount {
-    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Amount::zero(), |acc, amt| acc + amt)
-    }
-}
-
 impl Mul<u64> for Amount {
     type Output = Amount;
 
     fn mul(mut self, rhs: u64) -> Self::Output {
         self.raw *= rhs;
         self
+    }
+}
+
+impl Mul<Amount> for u64 {
+    type Output = Amount;
+
+    fn mul(self, mut rhs: Amount) -> Self::Output {
+        rhs.raw *= self;
+        rhs
     }
 }
 
@@ -572,6 +576,12 @@ impl Sub for Amount {
 impl SubAssign for Amount {
     fn sub_assign(&mut self, rhs: Self) {
         self.raw -= rhs.raw
+    }
+}
+
+impl Sum for Amount {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Amount::default(), |acc, next| acc + next)
     }
 }
 
@@ -659,6 +669,8 @@ impl From<Amount> for Uint {
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    Serialize,
+    Deserialize,
 )]
 #[repr(u8)]
 #[allow(missing_docs)]
@@ -974,7 +986,7 @@ pub struct Transfer {
     /// The unused storage location at which to place TxId
     pub key: Option<String>,
     /// Shielded transaction part
-    pub shielded: Option<Transaction>,
+    pub shielded: Option<Hash>,
 }
 
 #[allow(missing_docs)]

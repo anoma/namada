@@ -3,11 +3,9 @@
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
-    let signed = SignedTxData::try_from_slice(&tx_data[..])
-        .wrap_err("failed to decode SignedTxData")
-        .unwrap();
-    let data = signed.data.ok_or_err_msg("Missing data").unwrap();
+fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
+    let signed = tx_data;
+    let data = signed.data().ok_or_err_msg("Missing data")?;
     let bond = transaction::pos::Bond::try_from_slice(&data[..])
         .wrap_err("failed to decode Bond")
         .unwrap();
@@ -24,10 +22,10 @@ mod tests {
         bond_handle, read_consensus_validator_set_addresses_with_stake,
         read_total_stake, read_validator_stake,
     };
-    use namada::proto::Tx;
-    use namada::types::chain::ChainId;
+    use namada::proto::{Code, Data, Signature, Tx};
     use namada::types::dec::Dec;
     use namada::types::storage::Epoch;
+    use namada::types::transaction::TxType;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
@@ -100,9 +98,18 @@ mod tests {
 
         let tx_code = vec![];
         let tx_data = bond.try_to_vec().unwrap();
-        let tx = Tx::new(tx_code, Some(tx_data), ChainId::default(), None);
-        let signed_tx = tx.sign(&key);
-        let tx_data = signed_tx.data.unwrap();
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(tx_code));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key,
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key,
+        )));
+        let signed_tx = tx.clone();
 
         // Ensure that the initial stake of the sole validator is equal to the
         // PoS account balance
@@ -145,7 +152,7 @@ mod tests {
             );
         }
 
-        apply_tx(ctx(), tx_data)?;
+        apply_tx(ctx(), signed_tx)?;
 
         // Read the data after the tx is executed.
         let mut epoched_total_stake_post: Vec<token::Amount> = Vec::new();

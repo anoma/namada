@@ -23,7 +23,6 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use madato::types::TableRow;
 use namada::ledger::parameters::Parameters;
-use namada::proto::SignedTxData;
 use namada::types::address::Address;
 use namada::types::key::ed25519::{PublicKey, Signature};
 use namada::types::storage::{self, Epoch};
@@ -71,7 +70,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let public_key_schema = PublicKey::schema_container();
     // TODO update after <https://github.com/anoma/namada/issues/225>
     let signature_schema = Signature::schema_container();
-    let signed_tx_data_schema = SignedTxData::schema_container();
     let init_account_schema = transaction::InitAccount::schema_container();
     let init_validator_schema = transaction::InitValidator::schema_container();
     let token_transfer_schema = token::Transfer::schema_container();
@@ -97,7 +95,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     definitions.extend(parameters_schema.definitions);
     definitions.extend(public_key_schema.definitions);
     definitions.extend(signature_schema.definitions);
-    definitions.extend(signed_tx_data_schema.definitions);
     definitions.extend(init_account_schema.definitions);
     definitions.extend(init_validator_schema.definitions);
     definitions.extend(token_transfer_schema.definitions);
@@ -154,15 +151,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // TODO update after <https://github.com/anoma/namada/issues/225>
             "https://dev.namada.net/master/rustdoc/namada/types/key/ed25519/struct.Signature.html");
     tables.push(signature_table);
-
-    let signed_tx_data_definition = definitions
-        .remove(&signed_tx_data_schema.declaration)
-        .unwrap();
-    let signed_tx_data_table =
-        definition_to_table(signed_tx_data_schema.declaration, signed_tx_data_definition).with_rust_doc_link(
-            // TODO update after <https://github.com/anoma/namada/issues/225>
-            "https://dev.namada.net/master/rustdoc/namada/types/key/ed25519/struct.SignedTxData.html");
-    tables.push(signed_tx_data_table);
 
     let init_account_definition = definitions
         .remove(&init_account_schema.declaration)

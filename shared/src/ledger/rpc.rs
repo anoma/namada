@@ -5,10 +5,13 @@ use borsh::BorshDeserialize;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
+use namada_core::ledger::storage::LastBlock;
 use namada_core::ledger::testnet_pow;
 use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
-use namada_core::types::token::{Amount, Denomination, MaspDenom};
+use namada_core::types::token::{
+    Amount, DenominatedAmount, Denomination, MaspDenom, TokenAddress,
+};
 use namada_proof_of_stake::types::CommissionPair;
 use serde::Serialize;
 use tokio::time::Duration;
@@ -86,30 +89,13 @@ pub async fn query_epoch<C: crate::ledger::queries::Client + Sync>(
     epoch
 }
 
-/// Query the epoch of the given block height, if it exists.
-/// Will return none if the input block height is greater than
-/// the latest committed block height.
-pub async fn query_epoch_at_height<C: crate::ledger::queries::Client + Sync>(
-    client: &C,
-    height: BlockHeight,
-) -> Option<Epoch> {
-    unwrap_client_response::<C, _>(
-        RPC.shell().epoch_at_height(client, &height).await,
-    )
-}
-
-/// Query the last committed block
+/// Query the last committed block, if any.
 pub async fn query_block<C: crate::ledger::queries::Client + Sync>(
     client: &C,
-) -> crate::tendermint_rpc::endpoint::block::Response {
-    let response = client.latest_block().await.unwrap();
-    println!(
-        "Last committed block ID: {}, height: {}, time: {}",
-        response.block_id,
-        response.block.header.height,
-        response.block.header.time
-    );
-    response
+) -> Option<LastBlock> {
+    // NOTE: We're not using `client.latest_block()` because it may return an
+    // updated block from pre-commit before it's actually committed
+    unwrap_client_response::<C, _>(RPC.shell().last_block(client).await)
 }
 
 /// A helper to unwrap client's response. Will shut down process on error.
@@ -957,4 +943,29 @@ pub async fn validate_amount<C: crate::ledger::queries::Client + Sync>(
             }
         }
     }
+}
+
+/// Look up the denomination of a token in order to format it
+/// correctly as a string.
+pub async fn format_denominated_amount<
+    C: crate::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    token: &TokenAddress,
+    amount: token::Amount,
+) -> String {
+    let denom = unwrap_client_response::<C, Option<Denomination>>(
+        RPC.vp()
+            .token()
+            .denomination(client, &token.address, &token.sub_prefix)
+            .await,
+    )
+    .unwrap_or_else(|| {
+        println!(
+            "No denomination found for token: {token}, defaulting to zero \
+             decimal places"
+        );
+        0.into()
+    });
+    DenominatedAmount { amount, denom }.to_string()
 }

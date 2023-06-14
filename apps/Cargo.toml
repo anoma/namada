@@ -6,7 +6,7 @@ license = "GPL-3.0"
 name = "namada_apps"
 readme = "../README.md"
 resolver = "2"
-version = "0.16.0"
+version = "0.17.1"
 default-run = "namada"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -45,19 +45,9 @@ mainnet = [
   "namada/mainnet",
 ]
 dev = ["namada/dev"]
-std = ["ed25519-consensus/std", "rand/std", "rand_core/std"]
+std = ["ed25519-consensus/std", "rand/std", "rand_core/std", "namada/std"]
 # for integration tests and test utilies
 testing = ["dev"]
-
-abcipp = [
-    "namada/abcipp",
-    "namada/tendermint-rpc-abcipp",
-    "tendermint-abcipp",
-    "tendermint-config-abcipp",
-    "tendermint-proto-abcipp",
-    "tendermint-rpc-abcipp",
-    "tower-abci-abcipp",
-]
 
 abciplus = [
     "namada/abciplus",
@@ -70,7 +60,7 @@ abciplus = [
 ]
 
 [dependencies]
-namada = {path = "../shared", default-features = false, features = ["wasm-runtime", "ferveo-tpke", "masp-tx-gen"]}
+namada = {path = "../shared", default-features = false, features = ["wasm-runtime", "ferveo-tpke", "masp-tx-gen", "multicore"]}
 ark-serialize = "0.3.0"
 ark-std = "0.3.0"
 # branch = "bat/arse-merkle-tree"
@@ -114,6 +104,7 @@ rand_core = {version = "0.6", default-features = false}
 rayon = "=1.5.3"
 regex = "1.4.5"
 reqwest = "0.11.4"
+ripemd = "0.1"
 rlimit = "0.5.4"
 rocksdb = {version = "0.21.0", features = ['zstd', 'jemalloc'], default-features = false}
 rpassword = "5.0.1"
@@ -126,10 +117,6 @@ signal-hook = "0.3.9"
 sysinfo = {version = "=0.21.1", default-features = false}
 tar = "0.4.37"
 # temporarily using fork work-around
-tendermint-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "4db3c5ea09fae4057008d22bf9e96bf541b55b35", optional = true}
-tendermint-config-abcipp = {package = "tendermint-config", git = "https://github.com/heliaxdev/tendermint-rs", rev = "4db3c5ea09fae4057008d22bf9e96bf541b55b35", optional = true}
-tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", rev = "4db3c5ea09fae4057008d22bf9e96bf541b55b35", optional = true}
-tendermint-rpc-abcipp = {package = "tendermint-rpc", git = "https://github.com/heliaxdev/tendermint-rs", rev = "4db3c5ea09fae4057008d22bf9e96bf541b55b35", features = ["http-client", "websocket-client"], optional = true}
 tendermint = {version = "0.23.6", optional = true}
 tendermint-config = {version = "0.23.6", optional = true}
 tendermint-proto = {version = "0.23.6", optional = true}
@@ -141,7 +128,6 @@ tonic = "0.8.3"
 tower = "0.4"
 # Also, using the same version of tendermint-rs as we do here.
 # with a patch for https://github.com/penumbra-zone/tower-abci/issues/7.
-tower-abci-abcipp = {package = "tower-abci", git = "https://github.com/heliaxdev/tower-abci", rev = "a31ce06533f5fbd943508676059d44de27395792", optional = true}
 tower-abci = {version = "0.1.0", optional = true}
 tracing = "0.1.30"
 tracing-log = "0.1.2"
@@ -149,16 +135,16 @@ tracing-subscriber = {version = "0.3.7", features = ["env-filter", "json"]}
 websocket = "0.26.2"
 winapi = "0.3.9"
 #libmasp = { git = "https://github.com/anoma/masp", branch = "murisi/masp-incentive" }
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "ea4fcc68d9412b94042c1c2f0ea0212394e1be37", features = ["transparent-inputs"] }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "ea4fcc68d9412b94042c1c2f0ea0212394e1be37", features = ["bundled-prover", "download-params"] }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "64caae74dc71dd20e6e7fbf3d87770bffe5c4789", features = ["transparent-inputs"] }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "64caae74dc71dd20e6e7fbf3d87770bffe5c4789", features = ["bundled-prover", "download-params"] }
 bimap = {version = "0.6.2", features = ["serde"]}
+zeroize = "1.5.5"
 
 [dev-dependencies]
 namada = {path = "../shared", default-features = false, features = ["testing", "wasm-runtime"]}
 namada_test_utils = {path = "../test_utils"}
 bit-set = "0.5.2"
-# A fork with state machime testing
-proptest = {git = "https://github.com/heliaxdev/proptest", rev = "8f1b4abe7ebd35c0781bf9a00a4ee59833ffa2a1"}
+proptest = "1.2.0"
 tempfile = "3.2.0"
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tokio-test = "0.4.2"

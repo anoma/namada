@@ -255,6 +255,12 @@ impl From<u64> for Dec {
     }
 }
 
+impl From<usize> for Dec {
+    fn from(num: usize) -> Self {
+        Self::from(num as u64)
+    }
+}
+
 impl From<i128> for Dec {
     fn from(num: i128) -> Self {
         Self(I256::from(num) * Uint::exp10(POS_DECIMAL_PRECISION as usize))

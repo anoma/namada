@@ -8,14 +8,14 @@ use color_eyre::eyre::Result;
 use itertools::sorted;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::ledger::masp::find_valid_diversifier;
-use namada::ledger::wallet::FindKeyError;
+use namada::ledger::wallet::{DecryptionError, FindKeyError};
 use namada::types::key::*;
 use namada::types::masp::{MaspValue, PaymentAddress};
 use namada_apps::cli;
 use namada_apps::cli::args::CliToSdk;
 use namada_apps::cli::{args, cmds, Context};
 use namada_apps::wallet::{
-    read_and_confirm_pwd, CliWalletUtils, DecryptionError,
+    read_and_confirm_encryption_password, CliWalletUtils,
 };
 use rand_core::OsRng;
 
@@ -23,6 +23,9 @@ pub fn main() -> Result<()> {
     let (cmd, mut ctx) = cli::namada_wallet_cli()?;
     match cmd {
         cmds::NamadaWallet::Key(sub) => match sub {
+            cmds::WalletKey::Restore(cmds::KeyRestore(args)) => {
+                key_and_address_restore(ctx, args)
+            }
             cmds::WalletKey::Gen(cmds::KeyGen(args)) => {
                 key_and_address_gen(ctx, args)
             }
@@ -35,6 +38,9 @@ pub fn main() -> Result<()> {
         cmds::NamadaWallet::Address(sub) => match sub {
             cmds::WalletAddress::Gen(cmds::AddressGen(args)) => {
                 key_and_address_gen(ctx, args)
+            }
+            cmds::WalletAddress::Restore(cmds::AddressRestore(args)) => {
+                key_and_address_restore(ctx, args)
             }
             cmds::WalletAddress::Find(cmds::AddressOrAliasFind(args)) => {
                 address_or_alias_find(ctx, args)
@@ -205,7 +211,7 @@ fn spending_key_gen(
 ) {
     let mut wallet = ctx.wallet;
     let alias = alias.to_lowercase();
-    let password = read_and_confirm_pwd(unsafe_dont_encrypt);
+    let password = read_and_confirm_encryption_password(unsafe_dont_encrypt);
     let (alias, _key) = wallet.gen_spending_key(alias, password, alias_force);
     namada_apps::wallet::save(&wallet)
         .unwrap_or_else(|err| eprintln!("{}", err));
@@ -273,7 +279,8 @@ fn address_key_add(
             (alias, "viewing key")
         }
         MaspValue::ExtendedSpendingKey(spending_key) => {
-            let password = read_and_confirm_pwd(unsafe_dont_encrypt);
+            let password =
+                read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let alias = ctx
                 .wallet
                 .encrypt_insert_spending_key(
@@ -307,6 +314,41 @@ fn address_key_add(
     );
 }
 
+/// Restore a keypair and an implicit address from the mnemonic code in the
+/// wallet.
+fn key_and_address_restore(
+    ctx: Context,
+    args::KeyAndAddressRestore {
+        scheme,
+        alias,
+        alias_force,
+        unsafe_dont_encrypt,
+        derivation_path,
+    }: args::KeyAndAddressRestore,
+) {
+    let mut wallet = ctx.wallet;
+    let encryption_password =
+        read_and_confirm_encryption_password(unsafe_dont_encrypt);
+    let (alias, _key) = wallet
+        .derive_key_from_user_mnemonic_code(
+            scheme,
+            alias,
+            alias_force,
+            derivation_path,
+            encryption_password,
+        )
+        .unwrap_or_else(|err| {
+            eprintln!("{}", err);
+            cli::safe_exit(1)
+        });
+    namada_apps::wallet::save(&wallet)
+        .unwrap_or_else(|err| eprintln!("{}", err));
+    println!(
+        "Successfully added a key and an address with alias: \"{}\"",
+        alias
+    );
+}
+
 /// Generate a new keypair and derive implicit address from it and store them in
 /// the wallet.
 fn key_and_address_gen(
@@ -316,11 +358,27 @@ fn key_and_address_gen(
         alias,
         alias_force,
         unsafe_dont_encrypt,
+        derivation_path,
     }: args::KeyAndAddressGen,
 ) {
     let mut wallet = ctx.wallet;
-    let password = read_and_confirm_pwd(unsafe_dont_encrypt);
-    let (alias, _key) = wallet.gen_key(scheme, alias, password, alias_force);
+    let encryption_password =
+        read_and_confirm_encryption_password(unsafe_dont_encrypt);
+    let mut rng = OsRng;
+    let derivation_path_and_mnemonic_rng =
+        derivation_path.map(|p| (p, &mut rng));
+    let (alias, _key) = wallet
+        .gen_key(
+            scheme,
+            alias,
+            alias_force,
+            encryption_password,
+            derivation_path_and_mnemonic_rng,
+        )
+        .unwrap_or_else(|err| {
+            eprintln!("{}", err);
+            cli::safe_exit(1);
+        });
     namada_apps::wallet::save(&wallet)
         .unwrap_or_else(|err| eprintln!("{}", err));
     println!(

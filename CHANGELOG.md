@@ -1,10 +1,64 @@
 # CHANGELOG
 
-## Unreleased
+## v0.17.1
+
+Namada 0.17.0 is a scheduled minor release featuring several improvements to the slashing mechanism, 
+wallet address derivation, transaction structure and the ledger stability.
+
+### BUG FIXES
+
+- Persists a newly added storage field for epoch update blocks delay to be
+  available after node restart when not `None` which may break consensus.
+  ([\#1455](https://github.com/anoma/namada/pull/1455))
+- Client: Fixed an off-by-one error to stop waiting for start or catch-up when
+  max tries are reached. ([\#1456](https://github.com/anoma/namada/pull/1456))
+- Include the wasm tx hash instead of the wasm blob when constructing a
+  transaction ([#1474](https://github.com/anoma/namada/pull/1474))
+- Fix a client block query to avoid seeing pre-committed blocks.
+  ([\#1534](https://github.com/anoma/namada/pull/1534))
 
 ### DOCS
 
 - Adds specs for gas and fee ([#889](https://github.com/anoma/namada/pull/889))
+
+### FEATURES
+
+- The implementation of the cubic slashing system that touches virtually all
+  parts of the proof-of-stake system. Slashes tokens are currently kept in the
+  PoS address rather than being transferred to the Slash Pool address. This PR
+  also includes significant testing infrastructure, highlighted by the PoS state
+  machine test with slashing. ([#892](https://github.com/anoma/namada/pull/892))
+- Implements HD wallet derivation / recovery from a given mnemonic code
+  ([\#1110](https://github.com/anoma/namada/pull/1110))
+- PoS: Added a client command `find-validator --tm-address <address>`
+  to find validator's Namada address by Tendermint address.
+  ([\#1344](https://github.com/anoma/namada/pull/1344))
+
+### IMPROVEMENTS
+
+- Make Namada transactions signable on hardware constrained wallets by making
+  them smaller. ([#1093](https://github.com/anoma/namada/pull/1093))
+- Added `multicore` feature flag to the namada and namada_core
+  crate that can be switched off for JS WASM build.
+  Additionally, changed the `trait ShieldedUtils` to be async.
+  ([\#1238](https://github.com/anoma/namada/pull/1238))
+- Zeroizes memory containing passphrases in wallet.
+  ([\#1425](https://github.com/anoma/namada/issues/1425))
+- Added some missing cli option for cli wallet
+  ([#1432](https://github.com/anoma/namada/pull/1432))
+- Improve logging error when submiting an invalid validator commission change tx
+  ([#1434](https://github.com/anoma/namada/pull/1434))
+- Correct a typo in the error change commission error handling
+  ([#1435](https://github.com/anoma/namada/pull/1435))
+- Improve the reveal tx naming in cli
+  ([#1436](https://github.com/anoma/namada/pull/1436))
+- Improve computations readability when calculating inflations
+  ([#1444](https://github.com/anoma/namada/pull/1444))
+- Remove abci++ dependencies ([#1449](https://github.com/anoma/namada/pull/1449))
+- Reorganize the structure of transactions
+  ([#1462](https://github.com/anoma/namada/pull/1462))
+- Improved log entries related to PoS system.
+  ([\#1509](https://github.com/anoma/namada/pull/1509))
 
 ## v0.16.0
 
@@ -23,6 +77,24 @@ crate may now be usefully linked into user
 applications). ([#925](https://github.com/anoma/namada/pull/925))
 - Bump RocksDB crate to 0.21.0 to address compilation errors on certain C++
   toolchains. ([#1366](https://github.com/anoma/namada/pull/1366))
+
+## v0.15.4
+
+Namada 0.15.4 is a maintenance release addressing the invalid creation of blocks due to missing replay protection checks during prepare 
+proposal.
+
+### BUG FIXES
+
+- Fixed a bug in `prepare_proposal` causing the creation
+  of blocks containing already applied transactions.
+  ([#1405](https://github.com/anoma/namada/pull/1405))
+
+### IMPROVEMENTS
+
+- Make Tendermint consensus paramenters configurable via Namada configuration.
+  ([#1399](https://github.com/anoma/namada/pull/1399))
+- Improved error logs in `process_proposal` and added more info to
+  `InternalStats` ([#1407](https://github.com/anoma/namada/pull/1407))
 
 ## v0.15.3
 

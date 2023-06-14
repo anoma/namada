@@ -9,7 +9,7 @@ use std::str::FromStr;
 use arse_merkle_tree::traits::Value;
 use arse_merkle_tree::{InternalKey, Key as TreeKey};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use data_encoding::BASE32HEX_NOPAD;
+use data_encoding::{BASE32HEX_NOPAD, HEXUPPER};
 use index_set::vec::VecIndexSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -208,6 +208,12 @@ impl From<BlockHeight> for u64 {
 )]
 pub struct BlockHash(pub [u8; BLOCK_HASH_LENGTH]);
 
+impl Display for BlockHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", HEXUPPER.encode(&self.0))
+    }
+}
+
 impl From<Hash> for BlockHash {
     fn from(hash: Hash) -> Self {
         BlockHash(hash.0)
@@ -284,7 +290,7 @@ impl core::fmt::Debug for BlockHash {
 
 /// The data from Tendermint header
 /// relevant for Namada storage
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, Default)]
 pub struct Header {
     /// Merkle root hash of block
     pub hash: Hash,
@@ -962,6 +968,16 @@ impl Epoch {
         let start_ix: u64 = self.into();
         let end_ix: u64 = start_ix + len;
         (start_ix..end_ix).map(Epoch::from)
+    }
+
+    /// Iterate a range of epochs, inclusive of the start and end.
+    pub fn iter_bounds_inclusive(
+        start: Self,
+        end: Self,
+    ) -> impl Iterator<Item = Epoch> + Clone {
+        let start_ix = start.0;
+        let end_ix = end.0;
+        (start_ix..=end_ix).map(Epoch::from)
     }
 
     /// Checked epoch subtraction. Computes self - rhs, returning None if

@@ -105,7 +105,7 @@ pub struct TestIbcVp<'a> {
 impl<'a> TestIbcVp<'a> {
     pub fn validate(
         &self,
-        tx_data: &[u8],
+        tx_data: &Tx,
     ) -> std::result::Result<bool, namada::ledger::ibc::vp::Error> {
         self.ibc.validate_tx(
             tx_data,
@@ -122,7 +122,7 @@ pub struct TestIbcTokenVp<'a> {
 impl<'a> TestIbcTokenVp<'a> {
     pub fn validate(
         &self,
-        tx_data: &[u8],
+        tx_data: &Tx,
     ) -> std::result::Result<bool, namada::ledger::ibc::vp::IbcTokenError> {
         self.token.validate_tx(
             tx_data,
@@ -164,7 +164,7 @@ pub fn validate_ibc_vp_from_tx<'a>(
     );
     let ibc = Ibc { ctx };
 
-    TestIbcVp { ibc }.validate(tx.data.as_ref().unwrap())
+    TestIbcVp { ibc }.validate(tx)
 }
 
 /// Validate the native token VP for the given address
@@ -200,7 +200,7 @@ pub fn validate_token_vp_from_tx<'a>(
     );
     let token = IbcToken { ctx };
 
-    TestIbcTokenVp { token }.validate(tx.data.as_ref().unwrap())
+    TestIbcTokenVp { token }.validate(tx)
 }
 
 /// Initialize the test storage. Requires initialized [`tx_host_env::ENV`].
@@ -233,7 +233,7 @@ pub fn init_storage() -> (Address, Address) {
     });
 
     // initialize a token
-    let token = tx::ctx().init_account(code_hash.clone()).unwrap();
+    let token = tx::ctx().init_account(code_hash).unwrap();
 
     // initialize an account
     let account = tx::ctx().init_account(code_hash).unwrap();

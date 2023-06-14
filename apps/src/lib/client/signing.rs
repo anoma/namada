@@ -5,10 +5,10 @@ use namada::ledger::rpc::TxBroadcastData;
 use namada::ledger::signing::TxSigningKey;
 use namada::ledger::tx;
 use namada::ledger::wallet::{Wallet, WalletUtils};
+use namada::proof_of_stake::Epoch;
 use namada::proto::Tx;
 use namada::types::address::Address;
 use namada::types::key::*;
-use namada::types::storage::Epoch;
 
 use crate::cli::args;
 
@@ -77,8 +77,12 @@ pub async fn sign_tx<
 /// Create a wrapper tx from a normal tx. Get the hash of the
 /// wrapper and its payload which is needed for monitoring its
 /// progress on chain.
-pub async fn sign_wrapper<C: namada::ledger::queries::Client + Sync>(
+pub async fn sign_wrapper<
+    C: namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
+    wallet: &mut Wallet<U>,
     args: &args::Tx,
     epoch: Epoch,
     tx: Tx,
@@ -87,6 +91,7 @@ pub async fn sign_wrapper<C: namada::ledger::queries::Client + Sync>(
 ) -> TxBroadcastData {
     namada::ledger::signing::sign_wrapper(
         client,
+        wallet,
         args,
         epoch,
         tx,

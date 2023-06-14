@@ -454,9 +454,9 @@ jobs:
       - name: Download masp parameters
         run: |
           mkdir /home/runner/work/masp
-          curl -o /home/runner/work/masp/masp-spend.params -sLO https://github.com/anoma/masp/blob/ef0ef75e81696ff4428db775c654fbec1b39c21f/masp-spend.params?raw=true
-          curl -o /home/runner/work/masp/masp-output.params -sLO https://github.com/anoma/masp/blob/ef0ef75e81696ff4428db775c654fbec1b39c21f/masp-output.params?raw=true
-          curl -o /home/runner/work/masp/masp-convert.params -sLO https://github.com/anoma/masp/blob/ef0ef75e81696ff4428db775c654fbec1b39c21f/masp-convert.params?raw=true
+          curl -o /home/runner/work/masp/masp-spend.params -sLO https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params?raw=true
+          curl -o /home/runner/work/masp/masp-output.params -sLO https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
+          curl -o /home/runner/work/masp/masp-convert.params -sLO https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
       - name: Build 
         run: make build
         env:
@@ -498,7 +498,7 @@ jobs:
           NAMADA_E2E_KEEP_TEMP: "true"
           NAMADA_TM_STDOUT: "false"
           NAMADA_LOG_COLOR: "false"
-          NAMADA_MASP_PARAMS_DIR: "/home/runner/work/masp"
+          # NAMADA_MASP_PARAMS_DIR: "/home/runner/work/masp"
           NAMADA_LOG: "info"
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
           INDEX: ${{ matrix.make.index }}

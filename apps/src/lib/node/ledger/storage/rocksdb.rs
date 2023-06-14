@@ -23,6 +23,7 @@
 //!       - `root`: root hash
 //!       - `store`: the tree's store
 //!     - `hash`: block hash
+//!     - `time`: block time
 //!     - `epoch`: block epoch
 //!     - `address_gen`: established address generator
 //!     - `header`: block's header
@@ -537,6 +538,19 @@ impl DB for RocksDB {
                 return Ok(None);
             }
         };
+        let update_epoch_blocks_delay: Option<u32> = match self
+            .0
+            .get_cf(state_cf, "update_epoch_blocks_delay")
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            None => {
+                tracing::error!(
+                    "Couldn't load epoch update block delay from the DB"
+                );
+                return Ok(None);
+            }
+        };
         let tx_queue: TxQueue = match self
             .0
             .get_cf(state_cf, "tx_queue")
@@ -557,6 +571,7 @@ impl DB for RocksDB {
         read_opts.set_iterate_upper_bound(next_height_prefix);
         let mut merkle_tree_stores = MerkleTreeStoresRead::default();
         let mut hash = None;
+        let mut time = None;
         let mut epoch = None;
         let mut pred_epochs = None;
         let mut address_gen = None;
@@ -605,6 +620,11 @@ impl DB for RocksDB {
                             types::decode(bytes).map_err(Error::CodingError)?,
                         )
                     }
+                    "time" => {
+                        time = Some(
+                            types::decode(bytes).map_err(Error::CodingError)?,
+                        )
+                    }
                     "epoch" => {
                         epoch = Some(
                             types::decode(bytes).map_err(Error::CodingError)?,
@@ -625,21 +645,27 @@ impl DB for RocksDB {
                 None => unknown_key_error(path)?,
             }
         }
-        match (hash, epoch, pred_epochs, address_gen) {
-            (Some(hash), Some(epoch), Some(pred_epochs), Some(address_gen)) => {
-                Ok(Some(BlockStateRead {
-                    merkle_tree_stores,
-                    hash,
-                    height,
-                    epoch,
-                    pred_epochs,
-                    results,
-                    next_epoch_min_start_height,
-                    next_epoch_min_start_time,
-                    address_gen,
-                    tx_queue,
-                }))
-            }
+        match (hash, time, epoch, pred_epochs, address_gen) {
+            (
+                Some(hash),
+                Some(time),
+                Some(epoch),
+                Some(pred_epochs),
+                Some(address_gen),
+            ) => Ok(Some(BlockStateRead {
+                merkle_tree_stores,
+                hash,
+                height,
+                time,
+                epoch,
+                pred_epochs,
+                results,
+                next_epoch_min_start_height,
+                next_epoch_min_start_time,
+                update_epoch_blocks_delay,
+                address_gen,
+                tx_queue,
+            })),
             _ => Err(Error::Temporary {
                 error: "Essential data couldn't be read from the DB"
                     .to_string(),
@@ -658,12 +684,14 @@ impl DB for RocksDB {
             header,
             hash,
             height,
+            time,
             epoch,
             pred_epochs,
-            results,
             next_epoch_min_start_height,
             next_epoch_min_start_time,
+            update_epoch_blocks_delay,
             address_gen,
+            results,
             tx_queue,
         }: BlockStateWrite = state;
 
@@ -704,6 +732,24 @@ impl DB for RocksDB {
             "next_epoch_min_start_time",
             types::encode(&next_epoch_min_start_time),
         );
+        if let Some(current_value) = self
+            .0
+            .get_cf(state_cf, "update_epoch_blocks_delay")
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            // Write the predecessor value for rollback
+            batch.0.put_cf(
+                state_cf,
+                "pred/update_epoch_blocks_delay",
+                current_value,
+            );
+        }
+        batch.0.put_cf(
+            state_cf,
+            "update_epoch_blocks_delay",
+            types::encode(&update_epoch_blocks_delay),
+        );
+
         // Tx queue
         if let Some(pred_tx_queue) = self
             .0
@@ -769,6 +815,15 @@ impl DB for RocksDB {
             batch
                 .0
                 .put_cf(block_cf, key.to_string(), types::encode(&hash));
+        }
+        // Block time
+        {
+            let key = prefix_key
+                .push(&"time".to_owned())
+                .map_err(Error::KeyError)?;
+            batch
+                .0
+                .put_cf(block_cf, key.to_string(), types::encode(&time));
         }
         // Block epoch
         {
@@ -1408,11 +1463,13 @@ mod test {
         let merkle_tree = MerkleTree::<Sha256Hasher>::default();
         let merkle_tree_stores = merkle_tree.stores();
         let hash = BlockHash::default();
+        let time = DateTimeUtc::now();
         let epoch = Epoch::default();
         let pred_epochs = Epochs::default();
         let height = BlockHeight::default();
         let next_epoch_min_start_height = BlockHeight::default();
         let next_epoch_min_start_time = DateTimeUtc::now();
+        let update_epoch_blocks_delay = None;
         let address_gen = EstablishedAddressGen::new("whatever");
         let tx_queue = TxQueue::default();
         let results = BlockResults::default();
@@ -1421,11 +1478,13 @@ mod test {
             header: None,
             hash: &hash,
             height,
+            time,
             epoch,
             results: &results,
             pred_epochs: &pred_epochs,
             next_epoch_min_start_height,
             next_epoch_min_start_time,
+            update_epoch_blocks_delay,
             address_gen: &address_gen,
             tx_queue: &tx_queue,
         };
