@@ -14,7 +14,9 @@ use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
-use namada::types::address::{wnam, Address};
+#[cfg(feature = "dev")]
+use namada::types::address::wnam;
+use namada::types::address::Address;
 #[cfg(not(feature = "dev"))]
 use namada::types::chain::ChainId;
 use namada::types::chain::ProposalBytes;

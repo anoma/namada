@@ -19,8 +19,6 @@ use namada_core::ledger::storage::write_log::StorageModification;
 use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
 use namada_core::proto::SignedTxData;
 use namada_core::types::address::{Address, InternalAddress};
-use namada_core::types::dec::Dec;
-use namada_core::types::key::testing::common_sk_from_simple_seed;
 use namada_core::types::storage::Key;
 use namada_proof_of_stake::read_pos_params;
 use thiserror::Error;
@@ -229,6 +227,8 @@ pub fn get_dummy_header() -> crate::types::storage::Header {
 pub fn get_dummy_genesis_validator()
 -> namada_proof_of_stake::types::GenesisValidator {
     use crate::core::types::address::testing::established_address_1;
+    use crate::core::types::dec::Dec;
+    use crate::core::types::key::testing::common_sk_from_simple_seed;
     use crate::types::key;
     use crate::types::token::Amount;
 
