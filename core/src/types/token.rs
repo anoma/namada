@@ -714,7 +714,8 @@ impl TryFrom<IbcAmount> for Amount {
         // IBCAMOUNT::MAX OR SIMILAR) if amount > u64::MAX.into() {
         //    return Err(AmountParseError::InvalidRange);
         //}
-        DenominatedAmount::from_str(&amount.to_string()).map(|a| a.amount)
+        DenominatedAmount::from_str(&amount.to_string())
+            .map(|a| a.amount * NATIVE_SCALE)
     }
 }
 
@@ -913,8 +914,8 @@ pub fn is_any_multitoken_balance_key(
     }
 }
 
-/// Check if the given storage key is token or multitoken balance key for unspecified
-/// token. If it is, returns the token and owner addresses.
+/// Check if the given storage key is token or multitoken balance key for
+/// unspecified token. If it is, returns the token and owner addresses.
 pub fn is_any_token_or_multitoken_balance_key(
     key: &Key,
 ) -> Option<[&Address; 2]> {

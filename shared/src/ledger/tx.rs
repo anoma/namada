@@ -462,7 +462,7 @@ pub fn decode_component<K, F>(
     K: Eq + std::hash::Hash,
 {
     let decoded_change = token::Change::from_masp_denominated(val, denom)
-            .expect("expected this to fit");
+        .expect("expected this to fit");
 
     res.entry(mk_key(addr, sub, epoch))
         .and_modify(|val| *val += decoded_change)
@@ -796,7 +796,7 @@ pub async fn submit_unbond<
                 println!(
                     "Amount {} withdrawable starting from epoch {}",
                     latest_withdraw_amount_post.to_string_native(),
-                    latest_withdraw_epoch_post.to_string()
+                    latest_withdraw_epoch_post,
                 );
             }
         }
@@ -804,7 +804,7 @@ pub async fn submit_unbond<
         println!(
             "Amount {} withdrawable starting from epoch {}",
             latest_withdraw_amount_post.to_string_native(),
-            latest_withdraw_epoch_post.to_string()
+            latest_withdraw_epoch_post,
         );
     }
 
@@ -951,10 +951,14 @@ pub async fn submit_ibc_transfer<
         Some(sp) => sp.to_string().replace(RESERVED_ADDRESS_PREFIX, ""),
         None => token.to_string(),
     };
-    let token = Coin {
-        denom,
-        amount: args.amount.to_string_native(),
-    };
+    let amount = args
+        .amount
+        .to_string_native()
+        .split('.')
+        .next()
+        .expect("invalid amount")
+        .to_string();
+    let token = Coin { denom, amount };
 
     // this height should be that of the destination chain, not this chain
     let timeout_height = match args.timeout_height {
@@ -1055,7 +1059,7 @@ pub async fn submit_transfer<
 
     // validate the amount given
     let validated_amount =
-        validate_amount(client, args.amount, &token, &sub_prefix, args.tx.force)
+        validate_amount(client, args.amount, token, &sub_prefix, args.tx.force)
             .await
             .expect("expected to validate amount");
     let validate_fee = validate_amount(

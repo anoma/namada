@@ -293,7 +293,7 @@ pub async fn query_transparent_balance<
     let tokens = wallet.get_addresses_with_vp_type(AddressVpType::Token);
     match (args.token, args.owner) {
         (Some(token), Some(owner)) => {
-            let (_balance_key, sub_prefix) = match &args.sub_prefix {
+            let (balance_key, sub_prefix) = match &args.sub_prefix {
                 Some(sub_prefix) => {
                     let sub_prefix = Key::parse(sub_prefix).unwrap();
                     let prefix =
@@ -312,8 +312,9 @@ pub async fn query_transparent_balance<
                 ),
             };
             let token_alias = lookup_alias(wallet, &token);
-            let key = token::balance_key(&token, &owner.address().unwrap());
-            match query_storage_value::<C, token::Amount>(&client, &key).await {
+            match query_storage_value::<C, token::Amount>(client, &balance_key)
+                .await
+            {
                 Some(balance) => {
                     let balance = format_denominated_amount(
                         client,
@@ -453,7 +454,7 @@ pub async fn query_pinned_balance<
                 println!("Payment address {} has not yet been consumed.", owner)
             }
             (Ok((balance, epoch)), Some(token), sub_prefix) => {
-                let token_alias = lookup_alias(wallet, &token);
+                let token_alias = lookup_alias(wallet, token);
 
                 let token_address = TokenAddress {
                     address: token.clone(),
@@ -785,7 +786,7 @@ pub async fn query_shielded_balance<
                 ExtendedFullViewingKey::from(viewing_keys[0]).fvk.vk;
             let balance: MaspAmount = if no_conversions {
                 shielded
-                    .compute_shielded_balance(&client, &viewing_key)
+                    .compute_shielded_balance(client, &viewing_key)
                     .await
                     .expect("context should contain viewing key")
             } else {
@@ -833,7 +834,7 @@ pub async fn query_shielded_balance<
                 let viewing_key = ExtendedFullViewingKey::from(fvk).fvk.vk;
                 let balance = if no_conversions {
                     shielded
-                        .compute_shielded_balance(&client, &viewing_key)
+                        .compute_shielded_balance(client, &viewing_key)
                         .await
                         .expect("context should contain viewing key")
                 } else {
@@ -971,7 +972,7 @@ pub async fn query_shielded_balance<
                 let viewing_key = ExtendedFullViewingKey::from(fvk).fvk.vk;
                 let balance = if no_conversions {
                     shielded
-                        .compute_shielded_balance(&client, &viewing_key)
+                        .compute_shielded_balance(client, &viewing_key)
                         .await
                         .expect("context should contain viewing key")
                 } else {
@@ -1008,18 +1009,14 @@ pub async fn query_shielded_balance<
                 ExtendedFullViewingKey::from(viewing_keys[0]).fvk.vk;
             if no_conversions {
                 let balance = shielded
-                    .compute_shielded_balance(&client, &viewing_key)
+                    .compute_shielded_balance(client, &viewing_key)
                     .await
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
                 print_decoded_balance_with_epoch(client, wallet, balance).await;
             } else {
                 let balance = shielded
-                    .compute_exchanged_balance(
-                        client.clone(),
-                        &viewing_key,
-                        epoch,
-                    )
+                    .compute_exchanged_balance(client, &viewing_key, epoch)
                     .await
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
