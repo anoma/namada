@@ -167,8 +167,8 @@ package() {
         --unsafe-dont-encrypt
 
     # get the directory of this script
-    export SCRIPT_DIR="$(dirname $0)"
-    export NAMADA_NETWORK_CONFIG_PATH="${CHAIN_DIR}/network-config-processed.toml"
+    SCRIPT_DIR="$(dirname $0)"
+    NAMADA_NETWORK_CONFIG_PATH="${CHAIN_DIR}/network-config-processed.toml"
     $SCRIPT_DIR/utils/add_validator_shard.py $BASE_DIR/pre-genesis/$ALIAS/validator.toml $NETWORK_CONFIG_PATH >$NAMADA_NETWORK_CONFIG_PATH
 
     python3 wasm/checksums.py
@@ -189,7 +189,7 @@ package() {
     # clean up the http server when the script exits
     trap cleanup EXIT
 
-    NAMADA_NETWORK_CONFIGS_SERVER='http://localhost:8123'
+    export NAMADA_NETWORK_CONFIGS_SERVER='http://localhost:8123'
     nohup bash -c "python3 -m http.server --directory ${CHAIN_DIR} 8123 &" &&
         sleep 2 &&
         $NAMADA_BIN_DIR/namadac --base-dir $BASE_DIR utils join-network \
