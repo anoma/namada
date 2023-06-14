@@ -9,9 +9,7 @@ pub use types::Client;
 pub use types::{
     EncodedResponseQuery, RequestCtx, RequestQuery, ResponseQuery, Router,
 };
-use vp::VP;
-// Re-export to show in rustdoc!
-pub use vp::{Pos, Vp};
+use vp::{Vp, VP};
 
 use super::storage::{DBIter, StorageHasher, DB};
 use super::storage_api;
@@ -22,7 +20,7 @@ use crate::types::storage::BlockHeight;
 mod router;
 mod shell;
 mod types;
-mod vp;
+pub mod vp;
 
 // Most commonly expected patterns should be declared first
 router! {RPC,
