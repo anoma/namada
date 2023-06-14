@@ -50,12 +50,12 @@ set +x
 IFS=$'\n\t'
 
 show_help() {
-    echo "Usage: script.sh <config_toml> <base_dir> <namada_dir>"
+    echo "Usage: script.sh <config_toml> <namada_dir> OPTIONAL:<base_dir>"
     echo ""
     echo "Arguments:"
     echo "  config_toml - The path to a network config toml compatible with the version of Namada being used"
-    echo "  base_dir - The path to the base directory (BASE_DIR), which is the directory where the chain's information will be stored"
     echo "  namada_dir - The path to the directory containing the Namada binaries"
+    echo "  base_dir - The path to the base directory (BASE_DIR), which is the directory where the chain's information will be stored. If the default base dir has not been changed, this does not need to be provided."
     echo ""
 }
 
@@ -140,14 +140,11 @@ validate_arguments() {
     check_wasm_files
 
     if [ "$#" -eq 2 ]; then
-        BASE_DIR=$(echo $NAMADA_BIN_DIR/namadac utils default-base-dir)
+        BASE_DIR=$($NAMADA_BIN_DIR/namadac utils default-base-dir)
         echo "Using default BASE_DIR: $BASE_DIR"
     else [ "$#" -eq 3 ];
         BASE_DIR=$3
     fi
-
-
-    exit 1
 }
 
 package() {
@@ -170,8 +167,8 @@ package() {
         --unsafe-dont-encrypt
 
     # get the directory of this script
-    SCRIPT_DIR="$(dirname $0)"
-    NAMADA_NETWORK_CONFIG_PATH="${CHAIN_DIR}/network-config-processed.toml"
+    export SCRIPT_DIR="$(dirname $0)"
+    export NAMADA_NETWORK_CONFIG_PATH="${CHAIN_DIR}/network-config-processed.toml"
     $SCRIPT_DIR/utils/add_validator_shard.py $BASE_DIR/pre-genesis/$ALIAS/validator.toml $NETWORK_CONFIG_PATH >$NAMADA_NETWORK_CONFIG_PATH
 
     python3 wasm/checksums.py
