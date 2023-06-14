@@ -14,7 +14,7 @@ use thiserror::Error;
 use super::dec::POS_DECIMAL_PRECISION;
 use crate::ibc::applications::transfer::Amount as IbcAmount;
 use crate::ledger::storage_api::token::read_denom;
-use crate::ledger::storage_api::StorageRead;
+use crate::ledger::storage_api::{self, StorageRead};
 use crate::types::address::{masp, Address, DecodeError as AddressError};
 use crate::types::dec::Dec;
 use crate::types::storage;
@@ -193,13 +193,22 @@ impl Amount {
         token: &Address,
         sub_prefix: Option<&Key>,
         storage: &impl StorageRead,
-    ) -> Option<DenominatedAmount> {
-        let denom = read_denom(storage, token, sub_prefix)
-            .expect("Should be able to read storage");
-        denom.map(|denom| DenominatedAmount {
+    ) -> storage_api::Result<DenominatedAmount> {
+        let denom = read_denom(storage, token, sub_prefix)?.ok_or_else(|| {
+            storage_api::Error::SimpleMessage(
+                "No denomination found in storage for the given token",
+            )
+        })?;
+        Ok(DenominatedAmount {
             amount: *self,
             denom,
         })
+    }
+
+    /// Return a denominated native token amount.
+    #[inline]
+    pub const fn native_denominated(self) -> DenominatedAmount {
+        DenominatedAmount::native(self)
     }
 
     /// Convert to an [`Amount`] under the assumption that the input
@@ -264,6 +273,14 @@ pub struct DenominatedAmount {
 }
 
 impl DenominatedAmount {
+    /// Return a denominated native token amount.
+    pub const fn native(amount: Amount) -> Self {
+        Self {
+            amount,
+            denom: Denomination(NATIVE_MAX_DECIMAL_PLACES),
+        }
+    }
+
     /// A precise string representation. The number of
     /// decimal places in this string gives the denomination.
     /// This not true of the string produced by the `Display`

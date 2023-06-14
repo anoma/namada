@@ -22,7 +22,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
         &bridge_pool::BRIDGE_POOL_ADDRESS,
         &address::nam(),
         None,
-        amount,
+        amount.native_denominated(),
         &None,
         &None,
     )?;
@@ -41,19 +41,24 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
             &eth_bridge::ADDRESS,
             &address::nam(),
             None,
-            amount,
+            amount.native_denominated(),
             &None,
             &None,
         )?;
     } else {
         // Otherwise we escrow ERC20 tokens.
-        let sub_prefix = wrapped_erc20s::sub_prefix(&asset);
+        let sub_prefix = Some(wrapped_erc20s::sub_prefix(&asset));
+        let amount = amount.denominated(
+            &eth_bridge::ADDRESS,
+            sub_prefix.as_ref(),
+            ctx,
+        )?;
         token::transfer(
             ctx,
             sender,
             &bridge_pool::BRIDGE_POOL_ADDRESS,
             &eth_bridge::ADDRESS,
-            Some(sub_prefix),
+            sub_prefix,
             amount,
             &None,
             &None,

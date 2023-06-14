@@ -133,7 +133,10 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
     assert_eq!(dai_supply, Some(transfer_amount));
 
     // let's transfer them back to Ethereum
-    let amount = transfer_amount.to_string();
+    let amount = token::DenominatedAmount {
+        amount: transfer_amount,
+        denom: 0u8.into(),
+    }.to_string();
     let dai_addr = DAI_ERC20_ETH_ADDRESS.to_string();
     let tx_args = vec![
         "add-erc20-transfer",
@@ -224,7 +227,7 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
             amount: transfer_amount,
             asset: DAI_ERC20_ETH_ADDRESS,
             receiver: EthAddress::from_str(RECEIVER).expect("Test failed"),
-            gas_amount: Amount::whole(10),
+            gas_amount: Amount::native_whole(10),
             sender: berthas_addr.clone(),
             gas_payer: berthas_addr.clone(),
         }],
@@ -445,10 +448,10 @@ async fn test_bridge_pool_e2e() {
     let transfers = EthereumEvent::TransfersToEthereum {
         nonce: 0.into(),
         transfers: vec![TransferToEthereum {
-            amount: Amount::whole(100),
+            amount: Amount::native_whole(100),
             asset: EthAddress::from_str(&wnam_address).expect("Test failed"),
             receiver: EthAddress::from_str(RECEIVER).expect("Test failed"),
-            gas_amount: Amount::whole(10),
+            gas_amount: Amount::native_whole(10),
             sender: berthas_addr.clone(),
             gas_payer: berthas_addr.clone(),
         }],
@@ -522,7 +525,7 @@ async fn test_wnam_transfer() -> Result<()> {
                 .balances
                 .as_mut()
                 .unwrap()
-                .insert(BRIDGE_ADDRESS.to_string(), BRIDGE_INITIAL_NAM_BALANCE);
+                .insert(BRIDGE_ADDRESS.to_string(), BRIDGE_INITIAL_NAM_BALANCE.into());
             genesis
         },
         None,
@@ -761,7 +764,10 @@ async fn test_wdai_transfer_implicit_unauthorized() -> Result<()> {
         &albert_addr.to_string(),
         &bertha_addr.to_string(),
         &bertha_addr.to_string(),
-        &token::Amount::from(10_000),
+        &token::DenominatedAmount {
+            amount: token::Amount::from(10_000),
+            denom: 0u8.into(),
+        },
     )?;
     cmd.exp_string("Transaction is valid.")?;
     cmd.exp_string("Transaction is invalid.")?;
@@ -828,7 +834,10 @@ async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
         &albert_established_addr.to_string(),
         &bertha_addr.to_string(),
         &bertha_addr.to_string(),
-        &token::Amount::from(10_000),
+        &token::DenominatedAmount {
+            amount: token::Amount::from(10_000),
+            denom: 0u8.into(),
+        },
     )?;
     cmd.exp_string("Transaction is valid.")?;
     cmd.exp_string("Transaction is invalid.")?;
@@ -875,7 +884,10 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
     // attempt a transfer from Albert to Bertha that should succeed, as it's
     // signed with Albert's key
     let bertha_addr = find_address(&test, BERTHA)?;
-    let second_transfer_amount = token::Amount::from(10_000);
+    let second_transfer_amount = &token::DenominatedAmount {
+        amount: token::Amount::from(10_000),
+        denom: 0u8.into(),
+    };
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
         &Who::Validator(0),
@@ -883,7 +895,7 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
         &albert_addr.to_string(),
         &bertha_addr.to_string(),
         &albert_addr.to_string(),
-        &second_transfer_amount,
+        second_transfer_amount,
     )?;
     cmd.exp_string("Transaction is valid.")?;
     cmd.exp_string("Transaction is valid.")?;
@@ -897,7 +909,7 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
     )?;
     assert_eq!(
         albert_wdai_balance,
-        initial_transfer_amount - second_transfer_amount
+        initial_transfer_amount - second_transfer_amount.amount
     );
 
     let bertha_wdai_balance = find_wrapped_erc20_balance(
@@ -906,7 +918,7 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
         &DAI_ERC20_ETH_ADDRESS,
         &bertha_addr,
     )?;
-    assert_eq!(bertha_wdai_balance, second_transfer_amount);
+    assert_eq!(bertha_wdai_balance, second_transfer_amount.amount);
 
     Ok(())
 }
@@ -950,7 +962,10 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
 
     // attempt a transfer from Albert to Bertha that should succeed, as it's
     // signed with Albert's key
-    let second_transfer_amount = token::Amount::from(10_000);
+    let second_transfer_amount = &token::DenominatedAmount {
+        amount: token::Amount::from(10_000),
+        denom: 0u8.into(),
+    };
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
         &Who::Validator(0),
@@ -958,7 +973,7 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
         &albert_addr.to_string(),
         &bertha_established_addr.to_string(),
         &albert_addr.to_string(),
-        &second_transfer_amount,
+        second_transfer_amount,
     )?;
     cmd.exp_string("Transaction is valid.")?;
     cmd.exp_string("Transaction is valid.")?;
@@ -972,7 +987,7 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
     )?;
     assert_eq!(
         albert_wdai_balance,
-        initial_transfer_amount - second_transfer_amount
+        initial_transfer_amount - second_transfer_amount.amount
     );
 
     let bertha_established_wdai_balance = find_wrapped_erc20_balance(
@@ -981,7 +996,7 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
         &DAI_ERC20_ETH_ADDRESS,
         &bertha_established_addr,
     )?;
-    assert_eq!(bertha_established_wdai_balance, second_transfer_amount);
+    assert_eq!(bertha_established_wdai_balance, second_transfer_amount.amount);
 
     Ok(())
 }
@@ -1025,7 +1040,10 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
 
     // attempt a transfer from Albert to Bertha that should succeed, as it's
     // signed with Albert's key
-    let second_transfer_amount = token::Amount::from(10_000);
+    let second_transfer_amount = &token::DenominatedAmount {
+        amount: token::Amount::from(10_000),
+        denom: 0u8.into(),
+    };
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
         &Who::Validator(0),
@@ -1033,7 +1051,7 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
         &albert_established_addr.to_string(),
         &bertha_addr.to_string(),
         &albert_established_addr.to_string(),
-        &second_transfer_amount,
+        second_transfer_amount,
     )?;
     cmd.exp_string("Transaction is valid.")?;
     cmd.exp_string("Transaction is valid.")?;
@@ -1047,7 +1065,7 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
     )?;
     assert_eq!(
         albert_established_wdai_balance,
-        initial_transfer_amount - second_transfer_amount
+        initial_transfer_amount - second_transfer_amount.amount
     );
 
     let bertha_wdai_balance = find_wrapped_erc20_balance(
@@ -1056,7 +1074,7 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
         &DAI_ERC20_ETH_ADDRESS,
         &bertha_addr,
     )?;
-    assert_eq!(bertha_wdai_balance, second_transfer_amount);
+    assert_eq!(bertha_wdai_balance, second_transfer_amount.amount);
 
     // TODO: invalid transfer
 
@@ -1112,7 +1130,10 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
 
     // attempt a transfer from Albert to Bertha that should succeed, as it's
     // signed with Albert's key
-    let second_transfer_amount = token::Amount::from(10_000);
+    let second_transfer_amount = &token::DenominatedAmount {
+        amount: token::Amount::from(10_000),
+        denom: 0u8.into(),
+    };
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
         &Who::Validator(0),
@@ -1120,7 +1141,7 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
         &albert_established_addr.to_string(),
         &bertha_established_addr.to_string(),
         &albert_established_addr.to_string(),
-        &second_transfer_amount,
+        second_transfer_amount,
     )?;
     cmd.exp_string("Transaction is valid.")?;
     cmd.exp_string("Transaction is valid.")?;
@@ -1134,7 +1155,7 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
     )?;
     assert_eq!(
         albert_established_wdai_balance,
-        initial_transfer_amount - second_transfer_amount
+        initial_transfer_amount - second_transfer_amount.amount
     );
 
     let bertha_established_wdai_balance = find_wrapped_erc20_balance(
@@ -1143,7 +1164,7 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
         &DAI_ERC20_ETH_ADDRESS,
         &bertha_established_addr,
     )?;
-    assert_eq!(bertha_established_wdai_balance, second_transfer_amount);
+    assert_eq!(bertha_established_wdai_balance, second_transfer_amount.amount);
 
     // TODO: invalid transfer
 
