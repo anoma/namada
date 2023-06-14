@@ -3087,6 +3087,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "impl-num-traits"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "951641f13f873bff03d4bf19ae8bec531935ac0ac2cc775f84d7edfdcfed3f17"
+dependencies = [
+ "integer-sqrt",
+ "num-traits",
+ "uint",
+]
+
+[[package]]
 name = "impl-rlp"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3169,6 +3180,15 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
  "web-sys",
+]
+
+[[package]]
+name = "integer-sqrt"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "276ec31bcb4a9ee45f58bec6f9ec700ae4cf4f4f8f2fa7e06cb406bd5ffdd770"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -3390,7 +3410,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "0.5.0"
-source = "git+https://github.com/anoma/masp?rev=bee40fc465f6afbd10558d12fe96eb1742eee45c#bee40fc465f6afbd10558d12fe96eb1742eee45c"
+source = "git+https://github.com/anoma/masp?rev=ea4fcc68d9412b94042c1c2f0ea0212394e1be37#ea4fcc68d9412b94042c1c2f0ea0212394e1be37"
 dependencies = [
  "aes 0.7.5",
  "bip0039",
@@ -3423,7 +3443,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "0.5.0"
-source = "git+https://github.com/anoma/masp?rev=bee40fc465f6afbd10558d12fe96eb1742eee45c#bee40fc465f6afbd10558d12fe96eb1742eee45c"
+source = "git+https://github.com/anoma/masp?rev=ea4fcc68d9412b94042c1c2f0ea0212394e1be37#ea4fcc68d9412b94042c1c2f0ea0212394e1be37"
 dependencies = [
  "bellman",
  "blake2b_simd 1.0.0",
@@ -3631,8 +3651,6 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rayon",
- "rust_decimal",
- "rust_decimal_macros",
  "serde",
  "serde_json",
  "sha2 0.9.9",
@@ -3678,11 +3696,13 @@ dependencies = [
  "ibc",
  "ibc-proto 0.26.0",
  "ics23",
+ "impl-num-traits",
  "index-set",
  "itertools",
  "libsecp256k1",
  "masp_primitives",
  "namada_macros",
+ "num-integer",
  "num-rational 0.4.1",
  "num-traits",
  "num256",
@@ -3692,8 +3712,6 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rayon",
- "rust_decimal",
- "rust_decimal_macros",
  "serde",
  "serde_json",
  "sha2 0.9.9",
@@ -3704,6 +3722,7 @@ dependencies = [
  "tiny-keccak",
  "tonic-build",
  "tracing",
+ "uint",
  "zeroize",
 ]
 
@@ -3749,8 +3768,6 @@ dependencies = [
  "namada_core",
  "once_cell",
  "proptest",
- "rust_decimal",
- "rust_decimal_macros",
  "thiserror",
  "tracing",
 ]
@@ -3780,8 +3797,6 @@ dependencies = [
  "namada_vp_prelude",
  "prost",
  "regex",
- "rust_decimal",
- "rust_decimal_macros",
  "serde_json",
  "sha2 0.9.9",
  "tempfile",
@@ -3805,7 +3820,6 @@ dependencies = [
  "namada_macros",
  "namada_proof_of_stake",
  "namada_vm_env",
- "rust_decimal",
  "sha2 0.10.6",
  "thiserror",
 ]
@@ -6543,9 +6557,9 @@ checksum = "9e79c4d996edb816c91e4308506774452e55e95c3c9de07b6729e17e15a5ef81"
 
 [[package]]
 name = "uint"
-version = "0.9.4"
+version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a45526d29728d135c2900b0d30573fe3ee79fceb12ef534c7bb30e810a91b601"
+checksum = "76f64bba2c53b04fcab63c01a7d7427eadc821e3bc48c34dc9ba29c501164b52"
 dependencies = [
  "byteorder",
  "crunchy 0.2.2",
