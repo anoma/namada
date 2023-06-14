@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
-use namada::types::address::{btc, eth, masp_rewards, Address};
+use namada::types::address::{masp_rewards, Address};
 use namada::types::governance::ProposalType;
 use namada::types::storage::Epoch;
 use namada::types::token;
@@ -1033,7 +1033,7 @@ fn masp_incentives() -> Result<()> {
                     (token.clone(), {
                         let parameters =
                             account_config.parameters.map(|parameters| {
-                                if token == String::from(NAM) {
+                                if token == *NAM {
                                     Parameters {
                                         max_reward_rate: dec!(1000.5),
                                         // these need to be set to 0
@@ -1096,7 +1096,7 @@ fn masp_incentives() -> Result<()> {
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     // Wait till epoch boundary
-    let ep0 = epoch_sleep(&test, &validator_one_rpc, 7200000)?;
+    let _ep0 = epoch_sleep(&test, &validator_one_rpc, 7200000)?;
 
     // Send 200000 BTC from Albert to PA(A)
     let mut client = run!(
@@ -1156,10 +1156,10 @@ fn masp_incentives() -> Result<()> {
     client.exp_string("No shielded nam balance found")?;
     client.assert_success();
 
-    let masp_rewards = masp_rewards();
+    let _masp_rewards = masp_rewards();
 
     // Wait till epoch boundary
-    let ep1 = epoch_sleep(&test, &validator_one_rpc, 7200000)?;
+    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 7200000)?;
 
     // Assert BTC balance at VK(A) is 200000
     let mut client = run!(
@@ -1179,8 +1179,8 @@ fn masp_incentives() -> Result<()> {
     client.exp_string("btc: 200000")?;
     client.assert_success();
 
-    let amt200000 = token::Amount::from_str("200000").unwrap();
-    let amt30 = token::Amount::from_str("30").unwrap();
+    let _amt200000 = token::Amount::from_str("200000").unwrap();
+    let _amt30 = token::Amount::from_str("30").unwrap();
 
     // Assert NAM balance at VK(A) is 200000*BTC_reward*(epoch_1-epoch_0)
 
@@ -1229,7 +1229,7 @@ fn masp_incentives() -> Result<()> {
     client.assert_success();
 
     // Wait till epoch boundary
-    let ep2 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let _ep2 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
     // Assert BTC balance at VK(A) is 20
     let mut client = run!(
