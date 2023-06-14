@@ -53,7 +53,7 @@ use storage::{
     bonds_for_source_prefix, bonds_prefix, consensus_keys_key,
     decimal_mult_amount, get_validator_address_from_bond, into_tm_voting_power,
     is_bond_key, is_unbond_key, is_validator_slashes_key,
-    last_block_proposer_key, mult_change_to_amount, params_key, slashes_prefix,
+    last_block_proposer_key, params_key, slashes_prefix,
     unbonds_for_source_prefix, unbonds_prefix, validator_address_raw_hash_key,
     validator_last_slash_key, validator_max_commission_rate_change_key,
     BondDetails, BondsAndUnbondsDetail, BondsAndUnbondsDetails,
@@ -2584,6 +2584,7 @@ where
         let validator = bond_id.validator.clone();
         let (bonds, _unbonds) = bonds_and_unbonds.entry(bond_id).or_default();
         bonds.push(make_bond_details(
+            params,
             &validator,
             change,
             start,
@@ -2647,6 +2648,7 @@ where
         .filter(|(_start, change)| *change > token::Change::default())
         .map(|(start, change)| {
             make_bond_details(
+                params,
                 &validator,
                 change,
                 start,
@@ -2679,8 +2681,8 @@ where
     Ok(HashMap::from_iter([(bond_id, details)]))
 }
 
-// TODO: check carefully for validity
 fn make_bond_details(
+    params: &PosParams,
     validator: &Address,
     change: token::Change,
     start: Epoch,
@@ -2693,28 +2695,30 @@ fn make_bond_details(
         .cloned()
         .unwrap_or_default();
     let amount = token::Amount::from_change(change);
-    let slashed_amount =
-        slashes
-            .iter()
-            .fold(None, |acc: Option<token::Amount>, slash| {
-                if slash.epoch >= start {
-                    let validator_slashes =
-                        applied_slashes.entry(validator.clone()).or_default();
-                    if !prev_applied_slashes
-                        .iter()
-                        .any(|s| s.clone() == slash.clone())
-                    {
-                        validator_slashes.push(slash.clone());
-                    }
-                    return Some(
-                        acc.unwrap_or_default()
-                            + mult_change_to_amount(slash.rate, change),
-                    );
-                }
-                acc
-            });
-    let slashed_amount =
-        slashed_amount.map(|slashed| cmp::min(amount, slashed));
+    let mut slash_rates_by_epoch = BTreeMap::<Epoch, Decimal>::new();
+
+    let validator_slashes =
+        applied_slashes.entry(validator.clone()).or_default();
+    for slash in slashes {
+        if slash.epoch >= start {
+            let cur_rate = slash_rates_by_epoch.entry(slash.epoch).or_default();
+            *cur_rate = cmp::min(Decimal::ONE, *cur_rate + slash.rate);
+
+            if !prev_applied_slashes.iter().any(|s| s == slash) {
+                validator_slashes.push(slash.clone());
+            }
+        }
+    }
+
+    let slashed_amount = if slash_rates_by_epoch.is_empty() {
+        None
+    } else {
+        let amount_after_slashing = token::Amount::from_change(
+            get_slashed_amount(params, amount, &slash_rates_by_epoch).unwrap(),
+        );
+        Some(amount - amount_after_slashing)
+    };
+
     BondDetails {
         start,
         amount,
@@ -2722,7 +2726,6 @@ fn make_bond_details(
     }
 }
 
-// TODO: check carefully for validity
 fn make_unbond_details(
     params: &PosParams,
     validator: &Address,
@@ -2736,37 +2739,38 @@ fn make_unbond_details(
         .get(validator)
         .cloned()
         .unwrap_or_default();
-    // TODO: checks bounds for considering valid unbond with slash!
-    let slashed_amount =
-        slashes
-            .iter()
-            .fold(None, |acc: Option<token::Amount>, slash| {
-                if slash.epoch >= start
-                    && slash.epoch
-                        < withdraw
-                            .checked_sub(Epoch(
-                                params.unbonding_len
-                                    + params.cubic_slashing_window_length,
-                            ))
-                            .unwrap_or_default()
-                {
-                    let validator_slashes =
-                        applied_slashes.entry(validator.clone()).or_default();
-                    if !prev_applied_slashes
-                        .iter()
-                        .any(|s| s.clone() == slash.clone())
-                    {
-                        validator_slashes.push(slash.clone());
-                    }
-                    return Some(
-                        acc.unwrap_or_default()
-                            + decimal_mult_amount(slash.rate, amount),
-                    );
-                }
-                acc
-            });
-    let slashed_amount =
-        slashed_amount.map(|slashed| cmp::min(amount, slashed));
+    let mut slash_rates_by_epoch = BTreeMap::<Epoch, Decimal>::new();
+
+    let validator_slashes =
+        applied_slashes.entry(validator.clone()).or_default();
+    for slash in slashes {
+        if slash.epoch >= start
+            && slash.epoch
+                < withdraw
+                    .checked_sub(Epoch(
+                        params.unbonding_len
+                            + params.cubic_slashing_window_length,
+                    ))
+                    .unwrap_or_default()
+        {
+            let cur_rate = slash_rates_by_epoch.entry(slash.epoch).or_default();
+            *cur_rate = cmp::min(Decimal::ONE, *cur_rate + slash.rate);
+
+            if !prev_applied_slashes.iter().any(|s| s == slash) {
+                validator_slashes.push(slash.clone());
+            }
+        }
+    }
+
+    let slashed_amount = if slash_rates_by_epoch.is_empty() {
+        None
+    } else {
+        let amount_after_slashing = token::Amount::from_change(
+            get_slashed_amount(params, amount, &slash_rates_by_epoch).unwrap(),
+        );
+        Some(amount - amount_after_slashing)
+    };
+
     UnbondDetails {
         start,
         withdraw,
