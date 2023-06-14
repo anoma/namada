@@ -20,7 +20,7 @@ build:
 	$(cargo) build
 
 build-test:
-	$(cargo) +$(nightly) build --tests -Z unstable-options
+	$(cargo) build --tests
 
 build-release:
 	NAMADA_DEV=false $(cargo) build --release --package namada_apps --manifest-path Cargo.toml
@@ -109,18 +109,14 @@ audit:
 
 test: test-unit test-e2e test-wasm
 
-# NOTE: `unstable-options` are used twice for all unit tests - 1st to compile 
-# with allowing to use unstable features in test, 2nd to run with `report-time`
 test-unit-coverage:
 	$(cargo) +$(nightly) llvm-cov --output-dir target \
 		--features namada/testing \
 		--html \
-		-Z unstable-options \
 		-- --skip e2e -Z unstable-options --report-time
 
 test-e2e:
-	RUST_BACKTRACE=1 $(cargo) test e2e \
-		-Z unstable-options \
+	RUST_BACKTRACE=1 $(cargo) +$(nightly) test e2e \
 		-- \
 		--test-threads=1 \
 		-Z unstable-options --report-time
@@ -130,35 +126,30 @@ test-unit-abcipp:
 		--manifest-path ./apps/Cargo.toml \
 		--no-default-features \
 		--features "testing std abcipp" \
-		-Z unstable-options \
 		$(TEST_FILTER) -- \
 		-Z unstable-options --report-time && \
 	$(cargo) test \
 		--manifest-path \
 		./proof_of_stake/Cargo.toml \
 		--features "testing" \
-		-Z unstable-options \
 		$(TEST_FILTER) -- \
 		-Z unstable-options --report-time && \
 	$(cargo) test \
 		--manifest-path ./shared/Cargo.toml \
 		--no-default-features \
 		--features "testing wasm-runtime abcipp ibc-mocks-abcipp" \
-		-Z unstable-options \
 		$(TEST_FILTER) -- \
 		-Z unstable-options --report-time && \
 	$(cargo) test \
 		--manifest-path ./vm_env/Cargo.toml \
 		--no-default-features \
 		--features "abcipp" \
-		-Z unstable-options \
 		$(TEST_FILTER) -- \
 		-Z unstable-options --report-time
 
 test-unit:
 	$(cargo) +$(nightly) test \
 		$(TEST_FILTER) \
-		-Z unstable-options \
 		-- --skip e2e \
 		-Z unstable-options --report-time
 
@@ -166,14 +157,12 @@ test-unit-mainnet:
 	$(cargo) +$(nightly) test \
 		--features "mainnet" \
 		$(TEST_FILTER) \
-		-Z unstable-options \
 		-- --skip e2e \
 		-Z unstable-options --report-time
 
 test-unit-debug:
 	$(debug-cargo) +$(nightly) test \
 		$(TEST_FILTER) -- \
-		-Z unstable-options \
 		-- --skip e2e \
 		--nocapture \
 		-Z unstable-options --report-time
@@ -181,7 +170,7 @@ test-unit-debug:
 test-wasm:
 	make -C $(wasms) test
 
-test-wasm-template = $(cargo) test \
+test-wasm-template = $(cargo) +$(nightly) test \
 	--manifest-path $(wasm)/Cargo.toml \
 		-- \
 		-Z unstable-options --report-time
@@ -189,8 +178,7 @@ test-wasm-templates:
 	$(foreach wasm,$(wasm_templates),$(test-wasm-template) && ) true
 
 test-debug:
-	$(debug-cargo) test \
-		-Z unstable-options \
+	$(debug-cargo) +$(nightly) test \
 		-- \
 		--nocapture \
 		-Z unstable-options --report-time

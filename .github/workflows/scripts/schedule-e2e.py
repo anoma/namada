@@ -8,7 +8,7 @@ N_OF_MACHINES = 2
 NIGHTLY_VERSION = open("rust-nightly-version", "r").read().strip()
 
 E2E_FILE = ".github/workflows/scripts/e2e.json"
-CARGO_TEST_COMMAND = "cargo +{} test {} -Z unstable-options -- --test-threads=1 -Z unstable-options --nocapture"
+CARGO_TEST_COMMAND = "cargo +{} test {} -- --test-threads=1 --nocapture"
 
 MACHINES = [{'tasks': [], 'total_time': 0} for _ in range(N_OF_MACHINES)]
 
