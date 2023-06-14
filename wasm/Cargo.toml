@@ -25,9 +25,6 @@ tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermi
 ibc = {git = "https://github.com/heliaxdev/cosmos-ibc-rs.git", rev = "e71bc2cc79f8c2b32e970d95312f251398c93d9e"}
 ibc-proto = {git = "https://github.com/heliaxdev/ibc-proto-rs.git", rev = "6f4038fcf4981f1ed70771d1cd89931267f917af"}
 
-# patched to the yanked 1.2.0 until masp updates bitvec
-funty = { git = "https://github.com/bitvecto-rs/funty/", rev = "7ef0d890fbcd8b3def1635ac1a877fc298488446" }
-
 [profile.release]
 # smaller and faster wasm (https://rustwasm.github.io/book/reference/code-size.html#compiling-with-link-time-optimizations-lto)
 lto = true

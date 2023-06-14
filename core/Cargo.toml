@@ -7,7 +7,7 @@ resolver = "2"
 version = "0.17.2"
 
 [features]
-default = ["multicore"]
+default = []
 mainnet = []
 ferveo-tpke = [
   "ferveo",
@@ -37,10 +37,6 @@ ibc-mocks = [
   "ibc/std",
 ]
 
-multicore = [
-  "bellman/multicore"
-]
-
 # for integration tests and test utilies
 testing = [
   "rand",
@@ -57,7 +53,6 @@ ark-serialize = {version = "0.3"}
 # branch = "bat/arse-merkle-tree"
 arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "e086b235ed6e68929bf73f617dd61cd17b000a56", default-features = false, features = ["std", "borsh"]}
 bech32 = "0.8.0"
-bellman = { version = "0.11.2", default-features = false, features = ["groth16"] }
 borsh = "0.9.0"
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
 data-encoding = "2.3.2"

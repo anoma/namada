@@ -50,9 +50,6 @@ tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermi
 ibc = {git = "https://github.com/heliaxdev/cosmos-ibc-rs.git", rev = "4ec09135f5ef669144ef48c0a111a6428164c9ed"}
 ibc-proto = {git = "https://github.com/heliaxdev/ibc-proto-rs.git", rev = "19ad1cdfda14e95bd45fba0e0c710c086f71d0bc"}
 
-# patched to the yanked 1.2.0 until masp updates bitvec
-funty = { git = "https://github.com/bitvecto-rs/funty/", rev = "7ef0d890fbcd8b3def1635ac1a877fc298488446" }
-
 [dev-dependencies]
 namada_tests = {path = "../../tests"}
 

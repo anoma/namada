@@ -76,15 +76,13 @@ namada-sdk = [
   "masp_primitives/transparent-inputs",
 ]
 
-multicore = ["bellman/multicore", "namada_core/multicore", "masp_proofs/multicore"]
+multicore = ["masp_proofs/multicore"]
 
 [dependencies]
 async-std = "1.11.0"
 namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign-verify"]}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
 async-trait = {version = "0.1.51", optional = true}
-bellman = { version = "0.11.2", default-features = false, features = ["groth16"] }
-bls12_381 = "0.6.1"
 borsh = "0.9.0"
 circular-queue = "0.2.6"
 # Using unreleased commit on top of version 0.5.0 that adds Sync to the CLruCache
