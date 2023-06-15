@@ -13,7 +13,6 @@ use vp::{Vp, VP};
 
 use super::storage::{DBIter, StorageHasher, DB};
 use super::storage_api;
-use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::storage::BlockHeight;
 
 #[macro_use]
@@ -99,6 +98,7 @@ mod testing {
     use super::*;
     use crate::ledger::events::log::EventLog;
     use crate::ledger::storage::testing::TestWlStorage;
+    use crate::tendermint_rpc::error::Error as RpcError;
     use crate::types::storage::BlockHeight;
     use crate::vm::wasm::{self, TxCache, VpCache};
     use crate::vm::WasmCacheRoAccess;

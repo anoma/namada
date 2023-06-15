@@ -9,7 +9,7 @@ version = "0.17.2"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["abciplus", "namada-sdk"]
+default = ["abciplus", "namada-sdk", "wasm-runtime"]
 mainnet = [
   "namada_core/mainnet",
 ]
@@ -127,15 +127,17 @@ orion = "0.16.0"
 tokio = {version = "1.8.2", default-features = false}
 
 [dev-dependencies]
+namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign-verify", "testing", "ibc-mocks"]}
+namada_test_utils = {path = "../test_utils"}
 assert_matches = "1.5.0"
 async-trait = {version = "0.1.51"}
 base58 = "0.2.0"
 byte-unit = "4.0.13"
 hex = "0.4.3"
 libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9"}
-namada_test_utils = {path = "../test_utils"}
 pretty_assertions = "0.7.2"
 proptest = "1.2.0"
+tempfile = {version = "3.2.0"}
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tokio = {version = "1.8.2", default-features = false, features = ["rt", "macros"]}
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
