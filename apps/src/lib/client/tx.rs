@@ -298,8 +298,7 @@ pub async fn submit_init_validator<
 
         // Write Namada config stuff or figure out how to do the above
         // tendermint_node things two epochs in the future!!!
-        ctx.config.ledger.shell.tendermint_mode =
-            TendermintMode::Validator;
+        ctx.config.ledger.shell.tendermint_mode = TendermintMode::Validator;
         ctx.config
             .write(
                 &ctx.config.ledger.shell.base_dir,
