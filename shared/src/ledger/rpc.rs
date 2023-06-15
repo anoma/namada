@@ -119,13 +119,53 @@ pub async fn query_block<C: crate::ledger::queries::Client + Sync>(
     response
 }
 
-/// A helper to unwrap client's response. Will shut down process on error.
-fn unwrap_client_response<C: crate::ledger::queries::Client, T>(
-    response: Result<T, C::Error>,
-) -> T {
-    response.unwrap_or_else(|_err| {
+/// Display a contextual error message.
+///
+/// Used in conjunction with [`unwrap_client_response_ctx`].
+enum ErrWithCtx {}
+
+/// Display a generic error message.
+///
+/// Used in conjunction with [`unwrap_client_response_ctx`].
+enum ErrNoCtx {}
+
+trait PanicError<SPECIALIZED> {
+    fn panic_error(self) -> !;
+}
+
+impl<E> PanicError<ErrWithCtx> for E
+where
+    E: std::fmt::Display,
+{
+    fn panic_error(self) -> ! {
+        let err_msg = self;
+        panic!("Error in the query: {err_msg}");
+    }
+}
+
+impl<E> PanicError<ErrNoCtx> for E {
+    fn panic_error(self) -> ! {
         panic!("Error in the query");
-    })
+    }
+}
+
+/// A helper to unwrap client's response. Will shut down process on error.
+#[inline]
+fn unwrap_client_response<C, T>(response: Result<T, C::Error>) -> T
+where
+    C: crate::ledger::queries::Client,
+{
+    unwrap_client_response_ctx::<ErrNoCtx, C, T>(response)
+}
+
+/// A helper to unwrap client's response. Will shut down process on error.
+#[inline]
+fn unwrap_client_response_ctx<E, C, T>(response: Result<T, C::Error>) -> T
+where
+    C: crate::ledger::queries::Client,
+    C::Error: PanicError<E>,
+{
+    response.unwrap_or_else(|err| err.panic_error())
 }
 
 /// Query the results of the last committed block
@@ -449,12 +489,16 @@ pub async fn query_tx_events<C: crate::ledger::queries::Client + Sync>(
 }
 
 /// Dry run a transaction
-pub async fn dry_run_tx<C: crate::ledger::queries::Client + Sync>(
+pub async fn dry_run_tx<C>(
     client: &C,
     tx_bytes: Vec<u8>,
-) -> namada_core::types::transaction::TxResult {
+) -> namada_core::types::transaction::TxResult
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     let (data, height, prove) = (Some(tx_bytes), None, false);
-    let result = unwrap_client_response::<C, _>(
+    let result = unwrap_client_response_ctx::<ErrWithCtx, C, _>(
         RPC.shell().dry_run_tx(client, data, height, prove).await,
     )
     .data;

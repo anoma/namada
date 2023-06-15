@@ -1365,11 +1365,15 @@ where
     Ok(())
 }
 
-async fn expect_dry_broadcast<T, C: crate::ledger::queries::Client + Sync>(
+async fn expect_dry_broadcast<T, C>(
     to_broadcast: TxBroadcastData,
     client: &C,
     ret: T,
-) -> Result<T, Error> {
+) -> Result<T, Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     match to_broadcast {
         TxBroadcastData::DryRun(tx) => {
             rpc::dry_run_tx(client, tx.to_bytes()).await;

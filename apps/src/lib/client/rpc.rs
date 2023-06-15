@@ -1732,10 +1732,11 @@ pub async fn query_delegations<C: namada::ledger::queries::Client + Sync>(
 }
 
 /// Dry run a transaction
-pub async fn dry_run_tx<C: namada::ledger::queries::Client + Sync>(
-    client: &C,
-    tx_bytes: Vec<u8>,
-) {
+pub async fn dry_run_tx<C>(client: &C, tx_bytes: Vec<u8>)
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     println!(
         "Dry-run result: {}",
         namada::ledger::rpc::dry_run_tx(client, tx_bytes).await
