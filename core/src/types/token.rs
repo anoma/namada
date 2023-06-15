@@ -372,7 +372,7 @@ pub fn minter_key(token_addr: &Address) -> Key {
 /// Obtain a storage key for the minted multitoken balance.
 pub fn minted_balance_key(token_addr: &Address) -> Key {
     balance_prefix(token_addr)
-        .push(&Address::Internal(InternalAddress::Mint).to_db_key())
+        .push(&Address::Internal(InternalAddress::Minted).to_db_key())
         .expect("Cannot obtain a storage key")
 }
 
@@ -429,7 +429,7 @@ pub fn is_masp_key(key: &Key) -> bool {
 /// Is storage key for total supply of a specific token?
 pub fn is_minted_balance_key(token_addr: &Address, key: &Key) -> bool {
     if let Some(owner) = is_balance_key(token_addr, key) {
-        *owner == Address::Internal(InternalAddress::Mint)
+        *owner == Address::Internal(InternalAddress::Minted)
     } else {
         false
     }

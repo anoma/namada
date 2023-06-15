@@ -395,7 +395,7 @@ where
                             result
                         }
                         InternalAddress::IbcToken(_)
-                        | InternalAddress::Mint => {
+                        | InternalAddress::Minted => {
                             // These addresses should be a part of a multitoken
                             // key
                             gas_meter = ctx.gas_meter.into_inner();

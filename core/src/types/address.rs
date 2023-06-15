@@ -52,7 +52,7 @@ pub const FIXED_LEN_STRING_BYTES: usize = 45;
 /// Internal IBC address
 pub const IBC: Address = Address::Internal(InternalAddress::Ibc);
 /// Internal multitoken mint address
-pub const MINT: Address = Address::Internal(InternalAddress::Mint);
+pub const MINTED: Address = Address::Internal(InternalAddress::Minted);
 /// Internal ledger parameters address
 pub const PARAMETERS: Address = Address::Internal(InternalAddress::Parameters);
 /// Internal PoS address
@@ -85,7 +85,7 @@ mod internal {
         "ano::Replay Protection                       ";
     pub const MULTITOKEN: &str =
         "ano::Multitoken                              ";
-    pub const MINT: &str =
+    pub const MINTED: &str =
         "ano::Multitoken Mint Address                 ";
 }
 
@@ -233,7 +233,7 @@ impl Address {
                     InternalAddress::Multitoken => {
                         internal::MULTITOKEN.to_string()
                     }
-                    InternalAddress::Mint => internal::MINT.to_string(),
+                    InternalAddress::Minted => internal::MINTED.to_string(),
                 };
                 debug_assert_eq!(string.len(), FIXED_LEN_STRING_BYTES);
                 string
@@ -307,7 +307,9 @@ impl Address {
                 internal::MULTITOKEN => {
                     Ok(Address::Internal(InternalAddress::Multitoken))
                 }
-                internal::MINT => Ok(Address::Internal(InternalAddress::Mint)),
+                internal::MINTED => {
+                    Ok(Address::Internal(InternalAddress::Minted))
+                }
                 _ => Err(Error::new(
                     ErrorKind::InvalidData,
                     "Invalid internal address",
@@ -522,7 +524,7 @@ pub enum InternalAddress {
     /// Multitoken
     Multitoken,
     /// Minted multitoken address
-    Mint,
+    Minted,
 }
 
 impl Display for InternalAddress {
@@ -541,7 +543,7 @@ impl Display for InternalAddress {
                 Self::EthBridge => "EthBridge".to_string(),
                 Self::ReplayProtection => "ReplayProtection".to_string(),
                 Self::Multitoken => "Multitoken".to_string(),
-                Self::Mint => "Mint".to_string(),
+                Self::Minted => "Minted".to_string(),
             }
         )
     }
@@ -809,8 +811,8 @@ pub mod testing {
             InternalAddress::EthBridge => {}
             InternalAddress::ReplayProtection => {}
             InternalAddress::Multitoken => {}
-            InternalAddress::Mint => {} /* Add new addresses in the
-                                         * `prop_oneof` below. */
+            InternalAddress::Minted => {} /* Add new addresses in the
+                                           * `prop_oneof` below. */
         };
         prop_oneof![
             Just(InternalAddress::PoS),
@@ -823,7 +825,7 @@ pub mod testing {
             Just(InternalAddress::EthBridge),
             Just(InternalAddress::ReplayProtection),
             Just(InternalAddress::Multitoken),
-            Just(InternalAddress::Mint)
+            Just(InternalAddress::Minted)
         ]
     }
 
