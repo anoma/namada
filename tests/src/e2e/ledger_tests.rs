@@ -4170,7 +4170,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     let update_config = |ix: u8, mut config: Config| {
         let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
         let p2p_addr =
-            convert_tm_addr_to_socket_addr(&config.ledger.tendermint.p2p.laddr)
+            convert_tm_addr_to_socket_addr(&config.ledger.cometbft.p2p.laddr)
                 .ip()
                 .to_string();
         println!("ERROR: {}", p2p_addr);
