@@ -197,6 +197,9 @@ light_client_attack_min_slash_rate = 0.001
 # Number of epochs above and below (separately) the current epoch to
 # consider when doing cubic slashing
 cubic_slashing_window_length = 1
+# The minimum amount of bonded tokens that a validator needs to be in
+# either the `consensus` or `below_capacity` validator sets
+validator_stake_threshold = "1"
 
 # Governance parameters.
 [gov_params]

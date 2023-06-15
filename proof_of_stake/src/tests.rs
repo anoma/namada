@@ -36,8 +36,9 @@ use crate::types::{
     ValidatorState, WeightedValidator,
 };
 use crate::{
-    become_validator, below_capacity_validator_set_handle, bond_handle,
-    bond_tokens, bonds_and_unbonds, consensus_validator_set_handle,
+    become_validator, below_capacity_validator_set_handle,
+    below_threshold_validator_set_handle, bond_handle, bond_tokens,
+    bonds_and_unbonds, consensus_validator_set_handle,
     copy_validator_sets_and_positions, find_validator_by_raw_hash,
     get_num_consensus_validators, init_genesis,
     insert_validator_into_validator_set, is_validator, process_slashes,
@@ -1921,6 +1922,7 @@ fn advance_epoch(s: &mut TestWlStorage, params: &PosParams) -> Epoch {
         current_epoch + params.pipeline_len,
         &consensus_validator_set_handle(),
         &below_capacity_validator_set_handle(),
+        &below_threshold_validator_set_handle(),
     )
     .unwrap();
     // process_slashes(s, current_epoch).unwrap();

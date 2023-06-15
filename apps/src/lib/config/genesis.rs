@@ -304,6 +304,9 @@ pub mod genesis_config {
         /// Number of epochs above and below (separately) the current epoch to
         /// consider when doing cubic slashing
         pub cubic_slashing_window_length: u64,
+        /// The minimum amount of bonded tokens that a validator needs to be in
+        /// either the `consensus` or `below_capacity` validator sets
+        pub validator_stake_threshold: token::Amount,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -647,6 +650,7 @@ pub mod genesis_config {
             duplicate_vote_min_slash_rate,
             light_client_attack_min_slash_rate,
             cubic_slashing_window_length,
+            validator_stake_threshold,
         } = pos_params;
         let pos_params = PosParams {
             max_validator_slots,
@@ -660,6 +664,7 @@ pub mod genesis_config {
             duplicate_vote_min_slash_rate,
             light_client_attack_min_slash_rate,
             cubic_slashing_window_length,
+            validator_stake_threshold,
         };
 
         let mut genesis = Genesis {

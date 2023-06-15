@@ -2,6 +2,7 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::storage::Epoch;
+use namada_core::types::token;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
@@ -43,6 +44,9 @@ pub struct PosParams {
     /// Number of epochs above and below (separately) the current epoch to
     /// consider when doing cubic slashing
     pub cubic_slashing_window_length: u64,
+    /// The minimum amount of bonded tokens that a validator needs to be in
+    /// either the `consensus` or `below_capacity` validator sets
+    pub validator_stake_threshold: token::Amount,
 }
 
 impl Default for PosParams {
@@ -65,6 +69,7 @@ impl Default for PosParams {
             // slash 0.1%
             light_client_attack_min_slash_rate: dec!(0.001),
             cubic_slashing_window_length: 1,
+            validator_stake_threshold: token::Amount::whole(1_u64),
         }
     }
 }
