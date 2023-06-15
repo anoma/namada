@@ -383,7 +383,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                     let code = code.as_ref().to_vec();
                     let dir = self.dir.clone();
                     std::thread::spawn(move || {
-                        tracing::info!("Compiling {}.", hash.to_string());
+                        tracing::info!("Compiling WASM {}.", hash.to_string());
 
                         let (_module, _store) =
                             match wasm::run::prepare_wasm_code(code) {
@@ -395,6 +395,22 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                                             hash.clone(),
                                             Compilation::Done,
                                         );
+                                        tracing::info!(
+                                            "Finished compiling WASM {hash}."
+                                        );
+                                        if progress.values().all(
+                                            |compilation| {
+                                                matches!(
+                                                    compilation,
+                                                    Compilation::Done
+                                                )
+                                            },
+                                        ) {
+                                            tracing::info!(
+                                                "Finished compiling all {}.",
+                                                N::name()
+                                            )
+                                        }
                                         file_write_module(&dir, &module, &hash);
                                         (module, store)
                                     }

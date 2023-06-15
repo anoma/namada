@@ -24,7 +24,7 @@ use namada_apps::config::{Config, TendermintMode};
 use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 
 use super::setup::{
-    self, sleep, NamadaBgCmd, Test, ENV_VAR_DEBUG,
+    self, sleep, NamadaBgCmd, NamadaCmd, Test, ENV_VAR_DEBUG,
     ENV_VAR_USE_PREBUILT_BINARIES,
 };
 use crate::e2e::setup::{Bin, Who, APPS_PACKAGE};
@@ -428,4 +428,12 @@ pub fn epoch_sleep(
             sleep(10);
         }
     }
+}
+
+/// Wait for txs and VPs WASM compilations to finish. This is useful to avoid a
+/// timeout when submitting a first tx.
+pub fn wait_for_wasm_pre_compile(ledger: &mut NamadaCmd) -> Result<()> {
+    ledger.exp_string("Finished compiling all")?;
+    ledger.exp_string("Finished compiling all")?;
+    Ok(())
 }
