@@ -235,6 +235,8 @@ jobs:
           name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
           path: ./wasm
       - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Check crates build with default features
+        run: make check-crates
       - name: Run unit test
         run: make test-unit-coverage${{ matrix.make.suffix }}
         env:
