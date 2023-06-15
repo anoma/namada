@@ -19,8 +19,7 @@ use namada_core::types::key::testing::{
     arb_common_keypair, common_sk_from_simple_seed,
 };
 use namada_core::types::storage::{BlockHeight, Epoch};
-use namada_core::types::token::{Amount, NATIVE_MAX_DECIMAL_PLACES};
-use namada_core::types::uint::Uint;
+use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_core::types::{address, key, token};
 use proptest::prelude::*;
 use proptest::test_runner::Config;
