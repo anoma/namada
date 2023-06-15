@@ -96,8 +96,13 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     non_validator.exp_string("Namada ledger node started")?;
     non_validator.exp_string("This node is not a validator")?;
 
+    wait_for_wasm_pre_compile(&mut validator_0)?;
     let bg_validator_0 = validator_0.background();
+
+    wait_for_wasm_pre_compile(&mut validator_1)?;
     let bg_validator_1 = validator_1.background();
+
+    wait_for_wasm_pre_compile(&mut non_validator)?;
     let _bg_non_validator = non_validator.background();
 
     // 2. Cross over epoch to check for consensus with multiple nodes
