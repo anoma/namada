@@ -21,11 +21,11 @@ abciplus = [
 wasm-runtime = ["namada/wasm-runtime"]
 
 [dependencies]
-namada = {path = "../shared", default-features = false, features = ["testing", "namada-sdk"]}
-namada_core = {path = "../core", default-features = false, features = ["testing"]}
+namada = {path = "../shared", features = ["testing"]}
+namada_core = {path = "../core", features = ["testing"]}
 namada_test_utils = {path = "../test_utils"}
-namada_vp_prelude = {path = "../vp_prelude", default-features = false}
-namada_tx_prelude = {path = "../tx_prelude", default-features = false}
+namada_vp_prelude = {path = "../vp_prelude"}
+namada_tx_prelude = {path = "../tx_prelude"}
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
 concat-idents = "1.1.2"
 ibc-relayer = {git = "https://github.com/heliaxdev/hermes.git", rev = "a4ad1355fc0b05908881854aa27221cb2b878ac5", default-features = false}
@@ -44,7 +44,7 @@ rust_decimal = "=1.26.1"
 rust_decimal_macros = "=1.26.1"
 
 [dev-dependencies]
-namada_apps = {path = "../apps", default-features = false, features = ["testing"]}
+namada_apps = {path = "../apps", features = ["testing"]}
 assert_cmd = "1.0.7"
 borsh = "0.9.1"
 color-eyre = "0.5.11"
