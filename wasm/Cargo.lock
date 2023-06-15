@@ -3173,7 +3173,6 @@ dependencies = [
  "borsh",
  "data-encoding",
  "derivative",
- "hex",
  "namada_core",
  "once_cell",
  "proptest",
@@ -3230,7 +3229,7 @@ dependencies = [
  "namada_proof_of_stake",
  "namada_vm_env",
  "rust_decimal",
- "sha2 0.10.6",
+ "sha2 0.9.9",
  "thiserror",
 ]
 
@@ -3239,7 +3238,6 @@ name = "namada_vm_env"
 version = "0.17.2"
 dependencies = [
  "borsh",
- "hex",
  "masp_primitives",
  "namada_core",
 ]
@@ -3253,7 +3251,7 @@ dependencies = [
  "namada_macros",
  "namada_proof_of_stake",
  "namada_vm_env",
- "sha2 0.10.6",
+ "sha2 0.9.9",
  "thiserror",
 ]
 

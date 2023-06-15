@@ -21,13 +21,12 @@ abciplus = [
 ]
 
 [dependencies]
-# branch = "murisi/namada-integration"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "cfea8c95d3f73077ca3e25380fd27e5b46e828fd" }
 namada_core = {path = "../core", default-features = false}
 namada_macros = {path = "../macros"}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
 namada_vm_env = {path = "../vm_env", default-features = false}
-borsh = "0.9.0"
-sha2 = "0.10.1"
-thiserror = "1.0.38"
-rust_decimal = "=1.26.1"
+borsh.workspace = true
+masp_primitives.workspace = true
+rust_decimal.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
