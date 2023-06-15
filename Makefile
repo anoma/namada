@@ -21,6 +21,18 @@ wasm_templates := wasm/tx_template wasm/vp_template
 # TODO upgrade libp2p
 audit-ignores += RUSTSEC-2021-0076
 
+# Workspace crates
+crates := namada_core
+crates += namada
+crates += namada_apps
+crates += namada_encoding_spec
+crates += namada_macros
+crates += namada_proof_of_stake
+crates += namada_test_utils
+crates += namada_tests
+crates += namada_tx_prelude
+crates += namada_vm_env
+crates += namada_vp_prelude
 
 build:
 	$(cargo) build
@@ -49,6 +61,10 @@ check:
 
 check-mainnet:
 	$(cargo) check --workspace --features "mainnet"
+
+# Check that every crate can be built with default features
+check-crates:
+	$(foreach p,$(crates), echo "Checking $(p)"; cargo +$(nightly) check -Z unstable-options --tests -p $(p) && ) true
 
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 
