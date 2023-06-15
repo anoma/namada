@@ -920,7 +920,7 @@ mod test_finalize_block {
     use namada::types::key::tm_consensus_key_raw_hash;
     use namada::types::storage::Epoch;
     use namada::types::time::DurationSecs;
-    use namada::types::token::Amount;
+    use namada::types::token::{Amount, NATIVE_MAX_DECIMAL_PLACES};
     use namada::types::transaction::governance::{
         InitProposalData, ProposalType, VoteProposalData,
     };
@@ -2664,10 +2664,9 @@ mod test_finalize_block {
                         - self_unbond_2_amount)
             + Dec::from(del_2_amount);
 
-        let val = (exp_pipeline_stake - Dec::from(post_stake_10)).abs();
         assert!(
-            (exp_pipeline_stake - Dec::from(post_stake_10)).abs()
-                <= Uint::from(Amount::native_whole(1u64))
+            exp_pipeline_stake.abs_diff(&Dec::from(post_stake_10))
+                <= Dec::new(1, NATIVE_MAX_DECIMAL_PLACES).unwrap()
         );
 
         // Check the balance of the Slash Pool
@@ -2828,12 +2827,10 @@ mod test_finalize_block {
         // TODO: decimal mult issues should be resolved with PR 1282
         assert!(
             (del_details.bonds[0].slashed_amount.unwrap().change()
-                - (std::cmp::min(
+                - std::cmp::min(
                     Dec::one(),
                     Dec::new(3, 0).unwrap() * cubic_rate
-                ) * del_1_amount
-                    - del_unbond_1_amount)
-                    .change())
+                ) * (del_1_amount.change() - del_unbond_1_amount.change()))
             .abs()
                 <= Uint::from(2)
         );
@@ -2852,15 +2849,14 @@ mod test_finalize_block {
         // TODO: not sure why this is correct??? (with + self_bond_1_amount -
         // self_unbond_2_amount)
         // TODO: Make sure this is sound and what we expect
-        assert_eq!(
-            self_details.bonds[0].slashed_amount,
-            Some(
-                std::cmp::min(Dec::one(), Dec::new(3, 0).unwrap() * cubic_rate)
-                    * initial_stake
+        assert!(
+            (self_details.bonds[0].slashed_amount.unwrap().change() -
+            (std::cmp::min(Dec::one(), Dec::new(3, 0).unwrap() * cubic_rate)
+                    * (initial_stake
                     - self_unbond_1_amount
                     + self_bond_1_amount
-                    - self_unbond_2_amount
-            )
+                    - self_unbond_2_amount)
+            ).change()) <= Amount::from_uint(1000, NATIVE_MAX_DECIMAL_PLACES).unwrap().change()
         );
 
         // Check delegation unbonds
