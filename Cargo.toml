@@ -21,6 +21,17 @@ exclude = [
   "wasm_for_tests",
 ]
 
+[workspace.package]
+authors = ["Heliax AG <hello@heliax.dev>"]
+edition = "2021"
+documentation = "https://docs.namada.net/"
+homepage = "https://namada.net/"
+keywords = ["blockchain", "privacy", "crypto", "protocol", "network"]
+license = "GPL-3.0"
+readme = "README.md"
+repository = "https://github.com/anoma/namada"
+version = "0.17.2"
+
 [patch.crates-io]
 # TODO temp patch for <https://github.com/near/borsh-rs/issues/82>, <https://github.com/near/borsh-rs/issues/84> and more tba.
 borsh = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
