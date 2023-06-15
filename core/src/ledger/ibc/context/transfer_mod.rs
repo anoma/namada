@@ -444,13 +444,7 @@ where
     ) -> Result<(), TokenTransferError> {
         // Assumes that the coin denom is prefixed with "port-id/channel-id" or
         // has no prefix
-        let (token, amount) = get_token_amount(coin)?;
-
-        let ibc_token = if coin.denom.trace_path.is_empty() {
-            token
-        } else {
-            storage::ibc_token(coin.denom.to_string())
-        };
+        let (ibc_token, amount) = get_token_amount(coin)?;
 
         self.ctx
             .borrow_mut()
@@ -474,10 +468,8 @@ where
         account: &Self::AccountId,
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        let (_, amount) = get_token_amount(coin)?;
-
         // The trace path of the denom is already updated if receiving the token
-        let ibc_token = storage::ibc_token(coin.denom.to_string());
+        let (ibc_token, amount) = get_token_amount(coin)?;
 
         self.ctx
             .borrow_mut()
@@ -500,11 +492,9 @@ where
         account: &Self::AccountId,
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        let (_, amount) = get_token_amount(coin)?;
+        let (ibc_token, amount) = get_token_amount(coin)?;
 
-        // The burn is unminting of the minted
-        let ibc_token = storage::ibc_token(coin.denom.to_string());
-
+        // The burn is "unminting" from the minted balance
         self.ctx
             .borrow_mut()
             .burn_token(account, &ibc_token, amount)
@@ -559,16 +549,15 @@ where
     }
 }
 
-/// Get the token address and the amount from PrefixedCoin
+/// Get the token address and the amount from PrefixedCoin. If the base denom is
+/// not an address, it returns `IbcToken`
 fn get_token_amount(
     coin: &PrefixedCoin,
 ) -> Result<(Address, token::Amount), TokenTransferError> {
-    let token =
-        Address::decode(coin.denom.base_denom.as_str()).map_err(|_| {
-            TokenTransferError::InvalidCoin {
-                coin: coin.denom.base_denom.to_string(),
-            }
-        })?;
+    let token = match Address::decode(coin.denom.base_denom.as_str()) {
+        Ok(token_addr) if coin.denom.trace_path.is_empty() => token_addr,
+        _ => storage::ibc_token(coin.denom.to_string()),
+    };
 
     let amount = coin.amount.try_into().map_err(|_| {
         TokenTransferError::InvalidCoin {
