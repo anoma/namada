@@ -91,6 +91,8 @@ pub mod mock_web3_client {
     impl RpcClient for Web3Client {
         type Log = ethabi::RawLog;
 
+        const EXIT_ON_EVENTS_FAILURE: bool = false;
+
         #[cold]
         fn new_client(_: &str) -> Self
         where
