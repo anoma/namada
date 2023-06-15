@@ -23,8 +23,8 @@ pub mod facade {
 
     #[cfg(not(feature = "abcipp"))]
     pub use {
-        tendermint, tendermint_config, tendermint_proto, tendermint_rpc,
-        tower_abci,
+        namada::tendermint, namada::tendermint_proto, namada::tendermint_rpc,
+        tendermint_config, tower_abci,
     };
     #[cfg(feature = "abcipp")]
     pub use {

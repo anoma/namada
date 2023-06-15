@@ -62,8 +62,8 @@ ferveo = {optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd
 ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 # TODO using the same version of tendermint-rs as we do here.
-ibc = {version = "0.36.0", default-features = false, features = ["serde"], optional = true}
-ibc-proto = {version = "0.26.0", default-features = false, optional = true}
+ibc = {git = "https://github.com/heliaxdev/cosmos-ibc-rs.git", rev = "e71bc2cc79f8c2b32e970d95312f251398c93d9e", default-features = false, features = ["serde"], optional = true}
+ibc-proto = {git = "https://github.com/heliaxdev/ibc-proto-rs.git", rev = "6f4038fcf4981f1ed70771d1cd89931267f917af", default-features = false, optional = true}
 ics23 = "0.9.0"
 index-set = {git = "https://github.com/heliaxdev/index-set", tag = "v0.7.1", features = ["serialize-borsh", "serialize-serde"]}
 itertools = "0.10.0"
@@ -81,8 +81,8 @@ rust_decimal_macros = "=1.26.1"
 serde = {version = "1.0.125", features = ["derive"]}
 serde_json = "1.0.62"
 sha2 = "0.9.3"
-tendermint = {version = "0.23.6", optional = true}
-tendermint-proto = {version = "0.23.6", optional = true}
+tendermint = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "02b256829e80f8cfecf3fa0d625c2a76c79cd043", optional = true}
+tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "02b256829e80f8cfecf3fa0d625c2a76c79cd043", optional = true}
 thiserror = "1.0.38"
 tracing = "0.1.30"
 zeroize = {version = "1.5.5", features = ["zeroize_derive"]}

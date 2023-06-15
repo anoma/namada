@@ -9,8 +9,6 @@ use namada::types::key::*;
 use namada::types::storage::BlockHeight;
 use namada::types::time::DateTimeUtc;
 use serde_json::json;
-#[cfg(feature = "abciplus")]
-use tendermint::Moniker;
 #[cfg(feature = "abcipp")]
 use tendermint_abcipp::Moniker;
 use thiserror::Error;
@@ -20,6 +18,8 @@ use tokio::process::Command;
 
 use crate::cli::namada_version;
 use crate::config;
+#[cfg(feature = "abciplus")]
+use crate::facade::tendermint::Moniker;
 use crate::facade::tendermint::{block, Genesis};
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_config::{

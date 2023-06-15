@@ -52,10 +52,7 @@ testing = ["dev"]
 abciplus = [
     "namada/abciplus",
     "namada/tendermint-rpc",
-    "tendermint",
     "tendermint-config",
-    "tendermint-rpc",
-    "tendermint-proto",
     "tower-abci",
 ]
 
@@ -116,19 +113,14 @@ signal-hook = "0.3.9"
 # sysinfo with disabled multithread feature
 sysinfo = {version = "=0.21.1", default-features = false}
 tar = "0.4.37"
-# temporarily using fork work-around
-tendermint = {version = "0.23.6", optional = true}
-tendermint-config = {version = "0.23.6", optional = true}
-tendermint-proto = {version = "0.23.6", optional = true}
-tendermint-rpc = {version = "0.23.6", features = ["http-client", "websocket-client"], optional = true}
+tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "02b256829e80f8cfecf3fa0d625c2a76c79cd043", optional = true}
 thiserror = "1.0.38"
 tokio = {version = "1.8.2", features = ["full"]}
 toml = "0.5.8"
 tonic = "0.8.3"
 tower = "0.4"
 # Also, using the same version of tendermint-rs as we do here.
-# with a patch for https://github.com/penumbra-zone/tower-abci/issues/7.
-tower-abci = {version = "0.1.0", optional = true}
+tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "367d8d958b83c501ed2c09e9c4595f8bf75a0b01", optional = true}
 tracing = "0.1.30"
 tracing-log = "0.1.2"
 tracing-subscriber = {version = "0.3.7", features = ["env-filter", "json"]}

@@ -28,23 +28,6 @@ borsh-derive = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223
 borsh-derive-internal = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
 borsh-schema-derive-internal = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
 
-# patched to a commit on the `eth-bridge-integration+consensus-timeout` branch of our fork
-tendermint = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "02b256829e80f8cfecf3fa0d625c2a76c79cd043"}
-tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "02b256829e80f8cfecf3fa0d625c2a76c79cd043"}
-tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "02b256829e80f8cfecf3fa0d625c2a76c79cd043"}
-tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "02b256829e80f8cfecf3fa0d625c2a76c79cd043"}
-tendermint-testgen = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "02b256829e80f8cfecf3fa0d625c2a76c79cd043"}
-tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "02b256829e80f8cfecf3fa0d625c2a76c79cd043"}
-
-# patched to a commit on the `eth-bridge-integration` branch of our fork
-ibc = {git = "https://github.com/heliaxdev/cosmos-ibc-rs.git", rev = "e71bc2cc79f8c2b32e970d95312f251398c93d9e"}
-ibc-proto = {git = "https://github.com/heliaxdev/ibc-proto-rs.git", rev = "6f4038fcf4981f1ed70771d1cd89931267f917af"}
-ibc-relayer = {git = "https://github.com/heliaxdev/hermes.git", rev = "a4ad1355fc0b05908881854aa27221cb2b878ac5"}
-ibc-relayer-types = {git = "https://github.com/heliaxdev/hermes.git", rev = "a4ad1355fc0b05908881854aa27221cb2b878ac5"}
-
-# patched to a commit on the `eth-bridge-integration` branch of our fork
-tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "367d8d958b83c501ed2c09e9c4595f8bf75a0b01"}
-
 [profile.release]
 lto = true
 opt-level = 3
