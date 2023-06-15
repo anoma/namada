@@ -64,11 +64,14 @@ clippy-mainnet:
 clippy-fix:
 	$(cargo) +$(nightly) clippy --fix -Z unstable-options --all-targets --allow-dirty --allow-staged
 
-install: tendermint
-	NAMADA_DEV=false $(cargo) install --path ./apps --locked
-
 tendermint:
 	./scripts/get_tendermint.sh
+
+install: cometbft
+	NAMADA_DEV=false $(cargo) install --path ./apps --locked
+
+cometbft:
+	./scripts/get_cometbft.sh
 
 run-ledger:
 	# runs the node
