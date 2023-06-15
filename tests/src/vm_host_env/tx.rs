@@ -354,7 +354,9 @@ mod native_tx_host_env {
 
                             // Call the `host_env` function and unwrap any
                             // runtime errors
-                            $fn( &tx_env, $($arg),* ).unwrap()
+                            // TODO: this is fucked
+                            // $fn( &tx_env, $($arg),* ).unwrap()
+                            $fn( todo!(), $($arg),* ).unwrap()
                         })
                     }
                 });
@@ -394,7 +396,9 @@ mod native_tx_host_env {
 
                             // Call the `host_env` function and unwrap any
                             // runtime errors
-                            $fn( &tx_env, $($arg),* ).unwrap()
+                            // TODO: this is fucked
+                            // $fn( &tx_env, $($arg),* ).unwrap()
+                            $fn( todo!(), $($arg),* ).unwrap()
                         })
                     }
                 });

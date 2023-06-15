@@ -7,6 +7,7 @@ use std::num::TryFromIntError;
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::internal::KeyVal;
 use thiserror::Error;
+use wasmer::FunctionEnvMut;
 
 #[cfg(feature = "wasm-runtime")]
 use super::wasm::TxCache;
@@ -64,7 +65,7 @@ type TxResult<T> = std::result::Result<T, TxRuntimeError>;
 /// A transaction's host environment
 pub struct TxVmEnv<'a, MEM, DB, H, CA>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
@@ -113,7 +114,7 @@ where
 
 impl<'a, MEM, DB, H, CA> TxVmEnv<'a, MEM, DB, H, CA>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
@@ -174,7 +175,7 @@ where
 
 impl<MEM, DB, H, CA> Clone for TxVmEnv<'_, MEM, DB, H, CA>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
@@ -216,7 +217,7 @@ where
 /// A validity predicate's host environment
 pub struct VpVmEnv<'a, MEM, DB, H, EVAL, CA>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
@@ -298,7 +299,7 @@ pub trait VpEvaluator {
 
 impl<'a, MEM, DB, H, EVAL, CA> VpVmEnv<'a, MEM, DB, H, EVAL, CA>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
@@ -352,7 +353,7 @@ where
 
 impl<MEM, DB, H, EVAL, CA> Clone for VpVmEnv<'_, MEM, DB, H, EVAL, CA>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
@@ -463,30 +464,29 @@ where
 
 /// Called from tx wasm to request to use the given gas amount
 pub fn tx_charge_gas<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
     used_gas: i32,
 ) -> TxResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_add_gas(
-        env,
+    tx_add_gas_aux(
+        &env.data(),
         used_gas
             .try_into()
             .map_err(TxRuntimeError::NumConversionError)?,
     )
 }
 
-/// Add a gas cost incured in a transaction
-pub fn tx_add_gas<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+fn tx_add_gas_aux<MEM, DB, H, CA>(
+    env: &TxVmEnv<'static, MEM, DB, H, CA>,
     used_gas: u64,
 ) -> TxResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
@@ -505,17 +505,17 @@ where
 
 /// Called from VP wasm to request to use the given gas amount
 pub fn vp_charge_gas<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
     used_gas: i32,
 ) -> vp_host_fns::EnvResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
-    let gas_meter = unsafe { env.ctx.gas_meter.get() };
+    let gas_meter = unsafe { env.data().ctx.gas_meter.get() };
     vp_host_fns::add_gas(
         gas_meter,
         used_gas
@@ -527,21 +527,22 @@ where
 /// Storage `has_key` function exposed to the wasm VM Tx environment. It will
 /// try to check the write log first and if no entry found then the storage.
 pub fn tx_has_key<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    mut env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
     key_ptr: u64,
     key_len: u64,
 ) -> TxResult<i64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(&mut store, key_ptr, key_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
 
     tracing::debug!("tx_has_key {}, key {}", key, key_ptr,);
 
@@ -550,7 +551,7 @@ where
     // try to read from the write log first
     let write_log = unsafe { env.ctx.write_log.get() };
     let (log_val, gas) = write_log.read(&key);
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
     Ok(match log_val {
         Some(&write_log::StorageModification::Write { .. }) => {
             HostEnvResult::Success.to_i64()
@@ -571,7 +572,7 @@ where
             let (present, gas) = storage
                 .has_key(&key)
                 .map_err(TxRuntimeError::StorageError)?;
-            tx_add_gas(env, gas)?;
+            tx_add_gas_aux(&env, gas)?;
             HostEnvResult::from(present).to_i64()
         }
     })
@@ -583,21 +584,22 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn tx_read<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    mut env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
     key_ptr: u64,
     key_len: u64,
 ) -> TxResult<i64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(&mut store, key_ptr, key_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
 
     tracing::debug!("tx_read {}, key {}", key, key_ptr,);
 
@@ -606,7 +608,7 @@ where
     // try to read from the write log first
     let write_log = unsafe { env.ctx.write_log.get() };
     let (log_val, gas) = write_log.read(&key);
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
     Ok(match log_val {
         Some(write_log::StorageModification::Write { ref value }) => {
             let len: i64 = value
@@ -647,7 +649,7 @@ where
             let storage = unsafe { env.ctx.storage.get() };
             let (value, gas) =
                 storage.read(&key).map_err(TxRuntimeError::StorageError)?;
-            tx_add_gas(env, gas)?;
+            tx_add_gas_aux(&env, gas)?;
             match value {
                 Some(value) => {
                     let len: i64 = value
@@ -673,43 +675,45 @@ where
 /// any) back to the guest, the second step reads the value from cache into a
 /// pre-allocated buffer with the obtained size.
 pub fn tx_result_buffer<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    mut env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
     result_ptr: u64,
 ) -> TxResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let result_buffer = unsafe { env.ctx.result_buffer.get() };
     let value = result_buffer.take().unwrap();
     let gas = env
         .memory
-        .write_bytes(result_ptr, value)
+        .write_bytes(&mut store, result_ptr, value)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)
+    tx_add_gas_aux(&env, gas)
 }
 
 /// Storage prefix iterator function exposed to the wasm VM Tx environment.
 /// It will try to get an iterator from the storage and return the corresponding
 /// ID of the iterator, ordered by storage keys.
 pub fn tx_iter_prefix<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    mut env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> TxResult<u64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (prefix, gas) = env
         .memory
-        .read_string(prefix_ptr, prefix_len as _)
+        .read_string(&mut store, prefix_ptr, prefix_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
 
     tracing::debug!("tx_iter_prefix {}", prefix);
 
@@ -719,7 +723,7 @@ where
     let write_log = unsafe { env.ctx.write_log.get() };
     let storage = unsafe { env.ctx.storage.get() };
     let (iter, gas) = storage::iter_prefix_post(write_log, storage, &prefix);
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
 
     let iterators = unsafe { env.ctx.iterators.get() };
     Ok(iterators.insert(iter).id())
@@ -732,15 +736,16 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn tx_iter_next<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
     iter_id: u64,
 ) -> TxResult<i64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let env = env.data();
     tracing::debug!("tx_iter_next iter_id {}", iter_id,);
 
     let write_log = unsafe { env.ctx.write_log.get() };
@@ -751,7 +756,7 @@ where
             &Key::parse(key.clone())
                 .map_err(TxRuntimeError::StorageDataError)?,
         );
-        tx_add_gas(env, iter_gas + log_gas)?;
+        tx_add_gas_aux(&env, iter_gas + log_gas)?;
         match log_val {
             Some(write_log::StorageModification::Write { ref value }) => {
                 let key_val = KeyVal {
@@ -811,28 +816,29 @@ where
 /// Storage write function exposed to the wasm VM Tx environment. The given
 /// key/value will be written to the write log.
 pub fn tx_write<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    mut env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
     key_ptr: u64,
     key_len: u64,
     val_ptr: u64,
     val_len: u64,
 ) -> TxResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(&mut store, key_ptr, key_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
     let (value, gas) = env
         .memory
-        .read_bytes(val_ptr, val_len as _)
+        .read_bytes(&mut store, val_ptr, val_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
 
     tracing::debug!("tx_update {}, {:?}", key, value);
 
@@ -841,13 +847,13 @@ where
         tx_validate_vp_code_hash(env, &value)?;
     }
 
-    check_address_existence(env, &key)?;
+    check_address_existence(&env, &key)?;
 
     let write_log = unsafe { env.ctx.write_log.get() };
     let (gas, _size_diff) = write_log
         .write(&key, value)
         .map_err(TxRuntimeError::StorageModificationError)?;
-    tx_add_gas(env, gas)
+    tx_add_gas_aux(&env, gas)
     // TODO: charge the size diff
 }
 
@@ -855,49 +861,50 @@ where
 /// given key/value will be written only to the write log. It will be never
 /// written to the storage.
 pub fn tx_write_temp<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    mut env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
     key_ptr: u64,
     key_len: u64,
     val_ptr: u64,
     val_len: u64,
 ) -> TxResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(&mut store, key_ptr, key_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
     let (value, gas) = env
         .memory
-        .read_bytes(val_ptr, val_len as _)
+        .read_bytes(&mut store, val_ptr, val_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
 
     tracing::debug!("tx_write_temp {}, {:?}", key, value);
 
     let key = Key::parse(key).map_err(TxRuntimeError::StorageDataError)?;
 
-    check_address_existence(env, &key)?;
+    check_address_existence(&env, &key)?;
 
     let write_log = unsafe { env.ctx.write_log.get() };
     let (gas, _size_diff) = write_log
         .write_temp(&key, value)
         .map_err(TxRuntimeError::StorageModificationError)?;
-    tx_add_gas(env, gas)
+    tx_add_gas_aux(&env, gas)
     // TODO: charge the size diff
 }
 
 fn check_address_existence<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    env: &TxVmEnv<'static, MEM, DB, H, CA>,
     key: &Key,
 ) -> TxResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
@@ -911,14 +918,14 @@ where
         }
         let vp_key = Key::validity_predicate(&addr);
         let (vp, gas) = write_log.read(&vp_key);
-        tx_add_gas(env, gas)?;
+        tx_add_gas_aux(&env, gas)?;
         // just check the existence because the write log should not have the
         // delete log of the VP
         if vp.is_none() {
             let (is_present, gas) = storage
                 .has_key(&vp_key)
                 .map_err(TxRuntimeError::StorageError)?;
-            tx_add_gas(env, gas)?;
+            tx_add_gas_aux(&env, gas)?;
             if !is_present {
                 tracing::info!(
                     "Trying to write into storage with a key containing an \
@@ -937,21 +944,22 @@ where
 /// Storage delete function exposed to the wasm VM Tx environment. The given
 /// key/value will be written as deleted to the write log.
 pub fn tx_delete<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    mut env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
     key_ptr: u64,
     key_len: u64,
 ) -> TxResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(&mut store, key_ptr, key_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
 
     tracing::debug!("tx_delete {}", key);
 
@@ -964,33 +972,34 @@ where
     let (gas, _size_diff) = write_log
         .delete(&key)
         .map_err(TxRuntimeError::StorageModificationError)?;
-    tx_add_gas(env, gas)
+    tx_add_gas_aux(&env, gas)
     // TODO: charge the size diff
 }
 
 /// Emitting an IBC event function exposed to the wasm VM Tx environment.
 /// The given IBC event will be set to the write log.
 pub fn tx_emit_ibc_event<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    mut env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
     event_ptr: u64,
     event_len: u64,
 ) -> TxResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (event, gas) = env
         .memory
-        .read_bytes(event_ptr, event_len as _)
+        .read_bytes(&mut store, event_ptr, event_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
     let event: IbcEvent = BorshDeserialize::try_from_slice(&event)
         .map_err(TxRuntimeError::EncodingError)?;
     let write_log = unsafe { env.ctx.write_log.get() };
     let gas = write_log.emit_ibc_event(event);
-    tx_add_gas(env, gas)
+    tx_add_gas_aux(&env, gas)
 }
 
 /// Storage read prior state (before tx execution) function exposed to the wasm
@@ -999,20 +1008,21 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn vp_read_pre<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    mut env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
     key_ptr: u64,
     key_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(&mut store, key_ptr, key_len as _)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_host_fns::add_gas(gas_meter, gas)?;
@@ -1050,20 +1060,21 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn vp_read_post<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    mut env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
     key_ptr: u64,
     key_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(&mut store, key_ptr, key_len as _)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_host_fns::add_gas(gas_meter, gas)?;
@@ -1096,20 +1107,21 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn vp_read_temp<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    mut env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
     key_ptr: u64,
     key_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(&mut store, key_ptr, key_len as _)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_host_fns::add_gas(gas_meter, gas)?;
@@ -1144,21 +1156,22 @@ where
 /// any) back to the guest, the second step reads the value from cache into a
 /// pre-allocated buffer with the obtained size.
 pub fn vp_result_buffer<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    mut env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
     result_ptr: u64,
 ) -> vp_host_fns::EnvResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let result_buffer = unsafe { env.ctx.result_buffer.get() };
     let value = result_buffer.take().unwrap();
     let gas = env
         .memory
-        .write_bytes(result_ptr, value)
+        .write_bytes(&mut store, result_ptr, value)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_host_fns::add_gas(gas_meter, gas)
@@ -1167,20 +1180,21 @@ where
 /// Storage `has_key` in prior state (before tx execution) function exposed to
 /// the wasm VM VP environment. It will try to read from the storage.
 pub fn vp_has_key_pre<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    mut env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
     key_ptr: u64,
     key_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(&mut store, key_ptr, key_len as _)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_host_fns::add_gas(gas_meter, gas)?;
@@ -1200,20 +1214,21 @@ where
 /// to the wasm VM VP environment. It will try to check the write log first and
 /// if no entry found then the storage.
 pub fn vp_has_key_post<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    mut env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
     key_ptr: u64,
     key_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(&mut store, key_ptr, key_len as _)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_host_fns::add_gas(gas_meter, gas)?;
@@ -1234,20 +1249,21 @@ where
 /// the storage and return the corresponding ID of the iterator, ordered by
 /// storage keys.
 pub fn vp_iter_prefix_pre<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    mut env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> vp_host_fns::EnvResult<u64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (prefix, gas) = env
         .memory
-        .read_string(prefix_ptr, prefix_len as _)
+        .read_string(&mut store, prefix_ptr, prefix_len as _)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_host_fns::add_gas(gas_meter, gas)?;
@@ -1271,20 +1287,21 @@ where
 /// the storage and return the corresponding ID of the iterator, ordered by
 /// storage keys.
 pub fn vp_iter_prefix_post<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    mut env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> vp_host_fns::EnvResult<u64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (prefix, gas) = env
         .memory
-        .read_string(prefix_ptr, prefix_len as _)
+        .read_string(&mut store, prefix_ptr, prefix_len as _)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_host_fns::add_gas(gas_meter, gas)?;
@@ -1309,16 +1326,17 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn vp_iter_next<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
     iter_id: u64,
 ) -> vp_host_fns::EnvResult<i64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let env = env.data();
     tracing::debug!("vp_iter_next iter_id {}", iter_id);
 
     let iterators = unsafe { env.ctx.iterators.get() };
@@ -1343,21 +1361,22 @@ where
 
 /// Verifier insertion function exposed to the wasm VM Tx environment.
 pub fn tx_insert_verifier<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    mut env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
     addr_ptr: u64,
     addr_len: u64,
 ) -> TxResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (addr, gas) = env
         .memory
-        .read_string(addr_ptr, addr_len as _)
+        .read_string(&mut store, addr_ptr, addr_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
 
     tracing::debug!("tx_insert_verifier {}, addr_ptr {}", addr, addr_ptr,);
 
@@ -1365,28 +1384,29 @@ where
 
     let verifiers = unsafe { env.ctx.verifiers.get() };
     verifiers.insert(addr);
-    tx_add_gas(env, addr_len)
+    tx_add_gas_aux(&env, addr_len)
 }
 
 /// Update a validity predicate function exposed to the wasm VM Tx environment
 pub fn tx_update_validity_predicate<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    mut env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
     addr_ptr: u64,
     addr_len: u64,
     code_hash_ptr: u64,
     code_hash_len: u64,
 ) -> TxResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (addr, gas) = env
         .memory
-        .read_string(addr_ptr, addr_len as _)
+        .read_string(&mut store, addr_ptr, addr_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
 
     let addr = Address::decode(addr).map_err(TxRuntimeError::AddressError)?;
     tracing::debug!("tx_update_validity_predicate for addr {}", addr);
@@ -1394,9 +1414,9 @@ where
     let key = Key::validity_predicate(&addr);
     let (code_hash, gas) = env
         .memory
-        .read_bytes(code_hash_ptr, code_hash_len as _)
+        .read_bytes(&mut store, code_hash_ptr, code_hash_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
 
     tx_validate_vp_code_hash(env, &code_hash)?;
 
@@ -1404,28 +1424,29 @@ where
     let (gas, _size_diff) = write_log
         .write(&key, code_hash)
         .map_err(TxRuntimeError::StorageModificationError)?;
-    tx_add_gas(env, gas)
+    tx_add_gas_aux(&env, gas)
     // TODO: charge the size diff
 }
 
 /// Initialize a new account established address.
 pub fn tx_init_account<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    mut env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
     code_hash_ptr: u64,
     code_hash_len: u64,
     result_ptr: u64,
 ) -> TxResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (code_hash, gas) = env
         .memory
-        .read_bytes(code_hash_ptr, code_hash_len as _)
+        .read_bytes(&mut store, code_hash_ptr, code_hash_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
 
     tx_validate_vp_code_hash(env, &code_hash)?;
 
@@ -1438,50 +1459,52 @@ where
     let (addr, gas) = write_log.init_account(&storage.address_gen, code_hash);
     let addr_bytes =
         addr.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
     let gas = env
         .memory
-        .write_bytes(result_ptr, addr_bytes)
+        .write_bytes(&mut store, result_ptr, addr_bytes)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)
+    tx_add_gas_aux(&env, gas)
 }
 
 /// Getting the chain ID function exposed to the wasm VM Tx environment.
 pub fn tx_get_chain_id<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    mut env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
     result_ptr: u64,
 ) -> TxResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let storage = unsafe { env.ctx.storage.get() };
     let (chain_id, gas) = storage.get_chain_id();
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
     let gas = env
         .memory
-        .write_string(result_ptr, chain_id)
+        .write_string(&mut store, result_ptr, chain_id)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)
+    tx_add_gas_aux(&env, gas)
 }
 
 /// Getting the block height function exposed to the wasm VM Tx
 /// environment. The height is that of the block to which the current
 /// transaction is being applied.
 pub fn tx_get_block_height<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
 ) -> TxResult<u64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let env = env.data();
     let storage = unsafe { env.ctx.storage.get() };
     let (height, gas) = storage.get_block_height();
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
     Ok(height.0)
 }
 
@@ -1489,16 +1512,17 @@ where
 /// environment. The index is that of the transaction being applied
 /// in the current block.
 pub fn tx_get_tx_index<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
 ) -> TxResult<u32>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let env = env.data();
     let tx_index = unsafe { env.ctx.tx_index.get() };
-    tx_add_gas(env, crate::vm::host_env::gas::MIN_STORAGE_GAS)?;
+    tx_add_gas_aux(&env, crate::vm::host_env::gas::MIN_STORAGE_GAS)?;
     Ok(tx_index.0)
 }
 
@@ -1506,15 +1530,16 @@ where
 /// environment. The height is that of the block to which the current
 /// transaction is being applied.
 pub fn vp_get_tx_index<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
 ) -> vp_host_fns::EnvResult<u32>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let env = env.data();
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let tx_index = unsafe { env.ctx.tx_index.get() };
     let tx_idx = vp_host_fns::get_tx_index(gas_meter, tx_index)?;
@@ -1524,76 +1549,80 @@ where
 /// Getting the block hash function exposed to the wasm VM Tx environment. The
 /// hash is that of the block to which the current transaction is being applied.
 pub fn tx_get_block_hash<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    mut env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
     result_ptr: u64,
 ) -> TxResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let storage = unsafe { env.ctx.storage.get() };
     let (hash, gas) = storage.get_block_hash();
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
     let gas = env
         .memory
-        .write_bytes(result_ptr, hash.0)
+        .write_bytes(&mut store, result_ptr, hash.0)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)
+    tx_add_gas_aux(&env, gas)
 }
 
 /// Getting the block epoch function exposed to the wasm VM Tx
 /// environment. The epoch is that of the block to which the current
 /// transaction is being applied.
 pub fn tx_get_block_epoch<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
 ) -> TxResult<u64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let env = env.data();
     let storage = unsafe { env.ctx.storage.get() };
     let (epoch, gas) = storage.get_current_epoch();
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(&env, gas)?;
     Ok(epoch.0)
 }
 
 /// Get the native token's address
 pub fn tx_get_native_token<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    mut env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
     result_ptr: u64,
 ) -> TxResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let storage = unsafe { env.ctx.storage.get() };
-    tx_add_gas(env, MIN_STORAGE_GAS)?;
+    tx_add_gas_aux(&env, MIN_STORAGE_GAS)?;
     let native_token = storage.native_token.clone();
     let native_token_string = native_token.encode();
     let gas = env
         .memory
-        .write_string(result_ptr, native_token_string)
+        .write_string(&mut store, result_ptr, native_token_string)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)
+    tx_add_gas_aux(&env, gas)
 }
 
 /// Getting the block header function exposed to the wasm VM Tx environment.
 pub fn tx_get_block_header<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
     height: u64,
 ) -> TxResult<i64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let env = env.data();
     let storage = unsafe { env.ctx.storage.get() };
     let (header, gas) = storage
         .get_block_header(Some(BlockHeight(height)))
@@ -1608,7 +1637,7 @@ where
                 .map_err(TxRuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
             result_buffer.replace(value);
-            tx_add_gas(env, gas)?;
+            tx_add_gas_aux(&env, gas)?;
             len
         }
         None => HostEnvResult::Fail.to_i64(),
@@ -1617,22 +1646,23 @@ where
 
 /// Getting the chain ID function exposed to the wasm VM VP environment.
 pub fn vp_get_chain_id<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    mut env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
     result_ptr: u64,
 ) -> vp_host_fns::EnvResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let storage = unsafe { env.ctx.storage.get() };
     let chain_id = vp_host_fns::get_chain_id(gas_meter, storage)?;
     let gas = env
         .memory
-        .write_string(result_ptr, chain_id)
+        .write_string(&mut store, result_ptr, chain_id)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     vp_host_fns::add_gas(gas_meter, gas)
 }
@@ -1641,15 +1671,16 @@ where
 /// environment. The height is that of the block to which the current
 /// transaction is being applied.
 pub fn vp_get_block_height<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
 ) -> vp_host_fns::EnvResult<u64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let env = env.data();
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let storage = unsafe { env.ctx.storage.get() };
     let height = vp_host_fns::get_block_height(gas_meter, storage)?;
@@ -1658,16 +1689,17 @@ where
 
 /// Getting the block header function exposed to the wasm VM VP environment.
 pub fn vp_get_block_header<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
     height: u64,
 ) -> vp_host_fns::EnvResult<i64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let env = env.data();
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let storage = unsafe { env.ctx.storage.get() };
     let (header, gas) = storage
@@ -1694,38 +1726,40 @@ where
 /// Getting the block hash function exposed to the wasm VM VP environment. The
 /// hash is that of the block to which the current transaction is being applied.
 pub fn vp_get_block_hash<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    mut env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
     result_ptr: u64,
 ) -> vp_host_fns::EnvResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let storage = unsafe { env.ctx.storage.get() };
     let hash = vp_host_fns::get_block_hash(gas_meter, storage)?;
     let gas = env
         .memory
-        .write_bytes(result_ptr, hash.0)
+        .write_bytes(&mut store, result_ptr, hash.0)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     vp_host_fns::add_gas(gas_meter, gas)
 }
 
 /// Getting the transaction hash function exposed to the wasm VM VP environment.
 pub fn vp_get_tx_code_hash<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    mut env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
     result_ptr: u64,
 ) -> vp_host_fns::EnvResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let tx = unsafe { env.ctx.tx.get() };
     let hash = vp_host_fns::get_tx_code_hash(gas_meter, tx)?;
@@ -1738,7 +1772,7 @@ where
     };
     let gas = env
         .memory
-        .write_bytes(result_ptr, result_bytes)
+        .write_bytes(&mut store, result_ptr, result_bytes)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     vp_host_fns::add_gas(gas_meter, gas)
 }
@@ -1747,15 +1781,16 @@ where
 /// environment. The epoch is that of the block to which the current
 /// transaction is being applied.
 pub fn vp_get_block_epoch<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
 ) -> vp_host_fns::EnvResult<u64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let env = env.data();
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let storage = unsafe { env.ctx.storage.get() };
     let epoch = vp_host_fns::get_block_epoch(gas_meter, storage)?;
@@ -1764,23 +1799,24 @@ where
 
 /// Verify a ShieldedTransaction.
 pub fn vp_verify_masp<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    mut env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
     tx_ptr: u64,
     tx_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
     use masp_primitives::transaction::Transaction;
+    let (env, mut store) = env.data_and_store_mut();
 
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let (tx_bytes, gas) = env
         .memory
-        .read_bytes(tx_ptr, tx_len as _)
+        .read_bytes(&mut store, tx_ptr, tx_len as _)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     vp_host_fns::add_gas(gas_meter, gas)?;
 
@@ -1798,19 +1834,20 @@ where
 /// printed at the [`tracing::Level::INFO`]. This function is for development
 /// only.
 pub fn tx_log_string<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    mut env: FunctionEnvMut<TxVmEnv<'static, MEM, DB, H, CA>>,
     str_ptr: u64,
     str_len: u64,
 ) -> TxResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (str, _gas) = env
         .memory
-        .read_string(str_ptr, str_len as _)
+        .read_string(&mut store, str_ptr, str_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tracing::info!("WASM Transaction log: {}", str);
     Ok(())
@@ -1818,28 +1855,28 @@ where
 
 /// Validate a VP WASM code hash in a tx environment.
 fn tx_validate_vp_code_hash<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
+    env: &TxVmEnv<'static, MEM, DB, H, CA>,
     code_hash: &[u8],
 ) -> TxResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_add_gas(env, code_hash.len() as u64 * WASM_VALIDATION_GAS_PER_BYTE)?;
+    tx_add_gas_aux(env, code_hash.len() as u64 * WASM_VALIDATION_GAS_PER_BYTE)?;
     let hash = Hash::try_from(code_hash)
         .map_err(|e| TxRuntimeError::InvalidVpCodeHash(e.to_string()))?;
     let key = Key::wasm_code(&hash);
     let write_log = unsafe { env.ctx.write_log.get() };
     let (result, gas) = write_log.read(&key);
-    tx_add_gas(env, gas)?;
+    tx_add_gas_aux(env, gas)?;
     if result.is_none() {
         let storage = unsafe { env.ctx.storage.get() };
         let (is_present, gas) = storage
             .has_key(&key)
             .map_err(TxRuntimeError::StorageError)?;
-        tx_add_gas(env, gas)?;
+        tx_add_gas_aux(env, gas)?;
         if !is_present {
             return Err(TxRuntimeError::InvalidVpCodeHash(
                 "The corresponding VP code doesn't exist".to_string(),
@@ -1851,29 +1888,30 @@ where
 
 /// Evaluate a validity predicate with the given input data.
 pub fn vp_eval<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<'static, MEM, DB, H, EVAL, CA>,
+    mut env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
     vp_code_ptr: u64,
     vp_code_len: u64,
     input_data_ptr: u64,
     input_data_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator<Db = DB, H = H, Eval = EVAL, CA = CA>,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (vp_code_hash, gas) = env
         .memory
-        .read_bytes(vp_code_ptr, vp_code_len as _)
+        .read_bytes(&mut store, vp_code_ptr, vp_code_len as _)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_host_fns::add_gas(gas_meter, gas)?;
 
     let (input_data, gas) = env
         .memory
-        .read_bytes(input_data_ptr, input_data_len as _)
+        .read_bytes(&mut store, input_data_ptr, input_data_len as _)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     vp_host_fns::add_gas(gas_meter, gas)?;
     let input_data: Tx = BorshDeserialize::try_from_slice(&input_data)
@@ -1893,38 +1931,40 @@ where
 
 /// Get the native token's address
 pub fn vp_get_native_token<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    mut env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
     result_ptr: u64,
 ) -> vp_host_fns::EnvResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let storage = unsafe { env.ctx.storage.get() };
     let native_token = vp_host_fns::get_native_token(gas_meter, storage)?;
     let native_token_string = native_token.encode();
     let gas = env
         .memory
-        .write_string(result_ptr, native_token_string)
+        .write_string(&mut store, result_ptr, native_token_string)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     vp_host_fns::add_gas(gas_meter, gas)
 }
 
 /// Find if the wrapper tx had a valid `testnet_pow::Solution`
 pub fn vp_has_valid_pow<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
 ) -> vp_host_fns::EnvResult<i64>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let env = env.data();
     #[cfg(feature = "mainnet")]
     let _ = env;
 
@@ -1945,20 +1985,21 @@ where
 /// printed at the [`tracing::Level::INFO`]. This function is for development
 /// only.
 pub fn vp_log_string<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    mut env: FunctionEnvMut<VpVmEnv<'static, MEM, DB, H, EVAL, CA>>,
     str_ptr: u64,
     str_len: u64,
 ) -> vp_host_fns::EnvResult<()>
 where
-    MEM: VmMemory,
+    MEM: VmMemory + 'static,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
+    let (env, mut store) = env.data_and_store_mut();
     let (str, _gas) = env
         .memory
-        .read_string(str_ptr, str_len as _)
+        .read_string(&mut store, str_ptr, str_len as _)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     tracing::info!("WASM Validity predicate log: {}", str);
     Ok(())

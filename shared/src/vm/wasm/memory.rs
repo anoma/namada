@@ -8,11 +8,12 @@ use std::sync::Arc;
 use borsh::BorshSerialize;
 use thiserror::Error;
 use wasmer::{
-    vm, BaseTunables, HostEnvInitError, LazyInit, Memory, MemoryError,
-    MemoryType, Pages, TableType, Target, Tunables,
+    vm, BaseTunables, ExportError, Memory, MemoryError, MemoryType, Pages,
+    TableType, Target, Tunables,
 };
 use wasmer_vm::{
-    MemoryStyle, TableStyle, VMMemoryDefinition, VMTableDefinition,
+    MemoryStyle, TableStyle, VMMemory, VMMemoryDefinition, VMTable,
+    VMTableDefinition,
 };
 
 use crate::proto::Tx;
@@ -26,6 +27,8 @@ pub enum Error {
     InitMemoryError(wasmer::MemoryError),
     #[error("Memory ouf of bounds: {0}")]
     MemoryOutOfBounds(wasmer::MemoryError),
+    #[error("Memory access error: {0}")]
+    MemoryAccessError(#[from] wasmer::MemoryAccessError),
     #[error("Encoding error: {0}")]
     EncodingError(std::io::Error),
     #[error("Memory is not initialized")]
@@ -50,7 +53,7 @@ pub const VP_MEMORY_INIT_PAGES: u32 = 100; // 6.4 MiB
 pub const VP_MEMORY_MAX_PAGES: u32 = 200; // 12.8 MiB
 
 /// Prepare memory for instantiating a transaction module
-pub fn prepare_tx_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
+pub fn prepare_tx_memory(store: &mut wasmer::Store) -> Result<wasmer::Memory> {
     let mem_type = wasmer::MemoryType::new(
         TX_MEMORY_INIT_PAGES,
         Some(TX_MEMORY_MAX_PAGES),
@@ -60,7 +63,7 @@ pub fn prepare_tx_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
 }
 
 /// Prepare memory for instantiating a validity predicate module
-pub fn prepare_vp_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
+pub fn prepare_vp_memory(store: &mut wasmer::Store) -> Result<wasmer::Memory> {
     let mem_type = wasmer::MemoryType::new(
         VP_MEMORY_INIT_PAGES,
         Some(VP_MEMORY_MAX_PAGES),
@@ -82,13 +85,14 @@ pub struct TxCallInput {
 /// Write transaction inputs into wasm memory
 pub fn write_tx_inputs(
     memory: &wasmer::Memory,
+    store: &mut wasmer::StoreMut<'_>,
     tx_data: &Tx,
 ) -> Result<TxCallInput> {
     let tx_data_ptr = 0;
     let tx_data_bytes = tx_data.try_to_vec().map_err(Error::EncodingError)?;
     let tx_data_len = tx_data_bytes.len() as _;
 
-    write_memory_bytes(memory, tx_data_ptr, tx_data_bytes)?;
+    write_memory_bytes(memory, store, tx_data_ptr, tx_data_bytes)?;
 
     Ok(TxCallInput {
         tx_data_ptr,
@@ -120,6 +124,7 @@ pub struct VpCallInput {
 /// Write validity predicate inputs into wasm memory
 pub fn write_vp_inputs(
     memory: &wasmer::Memory,
+    store: &mut wasmer::StoreMut<'_>,
     VpInput {
         addr,
         data,
@@ -152,7 +157,7 @@ pub fn write_vp_inputs(
         &verifiers_bytes[..],
     ]
     .concat();
-    write_memory_bytes(memory, addr_ptr, bytes)?;
+    write_memory_bytes(memory, store, addr_ptr, bytes)?;
 
     Ok(VpCallInput {
         addr_ptr,
@@ -168,62 +173,65 @@ pub fn write_vp_inputs(
 
 /// Check that the given offset and length fits into the memory bounds. If not,
 /// it will try to grow the memory.
-fn check_bounds(memory: &Memory, offset: u64, len: usize) -> Result<()> {
-    tracing::debug!(
-        "check_bounds pages {}, data_size {}, offset + len {}",
-        memory.size().0,
-        memory.data_size(),
-        offset + len as u64
-    );
-    if memory.data_size() < offset + len as u64 {
-        let cur_pages = memory.size().0;
-        let capacity = cur_pages as usize * wasmer::WASM_PAGE_SIZE;
-        let missing = offset as usize + len - capacity;
-        // Ceiling division
-        let req_pages = ((missing + wasmer::WASM_PAGE_SIZE - 1)
-            / wasmer::WASM_PAGE_SIZE) as u32;
-        tracing::info!("trying to grow memory by {} pages", req_pages);
-        memory.grow(req_pages).map_err(Error::MemoryOutOfBounds)?;
-    }
+fn check_bounds(
+    memory: &Memory,
+    store: &mut wasmer::StoreMut<'_>,
+    offset: u64,
+    len: usize,
+) -> Result<()> {
+    // TODO: fucked big time
+    // tracing::debug!(
+    //     "check_bounds pages {}, data_size {}, offset + len {}",
+    //     memory.size().0,
+    //     memory.data_size(),
+    //     offset + len as u64
+    // );
+    // if memory.data_size() < offset + len as u64 {
+    //     let cur_pages = memory.size().0;
+    //     let capacity = cur_pages as usize * wasmer::WASM_PAGE_SIZE;
+    //     let missing = offset as usize + len - capacity;
+    //     // Ceiling division
+    //     let req_pages = ((missing + wasmer::WASM_PAGE_SIZE - 1)
+    //         / wasmer::WASM_PAGE_SIZE) as u32;
+    //     tracing::info!("trying to grow memory by {} pages", req_pages);
+    //     memory
+    //         .grow(store, req_pages)
+    //         .map_err(Error::MemoryOutOfBounds)?;
+    // }
     Ok(())
 }
 
 /// Read bytes from memory at the given offset and length
 fn read_memory_bytes(
     memory: &Memory,
+    store: &mut wasmer::StoreMut<'_>,
     offset: u64,
     len: usize,
 ) -> Result<Vec<u8>> {
-    check_bounds(memory, offset, len)?;
-    let offset = offset as usize;
-    let vec: Vec<_> = memory.view()[offset..(offset + len)]
-        .iter()
-        .map(|cell| cell.get())
-        .collect();
-    Ok(vec)
+    check_bounds(memory, store, offset, len)?;
+    let mut buf = vec![];
+    memory.view(store).read(offset, &mut buf)?;
+    Ok(buf)
 }
 
 /// Write bytes into memory at the given offset
 fn write_memory_bytes(
     memory: &Memory,
+    store: &mut wasmer::StoreMut<'_>,
     offset: u64,
     bytes: impl AsRef<[u8]>,
 ) -> Result<()> {
     let slice = bytes.as_ref();
     let len = slice.len();
-    check_bounds(memory, offset, len as _)?;
-    let offset = offset as usize;
-    memory.view()[offset..(offset + len)]
-        .iter()
-        .zip(slice.iter())
-        .for_each(|(cell, v)| cell.set(*v));
+    check_bounds(memory, store, offset, len as _)?;
+    memory.view(store).write(offset, slice)?;
     Ok(())
 }
 
 /// The wasm memory
 #[derive(Debug, Clone, Default)]
 pub struct WasmMemory {
-    inner: LazyInit<wasmer::Memory>,
+    inner: Option<wasmer::Memory>,
 }
 
 impl WasmMemory {
@@ -232,7 +240,7 @@ impl WasmMemory {
     pub fn init_env_memory(
         &mut self,
         exports: &wasmer::Exports,
-    ) -> std::result::Result<(), HostEnvInitError> {
+    ) -> std::result::Result<(), ExportError> {
         // "`TxEnv` holds a reference to the Wasm `Memory`, which itself
         // internally holds a reference to the instance which owns that
         // memory. However the instance itself also holds a reference to
@@ -241,10 +249,7 @@ impl WasmMemory {
         // You can work around this by using `get_with_generics_weak` which
         // creates a weak reference to the `Instance` internally."
         // <https://github.com/wasmerio/wasmer/issues/2780#issuecomment-1054452629>
-        let memory = exports.get_with_generics_weak("memory")?;
-        if !self.inner.initialize(memory) {
-            tracing::error!("wasm memory is already initialized");
-        }
+        self.inner = Some(exports.get_memory("memory")?.clone());
         Ok(())
     }
 }
@@ -254,25 +259,40 @@ impl VmMemory for WasmMemory {
 
     /// Read bytes from memory at the given offset and length, return the bytes
     /// and the gas cost
-    fn read_bytes(&self, offset: u64, len: usize) -> Result<(Vec<u8>, u64)> {
-        let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
-        let bytes = read_memory_bytes(memory, offset, len)?;
+    fn read_bytes(
+        &self,
+        store: &mut wasmer::StoreMut<'_>,
+        offset: u64,
+        len: usize,
+    ) -> Result<(Vec<u8>, u64)> {
+        let memory = self.inner.as_ref().ok_or(Error::UninitializedMemory)?;
+        let bytes = read_memory_bytes(memory, store, offset, len)?;
         let gas = bytes.len();
         Ok((bytes, gas as _))
     }
 
     /// Write bytes into memory at the given offset and return the gas cost
-    fn write_bytes(&self, offset: u64, bytes: impl AsRef<[u8]>) -> Result<u64> {
+    fn write_bytes(
+        &self,
+        store: &mut wasmer::StoreMut<'_>,
+        offset: u64,
+        bytes: impl AsRef<[u8]>,
+    ) -> Result<u64> {
         let gas = bytes.as_ref().len();
-        let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
-        write_memory_bytes(memory, offset, bytes)?;
+        let memory = self.inner.as_ref().ok_or(Error::UninitializedMemory)?;
+        write_memory_bytes(memory, store, offset, bytes)?;
         Ok(gas as _)
     }
 
     /// Read string from memory at the given offset and bytes length, and return
     /// the gas cost
-    fn read_string(&self, offset: u64, len: usize) -> Result<(String, u64)> {
-        let (bytes, gas) = self.read_bytes(offset, len)?;
+    fn read_string(
+        &self,
+        store: &mut wasmer::StoreMut<'_>,
+        offset: u64,
+        len: usize,
+    ) -> Result<(String, u64)> {
+        let (bytes, gas) = self.read_bytes(store, offset, len)?;
         let string = std::str::from_utf8(&bytes)
             .map_err(Error::InvalidUtf8String)?
             .to_string();
@@ -281,12 +301,17 @@ impl VmMemory for WasmMemory {
 
     /// Write string into memory at the given offset and return the gas cost
     #[allow(dead_code)]
-    fn write_string(&self, offset: u64, string: String) -> Result<u64> {
-        self.write_bytes(offset, string.as_bytes())
+    fn write_string(
+        &self,
+        store: &mut wasmer::StoreMut<'_>,
+        offset: u64,
+        string: String,
+    ) -> Result<u64> {
+        self.write_bytes(store, offset, string.as_bytes())
     }
 }
 
-#[derive(loupe::MemoryUsage)]
+// #[derive(loupe::MemoryUsage)]
 /// A custom [`Tunables`] to set a WASM memory limits.
 ///
 /// Adapted from <https://github.com/wasmerio/wasmer/blob/29d7b4a5f1c401d9a1e95086ed85878c8407ec16/examples/tunables_limit_memory.rs>.
@@ -377,7 +402,7 @@ impl<T: Tunables> Tunables for Limit<T> {
         &self,
         ty: &MemoryType,
         style: &MemoryStyle,
-    ) -> std::result::Result<Arc<dyn vm::Memory>, MemoryError> {
+    ) -> std::result::Result<VMMemory, MemoryError> {
         let adjusted = self.adjust_memory(ty);
         self.validate_memory(&adjusted)?;
         self.base.create_host_memory(&adjusted, style)
@@ -392,7 +417,7 @@ impl<T: Tunables> Tunables for Limit<T> {
         ty: &MemoryType,
         style: &MemoryStyle,
         vm_definition_location: NonNull<VMMemoryDefinition>,
-    ) -> std::result::Result<Arc<dyn vm::Memory>, MemoryError> {
+    ) -> std::result::Result<VMMemory, MemoryError> {
         let adjusted = self.adjust_memory(ty);
         self.validate_memory(&adjusted)?;
         self.base
@@ -407,7 +432,7 @@ impl<T: Tunables> Tunables for Limit<T> {
         &self,
         ty: &TableType,
         style: &TableStyle,
-    ) -> std::result::Result<Arc<dyn vm::Table>, String> {
+    ) -> std::result::Result<VMTable, String> {
         self.base.create_host_table(ty, style)
     }
 
@@ -420,7 +445,7 @@ impl<T: Tunables> Tunables for Limit<T> {
         ty: &TableType,
         style: &TableStyle,
         vm_definition_location: NonNull<VMTableDefinition>,
-    ) -> std::result::Result<Arc<dyn vm::Table>, String> {
+    ) -> std::result::Result<VMTable, String> {
         self.base.create_vm_table(ty, style, vm_definition_location)
     }
 }
@@ -428,7 +453,8 @@ impl<T: Tunables> Tunables for Limit<T> {
 #[cfg(test)]
 pub mod tests {
     use wasmer::{
-        wat2wasm, BaseTunables, Cranelift, Instance, Module, Store, Target,
+        wat2wasm, AsStoreRef, BaseTunables, Cranelift, Instance, Module, Store,
+        Target,
     };
 
     use super::*;
@@ -446,14 +472,13 @@ pub mod tests {
 
         // Any compiler and any engine do the job here
         let compiler = Cranelift::default();
-        let engine = wasmer_engine_universal::Universal::new(compiler).engine();
 
         let base = BaseTunables::for_target(&Target::default());
         let limit = Pages(24);
         let tunables = Limit { limit, base };
 
         // Create a store, that holds the engine and our custom tunables
-        let store = Store::new_with_tunables(&engine, tunables);
+        let mut store = wasmer::Store::new_with_tunables(compiler, tunables);
 
         println!("Compiling module...");
         let module = Module::new(&store, wasm_bytes).unwrap();
@@ -462,7 +487,8 @@ pub mod tests {
         let import_object = wasmer::imports! {};
 
         // Now at this point, our custom tunables are used
-        let instance = Instance::new(&module, &import_object).unwrap();
+        let instance =
+            Instance::new(&mut store, &module, &import_object).unwrap();
 
         // Check what happened
         let mut memories: Vec<Memory> = instance
@@ -475,6 +501,9 @@ pub mod tests {
 
         let first_memory = memories.pop().unwrap();
         println!("Memory of this instance: {:?}", first_memory);
-        assert_eq!(first_memory.ty().maximum.unwrap(), limit);
+        assert_eq!(
+            first_memory.ty(&store.as_store_ref()).maximum.unwrap(),
+            limit
+        );
     }
 }

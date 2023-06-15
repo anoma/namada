@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 use parity_wasm::elements;
 use pwasm_utils::{self, rules};
 use thiserror::Error;
-use wasmer::{BaseTunables, Module, Store};
+use wasmer::{AsStoreMut, BaseTunables, Module};
 
 use super::memory::{Limit, WasmMemory};
 use super::TxCache;
@@ -99,7 +99,7 @@ where
         .get_section(tx.code_sechash())
         .and_then(Section::code_sec)
         .ok_or(Error::MissingCode)?;
-    let (module, store) = match tx_code.code {
+    let (module, mut store) = match tx_code.code {
         Commitment::Hash(code_hash) => {
             fetch_or_compile(tx_wasm_cache, &code_hash, write_log, storage)?
         }
@@ -130,12 +130,17 @@ where
     );
 
     let initial_memory =
-        memory::prepare_tx_memory(&store).map_err(Error::MemoryError)?;
-    let imports = tx_imports(&store, initial_memory, env);
+        memory::prepare_tx_memory(&mut store).map_err(Error::MemoryError)?;
+    let mut env = wasmer::FunctionEnv::new(&mut store, env);
+    let imports = tx_imports(&mut store, initial_memory, &env);
 
     // Instantiate the wasm module
-    let instance = wasmer::Instance::new(&module, &imports)
+    let instance = wasmer::Instance::new(&mut store, &module, &imports)
         .map_err(|e| Error::InstantiationError(Box::new(e)))?;
+    env.as_mut(&mut store)
+        .memory
+        .init_env_memory(&instance.exports)
+        .expect("todo");
 
     // We need to write the inputs in the memory exported from the wasm
     // module
@@ -146,19 +151,20 @@ where
     let memory::TxCallInput {
         tx_data_ptr,
         tx_data_len,
-    } = memory::write_tx_inputs(memory, tx).map_err(Error::MemoryError)?;
+    } = memory::write_tx_inputs(memory, &mut store.as_store_mut(), tx)
+        .map_err(Error::MemoryError)?;
     // Get the module's entrypoint to be called
     let apply_tx = instance
         .exports
         .get_function(TX_ENTRYPOINT)
         .map_err(Error::MissingModuleEntrypoint)?
-        .native::<(u64, u64), ()>()
+        .typed::<(u64, u64), ()>(&mut store)
         .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
             entrypoint: TX_ENTRYPOINT,
             error,
         })?;
     match apply_tx
-        .call(tx_data_ptr, tx_data_len)
+        .call(&mut store, tx_data_ptr, tx_data_len)
         .map_err(Error::RuntimeError)
     {
         Err(Error::RuntimeError(err)) => {
@@ -194,7 +200,7 @@ where
     CA: 'static + WasmCacheAccess,
 {
     // Compile the wasm module
-    let (module, store) =
+    let (module, mut store) =
         fetch_or_compile(&mut vp_wasm_cache, vp_code_hash, write_log, storage)?;
 
     let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
@@ -224,15 +230,25 @@ where
     );
 
     let initial_memory =
-        memory::prepare_vp_memory(&store).map_err(Error::MemoryError)?;
-    let imports = vp_imports(&store, initial_memory, env);
+        memory::prepare_vp_memory(&mut store).map_err(Error::MemoryError)?;
+    let imports = vp_imports(&mut store, initial_memory, env);
 
-    run_vp(module, imports, tx, address, keys_changed, verifiers)
+    let mut store_mut = store.as_store_mut();
+    run_vp(
+        module,
+        &mut store_mut,
+        imports,
+        tx,
+        address,
+        keys_changed,
+        verifiers,
+    )
 }
 
 fn run_vp(
-    module: wasmer::Module,
-    vp_imports: wasmer::ImportObject,
+    mut module: wasmer::Module,
+    store: &mut wasmer::StoreMut<'_>,
+    vp_imports: wasmer::Imports,
     input_data: &Tx,
     address: &Address,
     keys_changed: &BTreeSet<Key>,
@@ -246,7 +262,7 @@ fn run_vp(
     };
 
     // Instantiate the wasm module
-    let instance = wasmer::Instance::new(&module, &vp_imports)
+    let instance = wasmer::Instance::new(store, &mut module, &vp_imports)
         .map_err(|e| Error::InstantiationError(Box::new(e)))?;
 
     // We need to write the inputs in the memory exported from the wasm
@@ -264,20 +280,22 @@ fn run_vp(
         keys_changed_len,
         verifiers_ptr,
         verifiers_len,
-    } = memory::write_vp_inputs(memory, input).map_err(Error::MemoryError)?;
+    } = memory::write_vp_inputs(memory, store, input)
+        .map_err(Error::MemoryError)?;
 
     // Get the module's entrypoint to be called
     let validate_tx = instance
         .exports
         .get_function(VP_ENTRYPOINT)
         .map_err(Error::MissingModuleEntrypoint)?
-        .native::<(u64, u64, u64, u64, u64, u64, u64, u64), u64>()
+        .typed::<(u64, u64, u64, u64, u64, u64, u64, u64), u64>(store)
         .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
             entrypoint: VP_ENTRYPOINT,
             error,
         })?;
     let is_valid = validate_tx
         .call(
+            store,
             addr_ptr,
             addr_len,
             data_ptr,
@@ -367,16 +385,18 @@ where
         };
 
         // Compile the wasm module
-        let (module, store) =
+        let (module, mut store) =
             fetch_or_compile(vp_wasm_cache, &vp_code_hash, write_log, storage)?;
 
-        let initial_memory =
-            memory::prepare_vp_memory(&store).map_err(Error::MemoryError)?;
+        let initial_memory = memory::prepare_vp_memory(&mut store)
+            .map_err(Error::MemoryError)?;
 
-        let imports = vp_imports(&store, initial_memory, env);
+        let imports = vp_imports(&mut store, initial_memory, env);
 
+        let mut store_mut = store.as_store_mut();
         run_vp(
             module,
+            &mut store_mut,
             imports,
             &input_data,
             address,
@@ -390,10 +410,10 @@ where
 pub fn untrusted_wasm_store(limit: Limit<BaseTunables>) -> wasmer::Store {
     // Use Singlepass compiler with the default settings
     let compiler = wasmer_compiler_singlepass::Singlepass::default();
-    wasmer::Store::new_with_tunables(
-        &wasmer_engine_universal::Universal::new(compiler).engine(),
-        limit,
-    )
+    let mut store = wasmer::Store::new(compiler);
+    // TODO: this is fucked
+    // store.engine().set_tunables(limit);
+    store
 }
 
 /// Inject gas counter and stack-height limiter into the given wasm code
@@ -415,7 +435,7 @@ fn fetch_or_compile<DB, H, CN, CA>(
     code_hash: &Hash,
     write_log: &WriteLog,
     storage: &Storage<DB, H>,
-) -> Result<(Module, Store)>
+) -> Result<(Module, wasmer::Store)>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,
