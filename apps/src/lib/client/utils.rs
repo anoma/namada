@@ -823,7 +823,7 @@ pub fn init_network(
     // Open P2P address
     if !localhost {
         config.ledger.cometbft.p2p.laddr =
-            TendermintAddress::from_str("0.0.0.0").unwrap();
+            TendermintAddress::from_str("0.0.0.0:26656").unwrap();
         // .set_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
     }
     config.ledger.cometbft.p2p.addr_book_strict = !localhost;
