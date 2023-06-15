@@ -41,6 +41,10 @@ tendermint-rpc = [
   "async-client",
   "dep:tendermint-rpc",
 ]
+# tendermint-rpc HttpClient
+http-client = [
+  "tendermint-rpc/http-client"
+]
 
 abciplus = [
   "namada_core/abciplus",

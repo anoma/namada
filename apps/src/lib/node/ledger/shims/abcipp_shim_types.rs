@@ -1,7 +1,8 @@
-#[cfg(not(feature = "abcipp"))]
-use tower_abci::{Request, Response};
 #[cfg(feature = "abcipp")]
 use tower_abci_abcipp::{Request, Response};
+
+#[cfg(not(feature = "abcipp"))]
+use crate::facade::tower_abci::{Request, Response};
 
 pub mod shim {
     use std::convert::TryFrom;

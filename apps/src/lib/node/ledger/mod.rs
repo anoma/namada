@@ -92,7 +92,7 @@ impl Shell {
                 tracing::debug!("Request InitChain");
                 self.init_chain(
                     init,
-                    #[cfg(feature = "dev")]
+                    #[cfg(any(test, feature = "dev"))]
                     1,
                 )
                 .map(Response::InitChain)
@@ -453,9 +453,9 @@ fn start_abci_broadcaster_shell(
     // Construct our ABCI application.
     let tendermint_mode = config.tendermint.tendermint_mode.clone();
     let ledger_address = config.shell.ledger_address;
-    #[cfg(not(feature = "dev"))]
+    #[cfg(not(any(test, feature = "dev")))]
     let genesis = genesis::genesis(&config.shell.base_dir, &config.chain_id);
-    #[cfg(feature = "dev")]
+    #[cfg(any(test, feature = "dev"))]
     let genesis = genesis::genesis(1);
     let (shell, abci_service, service_handle) = AbcippShim::new(
         config,

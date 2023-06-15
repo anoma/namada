@@ -33,7 +33,7 @@ where
     pub fn init_chain(
         &mut self,
         init: request::InitChain,
-        #[cfg(feature = "dev")] num_validators: u64,
+        #[cfg(any(test, feature = "dev"))] num_validators: u64,
     ) -> Result<response::InitChain> {
         let mut response = response::InitChain::default();
         let (current_chain_id, _) = self.wl_storage.storage.get_chain_id();
@@ -43,10 +43,10 @@ where
                 current_chain_id, init.chain_id
             )));
         }
-        #[cfg(not(feature = "dev"))]
+        #[cfg(not(any(test, feature = "dev")))]
         let genesis =
             genesis::genesis(&self.base_dir, &self.wl_storage.storage.chain_id);
-        #[cfg(not(feature = "dev"))]
+        #[cfg(not(any(test, feature = "dev")))]
         {
             let genesis_bytes = genesis.try_to_vec().unwrap();
             let errors =
@@ -58,7 +58,7 @@ where
                 errors.into_iter().format(". ")
             );
         }
-        #[cfg(feature = "dev")]
+        #[cfg(any(test, feature = "dev"))]
         let genesis = genesis::genesis(num_validators);
 
         let ts: protobuf::Timestamp = init.time.expect("Missing genesis time");
