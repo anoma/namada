@@ -27,25 +27,25 @@ use crate::facade::tendermint_config::{
 };
 
 /// Env. var to output Tendermint log to stdout
-pub const ENV_VAR_TM_STDOUT: &str = "NAMADA_TM_STDOUT";
+pub const ENV_VAR_TM_STDOUT: &str = "NAMADA_CMT_STDOUT";
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Failed to initialize Tendermint: {0}")]
+    #[error("Failed to initialize CometBFT: {0}")]
     Init(std::io::Error),
-    #[error("Failed to load Tendermint config file: {0}")]
+    #[error("Failed to load CometBFT config file: {0}")]
     LoadConfig(TendermintError),
-    #[error("Failed to open Tendermint config for writing: {0}")]
+    #[error("Failed to open CometBFT config for writing: {0}")]
     OpenWriteConfig(std::io::Error),
-    #[error("Failed to serialize Tendermint config TOML to string: {0}")]
+    #[error("Failed to serialize CometBFT config TOML to string: {0}")]
     ConfigSerializeToml(toml::ser::Error),
-    #[error("Failed to write Tendermint config: {0}")]
+    #[error("Failed to write CometBFT config: {0}")]
     WriteConfig(std::io::Error),
-    #[error("Failed to start up Tendermint node: {0}")]
+    #[error("Failed to start up CometBFT node: {0}")]
     StartUp(std::io::Error),
     #[error("{0}")]
     Runtime(String),
-    #[error("Failed to rollback tendermint state: {0}")]
+    #[error("Failed to rollback CometBFT state: {0}")]
     RollBack(String),
     #[error("Failed to convert to String: {0:?}")]
     TendermintPath(std::ffi::OsString),
@@ -53,17 +53,17 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Check if the TENDERMINT env var has been set and use that as the
-/// location of the tendermint binary. Otherwise, assume it is on path
+/// Check if the COMET env var has been set and use that as the
+/// location of the COMET binary. Otherwise, assume it is on path
 ///
 /// Returns an error if the env var is defined but not a valid Unicode.
 fn from_env_or_default() -> Result<String> {
-    match std::env::var("TENDERMINT") {
+    match std::env::var("COMETBFT") {
         Ok(path) => {
-            tracing::info!("Using tendermint path from env variable: {}", path);
+            tracing::info!("Using CometBFT path from env variable: {}", path);
             Ok(path)
         }
-        Err(std::env::VarError::NotPresent) => Ok(String::from("tendermint")),
+        Err(std::env::VarError::NotPresent) => Ok(String::from("cometbft")),
         Err(std::env::VarError::NotUnicode(msg)) => {
             Err(Error::TendermintPath(msg))
         }
@@ -138,7 +138,7 @@ pub async fn run(
         .kill_on_drop(true)
         .spawn()
         .map_err(Error::StartUp)?;
-    tracing::info!("Tendermint node started");
+    tracing::info!("CometBFT node started");
 
     tokio::select! {
         status = tendermint_node.wait() => {
@@ -486,8 +486,8 @@ async fn write_tm_genesis(
             )
         });
     let data = serde_json::to_vec_pretty(&genesis)
-        .expect("Couldn't encode the Tendermint genesis file");
+        .expect("Couldn't encode the CometBFT genesis file");
     file.write_all(&data[..])
         .await
-        .expect("Couldn't write the Tendermint genesis file");
+        .expect("Couldn't write the CometBFT genesis file");
 }

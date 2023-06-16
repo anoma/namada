@@ -153,6 +153,7 @@ jobs:
             suffix: ''
             cache_key: namada
             cache_version: v2
+            tendermint_artifact: tendermint-unreleased-v0.1.4-abciplus
 
     env:
       CARGO_INCREMENTAL: 0
@@ -378,12 +379,14 @@ jobs:
             index: 0
             cache_key: namada
             cache_version: v2
+            tendermint_artifact: tendermint-unreleased-v0.1.4-abciplus
             wait_for: namada-release (ubuntu-20.04, 1.7.0, ABCI Release build, namada-e2e-release, v2)
           - name: e2e
             suffix: ''
             index: 1
             cache_key: namada
             cache_version: v2
+            tendermint_artifact: tendermint-unreleased-v0.1.4-abciplus
             wait_for: namada-release (ubuntu-20.04, 1.7.0, ABCI Release build, namada-e2e-release, v2)
 
     env:
@@ -512,6 +515,7 @@ jobs:
           shasum /home/runner/work/masp-params/*.params
           python3 .github/workflows/scripts/schedule-e2e.py
         env:
+          NAMADA_TENDERMINT_WEBSOCKET_TIMEOUT: 20
           NAMADA_E2E_USE_PREBUILT_BINARIES: "true"
           NAMADA_E2E_KEEP_TEMP: "true"
           NAMADA_TM_STDOUT: "false"
