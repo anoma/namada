@@ -46,7 +46,6 @@
 
 set +x
 # set -eoux pipefail
-IFS=$'\n\t'
 
 show_help() {
     echo "Usage: script.sh <config_toml> <namada_dir> OPTIONAL:<base_dir>"
