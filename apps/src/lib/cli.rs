@@ -9,7 +9,7 @@
 pub mod context;
 mod utils;
 
-use clap::{AppSettings, ArgGroup, ArgMatches};
+use clap::{ArgGroup, ArgMatches};
 use color_eyre::eyre::Result;
 pub use utils::safe_exit;
 use utils::*;
@@ -26,8 +26,6 @@ const CLIENT_CMD: &str = "client";
 const WALLET_CMD: &str = "wallet";
 
 pub mod cmds {
-    use clap::AppSettings;
-
     use super::utils::*;
     use super::{args, ArgMatches, CLIENT_CMD, NODE_CMD, WALLET_CMD};
 
@@ -129,7 +127,8 @@ pub mod cmds {
             <Self as Cmd>::add_sub(
                 App::new(Self::CMD)
                     .about("Node sub-commands.")
-                    .setting(AppSettings::SubcommandRequiredElseHelp),
+                    .subcommand_required(true)
+                    .arg_required_else_help(true),
             )
         }
     }
@@ -279,7 +278,8 @@ pub mod cmds {
             <Self as Cmd>::add_sub(
                 App::new(Self::CMD)
                     .about("Client sub-commands.")
-                    .setting(AppSettings::SubcommandRequiredElseHelp),
+                    .subcommand_required(true)
+                    .arg_required_else_help(true),
             )
         }
     }
@@ -356,7 +356,8 @@ pub mod cmds {
             <Self as Cmd>::add_sub(
                 App::new(Self::CMD)
                     .about("Wallet sub-commands.")
-                    .setting(AppSettings::SubcommandRequiredElseHelp),
+                    .subcommand_required(true)
+                    .arg_required_else_help(true),
             )
         }
     }
@@ -391,7 +392,8 @@ pub mod cmds {
                     "Keypair management, including methods to generate and \
                      look-up keys.",
                 )
-                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand_required(true)
+                .arg_required_else_help(true)
                 .subcommand(KeyRestore::def())
                 .subcommand(KeyGen::def())
                 .subcommand(KeyFind::def())
@@ -539,7 +541,8 @@ pub mod cmds {
                      including methods to generate and look-up addresses and \
                      keys.",
                 )
-                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand_required(true)
+                .arg_required_else_help(true)
                 .subcommand(MaspGenSpendKey::def())
                 .subcommand(MaspGenPayAddr::def())
                 .subcommand(MaspAddAddrKey::def())
@@ -699,7 +702,8 @@ pub mod cmds {
                     "Address management, including methods to generate and \
                      look-up addresses.",
                 )
-                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand_required(true)
+                .arg_required_else_help(true)
                 .subcommand(AddressGen::def())
                 .subcommand(AddressRestore::def())
                 .subcommand(AddressOrAliasFind::def())
@@ -975,7 +979,8 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand_required(true)
+                .arg_required_else_help(true)
                 .about("Configuration sub-commands.")
                 .subcommand(ConfigGen::def())
         }
@@ -1625,7 +1630,8 @@ pub mod cmds {
                 .subcommand(InitGenesisValidator::def())
                 .subcommand(PkToTmAddress::def())
                 .subcommand(DefaultBaseDir::def())
-                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand_required(true)
+                .arg_required_else_help(true)
         }
     }
 
@@ -2026,7 +2032,7 @@ pub mod args {
             )
             .group(
                 ArgGroup::new("find_flags")
-                    .args(&[HALT_ACTION.name, SUSPEND_ACTION.name])
+                    .args([HALT_ACTION.name, SUSPEND_ACTION.name])
                     .required(true),
             )
         }
@@ -2647,7 +2653,7 @@ pub mod args {
                     PROPOSAL_ID_OPT
                         .def()
                         .help("The proposal identifier.")
-                        .conflicts_with_all(&[
+                        .conflicts_with_all([
                             PROPOSAL_OFFLINE.name,
                             DATA_PATH_OPT.name,
                         ]),
@@ -3649,7 +3655,7 @@ pub mod args {
                 RAW_PUBLIC_KEY_OPT
                     .def()
                     .help("A public key associated with the keypair.")
-                    .conflicts_with_all(&[ALIAS_OPT.name, VALUE.name]),
+                    .conflicts_with_all([ALIAS_OPT.name, VALUE.name]),
             )
             .arg(
                 ALIAS_OPT
@@ -3764,7 +3770,7 @@ pub mod args {
             )
             .group(
                 ArgGroup::new("find_flags")
-                    .args(&[ALIAS_OPT.name, RAW_ADDRESS_OPT.name])
+                    .args([ALIAS_OPT.name, RAW_ADDRESS_OPT.name])
                     .required(true),
             )
         }
@@ -4077,7 +4083,8 @@ fn namada_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada command line interface.")
-        .setting(AppSettings::SubcommandRequiredElseHelp);
+        .subcommand_required(true)
+        .arg_required_else_help(true);
     cmds::Namada::add_sub(args::Global::def(app))
 }
 
@@ -4085,7 +4092,8 @@ fn namada_node_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada node command line interface.")
-        .setting(AppSettings::SubcommandRequiredElseHelp);
+        .subcommand_required(true)
+        .arg_required_else_help(true);
     cmds::NamadaNode::add_sub(args::Global::def(app))
 }
 
@@ -4093,7 +4101,8 @@ fn namada_client_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada client command line interface.")
-        .setting(AppSettings::SubcommandRequiredElseHelp);
+        .subcommand_required(true)
+        .arg_required_else_help(true);
     cmds::NamadaClient::add_sub(args::Global::def(app))
 }
 
@@ -4101,6 +4110,7 @@ fn namada_wallet_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada wallet command line interface.")
-        .setting(AppSettings::SubcommandRequiredElseHelp);
+        .subcommand_required(true)
+        .arg_required_else_help(true);
     cmds::NamadaWallet::add_sub(args::Global::def(app))
 }
