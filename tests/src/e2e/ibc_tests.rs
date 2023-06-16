@@ -99,7 +99,7 @@ fn run_ledger_ibc() -> Result<()> {
         test_a,
         Who::Validator(0),
         Bin::Node,
-        &["ledger", "run", "--tx-index"],
+        &["ledger", "run"],
         Some(40)
     )?;
     ledger_a.exp_string("Namada ledger node started")?;
@@ -108,7 +108,7 @@ fn run_ledger_ibc() -> Result<()> {
         test_b,
         Who::Validator(0),
         Bin::Node,
-        &["ledger", "run", "--tx-index"],
+        &["ledger", "run"],
         Some(40)
     )?;
     ledger_b.exp_string("Namada ledger node started")?;
