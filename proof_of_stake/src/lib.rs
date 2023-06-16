@@ -994,13 +994,23 @@ where
     S: StorageRead + StorageWrite,
 {
     let target_epoch = current_epoch + offset;
-    let consensus_set = &consensus_validator_set_handle().at(&target_epoch);
-    let below_cap_set =
-        &below_capacity_validator_set_handle().at(&target_epoch);
+    let consensus_set = consensus_validator_set_handle().at(&target_epoch);
+    let below_cap_set = below_capacity_validator_set_handle().at(&target_epoch);
+    let below_thresh_set =
+        below_threshold_validator_set_handle().at(&target_epoch);
 
     let num_consensus_validators =
         get_num_consensus_validators(storage, target_epoch)?;
-    if num_consensus_validators < params.max_validator_slots {
+
+    if stake < params.validator_stake_threshold {
+        below_thresh_set.insert(storage, address.clone())?;
+        validator_state_handle(address).set(
+            storage,
+            ValidatorState::BelowThreshold,
+            current_epoch,
+            offset,
+        )?;
+    } else if num_consensus_validators < params.max_validator_slots {
         insert_validator_into_set(
             &consensus_set.at(&stake),
             storage,
@@ -1017,7 +1027,7 @@ where
         // Check to see if the current genesis validator should replace one
         // already in the consensus set
         let min_consensus_amount =
-            get_min_consensus_validator_amount(consensus_set, storage)?;
+            get_min_consensus_validator_amount(&consensus_set, storage)?;
         if stake > min_consensus_amount {
             // Swap this genesis validator in and demote the last min consensus
             // validator
