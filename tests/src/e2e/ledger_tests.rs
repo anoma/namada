@@ -3899,6 +3899,7 @@ fn test_genesis_validators() -> Result<()> {
         test_dir,
         net,
         genesis,
+        async_runtime: Default::default(),
     };
 
     // Host the network archive to make it available for `join-network` commands

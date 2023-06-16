@@ -23,6 +23,7 @@ use namada::types::chain::ChainId;
 use namada_apps::client::utils;
 use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
 use namada_apps::{config, wallet};
+use once_cell::sync::Lazy;
 use rand::Rng;
 use serde_json;
 use tempfile::{tempdir, tempdir_in, TempDir};
@@ -204,6 +205,7 @@ pub fn network(
         test_dir,
         net,
         genesis,
+        async_runtime: Default::default(),
     })
 }
 
@@ -224,6 +226,7 @@ pub struct Test {
     pub test_dir: TestDir,
     pub net: Network,
     pub genesis: GenesisConfig,
+    pub async_runtime: LazyAsyncRuntime,
 }
 
 #[derive(Debug)]
@@ -282,6 +285,15 @@ impl Drop for Test {
                 path.to_string_lossy()
             );
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct LazyAsyncRuntime(Lazy<tokio::runtime::Runtime>);
+
+impl Default for LazyAsyncRuntime {
+    fn default() -> Self {
+        Self(Lazy::new(|| tokio::runtime::Runtime::new().unwrap()))
     }
 }
 
@@ -407,6 +419,11 @@ impl Test {
                 .join(format!("validator-{}", index))
                 .join(config::DEFAULT_BASE_DIR),
         }
+    }
+
+    /// Get an async runtime.
+    pub fn async_runtime(&self) -> &tokio::runtime::Runtime {
+        Lazy::force(&self.async_runtime.0)
     }
 }
 

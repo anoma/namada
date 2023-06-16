@@ -4192,6 +4192,7 @@ dependencies = [
  "namada_test_utils",
  "namada_tx_prelude",
  "namada_vp_prelude",
+ "once_cell",
  "pretty_assertions",
  "proptest",
  "proptest-state-machine",
