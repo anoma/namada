@@ -3855,7 +3855,6 @@ dependencies = [
  "borsh",
  "getrandom 0.2.8",
  "masp_primitives",
- "masp_proofs",
  "namada",
  "namada_test_utils",
  "namada_tests",
