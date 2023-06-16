@@ -307,7 +307,7 @@ where
                         DecryptedTx::Decrypted { has_valid_pow: _ } => {
                             if let Some(code_sec) = tx
                                 .get_section(tx.code_sechash())
-                                .and_then(Section::code_sec)
+                                .and_then(|x| Section::code_sec(x.as_ref()))
                             {
                                 stats.increment_tx_type(
                                     code_sec.code.hash().to_string(),

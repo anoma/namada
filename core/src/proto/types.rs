@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::convert::TryFrom;
 
@@ -205,25 +206,37 @@ pub struct Signature {
     /// Additional random data
     salt: [u8; 8],
     /// The hash of the section being signed
-    target: crate::types::hash::Hash,
+    targets: Vec<crate::types::hash::Hash>,
     /// The signature over the above has
     pub signature: common::Signature,
-    /// The public key to verrify the above siggnature
+    /// The public key to verify the above siggnature
     pub_key: common::PublicKey,
 }
 
 impl Signature {
     /// Sign the given section hash with the given key and return a section
     pub fn new(
-        target: &crate::types::hash::Hash,
+        targets: Vec<crate::types::hash::Hash>,
         sec_key: &common::SecretKey,
     ) -> Self {
+        let signature =
+            common::SigScheme::sign(sec_key, Self::hash_targets(&targets));
         Self {
             salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
-            target: *target,
-            signature: common::SigScheme::sign(sec_key, target),
+            targets,
+            signature,
             pub_key: sec_key.ref_to(),
         }
+    }
+
+    /// Combine all section hashes into a single hash for signing
+    fn hash_targets(
+        targets: &Vec<crate::types::hash::Hash>,
+    ) -> crate::types::hash::Hash {
+        let targets_bytes = targets
+            .try_to_vec()
+            .expect("unable to serialize signature targets");
+        crate::types::hash::Hash::sha256(targets_bytes)
     }
 
     /// Hash this signature section
@@ -233,6 +246,15 @@ impl Signature {
                 .expect("unable to serialize signature section"),
         );
         hasher
+    }
+
+    /// Verify that the signature contained in this section is valid
+    pub fn verify_signature(&self) -> std::result::Result<(), VerifySigError> {
+        common::SigScheme::verify_signature_raw(
+            &self.pub_key,
+            &Self::hash_targets(&self.targets).0,
+            &self.signature,
+        )
     }
 }
 
@@ -549,6 +571,8 @@ pub enum Section {
     /// A section providing the auxiliary inputs used to construct a MASP
     /// transaction. Only send to wallet, never send to protocol.
     MaspBuilder(MaspBuilder),
+    /// Wrap a header with a section for the purposes of computing hashes
+    Header(Header),
 }
 
 impl Section {
@@ -571,17 +595,14 @@ impl Section {
                 hasher.update(tx.txid().as_ref());
                 hasher
             }
+            Self::Header(header) => header.hash(hasher),
         }
     }
 
-    /// Sign over the hash of this section and return a signature section that
-    /// can be added to the container transaction
-    pub fn sign(&self, sec_key: &common::SecretKey) -> Signature {
-        let mut hasher = Sha256::new();
-        self.hash(&mut hasher);
-        Signature::new(
-            &crate::types::hash::Hash(hasher.finalize().into()),
-            sec_key,
+    /// Get the hash of this section
+    pub fn get_hash(&self) -> crate::types::hash::Hash {
+        crate::types::hash::Hash(
+            self.hash(&mut Sha256::new()).finalize_reset().into(),
         )
     }
 
@@ -802,9 +823,7 @@ impl Tx {
 
     /// Get the transaction header hash
     pub fn header_hash(&self) -> crate::types::hash::Hash {
-        crate::types::hash::Hash(
-            self.header.hash(&mut Sha256::new()).finalize_reset().into(),
-        )
+        Section::Header(self.header.clone()).get_hash()
     }
 
     /// Update the header whilst maintaining existing cross-references
@@ -817,13 +836,13 @@ impl Tx {
     pub fn get_section(
         &self,
         hash: &crate::types::hash::Hash,
-    ) -> Option<&Section> {
+    ) -> Option<Cow<Section>> {
+        if self.header_hash() == *hash {
+            return Some(Cow::Owned(Section::Header(self.header.clone())));
+        }
         for section in &self.sections {
-            let sechash = crate::types::hash::Hash(
-                section.hash(&mut Sha256::new()).finalize_reset().into(),
-            );
-            if sechash == *hash {
-                return Some(section);
+            if section.get_hash() == *hash {
+                return Some(Cow::Borrowed(section));
             }
         }
         None
@@ -847,7 +866,7 @@ impl Tx {
 
     /// Get the code designated by the transaction code hash in the header
     pub fn code(&self) -> Option<Vec<u8>> {
-        match self.get_section(self.code_sechash()) {
+        match self.get_section(self.code_sechash()).as_ref().map(Cow::as_ref) {
             Some(Section::Code(section)) => section.code.id(),
             _ => None,
         }
@@ -856,10 +875,7 @@ impl Tx {
     /// Add the given code to the transaction and set code hash in the header
     pub fn set_code(&mut self, code: Code) -> &mut Section {
         let sec = Section::Code(code);
-        let mut hasher = Sha256::new();
-        sec.hash(&mut hasher);
-        let hash = crate::types::hash::Hash(hasher.finalize().into());
-        self.set_code_sechash(hash);
+        self.set_code_sechash(sec.get_hash());
         self.sections.push(sec);
         self.sections.last_mut().unwrap()
     }
@@ -877,17 +893,14 @@ impl Tx {
     /// Add the given code to the transaction and set the hash in the header
     pub fn set_data(&mut self, data: Data) -> &mut Section {
         let sec = Section::Data(data);
-        let mut hasher = Sha256::new();
-        sec.hash(&mut hasher);
-        let hash = crate::types::hash::Hash(hasher.finalize().into());
-        self.set_data_sechash(hash);
+        self.set_data_sechash(sec.get_hash());
         self.sections.push(sec);
         self.sections.last_mut().unwrap()
     }
 
     /// Get the data designated by the transaction data hash in the header
     pub fn data(&self) -> Option<Vec<u8>> {
-        match self.get_section(self.data_sechash()) {
+        match self.get_section(self.data_sechash()).as_ref().map(Cow::as_ref) {
             Some(Section::Data(data)) => Some(data.data.clone()),
             _ => None,
         }
@@ -913,12 +926,16 @@ impl Tx {
     ) -> std::result::Result<(), VerifySigError> {
         for section in &self.sections {
             if let Section::Signature(sig_sec) = section {
-                if sig_sec.pub_key == *pk && sig_sec.target == *hash {
-                    return common::SigScheme::verify_signature_raw(
-                        pk,
-                        &hash.0,
-                        &sig_sec.signature,
-                    );
+                if sig_sec.pub_key == *pk && sig_sec.targets.contains(hash) {
+                    // Ensure that all the sections the signature signs over are
+                    // present
+                    for target in &sig_sec.targets {
+                        if self.get_section(&target).is_none() {
+                            return Err(VerifySigError::MissingData);
+                        }
+                    }
+                    // Finally verify that the signature itself is valid
+                    return sig_sec.verify_signature();
                 }
             }
         }
@@ -974,7 +991,7 @@ impl Tx {
         // Iterate backwrds to sidestep the effects of deletion on indexing
         for i in (0..self.sections.len()).rev() {
             match &self.sections[i] {
-                Section::Signature(sig) if sig.target == header_hash => {}
+                Section::Signature(sig) if sig.targets.contains(&header_hash) => {}
                 // Add eligible section to the list of sections to encrypt
                 _ => plaintexts.push(self.sections.remove(i)),
             }

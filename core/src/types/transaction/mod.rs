@@ -257,7 +257,7 @@ mod test_process_tx {
         outer_tx.validate_header().expect("Test failed");
         match outer_tx.header().tx_type {
             TxType::Raw => assert_eq!(
-                Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into()),
+                code_sec.get_hash(),
                 outer_tx.header.code_hash,
             ),
             _ => panic!("Test failed: Expected Raw Tx"),
@@ -281,21 +281,11 @@ mod test_process_tx {
         match tx.header().tx_type {
             TxType::Raw => {
                 assert_eq!(
-                    Hash(
-                        code_sec
-                            .hash(&mut Sha256::new())
-                            .finalize_reset()
-                            .into()
-                    ),
+                    code_sec.get_hash(),
                     tx.header().code_hash,
                 );
                 assert_eq!(
-                    Hash(
-                        data_sec
-                            .hash(&mut Sha256::new())
-                            .finalize_reset()
-                            .into()
-                    ),
+                    data_sec.get_hash(),
                     tx.header().data_hash,
                 );
             }
@@ -327,21 +317,11 @@ mod test_process_tx {
         match tx.header().tx_type {
             TxType::Raw => {
                 assert_eq!(
-                    Hash(
-                        code_sec
-                            .hash(&mut Sha256::new())
-                            .finalize_reset()
-                            .into()
-                    ),
+                    code_sec.get_hash(),
                     tx.header().code_hash,
                 );
                 assert_eq!(
-                    Hash(
-                        data_sec
-                            .hash(&mut Sha256::new())
-                            .finalize_reset()
-                            .into()
-                    ),
+                    data_sec.get_hash(),
                     tx.header().data_hash,
                 );
             }
@@ -433,11 +413,11 @@ fn test_process_tx_decrypted_unsigned() {
         }) => {
             assert_eq!(
                 tx.header().code_hash,
-                Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into()),
+                code_sec.get_hash(),
             );
             assert_eq!(
                 tx.header().data_hash,
-                Hash(data_sec.hash(&mut Sha256::new()).finalize_reset().into()),
+                data_sec.get_hash(),
             );
         }
         _ => panic!("Test failed"),
@@ -482,14 +462,8 @@ fn test_process_tx_decrypted_signed() {
             #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: _,
         }) => {
-            assert_eq!(
-                decrypted.header.code_hash,
-                Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into()),
-            );
-            assert_eq!(
-                decrypted.header.data_hash,
-                Hash(data_sec.hash(&mut Sha256::new()).finalize_reset().into()),
-            );
+            assert_eq!(decrypted.header.code_hash, code_sec.get_hash());
+            assert_eq!(decrypted.header.data_hash, data_sec.get_hash());
         }
         _ => panic!("Test failed"),
     }

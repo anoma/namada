@@ -310,12 +310,15 @@ pub mod wrapper_tx {
             wrapper.set_code(Code::new("wasm code".as_bytes().to_owned()));
             wrapper
                 .set_data(Data::new("transaction data".as_bytes().to_owned()));
-            wrapper.add_section(Section::Signature(Signature::new(
-                &wrapper.header_hash(),
-                &keypair,
-            )));
             let mut encrypted_tx = wrapper.clone();
             encrypted_tx.encrypt(&Default::default());
+            wrapper.add_section(Section::Signature(Signature::new(
+                vec![
+                    wrapper.header_hash(),
+                    wrapper.sections[0].get_hash(),
+                ],
+                &keypair,
+            )));
             assert!(encrypted_tx.validate_ciphertext());
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
             encrypted_tx.decrypt(privkey).expect("Test failed");
@@ -346,11 +349,14 @@ pub mod wrapper_tx {
             // give a incorrect commitment to the decrypted contents of the tx
             wrapper.set_code_sechash(Hash([0u8; 32]));
             wrapper.set_data_sechash(Hash([0u8; 32]));
+            wrapper.encrypt(&Default::default());
             wrapper.add_section(Section::Signature(Signature::new(
-                &wrapper.header_hash(),
+                vec![
+                    wrapper.header_hash(),
+                    wrapper.sections[0].get_hash(),
+                ],
                 &keypair,
             )));
-            wrapper.encrypt(&Default::default());
             assert!(wrapper.validate_ciphertext());
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
             let err = wrapper.decrypt(privkey).expect_err("Test failed");
@@ -378,10 +384,6 @@ pub mod wrapper_tx {
 
             tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
             tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-            tx.add_section(Section::Signature(Signature::new(
-                &tx.header_hash(),
-                &keypair,
-            )));
 
             // we now try to alter the inner tx maliciously
             // malicious transaction
@@ -390,6 +392,14 @@ pub mod wrapper_tx {
             let malicious = "Give me all the money".as_bytes().to_owned();
             tx.set_data(Data::new(malicious.clone()));
             tx.encrypt(&Default::default());
+
+            tx.add_section(Section::Signature(Signature::new(
+                vec![
+                    tx.header_hash(),
+                    tx.sections[0].get_hash(),
+                ],
+                &keypair,
+            )));
 
             // we check ciphertext validity still passes
             assert!(tx.validate_ciphertext());

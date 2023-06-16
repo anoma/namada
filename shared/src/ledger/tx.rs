@@ -367,11 +367,10 @@ pub async fn submit_reveal_pk_aux<
         find_keypair(client, wallet, &addr, args.password.clone()).await
     }?;
     tx.add_section(Section::Signature(Signature::new(
-        tx.data_sechash(),
-        &keypair,
-    )));
-    tx.add_section(Section::Signature(Signature::new(
-        tx.code_sechash(),
+        vec![
+            *tx.data_sechash(),
+            *tx.code_sechash(),
+        ],
         &keypair,
     )));
     let epoch = rpc::query_epoch(client).await;
@@ -1320,8 +1319,7 @@ pub async fn submit_transfer<
             // Add a MASP Transaction section to the Tx
             let masp_tx = tx.add_section(Section::MaspTx(shielded_parts.1));
             // Get the hash of the MASP Transaction section
-            let masp_hash =
-                Hash(masp_tx.hash(&mut Sha256::new()).finalize_reset().into());
+            let masp_hash = masp_tx.get_hash();
             // Get the decoded asset types used in the transaction to give
             // offline wallet users more information
             let asset_types =
@@ -1428,11 +1426,9 @@ pub async fn submit_init_account<
     tx.header.expiration = args.tx.expiration;
     let extra =
         tx.add_section(Section::ExtraData(Code::from_hash(vp_code_hash)));
-    let extra_hash =
-        Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
     let data = InitAccount {
         public_key,
-        vp_code_hash: extra_hash,
+        vp_code_hash: extra.get_hash(),
     };
     let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
     tx.set_data(Data::new(data));
@@ -1522,11 +1518,9 @@ pub async fn submit_update_vp<
     tx.header.expiration = args.tx.expiration;
     let extra =
         tx.add_section(Section::ExtraData(Code::from_hash(vp_code_hash)));
-    let extra_hash =
-        Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
     let data = UpdateVp {
         addr,
-        vp_code_hash: extra_hash,
+        vp_code_hash: extra.get_hash(),
     };
     let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
     tx.set_data(Data::new(data));

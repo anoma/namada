@@ -213,8 +213,6 @@ pub async fn submit_init_validator<
     let extra = tx.add_section(Section::ExtraData(Code::from_hash(
         validator_vp_code_hash,
     )));
-    let extra_hash =
-        Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
     let data = InitValidator {
         account_key,
         consensus_key: consensus_key.ref_to(),
@@ -222,7 +220,7 @@ pub async fn submit_init_validator<
         dkg_key,
         commission_rate,
         max_commission_rate_change,
-        validator_vp_code_hash: extra_hash,
+        validator_vp_code_hash: extra.get_hash(),
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
     tx.header.chain_id = tx_args.chain_id.clone().unwrap();
