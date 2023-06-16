@@ -292,13 +292,13 @@ pub async fn submit_init_validator<
         crate::wallet::save(&ctx.wallet)
             .unwrap_or_else(|err| eprintln!("{}", err));
 
-        let tendermint_home = ctx.config.ledger.tendermint_dir();
+        let tendermint_home = ctx.config.ledger.cometbft_dir();
         tendermint_node::write_validator_key(&tendermint_home, &consensus_key);
         tendermint_node::write_validator_state(tendermint_home);
 
         // Write Namada config stuff or figure out how to do the above
         // tendermint_node things two epochs in the future!!!
-        ctx.config.ledger.tendermint.tendermint_mode =
+        ctx.config.ledger.cometbft.tendermint_mode =
             TendermintMode::Validator;
         ctx.config
             .write(
