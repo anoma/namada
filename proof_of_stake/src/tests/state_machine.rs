@@ -421,6 +421,7 @@ impl StateMachineTest for ConcretePosState {
                     height,
                     slash_type,
                     &address,
+                    current_epoch.next(),
                 )
                 .unwrap();
 

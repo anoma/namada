@@ -2974,6 +2974,7 @@ where
 /// Record a slash for a misbehavior that has been received from Tendermint and
 /// then jail the validator, removing it from the validator set. The slash rate
 /// will be computed at a later epoch.
+#[allow(clippy::too_many_arguments)]
 pub fn slash<S>(
     storage: &mut S,
     params: &PosParams,
@@ -2982,6 +2983,7 @@ pub fn slash<S>(
     evidence_block_height: impl Into<u64>,
     slash_type: SlashType,
     validator: &Address,
+    validator_set_update_epoch: Epoch,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -3017,7 +3019,7 @@ where
     // Remove the validator from the set starting at the next epoch and up thru
     // the pipeline epoch.
     for epoch in
-        Epoch::iter_bounds_inclusive(current_epoch.next(), pipeline_epoch)
+        Epoch::iter_bounds_inclusive(validator_set_update_epoch, pipeline_epoch)
     {
         let prev_state = validator_state_handle(validator)
             .get(storage, epoch, params)?
