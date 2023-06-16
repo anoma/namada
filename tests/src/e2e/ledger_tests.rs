@@ -3965,8 +3965,7 @@ fn test_genesis_validators() -> Result<()> {
             convert_tm_addr_to_socket_addr(&config.ledger.cometbft.p2p.laddr)
                 .ip()
                 .to_string();
-        println!("ERROR: {}", p2p_addr);
-        println!("ERROR: {}", first_port);
+
         config.ledger.cometbft.p2p.laddr = TendermintAddress::from_str(
             &format!("{}:{}", p2p_addr, first_port),
         )
@@ -4173,8 +4172,7 @@ fn double_signing_gets_slashed() -> Result<()> {
             convert_tm_addr_to_socket_addr(&config.ledger.cometbft.p2p.laddr)
                 .ip()
                 .to_string();
-        println!("ERROR: {}", p2p_addr);
-        println!("ERROR: {}", first_port);
+
         config.ledger.cometbft.p2p.laddr = TendermintAddress::from_str(
             &format!("{}:{}", p2p_addr, first_port),
         )

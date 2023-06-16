@@ -323,13 +323,9 @@ pub async fn join_network(
         let chain_id = chain_id.clone();
         tokio::task::spawn_blocking(move || {
             let mut config = Config::load(&base_dir, &chain_id, None);
-
             config.ledger.shell.tendermint_mode = TendermintMode::Validator;
-            // Validator node should turned off peer exchange reactor
-            // fixme: we shouldn't be setting config values that are settable in
-            // the actual config.toml config.ledger.
-            // tendermint_config.p2p.pex = false; Remove self from
-            // persistent peers
+
+            // Remove self from persistent peers
             config.ledger.cometbft.p2p.persistent_peers.retain(|peer| {
                 if let TendermintAddress::Tcp {
                     peer_id: Some(peer_id),
@@ -752,15 +748,10 @@ pub fn init_network(
                             None
                         })
                     .collect();
-            // fixme: We shouldn't be hardcoding these. The timeouts should only
-            // be set in the config files.
+
             config.ledger.cometbft.consensus.timeout_commit =
                 consensus_timeout_commit;
-            // fixme: We shouldn't be hardcoding these. The timeouts should only
-            // be set in the config files.
             config.ledger.cometbft.p2p.allow_duplicate_ip = allow_duplicate_ip;
-            // fixme: We shouldn't be hardcoding these. The timeouts should only
-            // be set in the config files.
             config.ledger.cometbft.p2p.addr_book_strict = !localhost;
             // Clear the net address from the config and use it to set ports
             let net_address = validator_config.net_address.take().unwrap();
@@ -771,7 +762,6 @@ pub fn init_network(
                     &format!("0.0.0.0:{}", first_port),
                 )
                 .unwrap();
-                // .set_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
             }
             config.ledger.cometbft.p2p.laddr =
                 TendermintAddress::from_str(&format!("{}:{}", ip, first_port))
@@ -781,24 +771,16 @@ pub fn init_network(
                     &format!("0.0.0.0:{}", first_port + 1),
                 )
                 .unwrap();
-                // .set_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
             }
             config.ledger.cometbft.rpc.laddr = TendermintAddress::from_str(
                 &format!("{}:{}", ip, first_port + 1),
             )
             .unwrap();
-            // config
-            //     .ledger
-            //     .tendermint
-            //     .rpc_address
-            //     .set_port(first_port + 1);
+
             config.ledger.cometbft.proxy_app = TendermintAddress::from_str(
                 &format!("{}:{}", ip, first_port + 2),
             )
             .unwrap();
-            // Validator node should turned off peer exchange reactor
-            // fixme: no hardcoding config values
-            config.ledger.cometbft.p2p.pex = false;
 
             config.write(&validator_dir, &chain_id, true).unwrap();
         },
@@ -813,7 +795,6 @@ pub fn init_network(
     if !localhost {
         config.ledger.cometbft.p2p.laddr =
             TendermintAddress::from_str("0.0.0.0:26656").unwrap();
-        // .set_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
     }
     config.ledger.cometbft.p2p.addr_book_strict = !localhost;
     config.ledger.genesis_time = genesis.genesis_time.into();

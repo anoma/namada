@@ -140,10 +140,6 @@ impl Ledger {
             chain_id,
             shell: Shell {
                 base_dir: base_dir.as_ref().to_owned(),
-                // ledger_address: SocketAddr::new(
-                //     IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                //     26658,
-                // ),
                 block_cache_bytes: None,
                 vp_wasm_compilation_cache_bytes: None,
                 tx_wasm_compilation_cache_bytes: None,
@@ -343,18 +339,6 @@ pub fn get_default_namada_folder() -> PathBuf {
         project_dir.data_local_dir().to_path_buf()
     } else {
         DEFAULT_BASE_DIR.into()
-    }
-}
-
-mod tests {
-
-    #![allow(unused_imports)]
-    use super::DEFAULT_COMETBFT_CONFIG;
-    use crate::facade::tendermint_config::TendermintConfig;
-
-    #[test]
-    fn test_default_cometbft_config() {
-        assert!(TendermintConfig::parse_toml(DEFAULT_COMETBFT_CONFIG).is_ok());
     }
 }
 
@@ -856,3 +840,14 @@ max_open_connections = 3
 namespace = "cometbft"
 
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::DEFAULT_COMETBFT_CONFIG;
+    use crate::facade::tendermint_config::TendermintConfig;
+
+    #[test]
+    fn test_default_cometbft_config() {
+        assert!(TendermintConfig::parse_toml(DEFAULT_COMETBFT_CONFIG).is_ok());
+    }
+}
