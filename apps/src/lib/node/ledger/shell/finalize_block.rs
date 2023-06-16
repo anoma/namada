@@ -374,7 +374,9 @@ where
                         }
                         for ibc_event in &result.ibc_events {
                             // Add the IBC event besides the tx_event
-                            let event = Event::from(ibc_event.clone());
+                            let mut event = Event::from(ibc_event.clone());
+                            // Add the height for IBC event query
+                            event["height"] = height.to_string();
                             response.events.push(event);
                         }
                         match serde_json::to_string(
