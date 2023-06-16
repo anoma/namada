@@ -2537,7 +2537,6 @@ fn pos_init_validator() -> Result<()> {
         Some(60),
         &test.working_dir,
         validator_1_base_dir,
-        None,
         loc,
     )?;
 
@@ -3760,7 +3759,6 @@ fn test_genesis_validators() -> Result<()> {
         Some(5),
         &working_dir,
         &test_dir,
-        None,
         format!("{}:{}", std::file!(), std::line!()),
     )?;
     init_genesis_validator_0.assert_success();
@@ -3802,7 +3800,6 @@ fn test_genesis_validators() -> Result<()> {
         Some(5),
         &working_dir,
         &test_dir,
-        None,
         format!("{}:{}", std::file!(), std::line!()),
     )?;
     init_genesis_validator_1.assert_success();
@@ -3879,7 +3876,6 @@ fn test_genesis_validators() -> Result<()> {
         Some(5),
         &working_dir,
         &test_dir,
-        None,
         format!("{}:{}", std::file!(), std::line!()),
     )?;
 
@@ -4227,7 +4223,6 @@ fn double_signing_gets_slashed() -> Result<()> {
         Some(40),
         &test.working_dir,
         validator_0_base_dir_copy,
-        None,
         loc,
     )?;
     validator_0_copy.exp_string("Namada ledger node started")?;

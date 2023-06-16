@@ -1776,7 +1776,7 @@ pub mod args {
     use super::context::*;
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
-    use crate::config::{self, Action, ActionAtHeight, TendermintMode};
+    use crate::config::{self, Action, ActionAtHeight};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
@@ -1863,7 +1863,6 @@ pub mod args {
     pub const MASP_VALUE: Arg<MaspValue> = arg("value");
     pub const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =
         arg("max-commission-rate-change");
-    pub const MODE: ArgOpt<String> = arg_opt("mode");
     pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     pub const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
@@ -1930,7 +1929,6 @@ pub mod args {
         pub chain_id: Option<ChainId>,
         pub base_dir: PathBuf,
         pub wasm_dir: Option<PathBuf>,
-        pub mode: Option<TendermintMode>,
     }
 
     impl Global {
@@ -1939,12 +1937,10 @@ pub mod args {
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let base_dir = BASE_DIR.parse(matches);
             let wasm_dir = WASM_DIR.parse(matches);
-            let mode = MODE.parse(matches).map(TendermintMode::from);
             Global {
                 chain_id,
                 base_dir,
                 wasm_dir,
-                mode,
             }
         }
 
@@ -1967,10 +1963,6 @@ pub mod args {
                      transactions. This value can also be set via \
                      `NAMADA_WASM_DIR` environment variable, but the argument \
                      takes precedence, if specified.",
-                ))
-                .arg(MODE.def().about(
-                    "The mode in which to run Namada. Options are \n\t * \
-                     Validator (default)\n\t * Full\n\t * Seed",
                 ))
         }
     }

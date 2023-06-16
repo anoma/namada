@@ -233,11 +233,7 @@ pub async fn join_network(
             let base_dir = base_dir.clone();
             let chain_id = chain_id.clone();
             tokio::task::spawn_blocking(move || {
-                let mut config = Config::load(
-                    &base_dir,
-                    &chain_id,
-                    global_args.mode.clone(),
-                );
+                let mut config = Config::load(&base_dir, &chain_id, None);
                 config.wasm_dir = wasm_dir;
                 config.write(&base_dir, &chain_id, true).unwrap();
             })
