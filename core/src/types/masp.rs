@@ -9,7 +9,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sha2::{Digest, Sha256};
 
 use crate::types::address::{
-    masp, Address, DecodeError, BECH32M_VARIANT, HASH_LEN,
+    masp, Address, DecodeError, BECH32M_VARIANT, HASH_HEX_LEN,
 };
 
 /// human-readable part of Bech32m encoded address
@@ -153,7 +153,7 @@ impl PaymentAddress {
         let mut hasher = Sha256::new();
         hasher.update(bytes);
         // hex of the first 40 chars of the hash
-        format!("{:.width$X}", hasher.finalize(), width = HASH_LEN)
+        format!("{:.width$X}", hasher.finalize(), width = HASH_HEX_LEN)
     }
 }
 

@@ -81,10 +81,18 @@ where
     use crate::ledger::storage::write_log::WriteLog;
     use crate::proto::Tx;
     use crate::types::storage::TxIndex;
+    use crate::types::transaction::decrypted::DecryptedTx;
+    use crate::types::transaction::TxType;
 
     let mut gas_meter = BlockGasMeter::default();
     let mut write_log = WriteLog::default();
-    let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
+    let mut tx = Tx::try_from(&request.data[..]).into_storage_result()?;
+    tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
+        #[cfg(not(feature = "mainnet"))]
+        // To be able to dry-run testnet faucet withdrawal, pretend
+        // that we got a valid PoW
+        has_valid_pow: true,
+    }));
     let data = protocol::apply_tx(
         tx,
         request.data.len(),

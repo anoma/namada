@@ -267,6 +267,21 @@ impl From<i128> for Dec {
     }
 }
 
+impl TryFrom<u128> for Dec {
+    type Error = Box<dyn 'static + std::error::Error>;
+    fn try_from(num: u128) -> std::result::Result<Self, Self::Error> {
+        Ok(Self(I256::try_from(Uint::from(num))? * Uint::exp10(POS_DECIMAL_PRECISION as usize)))
+    }
+}
+
+impl TryFrom<Dec> for i128 {
+    type Error = std::io::Error;
+
+    fn try_from(value: Dec) -> std::result::Result<Self, Self::Error> {
+        value.0.try_into()
+    }
+}
+
 // Is error handling needed for this?
 impl From<I256> for Dec {
     fn from(num: I256) -> Self {
@@ -309,14 +324,6 @@ impl Sub<Dec> for Dec {
         Self(self.0 - rhs.0)
     }
 }
-
-// impl Mul<Uint> for Dec {
-//     type Output = Uint;
-
-//     fn mul(self, rhs: Uint) -> Self::Output {
-//         self.0 * rhs / Uint::exp10(POS_DECIMAL_PRECISION as usize)
-//     }
-// }
 
 impl Mul<u64> for Dec {
     type Output = Dec;

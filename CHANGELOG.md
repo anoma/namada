@@ -1,5 +1,53 @@
 # CHANGELOG
 
+## v0.17.2
+
+Namada 0.17.2 is a minor release featuring improvements to the client stability.
+
+### BUG FIXES
+
+- Do not add address if it already exists in the wallet.
+  ([\#1504](https://github.com/anoma/namada/issues/1504))
+- When processing slashes, bonds and unbonds that became active after
+  the infraction epoch must be properly accounted in order to properly
+  deduct stake that accounts for the precise slash amount. A bug
+  is fixed in the procedure that properly performs this accounting.
+  ([#1520](https://github.com/anoma/namada/pull/1520))
+- Fix the message when a client is waiting for a node to sync on queries or
+  transactions. ([\#1522](https://github.com/anoma/namada/pull/1522))
+- This change will enable usage of the Namada SDK to create MASP transactions
+  from non-CLI clients. ([\#1524](https://github.com/anoma/namada/pull/1524))
+- Fixing how token balances are displayed in case of missing --token option.
+  ([#1528](https://github.com/anoma/namada/pull/1528))
+- The slashed token amounts contained inside the bond and unbond information
+  returned by the PoS library fn bonds_and_unbonds are fixed and properly
+  computed. ([#1533](https://github.com/anoma/namada/pull/1533))
+- PoS: Fixed the client to change configuration to validator
+  mode after a successful `init-validator` transaction.
+  ([\#1549](https://github.com/anoma/namada/pull/1549))
+- PoS: fixed a check for whether a given address belongs to a
+  validator account to work properly with newly created accounts.
+  ([\#1553](https://github.com/anoma/namada/pull/1553))
+- Fixes the slash rate output in the query_slashes client
+  command and some redundancy in misbehavior reporting logs.
+  ([#1558](https://github.com/anoma/namada/pull/1558))
+
+### IMPROVEMENTS
+
+- Add a command, `namadac utils default-base-dir`, to
+  print the default base directory the command
+  line would use were one not provided by the user.
+  ([#1491](https://github.com/anoma/namada/pull/1491))
+- Improve the established address in-memory representation
+  and use a full SHA-256 digest for their generation.
+  ([\#1510](https://github.com/anoma/namada/pull/1510))
+- Improve the implicit address and PKH in-memory representation.
+  ([\#1512](https://github.com/anoma/namada/pull/1512))
+- Improve help message for address add command
+  ([\#1514](https://github.com/anoma/namada/issues/1514))
+- PoS: make a re-usable bonds and unbonds details query.
+  ([\#1518](https://github.com/anoma/namada/pull/1518))
+
 ## v0.17.1
 
 Namada 0.17.0 is a scheduled minor release featuring several improvements to the slashing mechanism, 

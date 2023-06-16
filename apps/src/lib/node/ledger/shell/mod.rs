@@ -593,11 +593,13 @@ where
                         }
                     };
                 tracing::info!(
-                    "Slashing {} for {} in epoch {}, block height {}",
+                    "Slashing {} for {} in epoch {}, block height {} (current \
+                     epoch = {})",
                     validator,
                     slash_type,
                     evidence_epoch,
-                    evidence_height
+                    evidence_height,
+                    current_epoch
                 );
                 if let Err(err) = slash(
                     &mut self.wl_storage,

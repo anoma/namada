@@ -32,7 +32,9 @@ use namada_test_utils::TestWasms;
 use serde_json::json;
 use setup::constants::*;
 
-use super::helpers::{get_height, is_debug_mode, wait_for_block_height};
+use super::helpers::{
+    get_height, is_debug_mode, wait_for_block_height, wait_for_wasm_pre_compile,
+};
 use super::setup::get_all_wasms_hashes;
 use crate::e2e::helpers::{
     epoch_sleep, find_address, find_bonded_stake, get_actor_rpc, get_epoch,
@@ -355,8 +357,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
     let _bg_ledger = ledger.background();
 
     // for a custom tx
@@ -609,8 +610,7 @@ fn masp_txs_and_queries() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
 
     let _bg_ledger = ledger.background();
 
@@ -876,8 +876,7 @@ fn masp_pinned_txs() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
 
     let _bg_ledger = ledger.background();
 
@@ -1049,8 +1048,7 @@ fn masp_incentives() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
 
     let _bg_ledger = ledger.background();
 
@@ -1789,8 +1787,7 @@ fn invalid_transactions() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
 
     let bg_ledger = ledger.background();
 
@@ -1930,8 +1927,7 @@ fn pos_bonds() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -2132,8 +2128,11 @@ fn pos_rewards() -> Result<()> {
     validator_2.exp_string("Namada ledger node started")?;
     validator_2.exp_string("This node is a validator")?;
 
+    wait_for_wasm_pre_compile(&mut validator_0)?;
     let bg_validator_0 = validator_0.background();
+    wait_for_wasm_pre_compile(&mut validator_1)?;
     let bg_validator_1 = validator_1.background();
+    wait_for_wasm_pre_compile(&mut validator_2)?;
     let bg_validator_2 = validator_2.background();
 
     let validator_zero_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -2280,8 +2279,7 @@ fn test_bond_queries() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -2406,8 +2404,15 @@ All unbonds total withdrawable: 412\r",
 #[test]
 fn pos_init_validator() -> Result<()> {
     let pipeline_len = 1;
+    let validator_stake = 200000_u64;
     let test = setup::network(
         |genesis| {
+            assert_eq!(
+                genesis.validator.get("validator-0").unwrap().tokens,
+                Some(validator_stake),
+                "Assuming this stake, we give the same amount to the new \
+                 validator to have half of voting power",
+            );
             let parameters = ParametersConfig {
                 min_num_of_blocks: 4,
                 epochs_per_year: 31_536_000,
@@ -2428,17 +2433,28 @@ fn pos_init_validator() -> Result<()> {
         None,
     )?;
 
-    // 1. Run the ledger node
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+    // 1. Run a validator and non-validator ledger node
+    let args = ["ledger"];
+    let mut validator_0 =
+        run_as!(test, Who::Validator(0), Bin::Node, args, Some(60))?;
+    let mut non_validator =
+        run_as!(test, Who::NonValidator, Bin::Node, args, Some(60))?;
+
+    wait_for_wasm_pre_compile(&mut validator_0)?;
+    // let _bg_ledger = validator_0.background();
+
+    wait_for_wasm_pre_compile(&mut non_validator)?;
+    // let _bg_ledger = non_validator.background();
 
     // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
-    let _bg_ledger = ledger.background();
+    validator_0.exp_string("Committed block hash")?;
+    let _bg_validator_0 = validator_0.background();
+    non_validator.exp_string("Committed block hash")?;
+    let bg_non_validator = non_validator.background();
 
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let non_validator_rpc = get_actor_rpc(&test, &Who::NonValidator);
 
-    // 2. Initialize a new validator account
+    // 2. Initialize a new validator account with the non-validator node
     let new_validator = "new-validator";
     let new_validator_key = format!("{}-key", new_validator);
     let tx_args = vec![
@@ -2459,7 +2475,7 @@ fn pos_init_validator() -> Result<()> {
         "--max-commission-rate-change",
         "0.01",
         "--node",
-        &validator_one_rpc,
+        &non_validator_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
@@ -2484,12 +2500,14 @@ fn pos_init_validator() -> Result<()> {
         "--gas-token",
         NAM,
         "--node",
-        &validator_one_rpc,
+        &non_validator_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
     //     Then self-bond the tokens:
+    let delegation = 5_u64;
+    let delegation_str = &delegation.to_string();
     let tx_args = vec![
         "bond",
         "--validator",
@@ -2497,7 +2515,7 @@ fn pos_init_validator() -> Result<()> {
         "--source",
         BERTHA,
         "--amount",
-        "1000.5",
+        delegation_str,
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -2505,13 +2523,14 @@ fn pos_init_validator() -> Result<()> {
         "--gas-token",
         NAM,
         "--node",
-        &validator_one_rpc,
+        &non_validator_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // 4. Transfer some NAM to the new validator
+    let validator_stake_str = &validator_stake.to_string();
     let tx_args = vec![
         "transfer",
         "--source",
@@ -2521,7 +2540,7 @@ fn pos_init_validator() -> Result<()> {
         "--token",
         NAM,
         "--amount",
-        "10999.5",
+        validator_stake_str,
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -2529,7 +2548,7 @@ fn pos_init_validator() -> Result<()> {
         "--gas-token",
         NAM,
         "--node",
-        &validator_one_rpc,
+        &non_validator_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
@@ -2541,7 +2560,7 @@ fn pos_init_validator() -> Result<()> {
         "--validator",
         new_validator,
         "--amount",
-        "10000",
+        validator_stake_str,
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -2549,15 +2568,39 @@ fn pos_init_validator() -> Result<()> {
         "--gas-token",
         NAM,
         "--node",
-        &validator_one_rpc,
+        &non_validator_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
+    // Stop the non-validator node and run it as the new validator
+    let mut non_validator = bg_non_validator.foreground();
+    non_validator.interrupt()?;
+
+    // it takes a bit before the node is shutdown. We dont want flasky test.
+    sleep(6);
+
+    let loc = format!("{}:{}", std::file!(), std::line!());
+    let validator_1_base_dir = test.get_base_dir(&Who::NonValidator);
+    let mut validator_1 = setup::run_cmd(
+        Bin::Node,
+        args,
+        Some(60),
+        &test.working_dir,
+        validator_1_base_dir,
+        None,
+        loc,
+    )?;
+
+    validator_1.exp_string("Namada ledger node started")?;
+    validator_1.exp_string("This node is a validator")?;
+    validator_1.exp_string("Committed block hash")?;
+    let _bg_validator_1 = validator_1.background();
+
     // 6. Wait for the pipeline epoch when the validator's bonded stake should
     // be non-zero
-    let epoch = get_epoch(&test, &validator_one_rpc)?;
+    let epoch = get_epoch(&test, &non_validator_rpc)?;
     let earliest_update_epoch = epoch + pipeline_len;
     println!(
         "Current epoch: {}, earliest epoch with updated bonded stake: {}",
@@ -2569,7 +2612,7 @@ fn pos_init_validator() -> Result<()> {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!("Timed out waiting for epoch: {}", earliest_update_epoch);
         }
-        let epoch = get_epoch(&test, &validator_one_rpc)?;
+        let epoch = get_epoch(&test, &non_validator_rpc)?;
         if epoch >= earliest_update_epoch {
             break;
         }
@@ -2577,10 +2620,10 @@ fn pos_init_validator() -> Result<()> {
 
     // 7. Check the new validator's bonded stake
     let bonded_stake =
-        find_bonded_stake(&test, new_validator, &validator_one_rpc)?;
+        find_bonded_stake(&test, new_validator, &non_validator_rpc)?;
     assert_eq!(
         bonded_stake,
-        token::Amount::from_str("11000.5", NATIVE_MAX_DECIMAL_PLACES).unwrap()
+        token::Amount::native_whole(validator_stake + delegation)
     );
 
     Ok(())
@@ -2602,8 +2645,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     let mut ledger =
         run_as!(*test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
     let bg_ledger = ledger.background();
 
     let validator_one_rpc = Arc::new(get_actor_rpc(&test, &Who::Validator(0)));
@@ -2639,7 +2681,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
             std::thread::spawn(move || {
                 let mut args = (*tx_args).clone();
                 args.push(&*validator_one_rpc);
-                let mut client = run!(*test, Bin::Client, args, Some(40))?;
+                let mut client = run!(*test, Bin::Client, args, Some(80))?;
                 client.exp_string("Transaction accepted")?;
                 client.exp_string("Transaction applied")?;
                 client.exp_string("Transaction is valid.")?;
@@ -2715,8 +2757,7 @@ fn proposal_submission() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -3070,6 +3111,7 @@ fn eth_governance_proposal() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Namada ledger node started")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -3295,6 +3337,7 @@ fn pgf_governance_proposal() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Namada ledger node started")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -3569,8 +3612,7 @@ fn proposal_offline() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -3769,7 +3811,7 @@ fn test_genesis_validators() -> Result<()> {
         Some(5),
         &working_dir,
         &test_dir,
-        "validator",
+        None,
         format!("{}:{}", std::file!(), std::line!()),
     )?;
     init_genesis_validator_0.assert_success();
@@ -3811,7 +3853,7 @@ fn test_genesis_validators() -> Result<()> {
         Some(5),
         &working_dir,
         &test_dir,
-        "validator",
+        None,
         format!("{}:{}", std::file!(), std::line!()),
     )?;
     init_genesis_validator_1.assert_success();
@@ -3888,7 +3930,7 @@ fn test_genesis_validators() -> Result<()> {
         Some(5),
         &working_dir,
         &test_dir,
-        "validator",
+        None,
         format!("{}:{}", std::file!(), std::line!()),
     )?;
 
@@ -4021,10 +4063,9 @@ fn test_genesis_validators() -> Result<()> {
     non_validator.exp_string("Namada ledger node started")?;
     non_validator.exp_string("This node is not a validator")?;
 
-    // Wait for a first block
-    validator_0.exp_string("Committed block hash")?;
-    validator_1.exp_string("Committed block hash")?;
-    non_validator.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut validator_0)?;
+    wait_for_wasm_pre_compile(&mut validator_1)?;
+    wait_for_wasm_pre_compile(&mut non_validator)?;
 
     let bg_validator_0 = validator_0.background();
     let bg_validator_1 = validator_1.background();
@@ -4201,13 +4242,12 @@ fn double_signing_gets_slashed() -> Result<()> {
         Some(40),
         &test.working_dir,
         validator_0_base_dir_copy,
-        "validator",
+        None,
         loc,
     )?;
     validator_0_copy.exp_string("Namada ledger node started")?;
     validator_0_copy.exp_string("This node is a validator")?;
-    // Wait for a first block
-    validator_0_copy.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut validator_0_copy)?;
     let _bg_validator_0_copy = validator_0_copy.background();
 
     // 5. Submit a valid token transfer tx to validator 0
@@ -4231,9 +4271,10 @@ fn double_signing_gets_slashed() -> Result<()> {
         "--node",
         &validator_one_rpc,
     ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction is valid.")?;
-    client.assert_success();
+    let _client = run!(test, Bin::Client, tx_args, Some(40))?;
+    // We don't wait for tx result - sometimes the node may crash before while
+    // it's being applied, because the slashed validator will stop voting and
+    // rewards calculation then fails with `InsufficientVotes`.
 
     // 6. Wait for double signing evidence
     let mut validator_1 = bg_validator_1.foreground();
@@ -4260,8 +4301,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));

@@ -25,7 +25,6 @@ use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::{tx_record::TxAction, TxRecord};
 use crate::facade::tendermint_proto::google::protobuf::Timestamp;
-use crate::node::ledger::shell::ShellMode;
 use crate::node::ledger::shims::abcipp_shim_types::shim::{response, TxBytes};
 
 impl<D, H> Shell<D, H>
@@ -45,36 +44,30 @@ where
         &self,
         req: RequestPrepareProposal,
     ) -> response::PrepareProposal {
-        let txs = if let ShellMode::Validator { .. } = self.mode {
-            // start counting allotted space for txs
-            let alloc = self.get_encrypted_txs_allocator();
-            // add encrypted txs
-            let (encrypted_txs, alloc) = self.build_encrypted_txs(
-                alloc,
-                TempWlStorage::new(&self.wl_storage.storage),
-                &req.txs,
-                &req.time,
-            );
-            let mut txs = encrypted_txs;
+        // start counting allotted space for txs
+        let alloc = self.get_encrypted_txs_allocator();
+        // add encrypted txs
+        let (encrypted_txs, alloc) = self.build_encrypted_txs(
+            alloc,
+            TempWlStorage::new(&self.wl_storage.storage),
+            &req.txs,
+            &req.time,
+        );
+        let mut txs = encrypted_txs;
 
-            // decrypt the wrapper txs included in the previous block
-            let (mut decrypted_txs, alloc) = self.build_decrypted_txs(alloc);
-            txs.append(&mut decrypted_txs);
+        // decrypt the wrapper txs included in the previous block
+        let (mut decrypted_txs, alloc) = self.build_decrypted_txs(alloc);
+        txs.append(&mut decrypted_txs);
 
-            // add vote extension protocol txs
-            let mut protocol_txs = self.build_protocol_txs(
-                alloc,
-                #[cfg(feature = "abcipp")]
-                req.local_last_commit,
-                #[cfg(not(feature = "abcipp"))]
-                &req.txs,
-            );
-            txs.append(&mut protocol_txs);
-
-            txs
-        } else {
-            vec![]
-        };
+        // add vote extension protocol txs
+        let mut protocol_txs = self.build_protocol_txs(
+            alloc,
+            #[cfg(feature = "abcipp")]
+            req.local_last_commit,
+            #[cfg(not(feature = "abcipp"))]
+            &req.txs,
+        );
+        txs.append(&mut protocol_txs);
 
         tracing::info!(
             height = req.height,

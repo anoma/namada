@@ -27,7 +27,7 @@ use crate::config::genesis::genesis_config::{
     self, GenesisConfig, HexString, ValidatorPreGenesisConfig,
 };
 use crate::config::global::GlobalConfig;
-use crate::config::{self, Config, TendermintMode};
+use crate::config::{self, get_default_namada_folder, Config, TendermintMode};
 use crate::facade::tendermint::node::Id as TendermintNodeId;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::node::ledger::tendermint_node;
@@ -542,7 +542,8 @@ pub fn init_network(
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let (_alias, keypair) = wallet
                 .gen_key(SchemeType::Ed25519, Some(alias), true, password, None)
-                .expect("Key generation should not fail.");
+                .expect("Key generation should not fail.")
+                .expect("No existing alias expected.");
 
             // Write consensus key for Tendermint
             tendermint_node::write_validator_key(&tm_home_dir, &keypair);
@@ -561,7 +562,8 @@ pub fn init_network(
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let (_alias, keypair) = wallet
                 .gen_key(SchemeType::Ed25519, Some(alias), true, password, None)
-                .expect("Key generation should not fail.");
+                .expect("Key generation should not fail.")
+                .expect("No existing alias expected.");
             keypair.ref_to()
         });
 
@@ -576,7 +578,8 @@ pub fn init_network(
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let (_alias, keypair) = wallet
                 .gen_key(SchemeType::Ed25519, Some(alias), true, password, None)
-                .expect("Key generation should not fail.");
+                .expect("Key generation should not fail.")
+                .expect("No existing alias expected.");
             keypair.ref_to()
         });
 
@@ -667,7 +670,8 @@ pub fn init_network(
                         password,
                         None,
                     )
-                    .expect("Key generation should not fail.");
+                    .expect("Key generation should not fail.")
+                    .expect("No existing alias expected.");
                 let public_key =
                     genesis_config::HexString(keypair.ref_to().to_string());
                 config.public_key = Some(public_key);
@@ -923,7 +927,8 @@ fn init_established_account(
                 password,
                 None, // do not use mnemonic code / HD derivation path
             )
-            .expect("Key generation should not fail.");
+            .expect("Key generation should not fail.")
+            .expect("No existing alias expected.");
         let public_key =
             genesis_config::HexString(keypair.ref_to().to_string());
         config.public_key = Some(public_key);
@@ -939,6 +944,18 @@ pub fn pk_to_tm_address(
 ) {
     let tm_addr = tm_consensus_key_raw_hash(&public_key);
     println!("{tm_addr}");
+}
+
+pub fn default_base_dir(
+    _global_args: args::Global,
+    _args: args::DefaultBaseDir,
+) {
+    println!(
+        "{}",
+        get_default_namada_folder().to_str().expect(
+            "expected a default namada folder to be possible to determine"
+        )
+    );
 }
 
 /// Initialize genesis validator's address, consensus key and validator account

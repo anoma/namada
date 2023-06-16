@@ -33,7 +33,7 @@ use namada::ledger::pos::{
     self, BondId, BondsAndUnbondsDetail, CommissionPair, PosParams, Slash,
 };
 use namada::ledger::queries::RPC;
-use namada::ledger::rpc::{format_denominated_amount, query_epoch, TxResponse};
+use namada::ledger::rpc::{enriched_bonds_and_unbonds, format_denominated_amount, query_epoch, TxResponse};
 use namada::ledger::storage::ConversionState;
 use namada::ledger::wallet::{AddressVpType, Wallet};
 use namada::proof_of_stake::types::WeightedValidator;
@@ -350,7 +350,8 @@ pub async fn query_transparent_balance<
         }
         (None, Some(owner)) => {
             for token in tokens {
-                let prefix = token.to_db_key().into();
+                let prefix =
+                    token::balance_key(&token, &owner.address().unwrap());
                 let balances =
                     query_storage_prefix::<C, token::Amount>(client, &prefix)
                         .await;
@@ -367,7 +368,7 @@ pub async fn query_transparent_balance<
             }
         }
         (Some(token), None) => {
-            let prefix = token.to_db_key().into();
+            let prefix = token::balance_prefix(&token);
             let balances =
                 query_storage_prefix::<C, token::Amount>(client, &prefix).await;
             if let Some(balances) = balances {
@@ -1426,7 +1427,7 @@ pub async fn query_bonds<C: namada::ledger::queries::Client + Sync>(
     _wallet: &mut Wallet<CliWalletUtils>,
     args: args::QueryBonds,
 ) -> std::io::Result<()> {
-    let _epoch = query_and_print_epoch(client).await;
+    let epoch = query_and_print_epoch(client).await;
 
     let source = args.owner;
     let validator = args.validator;
@@ -1434,21 +1435,10 @@ pub async fn query_bonds<C: namada::ledger::queries::Client + Sync>(
     let stdout = io::stdout();
     let mut w = stdout.lock();
 
-    let bonds_and_unbonds: pos::types::BondsAndUnbondsDetails =
-        unwrap_client_response::<C, pos::types::BondsAndUnbondsDetails>(
-            RPC.vp()
-                .pos()
-                .bonds_and_unbonds(client, &source, &validator)
-                .await,
-        );
-    let mut bonds_total = token::Amount::default();
-    let mut bonds_total_slashed = token::Amount::default();
-    let mut unbonds_total = token::Amount::default();
-    let mut unbonds_total_slashed = token::Amount::default();
-    let mut total_withdrawable = token::Amount::default();
-    for (bond_id, details) in bonds_and_unbonds {
-        let mut total = token::Amount::default();
-        let mut total_slashed = token::Amount::default();
+    let bonds_and_unbonds =
+        enriched_bonds_and_unbonds(client, epoch, &source, &validator).await;
+
+    for (bond_id, details) in &bonds_and_unbonds.data {
         let bond_type = if bond_id.source == bond_id.validator {
             format!("Self-bonds from {}", bond_id.validator)
         } else {
@@ -1458,41 +1448,32 @@ pub async fn query_bonds<C: namada::ledger::queries::Client + Sync>(
             )
         };
         writeln!(w, "{}:", bond_type)?;
-        for bond in details.bonds {
+        for bond in &details.data.bonds {
             writeln!(
                 w,
                 "  Remaining active bond from epoch {}: Δ {}",
                 bond.start,
                 bond.amount.to_string_native()
             )?;
-            total += bond.amount;
-            total_slashed += bond.slashed_amount.unwrap_or_default();
         }
-        if total_slashed != token::Amount::zero() {
-            writeln!(
+        if details.bonds_total != token::Amount::zero() {
+           writeln!(
                 w,
                 "Active (slashed) bonds total: {}",
-                (total - total_slashed).to_string_native()
+                details.bonds_total_active().to_string_native()
             )?;
         }
-        writeln!(w, "Bonds total: {}", total.to_string_native())?;
+        writeln!(w, "Bonds total: {}", details.bonds_total.to_string_native())?;
         writeln!(w)?;
-        bonds_total += total;
-        bonds_total_slashed += total_slashed;
 
-        let mut withdrawable = token::Amount::zero();
-        if !details.unbonds.is_empty() {
-            let mut total = token::Amount::default();
-            let mut total_slashed = token::Amount::default();
+        if !details.data.unbonds.is_empty() {
             let bond_type = if bond_id.source == bond_id.validator {
                 format!("Unbonded self-bonds from {}", bond_id.validator)
             } else {
                 format!("Unbonded delegations from {}", bond_id.source)
             };
             writeln!(w, "{}:", bond_type)?;
-            for unbond in details.unbonds {
-                total += unbond.amount;
-                total_slashed += unbond.slashed_amount.unwrap_or_default();
+            for unbond in &details.data.unbonds {
                 writeln!(
                     w,
                     "  Withdrawable from epoch {} (active from {}): Δ {}",
@@ -1501,37 +1482,34 @@ pub async fn query_bonds<C: namada::ledger::queries::Client + Sync>(
                     unbond.amount.to_string_native()
                 )?;
             }
-            withdrawable = total - total_slashed;
-            writeln!(w, "Unbonded total: {}", total.to_string_native())?;
-
-            unbonds_total += total;
-            unbonds_total_slashed += total_slashed;
-            total_withdrawable += withdrawable;
+            writeln!(w, "Unbonded total: {}", details.unbonds_total.to_string_native())?;
         }
-        writeln!(w, "Withdrawable total: {}", withdrawable.to_string_native())?;
+        writeln!(w, "Withdrawable total: {}", details.total_withdrawable.to_string_native())?;
         writeln!(w)?;
     }
-    if bonds_total != bonds_total_slashed {
+    if bonds_and_unbonds.bonds_total != bonds_and_unbonds.bonds_total_slashed {
         writeln!(
             w,
             "All bonds total active: {}",
-            (bonds_total - bonds_total_slashed).to_string_native()
+            bonds_and_unbonds.bonds_total_active().to_string_native()
         )?;
     }
-    writeln!(w, "All bonds total: {}", bonds_total.to_string_native())?;
+    writeln!(w, "All bonds total: {}", bonds_and_unbonds.bonds_total.to_string_native())?;
 
-    if unbonds_total != unbonds_total_slashed {
+    if bonds_and_unbonds.unbonds_total
+        != bonds_and_unbonds.unbonds_total_slashed
+    {
         writeln!(
             w,
             "All unbonds total active: {}",
-            (unbonds_total - unbonds_total_slashed).to_string_native()
+            bonds_and_unbonds.unbonds_total_active().to_string_native()
         )?;
     }
-    writeln!(w, "All unbonds total: {}", unbonds_total.to_string_native())?;
+    writeln!(w, "All unbonds total: {}", bonds_and_unbonds.unbonds_total.to_string_native())?;
     writeln!(
         w,
         "All unbonds total withdrawable: {}",
-        total_withdrawable.to_string_native()
+        bonds_and_unbonds.total_withdrawable.to_string_native()
     )?;
     Ok(())
 }
@@ -1693,9 +1671,7 @@ pub async fn query_slashes<C: namada::ledger::queries::Client + Sync>(
                     writeln!(
                         w,
                         "Slash epoch {}, type {}, rate {}",
-                        slash.epoch,
-                        slash.r#type,
-                        slash.r#type.get_slash_rate(&params)
+                        slash.epoch, slash.r#type, slash.rate
                     )
                     .unwrap();
                 }

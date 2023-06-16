@@ -49,18 +49,19 @@ mod tests {
         /// that this transaction is accepted by the PoS validity predicate.
         #[test]
         fn test_tx_change_validator_commissions(
-            commission_state_change in arb_commission_info(),
+            (initial_rate, max_change, commission_change) in arb_commission_info(),
             // A key to sign the transaction
             key in arb_common_keypair(),
             pos_params in arb_pos_params(None)) {
-            test_tx_change_validator_commission_aux(commission_state_change.2, commission_state_change.0, commission_state_change.1, key, pos_params).unwrap()
+            test_tx_change_validator_commission_aux(
+                initial_rate, max_change, commission_change, key, pos_params).unwrap()
         }
     }
 
     fn test_tx_change_validator_commission_aux(
-        commission_change: transaction::pos::CommissionChange,
         initial_rate: Dec,
         max_change: Dec,
+        commission_change: transaction::pos::CommissionChange,
         key: key::common::SecretKey,
         pos_params: PosParams,
     ) -> TxResult {
@@ -160,37 +161,67 @@ mod tests {
     }
 
     fn arb_rate(min: Dec, max: Dec) -> impl Strategy<Value = Dec> {
-        let scale = Dec::new(100_000, 0).expect("Test failed");
-        let int_min = (min * scale).to_i256();
-        let int_min = i128::try_from(int_min).unwrap();
-        let int_max = (max * scale).to_i256();
-        let int_max = i128::try_from(int_max).unwrap();
-        (int_min..=int_max).prop_map(move |num| Dec::from(num) / scale)
+        let int_min: i128 = (min * scale()).try_into().unwrap();
+        let int_max: i128 = (max * scale()).try_into().unwrap();
+        (int_min..=int_max).prop_map(|num| Dec::from(num) / scale())
     }
 
     fn arb_new_rate(
-        min: Dec,
-        max: Dec,
         rate_pre: Dec,
+        max_change: Dec,
     ) -> impl Strategy<Value = Dec> {
-        arb_rate(min, max).prop_filter(
-            "New rate must not be equal to the previous epoch's rate",
-            move |v| v != &rate_pre,
-        )
+        // Arbitrary non-zero change
+        let arb_change = |ceil: Dec| {
+            // Clamp the `ceil` to `max_change` and convert to an int
+            let ceil = (cmp::min(max_change, ceil) * scale())
+                .abs()
+                .as_u128();
+            (1..ceil).prop_map(|c|
+                // Convert back from an int
+                 Dec::try_from(c).unwrap() / scale())
+        };
+
+        // Addition
+        let arb_add = || {
+            arb_change(
+                // Addition must not go over 1
+                Dec::one() - rate_pre,
+            )
+            .prop_map(move |c| rate_pre + c)
+        };
+        // Subtraction
+        let arb_sub = || {
+            arb_change(
+                // Sub must not go below 0
+                rate_pre,
+            )
+            .prop_map(move |c| rate_pre - c)
+        };
+
+        // Add or subtract from the previous rate
+        if rate_pre == Dec::zero() {
+            arb_add().boxed()
+        } else if rate_pre == Dec::one() {
+            arb_sub().boxed()
+        } else {
+            prop_oneof![arb_add(), arb_sub()].boxed()
+        }
     }
 
     fn arb_commission_change(
         rate_pre: Dec,
         max_change: Dec,
     ) -> impl Strategy<Value = transaction::pos::CommissionChange> {
-        let min = rate_pre.checked_sub(&max_change).unwrap_or_default();
-        let max = cmp::min(rate_pre + max_change, Dec::one());
-        (arb_established_address(), arb_new_rate(min, max, rate_pre)).prop_map(
-            |(validator, new_rate)| transaction::pos::CommissionChange {
-                validator: Address::Established(validator),
-                new_rate,
-            },
+        (
+            arb_established_address(),
+            arb_new_rate(rate_pre, max_change),
         )
+            .prop_map(|(validator, new_rate)| {
+                transaction::pos::CommissionChange {
+                    validator: Address::Established(validator),
+                    new_rate,
+                }
+            })
     }
 
     fn arb_commission_info()
@@ -198,14 +229,19 @@ mod tests {
     {
         let min = Dec::zero();
         let max = Dec::one();
-        (arb_rate(min, max), arb_rate(min, max)).prop_flat_map(
-            |(rate, change)| {
+        let non_zero_min = Dec::one() / scale();
+        (arb_rate(min, max), arb_rate(non_zero_min, max)).prop_flat_map(
+            |(rate, max_change)| {
                 (
                     Just(rate),
-                    Just(change),
-                    arb_commission_change(rate, change),
+                    Just(max_change),
+                    arb_commission_change(rate, max_change),
                 )
             },
         )
+    }
+
+    fn scale() -> Dec {
+        Dec::new(100_000, 0).unwrap()
     }
 }

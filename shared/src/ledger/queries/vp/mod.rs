@@ -1,10 +1,12 @@
+//! Queries router and handlers for validity predicates
+
 // Re-export to show in rustdoc!
 pub use pos::Pos;
 use pos::POS;
 pub use token::Token;
 use token::TOKEN;
 
-mod pos;
+pub mod pos;
 mod token;
 
 // Validity predicate queries
@@ -13,6 +15,7 @@ router! {VP,
     ( "token" ) = (sub TOKEN),
 }
 
+/// Client-only methods for the router type are composed from router functions.
 #[cfg(any(test, feature = "async-client"))]
 pub mod client_only_methods {
     #[cfg(not(feature = "mainnet"))]
