@@ -9,7 +9,7 @@
 pub mod context;
 mod utils;
 
-use clap::{ArgGroup, ArgMatches};
+use clap::{ArgGroup, ArgMatches, ColorChoice};
 use color_eyre::eyre::Result;
 pub use utils::safe_exit;
 use utils::*;
@@ -4083,6 +4083,7 @@ fn namada_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada command line interface.")
+        .color(ColorChoice::Auto)
         .subcommand_required(true)
         .arg_required_else_help(true);
     cmds::Namada::add_sub(args::Global::def(app))
@@ -4092,6 +4093,7 @@ fn namada_node_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada node command line interface.")
+        .color(ColorChoice::Auto)
         .subcommand_required(true)
         .arg_required_else_help(true);
     cmds::NamadaNode::add_sub(args::Global::def(app))
@@ -4101,6 +4103,7 @@ fn namada_client_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada client command line interface.")
+        .color(ColorChoice::Auto)
         .subcommand_required(true)
         .arg_required_else_help(true);
     cmds::NamadaClient::add_sub(args::Global::def(app))
@@ -4110,6 +4113,7 @@ fn namada_wallet_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada wallet command line interface.")
+        .color(ColorChoice::Auto)
         .subcommand_required(true)
         .arg_required_else_help(true);
     cmds::NamadaWallet::add_sub(args::Global::def(app))
