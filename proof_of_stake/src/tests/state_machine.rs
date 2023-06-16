@@ -32,9 +32,9 @@ use crate::types::{
     WeightedValidator,
 };
 use crate::{
-    below_capacity_validator_set_handle, consensus_validator_set_handle,
-    enqueued_slashes_handle, read_pos_params, validator_deltas_handle,
-    validator_slashes_handle, validator_state_handle,
+    below_capacity_validator_set_handle, below_threshold_validator_set_handle,
+    consensus_validator_set_handle, enqueued_slashes_handle, read_pos_params,
+    validator_deltas_handle, validator_slashes_handle, validator_state_handle,
 };
 
 prop_state_machine! {
@@ -71,6 +71,8 @@ struct AbstractPosState {
     /// Below-capacity validator set. Pipelined.
     below_capacity_set:
         BTreeMap<Epoch, BTreeMap<ReverseOrdTokenAmount, VecDeque<Address>>>,
+    /// Below-threshold validator set. Pipelined.
+    below_threshold_set: BTreeMap<Epoch, HashSet<Address>>,
     /// Validator states. Pipelined.
     validator_states: BTreeMap<Epoch, BTreeMap<Address, ValidatorState>>,
     /// Unbonded bonds. The outer key for Epoch is pipeline + unbonding offset
@@ -652,26 +654,32 @@ impl ConcretePosState {
     ) {
         let pipeline = submit_epoch + params.pipeline_len;
         // Read the consensus sets data using iterator
-        let consensus_set = crate::consensus_validator_set_handle()
+        let num_in_consensus = crate::consensus_validator_set_handle()
             .at(&pipeline)
             .iter(&self.s)
             .unwrap()
             .map(|res| res.unwrap())
-            .collect::<Vec<_>>();
-        let below_cap_set = crate::below_capacity_validator_set_handle()
-            .at(&pipeline)
-            .iter(&self.s)
-            .unwrap()
-            .map(|res| res.unwrap())
-            .collect::<Vec<_>>();
-        let num_occurrences = consensus_set
-            .iter()
             .filter(|(_keys, addr)| addr == &id.validator)
-            .count()
-            + below_cap_set
-                .iter()
-                .filter(|(_keys, addr)| addr == &id.validator)
-                .count();
+            .count();
+
+        let num_in_below_cap = crate::below_capacity_validator_set_handle()
+            .at(&pipeline)
+            .iter(&self.s)
+            .unwrap()
+            .map(|res| res.unwrap())
+            .filter(|(_keys, addr)| addr == &id.validator)
+            .count();
+
+        let num_in_below_thresh = crate::below_threshold_validator_set_handle()
+            .at(&pipeline)
+            .iter(&self.s)
+            .unwrap()
+            .map(|res| res.unwrap())
+            .filter(|addr| addr == &id.validator)
+            .count();
+
+        let num_occurrences =
+            num_in_consensus + num_in_below_cap + num_in_below_thresh;
         let validator_is_jailed = crate::validator_state_handle(&id.validator)
             .get(&self.s, pipeline, params)
             .unwrap()
@@ -696,22 +704,31 @@ impl ConcretePosState {
                 &self.s, pipeline,
             )
             .unwrap();
+        let below_thresh_set =
+            crate::read_below_threshold_validator_set_addresses(
+                &self.s, pipeline,
+            )
+            .unwrap();
         let weighted = WeightedValidator {
             bonded_stake: stake_at_pipeline,
             address: id.validator,
         };
         let consensus_val = consensus_set.get(&weighted);
         let below_cap_val = below_cap_set.get(&weighted);
+        let below_thresh_val = below_thresh_set.get(&weighted.address);
 
         // Post-condition: The validator should be updated in exactly once in
         // the validator sets
         let jailed_condition = validator_is_jailed
             && consensus_val.is_none()
-            && below_cap_val.is_none();
-        assert!(
-            (consensus_val.is_some() ^ below_cap_val.is_some())
-                || jailed_condition
-        );
+            && below_cap_val.is_none()
+            && below_thresh_val.is_none();
+
+        let mut num_sets = i32::from(consensus_val.is_some());
+        num_sets += i32::from(below_cap_val.is_some());
+        num_sets += i32::from(below_thresh_val.is_some());
+
+        assert!(num_sets == 1 || jailed_condition);
 
         // Post-condition: The stake of the validators in the consensus set is
         // greater than or equal to below-capacity validators
@@ -759,28 +776,35 @@ impl ConcretePosState {
                 .contains(address)
             );
             assert!(
+                !crate::read_below_threshold_validator_set_addresses(
+                    &self.s, epoch
+                )
+                .unwrap()
+                .contains(address)
+            );
+            assert!(
                 !crate::read_all_validator_addresses(&self.s, epoch)
                     .unwrap()
                     .contains(address)
             );
         }
-        let weighted = WeightedValidator {
-            bonded_stake: Default::default(),
-            address: address.clone(),
-        };
         let in_consensus =
-            crate::read_consensus_validator_set_addresses_with_stake(
+            crate::read_consensus_validator_set_addresses(&self.s, pipeline)
+                .unwrap()
+                .contains(address);
+        let in_bc = crate::read_below_capacity_validator_set_addresses(
+            &self.s, pipeline,
+        )
+        .unwrap()
+        .contains(address);
+        let in_below_thresh =
+            crate::read_below_threshold_validator_set_addresses(
                 &self.s, pipeline,
             )
             .unwrap()
-            .contains(&weighted);
-        let in_bc =
-            crate::read_below_capacity_validator_set_addresses_with_stake(
-                &self.s, pipeline,
-            )
-            .unwrap()
-            .contains(&weighted);
-        assert!(in_consensus ^ in_bc);
+            .contains(address);
+
+        assert!(in_below_thresh && !in_consensus && !in_bc);
     }
 
     fn check_misbehavior_post_conditions(
@@ -878,24 +902,34 @@ impl ConcretePosState {
                 .unwrap();
             assert_eq!(val_state, Some(ValidatorState::Jailed));
         }
-        let in_consensus = consensus_validator_set_handle()
-            .at(&(current_epoch + params.pipeline_len))
-            .iter(&self.s)
-            .unwrap()
-            .any(|res| {
-                let (_, val_address) = res.unwrap();
-                val_address == validator.clone()
-            });
+        let pipeline_epoch = current_epoch + params.pipeline_len;
 
-        let in_bc = below_capacity_validator_set_handle()
-            .at(&(current_epoch + params.pipeline_len))
+        let num_in_consensus = consensus_validator_set_handle()
+            .at(&pipeline_epoch)
             .iter(&self.s)
             .unwrap()
-            .any(|res| {
-                let (_, val_address) = res.unwrap();
-                val_address == validator.clone()
-            });
-        assert!(in_consensus ^ in_bc);
+            .map(|res| res.unwrap())
+            .filter(|(_keys, addr)| addr == validator)
+            .count();
+
+        let num_in_bc = below_capacity_validator_set_handle()
+            .at(&pipeline_epoch)
+            .iter(&self.s)
+            .unwrap()
+            .map(|res| res.unwrap())
+            .filter(|(_keys, addr)| addr == validator)
+            .count();
+
+        let num_in_bt = below_threshold_validator_set_handle()
+            .at(&pipeline_epoch)
+            .iter(&self.s)
+            .unwrap()
+            .map(|res| res.unwrap())
+            .filter(|addr| addr == validator)
+            .count();
+
+        let num_occurrences = num_in_consensus + num_in_bc + num_in_bt;
+        assert_eq!(num_occurrences, 1);
 
         let val_state = validator_state_handle(validator)
             .get(&self.s, current_epoch + params.pipeline_len, params)
@@ -903,6 +937,7 @@ impl ConcretePosState {
         assert!(
             val_state == Some(ValidatorState::Consensus)
                 || val_state == Some(ValidatorState::BelowCapacity)
+                || val_state == Some(ValidatorState::BelowThreshold)
         );
     }
 
@@ -1039,6 +1074,53 @@ impl ConcretePosState {
                 assert!(!vals.contains(&validator));
                 vals.insert(validator);
             }
+
+            for validator in
+                crate::read_below_threshold_validator_set_addresses(
+                    &self.s, epoch,
+                )
+                .unwrap()
+            {
+                let stake = validator_deltas_handle(&validator)
+                    .get_sum(&self.s, epoch, params)
+                    .unwrap()
+                    .unwrap_or_default();
+                tracing::debug!(
+                    "Below-thresh val {}, stake {}",
+                    &validator,
+                    stake
+                );
+
+                let state = crate::validator_state_handle(&validator)
+                    .get(&self.s, epoch, params)
+                    .unwrap()
+                    .unwrap();
+
+                assert_eq!(state, ValidatorState::BelowThreshold);
+                assert_eq!(
+                    state,
+                    ref_state
+                        .validator_states
+                        .get(&epoch)
+                        .unwrap()
+                        .get(&validator)
+                        .cloned()
+                        .unwrap()
+                );
+                assert_eq!(
+                    stake,
+                    ref_state
+                        .validator_stakes
+                        .get(&epoch)
+                        .unwrap()
+                        .get(&validator)
+                        .cloned()
+                        .unwrap()
+                );
+                assert!(!vals.contains(&validator));
+                vals.insert(validator);
+            }
+
             // Jailed validators not in a set
             let all_validators =
                 crate::read_all_validator_addresses(&self.s, epoch).unwrap();
@@ -1118,6 +1200,7 @@ impl ReferenceStateMachine for AbstractPosState {
                     validator_stakes: Default::default(),
                     consensus_set: Default::default(),
                     below_capacity_set: Default::default(),
+                    below_threshold_set: Default::default(),
                     validator_states: Default::default(),
                     validator_slashes: Default::default(),
                     enqueued_slashes: Default::default(),
@@ -1153,7 +1236,19 @@ impl ReferenceStateMachine for AbstractPosState {
                         .iter()
                         .map(|(_stake, validators)| validators.len() as u64)
                         .sum();
-                    let deque = if state.params.max_validator_slots
+
+                    if tokens < state.params.validator_stake_threshold {
+                        state
+                            .below_threshold_set
+                            .entry(epoch)
+                            .or_default()
+                            .insert(address.clone());
+                        state
+                            .validator_states
+                            .entry(epoch)
+                            .or_default()
+                            .insert(address, ValidatorState::BelowThreshold);
+                    } else if state.params.max_validator_slots
                         > consensus_vals_len
                     {
                         state
@@ -1161,7 +1256,10 @@ impl ReferenceStateMachine for AbstractPosState {
                             .entry(epoch)
                             .or_default()
                             .insert(address.clone(), ValidatorState::Consensus);
-                        consensus_set.entry(tokens).or_default()
+                        consensus_set
+                            .entry(tokens)
+                            .or_default()
+                            .push_back(address);
                     } else {
                         state
                             .validator_states
@@ -1176,11 +1274,13 @@ impl ReferenceStateMachine for AbstractPosState {
                         below_cap_set
                             .entry(ReverseOrdTokenAmount(tokens))
                             .or_default()
+                            .push_back(address)
                     };
-                    deque.push_back(address)
                 }
-                // Ensure that below-capacity set is initialized even if empty
+                // Ensure that below-capacity and below-threshold sets are
+                // initialized even if empty
                 state.below_capacity_set.entry(epoch).or_default();
+                state.below_threshold_set.entry(epoch).or_default();
 
                 // Copy validator sets up to pipeline epoch
                 for epoch in epoch.next().iter_range(state.params.pipeline_len)
@@ -1335,37 +1435,18 @@ impl ReferenceStateMachine for AbstractPosState {
                     .or_default()
                     .insert(address.clone(), 0_i128);
 
-                // Insert into validator set at pipeline
-                let consensus_set =
-                    state.consensus_set.entry(pipeline).or_default();
-
-                let consensus_vals_len = consensus_set
-                    .iter()
-                    .map(|(_stake, validators)| validators.len() as u64)
-                    .sum();
-
-                let deque = if state.params.max_validator_slots
-                    > consensus_vals_len
-                {
-                    state
-                        .validator_states
-                        .entry(pipeline)
-                        .or_default()
-                        .insert(address.clone(), ValidatorState::Consensus);
-                    consensus_set.entry(token::Amount::default()).or_default()
-                } else {
-                    state
-                        .validator_states
-                        .entry(pipeline)
-                        .or_default()
-                        .insert(address.clone(), ValidatorState::BelowCapacity);
-                    let below_cap_set =
-                        state.below_capacity_set.entry(pipeline).or_default();
-                    below_cap_set
-                        .entry(ReverseOrdTokenAmount(token::Amount::default()))
-                        .or_default()
-                };
-                deque.push_back(address.clone());
+                // Insert into the below-threshold set at pipeline since the
+                // initial stake is 0
+                state
+                    .below_threshold_set
+                    .entry(pipeline)
+                    .or_default()
+                    .insert(address.clone());
+                state
+                    .validator_states
+                    .entry(pipeline)
+                    .or_default()
+                    .insert(address.clone(), ValidatorState::BelowThreshold);
 
                 state.debug_validators();
             }
@@ -1555,6 +1636,15 @@ impl ReferenceStateMachine for AbstractPosState {
                                 .or_default()
                                 .remove(&stake.into());
                         }
+                    } else if state
+                        .is_in_below_threshold(address, current_epoch + offset)
+                    {
+                        let removed = state
+                            .below_threshold_set
+                            .entry(current_epoch + offset)
+                            .or_default()
+                            .remove(address);
+                        debug_assert!(removed);
                     } else {
                         // Just make sure the validator is already jailed
                         debug_assert_eq!(
@@ -1622,7 +1712,20 @@ impl ReferenceStateMachine for AbstractPosState {
                         sum + validators.len() as u64
                     });
 
-                if num_consensus < state.params.max_validator_slots {
+                if pipeline_stake
+                    < state.params.validator_stake_threshold.change()
+                {
+                    // Place into the below-threshold set
+                    let below_threshold_set_pipeline = state
+                        .below_threshold_set
+                        .entry(pipeline_epoch)
+                        .or_default();
+                    below_threshold_set_pipeline.insert(address.clone());
+                    validator_states_pipeline.insert(
+                        address.clone(),
+                        ValidatorState::BelowThreshold,
+                    );
+                } else if num_consensus < state.params.max_validator_slots {
                     // Place directly into the consensus set
                     debug_assert!(
                         state
@@ -1806,7 +1909,8 @@ impl ReferenceStateMachine for AbstractPosState {
                         .iter()
                         .filter(|(_addr, val_state)| match val_state {
                             ValidatorState::Consensus
-                            | ValidatorState::BelowCapacity => true,
+                            | ValidatorState::BelowCapacity
+                            | ValidatorState::BelowThreshold => true,
                             ValidatorState::Inactive
                             | ValidatorState::Jailed => false,
                         })
@@ -1905,6 +2009,10 @@ impl AbstractPosState {
         self.below_capacity_set.insert(
             epoch,
             self.below_capacity_set.get(&prev_epoch).unwrap().clone(),
+        );
+        self.below_threshold_set.insert(
+            epoch,
+            self.below_threshold_set.get(&prev_epoch).unwrap().clone(),
         );
         self.validator_states.insert(
             epoch,
@@ -2065,20 +2173,29 @@ impl AbstractPosState {
         let consensus_set = self.consensus_set.entry(pipeline).or_default();
         let below_cap_set =
             self.below_capacity_set.entry(pipeline).or_default();
+        let below_thresh_set =
+            self.below_threshold_set.entry(pipeline).or_default();
+
         let validator_stakes = self.validator_stakes.get(&pipeline).unwrap();
         let validator_states =
             self.validator_states.get_mut(&pipeline).unwrap();
 
-        let state = validator_states.get(validator).unwrap();
+        let state_pre = validator_states.get(validator).unwrap();
 
         let this_val_stake_pre = *validator_stakes.get(validator).unwrap();
         let this_val_stake_post =
             token::Amount::from_change(this_val_stake_pre + change);
-        let this_val_stake_pre = token::Amount::from_change(
-            *validator_stakes.get(validator).unwrap(),
-        );
+        let this_val_stake_pre = token::Amount::from_change(this_val_stake_pre);
 
-        match state {
+        let threshold = self.params.validator_stake_threshold;
+        if this_val_stake_pre < threshold && this_val_stake_post < threshold {
+            // Validator is already below-threshold and will remain there, so do
+            // nothing
+            debug_assert!(below_thresh_set.contains(validator));
+            return;
+        }
+
+        match state_pre {
             ValidatorState::Consensus => {
                 // println!("Validator initially in consensus");
                 // Remove from the prior stake
@@ -2089,6 +2206,37 @@ impl AbstractPosState {
 
                 if vals.is_empty() {
                     consensus_set.remove(&this_val_stake_pre);
+                }
+
+                // If posterior stake is below threshold, place into the
+                // below-threshold set
+                if this_val_stake_post < threshold {
+                    below_thresh_set.insert(validator.clone());
+                    validator_states.insert(
+                        validator.clone(),
+                        ValidatorState::BelowThreshold,
+                    );
+
+                    // Promote the next below-cap validator if there is one
+                    if let Some(mut max_below_cap) = below_cap_set.last_entry()
+                    {
+                        let max_below_cap_stake = *max_below_cap.key();
+                        let vals = max_below_cap.get_mut();
+                        let promoted_val = vals.pop_front().unwrap();
+                        // Remove the key if there's nothing left
+                        if vals.is_empty() {
+                            below_cap_set.remove(&max_below_cap_stake);
+                        }
+
+                        consensus_set
+                            .entry(max_below_cap_stake.0)
+                            .or_default()
+                            .push_back(promoted_val.clone());
+                        validator_states
+                            .insert(promoted_val, ValidatorState::Consensus);
+                    }
+
+                    return;
                 }
 
                 // If unbonding, check the max below-cap validator's state if we
@@ -2146,6 +2294,17 @@ impl AbstractPosState {
                     below_cap_set.remove(&this_val_stake_pre.into());
                 }
 
+                // If posterior stake is below threshold, place into the
+                // below-threshold set
+                if this_val_stake_post < threshold {
+                    below_thresh_set.insert(validator.clone());
+                    validator_states.insert(
+                        validator.clone(),
+                        ValidatorState::BelowThreshold,
+                    );
+                    return;
+                }
+
                 // If bonding, check the min consensus validator's state if we
                 // need to do a swap
                 if change >= token::Change::default() {
@@ -2193,6 +2352,67 @@ impl AbstractPosState {
                     .entry(this_val_stake_post.into())
                     .or_default()
                     .push_back(validator.clone());
+            }
+            ValidatorState::BelowThreshold => {
+                // We know that this validator will be promoted into one of the
+                // higher sets, so first remove from the below-threshold set.
+                below_thresh_set.remove(validator);
+
+                let num_consensus =
+                    consensus_set.iter().fold(0, |sum, (_, validators)| {
+                        sum + validators.len() as u64
+                    });
+                if num_consensus < self.params.max_validator_slots {
+                    // Place the validator directly into the consensus set
+                    consensus_set
+                        .entry(this_val_stake_post)
+                        .or_default()
+                        .push_back(validator.clone());
+                    validator_states
+                        .insert(validator.clone(), ValidatorState::Consensus);
+                    return;
+                }
+                // Determine which set to place the validator into
+                if let Some(mut min_consensus) = consensus_set.first_entry() {
+                    // dbg!(&min_consensus);
+                    let min_consensus_stake = *min_consensus.key();
+                    if this_val_stake_post > min_consensus_stake {
+                        // Swap this validator with the max consensus
+                        let vals = min_consensus.get_mut();
+                        let last_val = vals.pop_back().unwrap();
+                        // Remove the key if there's nothing left
+                        if vals.is_empty() {
+                            consensus_set.remove(&min_consensus_stake);
+                        }
+                        // Do the swap in the validator sets
+                        below_cap_set
+                            .entry(min_consensus_stake.into())
+                            .or_default()
+                            .push_back(last_val.clone());
+                        consensus_set
+                            .entry(this_val_stake_post)
+                            .or_default()
+                            .push_back(validator.clone());
+
+                        // Change the validator states
+                        validator_states.insert(
+                            validator.clone(),
+                            ValidatorState::Consensus,
+                        );
+                        validator_states
+                            .insert(last_val, ValidatorState::BelowCapacity);
+                    } else {
+                        // Place the validator into the below-capacity set
+                        below_cap_set
+                            .entry(this_val_stake_post.into())
+                            .or_default()
+                            .push_back(validator.clone());
+                        validator_states.insert(
+                            validator.clone(),
+                            ValidatorState::BelowCapacity,
+                        );
+                    }
+                }
             }
             ValidatorState::Inactive => {
                 panic!("unexpected state")
@@ -2544,6 +2764,14 @@ impl AbstractPosState {
         None
     }
 
+    fn is_in_below_threshold(&self, validator: &Address, epoch: Epoch) -> bool {
+        self.below_threshold_set
+            .get(&epoch)
+            .unwrap()
+            .iter()
+            .any(|val| val == validator)
+    }
+
     /// Find the sums of the bonds across all epochs
     fn bond_sums(&self) -> BTreeMap<BondId, token::Change> {
         self.bonds.iter().fold(
@@ -2714,7 +2942,38 @@ impl AbstractPosState {
                     debug_assert_eq!(*val_state, ValidatorState::BelowCapacity);
                 }
             }
+            if max_bc > min_consensus {
+                println!(
+                    "min_consensus = {}, max_bc = {}",
+                    min_consensus, max_bc
+                );
+            }
             assert!(min_consensus >= max_bc);
+
+            for addr in self.below_threshold_set.get(&epoch).unwrap() {
+                let state = self
+                    .validator_states
+                    .get(&epoch)
+                    .unwrap()
+                    .get(addr)
+                    .unwrap();
+
+                let stake = self
+                    .validator_stakes
+                    .get(&epoch)
+                    .unwrap()
+                    .get(addr)
+                    .cloned()
+                    .unwrap_or_default();
+                tracing::debug!(
+                    "Below-thresh val {}, stake {} - ({:?})",
+                    addr,
+                    &stake,
+                    state
+                );
+
+                assert_eq!(*state, ValidatorState::BelowThreshold);
+            }
 
             for addr in self
                 .validator_states
@@ -2724,9 +2983,10 @@ impl AbstractPosState {
                 .cloned()
                 .collect::<Vec<_>>()
             {
-                if let (None, None) = (
+                if let (None, None, false) = (
                     self.is_in_consensus_w_info(&addr, epoch),
                     self.is_in_below_capacity_w_info(&addr, epoch),
+                    self.is_in_below_threshold(&addr, epoch),
                 ) {
                     assert_eq!(
                         self.validator_states

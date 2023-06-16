@@ -702,6 +702,20 @@ where
         .collect()
 }
 
+/// Read all addresses from the below-threshold set
+pub fn read_below_threshold_validator_set_addresses<S>(
+    storage: &S,
+    epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<HashSet<Address>>
+where
+    S: StorageRead,
+{
+    below_threshold_validator_set_handle()
+        .at(&epoch)
+        .iter(storage)?
+        .collect()
+}
+
 /// Read all addresses from consensus validator set with their stake.
 pub fn read_consensus_validator_set_addresses_with_stake<S>(
     storage: &S,
