@@ -2399,24 +2399,24 @@ where
     // give Tendermint updates for the next epoch
     let next_epoch: Epoch = current_epoch.next();
 
-    let cur_consensus_validators =
+    let new_consensus_validators =
         consensus_validator_set_handle().at(&next_epoch);
     let prev_consensus_validators =
         consensus_validator_set_handle().at(&current_epoch);
 
-    let consensus_validators = cur_consensus_validators
+    let consensus_validators = new_consensus_validators
         .iter(storage)?
         .filter_map(|validator| {
             let (
                 NestedSubKey::Data {
-                    key: cur_stake,
+                    key: new_stake,
                     nested_sub_key: _,
                 },
                 address,
             ) = validator.unwrap();
 
             tracing::debug!(
-                "Consensus validator address {address}, stake {cur_stake}"
+                "Consensus validator address {address}, stake {new_stake}"
             );
 
             // Check if the validator was consensus in the previous epoch with
@@ -2427,25 +2427,27 @@ where
                     .get(storage, current_epoch, params)
                     .unwrap();
                 let prev_tm_voting_power = Lazy::new(|| {
-                    let prev_validator_stake =
-                        validator_deltas_handle(&address)
-                            .get_sum(storage, current_epoch, params)
-                            .unwrap()
-                            .map(token::Amount::from_change)
-                            .unwrap_or_default();
+                    let prev_validator_stake = read_validator_stake(
+                        storage,
+                        params,
+                        &address,
+                        current_epoch,
+                    )
+                    .unwrap()
+                    .unwrap_or_default();
                     into_tm_voting_power(
                         params.tm_votes_per_token,
                         prev_validator_stake,
                     )
                 });
-                let cur_tm_voting_power = Lazy::new(|| {
-                    into_tm_voting_power(params.tm_votes_per_token, cur_stake)
+                let new_tm_voting_power = Lazy::new(|| {
+                    into_tm_voting_power(params.tm_votes_per_token, new_stake)
                 });
 
                 // If it was in `Consensus` before and voting power has not
                 // changed, skip the update
                 if matches!(prev_state, Some(ValidatorState::Consensus))
-                    && *prev_tm_voting_power == *cur_tm_voting_power
+                    && *prev_tm_voting_power == *new_tm_voting_power
                 {
                     tracing::debug!(
                         "skipping validator update, {address} is in consensus \
@@ -2456,7 +2458,7 @@ where
 
                 // If both previous and current voting powers are 0, skip
                 // update
-                if *prev_tm_voting_power == 0 && *cur_tm_voting_power == 0 {
+                if *prev_tm_voting_power == 0 && *new_tm_voting_power == 0 {
                     tracing::info!(
                         "skipping validator update, {address} is in consensus \
                          set but without voting power"
@@ -2474,36 +2476,35 @@ where
             );
             Some(ValidatorSetUpdate::Consensus(ConsensusValidator {
                 consensus_key,
-                bonded_stake: cur_stake.into(),
+                bonded_stake: new_stake.into(),
             }))
         });
-    let cur_below_capacity_validators =
+    let new_below_capacity_validators =
         below_capacity_validator_set_handle().at(&next_epoch);
     let prev_below_capacity_vals =
         below_capacity_validator_set_handle().at(&current_epoch);
 
-    let below_capacity_validators = cur_below_capacity_validators
+    let below_capacity_validators = new_below_capacity_validators
         .iter(storage)
         .unwrap()
         .filter_map(|validator| {
             let (
                 NestedSubKey::Data {
-                    key: cur_stake,
+                    key: new_stake,
                     nested_sub_key: _,
                 },
                 address,
             ) = validator.unwrap();
-            let cur_stake = token::Amount::from(cur_stake);
+            let new_stake = token::Amount::from(new_stake);
 
             tracing::debug!(
-                "Below-capacity validator address {address}, stake {cur_stake}"
+                "Below-capacity validator address {address}, stake {new_stake}"
             );
 
-            let prev_validator_stake = validator_deltas_handle(&address)
-                .get_sum(storage, current_epoch, params)
-                .unwrap()
-                .map(token::Amount::from_change)
-                .unwrap_or_default();
+            let prev_validator_stake =
+                read_validator_stake(storage, params, &address, current_epoch)
+                    .unwrap()
+                    .unwrap_or_default();
             let prev_tm_voting_power = into_tm_voting_power(
                 params.tm_votes_per_token,
                 prev_validator_stake,
@@ -2547,8 +2548,78 @@ where
             );
             Some(ValidatorSetUpdate::Deactivated(consensus_key))
         });
+
+    let new_below_threshold_validators =
+        below_threshold_validator_set_handle().at(&next_epoch);
+    let prev_below_threshold_vals =
+        below_threshold_validator_set_handle().at(&current_epoch);
+
+    let below_threshold_validators = new_below_threshold_validators
+        .iter(storage)
+        .unwrap()
+        .filter_map(|validator| {
+            let address = validator.unwrap();
+            let new_stake =
+                read_validator_stake(storage, params, &address, next_epoch)
+                    .unwrap()
+                    .unwrap_or_default();
+
+            tracing::debug!(
+                "Below-threshold validator address {address}, stake \
+                 {new_stake}"
+            );
+
+            let prev_validator_stake =
+                read_validator_stake(storage, params, &address, current_epoch)
+                    .unwrap()
+                    .unwrap_or_default();
+            let prev_tm_voting_power = into_tm_voting_power(
+                params.tm_votes_per_token,
+                prev_validator_stake,
+            );
+
+            // If the validator previously had no voting power, it wasn't in
+            // tendermint set and we have to skip it.
+            if prev_tm_voting_power == 0 {
+                tracing::debug!(
+                    "skipping validator update {address}, it's inactive and \
+                     previously had no voting power"
+                );
+                return None;
+            }
+
+            if !prev_below_threshold_vals.is_empty(storage).unwrap() {
+                // Look up the previous state
+                let prev_state = validator_state_handle(&address)
+                    .get(storage, current_epoch, params)
+                    .unwrap();
+                // If the `prev_state.is_none()`, it's a new validator that
+                // is `BelowThreshold`, so no update is needed. If it
+                // previously was `BelowThreshold` there's no update needed
+                // either.
+                if !matches!(prev_state, Some(ValidatorState::Consensus)) {
+                    tracing::debug!(
+                        "skipping validator update, {address} is not and \
+                         wasn't previously in consensus set"
+                    );
+                    return None;
+                }
+            }
+
+            let consensus_key = validator_consensus_key_handle(&address)
+                .get(storage, next_epoch, params)
+                .unwrap()
+                .unwrap();
+            tracing::debug!(
+                "{address} consensus key {}",
+                consensus_key.tm_raw_hash()
+            );
+            Some(ValidatorSetUpdate::Deactivated(consensus_key))
+        });
+
     Ok(consensus_validators
         .chain(below_capacity_validators)
+        .chain(below_threshold_validators)
         .map(f)
         .collect())
 }
