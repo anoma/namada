@@ -188,10 +188,9 @@ fn test_init_genesis_aux(
                 }
             ));
             assert_eq!(state, Some(ValidatorState::Consensus));
-        } else {
-            // TODO: one more set once we have `below_threshold`
-
-            // should be in below-capacity set
+        } else if validator.tokens >= params.validator_stake_threshold {
+            // Should be in below-capacity set if its tokens are greater than
+            // `validator_stake_threshold`
             let handle = below_capacity_validator_set_handle().at(&start_epoch);
             assert!(handle.at(&validator.tokens.into()).iter(&s).unwrap().any(
                 |result| {
@@ -200,6 +199,15 @@ fn test_init_genesis_aux(
                 }
             ));
             assert_eq!(state, Some(ValidatorState::BelowCapacity));
+        } else {
+            // Should be in below-threshold
+            let handle =
+                below_threshold_validator_set_handle().at(&start_epoch);
+            assert!(handle.iter(&s).unwrap().any(|addr| {
+                let addr = addr.unwrap();
+                addr == validator.address
+            }));
+            assert_eq!(state, Some(ValidatorState::BelowThreshold));
         }
     }
 }
@@ -762,6 +770,12 @@ fn test_become_validator_aux(
     new_validator_consensus_key: SecretKey,
     validators: Vec<GenesisValidator>,
 ) {
+    // Use the minimal validator stake threshold
+    let params = PosParams {
+        validator_stake_threshold: token::Amount::from(1),
+        ..params
+    };
+
     println!(
         "Test inputs: {params:?}, new validator: {new_validator}, genesis \
          validators: {validators:#?}"
@@ -809,14 +823,9 @@ fn test_become_validator_aux(
     let num_consensus_after =
         get_num_consensus_validators(&s, current_epoch + params.pipeline_len)
             .unwrap();
-    assert_eq!(
-        if validators.len() as u64 >= params.max_validator_slots {
-            num_consensus_before
-        } else {
-            num_consensus_before + 1
-        },
-        num_consensus_after
-    );
+    // The new validator is initialized with no stake and thus is in the
+    // below-threshold set
+    assert_eq!(num_consensus_before, num_consensus_after);
 
     // Advance to epoch 2
     current_epoch = advance_epoch(&mut s, &params);
