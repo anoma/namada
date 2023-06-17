@@ -1314,6 +1314,7 @@ mod test_finalize_block {
                 &mut shell.wl_storage,
                 proposal,
                 vec![],
+                None,
             )
             .unwrap();
 

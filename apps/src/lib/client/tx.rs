@@ -541,8 +541,8 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
         Ok(())
     } else {
         let signer = ctx.get(&signer);
-        let tx_data: Result<(InitProposalData, Vec<u8>), _> = proposal.clone().try_into();
-        let (mut init_proposal_data, init_proposal_content) = if let Ok(data) = tx_data {
+        let tx_data: Result<(InitProposalData, Vec<u8>, Option<Vec<u8>>), _> = proposal.clone().try_into();
+        let (mut init_proposal_data, init_proposal_content, init_proposal_code) = if let Ok(data) = tx_data {
             data
         } else {
             eprintln!("Invalid data for init proposal transaction.");
@@ -576,10 +576,20 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
             .unwrap();
         tx.header.chain_id = ctx.config.ledger.chain_id.clone();
         tx.header.expiration = args.tx.expiration;
-        let content_sec = tx.add_section(Section::ExtraData(Code::new(init_proposal_content)));
-        let content_sec_hash =
-            Hash(content_sec.hash(&mut Sha256::new()).finalize_reset().into());
-        init_proposal_data.content = content_sec_hash;
+        // Put the content of this proposal into an extra section
+        {
+            let content_sec = tx.add_section(Section::ExtraData(Code::new(init_proposal_content)));
+            let content_sec_hash =
+                Hash(content_sec.hash(&mut Sha256::new()).finalize_reset().into());
+            init_proposal_data.content = content_sec_hash;
+        }
+        // Put any proposal code into an extra section
+        if let Some(init_proposal_code) = init_proposal_code {
+            let code_sec = tx.add_section(Section::ExtraData(Code::new(init_proposal_code)));
+            let code_sec_hash =
+                Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into());
+            init_proposal_data.r#type = ProposalType::Default(Some(code_sec_hash));
+        }
         let data = init_proposal_data
             .try_to_vec()
             .expect("Encoding proposal data shouldn't fail");
