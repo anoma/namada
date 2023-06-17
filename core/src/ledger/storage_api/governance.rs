@@ -11,6 +11,7 @@ use crate::types::transaction::governance::{
 pub fn init_proposal<S>(
     storage: &mut S,
     data: InitProposalData,
+    content: Vec<u8>,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -23,7 +24,7 @@ where
     };
 
     let content_key = storage::get_content_key(proposal_id);
-    storage.write_bytes(&content_key, data.content)?;
+    storage.write_bytes(&content_key, content)?;
 
     let author_key = storage::get_author_key(proposal_id);
     storage.write(&author_key, data.author.clone())?;

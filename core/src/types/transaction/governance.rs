@@ -7,6 +7,7 @@ use crate::types::address::Address;
 use crate::types::governance::{
     self, Proposal, ProposalError, ProposalVote, VoteType,
 };
+use crate::types::hash::Hash;
 use crate::types::storage::Epoch;
 
 /// The type of a Proposal
@@ -89,7 +90,7 @@ pub struct InitProposalData {
     /// The proposal id
     pub id: Option<u64>,
     /// The proposal content
-    pub content: Vec<u8>,
+    pub content: Hash,
     /// The proposal author address
     pub author: Address,
     /// The proposal type
@@ -123,18 +124,18 @@ pub struct VoteProposalData {
     pub delegations: Vec<Address>,
 }
 
-impl TryFrom<Proposal> for InitProposalData {
+impl TryFrom<Proposal> for (InitProposalData, Vec<u8>) {
     type Error = ProposalError;
 
     fn try_from(proposal: Proposal) -> Result<Self, Self::Error> {
-        Ok(InitProposalData {
+        Ok((InitProposalData {
             id: proposal.id,
-            content: proposal.content.try_to_vec().unwrap(),
+            content: Hash::default(),
             author: proposal.author,
             r#type: proposal.r#type.try_into()?,
             voting_start_epoch: proposal.voting_start_epoch,
             voting_end_epoch: proposal.voting_end_epoch,
             grace_epoch: proposal.grace_epoch,
-        })
+        }, proposal.content.try_to_vec().unwrap()))
     }
 }

@@ -1,5 +1,5 @@
 //! Functions to sign transactions
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 #[cfg(feature = "std")]
 use std::env;
 #[cfg(feature = "std")]
@@ -684,15 +684,7 @@ pub async fn to_ledger_vector<
             ),
             format!("Grace epoch : {}", init_proposal_data.grace_epoch),
         ]);
-        let content: BTreeMap<String, String> =
-            BorshDeserialize::try_from_slice(&init_proposal_data.content)?;
-        if !content.is_empty() {
-            for (key, value) in &content {
-                tv.output.push(format!("Content {} : {}", key, value));
-            }
-        } else {
-            tv.output.push("Content : (none)".to_string());
-        }
+        tv.output.push(format!("Content: {}", init_proposal_data.content));
 
         tv.output_expert.extend(vec![
             format!("ID : {}", init_proposal_data_id),
@@ -707,14 +699,7 @@ pub async fn to_ledger_vector<
             ),
             format!("Grace epoch : {}", init_proposal_data.grace_epoch),
         ]);
-        if !content.is_empty() {
-            for (key, value) in content {
-                tv.output_expert
-                    .push(format!("Content {} : {}", key, value));
-            }
-        } else {
-            tv.output_expert.push("Content : none".to_string());
-        }
+        tv.output.push(format!("Content: {}", init_proposal_data.content));
     } else if code_hash == vote_proposal_hash {
         let vote_proposal =
             VoteProposalData::try_from_slice(&tx.data().ok_or_else(|| {

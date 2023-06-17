@@ -916,6 +916,7 @@ mod test_finalize_block {
         validator_consensus_key_handle, validator_rewards_products_handle,
         validator_slashes_handle, validator_state_handle, write_pos_params,
     };
+    use namada::types::hash::Hash;
     use namada::proto::{Code, Data, Section, Signature};
     use namada::types::governance::ProposalVote;
     use namada::types::key::tm_consensus_key_raw_hash;
@@ -1301,7 +1302,7 @@ mod test_finalize_block {
 
             let proposal = InitProposalData {
                 id: Some(proposal_id),
-                content: vec![],
+                content: Hash::default(),
                 author: validator.clone(),
                 voting_start_epoch: Epoch::default(),
                 voting_end_epoch: Epoch::default().next(),
@@ -1312,6 +1313,7 @@ mod test_finalize_block {
             storage_api::governance::init_proposal(
                 &mut shell.wl_storage,
                 proposal,
+                vec![],
             )
             .unwrap();
 
