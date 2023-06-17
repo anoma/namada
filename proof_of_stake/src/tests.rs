@@ -1362,7 +1362,9 @@ fn test_validator_sets() {
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk2));
 
     // Unbond some stake from val1, it should be be swapped with the greatest
-    // below-capacity validator val2 into the below-capacity set
+    // below-capacity validator val2 into the below-capacity set. The stake of
+    // val1 will go below 1 NAM, which is the validator_stake_threshold, so it
+    // will enter the below-threshold validator set.
     let unbond = token::Amount::from(500_000);
     let stake1 = stake1 - unbond;
     println!("val1 {val1} new stake {stake1}");
@@ -1382,6 +1384,89 @@ fn test_validator_sets() {
     .unwrap();
     // Epoch 6
     let val1_unbond_epoch = pipeline_epoch;
+
+    let consensus_vals: Vec<_> = consensus_validator_set_handle()
+        .at(&pipeline_epoch)
+        .iter(&s)
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+
+    assert_eq!(consensus_vals.len(), 3);
+    assert!(matches!(
+        &consensus_vals[0],
+        (lazy_map::NestedSubKey::Data {
+                key: stake,
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val4 && stake == &stake4 && *position == Position(0)
+    ));
+    assert!(matches!(
+        &consensus_vals[1],
+        (lazy_map::NestedSubKey::Data {
+                key: stake,
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val3 && stake == &stake3 && *position == Position(0)
+    ));
+    assert!(matches!(
+        &consensus_vals[2],
+        (lazy_map::NestedSubKey::Data {
+                key: stake,
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val5 && stake == &stake5 && *position == Position(0)
+    ));
+
+    let below_capacity_vals: Vec<_> = below_capacity_validator_set_handle()
+        .at(&pipeline_epoch)
+        .iter(&s)
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+
+    assert_eq!(below_capacity_vals.len(), 2);
+    assert!(matches!(
+        &below_capacity_vals[0],
+        (lazy_map::NestedSubKey::Data {
+                key: ReverseOrdTokenAmount(stake),
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val2 && stake == &stake2 && *position == Position(1)
+    ));
+    assert!(matches!(
+        &below_capacity_vals[1],
+        (lazy_map::NestedSubKey::Data {
+                key: ReverseOrdTokenAmount(stake),
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val6 && stake == &stake6 && *position == Position(2)
+    ));
+
+    let below_threshold_vals: Vec<_> = below_threshold_validator_set_handle()
+        .at(&pipeline_epoch)
+        .iter(&s)
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+
+    assert_eq!(below_threshold_vals.len(), 1);
+    assert_eq!(&below_threshold_vals[0], &val1);
+
+    // Advance to EPOCH 5
+    let epoch = advance_epoch(&mut s, &params);
+    let pipeline_epoch = epoch + params.pipeline_len;
+
+    // Check tendermint validator set updates
+    assert_eq!(val6_epoch, epoch, "val6 is in the validator sets now");
+    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
+    assert!(tm_updates.is_empty());
+
+    // Insert another validator with stake 1 - it should be added to below
+    // capacity set
+    insert_validator(&mut s, &val7, &pk7, stake7, epoch);
+    // Epoch 7
+    let val7_epoch = pipeline_epoch;
 
     let consensus_vals: Vec<_> = consensus_validator_set_handle()
         .at(&pipeline_epoch)
@@ -1449,103 +1534,18 @@ fn test_validator_sets() {
             },
             address
         )
-        if address == &val1 && stake == &stake1 && *position == Position(0)
-    ));
-
-    // Advance to EPOCH 5
-    let epoch = advance_epoch(&mut s, &params);
-    let pipeline_epoch = epoch + params.pipeline_len;
-
-    // Check tendermint validator set updates
-    assert_eq!(val6_epoch, epoch, "val6 is in the validator sets now");
-    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
-    assert!(tm_updates.is_empty());
-
-    // Insert another validator with stake 1 - it should be added to below
-    // capacity set after val1
-    insert_validator(&mut s, &val7, &pk7, stake7, epoch);
-    // Epoch 7
-    let val7_epoch = pipeline_epoch;
-
-    let consensus_vals: Vec<_> = consensus_validator_set_handle()
-        .at(&pipeline_epoch)
-        .iter(&s)
-        .unwrap()
-        .map(Result::unwrap)
-        .collect();
-
-    assert_eq!(consensus_vals.len(), 3);
-    assert!(matches!(
-        &consensus_vals[0],
-        (lazy_map::NestedSubKey::Data {
-                key: stake,
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val4 && stake == &stake4 && *position == Position(0)
-    ));
-    assert!(matches!(
-        &consensus_vals[1],
-        (lazy_map::NestedSubKey::Data {
-                key: stake,
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val3 && stake == &stake3 && *position == Position(0)
-    ));
-    assert!(matches!(
-        &consensus_vals[2],
-        (lazy_map::NestedSubKey::Data {
-                key: stake,
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val5 && stake == &stake5 && *position == Position(0)
-    ));
-
-    let below_capacity_vals: Vec<_> = below_capacity_validator_set_handle()
-        .at(&pipeline_epoch)
-        .iter(&s)
-        .unwrap()
-        .map(Result::unwrap)
-        .collect();
-
-    assert_eq!(below_capacity_vals.len(), 4);
-    assert!(matches!(
-        &below_capacity_vals[0],
-        (lazy_map::NestedSubKey::Data {
-                key: ReverseOrdTokenAmount(stake),
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val2 && stake == &stake2 && *position == Position(1)
-    ));
-    assert!(matches!(
-        &below_capacity_vals[1],
-        (lazy_map::NestedSubKey::Data {
-                key: ReverseOrdTokenAmount(stake),
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val6 && stake == &stake6 && *position == Position(2)
-    ));
-    assert!(matches!(
-        &below_capacity_vals[2],
-        (
-            lazy_map::NestedSubKey::Data {
-                key: ReverseOrdTokenAmount(stake),
-                nested_sub_key: lazy_map::SubKey::Data(position),
-            },
-            address
-        )
         if address == &val7 && stake == &stake7 && *position == Position(3)
     ));
-    assert!(matches!(
-        &below_capacity_vals[3],
-        (
-            lazy_map::NestedSubKey::Data {
-                key: ReverseOrdTokenAmount(stake),
-                nested_sub_key: lazy_map::SubKey::Data(position),
-            },
-            address
-        )
-        if address == &val1 && stake == &stake1 && *position == Position(0)
-    ));
+
+    let below_threshold_vals: Vec<_> = below_threshold_validator_set_handle()
+        .at(&pipeline_epoch)
+        .iter(&s)
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+
+    assert_eq!(below_threshold_vals.len(), 1);
+    assert_eq!(&below_threshold_vals[0], &val1);
 
     // Advance to EPOCH 6
     let epoch = advance_epoch(&mut s, &params);
@@ -1621,7 +1621,7 @@ fn test_validator_sets() {
         .map(Result::unwrap)
         .collect();
 
-    assert_eq!(below_capacity_vals.len(), 4);
+    assert_eq!(below_capacity_vals.len(), 3);
     dbg!(&below_capacity_vals);
     assert!(matches!(
         &below_capacity_vals[0],
@@ -1650,17 +1650,16 @@ fn test_validator_sets() {
         )
         if address == &val4 && stake == &stake4 && *position == Position(4)
     ));
-    assert!(matches!(
-        &below_capacity_vals[3],
-        (
-            lazy_map::NestedSubKey::Data {
-                key: ReverseOrdTokenAmount(stake),
-                nested_sub_key: lazy_map::SubKey::Data(position),
-            },
-            address
-        )
-        if address == &val1 && stake == &stake1 && *position == Position(0)
-    ));
+
+    let below_threshold_vals: Vec<_> = below_threshold_validator_set_handle()
+        .at(&pipeline_epoch)
+        .iter(&s)
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+
+    assert_eq!(below_threshold_vals.len(), 1);
+    assert_eq!(&below_threshold_vals[0], &val1);
 
     // Advance to EPOCH 7
     let epoch = advance_epoch(&mut s, &params);
@@ -1700,6 +1699,9 @@ fn test_validator_sets_swap() {
     // Only 2 consensus validator slots
     let params = PosParams {
         max_validator_slots: 2,
+        // Set the stake threshold to 0 so no validators are in the
+        // below-threshold set
+        validator_stake_threshold: token::Amount::default(),
         // Set 0.1 votes per token
         tm_votes_per_token: dec!(0.1),
         ..Default::default()
