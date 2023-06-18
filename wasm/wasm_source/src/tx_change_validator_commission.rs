@@ -163,7 +163,7 @@ mod tests {
     fn arb_rate(min: Dec, max: Dec) -> impl Strategy<Value = Dec> {
         let int_min: i128 = (min * scale()).try_into().unwrap();
         let int_max: i128 = (max * scale()).try_into().unwrap();
-        (int_min..=int_max).prop_map(|num| Dec::from(num) / scale())
+        (int_min..=int_max).prop_map(|num| Dec::new(num, 0).unwrap() / scale())
     }
 
     fn arb_new_rate(
