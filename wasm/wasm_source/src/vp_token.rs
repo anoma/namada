@@ -56,35 +56,33 @@ fn token_checks(
 
         match owner {
             None => {
-                if key.segments.get(0) == Some(&token.to_db_key()) {
+                if let Some(t) = token::is_any_minted_balance_key(key) {
+                    if t == token {
+                        // check if total supply is changed, which it should
+                        // never be from a tx
+                        let total_pre: token::Amount =
+                            ctx.read_pre(key)?.unwrap();
+                        let total_post: token::Amount =
+                            ctx.read_post(key)?.unwrap();
+                        if total_pre != total_post {
+                            return reject();
+                        }
+                    }
+                } else if key.segments.get(0) == Some(&token.to_db_key()) {
                     // Unknown changes to this address space are disallowed, but
                     // unknown changes anywhere else are permitted
                     return reject();
                 }
             }
             Some(owner) => {
-                if token::is_minted_balance_key(token, key) {
-                    // check if total supply is changed, which it should never
-                    // be from a tx
-                    let total_pre: token::Amount = ctx.read_pre(key)?.unwrap();
-                    let total_post: token::Amount =
-                        ctx.read_post(key)?.unwrap();
-                    if total_pre != total_post {
-                        return reject();
-                    }
-                } else {
-                    // accumulate the change
-                    let pre: token::Amount =
-                        ctx.read_pre(key)?.unwrap_or_default();
-                    let post: token::Amount =
-                        ctx.read_post(key)?.unwrap_or_default();
-                    // make sure that the spender approved the transaction
-                    if post < pre
-                        && !(verifiers.contains(owner)
-                            || *owner == address::masp())
-                    {
-                        return reject();
-                    }
+                let pre: token::Amount = ctx.read_pre(key)?.unwrap_or_default();
+                let post: token::Amount =
+                    ctx.read_post(key)?.unwrap_or_default();
+                // make sure that the spender approved the transaction
+                if post < pre
+                    && !(verifiers.contains(owner) || *owner == address::masp())
+                {
+                    return reject();
                 }
             }
         }

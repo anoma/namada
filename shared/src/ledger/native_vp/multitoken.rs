@@ -11,7 +11,7 @@ use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::token::{
-    is_any_token_balance_key, is_minted_balance_key, minter_key, Amount,
+    is_any_minted_balance_key, is_any_token_balance_key, minter_key, Amount,
 };
 use crate::vm::WasmCacheAccess;
 
@@ -59,27 +59,27 @@ where
                 let pre: Amount = self.ctx.read_pre(key)?.unwrap_or_default();
                 let post: Amount = self.ctx.read_post(key)?.unwrap_or_default();
                 let diff = post.change() - pre.change();
+                match changes.get_mut(token) {
+                    Some(change) => *change += diff,
+                    None => _ = changes.insert(token, diff),
+                }
+            } else if let Some(token) = is_any_minted_balance_key(key) {
+                let pre: Amount = self.ctx.read_pre(key)?.unwrap_or_default();
+                let post: Amount = self.ctx.read_post(key)?.unwrap_or_default();
+                let diff = post.change() - pre.change();
+                match mints.get_mut(token) {
+                    Some(mint) => *mint += diff,
+                    None => _ = mints.insert(token, diff),
+                }
 
-                if is_minted_balance_key(token, key) {
-                    match mints.get_mut(token) {
-                        Some(mint) => *mint += diff,
-                        None => _ = mints.insert(token, diff),
-                    }
-
-                    // Check if the minter VP is called
-                    let minter_key = minter_key(token);
-                    let minter = match self.ctx.read_post(&minter_key)? {
-                        Some(m) => m,
-                        None => return Ok(false),
-                    };
-                    if !verifiers.contains(&minter) {
-                        return Ok(false);
-                    }
-                } else {
-                    match changes.get_mut(token) {
-                        Some(change) => *change += diff,
-                        None => _ = changes.insert(token, diff),
-                    }
+                // Check if the minter VP is called
+                let minter_key = minter_key(token);
+                let minter = match self.ctx.read_post(&minter_key)? {
+                    Some(m) => m,
+                    None => return Ok(false),
+                };
+                if !verifiers.contains(&minter) {
+                    return Ok(false);
                 }
             }
         }
