@@ -1235,13 +1235,11 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         // We want to fund our transaction solely from supplied spending key
         let spending_key = spending_key.map(|x| x.into());
         let spending_keys: Vec<_> = spending_key.into_iter().collect();
-        // Load the current shielded context given the spending key we
-        // possess
-        let _ = self.load();
+        // Load the current shielded context given the spending key we possess
+        let _ = self.load().await;
         self.fetch(client, &spending_keys, &[]).await;
-        // Save the update state so that future fetches can be
-        // short-circuited
-        let _ = self.save();
+        // Save the update state so that future fetches can be short-circuited
+        let _ = self.save().await;
         // Determine epoch in which to submit potential shielded transaction
         let epoch = rpc::query_epoch(client).await;
         // Context required for storing which notes are in the source's
@@ -1414,7 +1412,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         (Epoch, TransferDelta, TransactionDelta),
     > {
         const TXS_PER_PAGE: u8 = 100;
-        let _ = self.load();
+        let _ = self.load().await;
         let vks = viewing_keys;
         let fvks: Vec<_> = vks
             .values()
@@ -1422,7 +1420,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             .collect();
         self.fetch(client, &[], &fvks).await;
         // Save the update state so that future fetches can be short-circuited
-        let _ = self.save();
+        let _ = self.save().await;
         // Required for filtering out rejected transactions from Tendermint
         // responses
         let block_results = rpc::query_results(client).await;
