@@ -394,12 +394,12 @@ where
                                 replay_protection_vp.ctx.gas_meter.into_inner();
                             result
                         }
-                        InternalAddress::IbcToken(_)
-                        | InternalAddress::Minted => {
-                            // These addresses should be a part of a multitoken
-                            // key
+                        InternalAddress::IbcToken(_) => {
+                            // The address should be a part of a multitoken key
                             gas_meter = ctx.gas_meter.into_inner();
-                            Ok(true)
+                            Ok(verifiers.contains(&Address::Internal(
+                                InternalAddress::Multitoken,
+                            )))
                         }
                     };
 

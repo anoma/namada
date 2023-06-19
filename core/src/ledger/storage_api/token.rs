@@ -5,7 +5,7 @@ use crate::ledger::storage_api;
 use crate::types::address::Address;
 use crate::types::token;
 pub use crate::types::token::{
-    balance_key, is_balance_key, is_minted_balance_key, minted_balance_key,
+    balance_key, is_any_minted_balance_key, is_balance_key, minted_balance_key,
     minter_key, Amount, Change,
 };
 

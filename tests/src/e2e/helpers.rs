@@ -19,8 +19,7 @@ use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::config::{Config, TendermintMode};
 
 use super::setup::{
-    self, sleep, NamadaBgCmd, NamadaCmd, Test, ENV_VAR_DEBUG,
-    ENV_VAR_USE_PREBUILT_BINARIES,
+    sleep, NamadaCmd, Test, ENV_VAR_DEBUG, ENV_VAR_USE_PREBUILT_BINARIES,
 };
 use crate::e2e::setup::{Bin, Who, APPS_PACKAGE};
 use crate::run;

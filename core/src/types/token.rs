@@ -335,6 +335,8 @@ impl TryFrom<IbcAmount> for Amount {
 pub const BALANCE_STORAGE_KEY: &str = "balance";
 /// Key segment for multitoken minter
 pub const MINTER_STORAGE_KEY: &str = "minter";
+/// Key segment for minted balance
+pub const MINTED_STORAGE_KEY: &str = "minted";
 /// Key segment for head shielded transaction pointer key
 pub const HEAD_TX_KEY: &str = "head-tx";
 /// Key segment prefix for shielded transaction key
@@ -372,12 +374,12 @@ pub fn minter_key(token_addr: &Address) -> Key {
 /// Obtain a storage key for the minted multitoken balance.
 pub fn minted_balance_key(token_addr: &Address) -> Key {
     balance_prefix(token_addr)
-        .push(&Address::Internal(InternalAddress::Minted).to_db_key())
+        .push(&MINTED_STORAGE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 
 /// Check if the given storage key is balance key for the given token. If it is,
-/// returns the owner.
+/// returns the owner. For minted balances, use [`is_any_minted_balance_key()`].
 pub fn is_balance_key<'a>(
     token_addr: &Address,
     key: &'a Key,
@@ -426,12 +428,22 @@ pub fn is_masp_key(key: &Key) -> bool {
                     || key.starts_with(PIN_KEY_PREFIX)))
 }
 
-/// Is storage key for total supply of a specific token?
-pub fn is_minted_balance_key(token_addr: &Address, key: &Key) -> bool {
-    if let Some(owner) = is_balance_key(token_addr, key) {
-        *owner == Address::Internal(InternalAddress::Minted)
-    } else {
-        false
+/// Check if the given storage key is for total supply of a unspecified token.
+/// If it is, returns the token.
+pub fn is_any_minted_balance_key(key: &Key) -> Option<&Address> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::AddressSeg(token),
+            DbKeySeg::StringSeg(balance),
+            DbKeySeg::StringSeg(owner),
+        ] if *addr == Address::Internal(InternalAddress::Multitoken)
+            && balance == BALANCE_STORAGE_KEY
+            && owner == MINTED_STORAGE_KEY =>
+        {
+            Some(token)
+        }
+        _ => None,
     }
 }
 
