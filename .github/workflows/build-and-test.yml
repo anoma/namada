@@ -37,7 +37,7 @@ jobs:
       matrix:
         os: [ubuntu-20.04]
         wasm_cache_version: ["v2"]
-        mold_version: [1.7.0]
+        mold_version: [1.11.0]
 
     steps:
       - name: Checkout repo
@@ -79,8 +79,8 @@ jobs:
       matrix:
         os: [ubuntu-20.04]
         wasm_cache_version: ["v2"]
-        mold_version: [1.7.0]
         nightly_version: [nightly-2023-06-01]
+        mold_version: [1.11.0]
 
     steps:
       - name: Checkout repo
@@ -153,7 +153,7 @@ jobs:
       matrix:
         os: [ubuntu-20.04]
         nightly_version: [nightly-2023-06-01]
-        mold_version: [1.7.0]
+        mold_version: [1.11.0]
         make:
           - name: ABCI
             suffix: ''
@@ -265,7 +265,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-20.04]
-        mold_version: [1.7.0]
+        mold_version: [1.11.0]
         make:
           - name: ABCI Release build
             suffix: ''
@@ -378,7 +378,7 @@ jobs:
       matrix:
         os: [ubuntu-20.04]
         nightly_version: [nightly-2023-06-01]
-        mold_version: [1.7.0]
+        mold_version: [1.11.0]
         make:
           - name: e2e
             suffix: ''
