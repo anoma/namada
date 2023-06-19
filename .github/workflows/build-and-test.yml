@@ -80,6 +80,7 @@ jobs:
         os: [ubuntu-20.04]
         wasm_cache_version: ["v2"]
         mold_version: [1.7.0]
+        nightly_version: [nightly-2023-06-01]
 
     steps:
       - name: Checkout repo
@@ -103,6 +104,11 @@ jobs:
           path: ./wasm
         env:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+      - name: Setup rust nightly
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          toolchain: ${{ matrix.nightly_version }}
+          profile: default
       - name: Test Wasm
         run: make test-wasm
       - name: Check wasm up-to-date
