@@ -1272,13 +1272,13 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         );
-        let inner_unsigned_hash = wrapper.tx_hash.clone();
+        let inner_unsigned_hash = &wrapper.tx_hash;
         let signed = wrapper
             .sign(&keypair, shell.chain_id.clone(), None)
             .expect("Test failed");
 
         // Write inner hash to storage
-        let hash_key = replay_protection::get_tx_hash_key(&inner_unsigned_hash);
+        let hash_key = replay_protection::get_tx_hash_key(inner_unsigned_hash);
         shell
             .wl_storage
             .storage
@@ -1358,7 +1358,7 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         );
-        let inner_unsigned_hash = wrapper.tx_hash.clone();
+        let inner_unsigned_hash = &wrapper.tx_hash;
         let signed = wrapper
             .sign(&keypair, shell.chain_id.clone(), None)
             .expect("Test failed");
