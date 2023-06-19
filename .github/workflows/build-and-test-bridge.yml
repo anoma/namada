@@ -144,7 +144,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-20.04]
-        nightly_version: [nightly-2022-11-03]
+        nightly_version: [nightly-2023-06-01]
         mold_version: [1.7.0]
         make:
           - name: ABCI
@@ -356,7 +356,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-20.04]
-        nightly_version: [nightly-2022-11-03]
+        nightly_version: [nightly-2023-06-01]
         mold_version: [1.7.0]
         make:
           - name: e2e
