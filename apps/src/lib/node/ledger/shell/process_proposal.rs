@@ -1173,7 +1173,7 @@ mod test_process_proposal {
             wrapper.clone().update_header(TxType::Raw).header_hash();
 
         // Write inner hash to storage
-        let hash_key = replay_protection::get_tx_hash_key(inner_unsigned_hash);
+        let hash_key = replay_protection::get_tx_hash_key(&inner_unsigned_hash);
         shell
             .wl_storage
             .storage
