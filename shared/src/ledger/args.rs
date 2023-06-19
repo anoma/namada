@@ -319,7 +319,7 @@ pub struct QueryBondedStake<C: NamadaTypes = SdkTypes> {
 
 #[derive(Clone, Debug)]
 /// Commission rate change args
-pub struct TxCommissionRateChange<C: NamadaTypes = SdkTypes> {
+pub struct CommissionRateChange<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// Validator address (should be self)

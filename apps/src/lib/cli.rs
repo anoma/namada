@@ -165,6 +165,7 @@ pub mod cmds {
                 .subcommand(Bond::def().display_order(2))
                 .subcommand(Unbond::def().display_order(2))
                 .subcommand(Withdraw::def().display_order(2))
+                .subcommand(TxCommissionRateChange::def().display_order(2))
                 // Queries
                 .subcommand(QueryEpoch::def().display_order(3))
                 .subcommand(QueryTransfers::def().display_order(3))
@@ -199,6 +200,8 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, TxInitProposal);
             let tx_vote_proposal =
                 Self::parse_with_ctx(matches, TxVoteProposal);
+            let tx_commission_rate_change =
+                Self::parse_with_ctx(matches, TxCommissionRateChange);
             let bond = Self::parse_with_ctx(matches, Bond);
             let unbond = Self::parse_with_ctx(matches, Unbond);
             let withdraw = Self::parse_with_ctx(matches, Withdraw);
@@ -233,6 +236,7 @@ pub mod cmds {
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
                 .or(tx_init_validator)
+                .or(tx_commission_rate_change)
                 .or(bond)
                 .or(unbond)
                 .or(withdraw)
@@ -294,6 +298,7 @@ pub mod cmds {
         TxUpdateVp(TxUpdateVp),
         TxInitAccount(TxInitAccount),
         TxInitValidator(TxInitValidator),
+        TxCommissionRateChange(TxCommissionRateChange),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
         TxRevealPk(TxRevealPk),
@@ -1526,6 +1531,28 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Create a new proposal.")
                 .add_args::<args::InitProposal<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TxCommissionRateChange(pub args::CommissionRateChange<args::CliTypes>);
+
+    impl SubCmd for TxCommissionRateChange {
+        const CMD: &'static str = "change-commission-rate";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxCommissionRateChange(args::CommissionRateChange::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Change commission raate.")
+                .add_args::<args::CommissionRateChange<args::CliTypes>>()
         }
     }
 
@@ -3049,11 +3076,11 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<TxCommissionRateChange<SdkTypes>>
-        for TxCommissionRateChange<CliTypes>
+    impl CliToSdk<CommissionRateChange<SdkTypes>>
+        for CommissionRateChange<CliTypes>
     {
-        fn to_sdk(self, ctx: &mut Context) -> TxCommissionRateChange<SdkTypes> {
-            TxCommissionRateChange::<SdkTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> CommissionRateChange<SdkTypes> {
+            CommissionRateChange::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
                 rate: self.rate,
@@ -3062,7 +3089,7 @@ pub mod args {
         }
     }
 
-    impl Args for TxCommissionRateChange<CliTypes> {
+    impl Args for CommissionRateChange<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let validator = VALIDATOR.parse(matches);

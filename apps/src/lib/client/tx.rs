@@ -1018,7 +1018,7 @@ pub async fn submit_validator_commission_change<
 >(
     client: &C,
     mut ctx: Context,
-    mut args: args::TxCommissionRateChange,
+    mut args: args::CommissionRateChange,
 ) -> Result<(), tx::Error> {
     args.tx.chain_id = args
         .tx

@@ -38,7 +38,7 @@ use crate::ledger::tx::{
 pub use crate::ledger::wallet::store::AddressVpType;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::ledger::{args, rpc};
-use crate::proto::{Section, Signature, Tx};
+use crate::proto::{MaspBuilder, Section, Signature, Tx};
 use crate::types::key::*;
 use crate::types::masp::{ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::Epoch;
@@ -505,6 +505,76 @@ fn format_outputs(output: &mut Vec<String>) {
     }
 }
 
+/// Adds a Ledger output for the sender and destination for transparent and MASP
+/// transactions
+pub fn make_ledger_masp_endpoints(
+    tokens: &HashMap<Address, String>,
+    output: &mut Vec<String>,
+    transfer: &Transfer,
+    builder: Option<&MaspBuilder>,
+    assets: &HashMap<AssetType, (Address, Epoch)>,
+) {
+    if transfer.source != masp() {
+        output.push(format!("Sender : {}", transfer.source));
+        if transfer.target == masp() {
+            make_ledger_amount_addr(
+                &tokens,
+                output,
+                transfer.amount,
+                &transfer.token,
+                "Sending ",
+            );
+        }
+    } else if let Some(builder) = builder {
+        for sapling_input in builder.builder.sapling_inputs() {
+            let vk = ExtendedViewingKey::from(*sapling_input.key());
+            output.push(format!("Sender : {}", vk));
+            make_ledger_amount_asset(
+                &tokens,
+                output,
+                sapling_input.value(),
+                &sapling_input.asset_type(),
+                &assets,
+                "Sending ",
+            );
+        }
+    }
+    if transfer.target != masp() {
+        output.push(format!("Destination : {}", transfer.target));
+        if transfer.source == masp() {
+            make_ledger_amount_addr(
+                &tokens,
+                output,
+                transfer.amount,
+                &transfer.token,
+                "Receiving ",
+            );
+        }
+    } else if let Some(builder) = builder {
+        for sapling_output in builder.builder.sapling_outputs() {
+            let pa = PaymentAddress::from(sapling_output.address());
+            output.push(format!("Destination : {}", pa));
+            make_ledger_amount_asset(
+                &tokens,
+                output,
+                sapling_output.value(),
+                &sapling_output.asset_type(),
+                &assets,
+                "Receiving ",
+            );
+        }
+    }
+    if transfer.source != masp() && transfer.target != masp() {
+        make_ledger_amount_addr(
+            &tokens,
+            output,
+            transfer.amount,
+            &transfer.token,
+            "",
+        );
+    }
+}
+
 /// Converts the given transaction to the form that is displayed on the Ledger
 /// device
 pub async fn to_ledger_vector<
@@ -801,72 +871,8 @@ pub async fn to_ledger_vector<
         tv.name = "Transfer 0".to_string();
 
         tv.output.push("Type : Transfer".to_string());
-        if transfer.source != masp() {
-            tv.output.push(format!("Sender : {}", transfer.source));
-            if transfer.target == masp() {
-                make_ledger_amount_addr(
-                    &tokens,
-                    &mut tv.output,
-                    transfer.amount,
-                    &transfer.token,
-                    "Sending ",
-                );
-            }
-        } else if let Some(builder) = builder {
-            for input in builder.builder.sapling_inputs() {
-                let vk = ExtendedViewingKey::from(*input.key());
-                tv.output.push(format!("Sender : {}", vk));
-                make_ledger_amount_asset(
-                    &tokens,
-                    &mut tv.output,
-                    input.value(),
-                    &input.asset_type(),
-                    &asset_types,
-                    "Sending ",
-                );
-            }
-        }
-        if transfer.target != masp() {
-            tv.output.push(format!("Destination : {}", transfer.target));
-            if transfer.source == masp() {
-                make_ledger_amount_addr(
-                    &tokens,
-                    &mut tv.output,
-                    transfer.amount,
-                    &transfer.token,
-                    "Receiving ",
-                );
-            }
-        } else if let Some(builder) = builder {
-            for output in builder.builder.sapling_outputs() {
-                let pa = PaymentAddress::from(output.address());
-                tv.output.push(format!("Destination : {}", pa));
-                make_ledger_amount_asset(
-                    &tokens,
-                    &mut tv.output,
-                    output.value(),
-                    &output.asset_type(),
-                    &asset_types,
-                    "Receiving ",
-                );
-            }
-        }
-        if transfer.source != masp() && transfer.target != masp() {
-            make_ledger_amount_addr(
-                &tokens,
-                &mut tv.output,
-                transfer.amount,
-                &transfer.token,
-                "",
-            );
-        }
-
-        tv.output_expert.extend(vec![
-            format!("Source : {}", transfer.source),
-            format!("Target : {}", transfer.target),
-            format!("Token : {}", transfer.token),
-            format!("Amount : {}", transfer.amount),
-        ]);
+        make_ledger_masp_endpoints(&tokens, &mut tv.output, &transfer, builder, &asset_types);
+        make_ledger_masp_endpoints(&tokens, &mut tv.output_expert, &transfer, builder, &asset_types);
     } else if code_hash == ibc_hash {
         let msg = Any::decode(
             tx.data()
