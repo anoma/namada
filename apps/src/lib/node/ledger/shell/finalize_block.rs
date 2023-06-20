@@ -317,9 +317,11 @@ where
                             }
                         }
                         DecryptedTx::Undecryptable => {
+                            event["info"] = "Transaction is invalid.".into();
                             event["log"] =
                                 "Transaction could not be decrypted.".into();
                             event["code"] = ErrorCodes::Undecryptable.into();
+                            continue
                         }
                     }
                     (event, Some(wrapper_hash))
