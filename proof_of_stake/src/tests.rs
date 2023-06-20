@@ -36,13 +36,13 @@ use crate::types::{
     ValidatorState, WeightedValidator,
 };
 use crate::{
-    become_validator, below_capacity_validator_set_handle,
-    below_threshold_validator_set_handle, bond_handle, bond_tokens,
-    bonds_and_unbonds, consensus_validator_set_handle,
+    become_validator, below_capacity_validator_set_handle, bond_handle,
+    bond_tokens, bonds_and_unbonds, consensus_validator_set_handle,
     copy_validator_sets_and_positions, find_validator_by_raw_hash,
     get_num_consensus_validators, init_genesis,
     insert_validator_into_validator_set, is_validator, process_slashes,
     read_below_capacity_validator_set_addresses_with_stake,
+    read_below_threshold_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake, read_total_stake,
     read_validator_delta_value, read_validator_stake, slash,
     staking_token_address, total_deltas_handle, unbond_handle, unbond_tokens,
@@ -201,12 +201,14 @@ fn test_init_genesis_aux(
             assert_eq!(state, Some(ValidatorState::BelowCapacity));
         } else {
             // Should be in below-threshold
-            let handle =
-                below_threshold_validator_set_handle().at(&start_epoch);
-            assert!(handle.iter(&s).unwrap().any(|addr| {
-                let addr = addr.unwrap();
-                addr == validator.address
-            }));
+            let bt_addresses =
+                read_below_threshold_validator_set_addresses(&s, start_epoch)
+                    .unwrap();
+            assert!(
+                bt_addresses
+                    .into_iter()
+                    .any(|addr| { addr == validator.address })
+            );
             assert_eq!(state, Some(ValidatorState::BelowThreshold));
         }
     }
@@ -1452,12 +1454,11 @@ fn test_validator_sets() {
         if address == &val6 && stake == &stake6 && *position == Position(2)
     ));
 
-    let below_threshold_vals: Vec<_> = below_threshold_validator_set_handle()
-        .at(&pipeline_epoch)
-        .iter(&s)
-        .unwrap()
-        .map(Result::unwrap)
-        .collect();
+    let below_threshold_vals =
+        read_below_threshold_validator_set_addresses(&s, pipeline_epoch)
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>();
 
     assert_eq!(below_threshold_vals.len(), 1);
     assert_eq!(&below_threshold_vals[0], &val1);
@@ -1546,12 +1547,11 @@ fn test_validator_sets() {
         if address == &val7 && stake == &stake7 && *position == Position(3)
     ));
 
-    let below_threshold_vals: Vec<_> = below_threshold_validator_set_handle()
-        .at(&pipeline_epoch)
-        .iter(&s)
-        .unwrap()
-        .map(Result::unwrap)
-        .collect();
+    let below_threshold_vals =
+        read_below_threshold_validator_set_addresses(&s, pipeline_epoch)
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>();
 
     assert_eq!(below_threshold_vals.len(), 1);
     assert_eq!(&below_threshold_vals[0], &val1);
@@ -1660,12 +1660,11 @@ fn test_validator_sets() {
         if address == &val4 && stake == &stake4 && *position == Position(4)
     ));
 
-    let below_threshold_vals: Vec<_> = below_threshold_validator_set_handle()
-        .at(&pipeline_epoch)
-        .iter(&s)
-        .unwrap()
-        .map(Result::unwrap)
-        .collect();
+    let below_threshold_vals =
+        read_below_threshold_validator_set_addresses(&s, pipeline_epoch)
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>();
 
     assert_eq!(below_threshold_vals.len(), 1);
     assert_eq!(&below_threshold_vals[0], &val1);
@@ -1933,7 +1932,6 @@ fn advance_epoch(s: &mut TestWlStorage, params: &PosParams) -> Epoch {
         current_epoch + params.pipeline_len,
         &consensus_validator_set_handle(),
         &below_capacity_validator_set_handle(),
-        &below_threshold_validator_set_handle(),
     )
     .unwrap();
     // process_slashes(s, current_epoch).unwrap();

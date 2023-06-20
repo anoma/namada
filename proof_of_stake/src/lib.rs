@@ -56,9 +56,9 @@ use storage::{
     last_block_proposer_key, params_key, slashes_prefix,
     unbonds_for_source_prefix, unbonds_prefix, validator_address_raw_hash_key,
     validator_last_slash_key, validator_max_commission_rate_change_key,
-    BelowThresholdValidatorSets, BondDetails, BondsAndUnbondsDetail,
-    BondsAndUnbondsDetails, ReverseOrdTokenAmount, RewardsAccumulator,
-    SlashedAmount, UnbondDetails, ValidatorUnbondRecords,
+    BondDetails, BondsAndUnbondsDetail, BondsAndUnbondsDetails,
+    ReverseOrdTokenAmount, RewardsAccumulator, SlashedAmount, UnbondDetails,
+    ValidatorUnbondRecords,
 };
 use thiserror::Error;
 use types::{
@@ -248,12 +248,6 @@ pub fn consensus_validator_set_handle() -> ConsensusValidatorSets {
 pub fn below_capacity_validator_set_handle() -> BelowCapacityValidatorSets {
     let key = storage::below_capacity_validator_set_key();
     BelowCapacityValidatorSets::open(key)
-}
-
-/// Get the storage handle to the epoched below-threshold validator set
-pub fn below_threshold_validator_set_handle() -> BelowThresholdValidatorSets {
-    let key = storage::below_threshold_validator_set_key();
-    BelowThresholdValidatorSets::open(key)
 }
 
 /// Get the storage handle to a PoS validator's consensus key (used for
@@ -473,7 +467,6 @@ where
             epoch,
             &consensus_validator_set_handle(),
             &below_capacity_validator_set_handle(),
-            &below_threshold_validator_set_handle(),
         )?;
     }
 
@@ -710,10 +703,18 @@ pub fn read_below_threshold_validator_set_addresses<S>(
 where
     S: StorageRead,
 {
-    below_threshold_validator_set_handle()
+    let params = read_pos_params(storage)?;
+    Ok(validator_addresses_handle()
         .at(&epoch)
         .iter(storage)?
-        .collect()
+        .map(Result::unwrap)
+        .filter(|address| {
+            matches!(
+                validator_state_handle(address).get(storage, epoch, &params),
+                Ok(Some(ValidatorState::BelowThreshold))
+            )
+        })
+        .collect())
 }
 
 /// Read all addresses from consensus validator set with their stake.
@@ -1010,14 +1011,11 @@ where
     let target_epoch = current_epoch + offset;
     let consensus_set = consensus_validator_set_handle().at(&target_epoch);
     let below_cap_set = below_capacity_validator_set_handle().at(&target_epoch);
-    let below_thresh_set =
-        below_threshold_validator_set_handle().at(&target_epoch);
 
     let num_consensus_validators =
         get_num_consensus_validators(storage, target_epoch)?;
 
     if stake < params.validator_stake_threshold {
-        below_thresh_set.insert(storage, address.clone())?;
         validator_state_handle(address).set(
             storage,
             ValidatorState::BelowThreshold,
@@ -1129,8 +1127,6 @@ where
     let consensus_val_handle = consensus_validator_set.at(&pipeline_epoch);
     let below_capacity_val_handle =
         below_capacity_validator_set.at(&pipeline_epoch);
-    let below_threshold_val_handle =
-        below_threshold_validator_set_handle().at(&pipeline_epoch);
 
     let tokens_pre =
         read_validator_stake(storage, params, validator, pipeline_epoch)?
@@ -1186,9 +1182,7 @@ where
                 tracing::debug!(
                     "Demoting this validator to the below-threshold set"
                 );
-                // Place the validator into the below-threshold set
-                below_threshold_val_handle
-                    .insert(storage, validator.clone())?;
+                // Set the validator state as below-threshold
                 validator_state_handle(validator).set(
                     storage,
                     ValidatorState::BelowThreshold,
@@ -1348,8 +1342,6 @@ where
                     "Demoting this validator to the below-threshold set"
                 );
 
-                below_threshold_val_handle
-                    .insert(storage, validator.clone())?;
                 validator_state_handle(validator).set(
                     storage,
                     ValidatorState::BelowThreshold,
@@ -1366,12 +1358,8 @@ where
     } else {
         // If there is no position at pipeline offset, then the validator must
         // be in the below-threshold set
-        debug_assert!(below_threshold_val_handle.contains(storage, validator)?);
         debug_assert!(tokens_pre < params.validator_stake_threshold);
         tracing::debug!("Target validator is below-threshold");
-
-        // Remove the validator from the below-threshold set
-        below_threshold_val_handle.remove(storage, validator)?;
 
         // Move the validator into the appropriate set
         let num_consensus_validators =
@@ -1504,17 +1492,15 @@ pub fn copy_validator_sets_and_positions<S>(
     target_epoch: Epoch,
     consensus_validator_set: &ConsensusValidatorSets,
     below_capacity_validator_set: &BelowCapacityValidatorSets,
-    below_threshold_validator_set: &BelowThresholdValidatorSets,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
     let prev_epoch = target_epoch.prev();
 
-    let (consensus, below_capacity, below_threshold) = (
+    let (consensus, below_capacity) = (
         consensus_validator_set.at(&prev_epoch),
         below_capacity_validator_set.at(&prev_epoch),
-        below_threshold_validator_set.at(&prev_epoch),
     );
     debug_assert!(!consensus.is_empty(storage)?);
 
@@ -1526,7 +1512,6 @@ where
         (ReverseOrdTokenAmount, Position),
         Address,
     > = HashMap::new();
-    let mut below_thresh_in_mem: HashSet<Address> = HashSet::new();
 
     for val in consensus.iter(storage)? {
         let (
@@ -1547,10 +1532,6 @@ where
             address,
         ) = val?;
         below_cap_in_mem.insert((stake, position), address);
-    }
-    for val in below_threshold.iter(storage)? {
-        let address = val?;
-        below_thresh_in_mem.insert(address);
     }
 
     tracing::debug!("{consensus_in_mem:?}");
@@ -1574,11 +1555,6 @@ where
             .at(&target_epoch)
             .at(&val_stake)
             .insert(storage, val_position, val_address)?;
-    }
-    for val_address in below_thresh_in_mem.into_iter() {
-        below_threshold_validator_set
-            .at(&target_epoch)
-            .insert(storage, val_address)?;
     }
 
     // Copy validator positions
@@ -2084,11 +2060,8 @@ where
         params.pipeline_len,
     )?;
 
-    // The validator's stake at initialization is 0, so place it directly into
-    // the below-threshold set
-    below_threshold_validator_set_handle()
-        .at(&pipeline_epoch)
-        .insert(storage, address.clone())?;
+    // The validator's stake at initialization is 0, so its state is immediately
+    // below-threshold
     validator_state_handle(address).set(
         storage,
         ValidatorState::BelowThreshold,
@@ -2550,27 +2523,25 @@ where
         });
 
     let new_below_threshold_validators =
-        below_threshold_validator_set_handle().at(&next_epoch);
-    let prev_below_threshold_vals =
-        below_threshold_validator_set_handle().at(&current_epoch);
+        read_below_threshold_validator_set_addresses(storage, next_epoch)?;
+    let prev_below_threshold_validators =
+        read_below_threshold_validator_set_addresses(storage, current_epoch)?;
 
     let below_threshold_validators = new_below_threshold_validators
-        .iter(storage)
-        .unwrap()
+        .iter()
         .filter_map(|validator| {
-            let address = validator.unwrap();
             let new_stake =
-                read_validator_stake(storage, params, &address, next_epoch)
+                read_validator_stake(storage, params, validator, next_epoch)
                     .unwrap()
                     .unwrap_or_default();
 
             tracing::debug!(
-                "Below-threshold validator address {address}, stake \
+                "Below-threshold validator address {validator}, stake \
                  {new_stake}"
             );
 
             let prev_validator_stake =
-                read_validator_stake(storage, params, &address, current_epoch)
+                read_validator_stake(storage, params, validator, current_epoch)
                     .unwrap()
                     .unwrap_or_default();
             let prev_tm_voting_power = into_tm_voting_power(
@@ -2582,15 +2553,15 @@ where
             // tendermint set and we have to skip it.
             if prev_tm_voting_power == 0 {
                 tracing::debug!(
-                    "skipping validator update {address}, it's inactive and \
+                    "skipping validator update {validator}, it's inactive and \
                      previously had no voting power"
                 );
                 return None;
             }
 
-            if !prev_below_threshold_vals.is_empty(storage).unwrap() {
+            if !prev_below_threshold_validators.is_empty() {
                 // Look up the previous state
-                let prev_state = validator_state_handle(&address)
+                let prev_state = validator_state_handle(validator)
                     .get(storage, current_epoch, params)
                     .unwrap();
                 // If the `prev_state.is_none()`, it's a new validator that
@@ -2599,19 +2570,19 @@ where
                 // either.
                 if !matches!(prev_state, Some(ValidatorState::Consensus)) {
                     tracing::debug!(
-                        "skipping validator update, {address} is not and \
+                        "skipping validator update, {validator} is not and \
                          wasn't previously in consensus set"
                     );
                     return None;
                 }
             }
 
-            let consensus_key = validator_consensus_key_handle(&address)
+            let consensus_key = validator_consensus_key_handle(validator)
                 .get(storage, next_epoch, params)
                 .unwrap()
                 .unwrap();
             tracing::debug!(
-                "{address} consensus key {}",
+                "{validator} consensus key {}",
                 consensus_key.tm_raw_hash()
             );
             Some(ValidatorSetUpdate::Deactivated(consensus_key))
@@ -3408,9 +3379,7 @@ where
                     .remove(storage, &val_position)?;
             }
             ValidatorState::BelowThreshold => {
-                let _ = below_threshold_validator_set_handle()
-                    .at(&epoch)
-                    .remove(storage, validator)?;
+                println!("Below-threshold");
             }
             ValidatorState::Inactive => {
                 println!("INACTIVE");

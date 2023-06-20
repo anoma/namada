@@ -34,7 +34,6 @@ const VALIDATOR_TOTAL_UNBONDED_STORAGE_KEY: &str = "total_unbonded";
 const VALIDATOR_SETS_STORAGE_PREFIX: &str = "validator_sets";
 const CONSENSUS_VALIDATOR_SET_STORAGE_KEY: &str = "consensus";
 const BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY: &str = "below_capacity";
-const BELOW_THRESHOLD_VALIDATOR_SET_STORAGE_KEY: &str = "below_threshold";
 const TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
 const VALIDATOR_SET_POSITIONS_KEY: &str = "validator_set_positions";
 const CONSENSUS_KEYS: &str = "consensus_keys";
@@ -520,13 +519,6 @@ pub fn consensus_validator_set_key() -> Key {
 pub fn below_capacity_validator_set_key() -> Key {
     validator_sets_prefix()
         .push(&BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Storage key for below-threshold validator set
-pub fn below_threshold_validator_set_key() -> Key {
-    validator_sets_prefix()
-        .push(&BELOW_THRESHOLD_VALIDATOR_SET_STORAGE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 

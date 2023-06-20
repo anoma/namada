@@ -32,9 +32,10 @@ use crate::types::{
     WeightedValidator,
 };
 use crate::{
-    below_capacity_validator_set_handle, below_threshold_validator_set_handle,
-    consensus_validator_set_handle, enqueued_slashes_handle, read_pos_params,
-    validator_deltas_handle, validator_slashes_handle, validator_state_handle,
+    below_capacity_validator_set_handle, consensus_validator_set_handle,
+    enqueued_slashes_handle, read_below_threshold_validator_set_addresses,
+    read_pos_params, validator_deltas_handle, validator_slashes_handle,
+    validator_state_handle,
 };
 
 prop_state_machine! {
@@ -670,13 +671,12 @@ impl ConcretePosState {
             .filter(|(_keys, addr)| addr == &id.validator)
             .count();
 
-        let num_in_below_thresh = crate::below_threshold_validator_set_handle()
-            .at(&pipeline)
-            .iter(&self.s)
-            .unwrap()
-            .map(|res| res.unwrap())
-            .filter(|addr| addr == &id.validator)
-            .count();
+        let num_in_below_thresh =
+            read_below_threshold_validator_set_addresses(&self.s, pipeline)
+                .unwrap()
+                .into_iter()
+                .filter(|addr| addr == &id.validator)
+                .count();
 
         let num_occurrences =
             num_in_consensus + num_in_below_cap + num_in_below_thresh;
@@ -920,13 +920,14 @@ impl ConcretePosState {
             .filter(|(_keys, addr)| addr == validator)
             .count();
 
-        let num_in_bt = below_threshold_validator_set_handle()
-            .at(&pipeline_epoch)
-            .iter(&self.s)
-            .unwrap()
-            .map(|res| res.unwrap())
-            .filter(|addr| addr == validator)
-            .count();
+        let num_in_bt = read_below_threshold_validator_set_addresses(
+            &self.s,
+            pipeline_epoch,
+        )
+        .unwrap()
+        .into_iter()
+        .filter(|addr| addr == validator)
+        .count();
 
         let num_occurrences = num_in_consensus + num_in_bc + num_in_bt;
         assert_eq!(num_occurrences, 1);

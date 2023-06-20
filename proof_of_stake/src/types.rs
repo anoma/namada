@@ -106,12 +106,6 @@ pub type BelowCapacityValidatorSets = crate::epoched::NestedEpoched<
     crate::epoched::OffsetPipelineLen,
 >;
 
-/// Epoched below-threshold validator sets
-pub type BelowThresholdValidatorSets = crate::epoched::NestedEpoched<
-    LazySet<Address>,
-    crate::epoched::OffsetPipelineLen,
->;
-
 /// Epoched validator's deltas.
 pub type ValidatorDeltas = crate::epoched::EpochedDelta<
     token::Change,

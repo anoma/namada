@@ -103,7 +103,6 @@ where
                 current_epoch + pos_params.pipeline_len,
                 &namada_proof_of_stake::consensus_validator_set_handle(),
                 &namada_proof_of_stake::below_capacity_validator_set_handle(),
-                &namada_proof_of_stake::below_threshold_validator_set_handle(),
             )?;
         }
 
