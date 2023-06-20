@@ -61,9 +61,8 @@ proptest! {
     #[test]
     fn test_init_genesis(
 
-    pos_params in arb_pos_params(Some(5)),
+    (pos_params, genesis_validators) in arb_params_and_genesis_validators(Some(5), 1..10),
     start_epoch in (0_u64..1000).prop_map(Epoch),
-    genesis_validators in arb_genesis_validators(1..10),
 
     ) {
         test_init_genesis_aux(pos_params, start_epoch, genesis_validators)
@@ -79,8 +78,7 @@ proptest! {
     #[test]
     fn test_bonds(
 
-    pos_params in arb_pos_params(Some(5)),
-    genesis_validators in arb_genesis_validators(1..3),
+    (pos_params, genesis_validators) in arb_params_and_genesis_validators(Some(5), 1..3),
 
     ) {
         test_bonds_aux(pos_params, genesis_validators)
@@ -96,10 +94,9 @@ proptest! {
     #[test]
     fn test_become_validator(
 
-    pos_params in arb_pos_params(Some(5)),
+    (pos_params, genesis_validators) in arb_params_and_genesis_validators(Some(5), 1..3),
     new_validator in arb_established_address().prop_map(Address::Established),
     new_validator_consensus_key in arb_common_keypair(),
-    genesis_validators in arb_genesis_validators(1..3),
 
     ) {
         test_become_validator_aux(pos_params, new_validator,
@@ -123,6 +120,20 @@ proptest! {
     }
 }
 
+fn arb_params_and_genesis_validators(
+    num_max_validator_slots: Option<u64>,
+    val_size: Range<usize>,
+) -> impl Strategy<Value = (PosParams, Vec<GenesisValidator>)> {
+    let params = arb_pos_params(num_max_validator_slots);
+    params.prop_flat_map(move |params| {
+        let validators = arb_genesis_validators(
+            val_size.clone(),
+            Some(params.validator_stake_threshold),
+        );
+        (Just(params), validators)
+    })
+}
+
 fn test_slashes_with_unbonding_params()
 -> impl Strategy<Value = (PosParams, Vec<GenesisValidator>, u64)> {
     let params = arb_pos_params(Some(5));
@@ -130,7 +141,7 @@ fn test_slashes_with_unbonding_params()
         let unbond_delay = 0..(params.slash_processing_epoch_offset() * 2);
         // Must have at least 4 validators so we can slash one and the cubic
         // slash rate will be less than 100%
-        let validators = arb_genesis_validators(4..10);
+        let validators = arb_genesis_validators(4..10, None);
         (Just(params), validators, unbond_delay)
     })
 }
@@ -772,12 +783,6 @@ fn test_become_validator_aux(
     new_validator_consensus_key: SecretKey,
     validators: Vec<GenesisValidator>,
 ) {
-    // Use the minimal validator stake threshold
-    let params = PosParams {
-        validator_stake_threshold: token::Amount::from(1),
-        ..params
-    };
-
     println!(
         "Test inputs: {params:?}, new validator: {new_validator}, genesis \
          validators: {validators:#?}"
@@ -1941,30 +1946,55 @@ fn advance_epoch(s: &mut TestWlStorage, params: &PosParams) -> Epoch {
 
 fn arb_genesis_validators(
     size: Range<usize>,
+    threshold: Option<token::Amount>,
 ) -> impl Strategy<Value = Vec<GenesisValidator>> {
     let tokens: Vec<_> = (0..size.end)
-        .map(|_| (1..=10_000_000_u64).prop_map(token::Amount::from))
+        .map(|ix| {
+            if ix == 0 {
+                // If there's a threshold, make sure that at least one validator
+                // has at least a stake greater or equal to the threshold to
+                // avoid having an empty consensus set.
+                threshold.map(|token| token.raw_amount()).unwrap_or(1)
+                    ..=10_000_000_u64
+            } else {
+                1..=10_000_000_u64
+            }
+            .prop_map(token::Amount::from)
+        })
         .collect();
-    (size, tokens).prop_map(|(size, token_amounts)| {
-        // use unique seeds to generate validators' address and consensus key
-        let seeds = (0_u64..).take(size);
-        seeds
-            .zip(token_amounts)
-            .map(|(seed, tokens)| {
-                let address = address_from_simple_seed(seed);
-                let consensus_sk = common_sk_from_simple_seed(seed);
-                let consensus_key = consensus_sk.to_public();
+    (size, tokens)
+        .prop_map(|(size, token_amounts)| {
+            // use unique seeds to generate validators' address and consensus
+            // key
+            let seeds = (0_u64..).take(size);
+            seeds
+                .zip(token_amounts)
+                .map(|(seed, tokens)| {
+                    let address = address_from_simple_seed(seed);
+                    let consensus_sk = common_sk_from_simple_seed(seed);
+                    let consensus_key = consensus_sk.to_public();
 
-                let commission_rate = Decimal::new(5, 2);
-                let max_commission_rate_change = Decimal::new(1, 2);
-                GenesisValidator {
-                    address,
-                    tokens,
-                    consensus_key,
-                    commission_rate,
-                    max_commission_rate_change,
+                    let commission_rate = Decimal::new(5, 2);
+                    let max_commission_rate_change = Decimal::new(1, 2);
+                    GenesisValidator {
+                        address,
+                        tokens,
+                        consensus_key,
+                        commission_rate,
+                        max_commission_rate_change,
+                    }
+                })
+                .collect()
+        })
+        .prop_filter(
+            "Must have at least one genesis validator with stake above the \
+             provided threshold, if any.",
+            move |gen_vals: &Vec<GenesisValidator>| {
+                if let Some(thresh) = threshold {
+                    gen_vals.iter().any(|val| val.tokens >= thresh)
+                } else {
+                    true
                 }
-            })
-            .collect()
-    })
+            },
+        )
 }

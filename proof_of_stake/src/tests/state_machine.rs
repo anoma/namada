@@ -23,9 +23,9 @@ use rust_decimal_macros::dec;
 // `tracing` logs from tests
 use test_log::test;
 
-use super::arb_genesis_validators;
-use crate::parameters::testing::{arb_pos_params, arb_rate};
+use crate::parameters::testing::arb_rate;
 use crate::parameters::PosParams;
+use crate::tests::arb_params_and_genesis_validators;
 use crate::types::{
     decimal_mult_amount, decimal_mult_i128, BondId, GenesisValidator,
     ReverseOrdTokenAmount, Slash, SlashType, SlashedAmount, ValidatorState,
@@ -1183,7 +1183,7 @@ impl ReferenceStateMachine for AbstractPosState {
 
     fn init_state() -> BoxedStrategy<Self::State> {
         println!("\nInitializing abstract state machine");
-        (arb_pos_params(Some(5)), arb_genesis_validators(5..10))
+        arb_params_and_genesis_validators(Some(5), 5..10)
             .prop_map(|(params, genesis_validators)| {
                 let epoch = Epoch::default();
                 let mut state = Self {
