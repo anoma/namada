@@ -979,11 +979,11 @@ mod test_finalize_block {
             wrapper.set_code(Code::new(
                 format!("transaction data: {}", i).as_bytes().to_owned(),
             ));
+            wrapper.encrypt(&Default::default());
             wrapper.add_section(Section::Signature(Signature::new(
-                &wrapper.header_hash(),
+                vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
                 &keypair,
             )));
-            wrapper.encrypt(&Default::default());
             if i > 1 {
                 processed_txs.push(ProcessedTx {
                     tx: wrapper.to_bytes(),
@@ -1214,11 +1214,11 @@ mod test_finalize_block {
                     .as_bytes()
                     .to_owned(),
             ));
+            wrapper_tx.encrypt(&Default::default());
             wrapper_tx.add_section(Section::Signature(Signature::new(
-                &wrapper_tx.header_hash(),
+                vec![wrapper_tx.header_hash(), wrapper_tx.sections[0].get_hash()],
                 &keypair,
             )));
-            wrapper_tx.encrypt(&Default::default());
             valid_txs.push(wrapper_tx.clone());
             processed_txs.push(ProcessedTx {
                 tx: wrapper_tx.to_bytes(),

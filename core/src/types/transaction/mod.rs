@@ -305,11 +305,7 @@ mod test_process_tx {
             .set_data(Data::new("transaction data".as_bytes().to_owned()))
             .clone();
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &gen_keypair(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &gen_keypair(),
         )));
 
@@ -348,11 +344,11 @@ mod test_process_tx {
         ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        tx.encrypt(&Default::default());
         tx.add_section(Section::Signature(Signature::new(
-            &tx.header_hash(),
+            vec![tx.header_hash(), tx.sections[0].get_hash()],
             &keypair,
         )));
-        tx.encrypt(&Default::default());
 
         tx.validate_header().expect("Test failed");
         match tx.header().tx_type {
@@ -446,7 +442,8 @@ fn test_process_tx_decrypted_signed() {
     // Invalid signed data
     let ed_sig =
         ed25519::Signature::try_from_slice([0u8; 64].as_ref()).unwrap();
-    let mut sig_sec = Signature::new(&decrypted.header_hash(), &gen_keypair());
+    let mut sig_sec =
+        Signature::new(vec![decrypted.header_hash()], &gen_keypair());
     sig_sec.signature = common::Signature::try_from_sig(&ed_sig).unwrap();
     decrypted.add_section(Section::Signature(sig_sec));
     // create the tx with signed decrypted data

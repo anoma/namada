@@ -366,7 +366,7 @@ mod tests {
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.data_sechash()],
             &keypair,
         )));
         let signed_tx = tx.clone();
@@ -516,7 +516,7 @@ mod tests {
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.data_sechash()],
             &secret_key,
         )));
         let signed_tx = tx.clone();
@@ -670,7 +670,7 @@ mod tests {
             let mut vp_env = vp_host_env::take();
             let mut tx = vp_env.tx.clone();
             tx.set_data(Data::new(vec![]));
-            tx.add_section(Section::Signature(Signature::new(tx.data_sechash(), &keypair)));
+            tx.add_section(Section::Signature(Signature::new(vec![*tx.data_sechash()], &keypair)));
             let signed_tx = tx.clone();
             vp_env.tx = signed_tx.clone();
             let keys_changed: BTreeSet<storage::Key> =
@@ -751,7 +751,7 @@ mod tests {
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.data_sechash()],
             &keypair,
         )));
         let signed_tx = tx.clone();
@@ -798,7 +798,7 @@ mod tests {
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.data_sechash()],
             &keypair,
         )));
         let signed_tx = tx.clone();
@@ -846,7 +846,7 @@ mod tests {
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.data_sechash()],
             &keypair,
         )));
         let signed_tx = tx.clone();
@@ -898,7 +898,7 @@ mod tests {
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.data_sechash()],
             &keypair,
         )));
         let signed_tx = tx.clone();
@@ -947,7 +947,7 @@ mod tests {
         tx.set_code(Code::from_hash(vp_hash));
         tx.set_data(Data::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.data_sechash(), *tx.code_sechash()],
             &keypair,
         )));
         let signed_tx = tx.clone();

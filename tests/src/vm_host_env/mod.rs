@@ -461,11 +461,7 @@ mod tests {
                 tx.set_code(Code::new(code.clone()));
                 tx.set_data(Data::new(data.clone()));
                 tx.add_section(Section::Signature(Signature::new(
-                    tx.code_sechash(),
-                    &keypair,
-                )));
-                tx.add_section(Section::Signature(Signature::new(
-                    tx.data_sechash(),
+                    vec![*tx.code_sechash(), *tx.data_sechash()],
                     &keypair,
                 )));
                 env.tx = tx;
@@ -541,11 +537,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(input_data));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         let result = vp::CTX.eval(empty_code, tx).unwrap();
@@ -564,11 +556,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(input_data));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         let result = vp::CTX.eval(code_hash, tx).unwrap();
@@ -588,11 +576,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(input_data));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         let result = vp::CTX.eval(code_hash, tx).unwrap();
@@ -614,11 +598,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
 
@@ -654,11 +634,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // update the client with the message
@@ -697,11 +673,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // init a connection with the message
@@ -736,11 +708,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // open the connection with the message
@@ -780,11 +748,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // open try a connection with the message
@@ -819,11 +783,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // open the connection with the mssage
@@ -865,11 +825,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // init a channel with the message
@@ -904,11 +860,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // open the channle with the message
@@ -950,11 +902,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // try open a channel with the message
@@ -990,11 +938,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // open a channel with the message
@@ -1039,11 +983,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // close the channel with the message
@@ -1096,11 +1036,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
 
@@ -1150,11 +1086,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // send the token and a packet with the data
@@ -1203,11 +1135,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // ack the packet with the message
@@ -1283,11 +1211,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // send the token and a packet with the data
@@ -1363,11 +1287,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // receive a packet with the message
@@ -1455,11 +1375,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // receive a packet with the message
@@ -1551,11 +1467,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // receive a packet with the message
@@ -1650,11 +1562,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
 
@@ -1739,11 +1647,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
 
