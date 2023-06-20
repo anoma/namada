@@ -2372,12 +2372,12 @@ where
     // give Tendermint updates for the next epoch
     let next_epoch: Epoch = current_epoch.next();
 
-    let new_consensus_validators =
+    let new_consensus_validator_handle =
         consensus_validator_set_handle().at(&next_epoch);
-    let prev_consensus_validators =
+    let prev_consensus_validator_handle =
         consensus_validator_set_handle().at(&current_epoch);
 
-    let consensus_validators = new_consensus_validators
+    let new_consensus_validators = new_consensus_validator_handle
         .iter(storage)?
         .filter_map(|validator| {
             let (
@@ -2393,9 +2393,9 @@ where
             );
 
             // Check if the validator was consensus in the previous epoch with
-            // the same stake
+            // the same stake. If so, no updated is needed.
             // Look up previous state and prev and current voting powers
-            if !prev_consensus_validators.is_empty(storage).unwrap() {
+            if !prev_consensus_validator_handle.is_empty(storage).unwrap() {
                 let prev_state = validator_state_handle(&address)
                     .get(storage, current_epoch, params)
                     .unwrap();
@@ -2428,16 +2428,19 @@ where
                     );
                     return None;
                 }
-
-                // If both previous and current voting powers are 0, skip
-                // update
-                if *prev_tm_voting_power == 0 && *new_tm_voting_power == 0 {
+                // If both previous and current voting powers are 0, and the
+                // validator_stake_threshold is 0, skip update
+                if params.validator_stake_threshold == token::Amount::default()
+                    && *prev_tm_voting_power == 0
+                    && *new_tm_voting_power == 0
+                {
                     tracing::info!(
                         "skipping validator update, {address} is in consensus \
                          set but without voting power"
                     );
                     return None;
                 }
+                // TODO: maybe debug_assert that the new stake is >= threshold?
             }
             let consensus_key = validator_consensus_key_handle(&address)
                 .get(storage, next_epoch, params)
@@ -2452,65 +2455,57 @@ where
                 bonded_stake: new_stake.into(),
             }))
         });
-    let new_below_capacity_validators =
-        below_capacity_validator_set_handle().at(&next_epoch);
-    let prev_below_capacity_vals =
-        below_capacity_validator_set_handle().at(&current_epoch);
 
-    let below_capacity_validators = new_below_capacity_validators
-        .iter(storage)
-        .unwrap()
+    let prev_consensus_validators = prev_consensus_validator_handle
+        .iter(storage)?
         .filter_map(|validator| {
             let (
                 NestedSubKey::Data {
-                    key: new_stake,
+                    key: _prev_stake,
                     nested_sub_key: _,
                 },
                 address,
             ) = validator.unwrap();
-            let new_stake = token::Amount::from(new_stake);
 
-            tracing::debug!(
-                "Below-capacity validator address {address}, stake {new_stake}"
-            );
+            let new_state = validator_state_handle(&address)
+                .get(storage, current_epoch, params)
+                .unwrap();
 
-            let prev_validator_stake =
-                read_validator_stake(storage, params, &address, current_epoch)
-                    .unwrap()
-                    .unwrap_or_default();
-            let prev_tm_voting_power = into_tm_voting_power(
-                params.tm_votes_per_token,
-                prev_validator_stake,
-            );
+            let prev_tm_voting_power = Lazy::new(|| {
+                let prev_validator_stake = read_validator_stake(
+                    storage,
+                    params,
+                    &address,
+                    current_epoch,
+                )
+                .unwrap()
+                .unwrap_or_default();
+                into_tm_voting_power(
+                    params.tm_votes_per_token,
+                    prev_validator_stake,
+                )
+            });
 
-            // If the validator previously had no voting power, it wasn't in
-            // tendermint set and we have to skip it.
-            if prev_tm_voting_power == 0 {
-                tracing::debug!(
-                    "skipping validator update {address}, it's inactive and \
-                     previously had no voting power"
+            // If the validator is still in the Consensus set, we accounted for
+            // it in the `new_consensus_validators` iterator above
+            if matches!(new_state, Some(ValidatorState::Consensus)) {
+                return None;
+            } else if params.validator_stake_threshold
+                == token::Amount::default()
+                && *prev_tm_voting_power == 0
+            {
+                // If the new state is not Consensus but its prev voting power
+                // was 0 and the stake threshold is 0, we can also skip the
+                // update
+                tracing::info!(
+                    "skipping validator update, {address} is in consensus set \
+                     but without voting power"
                 );
                 return None;
             }
 
-            if !prev_below_capacity_vals.is_empty(storage).unwrap() {
-                // Look up the previous state
-                let prev_state = validator_state_handle(&address)
-                    .get(storage, current_epoch, params)
-                    .unwrap();
-                // If the `prev_state.is_none()`, it's a new validator that
-                // is `BelowCapacity`, so no update is needed. If it
-                // previously was `BelowCapacity` there's no update needed
-                // either.
-                if !matches!(prev_state, Some(ValidatorState::Consensus)) {
-                    tracing::debug!(
-                        "skipping validator update, {address} is not and \
-                         wasn't previously in consensus set"
-                    );
-                    return None;
-                }
-            }
-
+            // The remaining validators were previously Consensus but no longer
+            // are, so they must be deactivated
             let consensus_key = validator_consensus_key_handle(&address)
                 .get(storage, next_epoch, params)
                 .unwrap()
@@ -2522,75 +2517,8 @@ where
             Some(ValidatorSetUpdate::Deactivated(consensus_key))
         });
 
-    let new_below_threshold_validators =
-        read_below_threshold_validator_set_addresses(storage, next_epoch)?;
-    let prev_below_threshold_validators =
-        read_below_threshold_validator_set_addresses(storage, current_epoch)?;
-
-    let below_threshold_validators = new_below_threshold_validators
-        .iter()
-        .filter_map(|validator| {
-            let new_stake =
-                read_validator_stake(storage, params, validator, next_epoch)
-                    .unwrap()
-                    .unwrap_or_default();
-
-            tracing::debug!(
-                "Below-threshold validator address {validator}, stake \
-                 {new_stake}"
-            );
-
-            let prev_validator_stake =
-                read_validator_stake(storage, params, validator, current_epoch)
-                    .unwrap()
-                    .unwrap_or_default();
-            let prev_tm_voting_power = into_tm_voting_power(
-                params.tm_votes_per_token,
-                prev_validator_stake,
-            );
-
-            // If the validator previously had no voting power, it wasn't in
-            // tendermint set and we have to skip it.
-            if prev_tm_voting_power == 0 {
-                tracing::debug!(
-                    "skipping validator update {validator}, it's inactive and \
-                     previously had no voting power"
-                );
-                return None;
-            }
-
-            if !prev_below_threshold_validators.is_empty() {
-                // Look up the previous state
-                let prev_state = validator_state_handle(validator)
-                    .get(storage, current_epoch, params)
-                    .unwrap();
-                // If the `prev_state.is_none()`, it's a new validator that
-                // is `BelowThreshold`, so no update is needed. If it
-                // previously was `BelowThreshold` there's no update needed
-                // either.
-                if !matches!(prev_state, Some(ValidatorState::Consensus)) {
-                    tracing::debug!(
-                        "skipping validator update, {validator} is not and \
-                         wasn't previously in consensus set"
-                    );
-                    return None;
-                }
-            }
-
-            let consensus_key = validator_consensus_key_handle(validator)
-                .get(storage, next_epoch, params)
-                .unwrap()
-                .unwrap();
-            tracing::debug!(
-                "{validator} consensus key {}",
-                consensus_key.tm_raw_hash()
-            );
-            Some(ValidatorSetUpdate::Deactivated(consensus_key))
-        });
-
-    Ok(consensus_validators
-        .chain(below_capacity_validators)
-        .chain(below_threshold_validators)
+    Ok(new_consensus_validators
+        .chain(prev_consensus_validators)
         .map(f)
         .collect())
 }
