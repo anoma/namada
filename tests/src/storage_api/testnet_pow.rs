@@ -43,16 +43,23 @@ fn test_challenge_and_solution() -> storage_api::Result<()> {
 
     // Changing the solution to `0` invalidates it
     {
-        let mut solution = solution.clone();
-        solution.value = 0;
+        let solution = Solution {
+            value: 0,
+            ..solution.clone()
+        };
         // If you're unlucky and this fails, try changing the solution to
         // a different literal.
         assert!(!solution.verify_solution(source.clone()));
     }
     // Changing the counter invalidates it
     {
-        let mut solution = solution.clone();
-        solution.params.counter = 10;
+        let solution = Solution {
+            params: ChallengeParams {
+                difficulty: solution.params.difficulty,
+                counter: 10,
+            },
+            ..solution
+        };
         // If you're unlucky and this fails, try changing the counter to
         // a different literal.
         assert!(!solution.verify_solution(source.clone()));

@@ -2626,7 +2626,6 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     // We collect to run the threads in parallel.
     #[allow(clippy::needless_collect)]
     let tasks: Vec<std::thread::JoinHandle<_>> = (0..4)
-        .into_iter()
         .map(|_| {
             let test = Arc::clone(&test);
             let validator_one_rpc = Arc::clone(&validator_one_rpc);

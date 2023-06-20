@@ -378,7 +378,7 @@ jobs:
       matrix:
         os: [ubuntu-20.04]
         nightly_version: [nightly-2023-06-01]
-        mold_version: [1.11.0]
+        mold_version: [1.7.0]
         make:
           - name: e2e
             suffix: ''

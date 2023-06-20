@@ -642,7 +642,7 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
         "yay" => {
             if let Some(pgf) = args.proposal_pgf {
                 let splits = pgf.trim().split_ascii_whitespace();
-                let address_iter = splits.clone().into_iter().step_by(2);
+                let address_iter = splits.clone().step_by(2);
                 let cap_iter = splits.into_iter().skip(1).step_by(2);
                 let mut set = HashSet::new();
                 for (address, cap) in

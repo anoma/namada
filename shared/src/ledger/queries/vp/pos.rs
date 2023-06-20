@@ -361,21 +361,19 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let handle = unbond_handle(&source, &validator);
-    let unbonds = handle
-        .iter(ctx.wl_storage)?
-        .map(|next_result| {
-            next_result.map(
-                |(
-                    lazy_map::NestedSubKey::Data {
-                        key: withdraw_epoch,
-                        nested_sub_key: lazy_map::SubKey::Data(bond_epoch),
-                    },
-                    amount,
-                )| ((bond_epoch, withdraw_epoch), amount),
-            )
-        })
-        .collect();
-    unbonds
+    let iter = handle.iter(ctx.wl_storage)?;
+    iter.map(|next_result| {
+        next_result.map(
+            |(
+                lazy_map::NestedSubKey::Data {
+                    key: withdraw_epoch,
+                    nested_sub_key: lazy_map::SubKey::Data(bond_epoch),
+                },
+                amount,
+            )| ((bond_epoch, withdraw_epoch), amount),
+        )
+    })
+    .collect()
 }
 
 fn unbond_with_slashing<D, H>(
@@ -389,21 +387,19 @@ where
 {
     // TODO slashes
     let handle = unbond_handle(&source, &validator);
-    let unbonds = handle
-        .iter(ctx.wl_storage)?
-        .map(|next_result| {
-            next_result.map(
-                |(
-                    lazy_map::NestedSubKey::Data {
-                        key: withdraw_epoch,
-                        nested_sub_key: lazy_map::SubKey::Data(bond_epoch),
-                    },
-                    amount,
-                )| ((bond_epoch, withdraw_epoch), amount),
-            )
-        })
-        .collect();
-    unbonds
+    let iter = handle.iter(ctx.wl_storage)?;
+    iter.map(|next_result| {
+        next_result.map(
+            |(
+                lazy_map::NestedSubKey::Data {
+                    key: withdraw_epoch,
+                    nested_sub_key: lazy_map::SubKey::Data(bond_epoch),
+                },
+                amount,
+            )| ((bond_epoch, withdraw_epoch), amount),
+        )
+    })
+    .collect()
 }
 
 fn withdrawable_tokens<D, H>(
