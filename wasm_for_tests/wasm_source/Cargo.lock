@@ -3411,7 +3411,6 @@ dependencies = [
  "borsh",
  "hex",
  "masp_primitives",
- "masp_proofs",
  "namada_core",
 ]
 

@@ -2945,7 +2945,7 @@ fn proposal_submission() -> Result<()> {
     // 9. Send a yay vote from a validator
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     while epoch.0 <= 13 {
-        sleep(1);
+        sleep(10);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
@@ -3010,7 +3010,7 @@ fn proposal_submission() -> Result<()> {
     // 11. Query the proposal and check the result
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     while epoch.0 <= 25 {
-        sleep(1);
+        sleep(10);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
@@ -3029,7 +3029,7 @@ fn proposal_submission() -> Result<()> {
     // 12. Wait proposal grace and check proposal author funds
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     while epoch.0 < 31 {
-        sleep(1);
+        sleep(10);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 

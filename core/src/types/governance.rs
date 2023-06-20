@@ -112,6 +112,7 @@ pub enum ProposalVoteParseError {
 }
 
 /// The type of the tally
+#[derive(Clone, Debug)]
 pub enum Tally {
     /// Default proposal
     Default,
@@ -122,6 +123,7 @@ pub enum Tally {
 }
 
 /// The result of a proposal
+#[derive(Clone, Debug)]
 pub enum TallyResult {
     /// Proposal was accepted with the associated value
     Passed(Tally),
