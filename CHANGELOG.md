@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.17.4
+
+Namada 0.17.4 is a minor release improving the codebase by bumping the rust toolchain.
+
+### BUG FIXES
+
+- Fix missing async awaits in MASP load and save calls.
+  ([\#1588](https://github.com/anoma/namada/pull/1588))
+
 ## v0.17.3
 
 Namada 0.17.3 is a minor release switching from tendermint to cometbft.
