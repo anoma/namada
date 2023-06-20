@@ -2491,11 +2491,11 @@ fn test_bond_queries() -> Result<()> {
     let tx_args = vec!["bonds", "--ledger-address", &validator_one_rpc];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(
-        "All bonds total active: 200088\r
-All bonds total: 200088\r
-All unbonds total active: 412\r
-All unbonds total: 412\r
-All unbonds total withdrawable: 412\r",
+        "All bonds total active: 200088.000000\r
+All bonds total: 200088.000000\r
+All unbonds total active: 412.000000\r
+All unbonds total: 412.000000\r
+All unbonds total withdrawable: 412.000000\r",
     )?;
     client.assert_success();
 
