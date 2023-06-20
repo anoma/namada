@@ -1,10 +1,16 @@
 [package]
-authors = ["Heliax AG <hello@heliax.dev>"]
-edition = "2021"
-license = "GPL-3.0"
 name = "namada_vm_env"
+description = "Namada VM environment for WASM"
 resolver = "2"
-version = "0.17.3"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
 
 [features]
 default = ["abciplus"]
@@ -14,7 +20,5 @@ abciplus = [
 
 [dependencies]
 namada_core = {path = "../core", default-features = false}
-borsh = "0.9.0"
-# branch = "murisi/namada-integration"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "cfea8c95d3f73077ca3e25380fd27e5b46e828fd" }
-hex = "0.4.3"
+borsh.workspace = true
+masp_primitives.workspace = true

@@ -28,10 +28,10 @@ use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
+use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_test_utils::TestWasms;
 use serde_json::json;
 use setup::constants::*;
-use tendermint_config::net::Address as TendermintAddress;
 
 use super::helpers::{
     get_height, is_debug_mode, wait_for_block_height, wait_for_wasm_pre_compile,

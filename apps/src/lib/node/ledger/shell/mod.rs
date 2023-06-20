@@ -1110,7 +1110,7 @@ mod test_utils {
         pub fn init_chain(
             &mut self,
             req: RequestInitChain,
-            #[cfg(feature = "dev")] num_validators: u64,
+            num_validators: u64,
         ) {
             self.shell
                 .init_chain(req, num_validators)

@@ -32,7 +32,6 @@ use namada::types::transaction::governance::{
 use namada::types::transaction::{InitValidator, TxType};
 use rust_decimal::Decimal;
 use sha2::{Digest as Sha2Digest, Sha256};
-use tendermint_rpc::HttpClient;
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
@@ -42,6 +41,7 @@ use crate::client::signing::find_keypair;
 use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
+use crate::facade::tendermint_rpc::HttpClient;
 use crate::node::ledger::tendermint_node;
 use crate::wallet::{
     gen_validator_keys, read_and_confirm_encryption_password, CliWalletUtils,
@@ -381,7 +381,7 @@ impl Default for CLIShieldedUtils {
 
 #[async_trait(?Send)]
 impl masp::ShieldedUtils for CLIShieldedUtils {
-    type C = tendermint_rpc::HttpClient;
+    type C = crate::facade::tendermint_rpc::HttpClient;
 
     fn local_tx_prover(&self) -> LocalTxProver {
         if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR) {

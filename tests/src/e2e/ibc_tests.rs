@@ -79,13 +79,13 @@ use namada_apps::client::rpc::{
 };
 use namada_apps::client::utils::id_from_pk;
 use namada_apps::config::genesis::genesis_config::GenesisConfig;
+use namada_apps::facade::tendermint::block::Header as TmHeader;
+use namada_apps::facade::tendermint::merkle::proof::Proof as TmProof;
+use namada_apps::facade::tendermint::trust_threshold::TrustThresholdFraction;
+use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
+use namada_apps::facade::tendermint_rpc::{Client, HttpClient, Url};
 use prost::Message;
 use setup::constants::*;
-use tendermint::block::Header as TmHeader;
-use tendermint::merkle::proof::Proof as TmProof;
-use tendermint::trust_threshold::TrustThresholdFraction;
-use tendermint_config::net::Address as TendermintAddress;
-use tendermint_rpc::{Client, HttpClient, Url};
 
 use crate::e2e::helpers::{find_address, get_actor_rpc, get_validator_pk};
 use crate::e2e::setup::{self, sleep, Bin, NamadaCmd, Test, Who};
