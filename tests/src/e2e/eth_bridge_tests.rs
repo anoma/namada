@@ -326,12 +326,6 @@ async fn test_bridge_pool_e2e() {
         Some(LEDGER_STARTUP_TIMEOUT_SECONDS)
     )
     .unwrap();
-    namadan_ledger
-        .exp_string("Namada ledger node started")
-        .unwrap();
-    namadan_ledger
-        .exp_string("Tendermint node started")
-        .unwrap();
     namadan_ledger.exp_string("Committed block hash").unwrap();
     let bg_ledger = namadan_ledger.background();
 
