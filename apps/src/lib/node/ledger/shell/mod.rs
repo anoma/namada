@@ -31,6 +31,7 @@ use namada::ledger::pos::namada_proof_of_stake::types::{
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, TempWlStorage, WlStorage, DB,
+    EPOCH_SWITCH_BLOCKS_DELAY,
 };
 use namada::ledger::storage_api::{self, StorageRead, StorageWrite};
 use namada::ledger::{ibc, pos, protocol, replay_protection};
@@ -591,9 +592,28 @@ where
                             continue;
                         }
                     };
+                // Check if we're gonna switch to a new epoch after a delay
+                let validator_set_update_epoch = if let Some(delay) =
+                    self.wl_storage.storage.update_epoch_blocks_delay
+                {
+                    if delay == EPOCH_SWITCH_BLOCKS_DELAY {
+                        // If we're about to update validator sets for the
+                        // upcoming epoch, we can still remove the validator
+                        current_epoch.next()
+                    } else {
+                        // If we're waiting to switch to a new epoch, it's too
+                        // late to update validator sets
+                        // on the next epoch, so we need to
+                        // wait for the one after.
+                        current_epoch.next().next()
+                    }
+                } else {
+                    current_epoch.next()
+                };
                 tracing::info!(
                     "Slashing {} for {} in epoch {}, block height {} (current \
-                     epoch = {})",
+                     epoch = {}, validator set update epoch = \
+                     {validator_set_update_epoch})",
                     validator,
                     slash_type,
                     evidence_epoch,
@@ -608,6 +628,7 @@ where
                     evidence_height,
                     slash_type,
                     &validator,
+                    validator_set_update_epoch,
                 ) {
                     tracing::error!("Error in slashing: {}", err);
                 }

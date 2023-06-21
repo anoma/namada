@@ -107,8 +107,10 @@ where
         }
 
         // Invariant: This has to be applied after
-        // `copy_validator_sets_and_positions` if we're starting a new epoch
+        // `copy_validator_sets_and_positions` and before `self.update_epoch`.
         self.record_slashes_from_evidence();
+        // Invariant: This has to be applied after
+        // `copy_validator_sets_and_positions` if we're starting a new epoch
         if new_epoch {
             self.process_slashes();
         }
