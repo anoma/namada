@@ -132,6 +132,7 @@ tower = "0.4"
 # Also, using the same version of tendermint-rs as we do here.
 tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "367d8d958b83c501ed2c09e9c4595f8bf75a0b01"}
 tracing = "0.1.30"
+tracing-appender = "0.2.2"
 tracing-log = "0.1.2"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
 wasmparser = "0.83.0"
