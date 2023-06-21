@@ -36,6 +36,7 @@ Bertha = 1000000
 Christel = 1000000
 "Christel.public_key" = 100
 Daewon = 1000000
+Ester = 1000000
 faucet = 9223372036
 "faucet.public_key" = 100
 "validator-0.public_key" = 100
@@ -48,6 +49,7 @@ Albert = 1000000
 Bertha = 1000000
 Christel = 1000000
 Daewon = 1000000
+Ester = 1000000
 faucet = 9223372036854
 
 [token.ETH]
@@ -58,6 +60,7 @@ Albert = 1000000
 Bertha = 1000000
 Christel = 1000000
 Daewon = 1000000
+Ester = 1000000
 faucet = 9223372036854
 
 [token.DOT]
@@ -68,6 +71,7 @@ Albert = 1000000
 Bertha = 1000000
 Christel = 1000000
 Daewon = 1000000
+Ester = 1000000
 faucet = 9223372036854
 
 [token.Schnitzel]
@@ -78,6 +82,7 @@ Albert = 1000000
 Bertha = 1000000
 Christel = 1000000
 Daewon = 1000000
+Ester = 1000000
 faucet = 9223372036854
 
 [token.Apfel]
@@ -88,6 +93,7 @@ Albert = 1000000
 Bertha = 1000000
 Christel = 1000000
 Daewon = 1000000
+Ester = 1000000
 faucet = 9223372036854
 
 [token.Kartoffel]
@@ -99,6 +105,7 @@ Albert = 1000000
 Bertha = 1000000
 Christel = 1000000
 Daewon = 1000000
+Ester = 1000000
 faucet = 9223372036854
 
 # Some established accounts present at genesis.
@@ -119,6 +126,8 @@ address = "atest1v4ehgw36xaryysfsx5unvve4g5my2vjz89p52sjxxgenzd348yuyyv3hg3pnjs3
 vp = "vp_masp"
 
 [implicit.Daewon]
+
+[implicit.Ester]
 
 # Wasm VP definitions
 
