@@ -33,11 +33,10 @@ pub const STORAGE_WRITE_GAS_PER_BYTE: u64 = 100;
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
-//FIXME: shoul we use a type alias Gas for u64?
+//FIXME: type alias Gas for u64
 
 /// Trait to share gas operations for transactions and validity predicates
-pub trait TxVpGasMetering {
-    //FIXME: rename this trait, but it should not mention Wasm because this is also used for native vps
+pub trait GasMetering {
     /// Add gas cost. It will return error when the
     /// consumed gas exceeds the provided transaction gas limit, but the state
     /// will still be updated
@@ -86,12 +85,11 @@ pub struct VpGasMeter {
     Clone, Debug, Default, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct VpsGas {
-    //FIXME: should rework this a bit?
     max: Option<u64>,
     rest: Vec<u64>,
 }
 
-impl TxVpGasMetering for TxGasMeter {
+impl GasMetering for TxGasMeter {
     fn add(&mut self, gas: u64) -> Result<()> {
         self.transaction_gas = self
             .transaction_gas
@@ -130,7 +128,6 @@ impl TxGasMeter {
     }
 
     /// Add the gas cost used in validity predicates to the current transaction.
-    //FIXME: should this consume VpsGas?
     pub fn add_vps_gas(&mut self, vps_gas: &VpsGas) -> Result<()> {
         self.add(vps_gas.get_current_gas()?)
     }
@@ -141,7 +138,7 @@ impl TxGasMeter {
     }
 }
 
-impl TxVpGasMetering for VpGasMeter {
+impl GasMetering for VpGasMeter {
     fn add(&mut self, gas: u64) -> Result<()> {
         self.current_gas = self
             .current_gas
@@ -164,7 +161,6 @@ impl TxVpGasMetering for VpGasMeter {
 impl VpGasMeter {
     /// Initialize a new VP gas meter, starting with the gas consumed in the
     /// transaction so far. Also requires the transaction gas limit.
-    //FIXME: should pass reference to the TxGasMeter here?
     pub fn new(tx_gas_limit: u64, initial_gas: u64) -> Self {
         Self {
             tx_gas_limit,

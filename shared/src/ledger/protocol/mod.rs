@@ -12,7 +12,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
 use crate::ledger::eth_bridge::vp::EthBridge;
-use crate::ledger::gas::{self, TxVpGasMetering, VpGasMeter};
+use crate::ledger::gas::{self, GasMetering, VpGasMeter};
 use crate::ledger::ibc::vp::{Ibc, IbcToken};
 use crate::ledger::native_vp::governance::GovernanceVp;
 use crate::ledger::native_vp::parameters::{self, ParametersVp};
@@ -776,10 +776,6 @@ fn merge_vp_results(
     let mut errors = a.errors;
     errors.append(&mut b.errors);
     let mut gas_used = a.gas_used;
-
-    // Returning error from here will short-circuit the VP parallel execution.
-    // It's important that we only short-circuit gas errors to get deterministic
-    // gas costs
 
     gas_used.merge(&mut b.gas_used, tx_gas_limit, initial_gas)?;
 

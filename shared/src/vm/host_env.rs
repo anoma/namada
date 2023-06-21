@@ -5,7 +5,7 @@ use std::convert::TryInto;
 use std::num::TryFromIntError;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::ledger::gas::{TxGasMeter, TxVpGasMetering};
+use namada_core::ledger::gas::{GasMetering, TxGasMeter};
 use namada_core::types::internal::KeyVal;
 use thiserror::Error;
 

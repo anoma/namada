@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
-use namada_core::ledger::gas::{self, TxGasMeter, TxVpGasMetering};
+use namada_core::ledger::gas::{self, GasMetering, TxGasMeter};
 use namada_core::ledger::storage::write_log::StorageModification;
 use parity_wasm::elements;
 use pwasm_utils::{self, rules};
@@ -513,7 +513,7 @@ fn fetch_or_compile<DB, H, CN, CA>(
     code_or_hash: WasmPayload,
     write_log: &WriteLog,
     storage: &Storage<DB, H>,
-    gas_meter: &mut dyn TxVpGasMetering,
+    gas_meter: &mut dyn GasMetering,
 ) -> Result<(Module, Store)>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
