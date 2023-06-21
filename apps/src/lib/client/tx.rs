@@ -32,6 +32,7 @@ use namada::types::transaction::governance::{
 use namada::types::transaction::{InitValidator, TxType};
 use rust_decimal::Decimal;
 use sha2::{Digest as Sha2Digest, Sha256};
+use crate::cli;
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
@@ -357,10 +358,8 @@ impl CLIShieldedUtils {
             && convert_path.exists()
             && output_path.exists())
         {
-            println!("MASP parameters not present, downloading...");
-            masp_proofs::download_masp_parameters(None)
-                .expect("MASP parameters not present or downloadable");
-            println!("MASP parameter download complete, resuming execution...");
+            println!("MASP parameters not present, aborting");
+            cli::safe_exit(1)
         }
         // Finally initialize a shielded context with the supplied directory
         let utils = Self { context_dir };

@@ -90,7 +90,7 @@ itertools.workspace = true
 libc.workspace = true
 libloading.workspace = true
 masp_primitives = { workspace = true, features = ["transparent-inputs"] }
-masp_proofs = { workspace = true, features = ["bundled-prover", "download-params"] }
+masp_proofs = { workspace = true, features = ["bundled-prover"] }
 num_cpus.workspace = true
 num-derive.workspace = true
 num-rational.workspace = true

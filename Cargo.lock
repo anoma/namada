@@ -415,7 +415,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.22.0",
  "tungstenite",
- "webpki-roots 0.21.1",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -2710,7 +2710,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.22.0",
  "webpki 0.21.4",
- "webpki-roots 0.21.1",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -3422,7 +3422,6 @@ dependencies = [
  "jubjub",
  "lazy_static",
  "masp_primitives",
- "minreq",
  "rand_core 0.6.4",
  "redjubjub",
  "tracing 0.1.37",
@@ -3564,19 +3563,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7810e0be55b428ada41041c41f32c9f1a42817901b4ccf45fa3d4b6561e74c7"
 dependencies = [
  "adler",
-]
-
-[[package]]
-name = "minreq"
-version = "2.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb6c6973f78ef55d0e5fc04fdb8f9ad67c87c9e86bca0ff77b6a3102b0eb36b7"
-dependencies = [
- "log",
- "once_cell",
- "rustls 0.20.8",
- "webpki 0.22.0",
- "webpki-roots 0.22.6",
 ]
 
 [[package]]
@@ -7379,15 +7365,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aabe153544e473b775453675851ecc86863d2a81d786d741f6b76778f2a48940"
 dependencies = [
  "webpki 0.21.4",
-]
-
-[[package]]
-name = "webpki-roots"
-version = "0.22.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6c71e40d7d2c34a5106301fb632274ca37242cd0c9d3e64dbece371a40a2d87"
-dependencies = [
- "webpki 0.22.0",
 ]
 
 [[package]]

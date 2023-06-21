@@ -110,11 +110,7 @@ fn load_params(name: MaspParams) -> (
     let params_dir = get_params_dir();
     let params_path = params_dir.join(params_name);
     if !params_path.exists() {
-        #[cfg(feature = "masp_proofs/download-params")]
-        masp_proofs::download_parameters()
-            .expect("MASP parameters not present or downloadable");
-        #[cfg(not(feature = "masp_proofs/download-params"))]
-        panic!("MASP parameters not present or downloadable");
+        panic!("MASP parameters not present");
     }
     let param_f = File::open(params_path).unwrap();
     let params =
