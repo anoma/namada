@@ -90,26 +90,46 @@ pub const OUTPUT_NAME: &str = "masp-output.params";
 /// Convert circuit name
 pub const CONVERT_NAME: &str = "masp-convert.params";
 
-/// Load Sapling spend params.
-pub fn load_spend_params() -> (
+enum MaspParams {
+    Spend,
+    Convert,
+    Output,
+}
+
+/// Generic helper to load Sapling params.
+fn load_params(name: MaspParams) -> (
     masp_proofs::bellman::groth16::Parameters<Bls12>,
     masp_proofs::bellman::groth16::PreparedVerifyingKey<Bls12>,
 ) {
+    let params_name = match name {
+        MaspParams::Spend => SPEND_NAME,
+        MaspParams::Convert => CONVERT_NAME,
+        MaspParams::Output => OUTPUT_NAME,
+    };
+
     let params_dir = get_params_dir();
-    let spend_path = params_dir.join(SPEND_NAME);
-    if !spend_path.exists() {
+    let params_path = params_dir.join(params_name);
+    if !params_path.exists() {
         #[cfg(feature = "masp_proofs/download-params")]
         masp_proofs::download_parameters()
             .expect("MASP parameters not present or downloadable");
         #[cfg(not(feature = "masp_proofs/download-params"))]
         panic!("MASP parameters not present or downloadable");
     }
-    let param_f = File::open(spend_path).unwrap();
+    let param_f = File::open(params_path).unwrap();
     let params =
         masp_proofs::bellman::groth16::Parameters::read(&param_f, false)
             .unwrap();
     let vk = prepare_verifying_key(&params.vk);
     (params, vk)
+}
+
+/// Load Sapling spend params.
+pub fn load_spend_params() -> (
+    masp_proofs::bellman::groth16::Parameters<Bls12>,
+    masp_proofs::bellman::groth16::PreparedVerifyingKey<Bls12>,
+) {
+    load_params(MaspParams::Spend)
 }
 
 /// Load Sapling convert params.
@@ -117,21 +137,7 @@ pub fn load_convert_params() -> (
     masp_proofs::bellman::groth16::Parameters<Bls12>,
     masp_proofs::bellman::groth16::PreparedVerifyingKey<Bls12>,
 ) {
-    let params_dir = get_params_dir();
-    let spend_path = params_dir.join(CONVERT_NAME);
-    if !spend_path.exists() {
-        #[cfg(feature = "masp_proofs/download-params")]
-        masp_proofs::download_parameters()
-            .expect("MASP parameters not present or downloadable");
-        #[cfg(not(feature = "masp_proofs/download-params"))]
-        panic!("MASP parameters not present or downloadable");
-    }
-    let param_f = File::open(spend_path).unwrap();
-    let params =
-        masp_proofs::bellman::groth16::Parameters::read(&param_f, false)
-            .unwrap();
-    let vk = prepare_verifying_key(&params.vk);
-    (params, vk)
+    load_params(MaspParams::Convert)
 }
 
 /// Load Sapling output params.
@@ -139,21 +145,7 @@ pub fn load_output_params() -> (
     masp_proofs::bellman::groth16::Parameters<Bls12>,
     masp_proofs::bellman::groth16::PreparedVerifyingKey<Bls12>,
 ) {
-    let params_dir = get_params_dir();
-    let output_path = params_dir.join(OUTPUT_NAME);
-    if !output_path.exists() {
-        #[cfg(feature = "masp_proofs/download-params")]
-        masp_proofs::download_parameters()
-            .expect("MASP parameters not present or downloadable");
-        #[cfg(not(feature = "masp_proofs/download-params"))]
-        panic!("MASP parameters not present or downloadable");
-    }
-    let param_f = File::open(output_path).unwrap();
-    let params =
-        masp_proofs::bellman::groth16::Parameters::read(&param_f, false)
-            .unwrap();
-    let vk = prepare_verifying_key(&params.vk);
-    (params, vk)
+    load_params(MaspParams::Output)
 }
 
 /// check_spend wrapper
