@@ -31,6 +31,7 @@ use crate::e2e::setup::{Bin, Who, APPS_PACKAGE};
 use crate::{run, run_as};
 
 /// Instantiate a new [`HttpClient`] to perform RPC requests with.
+#[allow(dead_code)]
 pub async fn rpc_client_do<'fut, 'usr, U, A, F, R>(
     ledger_address: &str,
     user_data: U,
@@ -120,6 +121,7 @@ pub fn find_address(test: &Test, alias: impl AsRef<str>) -> Result<Address> {
 }
 
 /// Find the balance of specific token for an account.
+#[allow(dead_code)]
 pub fn find_balance(
     test: &Test,
     node: &Who,

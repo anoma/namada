@@ -248,6 +248,7 @@ pub fn network(
 
 /// Namada binaries
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum Bin {
     Node,
     Client,
