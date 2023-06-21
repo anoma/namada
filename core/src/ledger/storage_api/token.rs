@@ -6,7 +6,6 @@ use crate::types::address::Address;
 use crate::types::storage::DbKeySeg::StringSeg;
 use crate::types::storage::Key;
 use crate::types::token;
-use crate::types::token::Denomination;
 pub use crate::types::token::{
     balance_key, is_balance_key, is_total_supply_key, total_supply_key, Amount,
     Change,
@@ -52,7 +51,7 @@ where
 {
     if let Some(sub_prefix) = sub_prefix {
         if sub_prefix.segments.contains(&StringSeg("ibc".to_string())) {
-            return Ok(Some(Denomination(0)));
+            return Ok(Some(token::NATIVE_MAX_DECIMAL_PLACES.into()));
         }
     }
     let key = token::denom_key(token, sub_prefix);
