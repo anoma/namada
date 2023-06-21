@@ -60,8 +60,13 @@ pub enum WithoutEncryptedTxs {}
 
 /// Try to allocate a new transaction on a [`BlockSpaceAllocator`] state.
 pub trait TryAlloc {
+    type Resource<'tx>; //FIXME: should this lifetime be bound to swelf?
+
     /// Try to allocate space for a new transaction.
-    fn try_alloc(&mut self, tx: &[u8]) -> Result<(), AllocFailure>;
+    fn try_alloc<'tx>(
+        &mut self,
+        resource_required: Self::Resource<'tx>,
+    ) -> Result<(), AllocFailure>;
 }
 
 /// Represents a state transition in the [`BlockSpaceAllocator`] state machine.

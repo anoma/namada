@@ -14,11 +14,12 @@ use namada::proof_of_stake::pos_queries::PosQueries;
 use namada::types::hash::HASH_LENGTH;
 use namada::types::internal::WrapperTxInQueue;
 
+use super::block_space_alloc::EncryptedTxsBins;
 use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
 use crate::facade::tendermint_proto::abci::RequestProcessProposal;
 use crate::node::ledger::shell::block_space_alloc::{
-    threshold, AllocFailure, TxBin,
+    AllocFailure, DumpResource, TxBin,
 };
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
@@ -27,8 +28,8 @@ use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 /// transaction numbers, in a block proposal.
 #[derive(Default)]
 pub struct ValidationMeta {
-    /// Space utilized by encrypted txs.
-    pub encrypted_txs_bin: TxBin,
+    /// Space and gas utilized by encrypted txs.
+    pub encrypted_txs_bins: EncryptedTxsBins,
     /// Space utilized by all txs.
     pub txs_bin: TxBin,
     /// Check if the decrypted tx queue has any elements
@@ -49,13 +50,17 @@ where
     fn from(storage: &WlStorage<D, H>) -> Self {
         let max_proposal_bytes =
             storage.pos_queries().get_max_proposal_bytes().get();
+        let max_block_gas = storage
+            .read(&parameters::storage::get_max_block_gas_key())
+            .expect("Error while reading from storage")
+            .expect("Missing max_block_gas parameter in storage");
         let encrypted_txs_bin =
-            TxBin::init_over_ratio(max_proposal_bytes, threshold::ONE_THIRD);
+            EncryptedTxsBins::new(max_proposal_bytes, max_block_gas);
         let txs_bin = TxBin::init(max_proposal_bytes);
         Self {
             decrypted_queue_has_remaining_txs: false,
             has_decrypted_txs: false,
-            encrypted_txs_bin,
+            encrypted_txs_bins: encrypted_txs_bin,
             txs_bin,
         }
     }
@@ -152,12 +157,6 @@ where
         let mut tx_queue_iter = self.wl_storage.storage.tx_queue.iter();
         let mut temp_wl_storage = TempWlStorage::new(&self.wl_storage.storage);
         let mut metadata = ValidationMeta::from(&self.wl_storage);
-        let mut temp_block_gas_meter = BlockGasMeter::new(
-            self.wl_storage
-                .read(&parameters::storage::get_max_block_gas_key())
-                .expect("Error while reading from storage")
-                .expect("Missing max_block_gas parameter in storage"),
-        );
         let gas_table: BTreeMap<String, u64> = self
             .wl_storage
             .read(&parameters::storage::get_gas_table_storage_key())
@@ -176,7 +175,6 @@ where
                     &mut tx_queue_iter,
                     &mut metadata,
                     &mut temp_wl_storage,
-                    &mut temp_block_gas_meter,
                     block_time,
                     &gas_table,
                     &mut wrapper_index,
@@ -228,7 +226,6 @@ where
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTxInQueue>,
         metadata: &mut ValidationMeta,
         temp_wl_storage: &mut TempWlStorage<D, H>,
-        temp_block_gas_meter: &mut BlockGasMeter,
         block_time: DateTimeUtc,
         gas_table: &BTreeMap<String, u64>,
         wrapper_index: &mut usize,
@@ -240,7 +237,8 @@ where
         CA: 'static + WasmCacheAccess + Sync,
     {
         // try to allocate space for this tx
-        if let Err(e) = metadata.txs_bin.try_dump(tx_bytes) {
+        if let Err(e) = metadata.txs_bin.try_dump(DumpResource::Space(tx_bytes))
+        {
             return TxResult {
                 code: ErrorCodes::AllocationError.into(),
                 info: match e {
@@ -454,17 +452,17 @@ where
                 }
             }
             TxType::Wrapper(wrapper) => {
-                // Account for gas. This is done even if the transaction is
+                // Account for gas and space. This is done even if the transaction is
                 // later deemed invalid, to incentivize the proposer to
                 // include only valid transaction and avoid wasting block
-                // gas limit (ABCI only)
+                // resources (ABCI only)
                 let mut tx_gas_meter =
                     TxGasMeter::new(u64::from(&wrapper.gas_limit));
                 if tx_gas_meter.add_tx_size_gas(tx_bytes).is_err() {
-                    // Add the declared tx gas limit to the block gas meter
-                    // even in case of an error
-                    let _ =
-                        temp_block_gas_meter.finalize_transaction(tx_gas_meter);
+                    // Account for the tx's resources even in case of an error. Ignore any allocation error
+                    let _ = metadata
+                        .encrypted_txs_bins
+                        .try_dump(tx_bytes, u64::from(wrapper.gas_limit));
 
                     return TxResult {
                         code: ErrorCodes::TxGasLimit.into(),
@@ -473,19 +471,16 @@ where
                     };
                 }
 
-                if temp_block_gas_meter
-                    .finalize_transaction(tx_gas_meter)
-                    .is_err()
+                // try to allocate space and gas for this encrypted tx
+                if let Err(e) = metadata
+                    .encrypted_txs_bins
+                    .try_dump(tx_bytes, u64::from(wrapper.gas_limit.clone()))
                 {
                     return TxResult {
-                        code: ErrorCodes::BlockGasLimit.into(),
-
-                        info: "Wrapper transaction exceeds the maximum block \
-                               gas limit"
-                            .to_string(),
+                        code: ErrorCodes::AllocationError.into(),
+                        info: e,
                     };
                 }
-
                 // decrypted txs shouldn't show up before wrapper txs
                 if metadata.has_decrypted_txs {
                     return TxResult {
@@ -493,23 +488,6 @@ where
                         info: "Decrypted txs should not be proposed before \
                                wrapper txs"
                             .into(),
-                    };
-                }
-                // try to allocate space for this encrypted tx
-                if let Err(e) = metadata.encrypted_txs_bin.try_dump(tx_bytes) {
-                    return TxResult {
-                        code: ErrorCodes::AllocationError.into(),
-                        info: match e {
-                            AllocFailure::Rejected { .. } => {
-                                "No more space left in the block for wrapper \
-                                 txs"
-                            }
-                            AllocFailure::OverflowsBin { .. } => {
-                                "The given wrapper tx is larger than 1/3 of \
-                                 the available block space"
-                            }
-                        }
-                        .into(),
                     };
                 }
                 if hints::unlikely(self.encrypted_txs_not_allowed()) {
@@ -1909,7 +1887,7 @@ mod test_process_proposal {
             Err(TestError::RejectProposal(response)) => {
                 assert_eq!(
                     response[0].result.code,
-                    u32::from(ErrorCodes::BlockGasLimit)
+                    u32::from(ErrorCodes::AllocationError)
                 );
             }
         }

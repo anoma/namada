@@ -33,8 +33,11 @@ pub const STORAGE_WRITE_GAS_PER_BYTE: u64 = 100;
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
+//FIXME: shoul we use a type alias Gas for u64?
+
 /// Trait to share gas operations for transactions and validity predicates
 pub trait TxVpGasMetering {
+    //FIXME: rename this trait, but it should not mention Wasm because this is also used for native vps
     /// Add gas cost. It will return error when the
     /// consumed gas exceeds the provided transaction gas limit, but the state
     /// will still be updated
@@ -57,16 +60,6 @@ pub trait TxVpGasMetering {
                 .ok_or(Error::GasOverflow)?,
         )
     }
-}
-
-/// Gas metering in a block. The amount of gas consumed in a block is based on
-/// the tx_gas_limit declared by each [`TxGasMeter`]
-#[derive(Debug, Clone)]
-pub struct BlockGasMeter {
-    /// The max amount of gas allowed per block, defined by the protocol
-    /// parameter
-    pub block_gas_limit: u64,
-    block_gas: u64,
 }
 
 /// Gas metering in a transaction
@@ -93,59 +86,9 @@ pub struct VpGasMeter {
     Clone, Debug, Default, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct VpsGas {
+    //FIXME: should rework this a bit?
     max: Option<u64>,
     rest: Vec<u64>,
-}
-
-impl BlockGasMeter {
-    /// Build a new instance. Requires the block_gas_limit protocol parameter.
-    pub fn new(block_gas_limit: u64) -> Self {
-        Self {
-            block_gas_limit,
-            block_gas: 0,
-        }
-    }
-
-    /// Add the transaction gas limit to the block's total gas. It will return
-    /// error when the consumed gas exceeds the block gas limit, but the state
-    /// will still be updated. This function consumes the [`TxGasMeter`] which
-    /// shouldn't be updated after this point.
-    pub fn finalize_transaction(
-        &mut self,
-        tx_gas_meter: TxGasMeter,
-    ) -> Result<()> {
-        self.block_gas = self
-            .block_gas
-            .checked_add(tx_gas_meter.tx_gas_limit)
-            .ok_or(Error::GasOverflow)?;
-
-        if self.block_gas > self.block_gas_limit {
-            return Err(Error::BlockGasExceeded);
-        }
-        Ok(())
-    }
-
-    /// Tries to add the transaction gas limit to the block's total gas.
-    /// If the operation returns an error, propagates this errors without
-    /// updating the state. This function consumes the [`TxGasMeter`] which
-    /// shouldn't be updated after this point.
-    pub fn try_finalize_transaction(
-        &mut self,
-        tx_gas_meter: TxGasMeter,
-    ) -> Result<()> {
-        let updated_gas = self
-            .block_gas
-            .checked_add(tx_gas_meter.tx_gas_limit)
-            .ok_or(Error::GasOverflow)?;
-
-        if updated_gas > self.block_gas_limit {
-            return Err(Error::BlockGasExceeded);
-        }
-
-        self.block_gas = updated_gas;
-
-        Ok(())
-    }
 }
 
 impl TxVpGasMetering for TxGasMeter {
@@ -187,6 +130,7 @@ impl TxGasMeter {
     }
 
     /// Add the gas cost used in validity predicates to the current transaction.
+    //FIXME: should this consume VpsGas?
     pub fn add_vps_gas(&mut self, vps_gas: &VpsGas) -> Result<()> {
         self.add(vps_gas.get_current_gas()?)
     }
@@ -220,6 +164,7 @@ impl TxVpGasMetering for VpGasMeter {
 impl VpGasMeter {
     /// Initialize a new VP gas meter, starting with the gas consumed in the
     /// transaction so far. Also requires the transaction gas limit.
+    //FIXME: should pass reference to the TxGasMeter here?
     pub fn new(tx_gas_limit: u64, initial_gas: u64) -> Self {
         Self {
             tx_gas_limit,
@@ -300,14 +245,6 @@ mod tests {
             meter.add(gas).expect("cannot add the gas");
         }
 
-        #[test]
-        fn test_block_gas_meter_add(gas in 0..BLOCK_GAS_LIMIT) {
-            let mut meter = BlockGasMeter::new(BLOCK_GAS_LIMIT);
-            let mut tx_gas_meter = TxGasMeter::new(BLOCK_GAS_LIMIT );
-            tx_gas_meter.add(gas).expect("cannot add the gas");
-            meter.finalize_transaction(tx_gas_meter).expect("cannot finalize the tx");
-            assert_eq!(meter.block_gas, BLOCK_GAS_LIMIT);
-        }
     }
 
     #[test]
@@ -347,28 +284,5 @@ mod tests {
                 .expect_err("unexpectedly succeeded"),
             Error::TransactionGasExceededError
         );
-    }
-
-    #[test]
-    fn test_block_gas_limit() {
-        let mut meter = BlockGasMeter::new(BLOCK_GAS_LIMIT);
-        let transaction_gas = 10_000_u64;
-
-        // add the maximum tx gas
-        for _ in 0..(BLOCK_GAS_LIMIT / transaction_gas) {
-            let tx_gas_meter = TxGasMeter::new(transaction_gas);
-            meter
-                .finalize_transaction(tx_gas_meter)
-                .expect("over the block gas limit");
-        }
-
-        let tx_gas_meter = TxGasMeter::new(transaction_gas);
-        match meter
-            .finalize_transaction(tx_gas_meter)
-            .expect_err("unexpectedly succeeded")
-        {
-            Error::BlockGasExceeded => {}
-            _ => panic!("unexpected error happened"),
-        }
     }
 }

@@ -53,7 +53,9 @@ pub mod states;
 
 use std::marker::PhantomData;
 
+use namada::core::ledger::parameters;
 use namada::core::ledger::storage::{self, WlStorage};
+use namada::ledger::storage_api::StorageRead;
 use namada::proof_of_stake::pos_queries::PosQueries;
 
 #[allow(unused_imports)]
@@ -64,24 +66,44 @@ use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 pub enum AllocFailure {
     /// The transaction can only be included in an upcoming block.
     ///
-    /// We return the space left in the tx bin for logging purposes.
-    Rejected { bin_space_left: u64 },
-    /// The transaction would overflow the allotted bin space,
+    /// We return the resource left in the tx bin for logging purposes.
+    Rejected { bin_resource_left: u64 },
+    /// The transaction would overflow the allotted bin resource,
     /// therefore it needs to be handled separately.
     ///
-    /// We return the size of the tx bin for logging purposes.
-    OverflowsBin { bin_size: u64 },
+    /// We return the resource allotted to the tx bin for logging purposes.
+    OverflowsBin { bin_resource: u64 },
 }
 
-/// Allotted space for a batch of transactions in some proposed block,
-/// measured in bytes.
+pub enum DumpResource<'r> {
+    Space(&'r [u8]),
+    Gas(u64),
+}
+
+pub struct BlockResources<'tx> {
+    tx: &'tx [u8],
+    gas: u64,
+}
+
+impl<'tx> BlockResources<'tx> {
+    pub fn new(tx: &'tx [u8], gas: u64) -> Self {
+        Self { tx, gas }
+    }
+}
+
+/// Allotted resources for a batch of transactions in some proposed block.
 ///
 /// We keep track of the current space utilized by:
 ///
 ///   - DKG encrypted transactions.
 ///   - DKG decrypted transactions.
 ///   - Protocol transactions.
+///
+/// We keep track of the current gas utilized by:
+///
+///   - DKG encrypted transactions.  
 #[derive(Debug, Default)]
+//FIXME: rename to BlockSpaceGasAllocator or BlockResourcesAllocator or maybe just BlockAllocator
 pub struct BlockSpaceAllocator<State> {
     /// The current state of the [`BlockSpaceAllocator`] state machine.
     _state: PhantomData<*const State>,
@@ -90,8 +112,8 @@ pub struct BlockSpaceAllocator<State> {
     block: TxBin,
     /// The current space utilized by protocol transactions.
     protocol_txs: TxBin,
-    /// The current space utilized by DKG encrypted transactions.
-    encrypted_txs: TxBin,
+    /// The current space and gas utilized by DKG encrypted transactions.
+    encrypted_txs: EncryptedTxsBins,
     /// The current space utilized by DKG decrypted transactions.
     decrypted_txs: TxBin,
 }
@@ -104,21 +126,31 @@ where
 {
     #[inline]
     fn from(storage: &WlStorage<D, H>) -> Self {
-        Self::init(storage.pos_queries().get_max_proposal_bytes().get())
+        let max_block_gas = storage
+            .read(&parameters::storage::get_max_block_gas_key())
+            .expect("Error while reading from storage")
+            .expect("Missing max_block_gas parameter in storage");
+        Self::init(
+            storage.pos_queries().get_max_proposal_bytes().get(),
+            max_block_gas,
+        )
     }
 }
 
 impl<M> BlockSpaceAllocator<states::BuildingEncryptedTxBatch<M>> {
     /// Construct a new [`BlockSpaceAllocator`], with an upper bound
-    /// on the max size of all txs in a block defined by Tendermint.
+    /// on the max size of all txs in a block defined by Tendermint and an upper bound on the max gas in a block.
     #[inline]
-    pub fn init(tendermint_max_block_space_in_bytes: u64) -> Self {
+    pub fn init(
+        tendermint_max_block_space_in_bytes: u64,
+        max_block_gas: u64,
+    ) -> Self {
         let max = tendermint_max_block_space_in_bytes;
         Self {
             _state: PhantomData,
             block: TxBin::init(max),
             protocol_txs: TxBin::default(),
-            encrypted_txs: TxBin::init_over_ratio(max, threshold::ONE_THIRD),
+            encrypted_txs: EncryptedTxsBins::new(max, max_block_gas),
             decrypted_txs: TxBin::default(),
         }
     }
@@ -133,75 +165,106 @@ impl<State> BlockSpaceAllocator<State> {
     /// to each [`TxBin`] instance in a [`BlockSpaceAllocator`].
     #[inline]
     fn uninitialized_space_in_bytes(&self) -> u64 {
-        let total_bin_space = self.protocol_txs.allotted_space_in_bytes
-            + self.encrypted_txs.allotted_space_in_bytes
-            + self.decrypted_txs.allotted_space_in_bytes;
-        self.block.allotted_space_in_bytes - total_bin_space
+        let total_bin_space = self.protocol_txs.allotted
+            + self.encrypted_txs.space.allotted
+            + self.decrypted_txs.allotted;
+        self.block.allotted - total_bin_space
     }
 }
 
-/// Allotted space for a batch of transactions of the same kind in some
-/// proposed block, measured in bytes.
+/// Allotted resource for a batch of transactions of the same kind in some
+/// proposed block. At the moment this is used to track two resources of the block: space and gas. Space is measured in bytes while gas in gas units.
 #[derive(Debug, Copy, Clone, Default)]
 pub struct TxBin {
-    /// The current space utilized by the batch of transactions.
-    occupied_space_in_bytes: u64,
-    /// The maximum space the batch of transactions may occupy.
-    allotted_space_in_bytes: u64,
+    /// The current resource utilization of the batch of transactions.
+    occupied: u64,
+    /// The maximum resource amount the batch of transactions may occupy.
+    allotted: u64,
 }
 
 impl TxBin {
-    /// Return a new [`TxBin`] with a total allotted space equal to the
-    /// floor of the fraction `frac` of the available block space `max_bytes`.
+    /// Return the amount of resource left in this [`TxBin`].
     #[inline]
-    pub fn init_over_ratio(max_bytes: u64, frac: threshold::Threshold) -> Self {
-        let allotted_space_in_bytes = frac.over(max_bytes);
+    pub fn resource_left(&self) -> u64 {
+        self.allotted - self.occupied
+    }
+
+    /// Construct a new [`TxBin`], with a capacity of `max_capacity`.
+    #[inline]
+    pub fn init(max_capacity: u64) -> Self {
         Self {
-            allotted_space_in_bytes,
-            occupied_space_in_bytes: 0,
+            allotted: max_capacity,
+            occupied: 0,
         }
     }
 
-    /// Return the amount of space left in this [`TxBin`].
-    #[inline]
-    pub fn space_left_in_bytes(&self) -> u64 {
-        self.allotted_space_in_bytes - self.occupied_space_in_bytes
-    }
-
-    /// Construct a new [`TxBin`], with a capacity of `max_bytes`.
-    #[inline]
-    pub fn init(max_bytes: u64) -> Self {
-        Self {
-            allotted_space_in_bytes: max_bytes,
-            occupied_space_in_bytes: 0,
-        }
-    }
-
-    /// Shrink the allotted space of this [`TxBin`] to whatever
-    /// space is currently being utilized.
+    /// Shrink the allotted resource of this [`TxBin`] to whatever
+    /// amount is currently being utilized.
     #[inline]
     pub fn shrink_to_fit(&mut self) {
-        self.allotted_space_in_bytes = self.occupied_space_in_bytes;
+        self.allotted = self.occupied;
     }
 
     /// Try to dump a new transaction into this [`TxBin`].
     ///
-    /// Signal the caller if the tx is larger than its max
-    /// allotted bin space.
-    pub fn try_dump(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
-        let tx_len = tx.len() as u64;
-        if tx_len > self.allotted_space_in_bytes {
-            let bin_size = self.allotted_space_in_bytes;
-            return Err(AllocFailure::OverflowsBin { bin_size });
+    /// Signal the caller if the tx requires more resource than its max
+    /// allotted.
+    pub fn try_dump(
+        &mut self,
+        tx_resource: DumpResource,
+    ) -> Result<(), AllocFailure> {
+        let tx_resource = match tx_resource {
+            DumpResource::Space(tx) => {
+                u64::try_from(tx.len()).map_err(|_| {
+                    AllocFailure::OverflowsBin {
+                        bin_resource: self.allotted,
+                    }
+                })?
+            }
+            DumpResource::Gas(gas) => gas,
+        };
+
+        if tx_resource > self.allotted {
+            let bin_size = self.allotted;
+            return Err(AllocFailure::OverflowsBin {
+                bin_resource: bin_size,
+            });
         }
-        let occupied = self.occupied_space_in_bytes + tx_len;
-        if occupied <= self.allotted_space_in_bytes {
-            self.occupied_space_in_bytes = occupied;
+        let occupied = self.occupied + tx_resource;
+        if occupied <= self.allotted {
+            self.occupied = occupied;
             Ok(())
         } else {
-            let bin_space_left = self.space_left_in_bytes();
-            Err(AllocFailure::Rejected { bin_space_left })
+            let bin_resource_left = self.resource_left();
+            Err(AllocFailure::Rejected { bin_resource_left })
         }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct EncryptedTxsBins {
+    space: TxBin,
+    gas: TxBin,
+}
+
+impl EncryptedTxsBins {
+    pub fn new(max_bytes: u64, max_gas: u64) -> Self {
+        let allotted_space_in_bytes = threshold::ONE_THIRD.over(max_bytes);
+        Self {
+            space: TxBin::init(allotted_space_in_bytes),
+            gas: TxBin::init(max_gas),
+        }
+    }
+
+    pub fn try_dump(&mut self, tx: &[u8], gas: u64) -> Result<(), String> {
+        self.space.try_dump(DumpResource::Space(tx)).map_err(|e| match e {
+            AllocFailure::Rejected { .. } => "No more space left in the block for wrapper txs".to_string(),
+            AllocFailure::OverflowsBin { .. } => "The given wrapper tx is larger than 1/3 of the available block space".to_string()
+        })?;
+        self.gas.try_dump(DumpResource::Gas(gas)).map_err(|e| match e {
+            AllocFailure::Rejected { .. } => "No more gas left in the block for wrapper txs".to_string(),
+            AllocFailure::OverflowsBin { .. } => "The given wrapper tx requires more gas than available to the entire block".to_string()
+        })
     }
 }
 
@@ -260,36 +323,36 @@ mod tests {
     #[derive(Debug)]
     struct PropTx {
         tendermint_max_block_space_in_bytes: u64,
+        max_block_gas: u64,
         protocol_txs: Vec<TxBytes>,
         encrypted_txs: Vec<TxBytes>,
         decrypted_txs: Vec<TxBytes>,
     }
 
+    //FIXME: add more tests here for the gas
     /// Check that at most 1/3 of the block space is
     /// reserved for each kind of tx type, in the
     /// allocator's common path.
     #[test]
     fn test_txs_are_evenly_split_across_block() {
         const BLOCK_SIZE: u64 = 60;
+        const BLOCK_GAS: u64 = 1_000;
 
         // reserve block space for encrypted txs
-        let mut alloc = BsaWrapperTxs::init(BLOCK_SIZE);
+        let mut alloc = BsaWrapperTxs::init(BLOCK_SIZE, BLOCK_GAS);
 
         // allocate ~1/3 of the block space to encrypted txs
-        assert!(alloc.try_alloc(&[0; 18]).is_ok());
+        assert!(alloc.try_alloc(BlockResources::new(&[0; 18], 0)).is_ok());
 
         // reserve block space for decrypted txs
         let mut alloc = alloc.next_state();
 
         // the space we allotted to encrypted txs was shrunk to
         // the total space we actually used up
-        assert_eq!(alloc.encrypted_txs.allotted_space_in_bytes, 18);
+        assert_eq!(alloc.encrypted_txs.space.allotted, 18);
 
         // check that the allotted space for decrypted txs is correct
-        assert_eq!(
-            alloc.decrypted_txs.allotted_space_in_bytes,
-            BLOCK_SIZE - 18
-        );
+        assert_eq!(alloc.decrypted_txs.allotted, BLOCK_SIZE - 18);
 
         // add about ~1/3 worth of decrypted txs
         assert!(alloc.try_alloc(&[0; 17]).is_ok());
@@ -298,10 +361,7 @@ mod tests {
         let mut alloc = alloc.next_state();
 
         // check that space was shrunk
-        assert_eq!(
-            alloc.protocol_txs.allotted_space_in_bytes,
-            BLOCK_SIZE - (18 + 17)
-        );
+        assert_eq!(alloc.protocol_txs.allotted, BLOCK_SIZE - (18 + 17));
 
         // add protocol txs to the block space allocator
         assert!(alloc.try_alloc(&[0; 25]).is_ok());
@@ -317,9 +377,9 @@ mod tests {
     // when the state invariants banish them from inclusion.
     #[test]
     fn test_encrypted_txs_are_rejected() {
-        let mut alloc = BsaNoWrapperTxs::init(1234);
+        let mut alloc = BsaNoWrapperTxs::init(1234, 1_000);
         assert_matches!(
-            alloc.try_alloc(&[0; 1]),
+            alloc.try_alloc(BlockResources::new(&[0; 1], 0)),
             Err(AllocFailure::Rejected { .. })
         );
     }
@@ -351,22 +411,23 @@ mod tests {
     fn proptest_reject_tx_on_bin_cap_reached(
         tendermint_max_block_space_in_bytes: u64,
     ) {
-        let mut bins = BsaWrapperTxs::init(tendermint_max_block_space_in_bytes);
+        let mut bins =
+            BsaWrapperTxs::init(tendermint_max_block_space_in_bytes, 1_000);
 
         // fill the entire bin of encrypted txs
-        bins.encrypted_txs.occupied_space_in_bytes =
-            bins.encrypted_txs.allotted_space_in_bytes;
+        bins.encrypted_txs.space.occupied = bins.encrypted_txs.space.allotted;
 
         // make sure we can't dump any new encrypted txs in the bin
         assert_matches!(
-            bins.try_alloc(b"arbitrary tx bytes"),
+            bins.try_alloc(BlockResources::new(b"arbitrary tx bytes", 0)),
             Err(AllocFailure::Rejected { .. })
         );
     }
 
     /// Implementation of [`test_initial_bin_capacity`].
     fn proptest_initial_bin_capacity(tendermint_max_block_space_in_bytes: u64) {
-        let bins = BsaWrapperTxs::init(tendermint_max_block_space_in_bytes);
+        let bins =
+            BsaWrapperTxs::init(tendermint_max_block_space_in_bytes, 1_000);
         let expected = tendermint_max_block_space_in_bytes
             - threshold::ONE_THIRD.over(tendermint_max_block_space_in_bytes);
         assert_eq!(expected, bins.uninitialized_space_in_bytes());
@@ -376,6 +437,7 @@ mod tests {
     fn proptest_tx_dump_doesnt_fill_up_bin(args: PropTx) {
         let PropTx {
             tendermint_max_block_space_in_bytes,
+            max_block_gas,
             protocol_txs,
             encrypted_txs,
             decrypted_txs,
@@ -389,21 +451,25 @@ mod tests {
 
         let bins = RefCell::new(BsaWrapperTxs::init(
             tendermint_max_block_space_in_bytes,
+            max_block_gas,
         ));
         let encrypted_txs = encrypted_txs.into_iter().take_while(|tx| {
-            let bin = bins.borrow().encrypted_txs;
-            let new_size = bin.occupied_space_in_bytes + tx.len() as u64;
-            new_size < bin.allotted_space_in_bytes
+            let bin = bins.borrow().encrypted_txs.space;
+            let new_size = bin.occupied + tx.len() as u64;
+            new_size < bin.allotted
         });
         for tx in encrypted_txs {
-            assert!(bins.borrow_mut().try_alloc(&tx).is_ok());
+            assert!(bins
+                .borrow_mut()
+                .try_alloc(BlockResources::new(&tx, 0))
+                .is_ok());
         }
 
         let bins = RefCell::new(bins.into_inner().next_state());
         let decrypted_txs = decrypted_txs.into_iter().take_while(|tx| {
             let bin = bins.borrow().decrypted_txs;
-            let new_size = bin.occupied_space_in_bytes + tx.len() as u64;
-            new_size < bin.allotted_space_in_bytes
+            let new_size = bin.occupied + tx.len() as u64;
+            new_size < bin.allotted
         });
         for tx in decrypted_txs {
             assert!(bins.borrow_mut().try_alloc(&tx).is_ok());
@@ -412,8 +478,8 @@ mod tests {
         let bins = RefCell::new(bins.into_inner().next_state());
         let protocol_txs = protocol_txs.into_iter().take_while(|tx| {
             let bin = bins.borrow().protocol_txs;
-            let new_size = bin.occupied_space_in_bytes + tx.len() as u64;
-            new_size < bin.allotted_space_in_bytes
+            let new_size = bin.occupied + tx.len() as u64;
+            new_size < bin.allotted
         });
         for tx in protocol_txs {
             assert!(bins.borrow_mut().try_alloc(&tx).is_ok());
@@ -425,12 +491,13 @@ mod tests {
         fn arb_transactions()
             // create base strategies
             (
-                (tendermint_max_block_space_in_bytes, protocol_tx_max_bin_size, encrypted_tx_max_bin_size,
+                (tendermint_max_block_space_in_bytes, max_block_gas, protocol_tx_max_bin_size, encrypted_tx_max_bin_size,
                  decrypted_tx_max_bin_size) in arb_max_bin_sizes(),
             )
             // compose strategies
             (
                 tendermint_max_block_space_in_bytes in Just(tendermint_max_block_space_in_bytes),
+            max_block_gas in Just(max_block_gas),
                 protocol_txs in arb_tx_list(protocol_tx_max_bin_size),
                 encrypted_txs in arb_tx_list(encrypted_tx_max_bin_size),
                 decrypted_txs in arb_tx_list(decrypted_tx_max_bin_size),
@@ -438,6 +505,7 @@ mod tests {
             -> PropTx {
                 PropTx {
                     tendermint_max_block_space_in_bytes,
+                max_block_gas,
                     protocol_txs,
                     encrypted_txs,
                     decrypted_txs,
@@ -446,12 +514,13 @@ mod tests {
     }
 
     /// Return random bin sizes for a [`BlockSpaceAllocator`].
-    fn arb_max_bin_sizes() -> impl Strategy<Value = (u64, usize, usize, usize)>
-    {
+    fn arb_max_bin_sizes(
+    ) -> impl Strategy<Value = (u64, u64, usize, usize, usize)> {
         const MAX_BLOCK_SIZE_BYTES: u64 = 1000;
         (1..=MAX_BLOCK_SIZE_BYTES).prop_map(
             |tendermint_max_block_space_in_bytes| {
                 (
+                    tendermint_max_block_space_in_bytes,
                     tendermint_max_block_space_in_bytes,
                     threshold::ONE_THIRD
                         .over(tendermint_max_block_space_in_bytes)

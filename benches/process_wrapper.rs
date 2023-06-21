@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::types::address;
 use namada::core::types::token::{Amount, Transfer};
-use namada::ledger::gas::BlockGasMeter;
 use namada::ledger::storage::TempWlStorage;
 use namada::types::chain::ChainId;
 use namada::types::storage::BlockHeight;
@@ -59,7 +58,6 @@ fn process_tx(c: &mut Criterion) {
                     shell.wl_storage.storage.tx_queue.clone(),
                     // Prevent block out of gas and replay protection
                     TempWlStorage::new(&shell.wl_storage.storage),
-                    BlockGasMeter::new(u64::MAX),
                     ValidationMeta::from(&shell.wl_storage),
                     shell.vp_wasm_cache.clone(),
                     shell.tx_wasm_cache.clone(),
@@ -69,7 +67,6 @@ fn process_tx(c: &mut Criterion) {
             |(
                 tx_queue,
                 mut temp_wl_storage,
-                mut block_gas_meter,
                 mut validation_meta,
                 mut vp_wasm_cache,
                 mut tx_wasm_cache,
@@ -83,7 +80,6 @@ fn process_tx(c: &mut Criterion) {
                             &mut tx_queue.iter(),
                             &mut validation_meta,
                             &mut temp_wl_storage,
-                            &mut block_gas_meter,
                             datetime,
                             &gas_table,
                             &mut 0,

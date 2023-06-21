@@ -25,7 +25,7 @@ use std::rc::Rc;
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
-use namada::ledger::gas::{BlockGasMeter, TxGasMeter};
+use namada::ledger::gas::TxGasMeter;
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
 };
@@ -139,9 +139,8 @@ pub enum ErrorCodes {
     ReplayTx = 11,
     InvalidChainId = 12,
     ExpiredTx = 13,
-    BlockGasLimit = 14,
-    TxGasLimit = 15,
-    FeeError = 16,
+    TxGasLimit = 14,
+    FeeError = 15,
 }
 
 impl ErrorCodes {
@@ -159,7 +158,7 @@ impl ErrorCodes {
             | DecryptedTxGasLimit => true,
             InvalidTx | InvalidSig | InvalidOrder | ExtraTxs
             | Undecryptable | AllocationError | ReplayTx | InvalidChainId
-            | ExpiredTx | BlockGasLimit | TxGasLimit | FeeError => false,
+            | ExpiredTx | TxGasLimit | FeeError => false,
         }
     }
 }
@@ -726,9 +725,8 @@ where
                 .read(&parameters::storage::get_max_block_gas_key())
                 .expect("Error while reading from storage")
                 .expect("Missing max_block_gas parameter in storage");
-            let mut block_gas_meter = BlockGasMeter::new(block_gas_limit);
-            if block_gas_meter.finalize_transaction(gas_meter).is_err() {
-                response.code = ErrorCodes::BlockGasLimit.into();
+            if gas_meter.tx_gas_limit > block_gas_limit {
+                response.code = ErrorCodes::AllocationError.into();
                 response.log = "Wrapper transaction exceeds the maximum block \
                                 gas limit"
                     .to_string();
@@ -1823,7 +1821,7 @@ mod test_mempool_validate {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::BlockGasLimit));
+        assert_eq!(result.code, u32::from(ErrorCodes::AllocationError));
     }
 
     // Check that a tx requiring more gas than its limit gets rejected

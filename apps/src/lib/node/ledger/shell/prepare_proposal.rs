@@ -6,7 +6,6 @@ use std::collections::BTreeMap;
 use namada::core::hints;
 use namada::core::ledger::gas::TxGasMeter;
 use namada::core::ledger::parameters;
-use namada::ledger::gas::BlockGasMeter;
 use namada::ledger::storage::{DBIter, StorageHasher, TempWlStorage, DB};
 use namada::ledger::storage_api::StorageRead;
 use namada::proof_of_stake::find_validator_by_raw_hash;
@@ -27,7 +26,7 @@ use super::block_space_alloc::states::{
     BuildingDecryptedTxBatch, BuildingProtocolTxBatch,
     EncryptedTxBatchAllocator, NextState, TryAlloc,
 };
-use super::block_space_alloc::{AllocFailure, BlockSpaceAllocator};
+use super::block_space_alloc::{AllocFailure, BlockSpaceAllocator, BlockResources};
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
@@ -150,12 +149,6 @@ where
             // valid because of mempool check
             TryInto::<DateTimeUtc>::try_into(block_time).ok()
         });
-        let mut temp_block_gas_meter = BlockGasMeter::new(
-            self.wl_storage
-                .read(&parameters::storage::get_max_block_gas_key())
-                .expect("Error while reading from storage")
-                .expect("Missing max_block_gas parameter in storage"),
-        );
         let mut temp_wl_storage = TempWlStorage::new(&self.wl_storage.storage);
         let gas_table: BTreeMap<String, u64> = self
             .wl_storage
@@ -168,10 +161,10 @@ where
         let txs = txs
             .iter()
             .filter_map(|tx_bytes| {
-                match self.validate_wrapper_bytes(tx_bytes, &mut temp_block_gas_meter, block_time, &mut temp_wl_storage, &gas_table, &mut vp_wasm_cache, &mut tx_wasm_cache, block_proposer) {
-                    Ok(()) => {
+                match self.validate_wrapper_bytes(tx_bytes,  block_time, &mut temp_wl_storage, &gas_table, &mut vp_wasm_cache, &mut tx_wasm_cache, block_proposer) {
+                    Ok(gas) => {
                         temp_wl_storage.write_log.commit_tx();
-                        Some(tx_bytes.to_owned())
+                        Some((tx_bytes.to_owned(), gas)) 
                     },
                     Err(()) => {
                         temp_wl_storage.write_log.drop_tx();
@@ -179,11 +172,11 @@ where
                     }
                 }
             })
-            .take_while(|tx_bytes| {
-                alloc.try_alloc(&tx_bytes[..])
+            .take_while(|(tx_bytes, tx_gas)| {
+                alloc.try_alloc(BlockResources::new(&tx_bytes[..], tx_gas.to_owned()))
                     .map_or_else(
                         |status| match status {
-                            AllocFailure::Rejected { bin_space_left } => {
+                            AllocFailure::Rejected { bin_resource_left: bin_space_left } => {
                                 tracing::debug!(
                                     tx_bytes_len = tx_bytes.len(),
                                     bin_space_left,
@@ -193,7 +186,7 @@ where
                                 );
                                 false
                             }
-                            AllocFailure::OverflowsBin { bin_size } => {
+                            AllocFailure::OverflowsBin { bin_resource: bin_size } => {
                                 // TODO: handle tx whose size is greater
                                 // than bin size
                                 tracing::warn!(
@@ -209,6 +202,7 @@ where
                         |()| true,
                     )
             })
+            .map(|(tx, _)| tx) 
             .collect();
         let alloc = alloc.next_state();
 
@@ -220,14 +214,13 @@ where
     fn validate_wrapper_bytes<CA>(
         &self,
         tx_bytes: &[u8],
-        temp_block_gas_meter: &mut BlockGasMeter,
         block_time: Option<DateTimeUtc>,
         temp_wl_storage: &mut TempWlStorage<D, H>,
         gas_table: &BTreeMap<String, u64>,
         vp_wasm_cache: &mut VpCache<CA>,
         tx_wasm_cache: &mut TxCache<CA>,
         block_proposer: Option<&Address>,
-    ) -> Result<(), ()>
+    ) -> Result<u64, ()>
     where
         CA: 'static + WasmCacheAccess + Sync,
     {
@@ -245,25 +238,26 @@ where
         }
 
         if let TxType::Wrapper(wrapper) = process_tx(tx).map_err(|_| ())? {
-            // Check tx gas limit
+            // Check tx gas limit for tx size
             let mut tx_gas_meter =
                 TxGasMeter::new(wrapper.gas_limit.clone().into());
             tx_gas_meter.add_tx_size_gas(tx_bytes).map_err(|_| ())?;
 
-            temp_block_gas_meter
-                .try_finalize_transaction(tx_gas_meter)
-                .map_err(|_| ())?;
-
             // Check fees
-            self.wrapper_fee_check(
+            match self.wrapper_fee_check(
                 &wrapper,
                 temp_wl_storage,
                 Some(Cow::Borrowed(gas_table)),
                 vp_wasm_cache,
                 tx_wasm_cache,
                 block_proposer,
-            )
-            .map_err(|_| ())
+            ) {
+                Ok(()) => Ok(u64::from(wrapper.gas_limit)),
+                Err(_) => Err(())
+            }
+            
+            
+            
         } else {
             Err(())
         }
@@ -313,7 +307,7 @@ where
             .take_while(|tx_bytes| {
                 alloc.try_alloc(&tx_bytes[..]).map_or_else(
                     |status| match status {
-                        AllocFailure::Rejected { bin_space_left } => {
+                        AllocFailure::Rejected { bin_resource_left: bin_space_left } => {
                             tracing::warn!(
                                 tx_bytes_len = tx_bytes.len(),
                                 bin_space_left,
@@ -323,7 +317,7 @@ where
                             );
                             false
                         }
-                        AllocFailure::OverflowsBin { bin_size } => {
+                        AllocFailure::OverflowsBin { bin_resource: bin_size } => {
                             tracing::warn!(
                                 tx_bytes_len = tx_bytes.len(),
                                 bin_size,
