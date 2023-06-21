@@ -269,8 +269,12 @@ impl From<i128> for Dec {
 
 impl TryFrom<u128> for Dec {
     type Error = Box<dyn 'static + std::error::Error>;
+
     fn try_from(num: u128) -> std::result::Result<Self, Self::Error> {
-        Ok(Self(I256::try_from(Uint::from(num))? * Uint::exp10(POS_DECIMAL_PRECISION as usize)))
+        Ok(Self(
+            I256::try_from(Uint::from(num))?
+                * Uint::exp10(POS_DECIMAL_PRECISION as usize),
+        ))
     }
 }
 

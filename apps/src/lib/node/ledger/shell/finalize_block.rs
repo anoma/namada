@@ -321,7 +321,7 @@ where
                             event["log"] =
                                 "Transaction could not be decrypted.".into();
                             event["code"] = ErrorCodes::Undecryptable.into();
-                            continue
+                            continue;
                         }
                     }
                     (event, Some(wrapper_hash))
@@ -2653,17 +2653,22 @@ mod test_finalize_block {
                 + self_bond_1_amount
                 - self_unbond_2_amount);
         assert!(
-            ((pre_stake_10 - post_stake_10).change() - exp_slashed_during_processing_9.change()).abs() < Uint::from(1000)
+            ((pre_stake_10 - post_stake_10).change()
+                - exp_slashed_during_processing_9.change())
+            .abs()
+                < Uint::from(1000)
         );
 
         // Check that we can compute the stake at the pipeline epoch
         // NOTE: may be off. by 1 namnam due to rounding;
         let exp_pipeline_stake = (Dec::one() - slash_rate_3)
-                    * Dec::from(initial_stake + del_1_amount
-                        - self_unbond_1_amount
-                        - del_unbond_1_amount
-                        + self_bond_1_amount
-                        - self_unbond_2_amount)
+            * Dec::from(
+                initial_stake + del_1_amount
+                    - self_unbond_1_amount
+                    - del_unbond_1_amount
+                    + self_bond_1_amount
+                    - self_unbond_2_amount,
+            )
             + Dec::from(del_2_amount);
 
         assert!(
@@ -2852,13 +2857,17 @@ mod test_finalize_block {
         // self_unbond_2_amount)
         // TODO: Make sure this is sound and what we expect
         assert!(
-            (self_details.bonds[0].slashed_amount.unwrap().change() -
-            (std::cmp::min(Dec::one(), Dec::new(3, 0).unwrap() * cubic_rate)
-                    * (initial_stake
-                    - self_unbond_1_amount
+            (self_details.bonds[0].slashed_amount.unwrap().change()
+                - (std::cmp::min(
+                    Dec::one(),
+                    Dec::new(3, 0).unwrap() * cubic_rate
+                ) * (initial_stake - self_unbond_1_amount
                     + self_bond_1_amount
-                    - self_unbond_2_amount)
-            ).change()) <= Amount::from_uint(1000, NATIVE_MAX_DECIMAL_PLACES).unwrap().change()
+                    - self_unbond_2_amount))
+                    .change())
+                <= Amount::from_uint(1000, NATIVE_MAX_DECIMAL_PLACES)
+                    .unwrap()
+                    .change()
         );
 
         // Check delegation unbonds

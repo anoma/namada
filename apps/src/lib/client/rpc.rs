@@ -33,7 +33,10 @@ use namada::ledger::pos::{
     self, BondId, BondsAndUnbondsDetail, CommissionPair, PosParams, Slash,
 };
 use namada::ledger::queries::RPC;
-use namada::ledger::rpc::{enriched_bonds_and_unbonds, format_denominated_amount, query_epoch, TxResponse};
+use namada::ledger::rpc::{
+    enriched_bonds_and_unbonds, format_denominated_amount, query_epoch,
+    TxResponse,
+};
 use namada::ledger::storage::ConversionState;
 use namada::ledger::wallet::{AddressVpType, Wallet};
 use namada::proof_of_stake::types::WeightedValidator;
@@ -1457,7 +1460,7 @@ pub async fn query_bonds<C: namada::ledger::queries::Client + Sync>(
             )?;
         }
         if details.bonds_total != token::Amount::zero() {
-           writeln!(
+            writeln!(
                 w,
                 "Active (slashed) bonds total: {}",
                 details.bonds_total_active().to_string_native()
@@ -1482,9 +1485,17 @@ pub async fn query_bonds<C: namada::ledger::queries::Client + Sync>(
                     unbond.amount.to_string_native()
                 )?;
             }
-            writeln!(w, "Unbonded total: {}", details.unbonds_total.to_string_native())?;
+            writeln!(
+                w,
+                "Unbonded total: {}",
+                details.unbonds_total.to_string_native()
+            )?;
         }
-        writeln!(w, "Withdrawable total: {}", details.total_withdrawable.to_string_native())?;
+        writeln!(
+            w,
+            "Withdrawable total: {}",
+            details.total_withdrawable.to_string_native()
+        )?;
         writeln!(w)?;
     }
     if bonds_and_unbonds.bonds_total != bonds_and_unbonds.bonds_total_slashed {
@@ -1494,7 +1505,11 @@ pub async fn query_bonds<C: namada::ledger::queries::Client + Sync>(
             bonds_and_unbonds.bonds_total_active().to_string_native()
         )?;
     }
-    writeln!(w, "All bonds total: {}", bonds_and_unbonds.bonds_total.to_string_native())?;
+    writeln!(
+        w,
+        "All bonds total: {}",
+        bonds_and_unbonds.bonds_total.to_string_native()
+    )?;
 
     if bonds_and_unbonds.unbonds_total
         != bonds_and_unbonds.unbonds_total_slashed
@@ -1505,7 +1520,11 @@ pub async fn query_bonds<C: namada::ledger::queries::Client + Sync>(
             bonds_and_unbonds.unbonds_total_active().to_string_native()
         )?;
     }
-    writeln!(w, "All unbonds total: {}", bonds_and_unbonds.unbonds_total.to_string_native())?;
+    writeln!(
+        w,
+        "All unbonds total: {}",
+        bonds_and_unbonds.unbonds_total.to_string_native()
+    )?;
     writeln!(
         w,
         "All unbonds total withdrawable: {}",

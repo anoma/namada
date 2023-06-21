@@ -173,9 +173,7 @@ mod tests {
         // Arbitrary non-zero change
         let arb_change = |ceil: Dec| {
             // Clamp the `ceil` to `max_change` and convert to an int
-            let ceil = (cmp::min(max_change, ceil) * scale())
-                .abs()
-                .as_u128();
+            let ceil = (cmp::min(max_change, ceil) * scale()).abs().as_u128();
             (1..ceil).prop_map(|c|
                 // Convert back from an int
                  Dec::try_from(c).unwrap() / scale())

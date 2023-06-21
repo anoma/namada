@@ -1021,14 +1021,17 @@ fn test_slashes_with_unbonding_aux(
         .rate;
     println!("Slash 0 rate {slash_rate_0}, slash 1 rate {slash_rate_1}");
 
-    let expected_withdrawn_amount = Dec::from((Dec::one() - slash_rate_1)
-        * (Dec::one() - slash_rate_0) * unbond_amount);
+    let expected_withdrawn_amount = Dec::from(
+        (Dec::one() - slash_rate_1)
+            * (Dec::one() - slash_rate_0)
+            * unbond_amount,
+    );
     // Allow some rounding error, 1 NAMNAM per each slash
-    let rounding_error_tolerance = Dec::new(2, NATIVE_MAX_DECIMAL_PLACES).unwrap();
+    let rounding_error_tolerance =
+        Dec::new(2, NATIVE_MAX_DECIMAL_PLACES).unwrap();
     assert!(
-        dbg!(
-            expected_withdrawn_amount.abs_diff(&Dec::from(withdrawn_tokens))
-        ) <= rounding_error_tolerance
+        dbg!(expected_withdrawn_amount.abs_diff(&Dec::from(withdrawn_tokens)))
+            <= rounding_error_tolerance
     );
 
     // TODO: finish once implemented
