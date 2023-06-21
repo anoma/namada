@@ -1270,7 +1270,10 @@ mod test_process_proposal {
         ))));
         new_wrapper.encrypt(&Default::default());
         new_wrapper.add_section(Section::Signature(Signature::new(
-            vec![new_wrapper.header_hash(), new_wrapper.sections[0].get_hash()],
+            vec![
+                new_wrapper.header_hash(),
+                new_wrapper.sections[0].get_hash(),
+            ],
             &keypair,
         )));
 

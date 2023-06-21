@@ -8,7 +8,6 @@ use std::io::ErrorKind;
 #[cfg(feature = "std")]
 use std::io::Write;
 
-use sha2::{Digest, Sha256};
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
 use itertools::Itertools;
@@ -21,6 +20,7 @@ use namada_core::types::token::{self, Amount};
 use namada_core::types::transaction::{pos, MIN_FEE};
 use prost::Message;
 use serde::{Deserialize, Serialize};
+use sha2::Digest;
 use zeroize::Zeroizing;
 
 use crate::ibc::applications::transfer::msgs::transfer::{
@@ -198,10 +198,7 @@ pub async fn sign_tx<
     let keypair = tx_signer::<C, U>(client, wallet, args, default).await?;
     // Sign over the transaction data and code
     tx.add_section(Section::Signature(Signature::new(
-        vec![
-            *tx.data_sechash(),
-            *tx.code_sechash(),
-        ],
+        vec![*tx.data_sechash(), *tx.code_sechash()],
         &keypair,
     )));
 
@@ -360,10 +357,7 @@ pub async fn sign_wrapper<
     for section in &tx.sections {
         sec_hashes.push(section.get_hash());
     }
-    tx.add_section(Section::Signature(Signature::new(
-        sec_hashes,
-        keypair,
-    )));
+    tx.add_section(Section::Signature(Signature::new(sec_hashes, keypair)));
     // We use this to determine when the wrapper tx makes it on-chain
     let wrapper_hash = tx.header_hash().to_string();
     // We use this to determine when the decrypted inner tx makes it

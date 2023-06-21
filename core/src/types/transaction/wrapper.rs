@@ -313,10 +313,7 @@ pub mod wrapper_tx {
             let mut encrypted_tx = wrapper.clone();
             encrypted_tx.encrypt(&Default::default());
             wrapper.add_section(Section::Signature(Signature::new(
-                vec![
-                    wrapper.header_hash(),
-                    wrapper.sections[0].get_hash(),
-                ],
+                vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
                 &keypair,
             )));
             assert!(encrypted_tx.validate_ciphertext());
@@ -351,10 +348,7 @@ pub mod wrapper_tx {
             wrapper.set_data_sechash(Hash([0u8; 32]));
             wrapper.encrypt(&Default::default());
             wrapper.add_section(Section::Signature(Signature::new(
-                vec![
-                    wrapper.header_hash(),
-                    wrapper.sections[0].get_hash(),
-                ],
+                vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
                 &keypair,
             )));
             assert!(wrapper.validate_ciphertext());
@@ -394,10 +388,7 @@ pub mod wrapper_tx {
             tx.encrypt(&Default::default());
 
             tx.add_section(Section::Signature(Signature::new(
-                vec![
-                    tx.header_hash(),
-                    tx.sections[0].get_hash(),
-                ],
+                vec![tx.header_hash(), tx.sections[0].get_hash()],
                 &keypair,
             )));
 

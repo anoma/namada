@@ -22,7 +22,6 @@ use namada::types::address::Address;
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
-use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::storage::{Epoch, Key};
 use namada::types::token;
@@ -31,7 +30,7 @@ use namada::types::transaction::governance::{
 };
 use namada::types::transaction::{InitValidator, TxType};
 use rust_decimal::Decimal;
-use sha2::{Digest as Sha2Digest, Sha256};
+use sha2::Digest as Sha2Digest;
 use tendermint_rpc::HttpClient;
 
 use super::rpc;

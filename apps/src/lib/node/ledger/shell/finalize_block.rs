@@ -1216,7 +1216,10 @@ mod test_finalize_block {
             ));
             wrapper_tx.encrypt(&Default::default());
             wrapper_tx.add_section(Section::Signature(Signature::new(
-                vec![wrapper_tx.header_hash(), wrapper_tx.sections[0].get_hash()],
+                vec![
+                    wrapper_tx.header_hash(),
+                    wrapper_tx.sections[0].get_hash(),
+                ],
                 &keypair,
             )));
             valid_txs.push(wrapper_tx.clone());

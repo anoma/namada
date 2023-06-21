@@ -256,10 +256,9 @@ mod test_process_tx {
             .clone();
         outer_tx.validate_header().expect("Test failed");
         match outer_tx.header().tx_type {
-            TxType::Raw => assert_eq!(
-                code_sec.get_hash(),
-                outer_tx.header.code_hash,
-            ),
+            TxType::Raw => {
+                assert_eq!(code_sec.get_hash(), outer_tx.header.code_hash,)
+            }
             _ => panic!("Test failed: Expected Raw Tx"),
         }
     }
@@ -280,14 +279,8 @@ mod test_process_tx {
         tx.validate_header().expect("Test failed");
         match tx.header().tx_type {
             TxType::Raw => {
-                assert_eq!(
-                    code_sec.get_hash(),
-                    tx.header().code_hash,
-                );
-                assert_eq!(
-                    data_sec.get_hash(),
-                    tx.header().data_hash,
-                );
+                assert_eq!(code_sec.get_hash(), tx.header().code_hash,);
+                assert_eq!(data_sec.get_hash(), tx.header().data_hash,);
             }
             _ => panic!("Test failed: Expected Raw Tx"),
         }
@@ -312,14 +305,8 @@ mod test_process_tx {
         tx.validate_header().expect("Test failed");
         match tx.header().tx_type {
             TxType::Raw => {
-                assert_eq!(
-                    code_sec.get_hash(),
-                    tx.header().code_hash,
-                );
-                assert_eq!(
-                    data_sec.get_hash(),
-                    tx.header().data_hash,
-                );
+                assert_eq!(code_sec.get_hash(), tx.header().code_hash,);
+                assert_eq!(data_sec.get_hash(), tx.header().data_hash,);
             }
             _ => panic!("Test failed: Expected Raw Tx"),
         }
@@ -407,14 +394,8 @@ fn test_process_tx_decrypted_unsigned() {
             #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: _,
         }) => {
-            assert_eq!(
-                tx.header().code_hash,
-                code_sec.get_hash(),
-            );
-            assert_eq!(
-                tx.header().data_hash,
-                data_sec.get_hash(),
-            );
+            assert_eq!(tx.header().code_hash, code_sec.get_hash(),);
+            assert_eq!(tx.header().data_hash, data_sec.get_hash(),);
         }
         _ => panic!("Test failed"),
     }

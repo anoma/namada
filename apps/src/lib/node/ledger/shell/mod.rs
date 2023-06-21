@@ -1360,7 +1360,10 @@ mod test_mempool_validate {
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
         invalid_wrapper.encrypt(&Default::default());
         invalid_wrapper.add_section(Section::Signature(Signature::new(
-            vec![invalid_wrapper.header_hash(), invalid_wrapper.sections[0].get_hash()],
+            vec![
+                invalid_wrapper.header_hash(),
+                invalid_wrapper.sections[0].get_hash(),
+            ],
             &keypair,
         )));
 

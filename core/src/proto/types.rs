@@ -866,7 +866,11 @@ impl Tx {
 
     /// Get the code designated by the transaction code hash in the header
     pub fn code(&self) -> Option<Vec<u8>> {
-        match self.get_section(self.code_sechash()).as_ref().map(Cow::as_ref) {
+        match self
+            .get_section(self.code_sechash())
+            .as_ref()
+            .map(Cow::as_ref)
+        {
             Some(Section::Code(section)) => section.code.id(),
             _ => None,
         }
@@ -900,7 +904,11 @@ impl Tx {
 
     /// Get the data designated by the transaction data hash in the header
     pub fn data(&self) -> Option<Vec<u8>> {
-        match self.get_section(self.data_sechash()).as_ref().map(Cow::as_ref) {
+        match self
+            .get_section(self.data_sechash())
+            .as_ref()
+            .map(Cow::as_ref)
+        {
             Some(Section::Data(data)) => Some(data.data.clone()),
             _ => None,
         }
@@ -930,7 +938,7 @@ impl Tx {
                     // Ensure that all the sections the signature signs over are
                     // present
                     for target in &sig_sec.targets {
-                        if self.get_section(&target).is_none() {
+                        if self.get_section(target).is_none() {
                             return Err(VerifySigError::MissingData);
                         }
                     }
@@ -991,7 +999,8 @@ impl Tx {
         // Iterate backwrds to sidestep the effects of deletion on indexing
         for i in (0..self.sections.len()).rev() {
             match &self.sections[i] {
-                Section::Signature(sig) if sig.targets.contains(&header_hash) => {}
+                Section::Signature(sig)
+                    if sig.targets.contains(&header_hash) => {}
                 // Add eligible section to the list of sections to encrypt
                 _ => plaintexts.push(self.sections.remove(i)),
             }
