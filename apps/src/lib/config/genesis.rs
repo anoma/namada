@@ -138,22 +138,16 @@ pub mod genesis_config {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct GovernanceParamsConfig {
         // Min funds to stake to submit a proposal
-        // XXX: u64 doesn't work with toml-rs!
         pub min_proposal_fund: u64,
         // Maximum size of proposal in kibibytes (KiB)
-        // XXX: u64 doesn't work with toml-rs!
         pub max_proposal_code_size: u64,
         // Minimum proposal period length in epochs
-        // XXX: u64 doesn't work with toml-rs!
         pub min_proposal_period: u64,
         // Maximum proposal period length in epochs
-        // XXX: u64 doesn't work with toml-rs!
         pub max_proposal_period: u64,
         // Maximum number of characters in the proposal content
-        // XXX: u64 doesn't work with toml-rs!
         pub max_proposal_content_size: u64,
         // Minimum number of epoch between end and grace epoch
-        // XXX: u64 doesn't work with toml-rs!
         pub min_proposal_grace_epochs: u64,
     }
 
@@ -180,10 +174,8 @@ pub mod genesis_config {
         // Validator address (default: generate).
         pub address: Option<String>,
         // Total number of tokens held at genesis.
-        // XXX: u64 doesn't work with toml-rs!
         pub tokens: Option<u64>,
         // Unstaked balance at genesis.
-        // XXX: u64 doesn't work with toml-rs!
         pub non_staked_balance: Option<u64>,
         /// Commission rate charged on rewards for delegators (bounded inside
         /// 0-1)
@@ -206,7 +198,6 @@ pub mod genesis_config {
         // Filename of token account VP. (default: token VP)
         pub vp: Option<String>,
         // Initial balances held by accounts defined elsewhere.
-        // XXX: u64 doesn't work with toml-rs!
         pub balances: Option<HashMap<String, u64>>,
     }
 
@@ -244,7 +235,6 @@ pub mod genesis_config {
         /// serialization overhead in Tendermint blocks.
         pub max_proposal_bytes: ProposalBytes,
         /// Minimum number of blocks per epoch.
-        // XXX: u64 doesn't work with toml-rs!
         pub min_num_of_blocks: u64,
         /// Maximum duration per block (in seconds).
         // TODO: this is i64 because datetime wants it
@@ -271,39 +261,33 @@ pub mod genesis_config {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct PosParamsConfig {
         // Maximum number of consensus validators.
-        // XXX: u64 doesn't work with toml-rs!
         pub max_validator_slots: u64,
         // Pipeline length (in epochs).
-        // XXX: u64 doesn't work with toml-rs!
         pub pipeline_len: u64,
         // Unbonding length (in epochs).
-        // XXX: u64 doesn't work with toml-rs!
         pub unbonding_len: u64,
         // Votes per token.
-        // XXX: u64 doesn't work with toml-rs!
         pub tm_votes_per_token: Decimal,
         // Reward for proposing a block.
-        // XXX: u64 doesn't work with toml-rs!
         pub block_proposer_reward: Decimal,
         // Reward for voting on a block.
-        // XXX: u64 doesn't work with toml-rs!
         pub block_vote_reward: Decimal,
         // Maximum staking APY
-        // XXX: u64 doesn't work with toml-rs!
         pub max_inflation_rate: Decimal,
         // Target ratio of staked NAM tokens to total NAM tokens
         pub target_staked_ratio: Decimal,
         // Portion of a validator's stake that should be slashed on a
         // duplicate vote.
-        // XXX: u64 doesn't work with toml-rs!
         pub duplicate_vote_min_slash_rate: Decimal,
         // Portion of a validator's stake that should be slashed on a
         // light client attack.
-        // XXX: u64 doesn't work with toml-rs!
         pub light_client_attack_min_slash_rate: Decimal,
         /// Number of epochs above and below (separately) the current epoch to
         /// consider when doing cubic slashing
         pub cubic_slashing_window_length: u64,
+        /// The minimum amount of bonded tokens that a validator needs to be in
+        /// either the `consensus` or `below_capacity` validator sets
+        pub validator_stake_threshold: token::Amount,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -647,6 +631,7 @@ pub mod genesis_config {
             duplicate_vote_min_slash_rate,
             light_client_attack_min_slash_rate,
             cubic_slashing_window_length,
+            validator_stake_threshold,
         } = pos_params;
         let pos_params = PosParams {
             max_validator_slots,
@@ -660,6 +645,7 @@ pub mod genesis_config {
             duplicate_vote_min_slash_rate,
             light_client_attack_min_slash_rate,
             cubic_slashing_window_length,
+            validator_stake_threshold,
         };
 
         let mut genesis = Genesis {
