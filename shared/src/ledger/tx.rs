@@ -361,8 +361,6 @@ pub async fn submit_reveal_pk_aux<
     // submit_tx without signing the inner tx
     let keypair = if let Some(signing_key) = &args.signing_key {
         Ok(signing_key.clone())
-    } else if let Some(signer) = args.signer.as_ref() {
-        find_keypair(client, wallet, signer, args.password.clone()).await
     } else {
         find_keypair(client, wallet, &addr, args.password.clone()).await
     }?;

@@ -138,8 +138,6 @@ pub async fn tx_signer<
     // Override the default signing key source if possible
     let default = if let Some(signing_key) = &args.signing_key {
         TxSigningKey::WalletKeypair(signing_key.clone())
-    } else if let Some(signer) = &args.signer {
-        TxSigningKey::WalletAddress(signer.clone())
     } else {
         default
     };

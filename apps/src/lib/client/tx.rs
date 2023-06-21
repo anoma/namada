@@ -630,12 +630,6 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
         .tx
         .chain_id
         .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
-    let signer = if let Some(addr) = &args.tx.signer {
-        addr
-    } else {
-        eprintln!("Missing mandatory argument --signer.");
-        safe_exit(1)
-    };
 
     // Construct vote
     let proposal_vote = match args.vote.to_ascii_lowercase().as_str() {
@@ -712,20 +706,23 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
             safe_exit(1)
         }
 
-        let signing_key =
-            find_keypair::<C, CliWalletUtils>(client, &mut ctx.wallet, signer)
-                .await?;
+        let signing_key = find_keypair::<C, CliWalletUtils>(
+            client,
+            &mut ctx.wallet,
+            &args.voter_address,
+        )
+        .await?;
         let offline_vote = OfflineVote::new(
             &proposal,
             proposal_vote,
-            signer.clone(),
+            args.voter_address.clone(),
             &signing_key,
         );
 
         let proposal_vote_filename = proposal_file_path
             .parent()
             .expect("No parent found")
-            .join(format!("proposal-vote-{}", &signer.to_string()));
+            .join(format!("proposal-vote-{}", &args.voter_address.to_string()));
         let out = File::create(&proposal_vote_filename).unwrap();
         match serde_json::to_writer_pretty(out, &offline_vote) {
             Ok(_) => {
@@ -743,7 +740,7 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
     } else {
         let current_epoch = rpc::query_and_print_epoch(client).await;
 
-        let voter_address = signer.clone();
+        let voter_address = args.voter_address.clone();
         let proposal_id = args.proposal_id.unwrap();
         let proposal_start_epoch_key =
             gov_storage::get_voting_start_epoch_key(proposal_id);
@@ -867,7 +864,7 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
                     ctx,
                     &args.tx,
                     tx,
-                    TxSigningKey::WalletAddress(signer.clone()),
+                    TxSigningKey::WalletAddress(args.voter_address.clone()),
                     #[cfg(not(feature = "mainnet"))]
                     false,
                 )

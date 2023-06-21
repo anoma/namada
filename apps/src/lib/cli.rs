@@ -1891,7 +1891,6 @@ pub mod args {
     pub const RECEIVER: Arg<String> = arg("receiver");
     pub const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
-    pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
     pub const SIGNING_KEY_OPT: ArgOpt<WalletKeypair> = SIGNING_KEY.opt();
     pub const SIGNING_KEY: Arg<WalletKeypair> = arg("signing-key");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
@@ -2589,6 +2588,8 @@ pub mod args {
         pub proposal_id: Option<u64>,
         /// The vote
         pub vote: String,
+        /// The address of the voter
+        pub voter_address: C::Address,
         /// PGF proposal
         pub proposal_pgf: Option<String>,
         /// ETH proposal
@@ -2607,6 +2608,7 @@ pub mod args {
                 tx: self.tx.to_sdk(ctx),
                 proposal_id: self.proposal_id,
                 vote: self.vote,
+                voter_address: ctx.get(&self.voter_address),
                 offline: self.offline,
                 proposal_data: self.proposal_data,
                 tx_code_path: self.tx_code_path.to_path_buf(),
@@ -2623,6 +2625,7 @@ pub mod args {
             let proposal_pgf = PROPOSAL_VOTE_PGF_OPT.parse(matches);
             let proposal_eth = PROPOSAL_VOTE_ETH_OPT.parse(matches);
             let vote = PROPOSAL_VOTE.parse(matches);
+            let voter_address = ADDRESS.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
             let proposal_data = DATA_PATH_OPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_VOTE_PROPOSAL);
@@ -2634,6 +2637,7 @@ pub mod args {
                 proposal_pgf,
                 proposal_eth,
                 offline,
+                voter_address,
                 proposal_data,
                 tx_code_path,
             }
@@ -3297,7 +3301,6 @@ pub mod args {
                 fee_token: ctx.get(&self.fee_token),
                 gas_limit: self.gas_limit,
                 signing_key: self.signing_key.map(|x| ctx.get_cached(&x)),
-                signer: self.signer.map(|x| ctx.get(&x)),
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
                 expiration: self.expiration,
@@ -3352,25 +3355,10 @@ pub mod args {
                  equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
                  12:12:12Z\n2012-  12-12T12:  12:12Z",
             ))
-            .arg(
-                SIGNING_KEY_OPT
-                    .def()
-                    .about(
-                        "Sign the transaction with the key for the given \
-                         public key, public key hash or alias from your \
-                         wallet.",
-                    )
-                    .conflicts_with(SIGNER.name),
-            )
-            .arg(
-                SIGNER
-                    .def()
-                    .about(
-                        "Sign the transaction with the keypair of the public \
-                         key of the given address.",
-                    )
-                    .conflicts_with(SIGNING_KEY_OPT.name),
-            )
+            .arg(SIGNING_KEY_OPT.def().about(
+                "Sign the transaction with the key for the given public key, \
+                 public key hash or alias from your wallet.",
+            ))
         }
 
         fn parse(matches: &ArgMatches) -> Self {
@@ -3386,7 +3374,6 @@ pub mod args {
             let gas_limit = GAS_LIMIT.parse(matches).into();
             let expiration = EXPIRATION_OPT.parse(matches);
             let signing_key = SIGNING_KEY_OPT.parse(matches);
-            let signer = SIGNER.parse(matches);
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;
@@ -3403,7 +3390,6 @@ pub mod args {
                 gas_limit,
                 expiration,
                 signing_key,
-                signer,
                 tx_reveal_code_path,
                 password,
                 chain_id,

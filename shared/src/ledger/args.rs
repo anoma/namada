@@ -419,8 +419,6 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub chain_id: Option<ChainId>,
     /// Sign the tx with the key for the given alias from your wallet
     pub signing_key: Option<C::Keypair>,
-    /// Sign the tx with the keypair of the public key of the given address
-    pub signer: Option<C::Address>,
     /// Path to the TX WASM code file to reveal PK
     pub tx_reveal_code_path: PathBuf,
     /// Password to decrypt key
