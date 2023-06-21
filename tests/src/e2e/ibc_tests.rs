@@ -771,6 +771,7 @@ fn transfer_received_token(
         .to_string();
 
     let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let amount = Amount::native_whole(50000).to_string_native();
     let tx_args = [
         "transfer",
         "--source",
@@ -782,7 +783,7 @@ fn transfer_received_token(
         "--sub-prefix",
         &sub_prefix,
         "--amount",
-        "50000000000",
+        &amount,
         "--gas-amount",
         "0",
         "--gas-limit",

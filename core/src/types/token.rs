@@ -739,7 +739,8 @@ impl TryFrom<IbcAmount> for Amount {
         // IBCAMOUNT::MAX OR SIMILAR) if amount > u64::MAX.into() {
         //    return Err(AmountParseError::InvalidRange);
         //}
-        DenominatedAmount::from_str(&amount.to_string()).map(|a| a.amount)
+        DenominatedAmount::from_str(&amount.to_string())
+            .map(|a| a.amount * NATIVE_SCALE)
     }
 }
 

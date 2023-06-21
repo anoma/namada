@@ -1249,12 +1249,6 @@ mod tests {
         let (port_id, channel_id, channel_writes) =
             ibc::prepare_opened_channel(&conn_id, false);
         writes.extend(channel_writes);
-        // the origin-specific token
-        let denom = format!("{}/{}/{}", port_id, channel_id, token);
-        let key_prefix = ibc_storage::ibc_token_prefix(denom).unwrap();
-        let key = token::multitoken_balance_key(&key_prefix, &receiver);
-        let init_bal = Amount::from_uint(1_000_000_000u64, 0).unwrap();
-        writes.insert(key, init_bal.try_to_vec().unwrap());
 
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
@@ -1296,8 +1290,8 @@ mod tests {
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
         // Check if the token was minted
-        let mint = token::multitoken_balance_key(
-            &key_prefix,
+        let mint = token::balance_key(
+            &token,
             &address::Address::Internal(address::InternalAddress::IbcMint),
         );
         let result = ibc::validate_token_vp_from_tx(&env, &tx, &mint);

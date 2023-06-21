@@ -826,7 +826,7 @@ where
                 println!(
                     "Amount {} withdrawable starting from epoch {}",
                     latest_withdraw_amount_post.to_string_native(),
-                    latest_withdraw_epoch_post
+                    latest_withdraw_epoch_post,
                 );
             }
         }
@@ -834,7 +834,7 @@ where
         println!(
             "Amount {} withdrawable starting from epoch {}",
             latest_withdraw_amount_post.to_string_native(),
-            latest_withdraw_epoch_post
+            latest_withdraw_epoch_post,
         );
     }
 
@@ -985,10 +985,14 @@ where
         Some(sp) => sp.to_string().replace(RESERVED_ADDRESS_PREFIX, ""),
         None => token.to_string(),
     };
-    let token = Coin {
-        denom,
-        amount: args.amount.to_string_native(),
-    };
+    let amount = args
+        .amount
+        .to_string_native()
+        .split('.')
+        .next()
+        .expect("invalid amount")
+        .to_string();
+    let token = Coin { denom, amount };
 
     // this height should be that of the destination chain, not this chain
     let timeout_height = match args.timeout_height {
