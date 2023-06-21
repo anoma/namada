@@ -134,7 +134,7 @@ tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "367d8d
 tracing = "0.1.30"
 tracing-log = "0.1.2"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
-wasmparser = "0.83.0"
+wasmparser = "0.107.0"
 winapi = "0.3.9"
 zeroize = {version = "1.5.5", features = ["zeroize_derive"]}
 
