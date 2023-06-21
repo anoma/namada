@@ -104,6 +104,7 @@ impl<'tx> BlockResources<'tx> {
 ///   - DKG encrypted transactions.  
 #[derive(Debug, Default)]
 //FIXME: rename to BlockSpaceGasAllocator or BlockResourcesAllocator or maybe just BlockAllocator
+//FIXME: also rename the files
 pub struct BlockSpaceAllocator<State> {
     /// The current state of the [`BlockSpaceAllocator`] state machine.
     _state: PhantomData<*const State>,
@@ -329,7 +330,6 @@ mod tests {
         decrypted_txs: Vec<TxBytes>,
     }
 
-    //FIXME: add more tests here for the gas
     /// Check that at most 1/3 of the block space is
     /// reserved for each kind of tx type, in the
     /// allocator's common path.
@@ -422,6 +422,17 @@ mod tests {
             bins.try_alloc(BlockResources::new(b"arbitrary tx bytes", 0)),
             Err(AllocFailure::Rejected { .. })
         );
+
+        // Reset space bin
+        bins.encrypted_txs.space.occupied = 0;
+        // Fill the entire gas bin
+        bins.encrypted_txs.gas.occupied = bins.encrypted_txs.gas.allotted;
+
+        // Make sure we can't dump any new wncrypted txs in the bin
+        assert_matches!(
+            bins.try_alloc(BlockResources::new(b"arbitrary tx bytes", 1)),
+            Err(AllocFailure::Rejected { .. })
+        )
     }
 
     /// Implementation of [`test_initial_bin_capacity`].

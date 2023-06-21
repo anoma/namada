@@ -60,7 +60,7 @@ pub enum WithoutEncryptedTxs {}
 
 /// Try to allocate a new transaction on a [`BlockSpaceAllocator`] state.
 pub trait TryAlloc {
-    type Resource<'tx>; //FIXME: should this lifetime be bound to swelf?
+    type Resource<'tx>;
 
     /// Try to allocate space for a new transaction.
     fn try_alloc<'tx>(
