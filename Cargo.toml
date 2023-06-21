@@ -68,9 +68,9 @@ ethabi = "18.0.0"
 ethers = "2.0.0"
 expectrl = "0.7.0"
 eyre = "0.6.5"
+fd-lock = "3.0.12"
 ferveo = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
-file-lock = "2.0.2"
 file-serve = "0.2.0"
 flate2 = "1.0.22"
 fs_extra = "1.2.0"

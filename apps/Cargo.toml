@@ -90,9 +90,9 @@ ethbridge-bridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", ta
 ethbridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.18.0"}
 ethbridge-governance-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.18.0"}
 eyre.workspace = true
+fd-lock.workspace = true
 ferveo-common.workspace = true
 ferveo.workspace = true
-file-lock.workspace = true
 flate2.workspace = true
 futures.workspace = true
 itertools.workspace = true
