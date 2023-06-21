@@ -189,7 +189,9 @@ fn test_init_genesis_aux(
         let state = validator_state_handle(&validator.address)
             .get(&s, start_epoch, &params)
             .unwrap();
-        if (i as u64) < params.max_validator_slots {
+        if (i as u64) < params.max_validator_slots
+            && validator.tokens >= params.validator_stake_threshold
+        {
             // should be in consensus set
             let handle = consensus_validator_set_handle().at(&start_epoch);
             assert!(handle.at(&validator.tokens).iter(&s).unwrap().any(
@@ -1142,7 +1144,7 @@ fn test_validator_sets() {
     let ((val5, pk5), stake5) = (gen_validator(), token::Amount::whole(100));
     let ((val6, pk6), stake6) = (gen_validator(), token::Amount::whole(1));
     let ((val7, pk7), stake7) = (gen_validator(), token::Amount::whole(1));
-    println!("val1: {val1}, {pk1}, {stake1}");
+    println!("\nval1: {val1}, {pk1}, {stake1}");
     println!("val2: {val2}, {pk2}, {stake2}");
     println!("val3: {val3}, {pk3}, {stake3}");
     println!("val4: {val4}, {pk4}, {stake4}");

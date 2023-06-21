@@ -2468,7 +2468,7 @@ where
             ) = validator.unwrap();
 
             let new_state = validator_state_handle(&address)
-                .get(storage, current_epoch, params)
+                .get(storage, next_epoch, params)
                 .unwrap();
 
             let prev_tm_voting_power = Lazy::new(|| {
