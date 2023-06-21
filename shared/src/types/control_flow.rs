@@ -42,6 +42,14 @@ pub trait ProceedOrElse<T> {
     {
         self.proceed_or_else(move || error)
     }
+
+    #[inline]
+    fn proceed(self) -> T
+    where
+        Self: Sized,
+    {
+        self.proceed_or(()).expect("Halted execution")
+    }
 }
 
 impl<T> ProceedOrElse<T> for Halt<T> {
