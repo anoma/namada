@@ -2417,9 +2417,9 @@ impl AbstractPosState {
                         "total unbonded {}",
                         total_unbonded.to_string_native()
                     );
-                    let this_slash = total_rate * stake_at_infraction
-                        - total_unbonded.change();
-                    let diff_slashed_amount = this_slash - last_slash;
+                    let this_slash = total_rate
+                        * (stake_at_infraction - total_unbonded.change());
+                    let diff_slashed_amount = last_slash - this_slash;
                     tracing::debug!(
                         "Offset {} diff_slashed_amount {}",
                         offset,
