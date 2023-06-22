@@ -3379,6 +3379,7 @@ pub mod args {
                     )
                     .conflicts_with(SIGNING_KEY_OPT.name),
             )
+            .arg(CHAIN_ID_OPT.def().help("The chain ID."))
         }
 
         fn parse(matches: &ArgMatches) -> Self {
