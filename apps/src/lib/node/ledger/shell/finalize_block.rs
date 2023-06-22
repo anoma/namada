@@ -374,7 +374,9 @@ where
                         }
                         for ibc_event in &result.ibc_events {
                             // Add the IBC event besides the tx_event
-                            let event = Event::from(ibc_event.clone());
+                            let mut event = Event::from(ibc_event.clone());
+                            // Add the height for IBC event query
+                            event["height"] = height.to_string();
                             response.events.push(event);
                         }
                         match serde_json::to_string(
@@ -895,7 +897,6 @@ fn pos_votes_from_abci(
 #[cfg(test)]
 mod test_finalize_block {
     use std::collections::{BTreeMap, BTreeSet};
-    use std::str::FromStr;
 
     use data_encoding::HEXUPPER;
     use namada::ledger::parameters::EpochDuration;
@@ -1343,12 +1344,11 @@ mod test_finalize_block {
 
         // Collect all storage key-vals into a sorted map
         let store_block_state = |shell: &TestShell| -> BTreeMap<_, _> {
-            let prefix: Key = FromStr::from_str("").unwrap();
             shell
                 .wl_storage
                 .storage
                 .db
-                .iter_prefix(&prefix)
+                .iter_optional_prefix(None)
                 .map(|(key, val, _gas)| (key, val))
                 .collect()
         };

@@ -340,7 +340,20 @@ pub trait DBIter<'iter> {
     ///
     /// Read account subspace key value pairs with the given prefix from the DB,
     /// ordered by the storage keys.
-    fn iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter;
+    fn iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter {
+        self.iter_optional_prefix(Some(prefix))
+    }
+
+    /// Iterate over all subspace keys
+    fn iter_all(&'iter self) -> Self::PrefixIter {
+        self.iter_optional_prefix(None)
+    }
+
+    /// Iterate over subspace keys, with optional prefix
+    fn iter_optional_prefix(
+        &'iter self,
+        prefix: Option<&Key>,
+    ) -> Self::PrefixIter;
 
     /// Read results subspace key value pairs from the DB
     fn iter_results(&'iter self) -> Self::PrefixIter;
@@ -587,7 +600,10 @@ where
         &self,
         prefix: &Key,
     ) -> (<D as DBIter<'_>>::PrefixIter, u64) {
-        (self.db.iter_prefix(prefix), prefix.len() as _)
+        (
+            self.db.iter_optional_prefix(Some(prefix)),
+            prefix.len() as _,
+        )
     }
 
     /// Returns a prefix iterator and the gas cost

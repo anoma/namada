@@ -60,6 +60,9 @@ struct AbstractPosState {
     /// Bonds delta values. The outer key for Epoch is pipeline offset from
     /// epoch in which the bond is applied
     bonds: BTreeMap<BondId, BTreeMap<Epoch, token::Change>>,
+    /// Total bonded tokens to a validator in each epoch. This is never
+    /// decremented and used for slashing computations.
+    total_bonded: BTreeMap<Address, BTreeMap<Epoch, token::Change>>,
     /// Validator stakes. These are NOT deltas.
     /// Pipelined.
     validator_stakes: BTreeMap<Epoch, BTreeMap<Address, token::Change>>,
@@ -249,13 +252,7 @@ impl StateMachineTest for ConcretePosState {
                 // This must be ensured by both transitions generator and
                 // pre-conditions!
                 assert!(
-                    crate::is_validator(
-                        &state.s,
-                        &id.validator,
-                        &params,
-                        pipeline,
-                    )
-                    .unwrap(),
+                    crate::is_validator(&state.s, &id.validator).unwrap(),
                     "{} is not a validator",
                     id.validator
                 );
@@ -1116,6 +1113,7 @@ impl ReferenceStateMachine for AbstractPosState {
                         .rev()
                         .collect(),
                     bonds: Default::default(),
+                    total_bonded: Default::default(),
                     unbonds: Default::default(),
                     validator_stakes: Default::default(),
                     consensus_set: Default::default(),
@@ -1928,6 +1926,14 @@ impl AbstractPosState {
         if *bond == 0 {
             bonds.remove(&pipeline_epoch);
         }
+        // Update total_bonded
+        let total_bonded = self
+            .total_bonded
+            .entry(id.validator.clone())
+            .or_default()
+            .entry(pipeline_epoch)
+            .or_default();
+        *total_bonded += change;
     }
 
     fn update_state_with_unbond(&mut self, id: &BondId, change: token::Change) {
@@ -2251,8 +2257,11 @@ impl AbstractPosState {
                 tracing::debug!("Total rate: {}", total_rate);
 
                 let mut total_unbonded = token::Amount::default();
+                let mut sum_post_bonds = token::Change::default();
+
                 for epoch in (infraction_epoch.0 + 1)..self.epoch.0 {
                     tracing::debug!("\nEpoch {}", epoch);
+                    let mut recent_unbonds = token::Change::default();
                     let unbond_records = self
                         .unbond_records
                         .entry(validator.clone())
@@ -2266,43 +2275,45 @@ impl AbstractPosState {
                             &unbond_amount,
                             &start
                         );
-                        if start > infraction_epoch {
-                            continue;
-                        }
-                        let slashes_for_this_unbond = self
-                            .validator_slashes
-                            .get(&validator)
-                            .cloned()
-                            .unwrap_or_default()
-                            .iter()
-                            .filter(|&s| {
-                                start <= s.epoch
-                                    && s.epoch
-                                        + self.params.unbonding_len
-                                        + self
-                                            .params
-                                            .cubic_slashing_window_length
-                                        < infraction_epoch
-                            })
-                            .cloned()
-                            .fold(
-                                BTreeMap::<Epoch, Decimal>::new(),
-                                |mut acc, s| {
-                                    let cur = acc.entry(s.epoch).or_default();
-                                    *cur += s.rate;
-                                    acc
-                                },
+                        if start <= infraction_epoch {
+                            let slashes_for_this_unbond = self
+                                .validator_slashes
+                                .get(&validator)
+                                .cloned()
+                                .unwrap_or_default()
+                                .iter()
+                                .filter(|&s| {
+                                    start <= s.epoch
+                                        && s.epoch
+                                            + self.params.unbonding_len
+                                            + self
+                                                .params
+                                                .cubic_slashing_window_length
+                                            < infraction_epoch
+                                })
+                                .cloned()
+                                .fold(
+                                    BTreeMap::<Epoch, Decimal>::new(),
+                                    |mut acc, s| {
+                                        let cur =
+                                            acc.entry(s.epoch).or_default();
+                                        *cur += s.rate;
+                                        acc
+                                    },
+                                );
+                            tracing::debug!(
+                                "Slashes for this unbond: {:?}",
+                                slashes_for_this_unbond
                             );
-                        tracing::debug!(
-                            "Slashes for this unbond: {:?}",
-                            slashes_for_this_unbond
-                        );
-                        total_unbonded += compute_amount_after_slashing(
-                            &slashes_for_this_unbond,
-                            unbond_amount,
-                            self.params.unbonding_len,
-                            self.params.cubic_slashing_window_length,
-                        );
+                            total_unbonded += compute_amount_after_slashing(
+                                &slashes_for_this_unbond,
+                                unbond_amount,
+                                self.params.unbonding_len,
+                                self.params.cubic_slashing_window_length,
+                            );
+                        } else {
+                            recent_unbonds += unbond_amount.change();
+                        }
 
                         tracing::debug!(
                             "Total unbonded (epoch {}) w slashing = {}",
@@ -2310,6 +2321,13 @@ impl AbstractPosState {
                             total_unbonded
                         );
                     }
+                    sum_post_bonds += self
+                        .total_bonded
+                        .get(&validator)
+                        .and_then(|bonded| bonded.get(&Epoch(epoch)))
+                        .cloned()
+                        .unwrap_or_default()
+                        - recent_unbonds;
                 }
                 tracing::debug!("Computing adjusted amounts now");
 
@@ -2320,6 +2338,7 @@ impl AbstractPosState {
                         self.epoch + offset,
                         last_slash
                     );
+                    let mut recent_unbonds = token::Change::default();
                     let unbond_records = self
                         .unbond_records
                         .get(&validator)
@@ -2333,45 +2352,47 @@ impl AbstractPosState {
                             &unbond_amount,
                             &start
                         );
-                        if start > infraction_epoch {
-                            continue;
+                        if start <= infraction_epoch {
+                            let slashes_for_this_unbond = self
+                                .validator_slashes
+                                .get(&validator)
+                                .cloned()
+                                .unwrap_or_default()
+                                .iter()
+                                .filter(|&s| {
+                                    start <= s.epoch
+                                        && s.epoch
+                                            + self.params.unbonding_len
+                                            + self
+                                                .params
+                                                .cubic_slashing_window_length
+                                            < infraction_epoch
+                                })
+                                .cloned()
+                                .fold(
+                                    BTreeMap::<Epoch, Decimal>::new(),
+                                    |mut acc, s| {
+                                        let cur =
+                                            acc.entry(s.epoch).or_default();
+                                        *cur += s.rate;
+                                        acc
+                                    },
+                                );
+                            tracing::debug!(
+                                "Slashes for this unbond: {:?}",
+                                slashes_for_this_unbond
+                            );
+
+                            total_unbonded += compute_amount_after_slashing(
+                                &slashes_for_this_unbond,
+                                unbond_amount,
+                                self.params.unbonding_len,
+                                self.params.cubic_slashing_window_length,
+                            );
+                        } else {
+                            recent_unbonds += unbond_amount.change();
                         }
 
-                        let slashes_for_this_unbond = self
-                            .validator_slashes
-                            .get(&validator)
-                            .cloned()
-                            .unwrap_or_default()
-                            .iter()
-                            .filter(|&s| {
-                                start <= s.epoch
-                                    && s.epoch
-                                        + self.params.unbonding_len
-                                        + self
-                                            .params
-                                            .cubic_slashing_window_length
-                                        < infraction_epoch
-                            })
-                            .cloned()
-                            .fold(
-                                BTreeMap::<Epoch, Decimal>::new(),
-                                |mut acc, s| {
-                                    let cur = acc.entry(s.epoch).or_default();
-                                    *cur += s.rate;
-                                    acc
-                                },
-                            );
-                        tracing::debug!(
-                            "Slashes for this unbond: {:?}",
-                            slashes_for_this_unbond
-                        );
-
-                        total_unbonded += compute_amount_after_slashing(
-                            &slashes_for_this_unbond,
-                            unbond_amount,
-                            self.params.unbonding_len,
-                            self.params.cubic_slashing_window_length,
-                        );
                         tracing::debug!(
                             "Total unbonded (offset {}) w slashing = {}",
                             offset,
@@ -2387,7 +2408,7 @@ impl AbstractPosState {
                         total_rate,
                         stake_at_infraction - total_unbonded.change(),
                     );
-                    let diff_slashed_amount = this_slash - last_slash;
+                    let diff_slashed_amount = last_slash - this_slash;
                     tracing::debug!(
                         "Offset {} diff_slashed_amount {}",
                         offset,
@@ -2406,11 +2427,14 @@ impl AbstractPosState {
                     // *validator_stake -= diff_slashed_amount;
 
                     tracing::debug!("Updating ABSTRACT voting powers");
-                    let sum_post_bonds = self.get_validator_bond_sums(
-                        &validator,
-                        infraction_epoch.next(),
-                        self.epoch + offset,
-                    );
+                    sum_post_bonds += self
+                        .total_bonded
+                        .get(&validator)
+                        .and_then(|bonded| bonded.get(&(self.epoch + offset)))
+                        .cloned()
+                        .unwrap_or_default()
+                        - recent_unbonds;
+
                     tracing::debug!("\nUnslashable bonds = {}", sum_post_bonds);
                     let validator_stake_at_offset = self
                         .validator_stakes
@@ -2420,7 +2444,7 @@ impl AbstractPosState {
                         .or_default();
 
                     let slashable_stake_at_offset =
-                        *validator_stake_at_offset - sum_post_bonds.change();
+                        *validator_stake_at_offset - sum_post_bonds;
                     tracing::debug!(
                         "Val stake pre (epoch {}) = {}",
                         self.epoch + offset,
@@ -2430,16 +2454,13 @@ impl AbstractPosState {
                         "Slashable stake at offset = {}",
                         slashable_stake_at_offset
                     );
-                    let change = if slashable_stake_at_offset
-                        - diff_slashed_amount
-                        < 0i128
-                    {
-                        slashable_stake_at_offset
-                    } else {
-                        diff_slashed_amount
-                    };
+                    let change = cmp::max(
+                        -slashable_stake_at_offset,
+                        diff_slashed_amount,
+                    );
+
                     tracing::debug!("Change = {}", change);
-                    *validator_stake_at_offset -= change;
+                    *validator_stake_at_offset += change;
 
                     for os in (offset + 1)..=self.params.pipeline_len {
                         tracing::debug!("Adjust epoch {}", self.epoch + os);
@@ -2449,7 +2470,7 @@ impl AbstractPosState {
                             .or_default()
                             .entry(validator.clone())
                             .or_default();
-                        *offset_stake -= change;
+                        *offset_stake += change;
                         // let mut new_stake =
                         //     *validator_stake - diff_slashed_amount;
                         // if new_stake < 0_i128 {
@@ -2521,28 +2542,6 @@ impl AbstractPosState {
             }
         }
         None
-    }
-
-    fn get_validator_bond_sums(
-        &self,
-        validator: &Address,
-        start_epoch: Epoch,
-        end_epoch: Epoch,
-    ) -> token::Amount {
-        let bonds = self.bonds.iter().filter_map(|(bond_id, bonds)| {
-            if bond_id.validator != validator.clone() {
-                return None;
-            }
-            let desired_bonds = bonds.iter().filter_map(|(start, amount)| {
-                if *start < start_epoch || *start > end_epoch {
-                    return None;
-                }
-                Some(*amount)
-            });
-            let sum: token::Change = desired_bonds.sum();
-            Some(token::Amount::from_change(sum))
-        });
-        bonds.sum()
     }
 
     /// Find the sums of the bonds across all epochs

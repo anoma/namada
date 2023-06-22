@@ -23,6 +23,7 @@ use namada::types::chain::ChainId;
 use namada_apps::client::utils;
 use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
 use namada_apps::{config, wallet};
+use once_cell::sync::Lazy;
 use rand::Rng;
 use serde_json;
 use tempfile::{tempdir, tempdir_in, TempDir};
@@ -167,7 +168,6 @@ pub fn network(
         Some(5),
         &working_dir,
         &test_dir,
-        "validator",
         format!("{}:{}", std::file!(), std::line!()),
     )?;
 
@@ -205,6 +205,7 @@ pub fn network(
         test_dir,
         net,
         genesis,
+        async_runtime: Default::default(),
     })
 }
 
@@ -225,6 +226,7 @@ pub struct Test {
     pub test_dir: TestDir,
     pub net: Network,
     pub genesis: GenesisConfig,
+    pub async_runtime: LazyAsyncRuntime,
 }
 
 #[derive(Debug)]
@@ -283,6 +285,15 @@ impl Drop for Test {
                 path.to_string_lossy()
             );
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct LazyAsyncRuntime(Lazy<tokio::runtime::Runtime>);
+
+impl Default for LazyAsyncRuntime {
+    fn default() -> Self {
+        Self(Lazy::new(|| tokio::runtime::Runtime::new().unwrap()))
     }
 }
 
@@ -394,19 +405,7 @@ impl Test {
         S: AsRef<OsStr>,
     {
         let base_dir = self.get_base_dir(&who);
-        let mode = match &who {
-            Who::NonValidator => "full",
-            Who::Validator(_) => "validator",
-        };
-        run_cmd(
-            bin,
-            args,
-            timeout_sec,
-            &self.working_dir,
-            base_dir,
-            mode,
-            loc,
-        )
+        run_cmd(bin, args, timeout_sec, &self.working_dir, base_dir, loc)
     }
 
     pub fn get_base_dir(&self, who: &Who) -> PathBuf {
@@ -421,22 +420,27 @@ impl Test {
                 .join(config::DEFAULT_BASE_DIR),
         }
     }
+
+    /// Get an async runtime.
+    pub fn async_runtime(&self) -> &tokio::runtime::Runtime {
+        Lazy::force(&self.async_runtime.0)
+    }
 }
 
 /// A helper that should be ran on start of every e2e test case.
 pub fn working_dir() -> PathBuf {
     let working_dir = fs::canonicalize("..").unwrap();
 
-    // Check that tendermint is either on $PATH or `TENDERMINT` env var is set
-    if std::env::var("TENDERMINT").is_err() {
+    // Check that cometbft is either on $PATH or `COMETBFT` env var is set
+    if std::env::var("COMETBFT").is_err() {
         Command::new("which")
-            .arg("tendermint")
+            .arg("cometbft")
             .assert()
             .try_success()
             .expect(
-                "The env variable TENDERMINT must be set and point to a local \
-                 build of the tendermint abci++ branch, or the tendermint \
-                 binary must be on PATH",
+                "The env variable COMETBFT must be set and point to a local \
+                 build of the cometbft abci++ branch, or the cometbft binary \
+                 must be on PATH",
             );
     }
     working_dir
@@ -673,7 +677,6 @@ pub fn run_cmd<I, S>(
     timeout_sec: Option<u64>,
     working_dir: impl AsRef<Path>,
     base_dir: impl AsRef<Path>,
-    mode: &str,
     loc: String,
 ) -> Result<NamadaCmd>
 where
@@ -697,13 +700,9 @@ where
         .env("TM_LOG_LEVEL", "info")
         .env("NAMADA_LOG_COLOR", "false")
         .current_dir(working_dir)
-        .args([
-            "--base-dir",
-            &base_dir.as_ref().to_string_lossy(),
-            "--mode",
-            mode,
-        ])
-        .args(args);
+        .args(["--base-dir", &base_dir.as_ref().to_string_lossy()]);
+
+    run_cmd.args(args);
 
     let args: String =
         run_cmd.get_args().map(|s| s.to_string_lossy()).join(" ");

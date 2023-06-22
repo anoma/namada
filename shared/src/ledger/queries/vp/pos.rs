@@ -1,9 +1,13 @@
+//! Queries router and handlers for PoS validity predicate
+
 use std::collections::{HashMap, HashSet};
 
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::ledger::storage_api::collections::lazy_map;
 use namada_core::ledger::storage_api::OptionExt;
 use namada_proof_of_stake::types::{
-    BondId, BondsAndUnbondsDetails, CommissionPair, Slash, WeightedValidator,
+    BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails, CommissionPair,
+    Slash, WeightedValidator,
 };
 use namada_proof_of_stake::{
     self, below_capacity_validator_set_handle, bond_amount, bond_handle,
@@ -87,6 +91,46 @@ router! {POS,
 
 }
 
+/// Enriched bonds data with extra information calculated from the data queried
+/// from the node.
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema)]
+pub struct Enriched<T> {
+    /// The queried data
+    pub data: T,
+    /// Sum of the bond amounts
+    pub bonds_total: token::Amount,
+    /// Sum of the bond slashed amounts
+    pub bonds_total_slashed: token::Amount,
+    /// Sum of the unbond amounts
+    pub unbonds_total: token::Amount,
+    /// Sum of the unbond slashed amounts
+    pub unbonds_total_slashed: token::Amount,
+    /// Sum ofthe withdrawable amounts
+    pub total_withdrawable: token::Amount,
+}
+
+/// Bonds and unbonds with all details (slashes and rewards, if any) grouped by
+/// their bond IDs enriched with extra information calculated from the data
+/// queried from the node.
+pub type EnrichedBondsAndUnbondsDetails =
+    Enriched<HashMap<BondId, EnrichedBondsAndUnbondsDetail>>;
+
+/// Bonds and unbonds with all details (slashes and rewards, if any) enriched
+/// with extra information calculated from the data queried from the node.
+pub type EnrichedBondsAndUnbondsDetail = Enriched<BondsAndUnbondsDetail>;
+
+impl<T> Enriched<T> {
+    /// The bonds amount reduced by slashes
+    pub fn bonds_total_active(&self) -> token::Amount {
+        self.bonds_total - self.bonds_total_slashed
+    }
+
+    /// The unbonds amount reduced by slashes
+    pub fn unbonds_total_active(&self) -> token::Amount {
+        self.unbonds_total - self.unbonds_total_slashed
+    }
+}
+
 // Handlers that implement the functions via `trait StorageRead`:
 
 /// Find if the given address belongs to a validator account.
@@ -98,13 +142,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let params = namada_proof_of_stake::read_pos_params(ctx.wl_storage)?;
-    namada_proof_of_stake::is_validator(
-        ctx.wl_storage,
-        &addr,
-        &params,
-        ctx.wl_storage.storage.block.epoch,
-    )
+    namada_proof_of_stake::is_validator(ctx.wl_storage, &addr)
 }
 
 /// Find if the given address is a delegator
@@ -323,21 +361,19 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let handle = unbond_handle(&source, &validator);
-    let unbonds = handle
-        .iter(ctx.wl_storage)?
-        .map(|next_result| {
-            next_result.map(
-                |(
-                    lazy_map::NestedSubKey::Data {
-                        key: withdraw_epoch,
-                        nested_sub_key: lazy_map::SubKey::Data(bond_epoch),
-                    },
-                    amount,
-                )| ((bond_epoch, withdraw_epoch), amount),
-            )
-        })
-        .collect();
-    unbonds
+    let iter = handle.iter(ctx.wl_storage)?;
+    iter.map(|next_result| {
+        next_result.map(
+            |(
+                lazy_map::NestedSubKey::Data {
+                    key: withdraw_epoch,
+                    nested_sub_key: lazy_map::SubKey::Data(bond_epoch),
+                },
+                amount,
+            )| ((bond_epoch, withdraw_epoch), amount),
+        )
+    })
+    .collect()
 }
 
 fn unbond_with_slashing<D, H>(
@@ -351,21 +387,19 @@ where
 {
     // TODO slashes
     let handle = unbond_handle(&source, &validator);
-    let unbonds = handle
-        .iter(ctx.wl_storage)?
-        .map(|next_result| {
-            next_result.map(
-                |(
-                    lazy_map::NestedSubKey::Data {
-                        key: withdraw_epoch,
-                        nested_sub_key: lazy_map::SubKey::Data(bond_epoch),
-                    },
-                    amount,
-                )| ((bond_epoch, withdraw_epoch), amount),
-            )
-        })
-        .collect();
-    unbonds
+    let iter = handle.iter(ctx.wl_storage)?;
+    iter.map(|next_result| {
+        next_result.map(
+            |(
+                lazy_map::NestedSubKey::Data {
+                    key: withdraw_epoch,
+                    nested_sub_key: lazy_map::SubKey::Data(bond_epoch),
+                },
+                amount,
+            )| ((bond_epoch, withdraw_epoch), amount),
+        )
+    })
+    .collect()
 }
 
 fn withdrawable_tokens<D, H>(
@@ -472,4 +506,98 @@ where
     H: 'static + StorageHasher + Sync,
 {
     namada_proof_of_stake::find_validator_by_raw_hash(ctx.wl_storage, tm_addr)
+}
+
+/// Client-only methods for the router type are composed from router functions.
+#[cfg(any(test, feature = "async-client"))]
+pub mod client_only_methods {
+    use super::*;
+    use crate::ledger::queries::{Client, RPC};
+
+    impl Pos {
+        /// Get bonds and unbonds with all details (slashes and rewards, if any)
+        /// grouped by their bond IDs, enriched with extra information
+        /// calculated from the data.
+        pub async fn enriched_bonds_and_unbonds<CLIENT>(
+            &self,
+            client: &CLIENT,
+            current_epoch: Epoch,
+            source: &Option<Address>,
+            validator: &Option<Address>,
+        ) -> Result<EnrichedBondsAndUnbondsDetails, <CLIENT as Client>::Error>
+        where
+            CLIENT: Client + Sync,
+        {
+            let data = RPC
+                .vp()
+                .pos()
+                .bonds_and_unbonds(client, source, validator)
+                .await?;
+            Ok(enrich_bonds_and_unbonds(current_epoch, data))
+        }
+    }
+}
+
+/// Calculate extra information from the bonds and unbonds details.
+fn enrich_bonds_and_unbonds(
+    current_epoch: Epoch,
+    bonds_and_unbonds: BondsAndUnbondsDetails,
+) -> EnrichedBondsAndUnbondsDetails {
+    let mut bonds_total: token::Amount = 0.into();
+    let mut bonds_total_slashed: token::Amount = 0.into();
+    let mut unbonds_total: token::Amount = 0.into();
+    let mut unbonds_total_slashed: token::Amount = 0.into();
+    let mut total_withdrawable: token::Amount = 0.into();
+
+    let enriched_details: HashMap<BondId, EnrichedBondsAndUnbondsDetail> =
+        bonds_and_unbonds
+            .into_iter()
+            .map(|(bond_id, detail)| {
+                let mut bond_total: token::Amount = 0.into();
+                let mut bond_total_slashed: token::Amount = 0.into();
+                let mut unbond_total: token::Amount = 0.into();
+                let mut unbond_total_slashed: token::Amount = 0.into();
+                let mut withdrawable: token::Amount = 0.into();
+
+                for bond in &detail.bonds {
+                    bond_total += bond.amount;
+                    bond_total_slashed +=
+                        bond.slashed_amount.unwrap_or_default();
+                }
+                for unbond in &detail.unbonds {
+                    unbond_total += unbond.amount;
+                    unbond_total_slashed +=
+                        unbond.slashed_amount.unwrap_or_default();
+
+                    if current_epoch >= unbond.withdraw {
+                        withdrawable += unbond.amount
+                            - unbond.slashed_amount.unwrap_or_default()
+                    }
+                }
+
+                bonds_total += bond_total;
+                bonds_total_slashed += bond_total_slashed;
+                unbonds_total += unbond_total;
+                unbonds_total_slashed += unbond_total_slashed;
+                total_withdrawable += withdrawable;
+
+                let enriched_detail = EnrichedBondsAndUnbondsDetail {
+                    data: detail,
+                    bonds_total: bond_total,
+                    bonds_total_slashed: bond_total_slashed,
+                    unbonds_total: unbond_total,
+                    unbonds_total_slashed: unbond_total_slashed,
+                    total_withdrawable: withdrawable,
+                };
+                (bond_id, enriched_detail)
+            })
+            .collect();
+    EnrichedBondsAndUnbondsDetails {
+        data: enriched_details,
+        bonds_total,
+        bonds_total_slashed,
+        unbonds_total,
+        unbonds_total_slashed,
+        total_withdrawable,
+    }
 }

@@ -1,12 +1,16 @@
 [package]
-authors = ["Heliax AG <hello@heliax.dev>"]
-description = "Namada encoding spec generator"
-edition = "2021"
-license = "GPL-3.0"
 name = "namada_encoding_spec"
-readme = "../README.md"
+description = "Namada encoding spec generator"
 resolver = "2"
-version = "0.17.1"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
 
 [features]
 default = ["abciplus"]
@@ -15,8 +19,8 @@ abciplus = [
 ]
 
 [dependencies]
-namada = {path = "../shared", default-features = false}
-borsh = "0.9.0"
-itertools = "0.10.3"
+namada = {path = "../shared"}
+borsh.workspace = true
+itertools.workspace = true
 lazy_static = "1.4.0"
 madato = "0.5.3"

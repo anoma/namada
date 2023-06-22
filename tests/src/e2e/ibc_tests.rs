@@ -63,9 +63,11 @@ use ibc_relayer_types::Height;
 use namada::ibc::core::ics24_host::identifier::PortChannelId as IbcPortChannelId;
 use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::google::protobuf::Any;
+use namada::ledger::events::EventType;
 use namada::ledger::ibc::storage::*;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::{self, PosParams};
+use namada::ledger::queries::RPC;
 use namada::ledger::storage::ics23_specs::ibc_proof_specs;
 use namada::ledger::storage::Sha256Hasher;
 use namada::types::address::{Address, InternalAddress};
@@ -77,14 +79,13 @@ use namada_apps::client::rpc::{
 };
 use namada_apps::client::utils::id_from_pk;
 use namada_apps::config::genesis::genesis_config::GenesisConfig;
+use namada_apps::facade::tendermint::block::Header as TmHeader;
+use namada_apps::facade::tendermint::merkle::proof::Proof as TmProof;
+use namada_apps::facade::tendermint::trust_threshold::TrustThresholdFraction;
+use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
+use namada_apps::facade::tendermint_rpc::{Client, HttpClient, Url};
 use prost::Message;
 use setup::constants::*;
-use tendermint::block::Header as TmHeader;
-use tendermint::merkle::proof::Proof as TmProof;
-use tendermint::trust_threshold::TrustThresholdFraction;
-use tendermint_config::net::Address as TendermintAddress;
-use tendermint_rpc::{Client, HttpClient, Url};
-use tokio::runtime::Runtime;
 
 use crate::e2e::helpers::{find_address, get_actor_rpc, get_validator_pk};
 use crate::e2e::setup::{self, sleep, Bin, NamadaCmd, Test, Who};
@@ -99,7 +100,7 @@ fn run_ledger_ibc() -> Result<()> {
         test_a,
         Who::Validator(0),
         Bin::Node,
-        &["ledger", "run", "--tx-index"],
+        &["ledger", "run"],
         Some(40)
     )?;
     ledger_a.exp_string("Namada ledger node started")?;
@@ -108,7 +109,7 @@ fn run_ledger_ibc() -> Result<()> {
         test_b,
         Who::Validator(0),
         Bin::Node,
-        &["ledger", "run", "--tx-index"],
+        &["ledger", "run"],
         Some(40)
     )?;
     ledger_b.exp_string("Namada ledger node started")?;
@@ -235,15 +236,15 @@ fn make_client_state(test: &Test, height: Height) -> TmClientState {
     let client = HttpClient::new(ledger_address).unwrap();
 
     let key = pos::params_key();
-    let pos_params = Runtime::new()
-        .unwrap()
+    let pos_params = test
+        .async_runtime()
         .block_on(query_storage_value::<HttpClient, PosParams>(&client, &key))
         .unwrap();
     let pipeline_len = pos_params.pipeline_len;
 
     let key = param_storage::get_epoch_duration_storage_key();
-    let epoch_duration = Runtime::new()
-        .unwrap()
+    let epoch_duration = test
+        .async_runtime()
         .block_on(query_storage_value::<HttpClient, EpochDuration>(
             &client, &key,
         ))
@@ -349,6 +350,11 @@ fn update_client(
     };
     submit_ibc_tx(target_test, message, ALBERT)?;
 
+    check_ibc_update_query(
+        target_test,
+        client_id,
+        BlockHeight(target_height.revision_height()),
+    )?;
     Ok(())
 }
 
@@ -702,6 +708,7 @@ fn transfer_token(
         Some(IbcEvent::SendPacket(event)) => event.packet,
         _ => return Err(eyre!("Transaction failed")),
     };
+    check_ibc_packet_query(test_a, &"send_packet".parse().unwrap(), &packet)?;
 
     let height_a = query_height(test_a)?;
     let proofs = get_commitment_proof(test_a, &packet, height_a)?;
@@ -720,6 +727,11 @@ fn transfer_token(
         }
         _ => return Err(eyre!("Transaction failed")),
     };
+    check_ibc_packet_query(
+        test_b,
+        &"write_acknowledgement".parse().unwrap(),
+        &packet,
+    )?;
 
     // get the proof on Chain B
     let height_b = query_height(test_b)?;
@@ -1092,9 +1104,9 @@ fn query_height(test: &Test) -> Result<Height> {
     let rpc = get_actor_rpc(test, &Who::Validator(0));
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
-    let rt = Runtime::new().unwrap();
 
-    let status = rt
+    let status = test
+        .async_runtime()
         .block_on(client.status())
         .map_err(|e| eyre!("Getting the status failed: {}", e))?;
 
@@ -1106,8 +1118,8 @@ fn query_header(test: &Test, height: Height) -> Result<TmHeader> {
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
     let height = height.revision_height() as u32;
-    let result = Runtime::new()
-        .unwrap()
+    let result = test
+        .async_runtime()
         .block_on(client.blockchain(height, height));
     match result {
         Ok(mut response) => match response.block_metas.pop() {
@@ -1123,8 +1135,8 @@ fn get_event(test: &Test, height: u32) -> Result<Option<IbcEvent>> {
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
 
-    let response = Runtime::new()
-        .unwrap()
+    let response = test
+        .async_runtime()
         .block_on(client.block_results(height))
         .map_err(|e| eyre!("block_results() for an IBC event failed: {}", e))?;
     let tx_results = response.txs_results.ok_or_else(|| {
@@ -1152,6 +1164,54 @@ fn get_event(test: &Test, height: u32) -> Result<Option<IbcEvent>> {
     Ok(None)
 }
 
+fn check_ibc_update_query(
+    test: &Test,
+    client_id: &ClientId,
+    consensus_height: BlockHeight,
+) -> Result<()> {
+    let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
+    let client = HttpClient::new(ledger_address).unwrap();
+    match test.async_runtime().block_on(RPC.shell().ibc_client_update(
+        &client,
+        &client_id.as_str().parse().unwrap(),
+        &consensus_height,
+    )) {
+        Ok(Some(event)) => {
+            println!("Found the update event: {:?}", event);
+            Ok(())
+        }
+        Ok(None) => Err(eyre!("No update event for the client {}", client_id)),
+        Err(e) => Err(eyre!("IBC update event query failed: {}", e)),
+    }
+}
+
+fn check_ibc_packet_query(
+    test: &Test,
+    event_type: &EventType,
+    packet: &Packet,
+) -> Result<()> {
+    let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
+    let client = HttpClient::new(ledger_address).unwrap();
+    match test.async_runtime().block_on(RPC.shell().ibc_packet(
+        &client,
+        event_type,
+        &packet.source_port.as_str().parse().unwrap(),
+        &packet.source_channel.as_str().parse().unwrap(),
+        &packet.destination_port.as_str().parse().unwrap(),
+        &packet.destination_channel.as_str().parse().unwrap(),
+        &packet.sequence.to_string().parse().unwrap(),
+    )) {
+        Ok(Some(event)) => {
+            println!("Found the packet event: {:?}", event);
+            Ok(())
+        }
+        Ok(None) => Err(eyre!("No packet event for the packet {}", packet)),
+        Err(e) => Err(eyre!("IBC packet event query failed: {}", e)),
+    }
+}
+
 fn query_value_with_proof(
     test: &Test,
     key: &Key,
@@ -1160,7 +1220,7 @@ fn query_value_with_proof(
     let rpc = get_actor_rpc(test, &Who::Validator(0));
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
-    let result = Runtime::new().unwrap().block_on(query_storage_value_bytes(
+    let result = test.async_runtime().block_on(query_storage_value_bytes(
         &client,
         key,
         height.map(|h| BlockHeight(h.revision_height())),

@@ -15,7 +15,8 @@ use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::rpc::{TxBroadcastData, TxResponse};
 use namada::ledger::signing::TxSigningKey;
 use namada::ledger::wallet::{Wallet, WalletUtils};
-use namada::ledger::{masp, tx};
+use namada::ledger::{masp, pos, tx};
+use namada::proof_of_stake::parameters::PosParams;
 use namada::proto::{Code, Data, Section, Tx};
 use namada::types::address::Address;
 use namada::types::governance::{
@@ -31,7 +32,6 @@ use namada::types::transaction::governance::{
 use namada::types::transaction::{InitValidator, TxType};
 use rust_decimal::Decimal;
 use sha2::{Digest as Sha2Digest, Sha256};
-use tendermint_rpc::HttpClient;
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
@@ -39,7 +39,9 @@ use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::query_wasm_code_hash;
 use crate::client::signing::find_keypair;
 use crate::client::tx::tx::ProcessTxResponse;
+use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
+use crate::facade::tendermint_rpc::HttpClient;
 use crate::node::ledger::tendermint_node;
 use crate::wallet::{
     gen_validator_keys, read_and_confirm_encryption_password, CliWalletUtils,
@@ -128,6 +130,7 @@ pub async fn submit_init_validator<
                 None,
             )
             .expect("Key generation should not fail.")
+            .expect("No existing alias expected.")
             .1
             .ref_to()
     });
@@ -154,6 +157,7 @@ pub async fn submit_init_validator<
                     None,
                 )
                 .expect("Key generation should not fail.")
+                .expect("No existing alias expected.")
                 .1
         });
 
@@ -288,9 +292,25 @@ pub async fn submit_init_validator<
         crate::wallet::save(&ctx.wallet)
             .unwrap_or_else(|err| eprintln!("{}", err));
 
-        let tendermint_home = ctx.config.ledger.tendermint_dir();
+        let tendermint_home = ctx.config.ledger.cometbft_dir();
         tendermint_node::write_validator_key(&tendermint_home, &consensus_key);
         tendermint_node::write_validator_state(tendermint_home);
+
+        // Write Namada config stuff or figure out how to do the above
+        // tendermint_node things two epochs in the future!!!
+        ctx.config.ledger.shell.tendermint_mode = TendermintMode::Validator;
+        ctx.config
+            .write(
+                &ctx.config.ledger.shell.base_dir,
+                &ctx.config.ledger.chain_id,
+                true,
+            )
+            .unwrap();
+
+        let key = pos::params_key();
+        let pos_params = rpc::query_storage_value::<C, PosParams>(client, &key)
+            .await
+            .expect("Pos parameter should be defined.");
 
         println!();
         println!(
@@ -302,6 +322,11 @@ pub async fn submit_init_validator<
         println!(
             "The ledger node has been setup to use this validator's address \
              and consensus key."
+        );
+        println!(
+            "Your validator will be active in {} epochs. Be sure to restart \
+             your node for the changes to take effect!",
+            pos_params.pipeline_len
         );
     } else {
         println!("Transaction dry run. No addresses have been saved.")
@@ -356,7 +381,7 @@ impl Default for CLIShieldedUtils {
 
 #[async_trait(?Send)]
 impl masp::ShieldedUtils for CLIShieldedUtils {
-    type C = tendermint_rpc::HttpClient;
+    type C = crate::facade::tendermint_rpc::HttpClient;
 
     fn local_tx_prover(&self) -> LocalTxProver {
         if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR) {
@@ -631,7 +656,7 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
         "yay" => {
             if let Some(pgf) = args.proposal_pgf {
                 let splits = pgf.trim().split_ascii_whitespace();
-                let address_iter = splits.clone().into_iter().step_by(2);
+                let address_iter = splits.clone().step_by(2);
                 let cap_iter = splits.into_iter().skip(1).step_by(2);
                 let mut set = HashSet::new();
                 for (address, cap) in

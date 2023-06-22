@@ -753,9 +753,10 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Restores a keypair from the given mnemonic code and \
-                     derives the implicit address from its public key. Stores \
-                     the keypair and the address with the given alias.",
+                    "Restores a keypair from the given mnemonic code and HD \
+                     derivation path and derives the implicit address from \
+                     its public key. Stores the keypair and the address with \
+                     the given alias.",
                 )
                 .add_args::<args::KeyAndAddressRestore>()
         }
@@ -847,7 +848,6 @@ pub mod cmds {
                     // The `run` command is the default if no sub-command given
                     .or(Some(Self::Run(LedgerRun(args::LedgerRun {
                         start_time: None,
-                        tx_index: false,
                     }))))
             })
         }
@@ -1615,6 +1615,7 @@ pub mod cmds {
         InitNetwork(InitNetwork),
         InitGenesisValidator(InitGenesisValidator),
         PkToTmAddress(PkToTmAddress),
+        DefaultBaseDir(DefaultBaseDir),
     }
 
     impl SubCmd for Utils {
@@ -1631,11 +1632,14 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::InitGenesisValidator);
                 let pk_to_tm_address =
                     SubCmd::parse(matches).map(Self::PkToTmAddress);
+                let default_base_dir =
+                    SubCmd::parse(matches).map(Self::DefaultBaseDir);
                 join_network
                     .or(fetch_wasms)
                     .or(init_network)
                     .or(init_genesis)
                     .or(pk_to_tm_address)
+                    .or(default_base_dir)
             })
         }
 
@@ -1647,6 +1651,7 @@ pub mod cmds {
                 .subcommand(InitNetwork::def())
                 .subcommand(InitGenesisValidator::def())
                 .subcommand(PkToTmAddress::def())
+                .subcommand(DefaultBaseDir::def())
                 .setting(AppSettings::SubcommandRequiredElseHelp)
         }
     }
@@ -1752,6 +1757,29 @@ pub mod cmds {
                 .add_args::<args::PkToTmAddress>()
         }
     }
+
+    #[derive(Clone, Debug)]
+    pub struct DefaultBaseDir(pub args::DefaultBaseDir);
+
+    impl SubCmd for DefaultBaseDir {
+        const CMD: &'static str = "default-base-dir";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::DefaultBaseDir::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Print the default base directory that would be used if \
+                     --base-dir or NAMADA_BASE_DIR were not used to set the \
+                     base directory.",
+                )
+                .add_args::<args::DefaultBaseDir>()
+        }
+    }
 }
 
 pub mod args {
@@ -1775,7 +1803,7 @@ pub mod args {
     use super::context::*;
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
-    use crate::config::{self, Action, ActionAtHeight, TendermintMode};
+    use crate::config::{self, Action, ActionAtHeight};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
@@ -1862,7 +1890,6 @@ pub mod args {
     pub const MASP_VALUE: Arg<MaspValue> = arg("value");
     pub const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =
         arg("max-commission-rate-change");
-    pub const MODE: ArgOpt<String> = arg_opt("mode");
     pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     pub const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
@@ -1899,7 +1926,6 @@ pub mod args {
     pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     pub const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
     pub const SUSPEND_ACTION: ArgFlag = flag("suspend");
-    pub const TENDERMINT_TX_INDEX: ArgFlag = flag("tx-index");
     pub const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     pub const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
     pub const TM_ADDRESS: Arg<String> = arg("tm-address");
@@ -1930,7 +1956,6 @@ pub mod args {
         pub chain_id: Option<ChainId>,
         pub base_dir: PathBuf,
         pub wasm_dir: Option<PathBuf>,
-        pub mode: Option<TendermintMode>,
     }
 
     impl Global {
@@ -1939,12 +1964,10 @@ pub mod args {
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let base_dir = BASE_DIR.parse(matches);
             let wasm_dir = WASM_DIR.parse(matches);
-            let mode = MODE.parse(matches).map(TendermintMode::from);
             Global {
                 chain_id,
                 base_dir,
                 wasm_dir,
-                mode,
             }
         }
 
@@ -1968,27 +1991,18 @@ pub mod args {
                      `NAMADA_WASM_DIR` environment variable, but the argument \
                      takes precedence, if specified.",
                 ))
-                .arg(MODE.def().about(
-                    "The mode in which to run Namada. Options are \n\t * \
-                     Validator (default)\n\t * Full\n\t * Seed",
-                ))
         }
     }
 
     #[derive(Clone, Debug)]
     pub struct LedgerRun {
         pub start_time: Option<DateTimeUtc>,
-        pub tx_index: bool,
     }
 
     impl Args for LedgerRun {
         fn parse(matches: &ArgMatches) -> Self {
             let start_time = NAMADA_START_TIME.parse(matches);
-            let tx_index = TENDERMINT_TX_INDEX.parse(matches);
-            Self {
-                start_time,
-                tx_index,
-            }
+            Self { start_time }
         }
 
         fn def(app: App) -> App {
@@ -2000,11 +2014,6 @@ pub mod args {
                  equivalent:\n2023-01-20T12:12:12Z\n2023-01-20 \
                  12:12:12Z\n2023-  01-20T12:  12:12Z",
             ))
-            .arg(
-                TENDERMINT_TX_INDEX
-                    .def()
-                    .about("Enable Tendermint tx indexing."),
-            )
         }
     }
 
@@ -3866,6 +3875,19 @@ pub mod args {
                 "The consensus public key to be converted to Tendermint \
                  address.",
             ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct DefaultBaseDir {}
+
+    impl Args for DefaultBaseDir {
+        fn parse(_matches: &ArgMatches) -> Self {
+            Self {}
+        }
+
+        fn def(app: App) -> App {
+            app
         }
     }
 

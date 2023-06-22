@@ -340,6 +340,10 @@ fn key_and_address_restore(
         .unwrap_or_else(|err| {
             eprintln!("{}", err);
             cli::safe_exit(1)
+        })
+        .unwrap_or_else(|| {
+            println!("No changes are persisted. Exiting.");
+            cli::safe_exit(0);
         });
     namada_apps::wallet::save(&wallet)
         .unwrap_or_else(|err| eprintln!("{}", err));
@@ -378,6 +382,10 @@ fn key_and_address_gen(
         .unwrap_or_else(|err| {
             eprintln!("{}", err);
             cli::safe_exit(1);
+        })
+        .unwrap_or_else(|| {
+            println!("No changes are persisted. Exiting.");
+            cli::safe_exit(0);
         });
     namada_apps::wallet::save(&wallet)
         .unwrap_or_else(|err| eprintln!("{}", err));
