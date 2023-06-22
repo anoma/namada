@@ -38,7 +38,7 @@ pub async fn tx_signer<
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     default: TxSigningKey,
-) -> Result<common::SecretKey, tx::Error> {
+) -> Result<Vec<common::SecretKey>, tx::Error> {
     namada::ledger::signing::tx_signer::<C, U>(client, wallet, args, default)
         .await
 }

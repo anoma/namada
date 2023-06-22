@@ -1,3 +1,6 @@
+use std::cmp::Ordering;
+use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::convert::TryFrom;
 
@@ -50,6 +53,8 @@ pub enum Error {
     NoTimestampError,
     #[error("Timestamp is invalid: {0}")]
     InvalidTimestamp(prost_types::TimestampError),
+    #[error("The section signature is invalid: {0}")]
+    InvalidSectionSignature(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -191,6 +196,106 @@ impl Code {
     }
 }
 
+#[derive(
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Serialize,
+    Deserialize,
+    Eq,
+    PartialEq,
+)]
+pub struct SignatureIndex {
+    pub signature: common::Signature,
+    pub index: u8,
+}
+
+impl SignatureIndex {
+    pub fn from_single_signature(signature: common::Signature) -> Self {
+        Self { signature, index: 0 }
+    }
+
+    pub fn to_vec(&self) -> Vec<Self> {
+        vec![self.clone()]
+    }
+}
+
+impl Ord for SignatureIndex {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.index.cmp(&other.index)
+    }
+}
+
+impl PartialOrd for SignatureIndex {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// A section representing a multisig over another section
+#[derive(
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Serialize,
+    Deserialize,
+)]
+pub struct MultiSignature {
+    /// The hash of the section being signed
+    target: crate::types::hash::Hash,
+    /// The signature over the above hash
+    pub signatures: BTreeSet<SignatureIndex>,
+}
+
+impl MultiSignature {
+    /// Sign the given section hash with the given key and return a section
+    pub fn new(
+        target: &crate::types::hash::Hash,
+        secret_keys: &[common::SecretKey],
+        public_keys_index_map: HashMap<common::PublicKey, u8>,
+    ) -> Self {
+        let signatures_public_keys_map =
+            secret_keys.iter().map(|secret_key: &common::SecretKey| {
+                let signature = common::SigScheme::sign(secret_key, target);
+                let public_key = secret_key.ref_to();
+                (public_key, signature)
+            });
+
+        let signatures = signatures_public_keys_map
+            .filter_map(|(public_key, signature)| {
+                let public_key_index = public_keys_index_map.get(&public_key);
+                public_key_index.map(|index| SignatureIndex {
+                    signature,
+                    index: *index,
+                })
+            })
+            .collect::<BTreeSet<SignatureIndex>>();
+
+        Self {
+            target: *target,
+            signatures: signatures,
+        }
+    }
+
+    // TODO: check conversion
+    pub fn total_signatures(&self) -> u8 {
+        return self.signatures.len() as u8;
+    }
+
+    /// Hash this signature section
+    pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
+        hasher.update(
+            self.try_to_vec()
+                .expect("unable to serialize multisignature section"),
+        );
+        hasher
+    }
+}
+
 /// A section representing the signature over another section
 #[derive(
     Clone,
@@ -202,27 +307,21 @@ impl Code {
     Deserialize,
 )]
 pub struct Signature {
-    /// Additional random data
-    salt: [u8; 8],
     /// The hash of the section being signed
     target: crate::types::hash::Hash,
-    /// The signature over the above has
+    /// The signature over the above hash
     pub signature: common::Signature,
-    /// The public key to verrify the above siggnature
-    pub_key: common::PublicKey,
 }
 
 impl Signature {
-    /// Sign the given section hash with the given key and return a section
     pub fn new(
         target: &crate::types::hash::Hash,
-        sec_key: &common::SecretKey,
+        secret_key: &common::SecretKey,
     ) -> Self {
+        let signature = common::SigScheme::sign(secret_key, target);
         Self {
-            salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
             target: *target,
-            signature: common::SigScheme::sign(sec_key, target),
-            pub_key: sec_key.ref_to(),
+            signature,
         }
     }
 
@@ -537,6 +636,8 @@ pub enum Section {
     /// Transaction code. Sending to hardware wallets optional
     Code(Code),
     /// A transaction signature. Often produced by hardware wallets
+    SectionSignature(MultiSignature),
+    /// A transaction header/protocol signature
     Signature(Signature),
     /// Ciphertext obtained by encrypting arbitrary transaction sections
     Ciphertext(Ciphertext),
@@ -564,7 +665,8 @@ impl Section {
             Self::Data(data) => data.hash(hasher),
             Self::ExtraData(extra) => extra.hash(hasher),
             Self::Code(code) => code.hash(hasher),
-            Self::Signature(sig) => sig.hash(hasher),
+            Self::Signature(signature) => signature.hash(hasher),
+            Self::SectionSignature(signatures) => signatures.hash(hasher),
             Self::Ciphertext(ct) => ct.hash(hasher),
             Self::MaspBuilder(mb) => mb.hash(hasher),
             Self::MaspTx(tx) => {
@@ -633,6 +735,15 @@ impl Section {
     /// Extract the signature from this section if possible
     pub fn signature(&self) -> Option<Signature> {
         if let Self::Signature(data) = self {
+            Some(data.clone())
+        } else {
+            None
+        }
+    }
+
+    /// Extract the section signature from this section if possible
+    pub fn section_signature(&self) -> Option<MultiSignature> {
+        if let Self::SectionSignature(data) = self {
             Some(data.clone())
         } else {
             None
@@ -906,23 +1017,72 @@ impl Tx {
 
     /// Verify that the section with the given hash has been signed by the given
     /// public key
-    pub fn verify_signature(
+    pub fn verify_section_signatures(
         &self,
-        pk: &common::PublicKey,
         hash: &crate::types::hash::Hash,
-    ) -> std::result::Result<(), VerifySigError> {
+        public_keys_index_map: HashMap<u8, common::PublicKey>,
+        threshold: u8,
+        max_signatures: Option<u8>,
+    ) -> std::result::Result<(), Error> {
+        let max_signatures = max_signatures.unwrap_or(u8::MAX);
+        let mut valid_signatures = 0;
+
         for section in &self.sections {
-            if let Section::Signature(sig_sec) = section {
-                if sig_sec.pub_key == *pk && sig_sec.target == *hash {
-                    return common::SigScheme::verify_signature_raw(
-                        pk,
-                        &hash.0,
-                        &sig_sec.signature,
-                    );
+            if let Section::SectionSignature(signatures) = section {
+                if signatures.target == *hash {
+                    if signatures.total_signatures() > max_signatures {
+                        return Err(Error::InvalidSectionSignature(
+                            "too many signatures.".to_string(),
+                        ));
+                    }
+
+                    if signatures.total_signatures() < threshold {
+                        return Err(Error::InvalidSectionSignature(
+                            "too few signatures.".to_string(),
+                        ));
+                    }
+                    for signature_index in &signatures.signatures {
+                        let public_key =
+                            public_keys_index_map.get(&signature_index.index);
+                        if let Some(public_key) = public_key {
+                            let is_valid_signature =
+                                common::SigScheme::verify_signature_raw(
+                                    public_key,
+                                    hash.as_ref(),
+                                    &signature_index.signature,
+                                )
+                                .is_ok();
+                            if is_valid_signature {
+                                valid_signatures += 1;
+                            }
+                            if valid_signatures >= threshold {
+                                return Ok(())
+                            }
+                        }
+                    }
                 }
             }
         }
-        Err(VerifySigError::MissingData)
+        Err(Error::InvalidSectionSignature("invalid signatures.".to_string()))
+    }
+
+    pub fn verify_signature(
+        &self,
+        public_key: &common::PublicKey,
+        hash: &crate::types::hash::Hash,
+    ) -> std::result::Result<(), Error> {
+        for section in &self.sections {
+            if let Section::Signature(signature) = section {
+                if signature.target == *hash {
+                    return common::SigScheme::verify_signature_raw(
+                        public_key,
+                        hash.as_ref(),
+                        &signature.signature,
+                    ).map_err(|_| Error::InvalidSectionSignature("invalid signature".to_string()))
+                }
+            }
+        }
+        Err(Error::InvalidSectionSignature("invalid signatures.".to_string()))
     }
 
     /// Validate any and all ciphertexts stored in this transaction

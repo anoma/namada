@@ -407,6 +407,8 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// Whether to force overwrite the above alias, if it is provided, in the
     /// wallet.
     pub wallet_alias_force: bool,
+    /// The fee payer signing key
+    pub fee_payer: Option<C::Keypair>,
     /// The amount being payed to include the transaction
     pub fee_amount: token::Amount,
     /// The token in which the fee is being paid
@@ -418,7 +420,7 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// The chain id for which the transaction is intended
     pub chain_id: Option<ChainId>,
     /// Sign the tx with the key for the given alias from your wallet
-    pub signing_key: Option<C::Keypair>,
+    pub signing_keys: Vec<C::Keypair>,
     /// Path to the TX WASM code file to reveal PK
     pub tx_reveal_code_path: PathBuf,
     /// Password to decrypt key

@@ -38,7 +38,7 @@ use crate::ledger::tx::{
 pub use crate::ledger::wallet::store::AddressVpType;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::ledger::{args, rpc};
-use crate::proto::{Section, Signature, Tx};
+use crate::proto::{MultiSignature, Section, Signature, Tx};
 use crate::types::key::*;
 use crate::types::masp::{ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::Epoch;
@@ -122,6 +122,11 @@ pub enum TxSigningKey {
     SecretKey(common::SecretKey),
 }
 
+pub struct SigningContext {
+    pub secret_keys: Vec<common::SecretKey>,
+    pub public_keys_map: HashMap<common::PublicKey, u8>,
+}
+
 /// Given CLI arguments and some defaults, determine the rightful transaction
 /// signer. Return the given signing key or public key of the given signer if
 /// possible. If no explicit signer given, use the `default`. If no `default`
@@ -134,43 +139,56 @@ pub async fn tx_signer<
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     default: TxSigningKey,
-) -> Result<common::SecretKey, Error> {
+) -> Result<Vec<common::SecretKey>, Error> {
     // Override the default signing key source if possible
-    let default = if let Some(signing_key) = &args.signing_key {
-        TxSigningKey::WalletKeypair(signing_key.clone())
+    let signing_keys = if args.signing_keys.is_empty() {
+        vec![default]
     } else {
-        default
+        args.signing_keys
+            .iter()
+            .map(|key| TxSigningKey::WalletKeypair(key.clone()))
+            .collect()
     };
+
+    let mut secret_keys = vec![];
+
     // Now actually fetch the signing key and apply it
-    match default {
-        TxSigningKey::WalletKeypair(signing_key) => Ok(signing_key),
-        TxSigningKey::WalletAddress(signer) => {
-            let signer = signer;
-            let signing_key = find_keypair::<C, U>(
-                client,
-                wallet,
-                &signer,
-                args.password.clone(),
-            )
-            .await?;
-            // Check if the signer is implicit account that needs to reveal its
-            // PK first
-            if matches!(signer, Address::Implicit(_)) {
-                let pk: common::PublicKey = signing_key.ref_to();
-                super::tx::reveal_pk_if_needed::<C, U>(
-                    client, wallet, &pk, args,
+    for key in signing_keys {
+        match key {
+            TxSigningKey::WalletKeypair(key) => secret_keys.push(key),
+            TxSigningKey::WalletAddress(address) => {
+                let signing_key = find_keypair::<C, U>(
+                    client,
+                    wallet,
+                    &address,
+                    args.password.clone(),
                 )
                 .await?;
+                // Check if the signer is implicit account that needs to reveal its
+                // PK first
+                if matches!(address, Address::Implicit(_)) {
+                    let pk: common::PublicKey = signing_key.ref_to();
+                    super::tx::reveal_pk_if_needed::<C, U>(
+                        client, wallet, &pk, args,
+                    )
+                    .await?;
+                }
+                secret_keys.push(signing_key);
+            },
+            TxSigningKey::SecretKey(secret_key) => {
+                secret_keys.push(secret_key);
+            },
+            TxSigningKey::None => {
+                return other_err(
+                    "All transactions must be signed; please either specify the key \
+                     or the address from which to look up the signing key."
+                        .to_string(),
+                )
             }
-            Ok(signing_key)
         }
-        TxSigningKey::SecretKey(signing_key) => Ok(signing_key),
-        TxSigningKey::None => other_err(
-            "All transactions must be signed; please either specify the key \
-             or the address from which to look up the signing key."
-                .to_string(),
-        ),
     }
+
+    Ok(secret_keys)
 }
 
 /// Sign a transaction with a given signing key or public key of a given signer.
@@ -192,19 +210,27 @@ pub async fn sign_tx<
     default: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<TxBroadcastData, Error> {
-    let keypair = tx_signer::<C, U>(client, wallet, args, default).await?;
+    let keypairs = tx_signer::<C, U>(client, wallet, args, default).await?;
     // Sign over the transacttion data
-    tx.add_section(Section::Signature(Signature::new(
+    tx.add_section(Section::SectionSignature(MultiSignature::new(
         tx.data_sechash(),
-        &keypair,
+        &keypairs,
+        HashMap::new(),
     )));
     // Sign over the transaction code
-    tx.add_section(Section::Signature(Signature::new(
+    tx.add_section(Section::SectionSignature(MultiSignature::new(
         tx.code_sechash(),
-        &keypair,
+        &keypairs,
+        HashMap::new(),
     )));
 
     let epoch = rpc::query_epoch(client).await;
+
+    // TODO: refactor
+    let fee_payer_keypair = &args
+        .fee_payer
+        .clone()
+        .unwrap_or(keypairs.get(0).unwrap().clone());
 
     let broadcast_data = if args.dry_run {
         tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
@@ -221,7 +247,7 @@ pub async fn sign_tx<
             args,
             epoch,
             tx,
-            &keypair,
+            fee_payer_keypair,
             #[cfg(not(feature = "mainnet"))]
             requires_pow,
         )

@@ -200,6 +200,9 @@ pub enum Error {
     /// Epoch not in storage
     #[error("Proposal end epoch is not in the storage.")]
     EpochNotInStorage,
+    /// Couldn't understand who the fee pair is
+    #[error("{0}")]
+    InvalidFeePayer(String),
     /// Other Errors that may show up when using the interface
     #[error("{0}")]
     Other(String),
@@ -358,20 +361,18 @@ pub async fn submit_reveal_pk_aux<
     tx.set_data(Data::new(tx_data));
     tx.set_code(Code::from_hash(tx_code_hash));
 
-    // submit_tx without signing the inner tx
-    let keypair = if let Some(signing_key) = &args.signing_key {
-        Ok(signing_key.clone())
-    } else {
-        find_keypair(client, wallet, &addr, args.password.clone()).await
-    }?;
-    tx.add_section(Section::Signature(Signature::new(
-        tx.data_sechash(),
-        &keypair,
-    )));
-    tx.add_section(Section::Signature(Signature::new(
-        tx.code_sechash(),
-        &keypair,
-    )));
+    let fee_payer =
+        match &args.fee_payer {
+            Some(keypair) => keypair,
+            None => match args.signing_keys.get(0) {
+                Some(keypair) => keypair,
+                None => return Err(Error::InvalidFeePayer(
+                    "Either --signing-keys or --fee-payer must be available."
+                        .to_string(),
+                )),
+            },
+        };
+
     let epoch = rpc::query_epoch(client).await;
     let to_broadcast = if args.dry_run {
         TxBroadcastData::DryRun(tx)
@@ -382,7 +383,7 @@ pub async fn submit_reveal_pk_aux<
             args,
             epoch,
             tx,
-            &keypair,
+            fee_payer,
             #[cfg(not(feature = "mainnet"))]
             false,
         )
@@ -1245,34 +1246,31 @@ pub async fn submit_transfer<
     // signer. Also, if the transaction is shielded, redact the amount and token
     // types by setting the transparent value to 0 and token type to a constant.
     // This has no side-effect because transaction is to self.
-    let (default_signer, amount, token) =
+    let (default_signer, amount, token, shielded_gas) =
         if source == masp_addr && target == masp_addr {
             // TODO Refactor me, we shouldn't rely on any specific token here.
             (
                 TxSigningKey::SecretKey(masp_tx_key()),
                 0.into(),
                 args.native_token.clone(),
+                true,
             )
         } else if source == masp_addr {
             (
                 TxSigningKey::SecretKey(masp_tx_key()),
                 args.amount,
                 token.clone(),
+                true,
             )
         } else {
             (
                 TxSigningKey::WalletAddress(args.source.effective_address()),
                 args.amount,
                 token,
+                false,
             )
         };
-    // If our chosen signer is the MASP sentinel key, then our shielded inputs
-    // will need to cover the gas fees.
-    let chosen_signer =
-        tx_signer::<C, V>(client, wallet, &args.tx, default_signer.clone())
-            .await?
-            .ref_to();
-    let shielded_gas = masp_tx_key().ref_to() == chosen_signer;
+
     // Determine whether to pin this transaction to a storage key
     let key = match &args.target {
         TransferTarget::PaymentAddress(pa) if pa.is_pinned() => Some(pa.hash()),

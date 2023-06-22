@@ -1835,6 +1835,7 @@ pub mod args {
     pub const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
     pub const FORCE: ArgFlag = flag("force");
     pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
+    pub const GAS_PAYER: ArgOpt<WalletKeypair> = arg("fee-payer").opt();
     pub const GAS_AMOUNT: ArgDefault<token::Amount> =
         arg_default("gas-amount", DefaultFn(|| token::Amount::from(0)));
     pub const GAS_LIMIT: ArgDefault<token::Amount> =
@@ -1891,8 +1892,7 @@ pub mod args {
     pub const RECEIVER: Arg<String> = arg("receiver");
     pub const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
-    pub const SIGNING_KEY_OPT: ArgOpt<WalletKeypair> = SIGNING_KEY.opt();
-    pub const SIGNING_KEY: Arg<WalletKeypair> = arg("signing-key");
+    pub const SIGNING_KEYS: ArgMulti<WalletKeypair> = arg_multi("signing-keys");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
@@ -3297,10 +3297,11 @@ pub mod args {
                 ledger_address: (),
                 initialized_account_alias: self.initialized_account_alias,
                 wallet_alias_force: self.wallet_alias_force,
+                fee_payer: ctx.get_opt_cached(&self.fee_payer),
                 fee_amount: self.fee_amount,
                 fee_token: ctx.get(&self.fee_token),
                 gas_limit: self.gas_limit,
-                signing_key: self.signing_key.map(|x| ctx.get_cached(&x)),
+                signing_keys: self.signing_keys.iter().map(|key| ctx.get_cached(&key)).collect(),
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
                 expiration: self.expiration,
@@ -3340,6 +3341,9 @@ pub mod args {
             .arg(WALLET_ALIAS_FORCE.def().about(
                 "Override the alias without confirmation if it already exists.",
             ))
+            .arg(GAS_PAYER.def().about(
+                "The implicit address of the gas payer. It defaults to the address associated to the first key passed to --signing-keys."
+            ))
             .arg(GAS_AMOUNT.def().about(
                 "The amount being paid for the inclusion of this transaction",
             ))
@@ -3355,7 +3359,7 @@ pub mod args {
                  equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
                  12:12:12Z\n2012-  12-12T12:  12:12Z",
             ))
-            .arg(SIGNING_KEY_OPT.def().about(
+            .arg(SIGNING_KEYS.def().about(
                 "Sign the transaction with the key for the given public key, \
                  public key hash or alias from your wallet.",
             ))
@@ -3369,11 +3373,12 @@ pub mod args {
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
             let wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
+            let fee_payer = GAS_PAYER.parse(matches);
             let fee_amount = GAS_AMOUNT.parse(matches);
             let fee_token = GAS_TOKEN.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches).into();
             let expiration = EXPIRATION_OPT.parse(matches);
-            let signing_key = SIGNING_KEY_OPT.parse(matches);
+            let signing_keys = SIGNING_KEYS.parse(matches);
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;
@@ -3385,11 +3390,12 @@ pub mod args {
                 ledger_address,
                 initialized_account_alias,
                 wallet_alias_force,
+                fee_payer,
                 fee_amount,
                 fee_token,
                 gas_limit,
                 expiration,
-                signing_key,
+                signing_keys,
                 tx_reveal_code_path,
                 password,
                 chain_id,

@@ -222,6 +222,21 @@ where
     }
 }
 
+impl<T> ArgMulti<FromContext<T>> {
+    pub fn def(&self) -> ClapArg {
+        ClapArg::new(self.name)
+            .long(self.name)
+            .takes_value(true)
+            .multiple(true)
+            .require_delimiter(true)
+    }
+
+    pub fn parse(&self, matches: &ArgMatches) -> Vec<FromContext<T>> {
+        let raw = matches.values_of(self.name).unwrap_or_default();
+        raw.map(|val| FromContext::new(val.to_string())).collect()
+    }
+}
+
 impl<T> ArgDefaultFromCtx<FromContext<T>>
 where
     T: FromStr,
