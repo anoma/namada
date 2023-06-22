@@ -346,7 +346,7 @@ jobs:
       - name: Build
         run: make build-release${{ matrix.make.suffix }}
         env:
-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+          RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Upload target binaries
         uses: actions/upload-artifact@v3
         with:
