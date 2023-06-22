@@ -14,11 +14,11 @@ use namada::proof_of_stake::pos_queries::PosQueries;
 use namada::types::hash::HASH_LENGTH;
 use namada::types::internal::WrapperTxInQueue;
 
-use super::block_space_alloc::EncryptedTxsBins;
+use super::block_alloc::EncryptedTxsBins;
 use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
 use crate::facade::tendermint_proto::abci::RequestProcessProposal;
-use crate::node::ledger::shell::block_space_alloc::{
+use crate::node::ledger::shell::block_alloc::{
     AllocFailure, DumpResource, TxBin,
 };
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;

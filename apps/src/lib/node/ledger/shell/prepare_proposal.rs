@@ -22,11 +22,11 @@ use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheAccess;
 
 use super::super::*;
-use super::block_space_alloc::states::{
+use super::block_alloc::states::{
     BuildingDecryptedTxBatch, BuildingProtocolTxBatch,
     EncryptedTxBatchAllocator, NextState, TryAlloc,
 };
-use super::block_space_alloc::{AllocFailure, BlockSpaceAllocator, BlockResources};
+use super::block_alloc::{AllocFailure, BlockAllocator, BlockResources};
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
@@ -142,7 +142,7 @@ where
         txs: &[TxBytes],
         block_time: &Option<Timestamp>,
         block_proposer: Option<&Address>,
-    ) -> (Vec<TxBytes>, BlockSpaceAllocator<BuildingDecryptedTxBatch>) {
+    ) -> (Vec<TxBytes>, BlockAllocator<BuildingDecryptedTxBatch>) {
         let pos_queries = self.wl_storage.pos_queries();
         let block_time = block_time.clone().and_then(|block_time| {
             // If error in conversion, default to last block datetime, it's
@@ -273,8 +273,8 @@ where
     // - https://github.com/anoma/ferveo
     fn build_decrypted_txs(
         &self,
-        mut alloc: BlockSpaceAllocator<BuildingDecryptedTxBatch>,
-    ) -> (Vec<TxBytes>, BlockSpaceAllocator<BuildingProtocolTxBatch>) {
+        mut alloc: BlockAllocator<BuildingDecryptedTxBatch>,
+    ) -> (Vec<TxBytes>, BlockAllocator<BuildingProtocolTxBatch>) {
         // TODO: This should not be hardcoded
         let privkey =
             <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
@@ -340,7 +340,7 @@ where
     /// Builds a batch of protocol transactions.
     fn build_protocol_txs(
         &self,
-        _alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
+        _alloc: BlockAllocator<BuildingProtocolTxBatch>,
         #[cfg(feature = "abcipp")] _local_last_commit: Option<
             ExtendedCommitInfo,
         >,

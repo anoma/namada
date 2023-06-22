@@ -5,7 +5,7 @@
 //! and [`Shell::process_proposal`] must be also reverted
 //! (unless we can simply overwrite them in the next block).
 //! More info in <https://github.com/anoma/namada/issues/362>.
-pub mod block_space_alloc;
+pub mod block_alloc;
 mod finalize_block;
 mod governance;
 mod init_chain;

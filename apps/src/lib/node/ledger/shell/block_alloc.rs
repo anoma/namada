@@ -28,6 +28,10 @@
 //! restrict the space of encrypted txs to at most 1/3 of the
 //! total block space, we roughly divide the Tendermint block
 //! space in 3, for each major type of tx.
+//!
+//! # How gas is allocated
+//!
+//! Gas is only relevant to DKG encrypted txs. Every encrypted tx define its gas limit. We take this entire gas limit as the amount of gas requested by the tx.
 
 pub mod states;
 
@@ -47,10 +51,6 @@ pub mod states;
 // reserved for decrypted txs, given the invariants of the state
 // machine
 
-// TODO: refactor our measure of space to also reflect gas costs.
-// the total gas of all chosen txs cannot exceed the configured max
-// gas per block, otherwise a proposal will be rejected!
-
 use std::marker::PhantomData;
 
 use namada::core::ledger::parameters;
@@ -61,7 +61,7 @@ use namada::proof_of_stake::pos_queries::PosQueries;
 #[allow(unused_imports)]
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 
-/// Block space allocation failure status responses.
+/// Block allocation failure status responses.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum AllocFailure {
     /// The transaction can only be included in an upcoming block.
@@ -103,9 +103,7 @@ impl<'tx> BlockResources<'tx> {
 ///
 ///   - DKG encrypted transactions.  
 #[derive(Debug, Default)]
-//FIXME: rename to BlockSpaceGasAllocator or BlockResourcesAllocator or maybe just BlockAllocator
-//FIXME: also rename the files
-pub struct BlockSpaceAllocator<State> {
+pub struct BlockAllocator<State> {
     /// The current state of the [`BlockSpaceAllocator`] state machine.
     _state: PhantomData<*const State>,
     /// The total space Tendermint has allotted to the
@@ -120,7 +118,7 @@ pub struct BlockSpaceAllocator<State> {
 }
 
 impl<D, H, M> From<&WlStorage<D, H>>
-    for BlockSpaceAllocator<states::BuildingEncryptedTxBatch<M>>
+    for BlockAllocator<states::BuildingEncryptedTxBatch<M>>
 where
     D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + storage::StorageHasher,
@@ -138,8 +136,8 @@ where
     }
 }
 
-impl<M> BlockSpaceAllocator<states::BuildingEncryptedTxBatch<M>> {
-    /// Construct a new [`BlockSpaceAllocator`], with an upper bound
+impl<M> BlockAllocator<states::BuildingEncryptedTxBatch<M>> {
+    /// Construct a new [`BlockAllocator`], with an upper bound
     /// on the max size of all txs in a block defined by Tendermint and an upper bound on the max gas in a block.
     #[inline]
     pub fn init(
@@ -157,7 +155,7 @@ impl<M> BlockSpaceAllocator<states::BuildingEncryptedTxBatch<M>> {
     }
 }
 
-impl<State> BlockSpaceAllocator<State> {
+impl<State> BlockAllocator<State> {
     /// Return the amount of space left to initialize in all
     /// [`TxBin`] instances.
     ///
@@ -313,12 +311,12 @@ mod tests {
     /// Convenience alias for a block space allocator at a state with encrypted
     /// txs.
     type BsaWrapperTxs =
-        BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>;
+        BlockAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>;
 
     /// Convenience alias for a block space allocator at a state without
     /// encrypted txs.
     type BsaNoWrapperTxs =
-        BlockSpaceAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>;
+        BlockAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>;
 
     /// Proptest generated txs.
     #[derive(Debug)]

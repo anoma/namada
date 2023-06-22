@@ -1,11 +1,11 @@
 use std::marker::PhantomData;
 
-use super::super::{AllocFailure, BlockSpaceAllocator, DumpResource, TxBin};
+use super::super::{AllocFailure, BlockAllocator, DumpResource, TxBin};
 use super::{
     BuildingDecryptedTxBatch, BuildingProtocolTxBatch, NextStateImpl, TryAlloc,
 };
 
-impl TryAlloc for BlockSpaceAllocator<BuildingDecryptedTxBatch> {
+impl TryAlloc for BlockAllocator<BuildingDecryptedTxBatch> {
     type Resource<'tx> = &'tx [u8];
 
     #[inline]
@@ -17,8 +17,8 @@ impl TryAlloc for BlockSpaceAllocator<BuildingDecryptedTxBatch> {
     }
 }
 
-impl NextStateImpl for BlockSpaceAllocator<BuildingDecryptedTxBatch> {
-    type Next = BlockSpaceAllocator<BuildingProtocolTxBatch>;
+impl NextStateImpl for BlockAllocator<BuildingDecryptedTxBatch> {
+    type Next = BlockAllocator<BuildingProtocolTxBatch>;
 
     #[inline]
     fn next_state_impl(mut self) -> Self::Next {
@@ -37,7 +37,7 @@ impl NextStateImpl for BlockSpaceAllocator<BuildingDecryptedTxBatch> {
             ..
         } = self;
 
-        BlockSpaceAllocator {
+        BlockAllocator {
             _state: PhantomData,
             block,
             protocol_txs,

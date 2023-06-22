@@ -1,4 +1,4 @@
-//! All the states of the [`BlockSpaceAllocator`] state machine,
+//! All the states of the [`BlockAllocator`] state machine,
 //! over the extent of a Tendermint consensus round
 //! block proposal.
 //!
@@ -23,17 +23,17 @@ mod decrypted_txs;
 mod encrypted_txs;
 mod protocol_txs;
 
-use super::{AllocFailure, BlockSpaceAllocator};
+use super::{AllocFailure, BlockAllocator};
 
-/// Convenience wrapper for a [`BlockSpaceAllocator`] state that allocates
+/// Convenience wrapper for a [`BlockAllocator`] state that allocates
 /// encrypted transactions.
 #[allow(dead_code)]
 pub enum EncryptedTxBatchAllocator {
     WithEncryptedTxs(
-        BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>,
+        BlockAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>,
     ),
     WithoutEncryptedTxs(
-        BlockSpaceAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>,
+        BlockAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>,
     ),
 }
 
@@ -58,27 +58,27 @@ pub enum WithEncryptedTxs {}
 /// Prohibit block proposals from including encrypted txs.
 pub enum WithoutEncryptedTxs {}
 
-/// Try to allocate a new transaction on a [`BlockSpaceAllocator`] state.
+/// Try to allocate a new transaction on a [`BlockAllocator`] state.
 pub trait TryAlloc {
     type Resource<'tx>;
 
-    /// Try to allocate space for a new transaction.
+    /// Try to allocate resources for a new transaction.
     fn try_alloc<'tx>(
         &mut self,
         resource_required: Self::Resource<'tx>,
     ) -> Result<(), AllocFailure>;
 }
 
-/// Represents a state transition in the [`BlockSpaceAllocator`] state machine.
+/// Represents a state transition in the [`BlockAllocator`] state machine.
 ///
 /// This trait should not be used directly. Instead, consider using one of
 /// [`NextState`], [`WithEncryptedTxs`] or
 /// [`WithoutEncryptedTxs`].
 pub trait NextStateImpl<Transition = ()> {
-    /// The next state in the [`BlockSpaceAllocator`] state machine.
+    /// The next state in the [`BlockAllocator`] state machine.
     type Next;
 
-    /// Transition to the next state in the [`BlockSpaceAllocator`] state
+    /// Transition to the next state in the [`BlockAllocator`] state
     /// machine.
     fn next_state_impl(self) -> Self::Next;
 }
@@ -86,7 +86,7 @@ pub trait NextStateImpl<Transition = ()> {
 /// Convenience extension of [`NextStateImpl`], to transition to a new
 /// state with a null transition function.
 pub trait NextState: NextStateImpl {
-    /// Transition to the next state in the [`BlockSpaceAllocator`] state,
+    /// Transition to the next state in the [`BlockAllocator`] state,
     /// using a null transiiton function.
     #[inline]
     fn next_state(self) -> Self::Next

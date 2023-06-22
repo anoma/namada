@@ -1,7 +1,7 @@
-use super::super::{AllocFailure, BlockSpaceAllocator, DumpResource};
+use super::super::{AllocFailure, BlockAllocator, DumpResource};
 use super::{BuildingProtocolTxBatch, TryAlloc};
 
-impl TryAlloc for BlockSpaceAllocator<BuildingProtocolTxBatch> {
+impl TryAlloc for BlockAllocator<BuildingProtocolTxBatch> {
     type Resource<'tx> = &'tx [u8];
 
     #[inline]
