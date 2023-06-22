@@ -404,7 +404,7 @@ pub fn prepare_wasm_code<T: AsRef<[u8]>>(code: T) -> Result<Vec<u8>> {
         pwasm_utils::inject_gas_counter(module, &get_gas_rules(), "env")
             .map_err(|_original_module| Error::GasMeterInjection)?;
     let module =
-        pwasm_utils::stack_height::inject_limiter(module, WASM_STACK_LIMIT)
+        wasm_instrument::inject_stack_limiter(module, WASM_STACK_LIMIT)
             .map_err(|_original_module| Error::StackLimiterInjection)?;
     elements::serialize(module).map_err(Error::SerializationError)
 }
@@ -485,10 +485,10 @@ mod tests {
     /// execution is aborted.
     #[test]
     fn test_tx_stack_limiter() {
-        // Because each call into `$loop` inside the wasm consumes 3 stack
-        // heights, this should hit the stack limit. If we were to subtract
-        // one from this value, we should be just under the limit.
-        let loops = WASM_STACK_LIMIT / 3 - 1;
+        // Because each call into `$loop` inside the wasm consumes 5 stack
+        // heights except for the terminal call, this should hit the stack
+        // limit.
+        let loops = WASM_STACK_LIMIT / 5 - 1;
 
         let error = loop_in_tx_wasm(loops).expect_err(&format!(
             "Expecting runtime error \"unreachable\" caused by stack-height \
@@ -506,10 +506,10 @@ mod tests {
     /// is aborted.
     #[test]
     fn test_vp_stack_limiter() {
-        // Because each call into `$loop` inside the wasm consumes 3 stack
-        // heights, this should hit the stack limit. If we were to subtract
-        // one from this value, we should be just under the limit.
-        let loops = WASM_STACK_LIMIT / 3 - 1;
+        // Because each call into `$loop` inside the wasm consumes 5 stack
+        // heights except for the terminal call, this should hit the stack
+        // limit.
+        let loops = WASM_STACK_LIMIT / 5 - 1;
 
         let error = loop_in_vp_wasm(loops).expect_err(
             "Expecting runtime error caused by stack-height overflow. Got",

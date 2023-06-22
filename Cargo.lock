@@ -3695,6 +3695,7 @@ dependencies = [
  "toml",
  "tracing 0.1.37",
  "tracing-subscriber 0.3.17",
+ "wasm-instrument",
  "wasmer",
  "wasmer-cache",
  "wasmer-compiler-singlepass",
@@ -7095,6 +7096,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e77053dc709db790691d3732cfc458adc5acc881dec524965c608effdcd9c581"
 dependencies = [
  "leb128",
+]
+
+[[package]]
+name = "wasm-instrument"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a47ecb37b9734d1085eaa5ae1a81e60801fd8c28d4cabdd8aedb982021918bc"
+dependencies = [
+ "parity-wasm",
 ]
 
 [[package]]
