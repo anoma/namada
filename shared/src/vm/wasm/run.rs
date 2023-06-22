@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use parity_wasm::elements;
-use pwasm_utils::{self, rules};
 use thiserror::Error;
 use wasmer::{BaseTunables, Module, Store};
 
@@ -400,9 +399,14 @@ pub fn untrusted_wasm_store(limit: Limit<BaseTunables>) -> wasmer::Store {
 pub fn prepare_wasm_code<T: AsRef<[u8]>>(code: T) -> Result<Vec<u8>> {
     let module: elements::Module = elements::deserialize_buffer(code.as_ref())
         .map_err(Error::DeserializationError)?;
-    let module =
-        pwasm_utils::inject_gas_counter(module, &get_gas_rules(), "env")
-            .map_err(|_original_module| Error::GasMeterInjection)?;
+    let module = wasm_instrument::gas_metering::inject(
+        module,
+        wasm_instrument::gas_metering::host_function::Injector::new(
+            "env", "gas",
+        ),
+        &get_gas_rules(),
+    )
+    .map_err(|_original_module| Error::GasMeterInjection)?;
     let module =
         wasm_instrument::inject_stack_limiter(module, WASM_STACK_LIMIT)
             .map_err(|_original_module| Error::StackLimiterInjection)?;
@@ -461,8 +465,15 @@ where
 }
 
 /// Get the gas rules used to meter wasm operations
-fn get_gas_rules() -> rules::Set {
-    rules::Set::default().with_grow_cost(1)
+fn get_gas_rules() -> wasm_instrument::gas_metering::ConstantCostRules {
+    let instruction_cost = 1;
+    let memory_grow_cost = 1;
+    let call_per_local_cost = 1;
+    wasm_instrument::gas_metering::ConstantCostRules::new(
+        instruction_cost,
+        memory_grow_cost,
+        call_per_local_cost,
+    )
 }
 
 #[cfg(test)]
