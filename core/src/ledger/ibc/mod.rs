@@ -70,6 +70,31 @@ where
     validation_params: ValidationParams,
 }
 
+#[cfg(target_family = "wasm")]
+pub mod tx {
+    // These host functions are implemented in the Namada's [`host_env`]
+    // module. The environment provides calls to them via this C interface.
+    extern "C" {
+        // Requires a node running with "Info" log level
+        pub fn namada_tx_log_string(str_ptr: u64, str_len: u64);
+    }
+
+    pub fn log_string(msg: &str) {
+        unsafe {
+            namada_tx_log_string(msg.as_ptr() as u64, msg.len() as u64);
+        }
+    }
+}
+
+macro_rules! log_string {
+    ($($msg: tt)*) => {
+        #[cfg(target_family = "wasm")]
+        {
+            tx::log_string(&format!($($msg)*))
+        }
+    };
+}
+
 impl<'a, C> IbcActions<'a, C>
 where
     C: IbcCommonContext + Debug,
@@ -114,24 +139,35 @@ where
 
     /// Execute according to the message in an IBC transaction or VP
     pub fn execute(&mut self, tx_data: &[u8]) -> Result<(), Error> {
+        #[cfg(target_family = "wasm")]
+        {
+            tx::log_string(&format!("Reached line: {}", line!()))
+        }
         let msg = Any::decode(tx_data).map_err(Error::DecodingData)?;
+        log_string!("Reached line: {}", line!());
         match msg.type_url.as_str() {
             MSG_TRANSFER_TYPE_URL => {
                 let msg =
                     MsgTransfer::try_from(msg).map_err(Error::TokenTransfer)?;
+                log_string!("Reached line: {}", line!());
                 let port_id = msg.port_id_on_a.clone();
                 match self.get_route_mut_by_port(&port_id) {
                     Some(_module) => {
                         let mut module = TransferModule::new(self.ctx.clone());
                         // restore the denom if it is hashed
                         let msg = self.restore_denom(msg)?;
+                        log_string!("Reached line: {}", line!());
                         send_transfer_execute(&mut module, msg)
                             .map_err(Error::TokenTransfer)
                     }
-                    None => Err(Error::NoModule),
+                    None => {
+                        log_string!("Reached line: {}", line!());
+                        Err(Error::NoModule)
+                    },
                 }
             }
             _ => {
+                log_string!("Reached line: {}", line!());
                 execute(self, msg.clone()).map_err(Error::Execution)?;
                 // the current ibc-rs execution doesn't store the denom for the
                 // token hash when transfer with MsgRecvPacket
