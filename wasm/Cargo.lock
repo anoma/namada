@@ -3085,7 +3085,6 @@ dependencies = [
  "paste",
  "proptest",
  "prost",
- "pwasm-utils",
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rayon",
@@ -3851,16 +3850,6 @@ dependencies = [
  "bitflags",
  "memchr",
  "unicase",
-]
-
-[[package]]
-name = "pwasm-utils"
-version = "0.20.0"
-source = "git+https://github.com/heliaxdev/wasm-utils?tag=v0.20.0#782bfa7fb5e513b602e66af492cbc4cb1b06f2ba"
-dependencies = [
- "byteorder",
- "log",
- "parity-wasm",
 ]
 
 [[package]]

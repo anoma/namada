@@ -29,7 +29,6 @@ wasm-runtime = [
   "namada_core/wasm-runtime",
   "loupe",
   "parity-wasm",
-  "pwasm-utils",
   "rayon",
   "wasm-instrument",
   "wasmer-cache",
@@ -104,7 +103,6 @@ parity-wasm = {version = "0.45.0", features = ["sign_ext"], optional = true}
 paste.workspace = true
 proptest = {version = "1.2.0", optional = true}
 prost.workspace = true
-pwasm-utils = {git = "https://github.com/heliaxdev/wasm-utils", tag = "v0.20.0", features = ["sign_ext"], optional = true}
 rayon = {version = "=1.5.3", optional = true}
 ripemd.workspace = true
 rust_decimal.workspace = true
