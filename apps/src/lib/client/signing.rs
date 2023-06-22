@@ -300,8 +300,6 @@ pub async fn sign_wrapper(
                 let tx_args = args::Tx {
                     fee_amount: Some(0.into()),
                     fee_unshield: None,
-                    gas_limit: u64::MAX.into(),
-                    signer: Some(FromContext::new(address::masp().to_string())),
                     ..args.to_owned()
                 };
                 let transfer_args = args::TxTransfer {
