@@ -42,10 +42,11 @@ mod tests {
 
     proptest! {
         /// In this test we setup the ledger and PoS system with an arbitrary
-        /// initial state with 1 genesis validator and arbitrary PoS parameters. We then
-        /// generate an arbitrary bond that we'd like to apply.
+        /// initial state with 1 genesis validator and arbitrary PoS parameters.
+        /// We then generate an validator commission rate change that we'd like
+        /// to apply.
         ///
-        /// After we apply the bond, we check that all the storage values
+        /// After we apply the tx, we check that all the storage values
         /// in PoS system have been updated as expected and then we also check
         /// that this transaction is accepted by the PoS validity predicate.
         #[test]
@@ -129,12 +130,6 @@ mod tests {
 
         // After pipeline, the commission rates should have changed
         for epoch in pos_params.pipeline_len..=pos_params.unbonding_len {
-            assert_ne!(
-                commission_rates_pre[epoch as usize],
-                commission_rate_handle.get(ctx(), Epoch(epoch), &pos_params)?,
-                "The commission rate after the pipeline offset must have \
-                 changed - checking in epoch: {epoch}"
-            );
             assert_eq!(
                 Some(commission_change.new_rate),
                 commission_rate_handle.get(ctx(), Epoch(epoch), &pos_params)?,
@@ -167,6 +162,8 @@ mod tests {
         rate_pre: Decimal,
         max_change: Decimal,
     ) -> impl Strategy<Value = Decimal> {
+        assert!(max_change > Decimal::ZERO);
+
         // Arbitrary non-zero change
         let arb_change = |ceil: Decimal| {
             // Clamp the `ceil` to `max_change` and convert to an int
@@ -174,7 +171,7 @@ mod tests {
                 .abs()
                 .to_u64()
                 .unwrap();
-            (1..ceil).prop_map(|c|
+            (0..ceil).prop_map(|c|
                 // Convert back from an int
                  Decimal::from(c) / scale())
         };
@@ -212,7 +209,11 @@ mod tests {
     ) -> impl Strategy<Value = transaction::pos::CommissionChange> {
         (
             arb_established_address(),
-            arb_new_rate(rate_pre, max_change),
+            if max_change == Decimal::ZERO {
+                Just(Decimal::ZERO).boxed()
+            } else {
+                arb_new_rate(rate_pre, max_change).boxed()
+            },
         )
             .prop_map(|(validator, new_rate)| {
                 transaction::pos::CommissionChange {
@@ -227,8 +228,7 @@ mod tests {
     {
         let min = Decimal::ZERO;
         let max = Decimal::ONE;
-        let non_zero_min = Decimal::from(1) / scale();
-        (arb_rate(min, max), arb_rate(non_zero_min, max)).prop_flat_map(
+        (arb_rate(min, max), arb_rate(min, max)).prop_flat_map(
             |(rate, max_change)| {
                 (
                     Just(rate),

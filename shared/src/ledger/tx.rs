@@ -20,7 +20,6 @@ use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::CommissionPair;
 use prost::EncodeError;
 use rust_decimal::Decimal;
-use sha2::Digest as Sha2Digest;
 use thiserror::Error;
 use tokio::time::Duration;
 

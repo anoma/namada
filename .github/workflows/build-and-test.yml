@@ -37,7 +37,7 @@ jobs:
       matrix:
         os: [ubuntu-20.04]
         wasm_cache_version: ["v2"]
-        mold_version: [1.7.0]
+        mold_version: [1.11.0]
 
     steps:
       - name: Checkout repo
@@ -79,7 +79,8 @@ jobs:
       matrix:
         os: [ubuntu-20.04]
         wasm_cache_version: ["v2"]
-        mold_version: [1.7.0]
+        nightly_version: [nightly-2023-06-01]
+        mold_version: [1.11.0]
 
     steps:
       - name: Checkout repo
@@ -103,6 +104,11 @@ jobs:
           path: ./wasm
         env:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+      - name: Setup rust nightly
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          toolchain: ${{ matrix.nightly_version }}
+          profile: default
       - name: Test Wasm
         run: make test-wasm
       - name: Check wasm up-to-date
@@ -146,13 +152,14 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-20.04]
-        nightly_version: [nightly-2022-11-03]
-        mold_version: [1.7.0]
+        nightly_version: [nightly-2023-06-01]
+        mold_version: [1.11.0]
         make:
           - name: ABCI
             suffix: ''
             cache_key: namada
             cache_version: v2
+            tendermint_artifact: tendermint-unreleased-v0.1.4-abciplus
 
     env:
       CARGO_INCREMENTAL: 0
@@ -234,6 +241,8 @@ jobs:
           name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
           path: ./wasm
       - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Check crates build with default features
+        run: make check-crates
       - name: Run unit test
         run: make test-unit-coverage${{ matrix.make.suffix }}
         env:
@@ -258,7 +267,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-20.04]
-        mold_version: [1.7.0]
+        mold_version: [1.11.0]
         make:
           - name: ABCI Release build
             suffix: ''
@@ -365,12 +374,12 @@ jobs:
 
   namada-e2e:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 80
+    # timeout-minutes: 80
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-20.04]
-        nightly_version: [nightly-2022-11-03]
+        nightly_version: [nightly-2023-06-01]
         mold_version: [1.7.0]
         make:
           - name: e2e
@@ -378,13 +387,22 @@ jobs:
             index: 0
             cache_key: namada
             cache_version: v2
-            wait_for: namada-release (ubuntu-20.04, 1.7.0, ABCI Release build, namada-e2e-release, v2)
+            tendermint_artifact: tendermint-unreleased-v0.1.4-abciplus
+            wait_for: namada-release (ubuntu-20.04, 1.11.0, ABCI Release build, namada-e2e-release, v2)
           - name: e2e
             suffix: ''
             index: 1
             cache_key: namada
             cache_version: v2
-            wait_for: namada-release (ubuntu-20.04, 1.7.0, ABCI Release build, namada-e2e-release, v2)
+            tendermint_artifact: tendermint-unreleased-v0.1.4-abciplus
+            wait_for: namada-release (ubuntu-20.04, 1.11.0, ABCI Release build, namada-e2e-release, v2)
+          - name: e2e
+            suffix: ''
+            index: 2
+            cache_key: namada
+            cache_version: v2
+            tendermint_artifact: tendermint-unreleased-v0.1.4-abciplus
+            wait_for: namada-release (ubuntu-20.04, 1.11.0, ABCI Release build, namada-e2e-release, v2)
 
     env:
       CARGO_INCREMENTAL: 0
@@ -512,6 +530,7 @@ jobs:
           shasum /home/runner/work/masp-params/*.params
           python3 .github/workflows/scripts/schedule-e2e.py
         env:
+          NAMADA_TENDERMINT_WEBSOCKET_TIMEOUT: 20
           NAMADA_E2E_USE_PREBUILT_BINARIES: "true"
           NAMADA_E2E_KEEP_TEMP: "true"
           NAMADA_TM_STDOUT: "false"

@@ -20,7 +20,6 @@ use namada_core::types::token::{self, Amount};
 use namada_core::types::transaction::{pos, MIN_FEE};
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use sha2::Digest;
 use zeroize::Zeroizing;
 
 use crate::ibc::applications::transfer::msgs::transfer::{

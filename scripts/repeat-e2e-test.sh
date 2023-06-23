@@ -20,7 +20,7 @@ NIGHTLY=$(cat "$SCRIPTPATH"/../rust-nightly-version)
 for i in $(seq 1 "$NUM")
 do
     echo "Execution $i/$NUM"
-    if ! RUST_BACKTRACE=1 NAMADA_E2E_KEEP_TEMP=true NAMADA_E2E_DEBUG=true cargo "+$NIGHTLY" test "$TEST" -Z unstable-options -- --exact --test-threads=1 --nocapture; then
+    if ! RUST_BACKTRACE=1 NAMADA_E2E_KEEP_TEMP=true NAMADA_E2E_DEBUG=true cargo "+$NIGHTLY" test "$TEST" -- --exact --test-threads=1 --nocapture; then
         exit 1
     fi
 done

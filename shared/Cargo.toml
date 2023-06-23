@@ -1,15 +1,21 @@
 [package]
-authors = ["Heliax AG <hello@heliax.dev>"]
-edition = "2021"
-license = "GPL-3.0"
 name = "namada"
+description = "The main Namada library crate"
 resolver = "2"
-version = "0.17.2"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["abciplus", "namada-sdk"]
+default = ["abciplus", "namada-sdk", "wasm-runtime"]
 mainnet = [
   "namada_core/mainnet",
 ]
@@ -41,14 +47,14 @@ tendermint-rpc = [
   "async-client",
   "dep:tendermint-rpc",
 ]
+# tendermint-rpc HttpClient
+http-client = [
+  "tendermint-rpc/http-client"
+]
 
 abciplus = [
   "namada_core/abciplus",
   "namada_proof_of_stake/abciplus",
-  "ibc",
-  "ibc-proto",
-  "tendermint",
-  "tendermint-proto",
 ]
 
 ibc-mocks = [
@@ -76,77 +82,68 @@ namada-sdk = [
   "masp_primitives/transparent-inputs",
 ]
 
-multicore = ["bellman/multicore", "namada_core/multicore", "masp_proofs/multicore"]
+multicore = ["masp_proofs/multicore"]
 
 [dependencies]
-async-std = "1.11.0"
 namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign-verify"]}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
+async-std.workspace = true
 async-trait = {version = "0.1.51", optional = true}
-bellman = { version = "0.11.2", default-features = false, features = ["groth16"] }
-bls12_381 = "0.6.1"
-borsh = "0.9.0"
-circular-queue = "0.2.6"
-# Using unreleased commit on top of version 0.5.0 that adds Sync to the CLruCache
-clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
-data-encoding = "2.3.2"
-derivation-path = "0.2.0"
-derivative = "2.2.0"
-# TODO using the same version of tendermint-rs as we do here.
-ibc = {version = "0.36.0", default-features = false, features = ["serde"], optional = true}
-ibc-proto = {version = "0.26.0", default-features = false, optional = true}
-itertools = "0.10.0"
+bimap.workspace = true
+borsh.workspace = true
+circular-queue.workspace = true
+clru.workspace = true
+data-encoding.workspace = true
+derivation-path.workspace = true
+derivative.workspace = true
+itertools.workspace = true
 loupe = {version = "0.1.3", optional = true}
+orion.workspace = true
 parity-wasm = {version = "0.45.0", features = ["sign_ext"], optional = true}
-paste = "1.0.9"
+paste.workspace = true
 proptest = {version = "1.2.0", optional = true}
-prost = "0.11.6"
+prost.workspace = true
 pwasm-utils = {git = "https://github.com/heliaxdev/wasm-utils", tag = "v0.20.0", features = ["sign_ext"], optional = true}
 rayon = {version = "=1.5.3", optional = true}
-ripemd = "0.1"
-rust_decimal = "=1.26.1"
-rust_decimal_macros = "=1.26.1"
-serde = {version = "1.0.125", features = ["derive"]}
-serde_json = "1.0.62"
-sha2 = "0.9.3"
-slip10_ed25519 = "0.1.3"
-tiny-bip39 = {git = "https://github.com/anoma/tiny-bip39.git", rev = "bf0f6d8713589b83af7a917366ec31f5275c0e57"}
-tiny-hderive = "0.3.0"
-# We switch off "blake2b" because it cannot be compiled to wasm
+ripemd.workspace = true
+rust_decimal.workspace = true
+rust_decimal_macros.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+slip10_ed25519.workspace = true
 tempfile = {version = "3.2.0", optional = true}
-tendermint = {version = "0.23.6", optional = true}
-tendermint-rpc = {version = "0.23.6", default-features = false, features = ["trait-client"], optional = true}
-tendermint-proto = {version = "0.23.6", optional = true}
-thiserror = "1.0.38"
-tracing = "0.1.30"
+tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "02b256829e80f8cfecf3fa0d625c2a76c79cd043", default-features = false, features = ["trait-client"], optional = true}
+thiserror.workspace = true
+tiny-bip39.workspace = true
+tiny-hderive.workspace = true
+tokio.workspace = true
+toml.workspace = true
+tracing.workspace = true
 wasmer = {version = "=2.2.0", optional = true}
 wasmer-cache = {version = "=2.2.0", optional = true}
 wasmer-compiler-singlepass = {version = "=2.2.0", optional = true}
 wasmer-engine-dylib = {version = "=2.2.0", optional = true}
 wasmer-engine-universal = {version = "=2.2.0", optional = true}
 wasmer-vm = {version = "2.2.0", optional = true}
-wasmparser = "0.83.0"
-# branch = "murisi/namada-integration"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "cfea8c95d3f73077ca3e25380fd27e5b46e828fd" }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "cfea8c95d3f73077ca3e25380fd27e5b46e828fd", default-features = false, features = ["local-prover"] }
+wasmparser.workspace = true
+masp_primitives.workspace = true
+masp_proofs.workspace = true
 rand = {version = "0.8", default-features = false, optional = true}
 rand_core = {version = "0.6", default-features = false, optional = true}
-zeroize = "1.5.5"
-toml = "0.5.8"
-bimap = {version = "0.6.2", features = ["serde"]}
-orion = "0.16.0"
-tokio = {version = "1.8.2", default-features = false}
+zeroize.workspace = true
 
 [dev-dependencies]
-assert_matches = "1.5.0"
-async-trait = {version = "0.1.51"}
-base58 = "0.2.0"
-byte-unit = "4.0.13"
-hex = "0.4.3"
-libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9"}
+namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign-verify", "testing", "ibc-mocks"]}
 namada_test_utils = {path = "../test_utils"}
-pretty_assertions = "0.7.2"
-proptest = "1.2.0"
-test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
-tokio = {version = "1.8.2", default-features = false, features = ["rt", "macros"]}
-tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
+assert_matches.workspace = true
+async-trait.workspace = true
+base58.workspace = true
+byte-unit.workspace = true
+libsecp256k1.workspace = true
+pretty_assertions.workspace = true
+proptest.workspace = true
+tempfile.workspace = true
+test-log.workspace = true
+tokio = {workspace = true, features = ["rt", "macros"]}
+tracing-subscriber.workspace = true

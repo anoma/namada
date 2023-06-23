@@ -15,6 +15,7 @@ use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada::types::token;
 use namada_apps::config::genesis::genesis_config;
+use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::config::{Config, TendermintMode};
 
 use super::setup::{
@@ -99,7 +100,14 @@ pub fn get_actor_rpc(test: &Test, who: &Who) -> String {
     };
     let config =
         Config::load(base_dir, &test.net.chain_id, Some(tendermint_mode));
-    config.ledger.tendermint.rpc_address.to_string()
+    let ip = convert_tm_addr_to_socket_addr(&config.ledger.cometbft.rpc.laddr)
+        .ip()
+        .to_string();
+    let port =
+        convert_tm_addr_to_socket_addr(&config.ledger.cometbft.rpc.laddr)
+            .port()
+            .to_string();
+    format!("{}:{}", ip, port)
 }
 
 /// Get the public key of the validator

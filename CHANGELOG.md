@@ -1,5 +1,38 @@
 # CHANGELOG
 
+## v0.17.4
+
+Namada 0.17.4 is a minor release improving the codebase by bumping the rust toolchain.
+
+### BUG FIXES
+
+- Fix missing async awaits in MASP load and save calls.
+  ([\#1588](https://github.com/anoma/namada/pull/1588))
+
+## v0.17.3
+
+Namada 0.17.3 is a minor release switching from tendermint to cometbft.
+
+### BUG FIXES
+
+- Correctly handle parsing storage key if they are empty.
+  ([#1345](https://github.com/anoma/namada/pull/1345))
+
+### FEATURES
+
+- Enable users to change any tendermint config options via namada config.
+  ([#1570](https://github.com/anoma/namada/pull/1570))
+
+### IMPROVEMENTS
+
+- Added query endpoint for IBC events replacing Tendermint index.
+  ([\#1404](https://github.com/anoma/namada/pull/1404))
+
+### MISCELLANEOUS
+
+- Switch from unreleased Tendermint fork to an official CometBFT release
+  v0.37.1. ([\#1476](https://github.com/anoma/namada/pull/1476))
+
 ## v0.17.2
 
 Namada 0.17.2 is a minor release featuring improvements to the client stability.
