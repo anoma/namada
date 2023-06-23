@@ -1443,6 +1443,7 @@ mod test {
     use namada::types::address::EstablishedAddressGen;
     use namada::types::storage::{BlockHash, Epoch, Epochs};
     use tempfile::tempdir;
+    use test_log::test;
 
     use super::*;
 
@@ -1462,36 +1463,7 @@ mod test {
         )
         .unwrap();
 
-        let merkle_tree = MerkleTree::<Sha256Hasher>::default();
-        let merkle_tree_stores = merkle_tree.stores();
-        let hash = BlockHash::default();
-        let time = DateTimeUtc::now();
-        let epoch = Epoch::default();
-        let pred_epochs = Epochs::default();
-        let height = BlockHeight::default();
-        let next_epoch_min_start_height = BlockHeight::default();
-        let next_epoch_min_start_time = DateTimeUtc::now();
-        let update_epoch_blocks_delay = None;
-        let address_gen = EstablishedAddressGen::new("whatever");
-        let tx_queue = TxQueue::default();
-        let results = BlockResults::default();
-        let block = BlockStateWrite {
-            merkle_tree_stores,
-            header: None,
-            hash: &hash,
-            height,
-            time,
-            epoch,
-            results: &results,
-            pred_epochs: &pred_epochs,
-            next_epoch_min_start_height,
-            next_epoch_min_start_time,
-            update_epoch_blocks_delay,
-            address_gen: &address_gen,
-            tx_queue: &tx_queue,
-        };
-
-        db.write_block(block, &mut batch, true).unwrap();
+        write_block(&mut db, &mut batch, BlockHeight::default()).unwrap();
         db.exec_batch(batch.0).unwrap();
 
         let _state = db
@@ -1652,5 +1624,117 @@ mod test {
             .map(|(key, _val, _)| Key::parse(key).unwrap())
             .collect();
         itertools::assert_equal(all_keys, itered_keys);
+    }
+
+    #[test]
+    fn test_rollback() {
+        let dir = tempdir().unwrap();
+        let mut db = open(dir.path(), None).unwrap();
+
+        // A key that's gonna be added on a second block
+        let add_key = Key::parse("add").unwrap();
+        // A key that's gonna be deleted on a second block
+        let delete_key = Key::parse("delete").unwrap();
+        // A key that's gonna be overwritten on a second block
+        let overwrite_key = Key::parse("overwrite").unwrap();
+
+        // Write first block
+        let mut batch = RocksDB::batch();
+        let height_0 = BlockHeight(100);
+        let to_delete_val = vec![1_u8, 1, 0, 0];
+        let to_overwrite_val = vec![1_u8, 1, 1, 0];
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_0,
+            &delete_key,
+            &to_delete_val,
+        )
+        .unwrap();
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_0,
+            &overwrite_key,
+            &to_overwrite_val,
+        )
+        .unwrap();
+
+        write_block(&mut db, &mut batch, height_0).unwrap();
+        db.exec_batch(batch.0).unwrap();
+
+        // Write second block
+        let mut batch = RocksDB::batch();
+        let height_1 = BlockHeight(101);
+        let add_val = vec![1_u8, 0, 0, 0];
+        let overwrite_val = vec![1_u8, 1, 1, 1];
+        db.batch_write_subspace_val(&mut batch, height_1, &add_key, &add_val)
+            .unwrap();
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_1,
+            &overwrite_key,
+            &overwrite_val,
+        )
+        .unwrap();
+        db.batch_delete_subspace_val(&mut batch, height_1, &delete_key)
+            .unwrap();
+
+        write_block(&mut db, &mut batch, height_1).unwrap();
+        db.exec_batch(batch.0).unwrap();
+
+        // Check that the values are as expected from second block
+        let added = db.read_subspace_val(&add_key).unwrap();
+        assert_eq!(added, Some(add_val));
+        let overwritten = db.read_subspace_val(&overwrite_key).unwrap();
+        assert_eq!(overwritten, Some(overwrite_val));
+        let deleted = db.read_subspace_val(&delete_key).unwrap();
+        assert_eq!(deleted, None);
+
+        // Rollback to the first block height
+        db.rollback(height_0).unwrap();
+
+        // Check that the values are back to the state at the first block
+        let added = db.read_subspace_val(&add_key).unwrap();
+        assert_eq!(added, None);
+        let overwritten = db.read_subspace_val(&overwrite_key).unwrap();
+        assert_eq!(overwritten, Some(to_overwrite_val));
+        let deleted = db.read_subspace_val(&delete_key).unwrap();
+        assert_eq!(deleted, Some(to_delete_val));
+    }
+
+    /// A test helper to write a block
+    fn write_block(
+        db: &mut RocksDB,
+        batch: &mut RocksDBWriteBatch,
+        height: BlockHeight,
+    ) -> Result<()> {
+        let merkle_tree = MerkleTree::<Sha256Hasher>::default();
+        let merkle_tree_stores = merkle_tree.stores();
+        let hash = BlockHash::default();
+        let time = DateTimeUtc::now();
+        let epoch = Epoch::default();
+        let pred_epochs = Epochs::default();
+        let next_epoch_min_start_height = BlockHeight::default();
+        let next_epoch_min_start_time = DateTimeUtc::now();
+        let update_epoch_blocks_delay = None;
+        let address_gen = EstablishedAddressGen::new("whatever");
+        let tx_queue = TxQueue::default();
+        let results = BlockResults::default();
+        let block = BlockStateWrite {
+            merkle_tree_stores,
+            header: None,
+            hash: &hash,
+            height,
+            time,
+            epoch,
+            results: &results,
+            pred_epochs: &pred_epochs,
+            next_epoch_min_start_height,
+            next_epoch_min_start_time,
+            update_epoch_blocks_delay,
+            address_gen: &address_gen,
+            tx_queue: &tx_queue,
+        };
+
+        db.write_block(block, batch, true)
     }
 }
