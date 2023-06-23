@@ -20,6 +20,7 @@ mod tests {
     use std::cmp;
 
     use namada::ledger::pos::{PosParams, PosVP};
+    use namada::proof_of_stake::types::GenesisValidator;
     use namada::proof_of_stake::validator_commission_rate_handle;
     use namada::types::dec::{Dec, POS_DECIMAL_PRECISION};
     use namada::types::storage::Epoch;
@@ -33,7 +34,6 @@ mod tests {
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use namada_tx_prelude::token;
-    use namada_vp_prelude::proof_of_stake::GenesisValidator;
     use proptest::prelude::*;
 
     use super::*;

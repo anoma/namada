@@ -12,7 +12,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
 
     let slashed =
         ctx.withdraw_tokens(withdraw.source.as_ref(), &withdraw.validator)?;
-    if slashed != token::Amount::default() {
+    if !slashed.is_zero() {
         debug_log!("New withdrawal slashed for {}", slashed.to_string_native());
     }
     Ok(())
@@ -20,7 +20,8 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
 
 #[cfg(test)]
 mod tests {
-    use namada::ledger::pos::{GenesisValidator, PosParams, PosVP};
+    use namada::ledger::pos::{PosParams, PosVP};
+    use namada::proof_of_stake::types::GenesisValidator;
     use namada::proof_of_stake::unbond_handle;
     use namada::types::dec::Dec;
     use namada::types::storage::Epoch;
@@ -71,7 +72,7 @@ mod tests {
     ) -> TxResult {
         // Remove the validator stake threshold for simplicity
         let pos_params = PosParams {
-            validator_stake_threshold: token::Amount::default(),
+            validator_stake_threshold: token::Amount::zero(),
             ..pos_params
         };
 
@@ -89,7 +90,7 @@ mod tests {
                 // If we're withdrawing a delegation, we'll give the initial
                 // stake to the delegation instead of the
                 // validator
-                token::Amount::default()
+                token::Amount::zero()
             } else {
                 initial_stake
             },
@@ -193,7 +194,7 @@ mod tests {
         let handle = unbond_handle(&unbond_src, &withdraw.validator);
 
         let unbond_pre =
-            handle.at(&withdraw_epoch).get(ctx(), &bond_epoch).unwrap();
+            handle.at(&bond_epoch).get(ctx(), &withdraw_epoch).unwrap();
 
         assert_eq!(unbond_pre, Some(unbonded_amount));
 

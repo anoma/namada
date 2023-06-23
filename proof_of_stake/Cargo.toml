@@ -33,8 +33,12 @@ tracing.workspace = true
 
 [dev-dependencies]
 namada_core = {path = "../core", features = ["testing"]}
+assert_matches.workspace = true
 itertools.workspace = true
 proptest.workspace = true
 proptest-state-machine.workspace = true
 test-log.workspace = true
 tracing-subscriber.workspace = true
+pretty_assertions.workspace = true
+derivative.workspace = true
+yansi.workspace = true

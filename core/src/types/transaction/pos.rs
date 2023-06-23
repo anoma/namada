@@ -95,6 +95,30 @@ pub struct Withdraw {
     pub source: Option<Address>,
 }
 
+/// A redelegation of bonded tokens from one validator to another.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Hash,
+    Eq,
+    Serialize,
+    Deserialize,
+)]
+pub struct Redelegation {
+    /// Source validator address
+    pub src_validator: Address,
+    /// Destination validator address
+    pub dest_validator: Address,
+    /// Owner (delegator) of the bonds to be redelegate
+    pub owner: Address,
+    /// The amount of tokens
+    pub amount: token::Amount,
+}
+
 /// A change to the validator commission rate.
 #[derive(
     Debug,

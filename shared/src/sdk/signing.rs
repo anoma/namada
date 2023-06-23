@@ -358,7 +358,7 @@ pub async fn wrap_tx<
             if !args.force {
                 return Err(e);
             } else {
-                token::Amount::default()
+                token::Amount::zero()
             }
         }
     };

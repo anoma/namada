@@ -1395,6 +1395,48 @@ where
     Ok(())
 }
 
+pub async fn submit_redelegate<C, IO: Io>(
+    client: &C,
+    mut ctx: Context,
+    args: args::Redelegate,
+) -> Result<(), error::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
+    let default_address = args.owner.clone();
+    let default_signer = Some(default_address.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
+        client,
+        &mut ctx.wallet,
+        &args.tx,
+        Some(default_address),
+        default_signer,
+    )
+    .await?;
+
+    let mut tx = tx::build_redelegation::<_, _, _, IO>(
+        client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
+        args.clone(),
+        signing_data.fee_payer.clone(),
+    )
+    .await?;
+    signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
+        .await?;
+
+    if args.tx.dump_tx {
+        tx::dump_tx::<IO>(&args.tx, tx);
+    } else {
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data)?;
+        tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx)
+            .await?;
+    }
+
+    Ok(())
+}
+
 pub async fn submit_validator_commission_change<C, IO: Io>(
     client: &C,
     mut ctx: Context,

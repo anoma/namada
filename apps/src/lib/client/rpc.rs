@@ -30,7 +30,8 @@ use namada::core::ledger::pgf::parameters::PgfParameters;
 use namada::core::ledger::pgf::storage::steward::StewardDetail;
 use namada::ledger::events::Event;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
-use namada::ledger::pos::{CommissionPair, PosParams, Slash};
+use namada::ledger::pos::types::{CommissionPair, Slash};
+use namada::ledger::pos::PosParams;
 use namada::ledger::queries::RPC;
 use namada::ledger::storage::ConversionState;
 use namada::proof_of_stake::types::{ValidatorState, WeightedValidator};
@@ -1454,7 +1455,7 @@ pub async fn query_and_print_unbonds<
     let unbonds = query_unbond_with_slashing(client, source, validator).await;
     let current_epoch = query_epoch(client).await.unwrap();
 
-    let mut total_withdrawable = token::Amount::default();
+    let mut total_withdrawable = token::Amount::zero();
     let mut not_yet_withdrawable = HashMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         if withdraw_epoch <= current_epoch {
@@ -1465,7 +1466,7 @@ pub async fn query_and_print_unbonds<
             *withdrawable_amount += amount;
         }
     }
-    if total_withdrawable != token::Amount::default() {
+    if !total_withdrawable.is_zero() {
         display_line!(
             IO,
             "Total withdrawable now: {}.",
@@ -1538,7 +1539,7 @@ pub async fn query_bonds<C: namada::ledger::queries::Client + Sync, IO: Io>(
                 bond.amount.to_string_native()
             )?;
         }
-        if details.bonds_total != token::Amount::zero() {
+        if !details.bonds_total.is_zero() {
             display_line!(
                 IO,
                 &mut w;
@@ -2339,13 +2340,12 @@ pub async fn get_bond_amount_at<C: namada::ledger::queries::Client + Sync>(
     validator: &Address,
     epoch: Epoch,
 ) -> Option<token::Amount> {
-    let (_total, total_active) =
-        unwrap_client_response::<C, (token::Amount, token::Amount)>(
-            RPC.vp()
-                .pos()
-                .bond_with_slashing(client, delegator, validator, &Some(epoch))
-                .await,
-        );
+    let total_active = unwrap_client_response::<C, token::Amount>(
+        RPC.vp()
+            .pos()
+            .bond_with_slashing(client, delegator, validator, &Some(epoch))
+            .await,
+    );
     Some(total_active)
 }
 

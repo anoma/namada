@@ -6,6 +6,9 @@ NAMADA_E2E_DEBUG ?= true
 RUST_BACKTRACE ?= 1
 NAMADA_MASP_TEST_SEED ?= 0
 PROPTEST_CASES ?= 100
+# Disable shrinking in `make test-pos-sm` for CI runs. If the test fail in CI,
+# we only want to get the seed.
+PROPTEST_MAX_SHRINK_ITERS ?= 0
 
 cargo := $(env) cargo
 rustup := $(env) rustup
@@ -211,11 +214,13 @@ test-debug:
 test-benches:
 	$(cargo) +$(nightly) test --package namada_benchmarks --benches
 
-# Run PoS state machine tests
+# Run PoS state machine tests with shrinking disabled by default (can be 
+# overriden with `PROPTEST_MAX_SHRINK_ITERS`)
 test-pos-sm:
 	cd proof_of_stake && \
-	RUST_BACKTRACE=1 \
+		RUST_BACKTRACE=1 \
 		PROPTEST_CASES=$(PROPTEST_CASES) \
+		PROPTEST_MAX_SHRINK_ITERS=$(PROPTEST_MAX_SHRINK_ITERS) \
 		RUSTFLAGS='-C debuginfo=2 -C debug-assertions=true -C overflow-checks=true' \
 		cargo test pos_state_machine_test --release 
 

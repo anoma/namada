@@ -4,7 +4,8 @@
 //! precision.
 
 use std::fmt::{Debug, Display, Formatter};
-use std::ops::{Add, AddAssign, Div, Mul, Sub};
+use std::iter::Sum;
+use std::ops::{Add, AddAssign, Div, Mul, Neg, Sub};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -330,6 +331,12 @@ impl AddAssign<Dec> for Dec {
     }
 }
 
+impl Sum for Dec {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Dec::default(), |acc, next| acc + next)
+    }
+}
+
 impl Sub<Dec> for Dec {
     type Output = Self;
 
@@ -406,6 +413,14 @@ impl Div<u64> for Dec {
 
     fn div(self, rhs: u64) -> Self::Output {
         Self(self.0 / Uint::from(rhs))
+    }
+}
+
+impl Neg for Dec {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        Self(self.0.neg())
     }
 }
 

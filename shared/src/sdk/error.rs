@@ -165,6 +165,12 @@ pub enum TxError {
     /// Error retrieving from storage
     #[error("Error retrieving from storage")]
     Retrieval,
+    /// Bond amount is zero
+    #[error("The requested bond amount is 0.")]
+    BondIsZero,
+    /// Unond amount is zero
+    #[error("The requested unbond amount is 0.")]
+    UnbondIsZero,
     /// No unbonded bonds ready to withdraw in the current epoch
     #[error(
         "There are no unbonded bonds ready to withdraw in the current epoch \
@@ -278,6 +284,28 @@ pub enum TxError {
     /// Invalid owner account
     #[error("The source account {0} is not valid or doesn't exist.")]
     InvalidAccount(String),
+    /// The redelegation amount is larger than the remaining bond amount
+    #[error(
+        "The redelegation amount is larger than the remaining bond amount. \
+         Amount to redelegate is {0} and the remaining bond amount is {1}."
+    )]
+    RedelegationAmountTooLarge(String, String),
+    /// The redelegation amount is 0
+    #[error("The amount requested to redelegate is 0 tokens")]
+    RedelegationIsZero,
+    /// The src and dest validators are the same
+    #[error("The source and destination validators are the same")]
+    RedelegationSrcEqDest,
+    /// The redelegation owner is a validator
+    #[error("The redelegation owner {0} is a validator")]
+    RedelegatorIsValidator(Address),
+    /// There is an incoming redelegation that is still subject to possible
+    /// slashing
+    #[error(
+        "An incoming redelegation from delegator {0} to validator {1} is \
+         still subject to possible slashing"
+    )]
+    IncomingRedelIsStillSlashable(Address, Address),
     /// Other Errors that may show up when using the interface
     #[error("{0}")]
     Other(String),

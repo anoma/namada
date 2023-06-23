@@ -8,6 +8,7 @@ use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
 use namada_core::ledger::eth_bridge::storage::whitelist;
 use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
 use namada_core::ledger::storage::testing::{TestStorage, TestWlStorage};
+use namada_core::ledger::storage_api::token::credit_tokens;
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::address::{self, wnam, Address};
 use namada_core::types::dec::Dec;
@@ -20,7 +21,8 @@ use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_proof_of_stake::types::GenesisValidator;
 use namada_proof_of_stake::{
-    become_validator, bond_tokens, store_total_consensus_stake, BecomeValidator,
+    become_validator, bond_tokens, staking_token_address,
+    store_total_consensus_stake, BecomeValidator,
 };
 
 use crate::parameters::{
@@ -263,6 +265,8 @@ pub fn append_validators_to_storage(
     let mut all_keys = HashMap::new();
     let params = wl_storage.pos_queries().get_pos_params();
 
+    let staking_token = staking_token_address(wl_storage);
+
     for (validator, stake) in consensus_validators {
         let keys = TestValidatorKeys::generate();
 
@@ -282,6 +286,8 @@ pub fn append_validators_to_storage(
             max_commission_rate_change: Dec::new(1, 2).unwrap(),
         })
         .expect("Test failed");
+        credit_tokens(wl_storage, &staking_token, &validator, stake)
+            .expect("Test failed");
         bond_tokens(wl_storage, None, &validator, stake, current_epoch)
             .expect("Test failed");
 

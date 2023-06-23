@@ -223,6 +223,20 @@ impl<IO: Io> CliApi<IO> {
                         tx::submit_withdraw::<_, IO>(&client, ctx, args)
                             .await?;
                     }
+                    Sub::Redelegate(Redelegate(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.tx.ledger_address,
+                            )
+                        });
+                        client
+                            .wait_until_node_is_synced::<IO>()
+                            .await
+                            .proceed_or_else(error)?;
+                        let args = args.to_sdk(&mut ctx);
+                        tx::submit_redelegate::<_, IO>(&client, ctx, args)
+                            .await?;
+                    }
                     Sub::TxCommissionRateChange(TxCommissionRateChange(
                         mut args,
                     )) => {
