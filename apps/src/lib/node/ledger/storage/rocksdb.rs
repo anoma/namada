@@ -435,6 +435,29 @@ impl RocksDB {
             },
         )?;
 
+        // Look for diffs in this block to find what has been deleted
+        let diff_new_key_prefix = Key {
+            segments: vec![
+                last_block.height.to_db_key(),
+                "new".to_string().to_db_key(),
+            ],
+        };
+        {
+            let mut batch_guard = batch.lock().unwrap();
+            let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
+            for (key, val, _) in
+                iter_diffs_prefix(self, last_block.height, true)
+            {
+                let key = Key::parse(key).unwrap();
+                let diff_new_key = diff_new_key_prefix.join(&key);
+                if self.read_subspace_val(&diff_new_key)?.is_none() {
+                    // If there is no new value, it has been deleted in this
+                    // block and we have to restore it
+                    batch_guard.put_cf(subspace_cf, key.to_string(), val)
+                }
+            }
+        }
+
         tracing::info!("Deleting keys prepended with the last height");
         let mut batch = batch.into_inner().unwrap();
         let prefix = last_block.height.to_string();
