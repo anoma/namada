@@ -1289,11 +1289,7 @@ fn iter_subspace_prefix<'iter>(
         .get_column_family(SUBSPACE_CF)
         .expect("{SUBSPACE_CF} column family should exist");
     let db_prefix = "".to_owned();
-    let prefix_string = match prefix {
-        Some(prefix) => prefix.to_string(),
-        None => "".to_string(),
-    };
-    iter_prefix(db, subspace_cf, db_prefix, prefix_string)
+    iter_prefix(db, subspace_cf, db_prefix, prefix.map(|k| k.to_string()))
 }
 
 fn iter_diffs_prefix(
@@ -1307,20 +1303,23 @@ fn iter_diffs_prefix(
     let prefix = if is_old { "old" } else { "new" };
     let db_prefix = format!("{}/{}/", height.0.raw(), prefix);
     // get keys without a prefix
-    iter_prefix(db, diffs_cf, db_prefix.clone(), db_prefix)
+    iter_prefix(db, diffs_cf, db_prefix.clone(), Some(db_prefix))
 }
 
 fn iter_prefix<'a>(
     db: &'a RocksDB,
     cf: &'a ColumnFamily,
     db_prefix: String,
-    prefix: String,
+    prefix: Option<String>,
 ) -> PersistentPrefixIterator<'a> {
-    let read_opts = make_iter_read_opts(Some(prefix.clone()));
+    let read_opts = make_iter_read_opts(prefix.clone());
     let iter = db.0.iterator_cf_opt(
         cf,
         read_opts,
-        IteratorMode::From(prefix.as_bytes(), Direction::Forward),
+        IteratorMode::From(
+            prefix.unwrap_or_default().as_bytes(),
+            Direction::Forward,
+        ),
     );
     PersistentPrefixIterator(PrefixIterator::new(iter, db_prefix))
 }
