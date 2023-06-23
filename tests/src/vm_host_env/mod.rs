@@ -42,10 +42,33 @@ mod tests {
     use namada_vp_prelude::VpEnv;
     use prost::Message;
     use test_log::test;
+    use namada_core::ledger::testnet_pow::increment_counter;
+    use namada_core::types::address::InternalAddress;
 
     use super::{ibc, tx, vp};
     use crate::tx::{tx_host_env, TestTxEnv};
     use crate::vp::{vp_host_env, TestVpEnv};
+
+    #[test]
+    fn testy_poo() {
+        tx_host_env::init();
+        let contents = std::fs::read("/tmp/.tmpW4QYPv/tx.data")
+            .unwrap();
+        let counter_key = namada_core::ledger::ibc::storage::client_counter_key();
+        tx::ctx().write(&counter_key, 0u64).unwrap();
+        tx_host_env::with(|env| env
+            .wl_storage
+            .storage.block.height = 1.into());
+        let mut env = tx_host_env::take();
+        env.wl_storage
+            .storage
+            .set_header(tm_dummy_header())
+            .unwrap();
+        tx_host_env::set(env);
+        tx_host_env::ibc::ibc_actions(tx::ctx())
+            .execute(&contents)
+            .unwrap();
+    }
 
     #[test]
     fn test_tx_read_write() {

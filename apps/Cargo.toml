@@ -144,6 +144,7 @@ zeroize = "1.5.5"
 namada = {path = "../shared", default-features = false, features = ["testing", "wasm-runtime"]}
 namada_test_utils = {path = "../test_utils"}
 bit-set = "0.5.2"
+glob = "0.3.1"
 proptest = "1.2.0"
 tempfile = "3.2.0"
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}

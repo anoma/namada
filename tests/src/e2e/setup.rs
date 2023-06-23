@@ -694,7 +694,7 @@ where
     );
 
     run_cmd
-        .env("NAMADA_LOG", "info")
+        .env("NAMADA_LOG", "debug")
         .env("TM_LOG_LEVEL", "info")
         .env("NAMADA_LOG_COLOR", "false")
         .current_dir(working_dir)

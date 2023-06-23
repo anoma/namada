@@ -169,7 +169,7 @@ pub fn write_vp_inputs(
 /// Check that the given offset and length fits into the memory bounds. If not,
 /// it will try to grow the memory.
 fn check_bounds(memory: &Memory, offset: u64, len: usize) -> Result<()> {
-    tracing::debug!(
+    println!(
         "check_bounds pages {}, data_size {}, offset + len {}",
         memory.size().0,
         memory.data_size(),
@@ -182,7 +182,7 @@ fn check_bounds(memory: &Memory, offset: u64, len: usize) -> Result<()> {
         // Ceiling division
         let req_pages = ((missing + wasmer::WASM_PAGE_SIZE - 1)
             / wasmer::WASM_PAGE_SIZE) as u32;
-        tracing::info!("trying to grow memory by {} pages", req_pages);
+        println!("trying to grow memory by {} pages", req_pages);
         memory.grow(req_pages).map_err(Error::MemoryOutOfBounds)?;
     }
     Ok(())
@@ -194,6 +194,7 @@ fn read_memory_bytes(
     offset: u64,
     len: usize,
 ) -> Result<Vec<u8>> {
+    println!("Read memory bytes: Offset {}, len {}", offset, len);
     check_bounds(memory, offset, len)?;
     let offset = offset as usize;
     let vec: Vec<_> = memory.view()[offset..(offset + len)]
@@ -209,8 +210,10 @@ fn write_memory_bytes(
     offset: u64,
     bytes: impl AsRef<[u8]>,
 ) -> Result<()> {
+
     let slice = bytes.as_ref();
     let len = slice.len();
+    println!("Write memory bytes: Offset {}, len {}", offset, len);
     check_bounds(memory, offset, len as _)?;
     let offset = offset as usize;
     memory.view()[offset..(offset + len)]

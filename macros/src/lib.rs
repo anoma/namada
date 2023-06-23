@@ -52,7 +52,9 @@ pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
             let mut ctx = unsafe { namada_tx_prelude::Ctx::new() };
 
             if let Err(err) = #ident(&mut ctx, tx_data) {
-                namada_tx_prelude::debug_log!("Transaction error: {}", err);
+                //namada_tx_prelude::log_string(&format!("Transaction error: {}", err));
+                let x = [0u64; 215];
+                unsafe {core::ptr::read_volatile(&x as *const _);}
                 // crash the transaction to abort
                 panic!();
             }

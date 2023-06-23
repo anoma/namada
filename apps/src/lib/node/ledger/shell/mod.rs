@@ -1092,7 +1092,7 @@ mod test_utils {
                     shell: Shell::<MockDB, Sha256Hasher>::new(
                         config::Ledger::new(
                             base_dir,
-                            Default::default(),
+                            ChainId("e2e-test.ef2b3430db410246d2fbd".into()),
                             TendermintMode::Validator,
                         ),
                         top_level_directory().join("wasm"),
@@ -1559,5 +1559,58 @@ mod test_mempool_validate {
             MempoolTxType::NewTransaction,
         );
         assert_eq!(result.code, u32::from(ErrorCodes::ExpiredTx));
+    }
+
+    #[test]
+    fn testy_poo() {
+        let (TestShell {shell: Shell{
+                            chain_id,
+                           mut wl_storage,
+                           mut gas_meter,
+                           mut vp_wasm_cache,
+                           mut tx_wasm_cache,
+            ..}
+                       }, _) = TestShell::new();
+        proof_of_stake::write_pos_params(&mut wl_storage, Default::default());
+        let keypair = super::test_utils::gen_keypair();
+        wl_storage
+            .storage
+            .set_header(ibc::vp::get_dummy_header())
+            .unwrap();
+        wl_storage
+            .storage.block.height = 1.into();
+        let counter_key = namada::ledger::ibc::client_counter_key();
+        wl_storage.write(&counter_key, 0u64).unwrap();
+
+        let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {has_valid_pow: true}));
+        tx.header.expiration = Some(DateTimeUtc::now());
+        tx.header.chain_id = chain_id;
+        let tx_data = std::fs::read("/tmp/.tmpZU6zL3/tx.data").unwrap();
+        let wasm_path = glob::glob("/home/satan/Projects/namada/wasm/tx_ibc.*.wasm").unwrap().next().unwrap().unwrap();
+        let tx_code = std::fs::read(wasm_path)
+            .unwrap();
+        tx.set_code(Code::new(tx_code));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            &tx.header_hash(),
+            &keypair,
+        )));
+
+        let res = protocol::apply_tx(
+            tx.clone(),
+            tx.to_bytes().len(),
+            TxIndex(
+                1.try_into()
+                    .expect("transaction index out of bounds"),
+            ),
+            &mut gas_meter,
+            &mut wl_storage.write_log,
+            &wl_storage.storage,
+            &mut vp_wasm_cache,
+            &mut tx_wasm_cache,
+        );
+        println!("{:?}", res);
+        assert!(false);
+
     }
 }
