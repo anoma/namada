@@ -154,8 +154,10 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_validator_commission_change::<HttpClient>(&client, ctx, args)
-                        .await?;
+                    tx::submit_validator_commission_change::<HttpClient>(
+                        &client, ctx, args,
+                    )
+                    .await?;
                 }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(args)) => {

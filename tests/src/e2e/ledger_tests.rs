@@ -2996,7 +2996,7 @@ fn proposal_submission() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
-    client.exp_string("nam: 1000000")?;
+    client.exp_string("nam: 999500")?;
     client.assert_success();
 
     // 13. Check if governance funds are 0

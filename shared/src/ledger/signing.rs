@@ -518,7 +518,7 @@ pub fn make_ledger_masp_endpoints(
         output.push(format!("Sender : {}", transfer.source));
         if transfer.target == masp() {
             make_ledger_amount_addr(
-                &tokens,
+                tokens,
                 output,
                 transfer.amount,
                 &transfer.token,
@@ -530,11 +530,11 @@ pub fn make_ledger_masp_endpoints(
             let vk = ExtendedViewingKey::from(*sapling_input.key());
             output.push(format!("Sender : {}", vk));
             make_ledger_amount_asset(
-                &tokens,
+                tokens,
                 output,
                 sapling_input.value(),
                 &sapling_input.asset_type(),
-                &assets,
+                assets,
                 "Sending ",
             );
         }
@@ -543,7 +543,7 @@ pub fn make_ledger_masp_endpoints(
         output.push(format!("Destination : {}", transfer.target));
         if transfer.source == masp() {
             make_ledger_amount_addr(
-                &tokens,
+                tokens,
                 output,
                 transfer.amount,
                 &transfer.token,
@@ -555,18 +555,18 @@ pub fn make_ledger_masp_endpoints(
             let pa = PaymentAddress::from(sapling_output.address());
             output.push(format!("Destination : {}", pa));
             make_ledger_amount_asset(
-                &tokens,
+                tokens,
                 output,
                 sapling_output.value(),
                 &sapling_output.asset_type(),
-                &assets,
+                assets,
                 "Receiving ",
             );
         }
     }
     if transfer.source != masp() && transfer.target != masp() {
         make_ledger_amount_addr(
-            &tokens,
+            tokens,
             output,
             transfer.amount,
             &transfer.token,
@@ -754,7 +754,8 @@ pub async fn to_ledger_vector<
             ),
             format!("Grace epoch : {}", init_proposal_data.grace_epoch),
         ]);
-        tv.output.push(format!("Content: {}", init_proposal_data.content));
+        tv.output
+            .push(format!("Content: {}", init_proposal_data.content));
 
         tv.output_expert.extend(vec![
             format!("ID : {}", init_proposal_data_id),
@@ -769,7 +770,8 @@ pub async fn to_ledger_vector<
             ),
             format!("Grace epoch : {}", init_proposal_data.grace_epoch),
         ]);
-        tv.output.push(format!("Content: {}", init_proposal_data.content));
+        tv.output
+            .push(format!("Content: {}", init_proposal_data.content));
     } else if code_hash == vote_proposal_hash {
         let vote_proposal =
             VoteProposalData::try_from_slice(&tx.data().ok_or_else(|| {
@@ -871,8 +873,20 @@ pub async fn to_ledger_vector<
         tv.name = "Transfer 0".to_string();
 
         tv.output.push("Type : Transfer".to_string());
-        make_ledger_masp_endpoints(&tokens, &mut tv.output, &transfer, builder, &asset_types);
-        make_ledger_masp_endpoints(&tokens, &mut tv.output_expert, &transfer, builder, &asset_types);
+        make_ledger_masp_endpoints(
+            &tokens,
+            &mut tv.output,
+            &transfer,
+            builder,
+            &asset_types,
+        );
+        make_ledger_masp_endpoints(
+            &tokens,
+            &mut tv.output_expert,
+            &transfer,
+            builder,
+            &asset_types,
+        );
     } else if code_hash == ibc_hash {
         let msg = Any::decode(
             tx.data()

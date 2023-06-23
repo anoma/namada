@@ -7,7 +7,7 @@ fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
     let data = tx.data().ok_or_err_msg("Missing data")?;
     let tx_data =
         transaction::governance::InitProposalData::try_from_slice(&data[..])
-        .wrap_err("failed to decode InitProposalData")?;
+            .wrap_err("failed to decode InitProposalData")?;
     // Get the content from the referred to section
     let content = tx
         .get_section(&tx_data.content)
@@ -17,11 +17,10 @@ fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
     // Get the code from the referred to section
     let code = match tx_data.r#type {
         transaction::governance::ProposalType::Default(Some(hash)) => Some(
-            tx
-                .get_section(&hash)
+            tx.get_section(&hash)
                 .ok_or_err_msg("Missing proposal code")?
                 .extra_data()
-                .ok_or_err_msg("Missing full proposal code")?
+                .ok_or_err_msg("Missing full proposal code")?,
         ),
         _ => None,
     };

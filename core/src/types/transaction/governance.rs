@@ -63,15 +63,22 @@ impl TryFrom<governance::ProposalType> for (ProposalType, Option<Vec<u8>>) {
             governance::ProposalType::Default(path) => {
                 if let Some(p) = path {
                     match std::fs::read(p) {
-                        Ok(code) => Ok((ProposalType::Default(Some(Hash::default())), Some(code))),
+                        Ok(code) => Ok((
+                            ProposalType::Default(Some(Hash::default())),
+                            Some(code),
+                        )),
                         Err(_) => Err(Self::Error::InvalidProposalData),
                     }
                 } else {
                     Ok((ProposalType::Default(None), None))
                 }
             }
-            governance::ProposalType::PGFCouncil => Ok((ProposalType::PGFCouncil, None)),
-            governance::ProposalType::ETHBridge => Ok((ProposalType::ETHBridge, None)),
+            governance::ProposalType::PGFCouncil => {
+                Ok((ProposalType::PGFCouncil, None))
+            }
+            governance::ProposalType::ETHBridge => {
+                Ok((ProposalType::ETHBridge, None))
+            }
         }
     }
 }
@@ -129,14 +136,18 @@ impl TryFrom<Proposal> for (InitProposalData, Vec<u8>, Option<Vec<u8>>) {
 
     fn try_from(proposal: Proposal) -> Result<Self, Self::Error> {
         let (r#type, code) = proposal.r#type.try_into()?;
-        Ok((InitProposalData {
-            id: proposal.id,
-            content: Hash::default(),
-            author: proposal.author,
-            r#type,
-            voting_start_epoch: proposal.voting_start_epoch,
-            voting_end_epoch: proposal.voting_end_epoch,
-            grace_epoch: proposal.grace_epoch,
-        }, proposal.content.try_to_vec().unwrap(), code))
+        Ok((
+            InitProposalData {
+                id: proposal.id,
+                content: Hash::default(),
+                author: proposal.author,
+                r#type,
+                voting_start_epoch: proposal.voting_start_epoch,
+                voting_end_epoch: proposal.voting_end_epoch,
+                grace_epoch: proposal.grace_epoch,
+            },
+            proposal.content.try_to_vec().unwrap(),
+            code,
+        ))
     }
 }
