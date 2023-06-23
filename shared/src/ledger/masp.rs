@@ -506,7 +506,7 @@ impl std::ops::Sub for MaspAmount {
         for (key, value) in rhs.drain() {
             self.entry(key)
                 .and_modify(|val| *val -= value)
-                .or_insert(value);
+                .or_insert(-value);
         }
         self.0.retain(|_, v| !v.is_zero());
         self
@@ -541,7 +541,7 @@ impl<'a> From<&'a MaspAmount> for Amount {
                     &key.sub_prefix,
                     denom,
                 );
-                res += Amount::from_pair(asset, denom.denominate_i128(val))
+                res += Amount::from_pair(asset, denom.denominate_i64(val))
                     .unwrap();
             }
         }
@@ -557,7 +557,7 @@ impl From<MaspAmount> for Amount {
 
 /// Represents the amount used of different conversions
 pub type Conversions =
-    HashMap<AssetType, (AllowedConversion, MerklePath<Node>, i128)>;
+    HashMap<AssetType, (AllowedConversion, MerklePath<Node>, i64)>;
 
 /// Represents the changes that were made to a list of transparent accounts
 pub type TransferDelta = HashMap<Address, MaspChange>;
@@ -1036,8 +1036,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         client: &U::C,
         conv: AllowedConversion,
         asset_type: (Epoch, TokenAddress, MaspDenom),
-        value: i128,
-        usage: &mut i128,
+        value: i64,
+        usage: &mut i64,
         input: &mut MaspAmount,
         output: &mut MaspAmount,
     ) {
@@ -1115,7 +1115,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 );
                 let at_target_asset_type = target_epoch == asset_epoch;
 
-                let denom_value = denom.denominate_i128(&value);
+                let denom_value = denom.denominate_i64(&value);
                 self.query_allowed_conversion(
                     client,
                     target_asset_type,
@@ -1546,7 +1546,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 builder
                     .add_transparent_input(TxOut {
                         asset_type: *asset_type,
-                        value: denom.denominate(&amt) as i128,
+                        value: denom.denominate(&amt) as i64,
                         address: script,
                     })
                     .map_err(builder::Error::TransparentBuild)?;
@@ -1592,7 +1592,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                         .add_transparent_output(
                             &TransparentAddress(hash.into()),
                             *asset_type,
-                            vout as i128,
+                            vout as i64,
                         )
                         .map_err(builder::Error::TransparentBuild)?;
                 }

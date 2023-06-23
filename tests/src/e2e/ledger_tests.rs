@@ -821,9 +821,6 @@ fn masp_txs_and_queries() -> Result<()> {
         ),
     ];
 
-    // Wait till epoch boundary
-    let _ep0 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
     for (tx_args, tx_result) in &txs_args {
         for &dry_run in &[true, false] {
             let tx_args = if dry_run && tx_args[0] == "transfer" {
@@ -1055,7 +1052,7 @@ fn masp_incentives() -> Result<()> {
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     // Wait till epoch boundary
-    let ep0 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let ep0 = get_epoch(&test, &validator_one_rpc)?;
 
     // Send 20 BTC from Albert to PA(A)
     let mut client = run!(

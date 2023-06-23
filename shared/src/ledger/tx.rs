@@ -526,7 +526,7 @@ pub async fn submit_tx<C: crate::ledger::queries::Client + Sync>(
 /// decode components of a masp note
 pub fn decode_component<K, F>(
     (addr, sub, denom, epoch): (Address, Option<Key>, MaspDenom, Epoch),
-    val: i128,
+    val: i64,
     res: &mut HashMap<K, token::Change>,
     mk_key: F,
 ) where

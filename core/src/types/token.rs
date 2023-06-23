@@ -707,8 +707,8 @@ impl MaspDenom {
     }
 
     /// Get the corresponding u64 word from the input uint256.
-    pub fn denominate_i128(&self, amount: &Change) -> i128 {
-        let val = amount.abs().0[*self as usize] as i128;
+    pub fn denominate_i64(&self, amount: &Change) -> i64 {
+        let val = amount.abs().0[*self as usize] as i64;
         if Change::is_negative(amount) {
             -val
         } else {
