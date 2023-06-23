@@ -1364,8 +1364,8 @@ fn make_iter_read_opts(prefix: Option<String>) -> ReadOptions {
         let mut upper_prefix = prefix.into_bytes();
         if let Some(last) = upper_prefix.pop() {
             upper_prefix.push(last + 1);
+            read_opts.set_iterate_upper_bound(upper_prefix);
         }
-        read_opts.set_iterate_upper_bound(upper_prefix);
     }
 
     read_opts
