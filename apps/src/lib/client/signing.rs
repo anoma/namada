@@ -155,14 +155,14 @@ pub async fn sign_tx(
     tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,
-    updated_balance: Option<Amount>,
+    mut updated_balance: Option<Amount>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (TxBroadcastData, Option<Epoch>) {
     if args.dump_tx {
         dump_tx_helper(ctx, &tx, "unsigned", None);
     }
 
-    let keypair = tx_signer(ctx, args, default).await;
+    let mut keypair = tx_signer(ctx, args, default).await;
     let tx = tx.sign(&keypair);
     if args.dump_tx {
         dump_tx_helper(ctx, &tx, "signed", None);
@@ -180,6 +180,15 @@ pub async fn sign_tx(
         });
         (TxBroadcastData::DryRun(tx), None)
     } else {
+        if args.disposable_signing_key {
+            // Generate a disposable keypair to sign the wrapper if requested
+            let mut csprng = rand::rngs::OsRng {};
+            keypair = ed25519::SigScheme::generate(&mut csprng)
+                .try_to_sk()
+                .unwrap();
+            updated_balance = Some(Amount::default());
+        }
+
         sign_wrapper(
             ctx,
             args,

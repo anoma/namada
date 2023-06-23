@@ -385,8 +385,7 @@ pub mod wrapper_tx {
                     None,
                 );
 
-                // Mock a signature. We don't have the signign key of masp in
-                // the ledger but the masp vp does not check it
+                // Mock a signature. The masp vp does not check it, it just checks the signature on the Transaction object
                 let mock_sigkey = SecretKey::Ed25519(ed25519::SecretKey(
                     Box::new([0; 32].into()),
                 ));

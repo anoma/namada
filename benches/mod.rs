@@ -574,6 +574,7 @@ impl BenchShieldedCtx {
             fee_unshield: None,
             gas_limit: GasLimit::from(u64::MAX),
             expiration: None,
+            disposable_signing_key: false,
             signing_key: Some(FromContext::new(
                 defaults::albert_keypair().to_string(),
             )),

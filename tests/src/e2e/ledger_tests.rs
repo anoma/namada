@@ -539,6 +539,147 @@ fn ledger_txs_and_queries() -> Result<()> {
     Ok(())
 }
 
+#[test]
+/// Test the optional disposable keypair for wrapper signing
+///
+/// 1. Test that a tx requesting a disposable signer without unshielding is rejected
+/// 2. Test that a tx requesting a disposable signer providing an unsufficient unshielding is rejected
+/// 3. Test that a tx requesting a disposable signer with a correct unshielding operation is succesful
+fn wrapper_disposable_signer() -> Result<()> {
+    // Download the shielded pool parameters before starting node
+    let _ = ShieldedContext::new(PathBuf::new());
+    // Lengthen epoch to ensure that a transaction can be constructed and
+    // submitted within the same block. Necessary to ensure that conversion is
+    // not invalidated.
+    let test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                epochs_per_year: epochs_per_year_from_min_duration(
+                    if is_debug_mode() { 3600 } else { 360 },
+                ),
+                min_num_of_blocks: 1,
+                ..genesis.parameters
+            };
+            GenesisConfig {
+                parameters,
+                ..genesis
+            }
+        },
+        None,
+    )?;
+
+    // Run the ledger node
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+
+    // Wait for a first block
+    ledger.exp_string("Committed block hash")?;
+    let _bg_ledger = ledger.background();
+
+    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    let txs_args = [
+        (
+            vec![
+                // Shield some tokens
+                "transfer",
+                "--source",
+                ALBERT,
+                "--target",
+                AA_PAYMENT_ADDRESS,
+                "--token",
+                NAM,
+                "--amount",
+                "50",
+                "--gas-limit",
+                "40",
+                "--ledger-address",
+                &validator_one_rpc,
+            ],
+            "Transaction is valid",
+        ),
+        // 1. Missing unshielding
+        (
+            vec![
+                "transfer",
+                "--source",
+                ALBERT,
+                "--target",
+                BERTHA,
+                "--token",
+                NAM,
+                "--amount",
+                "1",
+                "--gas-limit",
+                "100",
+                "--disposable-signing-key",
+                "--ledger-address",
+                &validator_one_rpc,
+            ],
+            "The following required arguments were not provided",
+        ),
+        // 2. Insufficient unshielding
+        (
+            vec![
+                "transfer",
+                "--source",
+                ALBERT,
+                "--target",
+                BERTHA,
+                "--token",
+                NAM,
+                "--amount",
+                "1",
+                "--gas-limit",
+                "100",
+                "--fee-spending-key",
+                A_SPENDING_KEY,
+                "--disposable-signing-key",
+                "--ledger-address",
+                &validator_one_rpc,
+            ],
+            "Error in fee unshielding",
+        ),
+        // 3. Valid transaction
+        (
+            vec![
+                "transfer",
+                "--source",
+                ALBERT,
+                "--target",
+                BERTHA,
+                "--token",
+                NAM,
+                "--amount",
+                "1",
+                "--gas-limit",
+                "40",
+                "--fee-spending-key",
+                A_SPENDING_KEY,
+                "--disposable-signing-key",
+                "--ledger-address",
+                &validator_one_rpc,
+            ],
+            "Transaction is valid",
+        ),
+    ];
+
+    // Wait till epoch boundary
+    let _ep0 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+
+    for (tx_args, tx_result) in txs_args {
+        let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
+
+        if tx_result == "Transaction is valid" {
+            client.exp_string("Transaction accepted")?;
+            client.exp_string("Transaction applied")?;
+        }
+        client.exp_string(tx_result)?;
+    }
+
+    Ok(())
+}
+
 /// Test the unshielding tx attached to a wrapper:
 ///
 /// 1. Shield some tokens to reduce the unshielded balance

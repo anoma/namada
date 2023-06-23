@@ -1695,6 +1695,7 @@ pub mod args {
     const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     const DATA_PATH: Arg<PathBuf> = arg("data-path");
     const DECRYPT: ArgFlag = flag("decrypt");
+    const DISPOSABLE_SIGNING_KEY: ArgFlag = flag("disposable-signing-key");
     const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
     const DRY_RUN_WRAPPER_TX: ArgFlag = flag("dry-run-wrapper");
@@ -3038,6 +3039,8 @@ pub mod args {
         pub gas_limit: GasLimit,
         /// The optional expiration of the transaction
         pub expiration: Option<DateTimeUtc>,
+        /// Generate an ephimeral signing key to be used only once to sign a wrapper tx
+        pub disposable_signing_key: bool,
         /// Sign the tx with the key for the given alias from your wallet
         pub signing_key: Option<WalletKeypair>,
         /// Sign the tx with the keypair of the public key of the given address
@@ -3084,7 +3087,7 @@ pub mod args {
             ))
             .arg(GAS_LIMIT.def().about(
                 "The multiplier of the gas limit resolution defining the \
-                 maximum amount of gas needed to run transaction",
+                 maximum amount of gas needed to run transaction.",
             ))
             .arg(EXPIRATION_OPT.def().about(
                 "The expiration datetime of the transaction, after which the \
@@ -3092,6 +3095,7 @@ pub mod args {
                  equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
                  12:12:12Z\n2012-  12-12T12:  12:12Z",
             ))
+                .arg(DISPOSABLE_SIGNING_KEY.def().about("Generates an ephimeral, disposable keypair to sign the wrapper transaction. This keypair will be immediately discarded after use.").requires(FEE_UNSHIELD_SPENDING_KEY.name))
             .arg(
                 SIGNING_KEY_OPT
                     .def()
@@ -3127,6 +3131,7 @@ pub mod args {
             let gas_limit = GAS_LIMIT.parse(matches);
             let expiration = EXPIRATION_OPT.parse(matches);
 
+            let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
             let signing_key = SIGNING_KEY_OPT.parse(matches);
             let signer = SIGNER.parse(matches);
             Self {
@@ -3142,6 +3147,7 @@ pub mod args {
                 fee_unshield,
                 gas_limit,
                 expiration,
+                disposable_signing_key,
                 signing_key,
                 signer,
             }
