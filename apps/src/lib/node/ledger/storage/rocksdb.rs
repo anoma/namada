@@ -1600,4 +1600,58 @@ mod test {
             db.read_subspace_val(&key).expect("read should succeed");
         assert_eq!(latest_value, None);
     }
+
+    #[test]
+    fn test_prefix_iter() {
+        let dir = tempdir().unwrap();
+        let mut db = open(dir.path(), None).unwrap();
+
+        let prefix_0 = Key::parse("0").unwrap();
+        let key_0_a = prefix_0.push(&"a".to_string()).unwrap();
+        let key_0_b = prefix_0.push(&"b".to_string()).unwrap();
+        let key_0_c = prefix_0.push(&"c".to_string()).unwrap();
+        let prefix_1 = Key::parse("1").unwrap();
+        let key_1_a = prefix_1.push(&"a".to_string()).unwrap();
+        let key_1_b = prefix_1.push(&"b".to_string()).unwrap();
+        let key_1_c = prefix_1.push(&"c".to_string()).unwrap();
+
+        let keys_0 = vec![key_0_a.clone(), key_0_b.clone(), key_0_c.clone()];
+        let keys_1 = vec![key_1_a.clone(), key_1_b.clone(), key_1_c.clone()];
+        let all_keys = vec![keys_0.clone(), keys_1.clone()].concat();
+
+        // Write the keys
+        let mut batch = RocksDB::batch();
+        let height = BlockHeight(1);
+        db.batch_write_subspace_val(&mut batch, height, &key_0_a, [0_u8])
+            .unwrap();
+        db.batch_write_subspace_val(&mut batch, height, &key_0_b, [0_u8])
+            .unwrap();
+        db.batch_write_subspace_val(&mut batch, height, &key_0_c, [0_u8])
+            .unwrap();
+        db.batch_write_subspace_val(&mut batch, height, &key_1_a, [0_u8])
+            .unwrap();
+        db.batch_write_subspace_val(&mut batch, height, &key_1_b, [0_u8])
+            .unwrap();
+        db.batch_write_subspace_val(&mut batch, height, &key_1_c, [0_u8])
+            .unwrap();
+        db.exec_batch(batch.0).unwrap();
+
+        let itered_keys: Vec<Key> = db
+            .iter_optional_prefix(Some(&prefix_0))
+            .map(|(key, _val, _)| Key::parse(key).unwrap())
+            .collect();
+        itertools::assert_equal(keys_0, itered_keys);
+
+        let itered_keys: Vec<Key> = db
+            .iter_optional_prefix(Some(&prefix_1))
+            .map(|(key, _val, _)| Key::parse(key).unwrap())
+            .collect();
+        itertools::assert_equal(keys_1, itered_keys);
+
+        let itered_keys: Vec<Key> = db
+            .iter_optional_prefix(None)
+            .map(|(key, _val, _)| Key::parse(key).unwrap())
+            .collect();
+        itertools::assert_equal(all_keys, itered_keys);
+    }
 }
