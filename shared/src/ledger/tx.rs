@@ -36,9 +36,9 @@ use crate::ledger::args;
 use crate::ledger::governance::storage as gov_storage;
 use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
 use crate::ledger::rpc::{self, TxBroadcastData, TxResponse};
-use crate::ledger::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
+use crate::ledger::signing::{sign_tx, TxSigningKey};
 use crate::ledger::wallet::{Wallet, WalletUtils};
-use crate::proto::{Code, Data, MaspBuilder, Section, Signature, Tx};
+use crate::proto::{Code, Data, MaspBuilder, Section, Tx};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::hash::Hash;
@@ -361,17 +361,18 @@ pub async fn submit_reveal_pk_aux<
     tx.set_data(Data::new(tx_data));
     tx.set_code(Code::from_hash(tx_code_hash));
 
-    let fee_payer =
-        match &args.fee_payer {
+    let fee_payer = match &args.fee_payer {
+        Some(keypair) => keypair,
+        None => match args.signing_keys.get(0) {
             Some(keypair) => keypair,
-            None => match args.signing_keys.get(0) {
-                Some(keypair) => keypair,
-                None => return Err(Error::InvalidFeePayer(
+            None => {
+                return Err(Error::InvalidFeePayer(
                     "Either --signing-keys or --fee-payer must be available."
                         .to_string(),
-                )),
-            },
-        };
+                ));
+            }
+        },
+    };
 
     let epoch = rpc::query_epoch(client).await;
     let to_broadcast = if args.dry_run {
@@ -1407,7 +1408,7 @@ pub async fn submit_init_account<
     wallet: &mut Wallet<U>,
     args: args::TxInitAccount,
 ) -> Result<(), Error> {
-    let public_key = args.public_key;
+    let public_keys = args.public_keys;
 
     let vp_code_hash =
         query_wasm_code_hash(client, args.vp_code_path.to_str().unwrap())
@@ -1427,7 +1428,7 @@ pub async fn submit_init_account<
     let extra_hash =
         Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
     let data = InitAccount {
-        public_key,
+        public_keys,
         vp_code_hash: extra_hash,
     };
     let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;

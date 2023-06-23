@@ -142,7 +142,9 @@ pub struct TxInitAccount<C: NamadaTypes = SdkTypes> {
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
     /// Public key for the new account
-    pub public_key: C::PublicKey,
+    pub public_keys: Vec<C::PublicKey>,
+    /// The account multisignature threshold
+    pub threshold: Option<u8>,
 }
 
 /// Transaction to initialize a new account
@@ -155,7 +157,9 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     /// Signature scheme
     pub scheme: SchemeType,
     /// Account key
-    pub account_key: Option<C::PublicKey>,
+    pub account_keys: Vec<C::PublicKey>,
+    /// The account multisignature threshold
+    pub threshold: Option<u8>,
     /// Consensus key
     pub consensus_key: Option<C::Keypair>,
     /// Protocol key

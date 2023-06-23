@@ -92,7 +92,8 @@ pub async fn submit_init_validator<
         tx: tx_args,
         source,
         scheme,
-        account_key,
+        account_keys,
+        threshold: _threshold,
         consensus_key,
         protocol_key,
         commission_rate,
@@ -117,11 +118,14 @@ pub async fn submit_init_validator<
 
     let validator_key_alias = format!("{}-key", alias);
     let consensus_key_alias = format!("{}-consensus-key", alias);
-    let account_key = account_key.unwrap_or_else(|| {
+    let account_keys = if !account_keys.is_empty() {
+        account_keys
+    } else {
         println!("Generating validator account key...");
         let password =
             read_and_confirm_encryption_password(unsafe_dont_encrypt);
-        ctx.wallet
+        let public_key = ctx
+            .wallet
             .gen_key(
                 scheme,
                 Some(validator_key_alias.clone()),
@@ -132,8 +136,9 @@ pub async fn submit_init_validator<
             .expect("Key generation should not fail.")
             .expect("No existing alias expected.")
             .1
-            .ref_to()
-    });
+            .ref_to();
+        vec![public_key]
+    };
 
     let consensus_key = consensus_key
         .map(|key| match key {
@@ -216,7 +221,7 @@ pub async fn submit_init_validator<
     let extra_hash =
         Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
     let data = InitValidator {
-        account_key,
+        account_keys,
         consensus_key: consensus_key.ref_to(),
         protocol_key,
         dkg_key,

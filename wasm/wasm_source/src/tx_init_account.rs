@@ -20,6 +20,6 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         .hash();
     let address = ctx.init_account(vp_code)?;
     let pk_key = key::pk_key(&address);
-    ctx.write(&pk_key, &tx_data.public_key)?;
+    ctx.write(&pk_key, &tx_data.public_keys)?;
     Ok(())
 }

@@ -164,7 +164,7 @@ pub struct InitAccount {
     /// Public key to be written into the account's storage. This can be used
     /// for signature verification of transactions for the newly created
     /// account.
-    pub public_key: common::PublicKey,
+    pub public_keys: Vec<common::PublicKey>,
     /// The VP code hash
     pub vp_code_hash: Hash,
 }
@@ -184,7 +184,7 @@ pub struct InitValidator {
     /// Public key to be written into the account's storage. This can be used
     /// for signature verification of transactions for the newly created
     /// account.
-    pub account_key: common::PublicKey,
+    pub account_keys: Vec<common::PublicKey>,
     /// A key to be used for signing blocks and votes on blocks.
     pub consensus_key: common::PublicKey,
     /// Public key used to sign protocol transactions

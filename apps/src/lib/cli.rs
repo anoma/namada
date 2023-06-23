@@ -1879,6 +1879,7 @@ pub mod args {
     pub const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     pub const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
     pub const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
+    pub const PUBLIC_KEYS: ArgMulti<WalletPublicKey> = arg_multi("public-keys");
     pub const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
     pub const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
     pub const PROPOSAL_VOTE_PGF_OPT: ArgOpt<String> = arg_opt("pgf");
@@ -1906,12 +1907,15 @@ pub mod args {
     pub const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     pub const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
     pub const TX_HASH: Arg<String> = arg("tx-hash");
+    pub const THRESOLD: ArgOpt<u8> = arg_opt("threshold");
     pub const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
     pub const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
     pub const VALIDATOR: Arg<WalletAddress> = arg("validator");
     pub const VALIDATOR_OPT: ArgOpt<WalletAddress> = VALIDATOR.opt();
     pub const VALIDATOR_ACCOUNT_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("account-key");
+    pub const VALIDATOR_ACCOUNT_KEYS: ArgMulti<WalletPublicKey> =
+        arg_multi("account-keys");
     pub const VALIDATOR_CONSENSUS_KEY: ArgOpt<WalletKeypair> =
         arg_opt("consensus-key");
     pub const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> =
@@ -2267,7 +2271,12 @@ pub mod args {
                 source: ctx.get(&self.source),
                 vp_code_path: self.vp_code_path.to_path_buf(),
                 tx_code_path: self.tx_code_path.to_path_buf(),
-                public_key: ctx.get_cached(&self.public_key),
+                public_keys: self
+                    .public_keys
+                    .iter()
+                    .map(|pk| ctx.get_cached(pk))
+                    .collect(),
+                threshold: self.threshold,
             }
         }
     }
@@ -2280,12 +2289,14 @@ pub mod args {
                 .parse(matches)
                 .unwrap_or_else(|| PathBuf::from(VP_USER_WASM));
             let tx_code_path = PathBuf::from(TX_INIT_ACCOUNT_WASM);
-            let public_key = PUBLIC_KEY.parse(matches);
+            let public_keys = PUBLIC_KEYS.parse(matches);
+            let threshold = THRESOLD.parse(matches);
             Self {
                 tx,
                 source,
                 vp_code_path,
-                public_key,
+                public_keys,
+                threshold,
                 tx_code_path,
             }
         }
@@ -2304,6 +2315,11 @@ pub mod args {
                     "A public key to be used for the new account in \
                      hexadecimal encoding.",
                 ))
+                .arg(THRESOLD.def().about(
+                    "The minimum number of signature to be provided for \
+                     authorization. Must be less then the maximum number of \
+                     public keys provided.",
+                ))
         }
     }
 
@@ -2313,7 +2329,12 @@ pub mod args {
                 tx: self.tx.to_sdk(ctx),
                 source: ctx.get(&self.source),
                 scheme: self.scheme,
-                account_key: self.account_key.map(|x| ctx.get_cached(&x)),
+                account_keys: self
+                    .account_keys
+                    .iter()
+                    .map(|x| ctx.get_cached(x))
+                    .collect(),
+                threshold: self.threshold,
                 consensus_key: self.consensus_key.map(|x| ctx.get_cached(&x)),
                 protocol_key: self.protocol_key.map(|x| ctx.get_cached(&x)),
                 commission_rate: self.commission_rate,
@@ -2332,7 +2353,7 @@ pub mod args {
             let tx = Tx::parse(matches);
             let source = SOURCE.parse(matches);
             let scheme = SCHEME.parse(matches);
-            let account_key = VALIDATOR_ACCOUNT_KEY.parse(matches);
+            let account_keys = VALIDATOR_ACCOUNT_KEYS.parse(matches);
             let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
             let protocol_key = PROTOCOL_KEY.parse(matches);
             let commission_rate = COMMISSION_RATE.parse(matches);
@@ -2343,11 +2364,13 @@ pub mod args {
                 .unwrap_or_else(|| PathBuf::from(VP_USER_WASM));
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_INIT_VALIDATOR_WASM);
+            let threshold = THRESOLD.parse(matches);
             Self {
                 tx,
                 source,
                 scheme,
-                account_key,
+                account_keys,
+                threshold,
                 consensus_key,
                 protocol_key,
                 commission_rate,
@@ -2398,6 +2421,11 @@ pub mod args {
                 .arg(UNSAFE_DONT_ENCRYPT.def().about(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \
                      use this for keys used in a live network.",
+                ))
+                .arg(THRESOLD.def().about(
+                    "The minimum number of signature to be provided for \
+                     authorization. Must be less then the maximum number of \
+                     public keys provided.",
                 ))
         }
     }
@@ -3301,7 +3329,11 @@ pub mod args {
                 fee_amount: self.fee_amount,
                 fee_token: ctx.get(&self.fee_token),
                 gas_limit: self.gas_limit,
-                signing_keys: self.signing_keys.iter().map(|key| ctx.get_cached(&key)).collect(),
+                signing_keys: self
+                    .signing_keys
+                    .iter()
+                    .map(|key| ctx.get_cached(key))
+                    .collect(),
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
                 expiration: self.expiration,
@@ -3342,7 +3374,8 @@ pub mod args {
                 "Override the alias without confirmation if it already exists.",
             ))
             .arg(GAS_PAYER.def().about(
-                "The implicit address of the gas payer. It defaults to the address associated to the first key passed to --signing-keys."
+                "The implicit address of the gas payer. It defaults to the \
+                 address associated to the first key passed to --signing-keys.",
             ))
             .arg(GAS_AMOUNT.def().about(
                 "The amount being paid for the inclusion of this transaction",

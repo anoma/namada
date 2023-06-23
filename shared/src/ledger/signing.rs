@@ -122,11 +122,6 @@ pub enum TxSigningKey {
     SecretKey(common::SecretKey),
 }
 
-pub struct SigningContext {
-    pub secret_keys: Vec<common::SecretKey>,
-    pub public_keys_map: HashMap<common::PublicKey, u8>,
-}
-
 /// Given CLI arguments and some defaults, determine the rightful transaction
 /// signer. Return the given signing key or public key of the given signer if
 /// possible. If no explicit signer given, use the `default`. If no `default`
@@ -164,8 +159,8 @@ pub async fn tx_signer<
                     args.password.clone(),
                 )
                 .await?;
-                // Check if the signer is implicit account that needs to reveal its
-                // PK first
+                // Check if the signer is implicit account that needs to reveal
+                // its PK first
                 if matches!(address, Address::Implicit(_)) {
                     let pk: common::PublicKey = signing_key.ref_to();
                     super::tx::reveal_pk_if_needed::<C, U>(
@@ -174,16 +169,17 @@ pub async fn tx_signer<
                     .await?;
                 }
                 secret_keys.push(signing_key);
-            },
+            }
             TxSigningKey::SecretKey(secret_key) => {
                 secret_keys.push(secret_key);
-            },
+            }
             TxSigningKey::None => {
                 return other_err(
-                    "All transactions must be signed; please either specify the key \
-                     or the address from which to look up the signing key."
+                    "All transactions must be signed; please either specify \
+                     the key or the address from which to look up the signing \
+                     key."
                         .to_string(),
-                )
+                );
             }
         }
     }
@@ -627,12 +623,12 @@ pub async fn to_ledger_vector<
 
         tv.output.extend(vec![
             format!("Type : Init Account"),
-            format!("Public key : {}", init_account.public_key),
+            format!("Public key : {:?}", init_account.public_keys),
             format!("VP type : {}", vp_code),
         ]);
 
         tv.output_expert.extend(vec![
-            format!("Public key : {}", init_account.public_key),
+            format!("Public key : {:?}", init_account.public_keys),
             format!("VP type : {}", HEXLOWER.encode(&extra.0)),
         ]);
     } else if code_hash == init_validator_hash {
@@ -657,7 +653,7 @@ pub async fn to_ledger_vector<
 
         tv.output.extend(vec![
             format!("Type : Init Validator"),
-            format!("Account key : {}", init_validator.account_key),
+            format!("Account key : {:?}", init_validator.account_keys),
             format!("Consensus key : {}", init_validator.consensus_key),
             format!("Protocol key : {}", init_validator.protocol_key),
             format!("DKG key : {}", init_validator.dkg_key),
@@ -670,7 +666,7 @@ pub async fn to_ledger_vector<
         ]);
 
         tv.output_expert.extend(vec![
-            format!("Account key : {}", init_validator.account_key),
+            format!("Account key : {:?}", init_validator.account_keys),
             format!("Consensus key : {}", init_validator.consensus_key),
             format!("Protocol key : {}", init_validator.protocol_key),
             format!("DKG key : {}", init_validator.dkg_key),

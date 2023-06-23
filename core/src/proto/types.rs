@@ -1,7 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::BTreeSet;
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
 
 #[cfg(feature = "ferveo-tpke")]
@@ -214,7 +212,10 @@ pub struct SignatureIndex {
 
 impl SignatureIndex {
     pub fn from_single_signature(signature: common::Signature) -> Self {
-        Self { signature, index: 0 }
+        Self {
+            signature,
+            index: 0,
+        }
     }
 
     pub fn to_vec(&self) -> Vec<Self> {
@@ -277,13 +278,13 @@ impl MultiSignature {
 
         Self {
             target: *target,
-            signatures: signatures,
+            signatures,
         }
     }
 
     // TODO: check conversion
     pub fn total_signatures(&self) -> u8 {
-        return self.signatures.len() as u8;
+        self.signatures.len() as u8
     }
 
     /// Hash this signature section
@@ -628,6 +629,7 @@ impl borsh::BorshSchema for MaspBuilder {
     Serialize,
     Deserialize,
 )]
+#[allow(clippy::large_enum_variant)]
 pub enum Section {
     /// Transaction data that needs to be sent to hardware wallets
     Data(Data),
@@ -1056,14 +1058,16 @@ impl Tx {
                                 valid_signatures += 1;
                             }
                             if valid_signatures >= threshold {
-                                return Ok(())
+                                return Ok(());
                             }
                         }
                     }
                 }
             }
         }
-        Err(Error::InvalidSectionSignature("invalid signatures.".to_string()))
+        Err(Error::InvalidSectionSignature(
+            "invalid signatures.".to_string(),
+        ))
     }
 
     pub fn verify_signature(
@@ -1078,11 +1082,18 @@ impl Tx {
                         public_key,
                         hash.as_ref(),
                         &signature.signature,
-                    ).map_err(|_| Error::InvalidSectionSignature("invalid signature".to_string()))
+                    )
+                    .map_err(|_| {
+                        Error::InvalidSectionSignature(
+                            "invalid signature".to_string(),
+                        )
+                    });
                 }
             }
         }
-        Err(Error::InvalidSectionSignature("invalid signatures.".to_string()))
+        Err(Error::InvalidSectionSignature(
+            "invalid signatures.".to_string(),
+        ))
     }
 
     /// Validate any and all ciphertexts stored in this transaction

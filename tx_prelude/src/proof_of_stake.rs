@@ -73,7 +73,7 @@ impl Ctx {
     pub fn init_validator(
         &mut self,
         InitValidator {
-            account_key,
+            account_keys,
             consensus_key,
             protocol_key,
             dkg_key,
@@ -87,7 +87,8 @@ impl Ctx {
         // Init validator account
         let validator_address = self.init_account(validator_vp_code_hash)?;
         let pk_key = key::pk_key(&validator_address);
-        self.write(&pk_key, &account_key)?;
+        // TODO: fix with lazy map
+        self.write(&pk_key, &account_keys)?;
         let protocol_pk_key = key::protocol_pk_key(&validator_address);
         self.write(&protocol_pk_key, &protocol_key)?;
         let dkg_pk_key = key::dkg_session_keys::dkg_pk_key(&validator_address);
