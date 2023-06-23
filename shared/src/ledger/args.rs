@@ -252,6 +252,23 @@ pub struct Unbond<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
 }
 
+/// Redelegation arguments
+#[derive(Clone, Debug)]
+pub struct Redelegate<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Source validator address
+    pub src_validator: C::Address,
+    /// Destination validator address
+    pub dest_validator: C::Address,
+    /// Owner of the bonds that are being redelegated
+    pub owner: C::Address,
+    /// The amount of tokens to redelegate
+    pub amount: token::Amount,
+    /// Path to the TX WASM code file
+    pub tx_code_path: PathBuf,
+}
+
 /// Reveal public key
 #[derive(Clone, Debug)]
 pub struct RevealPk<C: NamadaTypes = SdkTypes> {

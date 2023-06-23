@@ -2723,6 +2723,7 @@ mod test_finalize_block {
             &val1.address,
             self_unbond_1_amount,
             current_epoch,
+            false,
         )
         .unwrap();
 
@@ -2766,6 +2767,7 @@ mod test_finalize_block {
             &val1.address,
             del_unbond_1_amount,
             current_epoch,
+            false,
         )
         .unwrap();
 
@@ -2831,6 +2833,7 @@ mod test_finalize_block {
             &val1.address,
             self_unbond_2_amount,
             current_epoch,
+            false,
         )
         .unwrap();
 

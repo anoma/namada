@@ -189,6 +189,42 @@ pub type ConsensusKeys = LazySet<common::PublicKey>;
 pub type ValidatorUnbondRecords =
     NestedMap<Epoch, LazyMap<Epoch, token::Amount>>;
 
+/// A validator's incoming redelegations, where the key is the bond owner
+/// address and the value is the redelegation end epoch
+pub type IncomingRedelegations = LazyMap<Address, Epoch>;
+
+/// A validator's outgoing redelegations, where the validator in question is a
+/// source validator. The outermost key is the destination validator's address,
+/// the middle key is the bond start epoch, and the innermost key is the
+/// redelegation start epoch. The internal value is the redelegated bond amount.
+pub type OutgoingRedelegations =
+    NestedMap<Address, NestedMap<Epoch, LazyMap<Epoch, token::Amount>>>;
+
+/// A validator's total redelegated unbonded tokens
+/// TODO: understand better, better description
+pub type TotalRedelegatedUnbonded = NestedMap<
+    Epoch,
+    NestedMap<Epoch, NestedMap<Address, LazyMap<Epoch, token::Amount>>>,
+>;
+
+/// Map of redelegated bonds
+/// TODO: better description
+/// TODO: should this be epoched?
+pub type RedelegatedBonds = NestedMap<Address, LazyMap<Epoch, token::Change>>;
+
+/// In-memory map of redelegated bonds
+pub type RedelegatedBondsMap = HashMap<Address, HashMap<Epoch, token::Change>>;
+
+/// A delegator's redelegated bonded token amount
+/// TODO: better understanding and description
+pub type DelegatorRedelegatedBonded =
+    NestedMap<Address, NestedMap<Epoch, RedelegatedBonds>>;
+
+/// A delegator's redelegated unbonded token amount
+/// TODO: better understanding and description
+pub type DelegatorRedelegatedUnbonded =
+    NestedMap<Address, NestedMap<Epoch, NestedMap<Epoch, RedelegatedBonds>>>;
+
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, Eq, Hash, PartialEq,
 )]

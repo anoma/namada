@@ -1224,6 +1224,18 @@ where
     Ok(())
 }
 
+pub async fn submit_redelegation<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
+    mut ctx: Context,
+    mut args: args::Redelegate,
+) -> Result<(), tx::Error> {
+    args.tx.chain_id = args
+        .tx
+        .chain_id
+        .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
+    tx::submit_redelegation::<C, _>(client, &mut ctx.wallet, args).await
+}
+
 /// Save accounts initialized from a tx into the wallet, if any.
 pub async fn save_initialized_accounts<U: WalletUtils>(
     wallet: &mut Wallet<U>,

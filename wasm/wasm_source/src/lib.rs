@@ -12,6 +12,8 @@ pub mod tx_init_account;
 pub mod tx_init_proposal;
 #[cfg(feature = "tx_init_validator")]
 pub mod tx_init_validator;
+#[cfg(feature = "tx_redelegate")]
+pub mod tx_redelegate;
 #[cfg(feature = "tx_reveal_pk")]
 pub mod tx_reveal_pk;
 #[cfg(feature = "tx_transfer")]

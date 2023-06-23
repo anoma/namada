@@ -855,6 +855,86 @@ pub async fn submit_unjail_validator<
     Ok(())
 }
 
+/// Submit transaction to redelegate bonded tokens from one validator to another
+pub async fn submit_redelegation<
+    C: crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
+    client: &C,
+    wallet: &mut Wallet<U>,
+    args: args::Redelegate,
+) -> Result<(), Error> {
+    let epoch = rpc::query_epoch(client).await;
+
+    let src_validator = known_validator_or_err(
+        args.src_validator.clone(),
+        args.tx.force,
+        client,
+    )
+    .await?;
+
+    let dest_validator = known_validator_or_err(
+        args.dest_validator.clone(),
+        args.tx.force,
+        client,
+    )
+    .await?;
+
+    let owner = args.owner.clone();
+    let redel_amount = args.amount.clone();
+
+    let bond_amount =
+        rpc::query_bond(client, &owner, &src_validator, None).await;
+    if redel_amount > bond_amount {
+        eprintln!(
+            "There are not enough tokens available for the desired \
+             redelegation at the current epoch {}.",
+            epoch
+        );
+        if !args.tx.force {
+            return Err(Error::NoBondFound);
+        }
+    } else {
+        println!(
+            "{bond_amount} NAM tokens available for redelegation. Submitting \
+             redelegation transaction for {redel_amount} tokens..."
+        );
+    }
+
+    let tx_code_hash =
+        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
+            .await
+            .unwrap();
+
+    let data = pos::Redelegation {
+        src_validator,
+        dest_validator,
+        owner,
+        amount: redel_amount,
+    };
+    let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
+
+    let mut tx = Tx::new(TxType::Raw);
+    tx.header.chain_id = args.tx.chain_id.clone().unwrap();
+    tx.header.expiration = args.tx.expiration;
+    tx.set_data(Data::new(data));
+    tx.set_code(Code::from_hash(tx_code_hash));
+
+    let default_signer = args.owner;
+    process_tx::<C, U>(
+        client,
+        wallet,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(default_signer),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await?;
+
+    Ok(())
+}
+
 /// Submit transaction to withdraw an unbond
 pub async fn build_withdraw<
     C: crate::ledger::queries::Client + Sync,

@@ -3,6 +3,7 @@
 mod state_machine;
 
 use std::cmp::min;
+use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
 use namada_core::ledger::storage::testing::TestWlStorage;
@@ -10,7 +11,8 @@ use namada_core::ledger::storage_api::collections::lazy_map;
 use namada_core::ledger::storage_api::token::{credit_tokens, read_balance};
 use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::address::testing::{
-    address_from_simple_seed, arb_established_address,
+    address_from_simple_seed, arb_established_address, established_address_1,
+    established_address_2, established_address_3,
 };
 use namada_core::types::address::{Address, EstablishedAddressGen};
 use namada_core::types::dec::Dec;
@@ -21,7 +23,7 @@ use namada_core::types::key::testing::{
 use namada_core::types::key::RefTo;
 use namada_core::types::storage::{BlockHeight, Epoch};
 use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
-use namada_core::types::uint::Uint;
+use namada_core::types::uint::{Uint, I256};
 use namada_core::types::{address, key, token};
 use proptest::prelude::*;
 use proptest::test_runner::Config;
@@ -33,16 +35,18 @@ use crate::parameters::testing::arb_pos_params;
 use crate::parameters::PosParams;
 use crate::types::{
     into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,
-    ConsensusValidator, GenesisValidator, Position, ReverseOrdTokenAmount,
-    SlashType, UnbondDetails, ValidatorSetUpdate, ValidatorState,
-    WeightedValidator,
+    ConsensusValidator, GenesisValidator, Position, RedelegatedBondsMap,
+    ReverseOrdTokenAmount, SlashType, UnbondDetails, ValidatorSetUpdate,
+    ValidatorState, WeightedValidator,
 };
 use crate::{
     become_validator, below_capacity_validator_set_handle, bond_handle,
-    bond_tokens, bonds_and_unbonds, consensus_validator_set_handle,
-    copy_validator_sets_and_positions, find_validator_by_raw_hash,
-    get_num_consensus_validators, init_genesis,
-    insert_validator_into_validator_set, is_validator, process_slashes,
+    bond_tokens, bonds_and_unbonds, compute_modified_redelegation,
+    consensus_validator_set_handle, copy_validator_sets_and_positions,
+    delegator_redelegated_bonds_handle, find_bonds_to_remove,
+    find_validator_by_raw_hash, get_num_consensus_validators, init_genesis,
+    insert_validator_into_validator_set, is_validator,
+    merge_redelegated_bonds_map, process_slashes,
     purge_validator_sets_for_old_epoch,
     read_below_capacity_validator_set_addresses_with_stake,
     read_below_threshold_validator_set_addresses,
@@ -53,7 +57,7 @@ use crate::{
     update_validator_set, validator_consensus_key_handle,
     validator_set_update_tendermint, validator_slashes_handle,
     validator_state_handle, withdraw_tokens, write_validator_address_raw_hash,
-    BecomeValidator, STORE_VALIDATOR_SETS_LEN,
+    BecomeValidator, ModifiedRedelegation, STORE_VALIDATOR_SETS_LEN,
 };
 
 proptest! {
@@ -529,6 +533,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         &validator.address,
         amount_self_unbond,
         current_epoch,
+        false,
     )
     .unwrap();
 
@@ -663,6 +668,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         &validator.address,
         amount_undel,
         current_epoch,
+        false,
     )
     .unwrap();
 
@@ -918,7 +924,8 @@ fn test_become_validator_aux(
     current_epoch = advance_epoch(&mut s, &params);
 
     // Unbond the self-bond
-    unbond_tokens(&mut s, None, &new_validator, amount, current_epoch).unwrap();
+    unbond_tokens(&mut s, None, &new_validator, amount, current_epoch, false)
+        .unwrap();
 
     let withdrawable_offset = params.unbonding_len + params.pipeline_len;
 
@@ -1005,7 +1012,8 @@ fn test_slashes_with_unbonding_aux(
     let unbond_amount = Dec::new(5, 1).unwrap() * val_tokens;
     println!("Going to unbond {}", unbond_amount.to_string_native());
     let unbond_epoch = current_epoch;
-    unbond_tokens(&mut s, None, val_addr, unbond_amount, unbond_epoch).unwrap();
+    unbond_tokens(&mut s, None, val_addr, unbond_amount, unbond_epoch, false)
+        .unwrap();
 
     // Discover second slash
     let slash_1_evidence_epoch = current_epoch;
@@ -2111,4 +2119,220 @@ fn arb_genesis_validators(
                 }
             },
         )
+}
+
+#[test]
+fn test_find_bonds_to_remove() {
+    let mut storage = TestWlStorage::default();
+    let source = established_address_1();
+    let validator = established_address_2();
+    let bond_handle = bond_handle(&source, &validator);
+
+    let (e1, e2, e6) = (Epoch(1), Epoch(2), Epoch(6));
+
+    bond_handle.set(&mut storage, I256::from(5), e1, 0).unwrap();
+    bond_handle.set(&mut storage, I256::from(3), e2, 0).unwrap();
+    bond_handle.set(&mut storage, I256::from(8), e6, 0).unwrap();
+
+    // Test 1
+    let bonds_for_removal = find_bonds_to_remove(
+        &storage,
+        &bond_handle.get_data_handler(),
+        I256::from(8),
+    )
+    .unwrap();
+    assert_eq!(
+        bonds_for_removal.epochs,
+        vec![e6].into_iter().collect::<HashSet<Epoch>>()
+    );
+    assert!(bonds_for_removal.new_entry.is_none());
+
+    // Test 2
+    let bonds_for_removal = find_bonds_to_remove(
+        &storage,
+        &bond_handle.get_data_handler(),
+        I256::from(10),
+    )
+    .unwrap();
+    assert_eq!(
+        bonds_for_removal.epochs,
+        vec![e6].into_iter().collect::<HashSet<Epoch>>()
+    );
+    assert_eq!(bonds_for_removal.new_entry, Some((Epoch(2), I256::from(1))));
+
+    // Test 3
+    let bonds_for_removal = find_bonds_to_remove(
+        &storage,
+        &bond_handle.get_data_handler(),
+        I256::from(11),
+    )
+    .unwrap();
+    assert_eq!(
+        bonds_for_removal.epochs,
+        vec![e6, e2].into_iter().collect::<HashSet<Epoch>>()
+    );
+    assert!(bonds_for_removal.new_entry.is_none());
+
+    // Test 4
+    let bonds_for_removal = find_bonds_to_remove(
+        &storage,
+        &bond_handle.get_data_handler(),
+        I256::from(12),
+    )
+    .unwrap();
+    assert_eq!(
+        bonds_for_removal.epochs,
+        vec![e6, e2].into_iter().collect::<HashSet<Epoch>>()
+    );
+    assert_eq!(bonds_for_removal.new_entry, Some((Epoch(1), I256::from(4))));
+}
+
+#[test]
+fn test_compute_modified_redelegation() {
+    let mut storage = TestWlStorage::default();
+    let validator1 = established_address_1();
+    let validator2 = established_address_2();
+    let owner = established_address_3();
+    let outer_epoch = Epoch(0);
+
+    // Fill redelegated bonds in storage
+    let redelegated_bonds_map = delegator_redelegated_bonds_handle(&owner)
+        .at(&validator1)
+        .at(&outer_epoch);
+    redelegated_bonds_map
+        .at(&validator1)
+        .insert(&mut storage, Epoch(2), I256::from(6))
+        .unwrap();
+    redelegated_bonds_map
+        .at(&validator1)
+        .insert(&mut storage, Epoch(4), I256::from(7))
+        .unwrap();
+    redelegated_bonds_map
+        .at(&validator2)
+        .insert(&mut storage, Epoch(1), I256::from(5))
+        .unwrap();
+    redelegated_bonds_map
+        .at(&validator2)
+        .insert(&mut storage, Epoch(4), I256::from(7))
+        .unwrap();
+
+    let mr1 = compute_modified_redelegation(
+        &storage,
+        &redelegated_bonds_map,
+        Epoch(5),
+        I256::from(25),
+    )
+    .unwrap();
+    let mr2 = compute_modified_redelegation(
+        &storage,
+        &redelegated_bonds_map,
+        Epoch(5),
+        I256::from(30),
+    )
+    .unwrap();
+
+    let exp_mr = ModifiedRedelegation::default();
+
+    assert_eq!(mr1, exp_mr);
+    assert_eq!(mr2, exp_mr);
+
+    // TODO: more tests once deterministic validator ordering is implemented and
+    // synced between Rust and Quint
+}
+
+#[test]
+fn test_merge_redelegated_bonds_map() {
+    let alice_address = established_address_1();
+    let bob_address = established_address_2();
+    let tom_address = established_address_3();
+
+    let ep1 = Epoch(1);
+    let ep2 = Epoch(2);
+    let ep4 = Epoch(4);
+    let ep5 = Epoch(5);
+    let ep7 = Epoch(7);
+
+    let alice_map = vec![(ep1, 2), (ep2, 3)]
+        .into_iter()
+        .map(|(epoch, amount)| (epoch, I256::from(amount)))
+        .collect::<HashMap<_, _>>();
+    let bob_map = vec![(ep1, 2), (ep2, 3)]
+        .into_iter()
+        .map(|(epoch, amount)| (epoch, I256::from(amount)))
+        .collect::<HashMap<_, _>>();
+    let tom_map = vec![(ep4, 3), (ep5, 6)]
+        .into_iter()
+        .map(|(epoch, amount)| (epoch, I256::from(amount)))
+        .collect::<HashMap<_, _>>();
+    let tom_map_2 = vec![(ep4, 3), (ep7, 6)]
+        .into_iter()
+        .map(|(epoch, amount)| (epoch, I256::from(amount)))
+        .collect::<HashMap<_, _>>();
+    let comb_tom_map = vec![(ep4, 6), (ep5, 6), (ep7, 6)]
+        .into_iter()
+        .map(|(epoch, amount)| (epoch, I256::from(amount)))
+        .collect::<HashMap<_, _>>();
+
+    let alice_bob_map = vec![
+        (alice_address.clone(), alice_map.clone()),
+        (bob_address.clone(), bob_map.clone()),
+    ]
+    .into_iter()
+    .collect::<HashMap<_, _>>();
+    let bob_tom_map = vec![
+        (tom_address.clone(), tom_map),
+        (bob_address.clone(), bob_map.clone()),
+    ]
+    .into_iter()
+    .collect::<HashMap<_, _>>();
+    let alice_tom2_map = vec![
+        (tom_address.clone(), tom_map_2),
+        (alice_address.clone(), alice_map.clone()),
+    ]
+    .into_iter()
+    .collect::<HashMap<_, _>>();
+    let everyone = vec![
+        (alice_address.clone(), alice_map.clone()),
+        (bob_address.clone(), bob_map.clone()),
+        (tom_address, comb_tom_map),
+    ]
+    .into_iter()
+    .collect::<HashMap<_, _>>();
+
+    assert_eq!(
+        merge_redelegated_bonds_map(
+            &RedelegatedBondsMap::default(),
+            &RedelegatedBondsMap::default()
+        ),
+        RedelegatedBondsMap::default()
+    );
+    assert_eq!(
+        merge_redelegated_bonds_map(
+            &alice_bob_map,
+            &RedelegatedBondsMap::default()
+        ),
+        alice_bob_map
+    );
+    assert_eq!(
+        merge_redelegated_bonds_map(
+            &RedelegatedBondsMap::default(),
+            &alice_bob_map
+        ),
+        alice_bob_map
+    );
+    assert_eq!(
+        merge_redelegated_bonds_map(
+            &vec![(alice_address, alice_map)]
+                .into_iter()
+                .collect::<HashMap<_, _>>(),
+            &vec![(bob_address, bob_map)]
+                .into_iter()
+                .collect::<HashMap<_, _>>(),
+        ),
+        alice_bob_map
+    );
+    assert_eq!(
+        merge_redelegated_bonds_map(&bob_tom_map, &alice_tom2_map),
+        everyone
+    )
 }
