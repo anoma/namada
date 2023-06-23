@@ -1800,6 +1800,8 @@ fn invalid_transactions() -> Result<()> {
 
     // There should be previous state now
     ledger.exp_string("Last state root hash:")?;
+    // Wait for a block by which time the RPC should be ready
+    ledger.exp_string("Committed block hash")?;
     let _bg_ledger = ledger.background();
 
     // 5. Submit an invalid transactions (invalid token address)
