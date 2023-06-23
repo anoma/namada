@@ -63,6 +63,33 @@ impl Error {
     {
         Self::CustomWithMessage(msg, CustomError(error.into()))
     }
+
+    /// Attempt to downgrade the inner error to `E` if any.
+    ///
+    /// If this [`enum@Error`] was constructed via [`new`] or [`wrap`] then this
+    /// function will attempt to perform downgrade on it, otherwise it will
+    /// return [`Err`].
+    ///
+    /// [`new`]: Error::new
+    /// [`wrap`]: Error::wrap
+    ///
+    /// To match on the inner error type when the downcast is successful, you'll
+    /// typically want to [`std::ops::Deref::deref`] it out of the [`Box`].
+    pub fn downcast<E>(self) -> std::result::Result<Box<E>, Self>
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        match self {
+            Self::Custom(CustomError(b))
+            | Self::CustomWithMessage(_, CustomError(b))
+                if b.is::<E>() =>
+            {
+                let res = b.downcast::<E>();
+                Ok(res.unwrap())
+            }
+            _ => Err(self),
+        }
+    }
 }
 
 /// A custom error

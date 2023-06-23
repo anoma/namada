@@ -20,7 +20,8 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
 
 #[cfg(test)]
 mod tests {
-    use namada::ledger::pos::{GenesisValidator, PosParams, PosVP};
+    use namada::ledger::pos::{PosParams, PosVP};
+    use namada::proof_of_stake::types::GenesisValidator;
     use namada::proof_of_stake::unbond_handle;
     use namada::types::dec::Dec;
     use namada::types::storage::Epoch;

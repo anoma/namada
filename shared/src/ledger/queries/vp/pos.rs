@@ -28,8 +28,6 @@ use crate::types::address::Address;
 use crate::types::storage::Epoch;
 use crate::types::token;
 
-type AmountPair = (token::Amount, token::Amount);
-
 // PoS validity predicate queries
 router! {POS,
     ( "validator" ) = {
@@ -79,7 +77,7 @@ router! {POS,
         -> token::Amount = bond,
 
     ( "bond_with_slashing" / [source: Address] / [validator: Address] / [epoch: opt Epoch] )
-        -> AmountPair = bond_with_slashing,
+        -> token::Amount = bond_with_slashing,
 
     ( "unbond" / [source: Address] / [validator: Address] )
         -> HashMap<(Epoch, Epoch), token::Amount> = unbond,
@@ -262,7 +260,13 @@ where
 {
     let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
     let params = read_pos_params(ctx.wl_storage)?;
-    read_validator_stake(ctx.wl_storage, &params, &validator, epoch)
+    if namada_proof_of_stake::is_validator(ctx.wl_storage, &validator)? {
+        let stake =
+            read_validator_stake(ctx.wl_storage, &params, &validator, epoch)?;
+        Ok(Some(stake))
+    } else {
+        Ok(None)
+    }
 }
 
 /// Get all the validator in the consensus set with their bonded stake.
@@ -348,7 +352,7 @@ fn bond_with_slashing<D, H>(
     source: Address,
     validator: Address,
     epoch: Option<Epoch>,
-) -> storage_api::Result<AmountPair>
+) -> storage_api::Result<token::Amount>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,

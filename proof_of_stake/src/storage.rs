@@ -6,7 +6,7 @@ use namada_core::types::storage::{DbKeySeg, Epoch, Key, KeySeg};
 
 use super::ADDRESS;
 use crate::epoched::LAZY_MAP_SUB_KEY;
-pub use crate::types::*; // TODO: not sure why this needs to be public
+use crate::types::BondId;
 
 const PARAMS_STORAGE_KEY: &str = "params";
 const VALIDATOR_ADDRESSES_KEY: &str = "validator_addresses";
@@ -43,6 +43,13 @@ const CONSENSUS_KEYS: &str = "consensus_keys";
 const LAST_BLOCK_PROPOSER_STORAGE_KEY: &str = "last_block_proposer";
 const CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY: &str =
     "validator_rewards_accumulator";
+const VALIDATOR_INCOMING_REDELEGATIONS_KEY: &str = "incoming_redelegations";
+const VALIDATOR_OUTGOING_REDELEGATIONS_KEY: &str = "outgoing_redelegations";
+const VALIDATOR_TOTAL_REDELEGATED_BONDED_KEY: &str = "total_redelegated_bonded";
+const VALIDATOR_TOTAL_REDELEGATED_UNBONDED_KEY: &str =
+    "total_redelegated_unbonded";
+const DELEGATOR_REDELEGATED_BONDS_KEY: &str = "delegator_redelegated_bonds";
+const DELEGATOR_REDELEGATED_UNBONDS_KEY: &str = "delegator_redelegated_unbonds";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -254,6 +261,66 @@ pub fn is_validator_self_rewards_product_key(key: &Key) -> Option<&Address> {
 pub fn validator_delegation_rewards_product_key(validator: &Address) -> Key {
     validator_prefix(validator)
         .push(&VALIDATOR_DELEGATION_REWARDS_PRODUCT_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for a validator's incoming redelegations, where the prefixed
+/// validator is the destination validator.
+pub fn validator_incoming_redelegations_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_INCOMING_REDELEGATIONS_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for a validator's outgoing redelegations, where the prefixed
+/// validator is the source validator.
+pub fn validator_outgoing_redelegations_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_OUTGOING_REDELEGATIONS_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for validator's total-redelegated-bonded amount to track for
+/// slashing
+pub fn validator_total_redelegated_bonded_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_TOTAL_REDELEGATED_BONDED_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for validator's total-redelegated-unbonded amount to track for
+/// slashing
+pub fn validator_total_redelegated_unbonded_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_TOTAL_REDELEGATED_UNBONDED_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key prefix for all delegators' redelegated bonds.
+pub fn delegator_redelegated_bonds_prefix() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&DELEGATOR_REDELEGATED_BONDS_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for a particular delegator's redelegated bond information.
+pub fn delegator_redelegated_bonds_key(delegator: &Address) -> Key {
+    delegator_redelegated_bonds_prefix()
+        .push(&delegator.to_db_key())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key prefix for all delegators' redelegated unbonds.
+pub fn delegator_redelegated_unbonds_prefix() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&DELEGATOR_REDELEGATED_UNBONDS_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for a particular delegator's redelegated unbond information.
+pub fn delegator_redelegated_unbonds_key(delegator: &Address) -> Key {
+    delegator_redelegated_unbonds_prefix()
+        .push(&delegator.to_db_key())
         .expect("Cannot obtain a storage key")
 }
 
@@ -521,9 +588,9 @@ pub fn is_unbond_key(key: &Key) -> Option<(BondId, Epoch, Epoch)> {
                 DbKeySeg::AddressSeg(source),
                 DbKeySeg::AddressSeg(validator),
                 DbKeySeg::StringSeg(data_1),
-                DbKeySeg::StringSeg(withdraw_epoch_str),
-                DbKeySeg::StringSeg(data_2),
                 DbKeySeg::StringSeg(start_epoch_str),
+                DbKeySeg::StringSeg(data_2),
+                DbKeySeg::StringSeg(withdraw_epoch_str),
             ] if addr == &ADDRESS
                 && prefix == UNBOND_STORAGE_KEY
                 && data_1 == lazy_map::DATA_SUBKEY

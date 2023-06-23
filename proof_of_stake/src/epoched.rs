@@ -434,7 +434,6 @@ where
         &self,
         storage: &S,
         epoch: Epoch,
-        _params: &PosParams,
     ) -> storage_api::Result<Option<Data>>
     where
         S: StorageRead,
@@ -480,6 +479,26 @@ where
                 Ok(sum)
             }
         }
+    }
+
+    /// Initialize or add a value to the current delta value at the given epoch
+    /// offset.
+    pub fn add<S>(
+        &self,
+        storage: &mut S,
+        value: Data,
+        current_epoch: Epoch,
+        offset: u64,
+    ) -> storage_api::Result<()>
+    where
+        S: StorageWrite + StorageRead,
+        Data: Default,
+    {
+        self.update_data(storage, current_epoch)?;
+        let cur_value = self
+            .get_delta_val(storage, current_epoch + offset)?
+            .unwrap_or_default();
+        self.set_at_epoch(storage, cur_value + value, current_epoch, offset)
     }
 
     /// Initialize or set the value at the given epoch offset.
@@ -1073,6 +1092,20 @@ mod test {
         assert_eq!(data_handler.get(&s, &Epoch(8))?, None);
         assert_eq!(data_handler.get(&s, &Epoch(9))?, None);
         assert_eq!(data_handler.get(&s, &Epoch(10))?, Some(6));
+
+        epoched.add(&mut s, 15, Epoch(10), 0)?;
+        assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(10)));
+        assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
+        assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
+        assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
+        assert_eq!(data_handler.get(&s, &Epoch(2))?, Some(3));
+        assert_eq!(data_handler.get(&s, &Epoch(3))?, Some(4));
+        assert_eq!(data_handler.get(&s, &Epoch(5))?, Some(5));
+        assert_eq!(data_handler.get(&s, &Epoch(6))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(7))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(8))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(9))?, None);
+        assert_eq!(data_handler.get(&s, &Epoch(10))?, Some(21));
 
         Ok(())
     }

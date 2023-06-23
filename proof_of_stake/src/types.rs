@@ -3,7 +3,7 @@
 mod rev_order;
 
 use core::fmt::Debug;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::hash::Hash;
@@ -176,6 +176,10 @@ pub type EpochedSlashes = crate::epoched::NestedEpoched<
 >;
 
 /// Epoched validator's unbonds
+///
+/// The map keys from outside in are:
+/// - start epoch of the bond in which it started contributing to stake
+/// - withdrawable epoch of the unbond
 pub type Unbonds = NestedMap<Epoch, LazyMap<Epoch, token::Amount>>;
 
 /// Consensus keys set, used to ensure uniqueness
@@ -186,17 +190,104 @@ pub type ConsensusKeys = LazySet<common::PublicKey>;
 /// (affects the deltas, pipeline after submission). The inner `Epoch`
 /// corresponds to the epoch from which the underlying bond became active
 /// (affected deltas).
-pub type ValidatorUnbondRecords =
+pub type ValidatorTotalUnbonded =
     NestedMap<Epoch, LazyMap<Epoch, token::Amount>>;
+
+/// A validator's incoming redelegations, where the key is the bond owner
+/// address and the value is the redelegation end epoch
+pub type IncomingRedelegations = LazyMap<Address, Epoch>;
+
+/// A validator's outgoing redelegations, where the validator in question is a
+/// source validator.
+///
+/// The map keys from outside in are:
+/// - destination validator's address
+/// - bond start epoch
+/// - redelegation epoch in which it started contributing to destination
+///   validator
+///
+/// The value is the redelegated bond amount.
+pub type OutgoingRedelegations =
+    NestedMap<Address, NestedMap<Epoch, LazyMap<Epoch, token::Amount>>>;
+
+/// A validator's total redelegated unbonded tokens for any delegator.
+/// The map keys from outside in are:
+///
+/// - redelegation epoch in which it started contributing to destination
+///   validator
+/// - redelegation source validator
+/// - start epoch of the bond that's been redelegated
+pub type TotalRedelegatedBonded = NestedMap<Epoch, RedelegatedTokens>;
+
+/// A validator's total redelegated unbonded tokens for any delegator.
+/// The map keys from outside in are:
+///
+/// - unbond epoch
+/// - redelegation epoch in which it started contributing to destination
+///   validator
+/// - redelegation source validator
+/// - bond start epoch
+pub type TotalRedelegatedUnbonded = NestedMap<Epoch, RedelegatedBondsOrUnbonds>;
+
+/// Map of redelegated tokens.
+/// The map keys from outside in are:
+///
+/// - redelegation source validator
+/// - start epoch of the bond that's been redelegated
+pub type RedelegatedTokens = NestedMap<Address, LazyMap<Epoch, token::Change>>;
+
+/// Map of redelegated bonds or unbonds.
+/// The map keys from outside in are:
+///
+/// - for bonds redelegation epoch in which the redelegation started
+///   contributing to destination validator, for unbonds it's withdrawal epoch
+/// - redelegation source validator
+/// - start epoch of the bond that's been redelegated
+///
+/// TODO: it's a confusing that the outermost epoch is different for bonds vs
+/// unbonds, can we swap withdrawal with redelegation epoch for
+/// `DelegatorRedelegatedUnbonded`?
+pub type RedelegatedBondsOrUnbonds = NestedMap<Epoch, RedelegatedTokens>;
+
+/// A delegator's redelegated bonded token amount.
+/// The map keys from outside in are:
+///
+/// - redelegation destination validator
+/// - redelegation epoch in which the redelegation started contributing to
+///   destination validator
+/// - redelegation source validator
+/// - start epoch of the bond that's been redelegated
+pub type DelegatorRedelegatedBonded =
+    NestedMap<Address, RedelegatedBondsOrUnbonds>;
+
+/// A delegator's redelegated unbonded token amounts.
+/// The map keys from outside in are:
+///
+/// - redelegation destination validator
+/// - redelegation epoch in which the redelegation started contributing to
+///   destination validator
+/// - withdrawal epoch of the unbond
+/// - redelegation source validator
+/// - start epoch of the bond that's been redelegated
+pub type DelegatorRedelegatedUnbonded =
+    NestedMap<Address, NestedMap<Epoch, RedelegatedBondsOrUnbonds>>;
+
+/// In-memory map of redelegated bonds.
+/// The map keys from outside in are:
+///
+/// - src validator address
+/// - src bond start epoch where it started contributing to src validator
+pub type EagerRedelegatedBondsMap =
+    BTreeMap<Address, BTreeMap<Epoch, token::Change>>;
 
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, Eq, Hash, PartialEq,
 )]
-/// TODO: slashed amount for thing
+/// Slashed amount of tokens.
 pub struct SlashedAmount {
-    /// Perlangus
+    /// Amount of tokens that were slashed.
     pub amount: token::Amount,
-    /// Churms
+    /// Infraction epoch from which the tokens were slashed
     pub epoch: Epoch,
 }
 
@@ -216,6 +307,20 @@ pub type RewardsProducts = LazyMap<Epoch, Dec>;
 /// rewards owed over the course of an epoch)
 pub type RewardsAccumulator = LazyMap<Address, Dec>;
 
+/// Eager data for a generic redelegation
+#[derive(Debug)]
+pub struct Redelegation {
+    /// Start epoch of the redelegation is the first epoch in which the
+    /// redelegated amount no longer contributes to the stake of source
+    /// validator and starts contributing to destination validator.
+    pub redel_bond_start: Epoch,
+    /// Source validator
+    pub src_validator: Address,
+    /// Start epoch of the redelgated bond
+    pub bond_start: Epoch,
+    /// Redelegation amount
+    pub amount: token::Amount,
+}
 // --------------------------------------------------------------------------------------------
 
 /// A genesis validator definition.

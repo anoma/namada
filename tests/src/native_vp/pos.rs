@@ -97,7 +97,7 @@
 
 use namada::ledger::pos::namada_proof_of_stake::init_genesis;
 use namada::proof_of_stake::parameters::PosParams;
-use namada::proof_of_stake::storage::GenesisValidator;
+use namada::proof_of_stake::types::GenesisValidator;
 use namada::types::storage::Epoch;
 
 use crate::tx::tx_host_env;
@@ -572,8 +572,7 @@ pub mod testing {
     use namada::proof_of_stake::epoched::DynEpochOffset;
     use namada::proof_of_stake::parameters::testing::arb_rate;
     use namada::proof_of_stake::parameters::PosParams;
-    use namada::proof_of_stake::storage::BondId;
-    use namada::proof_of_stake::types::ValidatorState;
+    use namada::proof_of_stake::types::{BondId, ValidatorState};
     use namada::proof_of_stake::{
         get_num_consensus_validators, read_pos_params, unbond_handle,
         ADDRESS as POS_ADDRESS,

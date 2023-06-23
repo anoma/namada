@@ -33,7 +33,8 @@ use namada::ledger::masp::{
     Conversions, MaspAmount, MaspChange, ShieldedContext, ShieldedUtils,
 };
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
-use namada::ledger::pos::{CommissionPair, PosParams, Slash};
+use namada::ledger::pos::types::{CommissionPair, Slash};
+use namada::ledger::pos::PosParams;
 use namada::ledger::queries::RPC;
 use namada::ledger::rpc::{
     self, enriched_bonds_and_unbonds, format_denominated_amount, query_epoch,
@@ -2082,13 +2083,12 @@ pub async fn get_bond_amount_at<C: namada::ledger::queries::Client + Sync>(
     validator: &Address,
     epoch: Epoch,
 ) -> Option<token::Amount> {
-    let (_total, total_active) =
-        unwrap_client_response::<C, (token::Amount, token::Amount)>(
-            RPC.vp()
-                .pos()
-                .bond_with_slashing(client, delegator, validator, &Some(epoch))
-                .await,
-        );
+    let total_active = unwrap_client_response::<C, token::Amount>(
+        RPC.vp()
+            .pos()
+            .bond_with_slashing(client, delegator, validator, &Some(epoch))
+            .await,
+    );
     Some(total_active)
 }
 

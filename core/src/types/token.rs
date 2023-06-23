@@ -148,6 +148,7 @@ impl Amount {
     }
 
     /// Checked subtraction. Returns `None` on underflow.
+    #[must_use]
     pub fn checked_sub(&self, amount: Amount) -> Option<Self> {
         self.raw
             .checked_sub(amount.raw)
@@ -243,6 +244,26 @@ impl Amount {
     /// string encodes all necessary decimal places.
     pub fn from_string_precise(string: &str) -> Result<Self, AmountParseError> {
         DenominatedAmount::from_str(string).map(|den| den.amount)
+    }
+
+    /// Multiply by a decimal [`Dec`] with the result rounded up.
+    ///
+    /// # Panics
+    /// Panics when the `dec` is negative.
+    #[must_use]
+    pub fn mul_ceil(&self, dec: Dec) -> Self {
+        assert!(!dec.is_negative());
+        let tot = self.raw * dec.abs();
+        let denom = Uint::from(10u64.pow(POS_DECIMAL_PRECISION as u32));
+        let floor_div = tot / denom;
+        let rem = tot % denom;
+        // dbg!(tot, denom, floor_div, rem);
+        let raw = if !rem.is_zero() {
+            floor_div + Self::from(1_u64)
+        } else {
+            floor_div
+        };
+        Self { raw }
     }
 }
 
@@ -1154,6 +1175,17 @@ mod tests {
 
         let non_zero = Amount::from_uint(1, 0).expect("Test failed");
         assert!(!non_zero.is_zero());
+    }
+
+    #[test]
+    fn test_token_amount_mul_ceil() {
+        let one = Amount::from(1);
+        let two = Amount::from(2);
+        let three = Amount::from(3);
+        let dec = Dec::from_str("0.34").unwrap();
+        assert_eq!(one.mul_ceil(dec), one);
+        assert_eq!(two.mul_ceil(dec), one);
+        assert_eq!(three.mul_ceil(dec), two);
     }
 }
 

@@ -768,6 +768,85 @@ pub async fn build_unjail_validator<
     .await
 }
 
+/// Redelegate tokens from one validator to another
+pub async fn build_redelegation<
+    C: crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+    V: ShieldedUtils,
+>(
+    client: &C,
+    wallet: &mut Wallet<U>,
+    shielded: &mut ShieldedContext<V>,
+    args::Redelegate {
+        tx: tx_args,
+        src_validator,
+        dest_validator,
+        owner,
+        amount: redel_amount,
+        tx_code_path,
+    }: args::Redelegate,
+    fee_payer: common::PublicKey,
+) -> Result<Tx> {
+    let epoch = rpc::query_epoch(client).await?;
+
+    if redel_amount == token::Amount::zero() {
+        eprintln!(
+            "The requested redelegation amount is 0. A positive amount must \
+             be requested."
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxError::RedelegationIsZero));
+        }
+    }
+
+    let bond_amount =
+        rpc::query_bond(client, &owner, &src_validator, None).await?;
+    if redel_amount > bond_amount {
+        eprintln!(
+            "There are not enough tokens available for the desired \
+             redelegation at the current epoch {}. Requested to redelegate {} \
+             tokens but only {} tokens are available.",
+            epoch,
+            redel_amount.to_string_native(),
+            bond_amount.to_string_native()
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxError::RedelegationAmountTooLarge(
+                redel_amount.to_string_native(),
+                bond_amount.to_string_native(),
+            )));
+        }
+    } else {
+        println!(
+            "{} NAM tokens available for redelegation. Submitting \
+             redelegation transaction for {} tokens...",
+            bond_amount.to_string_native(),
+            redel_amount.to_string_native()
+        );
+    }
+
+    let data = pos::Redelegation {
+        src_validator,
+        dest_validator,
+        owner,
+        amount: redel_amount,
+    };
+
+    let (tx, _epoch) = build(
+        client,
+        wallet,
+        shielded,
+        &tx_args,
+        tx_code_path,
+        data,
+        do_nothing,
+        &fee_payer,
+        None,
+    )
+    .await?;
+    Ok(tx)
+}
+
 /// Submit transaction to withdraw an unbond
 pub async fn build_withdraw<
     C: crate::ledger::queries::Client + Sync,

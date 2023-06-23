@@ -905,14 +905,14 @@ pub async fn get_bond_amount_at<C: crate::ledger::queries::Client + Sync>(
     delegator: &Address,
     validator: &Address,
     epoch: Epoch,
-) -> Result<Option<token::Amount>, error::Error> {
-    let (_total, total_active) = convert_response::<C, (Amount, Amount)>(
+) -> Result<token::Amount, error::Error> {
+    let total_active = convert_response::<C, Amount>(
         RPC.vp()
             .pos()
             .bond_with_slashing(client, delegator, validator, &Some(epoch))
             .await,
     )?;
-    Ok(Some(total_active))
+    Ok(total_active)
 }
 
 /// Get bonds and unbonds with all details (slashes and rewards, if any)

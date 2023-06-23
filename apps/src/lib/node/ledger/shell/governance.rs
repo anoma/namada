@@ -233,7 +233,7 @@ where
                 source: delegator.clone(),
                 validator: validator.clone(),
             };
-            let (_, delegator_stake) =
+            let delegator_stake =
                 bond_amount(storage, &bond_id, epoch).unwrap_or_default();
 
             delegators_vote.insert(delegator.clone(), vote_data.into());

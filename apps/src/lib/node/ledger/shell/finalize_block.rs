@@ -751,14 +751,12 @@ where
             let reward = fractional_claim * inflation;
 
             // Get validator data at the last epoch
-            let stake = read_validator_stake(
+            let stake = Dec::from(read_validator_stake(
                 &self.wl_storage,
                 &params,
                 &address,
                 last_epoch,
-            )?
-            .map(Dec::from)
-            .unwrap_or_default();
+            )?);
             let last_rewards_product =
                 validator_rewards_products_handle(&address)
                     .get(&self.wl_storage, &last_epoch)?
@@ -1085,7 +1083,6 @@ mod test_finalize_block {
     use namada::ledger::pos::PosQueries;
     use namada::ledger::storage_api;
     use namada::ledger::storage_api::StorageWrite;
-    use namada::proof_of_stake::btree_set::BTreeSetShims;
     use namada::proof_of_stake::storage::{
         is_validator_slashes_key, slashes_prefix,
     };
@@ -1963,7 +1960,6 @@ mod test_finalize_block {
             validator,
             Epoch::default(),
         )
-        .unwrap()
         .unwrap();
 
         let votes = vec![VoteInfo {
@@ -2046,10 +2042,10 @@ mod test_finalize_block {
 
         let params = read_pos_params(&shell.wl_storage).unwrap();
 
-        let val1 = validator_set.pop_first_shim().unwrap();
-        let val2 = validator_set.pop_first_shim().unwrap();
-        let val3 = validator_set.pop_first_shim().unwrap();
-        let val4 = validator_set.pop_first_shim().unwrap();
+        let val1 = validator_set.pop_first().unwrap();
+        let val2 = validator_set.pop_first().unwrap();
+        let val3 = validator_set.pop_first().unwrap();
+        let val4 = validator_set.pop_first().unwrap();
 
         let get_pkh = |address, epoch| {
             let ck = validator_consensus_key_handle(&address)
@@ -2888,15 +2884,13 @@ mod test_finalize_block {
                     &params,
                     &val1.address,
                     shell.wl_storage.storage.block.epoch,
-                )?
-                .unwrap();
+                )?;
                 let stake2 = read_validator_stake(
                     &shell.wl_storage,
                     &params,
                     &val2.address,
                     shell.wl_storage.storage.block.epoch,
-                )?
-                .unwrap();
+                )?;
                 let total_stake = read_total_stake(
                     &shell.wl_storage,
                     &params,
@@ -2987,21 +2981,35 @@ mod test_finalize_block {
             &params,
             &val1.address,
             pipeline_epoch,
-        )?
-        .unwrap();
+        )?;
         let stake2 = read_validator_stake(
             &shell.wl_storage,
             &params,
             &val2.address,
             pipeline_epoch,
-        )?
-        .unwrap();
+        )?;
         let total_stake =
             read_total_stake(&shell.wl_storage, &params, pipeline_epoch)?;
 
-        let expected_slashed = cubic_rate * initial_stake;
-        assert_eq!(stake1, initial_stake - expected_slashed);
-        assert_eq!(stake2, initial_stake - expected_slashed);
+        let expected_slashed = initial_stake.mul_ceil(cubic_rate);
+
+        println!(
+            "Initial stake = {}\nCubic rate = {}\nExpected slashed = {}\n",
+            initial_stake.to_string_native(),
+            cubic_rate,
+            expected_slashed.to_string_native()
+        );
+
+        assert!(
+            (stake1.change() - (initial_stake - expected_slashed).change())
+                .abs()
+                <= 1.into()
+        );
+        assert!(
+            (stake2.change() - (initial_stake - expected_slashed).change())
+                .abs()
+                <= 1.into()
+        );
         assert_eq!(total_stake, total_initial_stake - 2u64 * expected_slashed);
 
         // Unjail one of the validators
@@ -3076,7 +3084,6 @@ mod test_finalize_block {
     /// 4) Self-unbond 15_000
     /// 5) Delegate 8_144 to validator
     /// 6) Discover misbehavior in epoch 3
-    /// 7) Discover misbehavior in epoch 3
     /// 7) Discover misbehavior in epoch 4
     fn test_multiple_misbehaviors_by_num_vals(
         num_validators: u64,
@@ -3165,6 +3172,7 @@ mod test_finalize_block {
             &val1.address,
             self_unbond_1_amount,
             current_epoch,
+            false,
         )
         .unwrap();
 
@@ -3174,8 +3182,7 @@ mod test_finalize_block {
             &val1.address,
             current_epoch + params.pipeline_len,
         )
-        .unwrap()
-        .unwrap_or_default();
+        .unwrap();
 
         let total_stake = namada_proof_of_stake::read_total_stake(
             &shell.wl_storage,
@@ -3208,6 +3215,7 @@ mod test_finalize_block {
             &val1.address,
             del_unbond_1_amount,
             current_epoch,
+            false,
         )
         .unwrap();
 
@@ -3217,8 +3225,7 @@ mod test_finalize_block {
             &val1.address,
             current_epoch + params.pipeline_len,
         )
-        .unwrap()
-        .unwrap_or_default();
+        .unwrap();
         let total_stake = namada_proof_of_stake::read_total_stake(
             &shell.wl_storage,
             &params,
@@ -3273,6 +3280,7 @@ mod test_finalize_block {
             &val1.address,
             self_unbond_2_amount,
             current_epoch,
+            false,
         )
         .unwrap();
 
@@ -3449,8 +3457,7 @@ mod test_finalize_block {
             &val1.address,
             Epoch(10),
         )
-        .unwrap()
-        .unwrap_or_default();
+        .unwrap();
         assert_eq!(
             pre_stake_10,
             initial_stake + del_1_amount
@@ -3483,16 +3490,14 @@ mod test_finalize_block {
             &val1.address,
             Epoch(3),
         )
-        .unwrap()
-        .unwrap_or_default();
+        .unwrap();
         let val_stake_4 = namada_proof_of_stake::read_validator_stake(
             &shell.wl_storage,
             &params,
             &val1.address,
             Epoch(4),
         )
-        .unwrap()
-        .unwrap_or_default();
+        .unwrap();
 
         let tot_stake_3 = namada_proof_of_stake::read_total_stake(
             &shell.wl_storage,
@@ -3534,31 +3539,33 @@ mod test_finalize_block {
 
         // Check the amount of stake deducted from the futuremost epoch while
         // processing the slashes
-        let post_stake_10 = namada_proof_of_stake::read_validator_stake(
+        let post_stake_10 = read_validator_stake(
             &shell.wl_storage,
             &params,
             &val1.address,
             Epoch(10),
         )
-        .unwrap()
-        .unwrap_or_default();
+        .unwrap();
         // The amount unbonded after the infraction that affected the deltas
         // before processing is `del_unbond_1_amount + self_bond_1_amount -
         // self_unbond_2_amount` (since this self-bond was enacted then unbonded
         // all after the infraction). Thus, the additional deltas to be
         // deducted is the (infraction stake - this) * rate
         let slash_rate_3 = std::cmp::min(Dec::one(), Dec::two() * cubic_rate);
-        let exp_slashed_during_processing_9 = slash_rate_3
-            * (initial_stake + del_1_amount
-                - self_unbond_1_amount
-                - del_unbond_1_amount
-                + self_bond_1_amount
-                - self_unbond_2_amount);
+        let exp_slashed_during_processing_9 = (initial_stake + del_1_amount
+            - self_unbond_1_amount
+            - del_unbond_1_amount
+            + self_bond_1_amount
+            - self_unbond_2_amount)
+            .mul_ceil(slash_rate_3);
         assert!(
             ((pre_stake_10 - post_stake_10).change()
                 - exp_slashed_during_processing_9.change())
             .abs()
-                < Uint::from(1000)
+                < Uint::from(1000),
+            "Expected {}, got {} (with less than 1000 err)",
+            exp_slashed_during_processing_9.to_string_native(),
+            (pre_stake_10 - post_stake_10).to_string_native(),
         );
 
         // Check that we can compute the stake at the pipeline epoch
@@ -3575,7 +3582,11 @@ mod test_finalize_block {
 
         assert!(
             exp_pipeline_stake.abs_diff(&Dec::from(post_stake_10))
-                <= Dec::new(1, NATIVE_MAX_DECIMAL_PLACES).unwrap()
+                <= Dec::new(2, NATIVE_MAX_DECIMAL_PLACES).unwrap(),
+            "Expected {}, got {} (with less than 2 err), diff {}",
+            exp_pipeline_stake,
+            post_stake_10.to_string_native(),
+            exp_pipeline_stake.abs_diff(&Dec::from(post_stake_10)),
         );
 
         // Check the balance of the Slash Pool
@@ -3591,15 +3602,6 @@ mod test_finalize_block {
         //         - self_unbond_2_amount,
         // );
         // assert_eq!(slash_pool_balance, exp_slashed_3);
-
-        let _pre_stake_11 = namada_proof_of_stake::read_validator_stake(
-            &shell.wl_storage,
-            &params,
-            &val1.address,
-            Epoch(10),
-        )
-        .unwrap()
-        .unwrap_or_default();
 
         // Advance to epoch 10, where the infraction committed in epoch 4 will
         // be processed
@@ -3644,19 +3646,27 @@ mod test_finalize_block {
             &params,
             &val1.address,
             current_epoch + params.pipeline_len,
-        )?
-        .unwrap_or_default();
+        )?;
 
-        let post_stake_11 = namada_proof_of_stake::read_validator_stake(
+        let post_stake_10 = read_validator_stake(
             &shell.wl_storage,
             &params,
             &val1.address,
             Epoch(10),
         )
-        .unwrap()
-        .unwrap_or_default();
+        .unwrap();
 
-        assert_eq!(post_stake_11, val_stake);
+        // Stake at current epoch should be equal to stake at pipeline
+        assert_eq!(
+            post_stake_10,
+            val_stake,
+            "Stake at pipeline in epoch {} ({}) expected to be equal to stake \
+             in epoch 10 ({}).",
+            current_epoch + params.pipeline_len,
+            val_stake.to_string_native(),
+            post_stake_10.to_string_native()
+        );
+
         // dbg!(&val_stake);
         // dbg!(pre_stake_10 - post_stake_10);
 
@@ -3800,12 +3810,16 @@ mod test_finalize_block {
             self_details.unbonds[1].amount,
             self_unbond_2_amount - self_bond_1_amount
         );
-        assert_eq!(
-            self_details.unbonds[1].slashed_amount,
-            Some(
-                std::cmp::min(Dec::one(), Dec::new(3, 0).unwrap() * cubic_rate)
-                    * (self_unbond_2_amount - self_bond_1_amount)
-            )
+        let rate =
+            std::cmp::min(Dec::one(), Dec::new(3, 0).unwrap() * cubic_rate);
+        assert!(
+            // at most off by 1
+            (self_details.unbonds[1].slashed_amount.unwrap().change()
+                - (self_unbond_2_amount - self_bond_1_amount)
+                    .mul_ceil(rate)
+                    .change())
+            .abs()
+                <= Uint::from(1)
         );
         assert_eq!(self_details.unbonds[2].amount, self_bond_1_amount);
         assert_eq!(self_details.unbonds[2].slashed_amount, None);
@@ -3823,10 +3837,12 @@ mod test_finalize_block {
         .unwrap();
 
         let exp_del_withdraw_slashed_amount =
-            slash_rate_3 * del_unbond_1_amount;
-        assert_eq!(
-            del_withdraw,
-            del_unbond_1_amount - exp_del_withdraw_slashed_amount
+            del_unbond_1_amount.mul_ceil(slash_rate_3);
+        assert!(
+            (del_withdraw
+                - (del_unbond_1_amount - exp_del_withdraw_slashed_amount))
+                .raw_amount()
+                <= Uint::one()
         );
 
         // TODO: finish once implemented

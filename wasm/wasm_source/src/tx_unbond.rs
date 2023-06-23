@@ -10,15 +10,26 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let unbond = transaction::pos::Unbond::try_from_slice(&data[..])
         .wrap_err("failed to decode Unbond")?;
 
-    ctx.unbond_tokens(unbond.source.as_ref(), &unbond.validator, unbond.amount)
+    let proof_of_stake::ResultSlashing { sum, epoch_map: _ } = ctx
+        .unbond_tokens(
+            unbond.source.as_ref(),
+            &unbond.validator,
+            unbond.amount,
+        )?;
+    // TODO: do something for real here
+    if sum != token::Amount::zero() {
+        debug_log!("Say something for {}", sum.to_string_native());
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
 
-    use namada::ledger::pos::{GenesisValidator, PosParams, PosVP};
-    use namada::proof_of_stake::types::WeightedValidator;
+    use namada::ledger::pos::{PosParams, PosVP};
+    use namada::proof_of_stake::types::{GenesisValidator, WeightedValidator};
     use namada::proof_of_stake::{
         bond_handle, read_consensus_validator_set_addresses_with_stake,
         read_total_stake, read_validator_stake, unbond_handle,
@@ -164,18 +175,15 @@ mod tests {
                 &pos_params,
                 Epoch(epoch),
             )?);
-            epoched_validator_stake_pre.push(
-                read_validator_stake(
-                    ctx(),
-                    &pos_params,
-                    &unbond.validator,
-                    Epoch(epoch),
-                )?
-                .unwrap(),
-            );
+            epoched_validator_stake_pre.push(read_validator_stake(
+                ctx(),
+                &pos_params,
+                &unbond.validator,
+                Epoch(epoch),
+            )?);
             epoched_bonds_pre.push(
                 bond_handle
-                    .get_delta_val(ctx(), Epoch(epoch), &pos_params)?
+                    .get_delta_val(ctx(), Epoch(epoch))?
                     .map(token::Amount::from_change),
             );
             epoched_validator_set_pre.push(
@@ -201,7 +209,7 @@ mod tests {
         for epoch in 0..=pos_params.unbonding_len {
             epoched_bonds_post.push(
                 bond_handle
-                    .get_delta_val(ctx(), Epoch(epoch), &pos_params)?
+                    .get_delta_val(ctx(), Epoch(epoch))?
                     .map(token::Amount::from_change),
             );
         }
@@ -226,7 +234,7 @@ mod tests {
                     &unbond.validator,
                     Epoch(epoch)
                 )?,
-                Some(expected_amount_before_pipeline),
+                expected_amount_before_pipeline,
                 "The validator deltas before the pipeline offset must not \
                  change - checking in epoch: {epoch}"
             );
@@ -257,7 +265,7 @@ mod tests {
                     &unbond.validator,
                     Epoch(epoch)
                 )?,
-                Some(initial_stake - unbond.amount),
+                initial_stake - unbond.amount,
                 "The validator deltas at and after the pipeline offset must \
                  have changed - checking in epoch: {epoch}"
             );
@@ -282,23 +290,21 @@ mod tests {
 
         {
             let epoch = pos_params.unbonding_len + 1;
-            let expected_stake =
-                initial_stake.change() - unbond.amount.change();
+            let expected_stake = initial_stake - unbond.amount;
             assert_eq!(
                 read_validator_stake(
                     ctx(),
                     &pos_params,
                     &unbond.validator,
                     Epoch(epoch)
-                )?
-                .map(|v| v.change()),
-                Some(expected_stake),
+                )?,
+                expected_stake,
                 "The total deltas at after the unbonding offset epoch must be \
                  decremented by the unbonded amount - checking in epoch: \
                  {epoch}"
             );
             assert_eq!(
-                read_total_stake(ctx(), &pos_params, Epoch(epoch))?.change(),
+                read_total_stake(ctx(), &pos_params, Epoch(epoch))?,
                 expected_stake,
                 "The total deltas at after the unbonding offset epoch must be \
                  decremented by the unbonded amount - checking in epoch: \

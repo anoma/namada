@@ -17,7 +17,8 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
 mod tests {
     use std::collections::BTreeSet;
 
-    use namada::ledger::pos::{GenesisValidator, PosParams, PosVP};
+    use namada::ledger::pos::{PosParams, PosVP};
+    use namada::proof_of_stake::types::{GenesisValidator, WeightedValidator};
     use namada::proof_of_stake::{
         bond_handle, read_consensus_validator_set_addresses_with_stake,
         read_total_stake, read_validator_stake,
@@ -37,7 +38,6 @@ mod tests {
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use namada_tx_prelude::token;
-    use namada_vp_prelude::proof_of_stake::WeightedValidator;
     use proptest::prelude::*;
 
     use super::*;
@@ -138,15 +138,12 @@ mod tests {
                 &pos_params,
                 Epoch(epoch),
             )?);
-            epoched_validator_stake_pre.push(
-                read_validator_stake(
-                    ctx(),
-                    &pos_params,
-                    &bond.validator,
-                    Epoch(epoch),
-                )?
-                .unwrap(),
-            );
+            epoched_validator_stake_pre.push(read_validator_stake(
+                ctx(),
+                &pos_params,
+                &bond.validator,
+                Epoch(epoch),
+            )?);
             epoched_validator_set_pre.push(
                 read_consensus_validator_set_addresses_with_stake(
                     ctx(),
@@ -171,15 +168,12 @@ mod tests {
                 &pos_params,
                 Epoch(epoch),
             )?);
-            epoched_validator_stake_post.push(
-                read_validator_stake(
-                    ctx(),
-                    &pos_params,
-                    &bond.validator,
-                    Epoch(epoch),
-                )?
-                .unwrap(),
-            );
+            epoched_validator_stake_post.push(read_validator_stake(
+                ctx(),
+                &pos_params,
+                &bond.validator,
+                Epoch(epoch),
+            )?);
             epoched_validator_set_post.push(
                 read_consensus_validator_set_addresses_with_stake(
                     ctx(),
@@ -268,13 +262,6 @@ mod tests {
 
         let bonds_post = bond_handle(&bond_src, &bond.validator);
         // let bonds_post = ctx().read_bond(&bond_id)?.unwrap();
-
-        for epoch in 0..pos_params.unbonding_len {
-            dbg!(
-                epoch,
-                bonds_post.get_delta_val(ctx(), Epoch(epoch), &pos_params)?
-            );
-        }
 
         if is_delegation {
             // A delegation is applied at pipeline offset

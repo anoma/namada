@@ -514,7 +514,6 @@ mod test_prepare_proposal {
     use namada::ledger::gas::Gas;
     use namada::ledger::pos::PosQueries;
     use namada::ledger::replay_protection;
-    use namada::proof_of_stake::btree_set::BTreeSetShims;
     use namada::proof_of_stake::types::WeightedValidator;
     use namada::proof_of_stake::{
         consensus_validator_set_handle,
@@ -935,8 +934,8 @@ mod test_prepare_proposal {
             .unwrap()
             .into_iter()
             .collect();
-        let val1 = consensus_set.pop_first_shim().unwrap();
-        let val2 = consensus_set.pop_first_shim().unwrap();
+        let val1 = consensus_set.pop_first().unwrap();
+        let val2 = consensus_set.pop_first().unwrap();
         let pkh1 = get_pkh_from_address(
             &shell.wl_storage,
             &params,

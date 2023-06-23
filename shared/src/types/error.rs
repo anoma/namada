@@ -269,6 +269,15 @@ pub enum TxError {
     /// Invalid owner account
     #[error("The source account {0} is not valid or doesn't exist.")]
     InvalidAccount(String),
+    /// The redelegation amount is larger than the remaining bond amount
+    #[error(
+        "The redelegation amount is larger than the remaining bond amount. \
+         Amount to redelegate is {0} and the remaining bond amount is {1}."
+    )]
+    RedelegationAmountTooLarge(String, String),
+    /// The redelegation amount is 0
+    #[error("The amount requested to redelegate is 0 tokens")]
+    RedelegationIsZero,
     /// Other Errors that may show up when using the interface
     #[error("{0}")]
     Other(String),
