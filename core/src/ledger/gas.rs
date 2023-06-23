@@ -33,8 +33,6 @@ pub const STORAGE_WRITE_GAS_PER_BYTE: u64 = 100;
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
-//FIXME: type alias Gas for u64
-
 /// Trait to share gas operations for transactions and validity predicates
 pub trait GasMetering {
     /// Add gas cost. It will return error when the
