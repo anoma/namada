@@ -1535,7 +1535,9 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxCommissionRateChange(pub args::CommissionRateChange<args::CliTypes>);
+    pub struct TxCommissionRateChange(
+        pub args::CommissionRateChange<args::CliTypes>,
+    );
 
     impl SubCmd for TxCommissionRateChange {
         const CMD: &'static str = "change-commission-rate";
@@ -1545,7 +1547,9 @@ pub mod cmds {
             Self: Sized,
         {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                TxCommissionRateChange(args::CommissionRateChange::parse(matches))
+                TxCommissionRateChange(args::CommissionRateChange::parse(
+                    matches,
+                ))
             })
         }
 

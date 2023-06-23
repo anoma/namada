@@ -917,9 +917,9 @@ mod test_finalize_block {
         validator_consensus_key_handle, validator_rewards_products_handle,
         validator_slashes_handle, validator_state_handle, write_pos_params,
     };
-    use namada::types::hash::Hash;
     use namada::proto::{Code, Data, Section, Signature};
     use namada::types::governance::ProposalVote;
+    use namada::types::hash::Hash;
     use namada::types::key::tm_consensus_key_raw_hash;
     use namada::types::storage::Epoch;
     use namada::types::time::DurationSecs;

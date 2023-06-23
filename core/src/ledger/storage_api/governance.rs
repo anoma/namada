@@ -36,7 +36,9 @@ where
             // Remove wasm code and write it under a different subkey
             storage.write(&proposal_type_key, ProposalType::Default(None))?;
             let proposal_code_key = storage::get_proposal_code_key(proposal_id);
-            let proposal_code = code.ok_or(storage_api::Error::new_const("Missing proposal code"))?;
+            let proposal_code = code.clone().ok_or(storage_api::Error::new_const(
+                "Missing proposal code",
+            ))?;
             storage.write_bytes(&proposal_code_key, proposal_code)?
         }
         _ => storage.write(&proposal_type_key, data.r#type.clone())?,
@@ -52,8 +54,11 @@ where
     let grace_epoch_key = storage::get_grace_epoch_key(proposal_id);
     storage.write(&grace_epoch_key, data.grace_epoch)?;
 
-    if let ProposalType::Default(Some(proposal_code)) = data.r#type {
+    if let ProposalType::Default(Some(_)) = data.r#type {
         let proposal_code_key = storage::get_proposal_code_key(proposal_id);
+        let proposal_code = code.ok_or(storage_api::Error::new_const(
+            "Missing proposal code",
+        ))?;
         storage.write_bytes(&proposal_code_key, proposal_code)?;
     }
 
