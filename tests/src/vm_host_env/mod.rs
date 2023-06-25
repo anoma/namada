@@ -470,7 +470,13 @@ mod tests {
             assert_eq!(signed_tx_data.data().as_ref(), Some(data));
             assert!(
                 signed_tx_data
-                    .verify_signature(&pk, signed_tx_data.data_sechash())
+                    .verify_signature(
+                        &pk,
+                        &[
+                            *signed_tx_data.data_sechash(),
+                            *signed_tx_data.code_sechash(),
+                        ],
+                    )
                     .is_ok()
             );
 
@@ -479,7 +485,10 @@ mod tests {
                 signed_tx_data
                     .verify_signature(
                         &other_keypair.ref_to(),
-                        signed_tx_data.data_sechash()
+                        &[
+                            *signed_tx_data.data_sechash(),
+                            *signed_tx_data.code_sechash(),
+                        ],
                     )
                     .is_err()
             );

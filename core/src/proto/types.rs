@@ -925,16 +925,21 @@ impl Tx {
         bytes
     }
 
-    /// Verify that the section with the given hash has been signed by the given
-    /// public key
+    /// Verify that the sections with the given hashes have been signed together
+    /// by the given public key. I.e. this function looks for one signature that
+    /// covers over the given slice of hashes.
     pub fn verify_signature(
         &self,
         pk: &common::PublicKey,
-        hash: &crate::types::hash::Hash,
+        hashes: &[crate::types::hash::Hash],
     ) -> std::result::Result<(), VerifySigError> {
         for section in &self.sections {
             if let Section::Signature(sig_sec) = section {
-                if sig_sec.pub_key == *pk && sig_sec.targets.contains(hash) {
+                // Check that the signer is matched and that the hashes being
+                // checked are a subset of those in this section
+                if sig_sec.pub_key == *pk
+                    && hashes.iter().all(|x| sig_sec.targets.contains(x))
+                {
                     // Ensure that all the sections the signature signs over are
                     // present
                     for target in &sig_sec.targets {
@@ -1028,7 +1033,7 @@ impl Tx {
         match &self.header.tx_type {
             // verify signature and extract signed data
             TxType::Wrapper(wrapper) => {
-                self.verify_signature(&wrapper.pk, &self.header_hash())
+                self.verify_signature(&wrapper.pk, &[self.header_hash()])
                     .map_err(|err| {
                         TxError::SigError(format!(
                             "WrapperTx signature verification failed: {}",
@@ -1040,7 +1045,7 @@ impl Tx {
             // verify signature and extract signed data
             #[cfg(feature = "ferveo-tpke")]
             TxType::Protocol(protocol) => {
-                self.verify_signature(&protocol.pk, &self.header_hash())
+                self.verify_signature(&protocol.pk, &[self.header_hash()])
                     .map_err(|err| {
                         TxError::SigError(format!(
                             "ProtocolTx signature verification failed: {}",

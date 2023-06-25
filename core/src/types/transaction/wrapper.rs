@@ -402,7 +402,7 @@ pub mod wrapper_tx {
             assert_eq!(tx.data(), Some(malicious));
 
             // check that the signature is not valid
-            tx.verify_signature(&keypair.ref_to(), &tx.header_hash())
+            tx.verify_signature(&keypair.ref_to(), &[tx.header_hash()])
                 .expect_err("Test failed");
             // check that the try from method also fails
             let err = tx.validate_header().expect_err("Test failed");
