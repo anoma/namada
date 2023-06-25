@@ -207,10 +207,10 @@ pub struct Signature {
     salt: [u8; 8],
     /// The hash of the section being signed
     targets: Vec<crate::types::hash::Hash>,
-    /// The signature over the above has
-    pub signature: common::Signature,
-    /// The public key to verify the above siggnature
+    /// The public key to verify the below signature
     pub_key: common::PublicKey,
+    /// The signature over the above hashes
+    pub signature: Option<common::Signature>,
 }
 
 impl Signature {
@@ -219,24 +219,14 @@ impl Signature {
         targets: Vec<crate::types::hash::Hash>,
         sec_key: &common::SecretKey,
     ) -> Self {
-        let signature =
-            common::SigScheme::sign(sec_key, Self::hash_targets(&targets));
-        Self {
+        let mut sec = Self {
             salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
             targets,
-            signature,
             pub_key: sec_key.ref_to(),
-        }
-    }
-
-    /// Combine all section hashes into a single hash for signing
-    fn hash_targets(
-        targets: &Vec<crate::types::hash::Hash>,
-    ) -> crate::types::hash::Hash {
-        let targets_bytes = targets
-            .try_to_vec()
-            .expect("unable to serialize signature targets");
-        crate::types::hash::Hash::sha256(targets_bytes)
+            signature: None,
+        };
+        sec.signature = Some(common::SigScheme::sign(sec_key, sec.get_hash()));
+        sec
     }
 
     /// Hash this signature section
@@ -248,12 +238,26 @@ impl Signature {
         hasher
     }
 
+    /// Get the hash of this section
+    pub fn get_hash(&self) -> crate::types::hash::Hash {
+        crate::types::hash::Hash(
+            self.hash(&mut Sha256::new()).finalize_reset().into(),
+        )
+    }
+
     /// Verify that the signature contained in this section is valid
     pub fn verify_signature(&self) -> std::result::Result<(), VerifySigError> {
+        let signature =
+            self.signature.as_ref().ok_or(VerifySigError::MissingData)?;
         common::SigScheme::verify_signature_raw(
             &self.pub_key,
-            &Self::hash_targets(&self.targets).0,
-            &self.signature,
+            &Self {
+                signature: None,
+                ..self.clone()
+            }
+            .get_hash()
+            .0,
+            signature,
         )
     }
 }

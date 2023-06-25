@@ -425,7 +425,7 @@ fn test_process_tx_decrypted_signed() {
         ed25519::Signature::try_from_slice([0u8; 64].as_ref()).unwrap();
     let mut sig_sec =
         Signature::new(vec![decrypted.header_hash()], &gen_keypair());
-    sig_sec.signature = common::Signature::try_from_sig(&ed_sig).unwrap();
+    sig_sec.signature = Some(common::Signature::try_from_sig(&ed_sig).unwrap());
     decrypted.add_section(Section::Signature(sig_sec));
     // create the tx with signed decrypted data
     let code_sec = decrypted
