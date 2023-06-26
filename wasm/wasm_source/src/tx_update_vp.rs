@@ -8,7 +8,7 @@ use namada_tx_prelude::*;
 fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let signed = tx_data;
     let data = signed.data().ok_or_err_msg("Missing data")?;
-    let update_vp = transaction::UpdateVp::try_from_slice(&data[..])
+    let update_vp = transaction::account::UpdateVp::try_from_slice(&data[..])
         .wrap_err("failed to decode UpdateVp")?;
 
     debug_log!("update VP for: {:#?}", update_vp.addr);

@@ -46,7 +46,8 @@ use crate::types::key::*;
 use crate::types::masp::TransferTarget;
 use crate::types::storage::{Epoch, RESERVED_ADDRESS_PREFIX};
 use crate::types::time::DateTimeUtc;
-use crate::types::transaction::{pos, InitAccount, TxType, UpdateVp};
+use crate::types::transaction::account::{InitAccount, UpdateVp};
+use crate::types::transaction::{pos, TxType};
 use crate::types::{storage, token};
 use crate::vm;
 use crate::vm::WasmValidationError;
@@ -203,6 +204,9 @@ pub enum Error {
     /// Couldn't understand who the fee pair is
     #[error("{0}")]
     InvalidFeePayer(String),
+    /// Couldn't understand who the fee pair is
+    #[error("Account threshold must be set.")]
+    MissingAccountThreshold,
     /// Other Errors that may show up when using the interface
     #[error("{0}")]
     Other(String),
@@ -1420,6 +1424,17 @@ pub async fn submit_init_account<
             .await
             .unwrap();
 
+    let threshold = match args.threshold {
+        Some(threshold) => threshold,
+        None => {
+            if public_keys.len() == 1 {
+                1u8
+            } else {
+                return Err(Error::MissingAccountThreshold);
+            }
+        }
+    };
+
     let mut tx = Tx::new(TxType::Raw);
     tx.header.chain_id = args.tx.chain_id.clone().unwrap();
     tx.header.expiration = args.tx.expiration;
@@ -1430,6 +1445,7 @@ pub async fn submit_init_account<
     let data = InitAccount {
         public_keys,
         vp_code_hash: extra_hash,
+        threshold: threshold,
     };
     let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
     tx.set_data(Data::new(data));

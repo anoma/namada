@@ -25,15 +25,8 @@ fn validate_tx(
         verifiers
     );
 
-    let valid_sig = Lazy::new(|| {
-        let pk = key::get(ctx, &addr);
-        match pk {
-            Ok(Some(pk)) => tx_data
-                .verify_signature(&pk, tx_data.data_sechash())
-                .is_ok(),
-            _ => false,
-        }
-    });
+    let valid_sig =
+        Lazy::new(|| verify_signatures(ctx, &tx_data, &addr).is_ok());
 
     if !is_valid_tx(ctx, &tx_data)? {
         return reject();

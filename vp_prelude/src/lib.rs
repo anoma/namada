@@ -6,8 +6,6 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
-pub mod key;
-
 // used in the VP input
 use core::convert::AsRef;
 use core::slice;
@@ -77,6 +75,26 @@ pub fn is_proposal_accepted(ctx: &Ctx, proposal_id: u64) -> VpResult {
         gov_storage::get_proposal_execution_key(proposal_id);
 
     ctx.has_key_pre(&proposal_execution_key)
+}
+
+/// Verify section signatures
+pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
+    let public_keys_index_map =
+        storage_api::account::public_keys(&ctx.pre(), owner)?;
+    let threshold =
+        storage_api::account::threshold(&ctx.pre(), owner)?.unwrap_or(1);
+
+    let tx_data_hash = tx.data_sechash();
+    let is_correctly_signed = tx
+        .verify_section_signatures(
+            tx_data_hash,
+            public_keys_index_map,
+            threshold,
+            None,
+        )
+        .is_ok();
+
+    Ok(is_correctly_signed)
 }
 
 /// Checks whether a transaction is valid, which happens in two cases:

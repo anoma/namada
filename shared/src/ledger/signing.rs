@@ -43,13 +43,13 @@ use crate::types::key::*;
 use crate::types::masp::{ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::Epoch;
 use crate::types::token::Transfer;
+use crate::types::transaction::account::{InitAccount, UpdateVp};
 use crate::types::transaction::decrypted::DecryptedTx;
 use crate::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
-use crate::types::transaction::{
-    Fee, InitAccount, InitValidator, TxType, UpdateVp, WrapperTx,
-};
+use crate::types::transaction::pos::InitValidator;
+use crate::types::transaction::{Fee, TxType, WrapperTx};
 
 #[cfg(feature = "std")]
 /// Env. var specifying where to store signing test vectors

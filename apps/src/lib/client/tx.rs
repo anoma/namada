@@ -29,7 +29,8 @@ use namada::types::token;
 use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
 };
-use namada::types::transaction::{InitValidator, TxType};
+use namada::types::transaction::pos::InitValidator;
+use namada::types::transaction::TxType;
 use rust_decimal::Decimal;
 use sha2::{Digest as Sha2Digest, Sha256};
 
@@ -93,7 +94,7 @@ pub async fn submit_init_validator<
         source,
         scheme,
         account_keys,
-        threshold: _threshold,
+        threshold,
         consensus_key,
         protocol_key,
         commission_rate,
@@ -138,6 +139,17 @@ pub async fn submit_init_validator<
             .1
             .ref_to();
         vec![public_key]
+    };
+
+    let threshold = match threshold {
+        Some(threshold) => threshold,
+        None => {
+            if account_keys.len() == 1 {
+                1u8
+            } else {
+                return;
+            }
+        }
     };
 
     let consensus_key = consensus_key
@@ -222,6 +234,7 @@ pub async fn submit_init_validator<
         Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
     let data = InitValidator {
         account_keys,
+        threshold,
         consensus_key: consensus_key.ref_to(),
         protocol_key,
         dkg_key,

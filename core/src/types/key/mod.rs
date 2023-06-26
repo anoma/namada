@@ -12,6 +12,8 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXUPPER;
+use lazy_map::LazyMap;
+use namada_macros::StorageKeys;
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
 use serde::Serialize;
@@ -20,16 +22,39 @@ use thiserror::Error;
 
 use super::address::Address;
 use super::storage::{self, DbKeySeg, Key, KeySeg};
+use crate::ledger::storage_api::collections::{lazy_map, LazyCollection};
 use crate::types::address;
 
+/// Storage keys for account.
+#[derive(StorageKeys)]
+struct Keys {
+    public_keys: &'static str,
+    threshold: &'static str,
+    protocol_public_keys: &'static str,
+}
+
 const PK_STORAGE_KEY: &str = "public_key";
-const PROTOCOL_PK_STORAGE_KEY: &str = "protocol_public_key";
 
 /// Obtain a storage key for user's public key.
 pub fn pk_key(owner: &Address) -> storage::Key {
     Key::from(owner.to_db_key())
         .push(&PK_STORAGE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
+}
+
+/// Obtain a storage key for user's public key.
+pub fn pks_key_prefix(owner: &Address) -> storage::Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(owner.to_owned()),
+            DbKeySeg::StringSeg(Keys::VALUES.public_keys.to_string()),
+        ],
+    }
+}
+
+/// Object that LazyMap handler for the user's public key subspace
+pub fn pks_handle(owner: &Address) -> LazyMap<u8, common::PublicKey> {
+    LazyMap::open(pks_key_prefix(owner))
 }
 
 /// Check if the given storage key is a public key. If it is, returns the owner.
@@ -44,18 +69,61 @@ pub fn is_pk_key(key: &Key) -> Option<&Address> {
     }
 }
 
+/// Check if the given storage key is a public key. If it is, returns the owner.
+pub fn is_pks_key(key: &Key) -> Option<&Address> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(owner),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(data),
+            DbKeySeg::StringSeg(index),
+        ] if prefix.as_str() == Keys::VALUES.public_keys
+            && data.as_str() == lazy_map::DATA_SUBKEY
+            && index.parse::<u8>().is_ok() =>
+        {
+            Some(owner)
+        }
+        _ => None,
+    }
+}
+
+/// Check if the given storage key is a threshol key.
+pub fn is_threshold_key(key: &Key) -> Option<&Address> {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(owner), DbKeySeg::StringSeg(prefix)]
+            if prefix.as_str() == Keys::VALUES.threshold =>
+        {
+            Some(owner)
+        }
+        _ => None,
+    }
+}
+
+/// Obtain the storage key for a user threshold
+pub fn threshold_key(owner: &Address) -> storage::Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(owner.to_owned()),
+            DbKeySeg::StringSeg(Keys::VALUES.threshold.to_string()),
+        ],
+    }
+}
+
 /// Obtain a storage key for user's protocol public key.
 pub fn protocol_pk_key(owner: &Address) -> storage::Key {
-    Key::from(owner.to_db_key())
-        .push(&PROTOCOL_PK_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(owner.to_owned()),
+            DbKeySeg::StringSeg(Keys::VALUES.protocol_public_keys.to_string()),
+        ],
+    }
 }
 
 /// Check if the given storage key is a public key. If it is, returns the owner.
 pub fn is_protocol_pk_key(key: &Key) -> Option<&Address> {
     match &key.segments[..] {
         [DbKeySeg::AddressSeg(owner), DbKeySeg::StringSeg(key)]
-            if key == PROTOCOL_PK_STORAGE_KEY =>
+            if key.as_str() == Keys::VALUES.protocol_public_keys =>
         {
             Some(owner)
         }

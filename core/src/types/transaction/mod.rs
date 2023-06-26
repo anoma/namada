@@ -1,5 +1,7 @@
 //! Types that are used in transactions.
 
+/// txs to manage accounts
+pub mod account;
 /// txs that contain decrypted payloads or assertions of
 /// non-decryptability
 pub mod decrypted;
@@ -7,6 +9,7 @@ pub mod decrypted;
 pub mod encrypted;
 /// txs to manage governance
 pub mod governance;
+/// txs to manage pos
 pub mod pos;
 /// transaction protocols made by validators
 pub mod protocol;
@@ -21,7 +24,6 @@ pub use decrypted::*;
 #[cfg(feature = "ferveo-tpke")]
 pub use encrypted::EncryptionKey;
 pub use protocol::UpdateDkgSessionKey;
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 pub use wrapper::*;
@@ -30,7 +32,6 @@ use crate::ledger::gas::VpsGas;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
-use crate::types::key::*;
 use crate::types::storage;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::protocol::ProtocolTx;
@@ -131,75 +132,6 @@ fn iterable_to_string<T: fmt::Display>(
     }
 }
 
-/// A tx data type to update an account's validity predicate
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
-)]
-pub struct UpdateVp {
-    /// An address of the account
-    pub addr: Address,
-    /// The new VP code hash
-    pub vp_code_hash: Hash,
-}
-
-/// A tx data type to initialize a new established account
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
-)]
-pub struct InitAccount {
-    /// Public key to be written into the account's storage. This can be used
-    /// for signature verification of transactions for the newly created
-    /// account.
-    pub public_keys: Vec<common::PublicKey>,
-    /// The VP code hash
-    pub vp_code_hash: Hash,
-}
-
-/// A tx data type to initialize a new validator account.
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
-)]
-pub struct InitValidator {
-    /// Public key to be written into the account's storage. This can be used
-    /// for signature verification of transactions for the newly created
-    /// account.
-    pub account_keys: Vec<common::PublicKey>,
-    /// A key to be used for signing blocks and votes on blocks.
-    pub consensus_key: common::PublicKey,
-    /// Public key used to sign protocol transactions
-    pub protocol_key: common::PublicKey,
-    /// Serialization of the public session key used in the DKG
-    pub dkg_key: crate::types::key::dkg_session_keys::DkgPublicKey,
-    /// The initial commission rate charged for delegation rewards
-    pub commission_rate: Decimal,
-    /// The maximum change allowed per epoch to the commission rate. This is
-    /// immutable once set here.
-    pub max_commission_rate_change: Decimal,
-    /// The VP code for validator account
-    pub validator_vp_code_hash: Hash,
-}
-
 /// Struct that classifies that kind of Tx
 /// based on the contents of its data.
 #[derive(
@@ -236,6 +168,7 @@ mod test_process_tx {
     use super::*;
     use crate::proto::{Code, Data, Section, Signature, Tx, TxError};
     use crate::types::address::nam;
+    use crate::types::key::*;
     use crate::types::storage::Epoch;
 
     fn gen_keypair() -> common::SecretKey {
@@ -450,6 +383,8 @@ fn test_process_tx_decrypted_unsigned() {
 #[test]
 fn test_process_tx_decrypted_signed() {
     use crate::proto::{Code, Data, Section, Signature, Tx};
+    use crate::types::key::*;
+
     fn gen_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
         use rand::thread_rng;

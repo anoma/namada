@@ -70,10 +70,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let public_key_schema = PublicKey::schema_container();
     // TODO update after <https://github.com/anoma/namada/issues/225>
     let signature_schema = Signature::schema_container();
-    let init_account_schema = transaction::InitAccount::schema_container();
-    let init_validator_schema = transaction::InitValidator::schema_container();
+    let init_account_schema =
+        transaction::account::InitAccount::schema_container();
+    let init_validator_schema =
+        transaction::pos::InitValidator::schema_container();
     let token_transfer_schema = token::Transfer::schema_container();
-    let update_vp_schema = transaction::UpdateVp::schema_container();
+    let update_vp_schema = transaction::account::UpdateVp::schema_container();
     let pos_bond_schema = pos::Bond::schema_container();
     let pos_withdraw_schema = pos::Withdraw::schema_container();
     let wrapper_tx_schema = transaction::WrapperTx::schema_container();

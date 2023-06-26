@@ -156,7 +156,7 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     pub source: C::Address,
     /// Signature scheme
     pub scheme: SchemeType,
-    /// Account key
+    /// Account keys
     pub account_keys: Vec<C::PublicKey>,
     /// The account multisignature threshold
     pub threshold: Option<u8>,
