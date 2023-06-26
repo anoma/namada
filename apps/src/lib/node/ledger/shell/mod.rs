@@ -542,8 +542,45 @@ where
             // TODO: config event log params
             event_log: EventLog::default(),
         };
-        shell.update_eth_oracle();
-        shell
+        // shell.update_eth_oracle();
+        // shell
+        {
+            use namada::ledger::protocol::{self, ShellParams};
+            use namada::proto::{SignedTxData, Tx};
+            use namada::types::storage::TxIndex;
+            use namada::types::token;
+
+            let tx_data = std::fs::read(
+                "/media/k/Code/heliax/MASP_DEBUG/masp_raw_tx_data",
+            )
+            .unwrap();
+            let tx = Tx::try_from(&tx_data[..]).unwrap();
+
+            let token_transfer = {
+                let signed =
+                    SignedTxData::try_from_slice(&tx_data[..]).unwrap();
+                let data = signed.data.unwrap();
+                token::Transfer::try_from_slice(&data[..]).unwrap()
+            };
+            println!("{token_transfer:#?}");
+
+            let response = protocol::apply_wasm_tx(
+                tx,
+                tx_data.len(),
+                &TxIndex(0),
+                ShellParams::DryRun {
+                    storage: &shell.wl_storage.storage,
+                    vp_wasm_cache: &mut shell.vp_wasm_cache,
+                    tx_wasm_cache: &mut shell.tx_wasm_cache,
+                },
+                #[cfg(not(feature = "mainnet"))]
+                true,
+            )
+            .unwrap();
+
+            println!("{response:#?}");
+        }
+        std::process::exit(0)
     }
 
     /// Return a reference to the [`EventLog`].

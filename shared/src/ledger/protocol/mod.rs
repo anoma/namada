@@ -163,7 +163,7 @@ where
 
 /// Apply a transaction going via the wasm environment. Gas will be metered and
 /// validity predicates will be triggered in the normal way.
-pub(crate) fn apply_wasm_tx<'a, D, H, CA>(
+pub fn apply_wasm_tx<'a, D, H, CA>(
     tx: Tx,
     tx_length: usize,
     tx_index: &TxIndex,
