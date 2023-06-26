@@ -42,5 +42,11 @@ pub struct UpdateVp {
     /// An address of the account
     pub addr: Address,
     /// The new VP code hash
-    pub vp_code_hash: Hash,
+    pub vp_code_hash: Option<Hash>,
+    /// Public keys to be written into the account's storage. This can be used
+    /// for signature verification of transactions for the newly created
+    /// account.
+    pub public_keys: Vec<common::PublicKey>,
+    /// The account signature threshold
+    pub threshold: Option<u8>,
 }

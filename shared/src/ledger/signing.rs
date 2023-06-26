@@ -784,29 +784,33 @@ pub async fn to_ledger_vector<
             })?)?;
 
         tv.name = "Update VP 0".to_string();
-
-        let extra = tx
-            .get_section(&transfer.vp_code_hash)
-            .and_then(Section::extra_data_sec)
-            .expect("unable to load vp code")
-            .code
-            .hash();
-        let vp_code = if extra == user_hash {
-            "User".to_string()
-        } else {
-            HEXLOWER.encode(&extra.0)
+        
+        match &transfer.vp_code_hash {
+            Some(hash) => {
+                let extra = tx
+                    .get_section(&hash)
+                    .and_then(Section::extra_data_sec)
+                    .expect("unable to load vp code")
+                    .code
+                    .hash();
+                let vp_code = if extra == user_hash {
+                    "User".to_string()
+                } else {
+                    HEXLOWER.encode(&extra.0)
+                };
+                tv.output.extend(vec![
+                    format!("Type : Update VP"),
+                    format!("Address : {}", transfer.addr),
+                    format!("VP type : {}", vp_code),
+                ]);
+        
+                tv.output_expert.extend(vec![
+                    format!("Address : {}", transfer.addr),
+                    format!("VP type : {}", HEXLOWER.encode(&extra.0)),
+                ]);
+            },
+            None => (),
         };
-
-        tv.output.extend(vec![
-            format!("Type : Update VP"),
-            format!("Address : {}", transfer.addr),
-            format!("VP type : {}", vp_code),
-        ]);
-
-        tv.output_expert.extend(vec![
-            format!("Address : {}", transfer.addr),
-            format!("VP type : {}", HEXLOWER.encode(&extra.0)),
-        ]);
     } else if code_hash == transfer_hash {
         let transfer =
             Transfer::try_from_slice(&tx.data().ok_or_else(|| {

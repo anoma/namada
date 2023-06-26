@@ -1520,10 +1520,19 @@ pub async fn submit_update_vp<
         }
     }?;
 
-    let vp_code_hash =
-        query_wasm_code_hash(client, args.vp_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+    let public_keys = args.public_keys;
+    let threshold = args.threshold;
+
+    let vp_code_hash = match args.vp_code_path {
+        Some(code_path) => {
+            let vp_hash =
+                query_wasm_code_hash(client, code_path.to_str().unwrap())
+                    .await
+                    .unwrap();
+            Some(vp_hash)
+        }
+        None => None,
+    };
 
     let tx_code_hash =
         query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
@@ -1533,14 +1542,25 @@ pub async fn submit_update_vp<
     let mut tx = Tx::new(TxType::Raw);
     tx.header.chain_id = args.tx.chain_id.clone().unwrap();
     tx.header.expiration = args.tx.expiration;
-    let extra =
-        tx.add_section(Section::ExtraData(Code::from_hash(vp_code_hash)));
-    let extra_hash =
-        Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
+    
+    let extra_hash = match vp_code_hash {
+        Some(vp_code_hash) => {
+            let extra = tx
+                .add_section(Section::ExtraData(Code::from_hash(vp_code_hash)));
+            let extra_hash =
+                Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
+            Some(extra_hash)
+        }
+        None => None,
+    };
+
     let data = UpdateVp {
         addr,
         vp_code_hash: extra_hash,
+        public_keys,
+        threshold,
     };
+
     let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
     tx.set_data(Data::new(data));
     tx.set_code(Code::from_hash(tx_code_hash));

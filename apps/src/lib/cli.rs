@@ -2311,9 +2311,9 @@ pub mod args {
                      for the new account. Uses the default user VP if none \
                      specified.",
                 ))
-                .arg(PUBLIC_KEY.def().about(
-                    "A public key to be used for the new account in \
-                     hexadecimal encoding.",
+                .arg(PUBLIC_KEYS.def().about(
+                    "A list public keys to be associated with the new account in \
+                    hexadecimal encoding.",
                 ))
                 .arg(THRESOLD.def().about(
                     "The minimum number of signature to be provided for \
@@ -2390,8 +2390,9 @@ pub mod args {
                     "The key scheme/type used for the validator keys. \
                      Currently supports ed25519 and secp256k1.",
                 ))
-                .arg(VALIDATOR_ACCOUNT_KEY.def().about(
-                    "A public key for the validator account. A new one will \
+                .arg(VALIDATOR_ACCOUNT_KEYS.def().about(
+                    "A list public keys to be associated with the new account in \
+                    hexadecimal encoding. A new one will \
                      be generated if none given.",
                 ))
                 .arg(VALIDATOR_CONSENSUS_KEY.def().about(
@@ -2437,6 +2438,12 @@ pub mod args {
                 vp_code_path: self.vp_code_path,
                 tx_code_path: self.tx_code_path,
                 addr: ctx.get(&self.addr),
+                public_keys: self
+                    .public_keys
+                    .iter()
+                    .map(|pk| ctx.get_cached(pk))
+                    .collect(),
+                threshold: self.threshold,
             }
         }
     }
@@ -2444,27 +2451,40 @@ pub mod args {
     impl Args for TxUpdateVp<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let vp_code_path = CODE_PATH.parse(matches);
+            let vp_code_path = CODE_PATH_OPT.parse(matches);
             let addr = ADDRESS.parse(matches);
             let tx_code_path = PathBuf::from(TX_UPDATE_VP_WASM);
+            let public_keys = PUBLIC_KEYS.parse(matches);
+            let threshold = THRESOLD.parse(matches);
             Self {
                 tx,
                 vp_code_path,
                 addr,
                 tx_code_path,
+                public_keys,
+                threshold,
             }
         }
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
                 .arg(
-                    CODE_PATH.def().about(
+                    CODE_PATH_OPT.def().about(
                         "The path to the new validity predicate WASM code.",
                     ),
                 )
                 .arg(ADDRESS.def().about(
                     "The account's address. It's key is used to produce the \
                      signature.",
+                ))
+                .arg(PUBLIC_KEYS.def().about(
+                    "A list public keys to be associated with the new account in \
+                     hexadecimal encoding.",
+                ))
+                .arg(THRESOLD.def().about(
+                    "The minimum number of signature to be provided for \
+                     authorization. Must be less then the maximum number of \
+                     public keys provided.",
                 ))
         }
     }

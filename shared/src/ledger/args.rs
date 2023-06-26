@@ -182,11 +182,15 @@ pub struct TxUpdateVp<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// Path to the VP WASM code file
-    pub vp_code_path: PathBuf,
+    pub vp_code_path: Option<PathBuf>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
     /// Address of the account whose VP is to be updated
     pub addr: C::Address,
+    /// Public keys
+    pub public_keys: Vec<C::PublicKey>,
+    /// The account threshold
+    pub threshold: Option<u8>,
 }
 
 /// Bond arguments
