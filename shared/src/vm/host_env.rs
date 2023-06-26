@@ -537,6 +537,7 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    println!("tx_has_key");
     let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len as _)
@@ -593,13 +594,14 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    println!("tx_read");
     let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_add_gas(env, gas)?;
 
-    tracing::debug!("tx_read {}, key {}", key, key_ptr,);
+    println!("tx_read {}, key {}", key, key_ptr,);
 
     let key = Key::parse(key).map_err(TxRuntimeError::StorageDataError)?;
 
@@ -705,6 +707,7 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    println!("tx_iter_prefix");
     let (prefix, gas) = env
         .memory
         .read_string(prefix_ptr, prefix_len as _)
@@ -823,11 +826,13 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    println!("tx_write 1");
     let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_add_gas(env, gas)?;
+    println!("tx_write 2");
     let (value, gas) = env
         .memory
         .read_bytes(val_ptr, val_len as _)
@@ -867,11 +872,13 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    println!("tx_write_temp 1");
     let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_add_gas(env, gas)?;
+    println!("tx_write_temp 2");
     let (value, gas) = env
         .memory
         .read_bytes(val_ptr, val_len as _)
@@ -947,6 +954,7 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    println!("tx_delete");
     let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len as _)
@@ -981,6 +989,7 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    println!("tx_emit_ibc_event");
     let (event, gas) = env
         .memory
         .read_bytes(event_ptr, event_len as _)

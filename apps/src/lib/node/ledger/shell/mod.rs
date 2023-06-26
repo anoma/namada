@@ -1585,8 +1585,8 @@ mod test_mempool_validate {
         let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {has_valid_pow: true}));
         tx.header.expiration = Some(DateTimeUtc::now());
         tx.header.chain_id = chain_id;
-        let tx_data = std::fs::read("/tmp/.tmpZU6zL3/tx.data").unwrap();
-        let wasm_path = glob::glob("/home/satan/Projects/namada/wasm/tx_ibc.*.wasm").unwrap().next().unwrap().unwrap();
+        let tx_data = std::fs::read("/media/k/Code/heliax/ibc_tx_data").unwrap();
+        let wasm_path = glob::glob("/media/k/Code/heliax/namada/wasm/tx_ibc.*.wasm").unwrap().next().unwrap().unwrap();
         let tx_code = std::fs::read(wasm_path)
             .unwrap();
         tx.set_code(Code::new(tx_code));

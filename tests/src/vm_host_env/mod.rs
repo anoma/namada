@@ -49,10 +49,11 @@ mod tests {
     use crate::tx::{tx_host_env, TestTxEnv};
     use crate::vp::{vp_host_env, TestVpEnv};
 
+    #[ignore]
     #[test]
     fn testy_poo() {
         tx_host_env::init();
-        let contents = std::fs::read("/tmp/.tmpW4QYPv/tx.data")
+        let contents = std::fs::read("../ibc_tx_data")
             .unwrap();
         let counter_key = namada_core::ledger::ibc::storage::client_counter_key();
         tx::ctx().write(&counter_key, 0u64).unwrap();
