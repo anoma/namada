@@ -15,7 +15,7 @@ version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["abciplus", "namada-sdk", "wasm-runtime"]
+default = ["abciplus", "namada-sdk"]
 mainnet = [
   "namada_core/mainnet",
 ]
@@ -26,6 +26,7 @@ ferveo-tpke = [
   "namada_core/ferveo-tpke",
 ]
 wasm-runtime = [
+  "bundled-masp-params",
   "namada_core/wasm-runtime",
   "loupe",
   "parity-wasm",
@@ -84,6 +85,8 @@ namada-sdk = [
 
 multicore = ["masp_proofs/multicore"]
 
+bundled-masp-params = ["namada-masp-params"]
+
 [dependencies]
 namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign-verify"]}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
@@ -98,6 +101,7 @@ derivation-path.workspace = true
 derivative.workspace = true
 itertools.workspace = true
 loupe = {version = "0.1.3", optional = true}
+namada-masp-params = {git = "https://github.com/anoma/namada-masp-params", rev = "e6798607e1f5d0cf48c0d5e104d79381542c7f14", optional = true}
 orion.workspace = true
 parity-wasm = {version = "0.45.0", features = ["sign_ext"], optional = true}
 paste.workspace = true

@@ -4,7 +4,6 @@ use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env;
 use std::fmt::Debug;
-use std::fs::File;
 #[cfg(feature = "masp-tx-gen")]
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -50,6 +49,8 @@ use masp_proofs::bellman::groth16::{
 use masp_proofs::bls12_381::Bls12;
 use masp_proofs::prover::LocalTxProver;
 use masp_proofs::sapling::SaplingVerificationContext;
+#[cfg(feature = "bundled-masp-params")]
+use namada_masp_params::{NAMADA_MASP_CONVERT_PARAMS, NAMADA_MASP_OUTPUT_PARAMS, NAMADA_MASP_SPEND_PARAMS};
 use namada_core::types::transaction::AffineCurve;
 #[cfg(feature = "masp-tx-gen")]
 use rand_core::{CryptoRng, OsRng, RngCore};
@@ -90,36 +91,33 @@ pub const OUTPUT_NAME: &str = "masp-output.params";
 /// Convert circuit name
 pub const CONVERT_NAME: &str = "masp-convert.params";
 
+#[cfg(feature = "bundled-masp-params")]
 enum MaspParams {
     Spend,
     Convert,
     Output,
 }
 
+#[cfg(feature = "bundled-masp-params")]
 /// Generic helper to load Sapling params.
 fn load_params(name: MaspParams) -> (
     masp_proofs::bellman::groth16::Parameters<Bls12>,
     masp_proofs::bellman::groth16::PreparedVerifyingKey<Bls12>,
 ) {
-    let params_name = match name {
-        MaspParams::Spend => SPEND_NAME,
-        MaspParams::Convert => CONVERT_NAME,
-        MaspParams::Output => OUTPUT_NAME,
+    let params_bytes = match name {
+        MaspParams::Spend => NAMADA_MASP_SPEND_PARAMS,
+        MaspParams::Convert => NAMADA_MASP_CONVERT_PARAMS,
+        MaspParams::Output => NAMADA_MASP_OUTPUT_PARAMS,
     };
 
-    let params_dir = get_params_dir();
-    let params_path = params_dir.join(params_name);
-    if !params_path.exists() {
-        panic!("MASP parameters not present");
-    }
-    let param_f = File::open(params_path).unwrap();
     let params =
-        masp_proofs::bellman::groth16::Parameters::read(&param_f, false)
+        masp_proofs::bellman::groth16::Parameters::read(params_bytes, false)
             .unwrap();
     let vk = prepare_verifying_key(&params.vk);
     (params, vk)
 }
 
+#[cfg(feature = "bundled-masp-params")]
 /// Load Sapling spend params.
 pub fn load_spend_params() -> (
     masp_proofs::bellman::groth16::Parameters<Bls12>,
@@ -128,6 +126,7 @@ pub fn load_spend_params() -> (
     load_params(MaspParams::Spend)
 }
 
+#[cfg(feature = "bundled-masp-params")]
 /// Load Sapling convert params.
 pub fn load_convert_params() -> (
     masp_proofs::bellman::groth16::Parameters<Bls12>,
@@ -136,6 +135,7 @@ pub fn load_convert_params() -> (
     load_params(MaspParams::Convert)
 }
 
+#[cfg(feature = "bundled-masp-params")]
 /// Load Sapling output params.
 pub fn load_output_params() -> (
     masp_proofs::bellman::groth16::Parameters<Bls12>,
@@ -144,6 +144,7 @@ pub fn load_output_params() -> (
     load_params(MaspParams::Output)
 }
 
+#[cfg(feature = "bundled-masp-params")]
 /// check_spend wrapper
 pub fn check_spend(
     spend: &SpendDescription<<Authorized as Authorization>::SaplingAuth>,
@@ -169,6 +170,7 @@ pub fn check_spend(
     )
 }
 
+#[cfg(feature = "bundled-masp-params")]
 /// check_output wrapper
 pub fn check_output(
     output: &OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>,
@@ -190,6 +192,7 @@ pub fn check_output(
     ctx.check_output(output.cv, output.cmu, epk, zkproof, parameters)
 }
 
+#[cfg(feature = "bundled-masp-params")]
 /// check convert wrapper
 pub fn check_convert(
     convert: &ConvertDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>,
@@ -247,6 +250,7 @@ fn partial_deauthorize(
     ))
 }
 
+#[cfg(feature = "bundled-masp-params")]
 /// Verify a shielded transaction.
 pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
     tracing::info!("entered verify_shielded_tx()");

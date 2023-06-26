@@ -30,6 +30,7 @@ path = "src/bin/namada/main.rs"
 doc = false
 name = "namadan"
 path = "src/bin/namada-node/main.rs"
+required-features = ["wasm-runtime"]
 
 # Namada client
 [[bin]]
@@ -57,6 +58,7 @@ abciplus = [
     "namada/abciplus",
     "namada/tendermint-rpc",
 ]
+wasm-runtime = ["namada/wasm-runtime"]
 
 [dependencies]
 namada = {path = "../shared", features = ["ferveo-tpke", "masp-tx-gen", "multicore", "http-client"]}

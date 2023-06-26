@@ -2536,6 +2536,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
+name = "hex-literal"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fe2267d4ed49bc07b63801559be28c718ea06c4738b7a03c94df7386d2cde46"
+
+[[package]]
 name = "hmac"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3639,6 +3645,7 @@ dependencies = [
  "loupe",
  "masp_primitives",
  "masp_proofs",
+ "namada-masp-params",
  "namada_core",
  "namada_proof_of_stake",
  "namada_test_utils",
@@ -3677,6 +3684,14 @@ dependencies = [
  "wasmer-vm",
  "wasmparser 0.83.0",
  "zeroize",
+]
+
+[[package]]
+name = "namada-masp-params"
+version = "1.0.0"
+source = "git+https://github.com/anoma/namada-masp-params?rev=e6798607e1f5d0cf48c0d5e104d79381542c7f14#e6798607e1f5d0cf48c0d5e104d79381542c7f14"
+dependencies = [
+ "hex-literal",
 ]
 
 [[package]]

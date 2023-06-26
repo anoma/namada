@@ -1762,6 +1762,7 @@ where
     Ok(epoch.0)
 }
 
+#[cfg(feature = "bundled-masp-params")]
 /// Verify a ShieldedTransaction.
 pub fn vp_verify_masp<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
