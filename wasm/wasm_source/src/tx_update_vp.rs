@@ -30,9 +30,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         ctx.write(&threshold_key, threshold)?;
     }
 
-    if !update_vp.public_keys.is_empty() {
-        
-    }
+    if !update_vp.public_keys.is_empty() {}
 
     Ok(())
 }

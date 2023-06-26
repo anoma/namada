@@ -784,11 +784,11 @@ pub async fn to_ledger_vector<
             })?)?;
 
         tv.name = "Update VP 0".to_string();
-        
+
         match &transfer.vp_code_hash {
             Some(hash) => {
                 let extra = tx
-                    .get_section(&hash)
+                    .get_section(hash)
                     .and_then(Section::extra_data_sec)
                     .expect("unable to load vp code")
                     .code
@@ -803,12 +803,12 @@ pub async fn to_ledger_vector<
                     format!("Address : {}", transfer.addr),
                     format!("VP type : {}", vp_code),
                 ]);
-        
+
                 tv.output_expert.extend(vec![
                     format!("Address : {}", transfer.addr),
                     format!("VP type : {}", HEXLOWER.encode(&extra.0)),
                 ]);
-            },
+            }
             None => (),
         };
     } else if code_hash == transfer_hash {

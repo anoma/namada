@@ -280,7 +280,7 @@ impl Config {
             .and_then(|c| c.merge(config::File::with_name(file_name)))
             .and_then(|c| {
                 c.merge(
-                    config::Environment::with_prefix("namada").separator("__"),
+                    config::Environment::with_prefix("NAMADA").separator("__"),
                 )
             })
             .map_err(Error::ReadError)?;

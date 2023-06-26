@@ -2312,8 +2312,8 @@ pub mod args {
                      specified.",
                 ))
                 .arg(PUBLIC_KEYS.def().about(
-                    "A list public keys to be associated with the new account in \
-                    hexadecimal encoding.",
+                    "A list public keys to be associated with the new account \
+                     in hexadecimal encoding.",
                 ))
                 .arg(THRESOLD.def().about(
                     "The minimum number of signature to be provided for \
@@ -2391,9 +2391,9 @@ pub mod args {
                      Currently supports ed25519 and secp256k1.",
                 ))
                 .arg(VALIDATOR_ACCOUNT_KEYS.def().about(
-                    "A list public keys to be associated with the new account in \
-                    hexadecimal encoding. A new one will \
-                     be generated if none given.",
+                    "A list public keys to be associated with the new account \
+                     in hexadecimal encoding. A new one will be generated if \
+                     none given.",
                 ))
                 .arg(VALIDATOR_CONSENSUS_KEY.def().about(
                     "A consensus key for the validator account. A new one \
@@ -2478,8 +2478,8 @@ pub mod args {
                      signature.",
                 ))
                 .arg(PUBLIC_KEYS.def().about(
-                    "A list public keys to be associated with the new account in \
-                     hexadecimal encoding.",
+                    "A list public keys to be associated with the new account \
+                     in hexadecimal encoding.",
                 ))
                 .arg(THRESOLD.def().about(
                     "The minimum number of signature to be provided for \

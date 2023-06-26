@@ -1445,7 +1445,7 @@ pub async fn submit_init_account<
     let data = InitAccount {
         public_keys,
         vp_code_hash: extra_hash,
-        threshold: threshold,
+        threshold
     };
     let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
     tx.set_data(Data::new(data));
@@ -1542,7 +1542,7 @@ pub async fn submit_update_vp<
     let mut tx = Tx::new(TxType::Raw);
     tx.header.chain_id = args.tx.chain_id.clone().unwrap();
     tx.header.expiration = args.tx.expiration;
-    
+
     let extra_hash = match vp_code_hash {
         Some(vp_code_hash) => {
             let extra = tx
