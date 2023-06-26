@@ -557,8 +557,10 @@ where
             let tx = Tx::try_from(&tx_data[..]).unwrap();
 
             let token_transfer = {
-                let signed =
-                    SignedTxData::try_from_slice(&tx_data[..]).unwrap();
+                let signed = SignedTxData::try_from_slice(
+                    &tx.data.as_ref().unwrap()[..],
+                )
+                .unwrap();
                 let data = signed.data.unwrap();
                 token::Transfer::try_from_slice(&data[..]).unwrap()
             };
