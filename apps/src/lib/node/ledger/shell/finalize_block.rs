@@ -317,6 +317,10 @@ where
                             }
                         }
                         DecryptedTx::Undecryptable => {
+                            tracing::info!(
+                                "Tx with hash {} was un-decryptable",
+                                wrapper_hash
+                            );
                             event["info"] = "Transaction is invalid.".into();
                             event["log"] =
                                 "Transaction could not be decrypted.".into();
