@@ -39,7 +39,7 @@ elif [ "$1" = "server" ]; then
     
     sed -i 's/^epochs_per_year = 31_536_000$/epochs_per_year = 262_800/' genesis/test-vectors-single-node.toml
     
-    NAMADA_GENESIS_FILE=$(cargo run --bin namadac -- --mode validator utils init-network --genesis-path genesis/test-vectors-single-node.toml --wasm-checksums-path wasm/checksums.json --chain-prefix e2e-test --unsafe-dont-encrypt --localhost --allow-duplicate-ip | grep 'Genesis file generated at ' | sed 's/^Genesis file generated at //')
+    NAMADA_GENESIS_FILE=$(cargo run --bin namadac -- utils init-network --genesis-path genesis/test-vectors-single-node.toml --wasm-checksums-path wasm/checksums.json --chain-prefix e2e-test --unsafe-dont-encrypt --localhost --allow-duplicate-ip | grep 'Genesis file generated at ' | sed 's/^Genesis file generated at //')
     
     rm genesis/test-vectors-single-node.toml
 
@@ -51,7 +51,7 @@ elif [ "$1" = "server" ]; then
 
     cp $NAMADA_BASE_DIR/setup/other/wallet.toml $NAMADA_BASE_DIR/wallet.toml
 
-    cargo run --bin namadan -- --mode validator --base-dir $NAMADA_BASE_DIR/setup/validator-0/.namada/ ledger
+    cargo run --bin namadan -- --base-dir $NAMADA_BASE_DIR/setup/validator-0/.namada/ ledger
 elif [ "$1" = "client" ]; then
     echo > $NAMADA_TX_LOG_PATH
 
