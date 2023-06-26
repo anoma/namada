@@ -506,7 +506,7 @@ impl std::ops::Sub for MaspAmount {
         for (key, value) in rhs.drain() {
             self.entry(key)
                 .and_modify(|val| *val -= value)
-                .or_insert(value);
+                .or_insert(-value);
         }
         self.0.retain(|_, v| !v.is_zero());
         self
