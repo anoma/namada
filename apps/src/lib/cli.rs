@@ -47,7 +47,7 @@ pub mod cmds {
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
         TxIbcTransfer(TxIbcTransfer),
-        TxUpdateVp(TxUpdateVp),
+        TxUpdateAccount(TxUpdateAccount),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
         TxRevealPk(TxRevealPk),
@@ -62,7 +62,7 @@ pub mod cmds {
                 .subcommand(TxCustom::def())
                 .subcommand(TxTransfer::def())
                 .subcommand(TxIbcTransfer::def())
-                .subcommand(TxUpdateVp::def())
+                .subcommand(TxUpdateAccount::def())
                 .subcommand(TxInitProposal::def())
                 .subcommand(TxVoteProposal::def())
                 .subcommand(TxRevealPk::def())
@@ -77,7 +77,7 @@ pub mod cmds {
             let tx_transfer = SubCmd::parse(matches).map(Self::TxTransfer);
             let tx_ibc_transfer =
                 SubCmd::parse(matches).map(Self::TxIbcTransfer);
-            let tx_update_vp = SubCmd::parse(matches).map(Self::TxUpdateVp);
+            let tx_update_account = SubCmd::parse(matches).map(Self::TxUpdateAccount);
             let tx_init_proposal =
                 SubCmd::parse(matches).map(Self::TxInitProposal);
             let tx_vote_proposal =
@@ -89,7 +89,7 @@ pub mod cmds {
                 .or(tx_custom)
                 .or(tx_transfer)
                 .or(tx_ibc_transfer)
-                .or(tx_update_vp)
+                .or(tx_update_account)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
                 .or(tx_reveal_pk)
@@ -154,7 +154,7 @@ pub mod cmds {
                 .subcommand(TxCustom::def().display_order(1))
                 .subcommand(TxTransfer::def().display_order(1))
                 .subcommand(TxIbcTransfer::def().display_order(1))
-                .subcommand(TxUpdateVp::def().display_order(1))
+                .subcommand(TxUpdateAccount::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
                 .subcommand(TxRevealPk::def().display_order(1))
                 // Proposal transactions
@@ -190,7 +190,7 @@ pub mod cmds {
             let tx_custom = Self::parse_with_ctx(matches, TxCustom);
             let tx_transfer = Self::parse_with_ctx(matches, TxTransfer);
             let tx_ibc_transfer = Self::parse_with_ctx(matches, TxIbcTransfer);
-            let tx_update_vp = Self::parse_with_ctx(matches, TxUpdateVp);
+            let tx_update_account = Self::parse_with_ctx(matches, TxUpdateAccount);
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
             let tx_init_validator =
                 Self::parse_with_ctx(matches, TxInitValidator);
@@ -227,7 +227,7 @@ pub mod cmds {
             tx_custom
                 .or(tx_transfer)
                 .or(tx_ibc_transfer)
-                .or(tx_update_vp)
+                .or(tx_update_account)
                 .or(tx_init_account)
                 .or(tx_reveal_pk)
                 .or(tx_init_proposal)
@@ -291,7 +291,7 @@ pub mod cmds {
         TxTransfer(TxTransfer),
         TxIbcTransfer(TxIbcTransfer),
         QueryResult(QueryResult),
-        TxUpdateVp(TxUpdateVp),
+        TxUpdateAccount(TxUpdateAccount),
         TxInitAccount(TxInitAccount),
         TxInitValidator(TxInitValidator),
         TxInitProposal(TxInitProposal),
@@ -1146,15 +1146,15 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxUpdateVp(pub args::TxUpdateVp<args::CliTypes>);
+    pub struct TxUpdateAccount(pub args::TxUpdateAccount<args::CliTypes>);
 
-    impl SubCmd for TxUpdateVp {
+    impl SubCmd for TxUpdateAccount {
         const CMD: &'static str = "update";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| TxUpdateVp(args::TxUpdateVp::parse(matches)))
+                .map(|matches| TxUpdateAccount(args::TxUpdateAccount::parse(matches)))
         }
 
         fn def() -> App {
@@ -1163,7 +1163,7 @@ pub mod cmds {
                     "Send a signed transaction to update account's validity \
                      predicate.",
                 )
-                .add_args::<args::TxUpdateVp<args::CliTypes>>()
+                .add_args::<args::TxUpdateAccount<args::CliTypes>>()
         }
     }
 
@@ -1785,7 +1785,7 @@ pub mod args {
     pub const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
     pub const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
     pub const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
-    pub const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
+    pub const TX_UPDATE_ACCOUNT_WASM: &str = "tx_update_account.wasm";
     pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
     pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
     pub const VP_USER_WASM: &str = "vp_user.wasm";
@@ -2431,9 +2431,9 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<TxUpdateVp<SdkTypes>> for TxUpdateVp<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> TxUpdateVp<SdkTypes> {
-            TxUpdateVp::<SdkTypes> {
+    impl CliToSdk<TxUpdateAccount<SdkTypes>> for TxUpdateAccount<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxUpdateAccount<SdkTypes> {
+            TxUpdateAccount::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 vp_code_path: self.vp_code_path,
                 tx_code_path: self.tx_code_path,
@@ -2448,12 +2448,12 @@ pub mod args {
         }
     }
 
-    impl Args for TxUpdateVp<CliTypes> {
+    impl Args for TxUpdateAccount<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let vp_code_path = CODE_PATH_OPT.parse(matches);
             let addr = ADDRESS.parse(matches);
-            let tx_code_path = PathBuf::from(TX_UPDATE_VP_WASM);
+            let tx_code_path = PathBuf::from(TX_UPDATE_ACCOUNT_WASM);
             let public_keys = PUBLIC_KEYS.parse(matches);
             let threshold = THRESOLD.parse(matches);
             Self {

@@ -63,7 +63,7 @@ pub const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
 /// Reveal public key transaction WASM path
 pub const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
 /// Update validity predicate WASM path
-pub const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
+pub const TX_UPDATE_ACCOUNT_WASM: &str = "tx_update_account.wasm";
 /// Transfer transaction WASM path
 pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
 /// IBC transaction WASM path
@@ -1476,7 +1476,7 @@ pub async fn submit_update_vp<
 >(
     client: &C,
     wallet: &mut Wallet<U>,
-    args: args::TxUpdateVp,
+    args: args::TxUpdateAccount,
 ) -> Result<(), Error> {
     let addr = args.addr.clone();
 

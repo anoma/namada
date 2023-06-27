@@ -63,7 +63,7 @@ pub async fn submit_custom<C: namada::ledger::queries::Client + Sync>(
 pub async fn submit_update_vp<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
-    mut args: args::TxUpdateVp,
+    mut args: args::TxUpdateAccount,
 ) -> Result<(), tx::Error> {
     args.tx.chain_id = args
         .tx

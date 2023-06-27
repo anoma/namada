@@ -55,7 +55,7 @@ pub async fn main() -> Result<()> {
                     tx::submit_ibc_transfer::<HttpClient>(&client, ctx, args)
                         .await?;
                 }
-                Sub::TxUpdateVp(TxUpdateVp(args)) => {
+                Sub::TxUpdateAccount(TxUpdateAccount(args)) => {
                     wait_until_node_is_synched(&args.tx.ledger_address).await;
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())

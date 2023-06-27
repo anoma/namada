@@ -9,7 +9,7 @@
     "tx_transfer.wasm": "tx_transfer.7d661025fd92434635d1f40bd176de86cddd8d476611295970ed2f10a529bff5.wasm",
     "tx_unbond.wasm": "tx_unbond.0223f7374d4569b3bc77ca1c2df3d4f03fa0ec38ba88618b8b4c5137f6e3c320.wasm",
     "tx_unjail_validator.wasm": "tx_unjail_validator.3e20f7ad0b7304f0dea097470730f74646d88c2306c925724c191d7f3c1a7a26.wasm",
-    "tx_update_vp.wasm": "tx_update_vp.dc43508919887798bd79c5cb9812b100ff8da7c340c0c08ddb411d219a076120.wasm",
+    "tx_update_account.wasm": "tx_update_account.dc43508919887798bd79c5cb9812b100ff8da7c340c0c08ddb411d219a076120.wasm",
     "tx_vote_proposal.wasm": "tx_vote_proposal.d6ce45cd151a790ca87090af7068e82e47355dcf95bb9440afcc2ab9cd1bce45.wasm",
     "tx_withdraw.wasm": "tx_withdraw.657805b609502faf96f4ba1642235d510774a64916c518cb6238ad0891e655c7.wasm",
     "vp_implicit.wasm": "vp_implicit.c267bf11b59e6c37fce9702723b50a83bbde2a204e0e5554f13d2ef5e968b75d.wasm",

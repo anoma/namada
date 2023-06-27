@@ -32,7 +32,7 @@ use crate::ledger::rpc::{query_wasm_code_hash, TxBroadcastData};
 use crate::ledger::tx::{
     Error, TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_IBC_WASM,
     TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM,
-    TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UPDATE_VP_WASM,
+    TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UPDATE_ACCOUNT_WASM,
     TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
 };
 pub use crate::ledger::wallet::store::AddressVpType;
@@ -207,7 +207,7 @@ pub async fn sign_tx<
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<TxBroadcastData, Error> {
     let keypairs = tx_signer::<C, U>(client, wallet, args, default).await?;
-    // Sign over the transacttion data
+    // Sign over the transaction data
     tx.add_section(Section::SectionSignature(MultiSignature::new(
         tx.data_sechash(),
         &keypairs,
@@ -252,6 +252,14 @@ pub async fn sign_tx<
 
     Ok(broadcast_data)
 }
+
+// pub async fn public_keys_index_map<
+// C: crate::ledger::queries::Client + Sync,
+// U: WalletUtils,
+// >(
+// client: &C,
+
+// )
 
 /// Create a wrapper tx from a normal tx. Get the hash of the
 /// wrapper and its payload which is needed for monitoring its
@@ -550,7 +558,7 @@ pub async fn to_ledger_vector<
         .unwrap();
     let reveal_pk_hash =
         query_wasm_code_hash(client, TX_REVEAL_PK).await.unwrap();
-    let update_vp_hash = query_wasm_code_hash(client, TX_UPDATE_VP_WASM)
+    let update_vp_hash = query_wasm_code_hash(client, TX_UPDATE_ACCOUNT_WASM)
         .await
         .unwrap();
     let transfer_hash = query_wasm_code_hash(client, TX_TRANSFER_WASM)

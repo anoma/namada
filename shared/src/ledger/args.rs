@@ -178,7 +178,7 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
 
 /// Transaction to update a VP arguments
 #[derive(Clone, Debug)]
-pub struct TxUpdateVp<C: NamadaTypes = SdkTypes> {
+pub struct TxUpdateAccount<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// Path to the VP WASM code file
