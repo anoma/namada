@@ -358,20 +358,29 @@ pub fn epoch_sleep(
     ledger_address: &str,
     timeout_secs: u64,
 ) -> Result<Epoch> {
-    let old_epoch = get_epoch(test, ledger_address)?;
-    let start = Instant::now();
-    let loop_timeout = Duration::new(timeout_secs, 0);
-    loop {
-        if Instant::now().duration_since(start) > loop_timeout {
-            panic!("Timed out waiting for the next epoch");
-        }
-        let epoch = get_epoch(test, ledger_address)?;
-        if epoch > old_epoch {
-            break Ok(epoch);
-        } else {
-            sleep(10);
-        }
-    }
+    let mut find = run!(
+        test,
+        Bin::Client,
+        &["epoch-sleep", "--node", ledger_address],
+        Some(timeout_secs)
+    )?;
+    parse_reached_epoch(&mut find)
+}
+
+pub fn parse_reached_epoch(find: &mut NamadaCmd) -> Result<Epoch> {
+    let (unread, matched) = find.exp_regex("Reached epoch .*")?;
+    let epoch_str = strip_trailing_newline(&matched)
+        .trim()
+        .rsplit_once(' ')
+        .unwrap()
+        .1;
+    let epoch = u64::from_str(epoch_str).map_err(|e| {
+        eyre!(format!(
+            "Epoch: {} parsed from {}, Error: {}\n\nOutput: {}",
+            epoch_str, matched, e, unread
+        ))
+    })?;
+    Ok(Epoch(epoch))
 }
 
 /// Wait for txs and VPs WASM compilations to finish. This is useful to avoid a

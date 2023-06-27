@@ -39,6 +39,7 @@ use super::helpers::{
 use super::setup::get_all_wasms_hashes;
 use crate::e2e::helpers::{
     epoch_sleep, find_address, find_bonded_stake, get_actor_rpc, get_epoch,
+    parse_reached_epoch,
 };
 use crate::e2e::setup::{self, default_port_offset, sleep, Bin, Who};
 use crate::{run, run_as};
@@ -4432,11 +4433,15 @@ fn test_epoch_sleep() -> Result<()> {
     // 3. Use epoch-sleep to sleep for an epoch
     let args = ["epoch-sleep", "--node", &validator_one_rpc];
     let mut client = run!(test, Bin::Client, &args, None)?;
+    let reached_epoch = parse_reached_epoch(&mut client)?;
     client.assert_success();
 
     // 4. Confirm the current epoch is larger
+    // possibly badly, we assume we get here within 30 seconds of the last step
+    // should be fine haha (future debuggers: sorry)
     let current_epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     assert!(current_epoch > start_epoch);
+    assert_eq!(current_epoch, reached_epoch);
 
     Ok(())
 }
