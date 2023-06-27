@@ -947,6 +947,10 @@ fn masp_pinned_txs() -> Result<()> {
     client.exp_string("Transaction is valid")?;
     client.assert_success();
 
+    // Wait till epoch boundary
+    // This makes it more consistent for some reason?
+    let _ep2 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+
     // Assert PPA(C) has the 20 BTC transaction pinned to it
     let mut client = run!(
         test,
