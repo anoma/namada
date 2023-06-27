@@ -181,6 +181,9 @@ pub mod cmds {
                 .subcommand(QueryProposal::def().display_order(3))
                 .subcommand(QueryProposalResult::def().display_order(3))
                 .subcommand(QueryProtocolParameters::def().display_order(3))
+                // wait until next epoch (can't be in utils, needs the ledger
+                // address)
+                .subcommand(EpochSleep::def().display_order(4))
                 // Utils
                 .subcommand(Utils::def().display_order(5))
         }
@@ -223,6 +226,7 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryProposalResult);
             let query_protocol_parameters =
                 Self::parse_with_ctx(matches, QueryProtocolParameters);
+            let epoch_sleep = Self::parse_with_ctx(matches, EpochSleep);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
@@ -251,6 +255,7 @@ pub mod cmds {
                 .or(query_proposal)
                 .or(query_proposal_result)
                 .or(query_protocol_parameters)
+                .or(epoch_sleep)
                 .or(utils)
         }
     }
@@ -315,6 +320,7 @@ pub mod cmds {
         QueryProposal(QueryProposal),
         QueryProposalResult(QueryProposalResult),
         QueryProtocolParameters(QueryProtocolParameters),
+        EpochSleep(EpochSleep),
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -1578,6 +1584,28 @@ pub mod cmds {
                      this account.",
                 )
                 .add_args::<args::RevealPk<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct EpochSleep(pub args::Query<args::CliTypes>);
+
+    impl SubCmd for EpochSleep {
+        const CMD: &'static str = "epoch-sleep";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::Query::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Query for the current epoch, then sleep until the next \
+                     epoch.",
+                )
+                .add_args::<args::Query<args::CliTypes>>()
         }
     }
 
