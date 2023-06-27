@@ -4663,6 +4663,48 @@ fn implicit_account_reveal_pk() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_epoch_sleep() -> Result<()> {
+    // Use slightly longer epochs to give us time to sleep
+    let test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                epochs_per_year: epochs_per_year_from_min_duration(30),
+                min_num_of_blocks: 1,
+                ..genesis.parameters
+            };
+            GenesisConfig {
+                parameters,
+                ..genesis
+            }
+        },
+        None,
+    )?;
+
+    // 1. Run the ledger node
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
+
+    let _bg_ledger = ledger.background();
+
+    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    // 2. Query the current epoch
+    let start_epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+
+    // 3. Use epoch-sleep to sleep for an epoch
+    let args = ["epoch-sleep", "--node", &validator_one_rpc];
+    let mut client = run!(test, Bin::Client, &args, None)?;
+    client.assert_success();
+
+    // 4. Confirm the current epoch is larger
+    let current_epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    assert!(current_epoch > start_epoch);
+
+    Ok(())
+}
+
 /// Prepare proposal data in the test's temp dir from the given source address.
 /// This can be submitted with "init-proposal" command.
 fn prepare_proposal_data(
