@@ -2151,7 +2151,7 @@ fn pos_bonds() -> Result<()> {
                 delegation_withdrawable_epoch
             );
         }
-        let epoch = get_epoch(&test, &validator_one_rpc)?;
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 40)?;
         if epoch >= delegation_withdrawable_epoch {
             break;
         }
@@ -2358,7 +2358,7 @@ fn pos_rewards() -> Result<()> {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!("Timed out waiting for epoch: {}", wait_epoch);
         }
-        let epoch = get_epoch(&test, &validator_zero_rpc)?;
+        let epoch = epoch_sleep(&test, &validator_zero_rpc, 40)?;
         if dbg!(epoch) >= wait_epoch {
             break;
         }
@@ -2441,7 +2441,7 @@ fn test_bond_queries() -> Result<()> {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!("Timed out waiting for epoch: {}", 1);
         }
-        let epoch = get_epoch(&test, &validator_one_rpc)?;
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 40)?;
         if epoch >= Epoch(4) {
             break;
         }
@@ -2500,7 +2500,7 @@ fn test_bond_queries() -> Result<()> {
 
     // 6. Wait for withdraw_epoch
     loop {
-        let epoch = epoch_sleep(&test, &validator_one_rpc, 120)?;
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 40)?;
         if epoch >= withdraw_epoch {
             break;
         }
@@ -2740,7 +2740,7 @@ fn pos_init_validator() -> Result<()> {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!("Timed out waiting for epoch: {}", earliest_update_epoch);
         }
-        let epoch = get_epoch(&test, &non_validator_rpc)?;
+        let epoch = epoch_sleep(&test, &non_validator_rpc, 40)?;
         if epoch >= earliest_update_epoch {
             break;
         }
