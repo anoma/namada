@@ -157,7 +157,7 @@ where
                 continue;
             }
 
-            let tx = if let Ok(()) = tx.validate_header() {
+            let tx = if tx.validate_tx().is_ok() {
                 tx
             } else {
                 tracing::error!(

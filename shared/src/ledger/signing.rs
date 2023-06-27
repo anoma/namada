@@ -352,11 +352,7 @@ pub async fn sign_wrapper<
     // Encrypt all sections not relating to the header
     tx.encrypt(&Default::default());
     // Then sign over the bound wrapper committing to all other sections
-    let mut sec_hashes = vec![tx.header_hash()];
-    for section in &tx.sections {
-        sec_hashes.push(section.get_hash());
-    }
-    tx.add_section(Section::Signature(Signature::new(sec_hashes, keypair)));
+    tx.add_section(Section::Signature(Signature::new(tx.sechashes(), keypair)));
     // We use this to determine when the wrapper tx makes it on-chain
     let wrapper_hash = tx.header_hash().to_string();
     // We use this to determine when the decrypted inner tx makes it

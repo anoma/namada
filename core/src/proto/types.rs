@@ -830,6 +830,15 @@ impl Tx {
         Section::Header(self.header.clone()).get_hash()
     }
 
+    /// Get hashes of all the sections in this transaction
+    pub fn sechashes(&self) -> Vec<crate::types::hash::Hash> {
+        let mut hashes = vec![self.header_hash()];
+        for sec in &self.sections {
+            hashes.push(sec.get_hash());
+        }
+        hashes
+    }
+
     /// Update the header whilst maintaining existing cross-references
     pub fn update_header(&mut self, tx_type: TxType) -> &mut Self {
         self.header.tx_type = tx_type;
@@ -936,13 +945,15 @@ impl Tx {
         &self,
         pk: &common::PublicKey,
         hashes: &[crate::types::hash::Hash],
-    ) -> std::result::Result<(), VerifySigError> {
+    ) -> std::result::Result<&Signature, VerifySigError> {
         for section in &self.sections {
             if let Section::Signature(sig_sec) = section {
                 // Check that the signer is matched and that the hashes being
                 // checked are a subset of those in this section
                 if sig_sec.pub_key == *pk
-                    && hashes.iter().all(|x| sig_sec.targets.contains(x))
+                    && hashes.iter().all(|x| {
+                        sig_sec.targets.contains(x) || section.get_hash() == *x
+                    })
                 {
                     // Ensure that all the sections the signature signs over are
                     // present
@@ -952,7 +963,7 @@ impl Tx {
                         }
                     }
                     // Finally verify that the signature itself is valid
-                    return sig_sec.verify_signature();
+                    return sig_sec.verify_signature().map(|_| sig_sec);
                 }
             }
         }
@@ -1033,35 +1044,35 @@ impl Tx {
     /// the Tx and verify it is of the appropriate form. This means
     /// 1. The wrapper tx is indeed signed
     /// 2. The signature is valid
-    pub fn validate_header(&self) -> std::result::Result<(), TxError> {
+    pub fn validate_tx(
+        &self,
+    ) -> std::result::Result<Option<&Signature>, TxError> {
         match &self.header.tx_type {
             // verify signature and extract signed data
-            TxType::Wrapper(wrapper) => {
-                self.verify_signature(&wrapper.pk, &[self.header_hash()])
-                    .map_err(|err| {
-                        TxError::SigError(format!(
-                            "WrapperTx signature verification failed: {}",
-                            err
-                        ))
-                    })?;
-                Ok(())
-            }
+            TxType::Wrapper(wrapper) => self
+                .verify_signature(&wrapper.pk, &self.sechashes())
+                .map(Option::Some)
+                .map_err(|err| {
+                    TxError::SigError(format!(
+                        "WrapperTx signature verification failed: {}",
+                        err
+                    ))
+                }),
             // verify signature and extract signed data
             #[cfg(feature = "ferveo-tpke")]
-            TxType::Protocol(protocol) => {
-                self.verify_signature(&protocol.pk, &[self.header_hash()])
-                    .map_err(|err| {
-                        TxError::SigError(format!(
-                            "ProtocolTx signature verification failed: {}",
-                            err
-                        ))
-                    })?;
-                Ok(())
-            }
+            TxType::Protocol(protocol) => self
+                .verify_signature(&protocol.pk, &self.sechashes())
+                .map(Option::Some)
+                .map_err(|err| {
+                    TxError::SigError(format!(
+                        "ProtocolTx signature verification failed: {}",
+                        err
+                    ))
+                }),
             // we extract the signed data, but don't check the signature
-            TxType::Decrypted(_) => Ok(()),
+            TxType::Decrypted(_) => Ok(None),
             // return as is
-            TxType::Raw => Ok(()),
+            TxType::Raw => Ok(None),
         }
     }
 

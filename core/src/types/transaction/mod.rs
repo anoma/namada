@@ -254,7 +254,7 @@ mod test_process_tx {
         let code_sec = outer_tx
             .set_code(Code::new("wasm code".as_bytes().to_owned()))
             .clone();
-        outer_tx.validate_header().expect("Test failed");
+        outer_tx.validate_tx().expect("Test failed");
         match outer_tx.header().tx_type {
             TxType::Raw => {
                 assert_eq!(code_sec.get_hash(), outer_tx.header.code_hash,)
@@ -276,7 +276,7 @@ mod test_process_tx {
             .set_data(Data::new("transaction data".as_bytes().to_owned()))
             .clone();
 
-        tx.validate_header().expect("Test failed");
+        tx.validate_tx().expect("Test failed");
         match tx.header().tx_type {
             TxType::Raw => {
                 assert_eq!(code_sec.get_hash(), tx.header().code_hash,);
@@ -302,7 +302,7 @@ mod test_process_tx {
             &gen_keypair(),
         )));
 
-        tx.validate_header().expect("Test failed");
+        tx.validate_tx().expect("Test failed");
         match tx.header().tx_type {
             TxType::Raw => {
                 assert_eq!(code_sec.get_hash(), tx.header().code_hash,);
@@ -337,7 +337,7 @@ mod test_process_tx {
             &keypair,
         )));
 
-        tx.validate_header().expect("Test failed");
+        tx.validate_tx().expect("Test failed");
         match tx.header().tx_type {
             TxType::Wrapper(_) => {
                 tx.decrypt(<EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator())
@@ -368,7 +368,7 @@ mod test_process_tx {
         tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         tx.encrypt(&Default::default());
-        let result = tx.validate_header().expect_err("Test failed");
+        let result = tx.validate_tx().expect_err("Test failed");
         assert_matches!(result, TxError::SigError(_));
     }
 }
@@ -388,7 +388,7 @@ fn test_process_tx_decrypted_unsigned() {
     let data_sec = tx
         .set_data(Data::new("transaction data".as_bytes().to_owned()))
         .clone();
-    tx.validate_header().expect("Test failed");
+    tx.validate_tx().expect("Test failed");
     match tx.header().tx_type {
         TxType::Decrypted(DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]
@@ -434,7 +434,7 @@ fn test_process_tx_decrypted_signed() {
     let data_sec = decrypted
         .set_data(Data::new("transaction data".as_bytes().to_owned()))
         .clone();
-    decrypted.validate_header().expect("Test failed");
+    decrypted.validate_tx().expect("Test failed");
     match decrypted.header().tx_type {
         TxType::Decrypted(DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]

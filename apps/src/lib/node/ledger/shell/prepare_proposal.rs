@@ -138,7 +138,7 @@ where
                     if let (Some(block_time), Some(exp)) = (block_time.as_ref(), &tx.header.expiration) {
                         if block_time > exp { return None }
                     }
-                    if tx.validate_header().is_ok() && tx.header().wrapper().is_some() && self.replay_protection_checks(&tx, tx_bytes.as_slice(), &mut temp_wl_storage).is_ok() {
+                    if tx.validate_tx().is_ok() && tx.header().wrapper().is_some() && self.replay_protection_checks(&tx, tx_bytes.as_slice(), &mut temp_wl_storage).is_ok() {
                         return Some(tx_bytes.clone());
                     }
                 }

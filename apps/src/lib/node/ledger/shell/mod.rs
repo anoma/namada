@@ -772,8 +772,8 @@ where
         }
 
         // Tx signature check
-        let tx_type = match tx.validate_header() {
-            Ok(()) => tx.header(),
+        let tx_type = match tx.validate_tx() {
+            Ok(_) => tx.header(),
             Err(msg) => {
                 response.code = ErrorCodes::InvalidSig.into();
                 response.log = msg.to_string();

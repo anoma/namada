@@ -231,7 +231,7 @@ where
             |tx| {
                 let tx_chain_id = tx.header.chain_id.clone();
                 let tx_expiration = tx.header.expiration;
-                if let Err(err) = tx.validate_header() {
+                if let Err(err) = tx.validate_tx() {
                     // This occurs if the wrapper / protocol tx signature is
                     // invalid
                     return Err(TxResult {
@@ -250,7 +250,7 @@ where
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
-        if let Err(err) = tx.validate_header() {
+        if let Err(err) = tx.validate_tx() {
             return TxResult {
                 code: ErrorCodes::InvalidSig.into(),
                 info: err.to_string(),
