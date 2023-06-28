@@ -32,7 +32,6 @@ use namada::types::transaction::governance::{
 };
 use namada::types::transaction::{InitValidator, TxType};
 use sha2::{Digest as Sha2Digest, Sha256};
-use tendermint_rpc::HttpClient;
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
@@ -42,6 +41,7 @@ use crate::client::signing::find_keypair;
 use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
+use crate::facade::tendermint_rpc::HttpClient;
 use crate::node::ledger::tendermint_node;
 use crate::wallet::{
     gen_validator_keys, read_and_confirm_encryption_password, CliWalletUtils,
@@ -292,14 +292,13 @@ pub async fn submit_init_validator<
         crate::wallet::save(&ctx.wallet)
             .unwrap_or_else(|err| eprintln!("{}", err));
 
-        let tendermint_home = ctx.config.ledger.tendermint_dir();
+        let tendermint_home = ctx.config.ledger.cometbft_dir();
         tendermint_node::write_validator_key(&tendermint_home, &consensus_key);
         tendermint_node::write_validator_state(tendermint_home);
 
         // Write Namada config stuff or figure out how to do the above
         // tendermint_node things two epochs in the future!!!
-        ctx.config.ledger.tendermint.tendermint_mode =
-            TendermintMode::Validator;
+        ctx.config.ledger.shell.tendermint_mode = TendermintMode::Validator;
         ctx.config
             .write(
                 &ctx.config.ledger.shell.base_dir,
@@ -382,7 +381,7 @@ impl Default for CLIShieldedUtils {
 
 #[async_trait(?Send)]
 impl masp::ShieldedUtils for CLIShieldedUtils {
-    type C = tendermint_rpc::HttpClient;
+    type C = crate::facade::tendermint_rpc::HttpClient;
 
     fn local_tx_prover(&self) -> LocalTxProver {
         if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR) {

@@ -23,7 +23,7 @@ use tower::ServiceBuilder;
 use self::abortable::AbortableSpawner;
 use self::shims::abcipp_shim::AbciService;
 use crate::cli::args;
-use crate::config::utils::num_of_threads;
+use crate::config::utils::{convert_tm_addr_to_socket_addr, num_of_threads};
 use crate::config::TendermintMode;
 use crate::facade::tendermint_proto::abci::CheckTxType;
 use crate::facade::tower_abci::{response, split, Server};
@@ -92,7 +92,7 @@ impl Shell {
                 tracing::debug!("Request InitChain");
                 self.init_chain(
                     init,
-                    #[cfg(feature = "dev")]
+                    #[cfg(any(test, feature = "dev"))]
                     1,
                 )
                 .map(Response::InitChain)
@@ -408,7 +408,8 @@ fn start_abci_broadcaster_shell(
     task::JoinHandle<()>,
     thread::JoinHandle<()>,
 ) {
-    let rpc_address = config.tendermint.rpc_address.to_string();
+    let rpc_address =
+        convert_tm_addr_to_socket_addr(&config.cometbft.rpc.laddr);
     let RunAuxSetup {
         vp_wasm_compilation_cache,
         tx_wasm_compilation_cache,
@@ -421,41 +422,40 @@ fn start_abci_broadcaster_shell(
         tokio::sync::mpsc::unbounded_channel();
 
     // Start broadcaster
-    let broadcaster = if matches!(
-        config.tendermint.tendermint_mode,
-        TendermintMode::Validator
-    ) {
-        let (bc_abort_send, bc_abort_recv) =
-            tokio::sync::oneshot::channel::<()>();
+    let broadcaster =
+        if matches!(config.shell.tendermint_mode, TendermintMode::Validator) {
+            let (bc_abort_send, bc_abort_recv) =
+                tokio::sync::oneshot::channel::<()>();
 
-        spawner
-            .spawn_abortable("Broadcaster", move |aborter| async move {
-                // Construct a service for broadcasting protocol txs from the
-                // ledger
-                let mut broadcaster =
-                    Broadcaster::new(&rpc_address, broadcaster_receiver);
-                broadcaster.run(bc_abort_recv).await;
-                tracing::info!("Broadcaster is no longer running.");
+            spawner
+                .spawn_abortable("Broadcaster", move |aborter| async move {
+                    // Construct a service for broadcasting protocol txs from
+                    // the ledger
+                    let mut broadcaster =
+                        Broadcaster::new(rpc_address, broadcaster_receiver);
+                    broadcaster.run(bc_abort_recv).await;
+                    tracing::info!("Broadcaster is no longer running.");
 
-                drop(aborter);
-            })
-            .with_cleanup(async move {
-                let _ = bc_abort_send.send(());
-            })
-    } else {
-        spawn_dummy_task(())
-    };
+                    drop(aborter);
+                })
+                .with_cleanup(async move {
+                    let _ = bc_abort_send.send(());
+                })
+        } else {
+            spawn_dummy_task(())
+        };
 
     // Setup DB cache, it must outlive the DB instance that's in the shell
     let db_cache =
         rocksdb::Cache::new_lru_cache(db_block_cache_size_bytes as usize);
 
     // Construct our ABCI application.
-    let tendermint_mode = config.tendermint.tendermint_mode.clone();
-    let ledger_address = config.shell.ledger_address;
-    #[cfg(not(feature = "dev"))]
+    let tendermint_mode = config.shell.tendermint_mode.clone();
+    let proxy_app_address =
+        convert_tm_addr_to_socket_addr(&config.cometbft.proxy_app);
+    #[cfg(not(any(test, feature = "dev")))]
     let genesis = genesis::genesis(&config.shell.base_dir, &config.chain_id);
-    #[cfg(feature = "dev")]
+    #[cfg(any(test, feature = "dev"))]
     let genesis = genesis::genesis(1);
     let (shell, abci_service, service_handle) = AbcippShim::new(
         config,
@@ -476,7 +476,7 @@ fn start_abci_broadcaster_shell(
             let res = run_abci(
                 abci_service,
                 service_handle,
-                ledger_address,
+                proxy_app_address,
                 abci_abort_recv,
             )
             .await;
@@ -513,7 +513,7 @@ fn start_abci_broadcaster_shell(
 async fn run_abci(
     abci_service: AbciService,
     service_handle: tokio::sync::broadcast::Sender<()>,
-    ledger_address: SocketAddr,
+    proxy_app_address: SocketAddr,
     abort_recv: tokio::sync::oneshot::Receiver<()>,
 ) -> shell::Result<()> {
     // Split it into components.
@@ -541,7 +541,7 @@ async fn run_abci(
         .unwrap();
     tokio::select! {
         // Run the server with the ABCI service
-        status = server.listen(ledger_address) => {
+        status = server.listen(proxy_app_address) => {
             status.map_err(|err| Error::TowerServer(err.to_string()))
         },
         resp_sender = abort_recv => {
@@ -566,17 +566,17 @@ fn start_tendermint(
     spawner: &mut AbortableSpawner,
     config: &config::Ledger,
 ) -> task::JoinHandle<shell::Result<()>> {
-    let tendermint_dir = config.tendermint_dir();
+    let tendermint_dir = config.cometbft_dir();
     let chain_id = config.chain_id.clone();
-    let ledger_address = config.shell.ledger_address.to_string();
-    let tendermint_config = config.tendermint.clone();
+    let proxy_app_address = config.cometbft.proxy_app.to_string();
+    let config = config.clone();
     let genesis_time = config
         .genesis_time
         .clone()
         .try_into()
         .expect("expected RFC3339 genesis_time");
 
-    // Channel for signalling shut down to Tendermint process
+    // Channel for signalling shut down to cometbft process
     let (tm_abort_send, tm_abort_recv) =
         tokio::sync::oneshot::channel::<tokio::sync::oneshot::Sender<()>>();
 
@@ -586,8 +586,8 @@ fn start_tendermint(
                 tendermint_dir,
                 chain_id,
                 genesis_time,
-                ledger_address,
-                tendermint_config,
+                proxy_app_address,
+                config,
                 tm_abort_recv,
             )
             .map_err(Error::Tendermint)

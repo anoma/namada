@@ -9,8 +9,6 @@ use namada::types::key::*;
 use namada::types::storage::BlockHeight;
 use namada::types::time::DateTimeUtc;
 use serde_json::json;
-#[cfg(feature = "abciplus")]
-use tendermint::Moniker;
 #[cfg(feature = "abcipp")]
 use tendermint_abcipp::Moniker;
 use thiserror::Error;
@@ -20,32 +18,33 @@ use tokio::process::Command;
 
 use crate::cli::namada_version;
 use crate::config;
+#[cfg(feature = "abciplus")]
+use crate::facade::tendermint::Moniker;
 use crate::facade::tendermint::{block, Genesis};
-use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_config::{
-    Error as TendermintError, TendermintConfig, TxIndexConfig, TxIndexer,
+    Error as TendermintError, TendermintConfig,
 };
 
 /// Env. var to output Tendermint log to stdout
-pub const ENV_VAR_TM_STDOUT: &str = "NAMADA_TM_STDOUT";
+pub const ENV_VAR_TM_STDOUT: &str = "NAMADA_CMT_STDOUT";
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Failed to initialize Tendermint: {0}")]
+    #[error("Failed to initialize CometBFT: {0}")]
     Init(std::io::Error),
-    #[error("Failed to load Tendermint config file: {0}")]
+    #[error("Failed to load CometBFT config file: {0}")]
     LoadConfig(TendermintError),
-    #[error("Failed to open Tendermint config for writing: {0}")]
+    #[error("Failed to open CometBFT config for writing: {0}")]
     OpenWriteConfig(std::io::Error),
-    #[error("Failed to serialize Tendermint config TOML to string: {0}")]
+    #[error("Failed to serialize CometBFT config TOML to string: {0}")]
     ConfigSerializeToml(toml::ser::Error),
-    #[error("Failed to write Tendermint config: {0}")]
+    #[error("Failed to write CometBFT config: {0}")]
     WriteConfig(std::io::Error),
-    #[error("Failed to start up Tendermint node: {0}")]
+    #[error("Failed to start up CometBFT node: {0}")]
     StartUp(std::io::Error),
     #[error("{0}")]
     Runtime(String),
-    #[error("Failed to rollback tendermint state: {0}")]
+    #[error("Failed to rollback CometBFT state: {0}")]
     RollBack(String),
     #[error("Failed to convert to String: {0:?}")]
     TendermintPath(std::ffi::OsString),
@@ -53,17 +52,17 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Check if the TENDERMINT env var has been set and use that as the
-/// location of the tendermint binary. Otherwise, assume it is on path
+/// Check if the COMET env var has been set and use that as the
+/// location of the COMET binary. Otherwise, assume it is on path
 ///
 /// Returns an error if the env var is defined but not a valid Unicode.
 fn from_env_or_default() -> Result<String> {
-    match std::env::var("TENDERMINT") {
+    match std::env::var("COMETBFT") {
         Ok(path) => {
-            tracing::info!("Using tendermint path from env variable: {}", path);
+            tracing::info!("Using CometBFT path from env variable: {}", path);
             Ok(path)
         }
-        Err(std::env::VarError::NotPresent) => Ok(String::from("tendermint")),
+        Err(std::env::VarError::NotPresent) => Ok(String::from("cometbft")),
         Err(std::env::VarError::NotUnicode(msg)) => {
             Err(Error::TendermintPath(msg))
         }
@@ -75,15 +74,15 @@ pub async fn run(
     home_dir: PathBuf,
     chain_id: ChainId,
     genesis_time: DateTimeUtc,
-    ledger_address: String,
-    config: config::Tendermint,
+    proxy_app_address: String,
+    config: config::Ledger,
     abort_recv: tokio::sync::oneshot::Receiver<
         tokio::sync::oneshot::Sender<()>,
     >,
 ) -> Result<()> {
     let home_dir_string = home_dir.to_string_lossy().to_string();
     let tendermint_path = from_env_or_default()?;
-    let mode = config.tendermint_mode.to_str().to_owned();
+    let mode = config.shell.tendermint_mode.to_str().to_owned();
 
     #[cfg(feature = "dev")]
     // This has to be checked before we run tendermint init
@@ -115,13 +114,13 @@ pub async fn run(
     #[cfg(not(feature = "abcipp"))]
     write_tm_genesis(&home_dir, chain_id, genesis_time).await;
 
-    update_tendermint_config(&home_dir, config).await?;
+    update_tendermint_config(&home_dir, config.cometbft).await?;
 
     let mut tendermint_node = Command::new(&tendermint_path);
     tendermint_node.args([
         "start",
         "--proxy_app",
-        &ledger_address,
+        &proxy_app_address,
         "--home",
         &home_dir_string,
     ]);
@@ -138,7 +137,7 @@ pub async fn run(
         .kill_on_drop(true)
         .spawn()
         .map_err(Error::StartUp)?;
-    tracing::info!("Tendermint node started");
+    tracing::info!("CometBFT node started");
 
     tokio::select! {
         status = tendermint_node.wait() => {
@@ -348,23 +347,15 @@ pub fn write_validator_state(home_dir: impl AsRef<Path>) {
 
 async fn update_tendermint_config(
     home_dir: impl AsRef<Path>,
-    tendermint_config: config::Tendermint,
+    config: TendermintConfig,
 ) -> Result<()> {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("config.toml");
-    let mut config =
-        TendermintConfig::load_toml_file(&path).map_err(Error::LoadConfig)?;
+    let mut config = config.clone();
 
     config.moniker =
         Moniker::from_str(&format!("{}-{}", config.moniker, namada_version()))
             .expect("Invalid moniker");
-
-    config.p2p.laddr =
-        TendermintAddress::from_str(&tendermint_config.p2p_address.to_string())
-            .unwrap();
-    config.p2p.persistent_peers = tendermint_config.p2p_persistent_peers;
-    config.p2p.pex = tendermint_config.p2p_pex;
-    config.p2p.allow_duplicate_ip = tendermint_config.p2p_allow_duplicate_ip;
 
     // In "dev", only produce blocks when there are txs or when the AppHash
     // changes
@@ -375,47 +366,9 @@ async fn update_tendermint_config(
     // again in the future.
     config.mempool.keep_invalid_txs_in_cache = false;
 
-    config.rpc.laddr =
-        TendermintAddress::from_str(&tendermint_config.rpc_address.to_string())
-            .unwrap();
     // Bumped from the default `1_000_000`, because some WASMs can be
     // quite large
     config.rpc.max_body_bytes = 2_000_000;
-
-    config.instrumentation.prometheus =
-        tendermint_config.instrumentation_prometheus;
-    config.instrumentation.prometheus_listen_addr = tendermint_config
-        .instrumentation_prometheus_listen_addr
-        .to_string();
-    config.instrumentation.namespace =
-        tendermint_config.instrumentation_namespace;
-
-    #[cfg(feature = "abciplus")]
-    {
-        config.consensus.timeout_propose =
-            tendermint_config.consensus_timeout_propose;
-        config.consensus.timeout_propose_delta =
-            tendermint_config.consensus_timeout_propose_delta;
-        config.consensus.timeout_prevote =
-            tendermint_config.consensus_timeout_prevote;
-        config.consensus.timeout_prevote_delta =
-            tendermint_config.consensus_timeout_prevote_delta;
-        config.consensus.timeout_precommit =
-            tendermint_config.consensus_timeout_precommit;
-        config.consensus.timeout_precommit_delta =
-            tendermint_config.consensus_timeout_precommit_delta;
-        config.consensus.timeout_commit =
-            tendermint_config.consensus_timeout_commit;
-    }
-
-    let indexer = if tendermint_config.tx_index {
-        TxIndexer::Kv
-    } else {
-        TxIndexer::Null
-    };
-    #[cfg(feature = "abcipp")]
-    let indexer = [indexer];
-    config.tx_index = TxIndexConfig { indexer };
 
     let mut file = OpenOptions::new()
         .write(true)
@@ -486,8 +439,8 @@ async fn write_tm_genesis(
             )
         });
     let data = serde_json::to_vec_pretty(&genesis)
-        .expect("Couldn't encode the Tendermint genesis file");
+        .expect("Couldn't encode the CometBFT genesis file");
     file.write_all(&data[..])
         .await
-        .expect("Couldn't write the Tendermint genesis file");
+        .expect("Couldn't write the CometBFT genesis file");
 }

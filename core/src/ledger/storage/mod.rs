@@ -12,7 +12,6 @@ pub mod write_log;
 
 use core::fmt::Debug;
 use std::cmp::Ordering;
-use std::format;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use merkle_tree::{

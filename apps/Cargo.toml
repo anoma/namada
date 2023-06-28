@@ -1,13 +1,17 @@
 [package]
-authors = ["Heliax AG <hello@heliax.dev>"]
-description = "Namada apps"
-edition = "2021"
-license = "GPL-3.0"
 name = "namada_apps"
-readme = "../README.md"
+description = "Namada CLI apps"
 resolver = "2"
-version = "0.17.2"
 default-run = "namada"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -52,102 +56,86 @@ testing = ["dev"]
 abciplus = [
     "namada/abciplus",
     "namada/tendermint-rpc",
-    "tendermint",
-    "tendermint-config",
-    "tendermint-rpc",
-    "tendermint-proto",
-    "tower-abci",
 ]
 
 [dependencies]
-namada = {path = "../shared", default-features = false, features = ["wasm-runtime", "ferveo-tpke", "masp-tx-gen", "multicore"]}
-ark-serialize = "0.3.0"
-ark-std = "0.3.0"
-# branch = "bat/arse-merkle-tree"
-arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "e086b235ed6e68929bf73f617dd61cd17b000a56", features = ["std", "borsh"]}
-assert_matches = "1.5.0"
-async-std = {version = "=1.11.0", features = ["unstable"]}
-async-trait = "0.1.51"
-base64 = "0.13.0"
-bech32 = "0.8.0"
-blake2b-rs = "0.2.0"
-borsh = "0.9.0"
-byte-unit = "4.0.13"
-byteorder = "1.4.2"
-# https://github.com/clap-rs/clap/issues/1037
-clap = {git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2", default-features = false, features = ["std", "suggestions", "color", "cargo"]}
-color-eyre = "0.5.10"
-config = "0.11.0"
-data-encoding = "2.3.2"
-derivative = "2.2.0"
-directories = "4.0.1"
-ed25519-consensus = "1.2.0"
-ferveo = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
-ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
-eyre = "0.6.5"
-flate2 = "1.0.22"
-file-lock = "2.0.2"
-futures = "0.3"
-itertools = "0.10.1"
-libc = "0.2.97"
-libloading = "0.7.2"
-num-derive = "0.3.3"
-num-rational = "0.4.1"
-num-traits = "0.2.14"
-num_cpus = "1.13.0"
-once_cell = "1.8.0"
-orion = "0.16.0"
-prost = "0.11.6"
-prost-types = "0.11.6"
-rand = {version = "0.8", default-features = false}
-rand_core = {version = "0.6", default-features = false}
-rayon = "=1.5.3"
-regex = "1.4.5"
-reqwest = "0.11.4"
-ripemd = "0.1"
-rlimit = "0.5.4"
-rocksdb = {version = "0.21.0", features = ['zstd', 'jemalloc'], default-features = false}
-rpassword = "5.0.1"
-serde = {version = "1.0.125", features = ["derive"]}
-serde_bytes = "0.11.5"
-serde_json = {version = "1.0.62", features = ["raw_value"]}
-sha2 = "0.9.3"
-signal-hook = "0.3.9"
-# sysinfo with disabled multithread feature
-sysinfo = {version = "=0.21.1", default-features = false}
-tar = "0.4.37"
-# temporarily using fork work-around
-tendermint = {version = "0.23.6", optional = true}
-tendermint-config = {version = "0.23.6", optional = true}
-tendermint-proto = {version = "0.23.6", optional = true}
-tendermint-rpc = {version = "0.23.6", features = ["http-client", "websocket-client"], optional = true}
-thiserror = "1.0.38"
-tokio = {version = "1.8.2", features = ["full"]}
-toml = "0.5.8"
-tonic = "0.8.3"
-tower = "0.4"
-# Also, using the same version of tendermint-rs as we do here.
-# with a patch for https://github.com/penumbra-zone/tower-abci/issues/7.
-tower-abci = {version = "0.1.0", optional = true}
-tracing = "0.1.30"
-tracing-log = "0.1.2"
-tracing-subscriber = {version = "0.3.7", features = ["env-filter", "json"]}
-websocket = "0.26.2"
-winapi = "0.3.9"
-#libmasp = { git = "https://github.com/anoma/masp", branch = "murisi/masp-incentive" }
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "9320c6b69b5d2e97134866871e960f0a31703813", features = ["transparent-inputs"] }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "9320c6b69b5d2e97134866871e960f0a31703813", features = ["bundled-prover", "download-params"] }
-bimap = {version = "0.6.2", features = ["serde"]}
-zeroize = "1.5.5"
+namada = {path = "../shared", features = ["ferveo-tpke", "masp-tx-gen", "multicore", "http-client"]}
+ark-serialize.workspace = true
+ark-std.workspace = true
+arse-merkle-tree = { workspace = true, features = ["blake2b"] }
+assert_matches.workspace = true
+async-std = {workspace = true, features = ["unstable"]}
+async-trait.workspace = true
+base64.workspace = true
+bech32.workspace = true
+bimap.workspace = true
+blake2b-rs.workspace = true
+borsh.workspace = true
+byte-unit.workspace = true
+byteorder.workspace = true
+clap.workspace = true
+color-eyre.workspace = true
+config.workspace = true
+data-encoding.workspace = true
+derivative.workspace = true
+directories.workspace = true
+ed25519-consensus.workspace = true
+eyre.workspace = true
+ferveo-common.workspace = true
+ferveo.workspace = true
+file-lock.workspace = true
+flate2.workspace = true
+futures.workspace = true
+itertools.workspace = true
+libc.workspace = true
+libloading.workspace = true
+masp_primitives = { workspace = true, features = ["transparent-inputs"] }
+masp_proofs = { workspace = true, features = ["bundled-prover", "download-params"] }
+num_cpus.workspace = true
+num-derive.workspace = true
+num-rational.workspace = true
+num-traits.workspace = true
+once_cell.workspace = true
+orion.workspace = true
+prost-types.workspace = true
+prost.workspace = true
+rand_core.workspace = true
+rand.workspace = true
+rayon.workspace = true
+regex.workspace = true
+reqwest.workspace = true
+ripemd.workspace = true
+rlimit.workspace = true
+rocksdb.workspace = true
+rpassword.workspace = true
+serde_bytes.workspace = true
+serde_json = {workspace = true, features = ["raw_value"]}
+serde.workspace = true
+sha2.workspace = true
+signal-hook.workspace = true
+sysinfo.workspace = true
+tar.workspace = true
+tendermint-config.workspace = true
+thiserror.workspace = true
+tokio = {workspace = true, features = ["full"]}
+toml.workspace = true
+tonic.workspace = true
+tower-abci.workspace = true
+tower.workspace = true
+tracing-log.workspace = true
+tracing-subscriber = { workspace = true, features = ["std", "json", "ansi", "tracing-log"]}
+tracing.workspace = true
+winapi.workspace = true
+zeroize.workspace = true
 
 [dev-dependencies]
 namada = {path = "../shared", default-features = false, features = ["testing", "wasm-runtime"]}
 namada_test_utils = {path = "../test_utils"}
-bit-set = "0.5.2"
-proptest = "1.2.0"
-tempfile = "3.2.0"
-test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
-tokio-test = "0.4.2"
+bit-set.workspace = true
+proptest.workspace = true
+tempfile.workspace = true
+test-log.workspace = true
+tokio-test.workspace = true
 
 [build-dependencies]
-git2 = "0.13.25"
+git2.workspace = true

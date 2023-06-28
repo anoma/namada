@@ -41,10 +41,11 @@ mod tests {
 
     proptest! {
         /// In this test we setup the ledger and PoS system with an arbitrary
-        /// initial state with 1 genesis validator and arbitrary PoS parameters. We then
-        /// generate an arbitrary bond that we'd like to apply.
+        /// initial state with 1 genesis validator and arbitrary PoS parameters.
+        /// We then generate an validator commission rate change that we'd like
+        /// to apply.
         ///
-        /// After we apply the bond, we check that all the storage values
+        /// After we apply the tx, we check that all the storage values
         /// in PoS system have been updated as expected and then we also check
         /// that this transaction is accepted by the PoS validity predicate.
         #[test]
@@ -132,12 +133,6 @@ mod tests {
 
         // After pipeline, the commission rates should have changed
         for epoch in pos_params.pipeline_len..=pos_params.unbonding_len {
-            assert_ne!(
-                commission_rates_pre[epoch as usize],
-                commission_rate_handle.get(ctx(), Epoch(epoch), &pos_params)?,
-                "The commission rate after the pipeline offset must have \
-                 changed - checking in epoch: {epoch}"
-            );
             assert_eq!(
                 Some(commission_change.new_rate),
                 commission_rate_handle.get(ctx(), Epoch(epoch), &pos_params)?,
@@ -172,6 +167,7 @@ mod tests {
         rate_pre: Dec,
         max_change: Dec,
     ) -> impl Strategy<Value = Dec> {
+        assert!(max_change > Dec::zero());
         // Arbitrary non-zero change
         let arb_change = |ceil: Dec| {
             // Clamp the `ceil` to `max_change` and convert to an int
@@ -214,7 +210,11 @@ mod tests {
     ) -> impl Strategy<Value = transaction::pos::CommissionChange> {
         (
             arb_established_address(),
-            arb_new_rate(rate_pre, max_change),
+            if max_change.is_zero() {
+                Just(Dec::zero()).boxed()
+            } else {
+                arb_new_rate(rate_pre, max_change).boxed()
+            },
         )
             .prop_map(|(validator, new_rate)| {
                 transaction::pos::CommissionChange {
