@@ -279,6 +279,15 @@ pub struct QueryConversions<C: NamadaTypes = SdkTypes> {
 
 /// Query token balance(s)
 #[derive(Clone, Debug)]
+pub struct QueryAccount<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+    /// Address of an owner
+    pub owner: C::Address
+}
+
+/// Query token balance(s)
+#[derive(Clone, Debug)]
 pub struct QueryBalance<C: NamadaTypes = SdkTypes> {
     /// Common query args
     pub query: Query<C>,

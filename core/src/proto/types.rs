@@ -20,6 +20,7 @@ use thiserror::Error;
 use super::generated::types;
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint_proto::abci::ResponseDeliverTx;
+use crate::types::account::AccountPublicKeysMap;
 use crate::types::address::Address;
 use crate::types::chain::ChainId;
 use crate::types::key::*;
@@ -1022,7 +1023,7 @@ impl Tx {
     pub fn verify_section_signatures(
         &self,
         hash: &crate::types::hash::Hash,
-        public_keys_index_map: HashMap<u8, common::PublicKey>,
+        public_keys_index_map: AccountPublicKeysMap,
         threshold: u8,
         max_signatures: Option<u8>,
     ) -> std::result::Result<(), Error> {
@@ -1045,11 +1046,11 @@ impl Tx {
                     }
                     for signature_index in &signatures.signatures {
                         let public_key =
-                            public_keys_index_map.get(&signature_index.index);
+                            public_keys_index_map.get_public_key_from_index(signature_index.index);
                         if let Some(public_key) = public_key {
                             let is_valid_signature =
                                 common::SigScheme::verify_signature_raw(
-                                    public_key,
+                                    &public_key,
                                     hash.as_ref(),
                                     &signature_index.signature,
                                 )

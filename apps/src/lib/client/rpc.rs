@@ -19,6 +19,7 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::transaction::components::Amount;
 use masp_primitives::zip32::ExtendedFullViewingKey;
+use namada::core::types::account::Account;
 use namada::core::types::transaction::governance::ProposalType;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
@@ -1110,6 +1111,17 @@ pub async fn query_proposal_result<
             }
         }
     }
+}
+
+pub async fn query_account<
+    C: namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    args: args::QueryAccount,
+) {
+    unwrap_client_response::<C, Option<Account>>(
+        RPC.shell().account(client, &args.owner).await,
+    );
 }
 
 pub async fn query_protocol_parameters<

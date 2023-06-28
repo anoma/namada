@@ -80,7 +80,7 @@ pub fn is_proposal_accepted(ctx: &Ctx, proposal_id: u64) -> VpResult {
 /// Verify section signatures
 pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
     let public_keys_index_map =
-        storage_api::account::public_keys(&ctx.pre(), owner)?;
+        storage_api::account::public_keys_index_map(&ctx.pre(), owner)?;
     let threshold =
         storage_api::account::threshold(&ctx.pre(), owner)?.unwrap_or(1);
 

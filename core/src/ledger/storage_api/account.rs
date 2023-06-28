@@ -1,8 +1,7 @@
 //! Cryptographic signature keys storage API
 
-use std::collections::HashMap;
-
 use super::*;
+use crate::types::account::AccountPublicKeysMap;
 use crate::types::address::Address;
 use crate::types::key::*;
 
@@ -37,15 +36,39 @@ where
 pub fn public_keys<S>(
     storage: &S,
     owner: &Address,
-) -> Result<HashMap<u8, common::PublicKey>>
+) -> Result<Vec<common::PublicKey>>
 where
     S: StorageRead,
 {
-    let mut public_keys_map = HashMap::new();
 
-    for item in pks_handle(owner).iter(storage)? {
-        let (index, public_key) = item?;
-        public_keys_map.insert(index, public_key);
-    }
-    Ok(public_keys_map)
+    let public_keys = pks_handle(owner).iter(storage)?.filter_map(|data| {
+        match data {
+            Ok((_index, public_key)) => Some(public_key),
+            Err(_) => None,
+        }
+    }).collect::<Vec<common::PublicKey>>();
+
+    Ok(public_keys)
+}
+
+/// Get the public key index map associated with an account
+pub fn public_keys_index_map<S>(
+    storage: &S,
+    owner: &Address,
+) -> Result<AccountPublicKeysMap>
+where
+    S: StorageRead,
+{
+    let public_keys = public_keys(storage, owner)?;
+
+    Ok(AccountPublicKeysMap::from_iter(public_keys))
+}
+
+/// Check if an account exists in storage
+pub fn exists<S>(storage: &S, owner: &Address) -> Result<bool>
+where
+    S: StorageRead,
+{
+    let public_keys_prefix_key = pks_key_prefix(owner);
+    storage.has_key(&public_keys_prefix_key)
 }

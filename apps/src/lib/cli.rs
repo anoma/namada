@@ -167,6 +167,7 @@ pub mod cmds {
                 .subcommand(Withdraw::def().display_order(2))
                 // Queries
                 .subcommand(QueryEpoch::def().display_order(3))
+                .subcommand(QueryAccount::def().display_order(3))
                 .subcommand(QueryTransfers::def().display_order(3))
                 .subcommand(QueryConversions::def().display_order(3))
                 .subcommand(QueryBlock::def().display_order(3))
@@ -203,6 +204,7 @@ pub mod cmds {
             let unbond = Self::parse_with_ctx(matches, Unbond);
             let withdraw = Self::parse_with_ctx(matches, Withdraw);
             let query_epoch = Self::parse_with_ctx(matches, QueryEpoch);
+            let query_account = Self::parse_with_ctx(matches, QueryAccount);
             let query_transfers = Self::parse_with_ctx(matches, QueryTransfers);
             let query_conversions =
                 Self::parse_with_ctx(matches, QueryConversions);
@@ -251,6 +253,7 @@ pub mod cmds {
                 .or(query_proposal)
                 .or(query_proposal_result)
                 .or(query_protocol_parameters)
+                .or(query_account)
                 .or(utils)
         }
     }
@@ -301,6 +304,7 @@ pub mod cmds {
         Unbond(Unbond),
         Withdraw(Withdraw),
         QueryEpoch(QueryEpoch),
+        QueryAccount(QueryAccount),
         QueryTransfers(QueryTransfers),
         QueryConversions(QueryConversions),
         QueryBlock(QueryBlock),
@@ -1284,6 +1288,25 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Query the epoch of the last committed block.")
                 .add_args::<args::Query<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryAccount(pub args::QueryAccount<args::CliTypes>);
+
+    impl SubCmd for QueryAccount {
+        const CMD: &'static str = "account";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| QueryAccount(args::QueryAccount::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query the substorage space of a specific enstablished address.")
+                .add_args::<args::QueryAccount<args::CliTypes>>()
         }
     }
 
@@ -2949,6 +2972,35 @@ pub mod args {
                     TOKEN_OPT.def().about(
                         "The token address for which to query conversions.",
                     ),
+                )
+        }
+    }
+
+    impl CliToSdk<QueryAccount<SdkTypes>> for QueryAccount<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryAccount<SdkTypes> {
+            QueryAccount::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                owner: ctx.get(&self.owner)
+            }
+        }
+    }
+
+    impl Args for QueryAccount<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let owner = OWNER.parse(matches);
+            Self {
+                query,
+                owner
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>()
+                .arg(
+                    BALANCE_OWNER
+                        .def()
+                        .about("The substorage space address to query."),
                 )
         }
     }
