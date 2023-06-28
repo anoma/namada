@@ -430,13 +430,15 @@ where
     let account_exists = storage_api::account::exists(ctx.wl_storage, &owner)?;
 
     if account_exists {
-        let public_keys = storage_api::account::public_keys(ctx.wl_storage, &owner)?;
-        let threshold = storage_api::account::threshold(ctx.wl_storage, &owner)?;
-        
+        let public_keys =
+            storage_api::account::public_keys(ctx.wl_storage, &owner)?;
+        let threshold =
+            storage_api::account::threshold(ctx.wl_storage, &owner)?;
+
         Ok(Some(Account {
             public_keys_map: AccountPublicKeysMap::from_iter(public_keys),
             address: owner,
-            threshold: threshold.unwrap_or(1)
+            threshold: threshold.unwrap_or(1),
         }))
     } else {
         Ok(None)

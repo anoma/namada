@@ -1445,7 +1445,7 @@ pub async fn submit_init_account<
     let data = InitAccount {
         public_keys,
         vp_code_hash: extra_hash,
-        threshold
+        threshold,
     };
     let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
     tx.set_data(Data::new(data));

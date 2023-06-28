@@ -77,7 +77,8 @@ pub mod cmds {
             let tx_transfer = SubCmd::parse(matches).map(Self::TxTransfer);
             let tx_ibc_transfer =
                 SubCmd::parse(matches).map(Self::TxIbcTransfer);
-            let tx_update_account = SubCmd::parse(matches).map(Self::TxUpdateAccount);
+            let tx_update_account =
+                SubCmd::parse(matches).map(Self::TxUpdateAccount);
             let tx_init_proposal =
                 SubCmd::parse(matches).map(Self::TxInitProposal);
             let tx_vote_proposal =
@@ -191,7 +192,8 @@ pub mod cmds {
             let tx_custom = Self::parse_with_ctx(matches, TxCustom);
             let tx_transfer = Self::parse_with_ctx(matches, TxTransfer);
             let tx_ibc_transfer = Self::parse_with_ctx(matches, TxIbcTransfer);
-            let tx_update_account = Self::parse_with_ctx(matches, TxUpdateAccount);
+            let tx_update_account =
+                Self::parse_with_ctx(matches, TxUpdateAccount);
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
             let tx_init_validator =
                 Self::parse_with_ctx(matches, TxInitValidator);
@@ -1156,9 +1158,9 @@ pub mod cmds {
         const CMD: &'static str = "update";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| TxUpdateAccount(args::TxUpdateAccount::parse(matches)))
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxUpdateAccount(args::TxUpdateAccount::parse(matches))
+            })
         }
 
         fn def() -> App {
@@ -1305,7 +1307,10 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query the substorage space of a specific enstablished address.")
+                .about(
+                    "Query the substorage space of a specific enstablished \
+                     address.",
+                )
                 .add_args::<args::QueryAccount<args::CliTypes>>()
         }
     }
@@ -2980,7 +2985,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> QueryAccount<SdkTypes> {
             QueryAccount::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
-                owner: ctx.get(&self.owner)
+                owner: ctx.get(&self.owner),
             }
         }
     }
@@ -2989,19 +2994,15 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let owner = OWNER.parse(matches);
-            Self {
-                query,
-                owner
-            }
+            Self { query, owner }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query<CliTypes>>()
-                .arg(
-                    BALANCE_OWNER
-                        .def()
-                        .about("The substorage space address to query."),
-                )
+            app.add_args::<Query<CliTypes>>().arg(
+                BALANCE_OWNER
+                    .def()
+                    .about("The substorage space address to query."),
+            )
         }
     }
 

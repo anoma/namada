@@ -1045,8 +1045,8 @@ impl Tx {
                         ));
                     }
                     for signature_index in &signatures.signatures {
-                        let public_key =
-                            public_keys_index_map.get_public_key_from_index(signature_index.index);
+                        let public_key = public_keys_index_map
+                            .get_public_key_from_index(signature_index.index);
                         if let Some(public_key) = public_key {
                             let is_valid_signature =
                                 common::SigScheme::verify_signature_raw(

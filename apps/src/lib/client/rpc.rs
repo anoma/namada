@@ -1113,9 +1113,7 @@ pub async fn query_proposal_result<
     }
 }
 
-pub async fn query_account<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn query_account<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     args: args::QueryAccount,
 ) {

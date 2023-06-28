@@ -313,10 +313,9 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.query.ledger_address.clone())
                             .unwrap();
-                        let args = args.to_sdk(&mut ctx);
+                    let args = args.to_sdk(&mut ctx);
                     rpc::query_account(&client, args).await;
                 }
-                
             }
         }
         cli::NamadaClient::WithoutContext(cmd, global_args) => match cmd {

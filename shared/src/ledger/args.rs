@@ -283,7 +283,7 @@ pub struct QueryAccount<C: NamadaTypes = SdkTypes> {
     /// Common query args
     pub query: Query<C>,
     /// Address of an owner
-    pub owner: C::Address
+    pub owner: C::Address,
 }
 
 /// Query token balance(s)

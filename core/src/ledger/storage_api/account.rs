@@ -40,13 +40,13 @@ pub fn public_keys<S>(
 where
     S: StorageRead,
 {
-
-    let public_keys = pks_handle(owner).iter(storage)?.filter_map(|data| {
-        match data {
+    let public_keys = pks_handle(owner)
+        .iter(storage)?
+        .filter_map(|data| match data {
             Ok((_index, public_key)) => Some(public_key),
             Err(_) => None,
-        }
-    }).collect::<Vec<common::PublicKey>>();
+        })
+        .collect::<Vec<common::PublicKey>>();
 
     Ok(public_keys)
 }

@@ -1,5 +1,6 @@
 //! Types definitions.
 
+pub mod account;
 pub mod address;
 pub mod chain;
 pub mod governance;
@@ -13,4 +14,3 @@ pub mod time;
 pub mod token;
 pub mod transaction;
 pub mod validity_predicate;
-pub mod account;
