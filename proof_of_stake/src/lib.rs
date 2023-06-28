@@ -904,7 +904,11 @@ where
             .get_delta_val(storage, ep, &params)?
             .unwrap_or_default();
         if !delta.is_zero() {
-            tracing::debug!("bond ∆ at epoch {}: {}", ep, delta);
+            tracing::debug!(
+                "bond ∆ at epoch {}: {}",
+                ep,
+                delta.to_string_native()
+            );
         }
     }
 
@@ -930,7 +934,11 @@ where
             .get_delta_val(storage, ep, &params)?
             .unwrap_or_default();
         if !delta.is_zero() {
-            tracing::debug!("bond ∆ at epoch {}: {}", ep, delta);
+            tracing::debug!(
+                "bond ∆ at epoch {}: {}",
+                ep,
+                delta.to_string_native()
+            );
         }
     }
 
@@ -1574,7 +1582,11 @@ where
             .get_delta_val(storage, ep, &params)?
             .unwrap_or_default();
         if !delta.is_zero() {
-            tracing::debug!("bond ∆ at epoch {}: {}", ep, delta);
+            tracing::debug!(
+                "bond ∆ at epoch {}: {}",
+                ep,
+                delta.to_string_native()
+            );
         }
     }
 
@@ -1676,12 +1688,16 @@ where
             .get_delta_val(storage, ep, &params)?
             .unwrap_or_default();
         if !delta.is_zero() {
-            tracing::debug!("bond ∆ at epoch {}: {}", ep, delta);
+            tracing::debug!(
+                "bond ∆ at epoch {}: {}",
+                ep,
+                delta.to_string_native()
+            );
         }
     }
     tracing::debug!(
         "Token change including slashes on unbond = {}",
-        -amount_after_slashing
+        (-amount_after_slashing).to_string_native()
     );
 
     // Update the validator set at the pipeline offset. Since unbonding from a
@@ -3324,7 +3340,7 @@ where
             tracing::debug!(
                 "Epoch {}\nLast slash = {}",
                 current_epoch + offset,
-                last_slash
+                last_slash.to_string_native()
             );
             let mut recent_unbonds = token::Change::default();
             let unbonds =
@@ -3417,7 +3433,7 @@ where
 
             tracing::debug!(
                 "Deltas change = {} at offset {} for validator {}",
-                delta,
+                delta.to_string_native(),
                 offset,
                 &validator
             );

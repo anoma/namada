@@ -1323,7 +1323,6 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                             .expect(
                                 "found note with invalid value or asset type",
                             );
-                    break;
                 }
                 _ => {}
             }
@@ -1345,13 +1344,16 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         // Obtain the balance that will be exchanged
         let (amt, ep) =
             Self::compute_pinned_balance(client, owner, viewing_key).await?;
+        println!("Pinned balance: {:?}", amt);
         // Establish connection with which to do exchange rate queries
         let amount = self.decode_all_amounts(client, amt).await;
+        println!("Decoded pinned balance: {:?}", amount);
         // Finally, exchange the balance to the transaction's epoch
         let computed_amount = self
             .compute_exchanged_amount(client, amount, ep, HashMap::new())
             .await
             .0;
+        println!("Exchanged amount: {:?}", computed_amount);
         Ok((self.decode_all_amounts(client, computed_amount).await, ep))
     }
 

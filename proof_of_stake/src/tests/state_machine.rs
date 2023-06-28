@@ -936,7 +936,7 @@ impl ConcretePosState {
                     "Consensus val {}, stake: {} ({})",
                     &validator,
                     bonded_stake.to_string_native(),
-                    deltas_stake
+                    deltas_stake.to_string_native(),
                 );
                 assert!(!deltas_stake.is_negative());
                 assert_eq!(
@@ -989,7 +989,7 @@ impl ConcretePosState {
                     "Below-cap val {}, stake: {} ({})",
                     &validator,
                     bonded_stake.to_string_native(),
-                    deltas_stake
+                    deltas_stake.to_string_native(),
                 );
                 assert_eq!(
                     bonded_stake,
@@ -1065,7 +1065,11 @@ impl ConcretePosState {
                         .get_sum(&self.s, epoch, params)
                         .unwrap()
                         .unwrap_or_default();
-                    tracing::debug!("Jailed val {}, stake {}", &val, stake);
+                    tracing::debug!(
+                        "Jailed val {}, stake {}",
+                        &val,
+                        stake.to_string_native()
+                    );
 
                     assert_eq!(
                         state,
@@ -1976,14 +1980,25 @@ impl AbstractPosState {
 
         tracing::debug!("Bonds before decrementing");
         for (start, amnt) in bonds.iter() {
-            tracing::debug!("Bond epoch {} - amnt {}", start, amnt);
+            tracing::debug!(
+                "Bond epoch {} - amnt {}",
+                start,
+                amnt.to_string_native()
+            );
         }
 
         for (bond_epoch, bond_amnt) in bonds.iter_mut().rev() {
-            tracing::debug!("remaining {}", remaining);
-            tracing::debug!("Bond epoch {} - amnt {}", bond_epoch, bond_amnt);
+            tracing::debug!("remaining {}", remaining.to_string_native());
+            tracing::debug!(
+                "Bond epoch {} - amnt {}",
+                bond_epoch,
+                bond_amnt.to_string_native()
+            );
             let to_unbond = cmp::min(*bond_amnt, remaining);
-            tracing::debug!("to_unbond (init) = {}", to_unbond);
+            tracing::debug!(
+                "to_unbond (init) = {}",
+                to_unbond.to_string_native()
+            );
             *bond_amnt -= to_unbond;
             *unbonds += token::Amount::from_change(to_unbond);
 
@@ -2009,7 +2024,7 @@ impl AbstractPosState {
             .change();
             tracing::debug!(
                 "Cur amnt after slashing = {}",
-                &amount_after_slashing
+                &amount_after_slashing.to_string_native()
             );
 
             let amt = unbond_records.entry(*bond_epoch).or_default();
@@ -2023,7 +2038,11 @@ impl AbstractPosState {
 
         tracing::debug!("Bonds after decrementing");
         for (start, amnt) in bonds.iter() {
-            tracing::debug!("Bond epoch {} - amnt {}", start, amnt);
+            tracing::debug!(
+                "Bond epoch {} - amnt {}",
+                start,
+                amnt.to_string_native()
+            );
         }
 
         let pipeline_state = self
@@ -2238,7 +2257,7 @@ impl AbstractPosState {
                 tracing::debug!(
                     "Val {} stake at infraction {}",
                     validator,
-                    stake_at_infraction
+                    stake_at_infraction.to_string_native(),
                 );
 
                 let mut total_rate = Dec::zero();
@@ -2346,7 +2365,7 @@ impl AbstractPosState {
                     tracing::debug!(
                         "Epoch {}\nLast slash = {}",
                         self.epoch + offset,
-                        last_slash
+                        last_slash.to_string_native(),
                     );
                     let mut recent_unbonds = token::Change::default();
                     let unbond_records = self
@@ -2411,7 +2430,7 @@ impl AbstractPosState {
                     }
                     tracing::debug!(
                         "stake at infraction {}",
-                        stake_at_infraction
+                        stake_at_infraction.to_string_native(),
                     );
                     tracing::debug!(
                         "total unbonded {}",
@@ -2423,7 +2442,7 @@ impl AbstractPosState {
                     tracing::debug!(
                         "Offset {} diff_slashed_amount {}",
                         offset,
-                        diff_slashed_amount
+                        diff_slashed_amount.to_string_native(),
                     );
                     last_slash = this_slash;
                     // total_unbonded = token::Amount::default();
@@ -2446,7 +2465,10 @@ impl AbstractPosState {
                         .unwrap_or_default()
                         - recent_unbonds;
 
-                    tracing::debug!("\nUnslashable bonds = {}", sum_post_bonds);
+                    tracing::debug!(
+                        "\nUnslashable bonds = {}",
+                        sum_post_bonds.to_string_native()
+                    );
                     let validator_stake_at_offset = self
                         .validator_stakes
                         .entry(self.epoch + offset)
@@ -2459,18 +2481,18 @@ impl AbstractPosState {
                     tracing::debug!(
                         "Val stake pre (epoch {}) = {}",
                         self.epoch + offset,
-                        validator_stake_at_offset
+                        validator_stake_at_offset.to_string_native(),
                     );
                     tracing::debug!(
                         "Slashable stake at offset = {}",
-                        slashable_stake_at_offset
+                        slashable_stake_at_offset.to_string_native(),
                     );
                     let change = cmp::max(
                         -slashable_stake_at_offset,
                         diff_slashed_amount,
                     );
 
-                    tracing::debug!("Change = {}", change);
+                    tracing::debug!("Change = {}", change.to_string_native());
                     *validator_stake_at_offset += change;
 
                     for os in (offset + 1)..=self.params.pipeline_len {
@@ -2492,7 +2514,7 @@ impl AbstractPosState {
                         tracing::debug!(
                             "New stake at epoch {} = {}",
                             self.epoch + os,
-                            offset_stake
+                            offset_stake.to_string_native()
                         );
                     }
                 }
@@ -2684,7 +2706,7 @@ impl AbstractPosState {
                         "Consensus val {}, stake {} ({}) - ({:?})",
                         val,
                         amount.to_string_native(),
-                        deltas_stake,
+                        deltas_stake.to_string_native(),
                         val_state
                     );
                     debug_assert_eq!(
@@ -2718,7 +2740,7 @@ impl AbstractPosState {
                         "Below-cap val {}, stake {} ({}) - ({:?})",
                         val,
                         token::Amount::from(*amount).to_string_native(),
-                        deltas_stake,
+                        deltas_stake.to_string_native(),
                         val_state
                     );
                     debug_assert_eq!(
@@ -2757,7 +2779,11 @@ impl AbstractPosState {
                         .get(&addr)
                         .cloned()
                         .unwrap_or_default();
-                    tracing::debug!("Jailed val {}, stake {}", &addr, &stake);
+                    tracing::debug!(
+                        "Jailed val {}, stake {}",
+                        &addr,
+                        &stake.to_string_native()
+                    );
                 }
             }
         }

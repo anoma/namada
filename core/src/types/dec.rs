@@ -43,7 +43,6 @@ pub type Result<T> = std::result::Result<T, Error>;
     Eq,
     PartialOrd,
     Ord,
-    Debug,
     Hash,
 )]
 #[serde(try_from = "String")]
@@ -424,6 +423,12 @@ impl Display for Dec {
         } else {
             f.write_str(stripped_string)
         }
+    }
+}
+
+impl Debug for Dec {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.to_string())
     }
 }
 

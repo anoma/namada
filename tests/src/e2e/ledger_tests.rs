@@ -2363,17 +2363,17 @@ fn test_bond_queries() -> Result<()> {
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
+    let (_, res) = client
+        .exp_regex(r"withdrawable starting from epoch [0-9]+")
+        .unwrap();
+    let withdraw_epoch =
+        Epoch::from_str(res.split(' ').last().unwrap()).unwrap();
     client.assert_success();
 
-    // 6. Wait for epoch 7
-    let start = Instant::now();
-    let loop_timeout = Duration::new(20, 0);
+    // 6. Wait for withdraw_epoch
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
-            panic!("Timed out waiting for epoch: {}", 7);
-        }
-        let epoch = get_epoch(&test, &validator_one_rpc)?;
-        if epoch >= Epoch(7) {
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 120)?;
+        if epoch >= withdraw_epoch {
             break;
         }
     }
@@ -2382,11 +2382,11 @@ fn test_bond_queries() -> Result<()> {
     let tx_args = vec!["bonds", "--ledger-address", &validator_one_rpc];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(
-        "All bonds total active: 200088\r
-All bonds total: 200088\r
-All unbonds total active: 412\r
-All unbonds total: 412\r
-All unbonds total withdrawable: 412\r",
+        "All bonds total active: 200088.000000\r
+All bonds total: 200088.000000\r
+All unbonds total active: 412.000000\r
+All unbonds total: 412.000000\r
+All unbonds total withdrawable: 412.000000\r",
     )?;
     client.assert_success();
 

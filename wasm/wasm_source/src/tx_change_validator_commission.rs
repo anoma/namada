@@ -22,7 +22,7 @@ mod tests {
     use namada::ledger::pos::{PosParams, PosVP};
     use namada::proof_of_stake::validator_commission_rate_handle;
     use namada::proto::{Code, Data, Signature, Tx};
-    use namada::types::dec::Dec;
+    use namada::types::dec::{Dec, POS_DECIMAL_PRECISION};
     use namada::types::storage::Epoch;
     use namada::types::transaction::TxType;
     use namada_tests::log::test;
@@ -163,7 +163,9 @@ mod tests {
     fn arb_rate(min: Dec, max: Dec) -> impl Strategy<Value = Dec> {
         let int_min: i128 = (min * scale()).try_into().unwrap();
         let int_max: i128 = (max * scale()).try_into().unwrap();
-        (int_min..=int_max).prop_map(|num| Dec::new(num, 0).unwrap() / scale())
+        (int_min..=int_max).prop_map(|num| {
+            Dec::new(num, POS_DECIMAL_PRECISION).unwrap() / scale()
+        })
     }
 
     fn arb_new_rate(
@@ -176,7 +178,7 @@ mod tests {
             let ceil = (cmp::min(max_change, ceil) * scale()).abs().as_u128();
             (1..ceil).prop_map(|c|
                 // Convert back from an int
-                 Dec::try_from(c).unwrap() / scale())
+                 Dec::new(c as i128, POS_DECIMAL_PRECISION).unwrap() / scale())
         };
 
         // Addition
