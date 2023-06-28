@@ -4,7 +4,6 @@ use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env;
 use std::fmt::Debug;
-use std::fs::File;
 #[cfg(feature = "masp-tx-gen")]
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -44,9 +43,7 @@ use masp_primitives::transaction::{
     TransparentAddress, Unauthorized,
 };
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
-use masp_proofs::bellman::groth16::{
-    prepare_verifying_key, PreparedVerifyingKey,
-};
+use masp_proofs::bellman::groth16::PreparedVerifyingKey;
 use masp_proofs::bls12_381::Bls12;
 use masp_proofs::prover::LocalTxProver;
 use masp_proofs::sapling::SaplingVerificationContext;
@@ -90,70 +87,37 @@ pub const OUTPUT_NAME: &str = "masp-output.params";
 /// Convert circuit name
 pub const CONVERT_NAME: &str = "masp-convert.params";
 
-/// Load Sapling spend params.
-pub fn load_spend_params() -> (
-    masp_proofs::bellman::groth16::Parameters<Bls12>,
-    masp_proofs::bellman::groth16::PreparedVerifyingKey<Bls12>,
+fn load_pvks() -> (
+    PreparedVerifyingKey<Bls12>,
+    PreparedVerifyingKey<Bls12>,
+    PreparedVerifyingKey<Bls12>,
 ) {
     let params_dir = get_params_dir();
-    let spend_path = params_dir.join(SPEND_NAME);
-    if !spend_path.exists() {
-        #[cfg(feature = "masp_proofs/download-params")]
-        masp_proofs::download_parameters()
-            .expect("MASP parameters not present or downloadable");
-        #[cfg(not(feature = "masp_proofs/download-params"))]
-        panic!("MASP parameters not present or downloadable");
-    }
-    let param_f = File::open(spend_path).unwrap();
-    let params =
-        masp_proofs::bellman::groth16::Parameters::read(&param_f, false)
-            .unwrap();
-    let vk = prepare_verifying_key(&params.vk);
-    (params, vk)
-}
+    let [spend_path, convert_path, output_path] =
+        [SPEND_NAME, CONVERT_NAME, OUTPUT_NAME].map(|p| params_dir.join(p));
 
-/// Load Sapling convert params.
-pub fn load_convert_params() -> (
-    masp_proofs::bellman::groth16::Parameters<Bls12>,
-    masp_proofs::bellman::groth16::PreparedVerifyingKey<Bls12>,
-) {
-    let params_dir = get_params_dir();
-    let spend_path = params_dir.join(CONVERT_NAME);
-    if !spend_path.exists() {
-        #[cfg(feature = "masp_proofs/download-params")]
-        masp_proofs::download_parameters()
-            .expect("MASP parameters not present or downloadable");
-        #[cfg(not(feature = "masp_proofs/download-params"))]
-        panic!("MASP parameters not present or downloadable");
+    if !spend_path.exists() || !convert_path.exists() || !output_path.exists() {
+        let paths = masp_proofs::download_masp_parameters(None).expect(
+            "MASP parameters were not present, expected the download to \
+             succeed",
+        );
+        if paths.spend != spend_path
+            || paths.convert != convert_path
+            || paths.output != output_path
+        {
+            panic!(
+                "unrecoverable: downloaded missing masp params, but to an \
+                 unfamiliar path"
+            )
+        }
     }
-    let param_f = File::open(spend_path).unwrap();
-    let params =
-        masp_proofs::bellman::groth16::Parameters::read(&param_f, false)
-            .unwrap();
-    let vk = prepare_verifying_key(&params.vk);
-    (params, vk)
-}
-
-/// Load Sapling output params.
-pub fn load_output_params() -> (
-    masp_proofs::bellman::groth16::Parameters<Bls12>,
-    masp_proofs::bellman::groth16::PreparedVerifyingKey<Bls12>,
-) {
-    let params_dir = get_params_dir();
-    let output_path = params_dir.join(OUTPUT_NAME);
-    if !output_path.exists() {
-        #[cfg(feature = "masp_proofs/download-params")]
-        masp_proofs::download_parameters()
-            .expect("MASP parameters not present or downloadable");
-        #[cfg(not(feature = "masp_proofs/download-params"))]
-        panic!("MASP parameters not present or downloadable");
-    }
-    let param_f = File::open(output_path).unwrap();
-    let params =
-        masp_proofs::bellman::groth16::Parameters::read(&param_f, false)
-            .unwrap();
-    let vk = prepare_verifying_key(&params.vk);
-    (params, vk)
+    // size and blake2b checked here
+    let params = masp_proofs::load_parameters(
+        spend_path.as_path(),
+        output_path.as_path(),
+        convert_path.as_path(),
+    );
+    (params.spend_vk, params.convert_vk, params.output_vk)
 }
 
 /// check_spend wrapper
@@ -285,9 +249,7 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
 
     tracing::info!("sighash computed");
 
-    let (_, spend_pvk) = load_spend_params();
-    let (_, convert_pvk) = load_convert_params();
-    let (_, output_pvk) = load_output_params();
+    let (spend_pvk, convert_pvk, output_pvk) = load_pvks();
 
     let mut ctx = SaplingVerificationContext::new(true);
     let spends_valid = sapling_bundle.shielded_spends.iter().all(|spend| {
@@ -373,7 +335,7 @@ impl<P1, R1, N1>
 
 /// Abstracts platform specific details away from the logic of shielded pool
 /// operations.
-#[async_trait(?Send)]
+#[async_trait(? Send)]
 pub trait ShieldedUtils:
     Sized + BorshDeserialize + BorshSerialize + Default + Clone
 {
@@ -1553,4 +1515,106 @@ fn convert_amount(
     let amount = Amount::from_nonnegative(asset_type, u64::from(val))
         .expect("invalid value for amount");
     (asset_type, amount)
+}
+
+mod tests {
+    /// quick and dirty test. will fail on size check
+    #[test]
+    #[should_panic(expected = "parameter file size is not correct")]
+    fn test_wrong_masp_params() {
+        use std::io::Write;
+
+        use super::{CONVERT_NAME, OUTPUT_NAME, SPEND_NAME};
+
+        let tempdir = tempfile::tempdir()
+            .expect("expected a temp dir")
+            .into_path();
+        let fake_params_paths =
+            [SPEND_NAME, CONVERT_NAME, OUTPUT_NAME].map(|p| tempdir.join(p));
+        for path in fake_params_paths {
+            let mut f =
+                std::fs::File::create(path).expect("expected a temp file");
+            f.write_all(b"fake params")
+                .expect("expected a writable temp file");
+            f.sync_all()
+                .expect("expected a writable temp file (on sync)");
+        }
+
+        std::env::set_var(super::ENV_VAR_MASP_PARAMS_DIR, tempdir.as_os_str());
+        // should panic here
+        super::load_pvks();
+    }
+
+    /// a more involved test, using dummy parameters with the right
+    /// size but the wrong hash.
+    #[test]
+    #[should_panic(expected = "parameter file is not correct")]
+    fn test_wrong_masp_params_hash() {
+        use masp_primitives::ff::PrimeField;
+        use masp_proofs::bellman::groth16::{
+            generate_random_parameters, Parameters,
+        };
+        use masp_proofs::bellman::{Circuit, ConstraintSystem, SynthesisError};
+        use masp_proofs::bls12_381::{Bls12, Scalar};
+
+        use super::{CONVERT_NAME, OUTPUT_NAME, SPEND_NAME};
+
+        struct FakeCircuit<E: PrimeField> {
+            x: E,
+        }
+
+        impl<E: PrimeField> Circuit<E> for FakeCircuit<E> {
+            fn synthesize<CS: ConstraintSystem<E>>(
+                self,
+                cs: &mut CS,
+            ) -> Result<(), SynthesisError> {
+                let x = cs.alloc(|| "x", || Ok(self.x)).unwrap();
+                cs.enforce(
+                    || {
+                        "this is an extra long constraint name so that rustfmt \
+                         is ok with wrapping the params of enforce()"
+                    },
+                    |lc| lc + x,
+                    |lc| lc + x,
+                    |lc| lc + x,
+                );
+                Ok(())
+            }
+        }
+
+        let dummy_circuit = FakeCircuit { x: Scalar::zero() };
+        let mut rng = rand::thread_rng();
+        let fake_params: Parameters<Bls12> =
+            generate_random_parameters(dummy_circuit, &mut rng)
+                .expect("expected to generate fake params");
+
+        let tempdir = tempfile::tempdir()
+            .expect("expected a temp dir")
+            .into_path();
+        // TODO: get masp to export these consts
+        let fake_params_paths = [
+            (SPEND_NAME, 49848572u64),
+            (CONVERT_NAME, 22570940u64),
+            (OUTPUT_NAME, 16398620u64),
+        ]
+        .map(|(p, s)| (tempdir.join(p), s));
+        for (path, size) in fake_params_paths {
+            let mut f =
+                std::fs::File::create(path).expect("expected a temp file");
+            fake_params
+                .write(&mut f)
+                .expect("expected a writable temp file");
+            // the dummy circuit has one constraint, and therefore its
+            // params should always be smaller than the large masp
+            // circuit params. so this truncate extends the file, and
+            // extra bytes at the end do not make it invalid.
+            f.set_len(size).expect("expected to truncate the temp file");
+            f.sync_all()
+                .expect("expected a writable temp file (on sync)");
+        }
+
+        std::env::set_var(super::ENV_VAR_MASP_PARAMS_DIR, tempdir.as_os_str());
+        // should panic here
+        super::load_pvks();
+    }
 }

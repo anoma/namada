@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.17.5
+
+Namada 0.17.5 is a maintenance release chiefly addressing MASP
+parameter validation.
+
+### IMPROVEMENTS
+
+- Check MASP parameters are correct in the ledger node.
+  ([#1619](https://github.com/anoma/namada/pull/1619))
+
 ## v0.17.4
 
 Namada 0.17.4 is a minor release improving the codebase by bumping the rust toolchain.
