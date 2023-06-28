@@ -1,6 +1,7 @@
 //! Helpers for making digital signatures using cryptographic keys from the
 //! wallet.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use borsh::BorshSerialize;
@@ -180,21 +181,12 @@ pub async fn sign_tx(
         });
         (TxBroadcastData::DryRun(tx), None)
     } else {
-        if args.disposable_signing_key {
-            // Generate a disposable keypair to sign the wrapper if requested
-            let mut csprng = rand::rngs::OsRng {};
-            keypair = ed25519::SigScheme::generate(&mut csprng)
-                .try_to_sk()
-                .unwrap();
-            updated_balance = Some(Amount::default());
-        }
-
         sign_wrapper(
             ctx,
             args,
             epoch,
             tx,
-            &keypair,
+            Cow::Borrowed(&keypair),
             updated_balance,
             #[cfg(not(feature = "mainnet"))]
             requires_pow,
@@ -248,16 +240,27 @@ pub fn dump_tx_helper(
 /// Create a wrapper tx from a normal tx. Get the hash of the
 /// wrapper and its payload which is needed for monitoring its
 /// progress on chain. Accepts an optional balance reflecting any modification applied to it by the inner tx for a correct fee validation.
-pub async fn sign_wrapper(
+pub async fn sign_wrapper<'key>(
     ctx: &mut Context,
     args: &args::Tx,
     epoch: Epoch,
     tx: Tx,
-    keypair: &common::SecretKey,
-    updated_balance: Option<Amount>,
+    mut keypair: Cow<'key, common::SecretKey>,
+    mut updated_balance: Option<Amount>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (TxBroadcastData, Option<Epoch>) {
     let client = HttpClient::new(args.ledger_address.clone()).unwrap();
+
+    if args.disposable_signing_key {
+        // Generate a disposable keypair to sign the wrapper if requested
+        let mut csprng = rand::rngs::OsRng {};
+        keypair = Cow::Owned(
+            ed25519::SigScheme::generate(&mut csprng)
+                .try_to_sk()
+                .unwrap(),
+        );
+        updated_balance = Some(Amount::default());
+    }
 
     let fee_token = ctx.get(&args.fee_token);
     let fee_amount = match args.fee_amount {
@@ -452,7 +455,7 @@ pub async fn sign_wrapper(
                 amount_per_gas_unit: fee_amount,
                 token: fee_token,
             },
-            keypair,
+            &keypair,
             epoch,
             args.gas_limit.clone(),
             tx,
@@ -465,7 +468,11 @@ pub async fn sign_wrapper(
     };
 
     let signed_wrapper = tx
-        .sign(keypair, ctx.config.ledger.chain_id.clone(), args.expiration)
+        .sign(
+            &keypair,
+            ctx.config.ledger.chain_id.clone(),
+            args.expiration,
+        )
         .expect("Wrapper tx signing keypair should be correct");
     let to_broadcast = if args.dry_run_wrapper {
         TxBroadcastData::DryRun(signed_wrapper)

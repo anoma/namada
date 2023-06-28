@@ -2370,7 +2370,7 @@ pub async fn submit_reveal_pk_aux(
             args,
             epoch,
             tx,
-            &keypair,
+            Cow::Borrowed(&keypair),
             None,
             #[cfg(not(feature = "mainnet"))]
             false,
