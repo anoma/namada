@@ -355,7 +355,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.22.0",
  "tungstenite",
- "webpki-roots",
+ "webpki-roots 0.21.1",
 ]
 
 [[package]]
@@ -2296,7 +2296,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.22.0",
  "webpki 0.21.4",
- "webpki-roots",
+ "webpki-roots 0.21.1",
 ]
 
 [[package]]
@@ -2882,6 +2882,7 @@ dependencies = [
  "jubjub",
  "lazy_static",
  "masp_primitives",
+ "minreq",
  "rand_core 0.6.4",
  "redjubjub",
  "tracing",
@@ -2997,6 +2998,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "minreq"
+version = "2.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3de406eeb24aba36ed3829532fa01649129677186b44a49debec0ec574ca7da7"
+dependencies = [
+ "log",
+ "once_cell",
+ "rustls 0.20.8",
+ "webpki 0.22.0",
+ "webpki-roots 0.22.6",
+]
+
+[[package]]
 name = "mio"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3051,7 +3065,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.17.4"
+version = "0.17.5"
 dependencies = [
  "async-std",
  "async-trait",
@@ -3104,7 +3118,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.17.4"
+version = "0.17.5"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -3148,7 +3162,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.17.4"
+version = "0.17.5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3157,7 +3171,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.17.4"
+version = "0.17.5"
 dependencies = [
  "borsh",
  "data-encoding",
@@ -3173,7 +3187,7 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.17.4"
+version = "0.17.5"
 dependencies = [
  "borsh",
  "namada_core",
@@ -3182,7 +3196,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.17.4"
+version = "0.17.5"
 dependencies = [
  "chrono",
  "concat-idents",
@@ -3209,7 +3223,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.17.4"
+version = "0.17.5"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -3224,7 +3238,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.17.4"
+version = "0.17.5"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -3233,7 +3247,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.17.4"
+version = "0.17.5"
 dependencies = [
  "borsh",
  "namada_core",
@@ -3246,7 +3260,7 @@ dependencies = [
 
 [[package]]
 name = "namada_wasm_for_tests"
-version = "0.17.4"
+version = "0.17.5"
 dependencies = [
  "borsh",
  "getrandom 0.2.9",
@@ -6009,6 +6023,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aabe153544e473b775453675851ecc86863d2a81d786d741f6b76778f2a48940"
 dependencies = [
  "webpki 0.21.4",
+]
+
+[[package]]
+name = "webpki-roots"
+version = "0.22.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6c71e40d7d2c34a5106301fb632274ca37242cd0c9d3e64dbece371a40a2d87"
+dependencies = [
+ "webpki 0.22.0",
 ]
 
 [[package]]
