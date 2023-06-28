@@ -2202,7 +2202,7 @@ fn pos_rewards() -> Result<()> {
 /// 3. Wait for epoch 4
 /// 4. Submit another delegation to the genesis validator
 /// 5. Submit an unbond of the delegation
-/// 6. Wait for epoch 7
+/// 6. Wait for epoch withdraw_epoch
 /// 7. Check the output of the bonds query
 #[test]
 fn test_bond_queries() -> Result<()> {
@@ -2317,6 +2317,11 @@ fn test_bond_queries() -> Result<()> {
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
+    let (_, res) = client
+        .exp_regex(r"withdrawable starting from epoch [0-9]+")
+        .unwrap();
+    let withdraw_epoch =
+        Epoch::from_str(res.split(' ').last().unwrap()).unwrap();
     client.assert_success();
 
     // 6. Wait for epoch 7
@@ -2327,7 +2332,7 @@ fn test_bond_queries() -> Result<()> {
             panic!("Timed out waiting for epoch: {}", 7);
         }
         let epoch = get_epoch(&test, &validator_one_rpc)?;
-        if epoch >= Epoch(7) {
+        if epoch >= withdraw_epoch {
             break;
         }
     }
