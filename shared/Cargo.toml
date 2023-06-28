@@ -121,12 +121,12 @@ toml.workspace = true
 tracing.workspace = true
 wasm-instrument = {version = "0.4.0", features = ["sign_ext"], optional = true}
 # wasmer crates on a temp branch `tomas/fix-align` to fix alignment issue
-wasmer = {git = "https://github.com/heliaxdev/wasmer.git", rev = "9d7adb00d0564a4176acaf6ce72dff6079acb975", optional = true}
-wasmer-cache = {git = "https://github.com/heliaxdev/wasmer.git", rev = "9d7adb00d0564a4176acaf6ce72dff6079acb975", optional = true}
-wasmer-compiler-singlepass = {git = "https://github.com/heliaxdev/wasmer.git", rev = "9d7adb00d0564a4176acaf6ce72dff6079acb975", optional = true}
-wasmer-engine-dylib = {git = "https://github.com/heliaxdev/wasmer.git", rev = "9d7adb00d0564a4176acaf6ce72dff6079acb975", optional = true}
-wasmer-engine-universal = {git = "https://github.com/heliaxdev/wasmer.git", rev = "9d7adb00d0564a4176acaf6ce72dff6079acb975", optional = true}
-wasmer-vm = {git = "https://github.com/heliaxdev/wasmer.git", rev = "9d7adb00d0564a4176acaf6ce72dff6079acb975", optional = true}
+wasmer = {git = "https://github.com/heliaxdev/wasmer.git", rev = "88ab394b94c889a2e25014563b5a334cbf458780", optional = true}
+wasmer-cache = {git = "https://github.com/heliaxdev/wasmer.git", rev = "88ab394b94c889a2e25014563b5a334cbf458780", optional = true}
+wasmer-compiler-singlepass = {git = "https://github.com/heliaxdev/wasmer.git", rev = "88ab394b94c889a2e25014563b5a334cbf458780", optional = true}
+wasmer-engine-dylib = {git = "https://github.com/heliaxdev/wasmer.git", rev = "88ab394b94c889a2e25014563b5a334cbf458780", optional = true}
+wasmer-engine-universal = {git = "https://github.com/heliaxdev/wasmer.git", rev = "88ab394b94c889a2e25014563b5a334cbf458780", optional = true}
+wasmer-vm = {git = "https://github.com/heliaxdev/wasmer.git", rev = "88ab394b94c889a2e25014563b5a334cbf458780", optional = true}
 wasmparser.workspace = true
 masp_primitives.workspace = true
 masp_proofs.workspace = true

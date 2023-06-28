@@ -7099,7 +7099,7 @@ dependencies = [
 [[package]]
 name = "wasmer"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=88ab394b94c889a2e25014563b5a334cbf458780#88ab394b94c889a2e25014563b5a334cbf458780"
 dependencies = [
  "cfg-if 1.0.0",
  "indexmap",
@@ -7125,7 +7125,7 @@ dependencies = [
 [[package]]
 name = "wasmer-artifact"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=88ab394b94c889a2e25014563b5a334cbf458780#88ab394b94c889a2e25014563b5a334cbf458780"
 dependencies = [
  "enumset",
  "loupe",
@@ -7137,7 +7137,7 @@ dependencies = [
 [[package]]
 name = "wasmer-cache"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=88ab394b94c889a2e25014563b5a334cbf458780#88ab394b94c889a2e25014563b5a334cbf458780"
 dependencies = [
  "blake3",
  "hex",
@@ -7148,7 +7148,7 @@ dependencies = [
 [[package]]
 name = "wasmer-compiler"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=88ab394b94c889a2e25014563b5a334cbf458780#88ab394b94c889a2e25014563b5a334cbf458780"
 dependencies = [
  "enumset",
  "loupe",
@@ -7165,7 +7165,7 @@ dependencies = [
 [[package]]
 name = "wasmer-compiler-cranelift"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=88ab394b94c889a2e25014563b5a334cbf458780#88ab394b94c889a2e25014563b5a334cbf458780"
 dependencies = [
  "cranelift-codegen",
  "cranelift-entity",
@@ -7185,7 +7185,7 @@ dependencies = [
 [[package]]
 name = "wasmer-compiler-singlepass"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=88ab394b94c889a2e25014563b5a334cbf458780#88ab394b94c889a2e25014563b5a334cbf458780"
 dependencies = [
  "byteorder",
  "dynasm",
@@ -7204,7 +7204,7 @@ dependencies = [
 [[package]]
 name = "wasmer-derive"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=88ab394b94c889a2e25014563b5a334cbf458780#88ab394b94c889a2e25014563b5a334cbf458780"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -7215,7 +7215,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=88ab394b94c889a2e25014563b5a334cbf458780#88ab394b94c889a2e25014563b5a334cbf458780"
 dependencies = [
  "backtrace",
  "enumset",
@@ -7237,7 +7237,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine-dylib"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=88ab394b94c889a2e25014563b5a334cbf458780#88ab394b94c889a2e25014563b5a334cbf458780"
 dependencies = [
  "cfg-if 1.0.0",
  "enum-iterator",
@@ -7262,7 +7262,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine-universal"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=88ab394b94c889a2e25014563b5a334cbf458780#88ab394b94c889a2e25014563b5a334cbf458780"
 dependencies = [
  "cfg-if 1.0.0",
  "enumset",
@@ -7281,7 +7281,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine-universal-artifact"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=88ab394b94c889a2e25014563b5a334cbf458780#88ab394b94c889a2e25014563b5a334cbf458780"
 dependencies = [
  "enum-iterator",
  "enumset",
@@ -7296,7 +7296,7 @@ dependencies = [
 [[package]]
 name = "wasmer-object"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=88ab394b94c889a2e25014563b5a334cbf458780#88ab394b94c889a2e25014563b5a334cbf458780"
 dependencies = [
  "object 0.28.4",
  "thiserror",
@@ -7307,7 +7307,7 @@ dependencies = [
 [[package]]
 name = "wasmer-types"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=88ab394b94c889a2e25014563b5a334cbf458780#88ab394b94c889a2e25014563b5a334cbf458780"
 dependencies = [
  "backtrace",
  "enum-iterator",
@@ -7321,7 +7321,7 @@ dependencies = [
 [[package]]
 name = "wasmer-vm"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=88ab394b94c889a2e25014563b5a334cbf458780#88ab394b94c889a2e25014563b5a334cbf458780"
 dependencies = [
  "backtrace",
  "cc",
