@@ -260,7 +260,7 @@ pub mod genesis_config {
         /// Expected number of epochs per year
         pub epochs_per_year: u64,
         /// Max signature per transaction
-        pub max_signatures_per_transaction: u64,
+        pub max_signatures_per_transaction: u8,
         /// PoS gain p
         pub pos_gain_p: Decimal,
         /// PoS gain d
@@ -861,7 +861,7 @@ pub struct Parameters {
     /// Expected number of epochs per year (read only)
     pub epochs_per_year: u64,
     /// Maximum amount of signatures per transaction
-    pub max_signatures_per_transaction: u64,
+    pub max_signatures_per_transaction: u8,
     /// PoS gain p (read only)
     pub pos_gain_p: Decimal,
     /// PoS gain d (read only)

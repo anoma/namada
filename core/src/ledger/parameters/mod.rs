@@ -45,7 +45,7 @@ pub struct Parameters {
     /// Expected number of epochs per year (read only)
     pub epochs_per_year: u64,
     /// Maximum number of signature per transaction
-    pub max_signatures_per_transaction: u64,
+    pub max_signatures_per_transaction: u8,
     /// PoS gain p (read only)
     pub pos_gain_p: Decimal,
     /// PoS gain d (read only)
@@ -203,6 +203,17 @@ impl Parameters {
         }
         Ok(())
     }
+}
+
+/// Get the max signatures per transactio parameter
+pub fn max_signatures_per_transaction<S>(
+    storage: &S
+) -> storage_api::Result<Option<u8>>
+where
+    S: StorageRead
+{
+    let key = storage::get_max_signatures_per_transaction_key();
+    storage.read(&key)
 }
 
 /// Update the max_expected_time_per_block parameter in storage. Returns the
@@ -445,9 +456,9 @@ where
     // read the maximum signatures per transaction
     let max_signatures_per_transaction_key =
         storage::get_max_signatures_per_transaction_key();
-    let value: Option<u64> =
+    let value: Option<u8> =
         storage.read(&max_signatures_per_transaction_key)?;
-    let max_signatures_per_transaction: u64 = value
+    let max_signatures_per_transaction: u8 = value
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 

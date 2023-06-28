@@ -79,6 +79,9 @@ pub fn is_proposal_accepted(ctx: &Ctx, proposal_id: u64) -> VpResult {
 
 /// Verify section signatures
 pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
+    let max_signatures_per_transaction =
+        parameters::max_signatures_per_transaction(&ctx.pre())?;
+
     let public_keys_index_map =
         storage_api::account::public_keys_index_map(&ctx.pre(), owner)?;
     let threshold =
@@ -90,7 +93,7 @@ pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
             tx_data_hash,
             public_keys_index_map,
             threshold,
-            None,
+            max_signatures_per_transaction,
         )
         .is_ok();
 
