@@ -14,7 +14,6 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
@@ -1985,16 +1984,8 @@ fn pos_bonds() -> Result<()> {
         "Current epoch: {}, earliest epoch for withdrawal: {}",
         epoch, delegation_withdrawable_epoch
     );
-    let start = Instant::now();
-    let loop_timeout = Duration::new(60, 0);
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
-            panic!(
-                "Timed out waiting for epoch: {}",
-                delegation_withdrawable_epoch
-            );
-        }
-        let epoch = get_epoch(&test, &validator_one_rpc)?;
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 120)?;
         if epoch >= delegation_withdrawable_epoch {
             break;
         }
@@ -2181,13 +2172,8 @@ fn pos_rewards() -> Result<()> {
         epoch, wait_epoch
     );
 
-    let start = Instant::now();
-    let loop_timeout = Duration::new(40, 0);
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
-            panic!("Timed out waiting for epoch: {}", wait_epoch);
-        }
-        let epoch = get_epoch(&test, &validator_zero_rpc)?;
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 120)?;
         if dbg!(epoch) >= wait_epoch {
             break;
         }
@@ -2263,13 +2249,8 @@ fn test_bond_queries() -> Result<()> {
     client.assert_success();
 
     // 3. Wait for epoch 4
-    let start = Instant::now();
-    let loop_timeout = Duration::new(20, 0);
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
-            panic!("Timed out waiting for epoch: {}", 1);
-        }
-        let epoch = get_epoch(&test, &validator_one_rpc)?;
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 120)?;
         if epoch >= Epoch(4) {
             break;
         }
@@ -2320,13 +2301,8 @@ fn test_bond_queries() -> Result<()> {
     client.assert_success();
 
     // 6. Wait for epoch 7
-    let start = Instant::now();
-    let loop_timeout = Duration::new(20, 0);
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
-            panic!("Timed out waiting for epoch: {}", 7);
-        }
-        let epoch = get_epoch(&test, &validator_one_rpc)?;
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 120)?;
         if epoch >= Epoch(7) {
             break;
         }
@@ -2560,13 +2536,8 @@ fn pos_init_validator() -> Result<()> {
         "Current epoch: {}, earliest epoch with updated bonded stake: {}",
         epoch, earliest_update_epoch
     );
-    let start = Instant::now();
-    let loop_timeout = Duration::new(20, 0);
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
-            panic!("Timed out waiting for epoch: {}", earliest_update_epoch);
-        }
-        let epoch = get_epoch(&test, &non_validator_rpc)?;
+        let epoch = epoch_sleep(&test, &non_validator_rpc, 120)?;
         if epoch >= earliest_update_epoch {
             break;
         }
