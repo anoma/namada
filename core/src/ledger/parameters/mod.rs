@@ -44,6 +44,8 @@ pub struct Parameters {
     pub implicit_vp_code_hash: Hash,
     /// Expected number of epochs per year (read only)
     pub epochs_per_year: u64,
+    /// Maximum number of signature per transaction
+    pub max_signatures_per_transaction: u64,
     /// PoS gain p (read only)
     pub pos_gain_p: Decimal,
     /// PoS gain d (read only)
@@ -115,6 +117,7 @@ impl Parameters {
             tx_whitelist,
             implicit_vp_code_hash,
             epochs_per_year,
+            max_signatures_per_transaction,
             pos_gain_p,
             pos_gain_d,
             staked_ratio,
@@ -165,6 +168,13 @@ impl Parameters {
 
         let epochs_per_year_key = storage::get_epochs_per_year_key();
         storage.write(&epochs_per_year_key, epochs_per_year)?;
+
+        let max_signatures_per_transaction_key =
+            storage::get_max_signatures_per_transaction_key();
+        storage.write(
+            &max_signatures_per_transaction_key,
+            max_signatures_per_transaction,
+        )?;
 
         let pos_gain_p_key = storage::get_pos_gain_p_key();
         storage.write(&pos_gain_p_key, pos_gain_p)?;
@@ -432,6 +442,15 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
+    // read the maximum signatures per transaction
+    let max_signatures_per_transaction_key =
+        storage::get_max_signatures_per_transaction_key();
+    let value: Option<u64> =
+        storage.read(&max_signatures_per_transaction_key)?;
+    let max_signatures_per_transaction: u64 = value
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()?;
+
     // read PoS gain P
     let pos_gain_p_key = storage::get_pos_gain_p_key();
     let value = storage.read(&pos_gain_p_key)?;
@@ -476,6 +495,7 @@ where
         tx_whitelist,
         implicit_vp_code_hash,
         epochs_per_year,
+        max_signatures_per_transaction,
         pos_gain_p,
         pos_gain_d,
         staked_ratio,

@@ -10,6 +10,7 @@ use crate::types::storage::{DbKeySeg, Key};
 struct Keys {
     epoch_duration: &'static str,
     epochs_per_year: &'static str,
+    max_signatures_per_transaction: &'static str,
     implicit_vp: &'static str,
     max_expected_time_per_block: &'static str,
     pos_gain_d: &'static str,
@@ -127,6 +128,14 @@ pub fn is_max_proposal_bytes_key(key: &Key) -> bool {
         DbKeySeg::AddressSeg(addr),
         DbKeySeg::StringSeg(max_proposal_bytes),
     ] if addr == &ADDRESS && max_proposal_bytes == Keys::VALUES.max_proposal_bytes)
+}
+
+/// Returns if the key is the max signature per transacton key
+pub fn is_max_signatures_per_transaction_key(key: &Key) -> bool {
+    matches!(&key.segments[..], [
+        DbKeySeg::AddressSeg(addr),
+        DbKeySeg::StringSeg(max_signatures_per_transaction),
+    ] if addr == &ADDRESS && max_signatures_per_transaction == Keys::VALUES.max_signatures_per_transaction)
 }
 
 /// Storage key used for epoch parameter.
@@ -257,6 +266,18 @@ pub fn get_wrapper_tx_fees_key() -> Key {
         segments: vec![
             DbKeySeg::AddressSeg(ADDRESS),
             DbKeySeg::StringSeg(Keys::VALUES.wrapper_tx_fees.to_string()),
+        ],
+    }
+}
+
+/// Storage key used for the max signatures per transaction key
+pub fn get_max_signatures_per_transaction_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(
+                Keys::VALUES.max_signatures_per_transaction.to_string(),
+            ),
         ],
     }
 }
