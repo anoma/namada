@@ -7099,8 +7099,7 @@ dependencies = [
 [[package]]
 name = "wasmer"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea8d8361c9d006ea3d7797de7bd6b1492ffd0f91a22430cfda6c1658ad57bedf"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
 dependencies = [
  "cfg-if 1.0.0",
  "indexmap",
@@ -7126,8 +7125,7 @@ dependencies = [
 [[package]]
 name = "wasmer-artifact"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7aaf9428c29c1d8ad2ac0e45889ba8a568a835e33fd058964e5e500f2f7ce325"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
 dependencies = [
  "enumset",
  "loupe",
@@ -7139,8 +7137,7 @@ dependencies = [
 [[package]]
 name = "wasmer-cache"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0def391ee1631deac5ac1e6ce919c07a5ccb936ad0fd44708cdc2365c49561a4"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
 dependencies = [
  "blake3",
  "hex",
@@ -7151,8 +7148,7 @@ dependencies = [
 [[package]]
 name = "wasmer-compiler"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e67a6cd866aed456656db2cfea96c18baabbd33f676578482b85c51e1ee19d2c"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
 dependencies = [
  "enumset",
  "loupe",
@@ -7169,8 +7165,7 @@ dependencies = [
 [[package]]
 name = "wasmer-compiler-cranelift"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48be2f9f6495f08649e4f8b946a2cbbe119faf5a654aa1457f9504a99d23dae0"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
 dependencies = [
  "cranelift-codegen",
  "cranelift-entity",
@@ -7184,13 +7179,13 @@ dependencies = [
  "tracing 0.1.37",
  "wasmer-compiler",
  "wasmer-types",
+ "wasmer-vm",
 ]
 
 [[package]]
 name = "wasmer-compiler-singlepass"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29ca2a35204d8befa85062bc7aac259a8db8070b801b8a783770ba58231d729e"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
 dependencies = [
  "byteorder",
  "dynasm",
@@ -7203,13 +7198,13 @@ dependencies = [
  "smallvec",
  "wasmer-compiler",
  "wasmer-types",
+ "wasmer-vm",
 ]
 
 [[package]]
 name = "wasmer-derive"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00e50405cc2a2f74ff574584710a5f2c1d5c93744acce2ca0866084739284b51"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -7220,8 +7215,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f98f010978c244db431b392aeab0661df7ea0822343334f8f2a920763548e45"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
 dependencies = [
  "backtrace",
  "enumset",
@@ -7243,8 +7237,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine-dylib"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad0358af9c154724587731175553805648d9acb8f6657880d165e378672b7e53"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
 dependencies = [
  "cfg-if 1.0.0",
  "enum-iterator",
@@ -7269,8 +7262,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine-universal"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "440dc3d93c9ca47865a4f4edd037ea81bf983b5796b59b3d712d844b32dbef15"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
 dependencies = [
  "cfg-if 1.0.0",
  "enumset",
@@ -7289,8 +7281,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine-universal-artifact"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68f1db3f54152657eb6e86c44b66525ff7801dad8328fe677da48dd06af9ad41"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
 dependencies = [
  "enum-iterator",
  "enumset",
@@ -7305,8 +7296,7 @@ dependencies = [
 [[package]]
 name = "wasmer-object"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d831335ff3a44ecf451303f6f891175c642488036b92ceceb24ac8623a8fa8b"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
 dependencies = [
  "object 0.28.4",
  "thiserror",
@@ -7317,14 +7307,12 @@ dependencies = [
 [[package]]
 name = "wasmer-types"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39df01ea05dc0a9bab67e054c7cb01521e53b35a7bb90bd02eca564ed0b2667f"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
 dependencies = [
  "backtrace",
  "enum-iterator",
  "indexmap",
  "loupe",
- "more-asserts",
  "rkyv",
  "serde 1.0.163",
  "thiserror",
@@ -7333,8 +7321,7 @@ dependencies = [
 [[package]]
 name = "wasmer-vm"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30d965fa61f4dc4cdb35a54daaf7ecec3563fbb94154a6c35433f879466247dd"
+source = "git+https://github.com/heliaxdev/wasmer.git?rev=9d7adb00d0564a4176acaf6ce72dff6079acb975#9d7adb00d0564a4176acaf6ce72dff6079acb975"
 dependencies = [
  "backtrace",
  "cc",
