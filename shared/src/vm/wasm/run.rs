@@ -139,7 +139,7 @@ where
             #[cfg(not(test))]
             None => 0, // VPs will reject the non-whitelisted tx
         };
-    gas_meter.add(tx_gas_required)?;
+    gas_meter.consume(tx_gas_required)?;
 
     let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
     let mut verifiers = BTreeSet::new();
@@ -301,7 +301,9 @@ fn run_vp(
             None => 0,
         };
 
-    gas_meter.add(vp_gas_required).map_err(Error::GasError)?;
+    gas_meter
+        .consume(vp_gas_required)
+        .map_err(Error::GasError)?;
 
     let input: VpInput = VpInput {
         addr: address,

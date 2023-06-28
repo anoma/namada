@@ -416,7 +416,7 @@ where
                                     .map_or(0, |wrapper| wrapper.gas);
                                 let mut tx_gas_meter =
                                     TxGasMeter::new(inner_tx_gas_limit);
-                                if let Err(e) = tx_gas_meter.add(tx_gas) {
+                                if let Err(e) = tx_gas_meter.consume(tx_gas) {
                                     return TxResult {
                                         code: ErrorCodes::DecryptedTxGasLimit
                                             .into(),

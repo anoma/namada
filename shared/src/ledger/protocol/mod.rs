@@ -591,7 +591,7 @@ where
                     let (vp_hash, gas) = storage
                         .validity_predicate(addr)
                         .map_err(Error::StorageError)?;
-                    gas_meter.add(gas).map_err(Error::GasError)?;
+                    gas_meter.consume(gas).map_err(Error::GasError)?;
                     let vp_code_hash = match vp_hash {
                         Some(v) => Hash::try_from(&v[..])
                             .map_err(|_| Error::MissingAddress(addr.clone()))?,

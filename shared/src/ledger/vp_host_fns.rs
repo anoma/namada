@@ -47,7 +47,7 @@ pub type EnvResult<T> = std::result::Result<T, RuntimeError>;
 
 /// Add a gas cost incured in a validity predicate
 pub fn add_gas(gas_meter: &mut VpGasMeter, used_gas: u64) -> EnvResult<()> {
-    let result = gas_meter.add(used_gas).map_err(RuntimeError::OutOfGas);
+    let result = gas_meter.consume(used_gas).map_err(RuntimeError::OutOfGas);
     if let Err(err) = &result {
         tracing::info!("Stopping VP execution because of gas error: {}", err);
     }
