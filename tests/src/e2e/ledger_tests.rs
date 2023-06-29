@@ -1083,8 +1083,13 @@ fn masp_incentives() -> Result<()> {
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     // Wait till epoch boundary
-    let ep0 = get_epoch(&test, &validator_one_rpc)?;
-
+    loop {
+        let ep1 = get_epoch(&test, &validator_one_rpc)?;
+        if ep1 == Epoch(1) {
+            break;
+        }
+    }
+    let ep0 = Epoch(0);
     // Send 20 BTC from Albert to PA(A)
     let mut client = run!(
         test,
