@@ -26,7 +26,7 @@ pub mod wrapper_tx {
     use crate::types::transaction::{EncryptionKey, Hash, TxError, TxType};
 
     /// TODO: Determine a sane number for this
-    const GAS_LIMIT_RESOLUTION: u64 = 1_000_000;
+    const GAS_LIMIT_RESOLUTION: u64 = 1;
 
     /// Errors relating to decrypting a wrapper tx and its
     /// encrypted payload from a Tx type

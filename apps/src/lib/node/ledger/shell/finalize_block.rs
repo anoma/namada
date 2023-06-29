@@ -922,7 +922,7 @@ mod test_finalize_block {
         FinalizeBlock, ProcessedTx,
     };
 
-    const GAS_LIMIT_MULTIPLIER: u64 = 1;
+    const GAS_LIMIT_MULTIPLIER: u64 = 300_000;
 
     /// Check that if a wrapper tx was rejected by [`process_proposal`],
     /// check that the correct event is returned. Check that it does
@@ -1832,7 +1832,7 @@ mod test_finalize_block {
             },
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
-            200.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             raw_tx.clone(),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]

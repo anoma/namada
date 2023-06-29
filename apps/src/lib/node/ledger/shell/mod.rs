@@ -1444,7 +1444,7 @@ mod test_utils {
             },
             &keypair,
             Epoch(0),
-            1.into(),
+            300_000.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1501,6 +1501,8 @@ mod test_mempool_validate {
 
     use super::test_utils::TestShell;
     use super::{MempoolTxType, *};
+
+    const GAS_LIMIT_MULTIPLIER: u64 = 300_000;
 
     /// Mempool validation must reject unsigned wrappers
     #[test]
@@ -1682,7 +1684,7 @@ mod test_mempool_validate {
             },
             &keypair,
             Epoch(0),
-            1.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1925,7 +1927,7 @@ mod test_mempool_validate {
             },
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
-            200.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1965,7 +1967,7 @@ mod test_mempool_validate {
             },
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
-            200.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -2005,7 +2007,7 @@ mod test_mempool_validate {
             },
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
-            200.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -2045,7 +2047,7 @@ mod test_mempool_validate {
             },
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
-            200.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]

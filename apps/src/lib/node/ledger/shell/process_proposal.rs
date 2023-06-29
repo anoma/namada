@@ -664,7 +664,7 @@ mod test_process_proposal {
         self, gen_keypair, ProcessProposal, TestError,
     };
 
-    const GAS_LIMIT_MULTIPLIER: u64 = 1;
+    const GAS_LIMIT_MULTIPLIER: u64 = 300_000;
 
     /// Test that if a wrapper tx is not signed, the block is rejected
     /// by [`process_proposal`].
@@ -895,7 +895,7 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount_per_gas_unit: Amount::from(100),
+                amount_per_gas_unit: Amount::from(1_000_000),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1963,7 +1963,7 @@ mod test_process_proposal {
             },
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
-            200.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -2011,7 +2011,7 @@ mod test_process_proposal {
             },
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
-            200.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -2059,7 +2059,7 @@ mod test_process_proposal {
             },
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
-            200.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -2107,7 +2107,7 @@ mod test_process_proposal {
             },
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
-            200.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]

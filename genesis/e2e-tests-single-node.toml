@@ -158,7 +158,7 @@ max_proposal_bytes = 22020096
 # Max amount of gas per block 
 max_block_gas = 1000000000 
 # Fee unshielding gas limit
-fee_unshielding_gas_limit = 150000000
+fee_unshielding_gas_limit = 1000000
 # Fee unshielding descriptions limit
 fee_unshielding_descriptions_limit = 15
 # Gas table

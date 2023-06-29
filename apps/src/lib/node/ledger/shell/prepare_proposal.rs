@@ -366,6 +366,8 @@ use data_encoding::HEXUPPER;
     use super::*;
     use crate::node::ledger::shell::test_utils::{self, gen_keypair};
 
+    const GAS_LIMIT_MULTIPLIER: u64 = 300_000;
+
     /// Test that if a tx from the mempool is not a
     /// WrapperTx type, it is not included in the
     /// proposed block.
@@ -477,7 +479,7 @@ use data_encoding::HEXUPPER;
                 },
                 &keypair,
                 Epoch(0),
-                100.into(),
+                GAS_LIMIT_MULTIPLIER.into(),
                 tx,
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
@@ -670,7 +672,7 @@ use data_encoding::HEXUPPER;
             },
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
-            200.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -714,7 +716,7 @@ use data_encoding::HEXUPPER;
             },
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
-            200.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -758,7 +760,7 @@ use data_encoding::HEXUPPER;
             },
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
-            200.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -802,7 +804,7 @@ use data_encoding::HEXUPPER;
             },
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
-            200.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]

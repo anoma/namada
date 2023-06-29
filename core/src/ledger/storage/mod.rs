@@ -1091,7 +1091,7 @@ mod tests {
                 pos_inflation_amount: 0,
                 #[cfg(not(feature = "mainnet"))]
                 faucet_account: None,
-                fee_unshielding_gas_limit: 150000000,
+                fee_unshielding_gas_limit: 1000000,
                 fee_unshielding_descriptions_limit: 15,
                 gas_cost: BTreeMap::default(),
                 gas_table: BTreeMap::default()

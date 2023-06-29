@@ -1000,7 +1000,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         pos_inflation_amount: 0,
         gas_cost: [(nam(), token::Amount::from(1))].into_iter().collect(),
         gas_table: BTreeMap::default(),
-        fee_unshielding_gas_limit: 150000000,
+        fee_unshielding_gas_limit: 1000000,
         fee_unshielding_descriptions_limit: 10,
     };
     let albert = EstablishedAccount {
