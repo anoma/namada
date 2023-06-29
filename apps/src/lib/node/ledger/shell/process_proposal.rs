@@ -566,8 +566,8 @@ mod test_process_proposal {
                 assert_eq!(
                     response[0].result.info,
                     String::from(
-                        "WrapperTx signature verification failed: Transaction \
-                         doesn't have any data with a signature."
+                        "WrapperTx signature verification failed: The section \
+                         signature is invalid: invalid signatures."
                     )
                 );
             }
@@ -614,8 +614,8 @@ mod test_process_proposal {
             Ok(_) => panic!("Test failed"),
             Err(TestError::RejectProposal(response)) => {
                 let expected_error = "WrapperTx signature verification \
-                                      failed: Transaction doesn't have any \
-                                      data with a signature.";
+                                      failed: The section signature is \
+                                      invalid: invalid signatures.";
                 assert_eq!(
                     response[0].result.code,
                     u32::from(ErrorCodes::InvalidSig)

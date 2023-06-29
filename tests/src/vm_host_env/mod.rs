@@ -37,8 +37,10 @@ mod tests {
     use namada::types::{address, key};
     use namada_core::ledger::ibc::context::transfer_mod::testing::DummyTransferModule;
     use namada_core::ledger::ibc::Error as IbcActionError;
+    use namada_core::proto::MultiSignature;
     use namada_test_utils::TestWasms;
     use namada_tx_prelude::{BorshSerialize, StorageRead, StorageWrite};
+    use namada_vp_prelude::account::AccountPublicKeysMap;
     use namada_vp_prelude::VpEnv;
     use prost::Message;
     use test_log::test;
@@ -540,13 +542,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(input_data));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
         let result = vp::CTX.eval(empty_code, tx).unwrap();
         assert!(!result);
@@ -563,13 +571,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(input_data));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
         let result = vp::CTX.eval(code_hash, tx).unwrap();
         assert!(result);
@@ -587,13 +601,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(input_data));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
         let result = vp::CTX.eval(code_hash, tx).unwrap();
         assert!(!result);
@@ -653,13 +673,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
         // update the client with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -696,13 +722,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
         // init a connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -735,13 +767,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
         // open the connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -779,13 +817,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
         // open try a connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -818,13 +862,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
         // open the connection with the mssage
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -864,13 +914,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
         // init a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -903,13 +959,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
         // open the channle with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -949,13 +1011,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
         // try open a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -989,13 +1057,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
         // open a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1038,13 +1112,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
         // close the channel with the message
         let mut actions = tx_host_env::ibc::ibc_actions(tx::ctx());
@@ -1095,13 +1175,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
 
         // close the channel with the message
@@ -1202,13 +1288,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
         // ack the packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1282,13 +1374,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
         // send the token and a packet with the data
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1362,13 +1460,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1454,13 +1558,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1550,13 +1660,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1738,13 +1854,19 @@ mod tests {
         let mut tx = Tx::new(TxType::Raw);
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.code_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.data_sechash(),
-            &key::testing::keypair_1(),
+            &[key::testing::keypair_1()],
+            &AccountPublicKeysMap::from_iter([
+                key::testing::keypair_1().ref_to()
+            ]),
         )));
 
         // timeout the packet

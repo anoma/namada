@@ -245,7 +245,8 @@ pub async fn sign_tx<
 
     let epoch = rpc::query_epoch(client).await;
 
-    // TODO: refactor
+    // the unwrap is fine cause we check the threshold before which must be at
+    // least 1
     let fee_payer_keypair = &args
         .fee_payer
         .clone()
@@ -275,14 +276,6 @@ pub async fn sign_tx<
 
     Ok(broadcast_data)
 }
-
-// pub async fn public_keys_index_map<
-// C: crate::ledger::queries::Client + Sync,
-// U: WalletUtils,
-// >(
-// client: &C,
-
-// )
 
 /// Create a wrapper tx from a normal tx. Get the hash of the
 /// wrapper and its payload which is needed for monitoring its
