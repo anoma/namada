@@ -364,18 +364,21 @@ where
         }
     }
 
-    // Charge fee
-    transfer_fee(wl_storage, block_proposer, has_valid_pow, &wrapper)?;
+    // Charge or check fees
+    match block_proposer {
+        Some(proposer) => transfer_fee(wl_storage, proposer, #[cfg(not(feature = "mainnet"))]has_valid_pow, &wrapper)?,
+        None => check_fees(wl_storage, #[cfg(not(feature = "mainnet"))]has_valid_pow, &wrapper)?
+        }
 
     changed_keys.append(&mut wl_storage.write_log.get_keys());
 
     Ok(())
 }
 
-/// Perform the actual transfer of fess from the fee payer to the block proposer. If the block proposer is not provided, fees will be be burned and the total supply reduced accordingly
+/// Perform the actual transfer of fess from the fee payer to the block proposer
 pub fn transfer_fee<S>(
     wl_storage: &mut S,
-    block_proposer: Option<&Address>,
+    block_proposer: &Address, 
     #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     wrapper: &WrapperTx,
 ) -> Result<()> 
@@ -392,8 +395,13 @@ where
     match wrapper.get_tx_fee() {
         Ok(fees) => {
             if balance.checked_sub(fees).is_some() {
-                dispatch_fee_action(wl_storage, wrapper, block_proposer, fees)
-                    .map_err(|e| Error::FeeError(e.to_string()))
+        storage_api::token::transfer(
+            wl_storage,
+            &wrapper.fee.token,
+            &wrapper.fee_payer(),
+            block_proposer,
+            fees,
+        ).map_err(|e| Error::FeeError(e.to_string()))
             } else {
                 // Balance was insufficient for fee payment
                 #[cfg(not(feature = "mainnet"))]
@@ -405,13 +413,14 @@ where
                 #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
                     {
                         // Move all the available funds in the transparent balance of the fee payer
-                        dispatch_fee_action(
-                            wl_storage,
-                            wrapper,
-                            block_proposer,
-                            balance,
-                        )
-                        .map_err(|e| Error::FeeError(e.to_string()))?;
+        storage_api::token::transfer(
+            wl_storage,
+            &wrapper.fee.token,
+            &wrapper.fee_payer(),
+            block_proposer,
+            balance,
+        ).map_err(|e| Error::FeeError(e.to_string()))?;
+
 
                         return Err(Error::FeeError("Transparent balance of wrapper's signer was insufficient to pay fee. All the available transparent funds have been moved to the block proposer".to_string()));
                     }
@@ -429,13 +438,14 @@ where
                 #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
             {
                 // Move all the available funds in the transparent balance of the fee payer
-                dispatch_fee_action(
-                    wl_storage,
-                    wrapper,
-                    block_proposer,
-                    balance,
-                )
-                .map_err(|e| Error::FeeError(e.to_string()))?;
+        storage_api::token::transfer(
+            wl_storage,
+            &wrapper.fee.token,
+            &wrapper.fee_payer(),
+            block_proposer,
+            balance,
+        ).map_err(|e| Error::FeeError(e.to_string()))?;
+
 
                 return Err(Error::FeeError(
                     format!("{}. All the available transparent funds have been moved to the block proposer", e
@@ -448,30 +458,43 @@ where
     }
 }
 
-/// Decides whether to transfer the fees to the block proposer or burn them. Operations are done on the block write log.
-fn dispatch_fee_action<S>(
+/// Check if the fee payer has enough transparent balance to pay fees
+pub fn check_fees<S>(
     wl_storage: &mut S,
+    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool, 
     wrapper: &WrapperTx,
-    block_proposer: Option<&Address>,
-    amount: storage_api::token::Amount,
-) -> storage_api::Result<()>
+) -> Result<()> 
 where
     S: StorageRead + StorageWrite,
 {
-    match block_proposer {
-        Some(block_proposer) => storage_api::token::transfer(
-            wl_storage,
-            &wrapper.fee.token,
-            &wrapper.fee_payer(),
-            block_proposer,
-            amount,
-        ),
-        None => storage_api::token::burn_tokens(
-            wl_storage,
-            &wrapper.fee.token,
-            &wrapper.fee_payer(),
-            amount,
-        ),
+    
+    let balance = storage_api::token::read_balance(
+        wl_storage,
+        &wrapper.fee.token,
+        &wrapper.fee_payer(),
+    )
+    .unwrap();
+
+    let fees = wrapper.get_tx_fee().map_err(|e| Error::FeeError(e.to_string()))?;
+
+    if balance.checked_sub(fees).is_some() {
+        Ok(())
+    } else {
+        
+                // Balance was insufficient for fee payment
+                #[cfg(not(feature = "mainnet"))]
+                let reject = !has_valid_pow;
+                #[cfg(feature = "mainnet")]
+                let reject = true;
+
+        if reject {
+            Err(Error::FeeError("Insufficient transparent balance to pay fees".to_string()))
+        } else {
+            
+                    tracing::debug!("Balance was insufficient for fee payment but a valid PoW was provided");
+                    Ok(())
+        }
+
     }
 }
 

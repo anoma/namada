@@ -162,23 +162,24 @@ impl AbcippShim {
                             .and_then(|header| header.time.to_owned()),
                     );
 
-                    let block_proposer = begin_block_request
-                        .header
-                        .as_ref()
-                        .and_then(|header| {
-                            let tm_raw_hash_string =
-                                tm_raw_hash_to_string(&header.proposer_address);
-                            find_validator_by_raw_hash(
+                    let tm_raw_hash_string = tm_raw_hash_to_string(
+                        &begin_block_request
+                            .header
+                            .as_ref()
+                            .expect("Missing block header")
+                            .proposer_address,
+                    );
+                    let block_proposer = find_validator_by_raw_hash(
                                 &self.service.wl_storage,
                                 tm_raw_hash_string,
                             )
-                            .unwrap()
-                        });
+                            .unwrap().expect("Unable to find native validator address of block proposer from tendermint raw hash")
+                        ;
 
                     let (processing_results, _) = self.service.process_txs(
                         &self.delivered_txs,
                         block_time,
-                        block_proposer.as_ref(),
+                        &block_proposer,
                     );
                     let mut txs = Vec::with_capacity(self.delivered_txs.len());
                     let mut delivered = vec![];

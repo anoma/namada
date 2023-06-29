@@ -1013,7 +1013,7 @@ where
         false
     }
 
-    /// Check that the Wrapper's signer has enough funds to pay fees.
+    /// Check that the Wrapper's signer has enough funds to pay fees. If a block proposer is provided, updates the balance of the fee payer
     #[allow(clippy::too_many_arguments)]
     pub fn wrapper_fee_check<CA>(
         &self,
@@ -1126,21 +1126,33 @@ where
             }
         }
 
-        protocol::transfer_fee(
-            temp_wl_storage,
-            block_proposer,
-            self.has_valid_pow_solution(&wrapper),
-            &wrapper,
-        )
-        .map_err(Error::TxApply)
+        let result = match block_proposer {
+            Some(proposer) => protocol::transfer_fee(
+                temp_wl_storage,
+                proposer,
+                #[cfg(not(feature = "mainnet"))]
+                self.has_valid_pow_solution(&wrapper),
+                &wrapper,
+            ),
+            None => protocol::check_fees(
+                temp_wl_storage,
+                #[cfg(not(feature = "mainnet"))]
+                self.has_valid_pow_solution(&wrapper),
+                &wrapper,
+            ),
+        };
+
+        result.map_err(Error::TxApply)
     }
 }
 
 /// for the shell
 #[cfg(test)]
 mod test_utils {
+    use data_encoding::HEXUPPER;
     use std::ops::{Deref, DerefMut};
     use std::path::PathBuf;
+    use tendermint_proto::abci::RequestPrepareProposal;
 
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::{update_allowed_conversions, Sha256Hasher};
@@ -1157,6 +1169,7 @@ mod test_utils {
         RequestInitChain, RequestProcessProposal,
     };
     use crate::facade::tendermint_proto::google::protobuf::Timestamp;
+    use crate::node::ledger::shims::abcipp_shim_types;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
@@ -1267,6 +1280,14 @@ mod test_utils {
         ) -> std::result::Result<Vec<ProcessedTx>, TestError> {
             let resp = self.shell.process_proposal(RequestProcessProposal {
                 txs: req.txs.clone(),
+                proposer_address: HEXUPPER
+                    .decode(
+                        crate::wallet::defaults::validator_keypair()
+                            .to_public()
+                            .tm_raw_hash()
+                            .as_bytes(),
+                    )
+                    .unwrap(),
                 ..Default::default()
             });
             let results = resp
@@ -1295,6 +1316,22 @@ mod test_utils {
                 Ok(resp) => Ok(resp.events),
                 Err(err) => Err(err),
             }
+        }
+
+        /// Forward a PrepareProposal request
+        pub fn prepare_proposal(
+            &self,
+            mut req: RequestPrepareProposal,
+        ) -> abcipp_shim_types::shim::response::PrepareProposal {
+            req.proposer_address = HEXUPPER
+                .decode(
+                    crate::wallet::defaults::validator_keypair()
+                        .to_public()
+                        .tm_raw_hash()
+                        .as_bytes(),
+                )
+                .unwrap();
+            self.shell.prepare_proposal(req)
         }
 
         /// Add a wrapper tx to the queue of txs to be decrypted
@@ -1351,7 +1388,14 @@ mod test_utils {
                 },
                 byzantine_validators: vec![],
                 txs: vec![],
-                proposer_address: vec![],
+                proposer_address: HEXUPPER
+                    .decode(
+                        crate::wallet::defaults::validator_keypair()
+                            .to_public()
+                            .tm_raw_hash()
+                            .as_bytes(),
+                    )
+                    .unwrap(),
                 votes: vec![],
             }
         }

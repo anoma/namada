@@ -61,7 +61,7 @@ fn process_tx(c: &mut Criterion) {
                     ValidationMeta::from(&shell.wl_storage),
                     shell.vp_wasm_cache.clone(),
                     shell.tx_wasm_cache.clone(),
-                    Some(defaults::daewon_address()),
+                    defaults::daewon_address(),
                 )
             },
             |(
@@ -85,7 +85,7 @@ fn process_tx(c: &mut Criterion) {
                             &mut 0,
                             &mut vp_wasm_cache,
                             &mut tx_wasm_cache,
-                            block_proposer.as_ref()
+                            &block_proposer
                         )
                         .code,
                     0

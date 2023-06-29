@@ -62,12 +62,12 @@ where
                 &self.wl_storage,
                 tm_raw_hash_string,
             )
-            .unwrap();
+            .unwrap().expect("Unable to find native validator address of block proposer from tendermint raw hash");
             let (encrypted_txs, alloc) = self.build_encrypted_txs(
                 alloc,
                 &req.txs,
                 &req.time,
-                block_proposer.as_ref(),
+                &block_proposer,
             );
             let mut txs = encrypted_txs;
 
@@ -141,7 +141,7 @@ where
         mut alloc: EncryptedTxBatchAllocator,
         txs: &[TxBytes],
         block_time: &Option<Timestamp>,
-        block_proposer: Option<&Address>,
+        block_proposer: &Address,
     ) -> (Vec<TxBytes>, BlockAllocator<BuildingDecryptedTxBatch>) {
         let pos_queries = self.wl_storage.pos_queries();
         let block_time = block_time.clone().and_then(|block_time| {
@@ -219,7 +219,7 @@ where
         gas_table: &BTreeMap<String, u64>,
         vp_wasm_cache: &mut VpCache<CA>,
         tx_wasm_cache: &mut TxCache<CA>,
-        block_proposer: Option<&Address>,
+        block_proposer: &Address,
     ) -> Result<u64, ()>
     where
         CA: 'static + WasmCacheAccess + Sync,
@@ -250,7 +250,7 @@ where
                 Some(Cow::Borrowed(gas_table)),
                 vp_wasm_cache,
                 tx_wasm_cache,
-                block_proposer,
+                Some(block_proposer),
             ) {
                 Ok(()) => Ok(u64::from(wrapper.gas_limit)),
                 Err(_) => Err(())
@@ -361,7 +361,8 @@ mod test_prepare_proposal {
     use namada::types::token;
     use namada::types::token::Amount;
     use namada::types::transaction::{Fee, WrapperTx};
-
+use data_encoding::HEXUPPER;
+    use namada::core::types::key::PublicKeyTmRawHash;
     use super::*;
     use crate::node::ledger::shell::test_utils::{self, gen_keypair};
 

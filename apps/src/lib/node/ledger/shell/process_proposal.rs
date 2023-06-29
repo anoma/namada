@@ -93,13 +93,18 @@ where
         req: RequestProcessProposal,
     ) -> ProcessProposal {
         let tm_raw_hash_string = tm_raw_hash_to_string(&req.proposer_address);
-        let block_proposer =
-            find_validator_by_raw_hash(&self.wl_storage, tm_raw_hash_string)
-                .unwrap();
+        let block_proposer = find_validator_by_raw_hash(
+            &self.wl_storage,
+            tm_raw_hash_string,
+        )
+        .unwrap()
+        .expect(
+            "Unable to find native validator address of block proposer from tendermint raw hash",
+        );
         let (tx_results, metadata) = self.process_txs(
             &req.txs,
             self.get_block_timestamp(req.time),
-            block_proposer.as_ref(),
+            &block_proposer,
         );
 
         // Erroneous transactions were detected when processing
@@ -152,7 +157,7 @@ where
         &self,
         txs: &[TxBytes],
         block_time: DateTimeUtc,
-        block_proposer: Option<&Address>,
+        block_proposer: &Address,
     ) -> (Vec<TxResult>, ValidationMeta) {
         let mut tx_queue_iter = self.wl_storage.storage.tx_queue.iter();
         let mut temp_wl_storage = TempWlStorage::new(&self.wl_storage.storage);
@@ -231,7 +236,7 @@ where
         wrapper_index: &mut usize,
         vp_wasm_cache: &mut VpCache<CA>,
         tx_wasm_cache: &mut TxCache<CA>,
-        block_proposer: Option<&Address>,
+        block_proposer: &Address,
     ) -> TxResult
     where
         CA: 'static + WasmCacheAccess + Sync,
@@ -599,7 +604,7 @@ where
                         Some(Cow::Borrowed(gas_table)),
                         vp_wasm_cache,
                         tx_wasm_cache,
-                        block_proposer,
+                        Some(block_proposer),
                     ) {
                         Ok(()) => {
                             temp_wl_storage
