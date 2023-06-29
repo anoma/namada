@@ -3290,6 +3290,9 @@ where
                     .at(&epoch)
                     .at(&token::Amount::from_change(amount_pre))
                     .remove(storage, &val_position)?;
+                validator_set_positions_handle()
+                    .at(&epoch)
+                    .remove(storage, validator)?;
 
                 // For the pipeline epoch only:
                 // promote the next max inactive validator to the active
@@ -3346,6 +3349,9 @@ where
                     .at(&epoch)
                     .at(&token::Amount::from_change(amount_pre).into())
                     .remove(storage, &val_position)?;
+                validator_set_positions_handle()
+                    .at(&epoch)
+                    .remove(storage, validator)?;
             }
             ValidatorState::BelowThreshold => {
                 println!("Below-threshold");
