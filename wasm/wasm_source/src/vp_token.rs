@@ -51,7 +51,7 @@ fn token_checks(
     keys_touched: &BTreeSet<storage::Key>,
     verifiers: &BTreeSet<Address>,
 ) -> VpResult {
-    let mut change: token::Change = 0;
+    let mut change = token::Change::default();
     for key in keys_touched.iter() {
         let owner: Option<&Address> = token::is_balance_key(token, key)
             .or_else(|| {
@@ -77,36 +77,45 @@ fn token_checks(
             }
             Some(owner) => {
                 // accumulate the change
-                let pre: token::Amount = match owner {
+                let pre: token::Change = match owner {
                     Address::Internal(InternalAddress::IbcMint) => {
-                        token::Amount::max()
+                        token::Change::maximum()
                     }
                     Address::Internal(InternalAddress::IbcBurn) => {
-                        token::Amount::default()
+                        token::Change::default()
                     }
-                    _ => ctx.read_pre(key)?.unwrap_or_default(),
+                    _ => ctx
+                        .read_pre::<token::Amount>(key)?
+                        .unwrap_or_default()
+                        .change(),
                 };
-                let post: token::Amount = match owner {
-                    Address::Internal(InternalAddress::IbcMint) => {
-                        ctx.read_temp(key)?.unwrap_or_else(token::Amount::max)
-                    }
-                    Address::Internal(InternalAddress::IbcBurn) => {
-                        ctx.read_temp(key)?.unwrap_or_default()
-                    }
-                    _ => ctx.read_post(key)?.unwrap_or_default(),
+                let post: token::Change = match owner {
+                    Address::Internal(InternalAddress::IbcMint) => ctx
+                        .read_temp::<token::Amount>(key)?
+                        .map(|x| x.change())
+                        .unwrap_or_else(token::Change::maximum),
+                    Address::Internal(InternalAddress::IbcBurn) => ctx
+                        .read_temp::<token::Amount>(key)?
+                        .unwrap_or_default()
+                        .change(),
+                    _ => ctx
+                        .read_post::<token::Amount>(key)?
+                        .unwrap_or_default()
+                        .change(),
                 };
-                let this_change = post.change() - pre.change();
+                let this_change = post - pre;
                 change += this_change;
                 // make sure that the spender approved the transaction
-                if this_change < 0
-                    && !(verifiers.contains(owner) || *owner == address::masp())
+                if !(this_change.non_negative()
+                    || verifiers.contains(owner)
+                    || *owner == address::masp())
                 {
                     return reject();
                 }
             }
         }
     }
-    Ok(change == 0)
+    Ok(change.is_zero())
 }
 
 #[cfg(test)]
@@ -129,7 +138,8 @@ mod tests {
         let token = address::nam();
         let src = address::testing::established_address_1();
         let dest = address::testing::established_address_2();
-        let total_supply = token::Amount::from(10_098_123);
+        let total_supply =
+            token::Amount::from_uint(10_098_123, 0).expect("Test failed");
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&token, &src, &dest]);
@@ -147,7 +157,7 @@ mod tests {
         vp_host_env::init_from_tx(token.clone(), tx_env, |_address| {
             // Apply a transfer
 
-            let amount = token::Amount::from(100);
+            let amount = token::Amount::from_uint(100, 0).expect("Test failed");
             token::transfer(tx::ctx(), &token, &src, &dest, amount).unwrap();
         });
 
@@ -172,7 +182,8 @@ mod tests {
         let token = address::nam();
         let src = address::testing::established_address_1();
         let dest = address::testing::established_address_2();
-        let total_supply = token::Amount::from(10_098_123);
+        let total_supply =
+            token::Amount::from_uint(10_098_123, 0).expect("Test failed");
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&token, &src, &dest]);
@@ -190,8 +201,10 @@ mod tests {
         vp_host_env::init_from_tx(token.clone(), tx_env, |_address| {
             // Apply a transfer
 
-            let amount_in = token::Amount::from(100);
-            let amount_out = token::Amount::from(900);
+            let amount_in =
+                token::Amount::from_uint(100, 0).expect("Test failed");
+            let amount_out =
+                token::Amount::from_uint(900, 0).expect("Test failed");
 
             let src_key = token::balance_key(&token, &src);
             let src_balance =
@@ -226,7 +239,8 @@ mod tests {
         let mut tx_env = TestTxEnv::default();
         let token = address::nam();
         let owner = address::testing::established_address_1();
-        let total_supply = token::Amount::from(10_098_123);
+        let total_supply =
+            token::Amount::from_uint(10_098_123, 0).expect("Test failed");
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&token, &owner]);
@@ -253,7 +267,8 @@ mod tests {
             tx::ctx()
                 .write(
                     &total_supply_key,
-                    current_supply + token::Amount::from(1),
+                    current_supply
+                        + token::Amount::from_uint(1, 0).expect("Test failed"),
                 )
                 .unwrap();
         });

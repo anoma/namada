@@ -28,8 +28,6 @@ derivative.workspace = true
 once_cell.workspace = true
 proptest = {version = "1.2.0", optional = true}
 rand = "0.8.5"
-rust_decimal_macros.workspace = true
-rust_decimal.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 

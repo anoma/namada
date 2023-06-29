@@ -5,7 +5,8 @@ use masp_primitives::sapling::Node;
 use namada_core::ledger::storage::LastBlock;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
-use namada_core::types::storage::{BlockResults, KeySeg};
+use namada_core::types::storage::{BlockResults, Key, KeySeg};
+use namada_core::types::token::MaspDenom;
 
 use crate::ibc::core::ics04_channel::packet::Sequence;
 use crate::ibc::core::ics24_host::identifier::{ChannelId, ClientId, PortId};
@@ -23,6 +24,8 @@ use crate::types::transaction::TxResult;
 
 type Conversion = (
     Address,
+    Option<Key>,
+    MaspDenom,
     Epoch,
     masp_primitives::transaction::components::Amount,
     MerklePath<Node>,
@@ -151,7 +154,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     // Conversion values are constructed on request
-    if let Some((addr, epoch, conv, pos)) = ctx
+    if let Some(((addr, sub_prefix, denom), epoch, conv, pos)) = ctx
         .wl_storage
         .storage
         .conversion_state
@@ -160,6 +163,8 @@ where
     {
         Ok((
             addr.clone(),
+            sub_prefix.clone(),
+            *denom,
             *epoch,
             Into::<masp_primitives::transaction::components::Amount>::into(
                 conv.clone(),
@@ -470,7 +475,7 @@ mod test {
         // Request dry run tx
         let mut outer_tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]
-            // To be able to dry-run testnet faucet withdrawal, pretend 
+            // To be able to dry-run testnet faucet withdrawal, pretend
             // that we got a valid PoW
             has_valid_pow: true,
         }));
@@ -515,7 +520,7 @@ mod test {
         assert!(!has_balance_key);
 
         // Then write some balance ...
-        let balance = token::Amount::from(1000);
+        let balance = token::Amount::native_whole(1000);
         StorageWrite::write(&mut client.wl_storage, &balance_key, balance)?;
         // It has to be committed to be visible in a query
         client.wl_storage.commit_tx();

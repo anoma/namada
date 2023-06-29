@@ -26,7 +26,7 @@ RUN make build-release
 FROM golang:1.18.0 as tendermint-builder
 WORKDIR /app
 
-RUN git clone -b v0.1.4-abciplus --single-branch https://github.com/heliaxdev/tendermint.git && cd tendermint && make build
+RUN git clone -b v0.37.2 --single-branch https://github.com/cometbft/cometbft.git && cd cometbft && make build
 
 FROM debian:bullseye-slim AS runtime
 ENV NAMADA_BASE_DIR=/.namada 
@@ -41,7 +41,7 @@ COPY --from=builder --chmod=0755 /app/target/release/namada /usr/local/bin
 COPY --from=builder --chmod=0755 /app/target/release/namadan /usr/local/bin
 COPY --from=builder --chmod=0755 /app/target/release/namadaw /usr/local/bin
 COPY --from=builder --chmod=0755 /app/target/release/namadac /usr/local/bin
-COPY --from=tendermint-builder --chmod=0755 /app/tendermint/build/tendermint /usr/local/bin
+COPY --from=tendermint-builder --chmod=0755 /app/cometbft/build/cometbft /usr/local/bin
 
 EXPOSE 26656
 EXPOSE 26660

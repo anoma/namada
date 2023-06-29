@@ -3,6 +3,8 @@
 use super::{StorageRead, StorageWrite};
 use crate::ledger::storage_api;
 use crate::types::address::Address;
+use crate::types::storage::DbKeySeg::StringSeg;
+use crate::types::storage::Key;
 use crate::types::token;
 pub use crate::types::token::{
     balance_key, is_balance_key, is_total_supply_key, total_supply_key, Amount,
@@ -34,6 +36,45 @@ where
     let key = token::total_supply_key(token);
     let balance = storage.read::<token::Amount>(&key)?.unwrap_or_default();
     Ok(balance)
+}
+
+/// Read the denomination of a given token, if any. Note that native
+/// transparent tokens do not have this set and instead use the constant
+/// [`token::NATIVE_MAX_DECIMAL_PLACES`].
+pub fn read_denom<S>(
+    storage: &S,
+    token: &Address,
+    sub_prefix: Option<&Key>,
+) -> storage_api::Result<Option<token::Denomination>>
+where
+    S: StorageRead,
+{
+    if let Some(sub_prefix) = sub_prefix {
+        if sub_prefix.segments.contains(&StringSeg("ibc".to_string())) {
+            return Ok(Some(token::NATIVE_MAX_DECIMAL_PLACES.into()));
+        }
+    }
+    let key = token::denom_key(token, sub_prefix);
+    storage.read(&key).map(|opt_denom| {
+        Some(
+            opt_denom
+                .unwrap_or_else(|| token::NATIVE_MAX_DECIMAL_PLACES.into()),
+        )
+    })
+}
+
+/// Write the denomination of a given token.
+pub fn write_denom<S>(
+    storage: &mut S,
+    token: &Address,
+    sub_prefix: Option<&Key>,
+    denom: token::Denomination,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = token::denom_key(token, sub_prefix);
+    storage.write(&key, denom)
 }
 
 /// Transfer `token` from `src` to `dest`. Returns an `Err` if `src` has

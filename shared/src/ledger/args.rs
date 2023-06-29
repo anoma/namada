@@ -2,8 +2,8 @@
 use std::path::PathBuf;
 
 use namada_core::types::chain::ChainId;
+use namada_core::types::dec::Dec;
 use namada_core::types::time::DateTimeUtc;
-use rust_decimal::Decimal;
 use zeroize::Zeroizing;
 
 use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
@@ -96,11 +96,22 @@ pub struct TxTransfer<C: NamadaTypes = SdkTypes> {
     /// Transferred token address
     pub sub_prefix: Option<String>,
     /// Transferred token amount
-    pub amount: token::Amount,
+    pub amount: InputAmount,
     /// Native token address
     pub native_token: C::NativeAddress,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
+}
+/// An amount read in by the cli
+#[derive(Copy, Clone, Debug)]
+pub enum InputAmount {
+    /// An amount whose representation has been validated
+    /// against the allowed representation in storage
+    Validated(token::DenominatedAmount),
+    /// The parsed amount read in from the cli. It has
+    /// not yet been validated against the allowed
+    /// representation in storage.
+    Unvalidated(token::DenominatedAmount),
 }
 
 /// IBC transfer transaction arguments
@@ -112,7 +123,7 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub source: C::Address,
     /// Transfer target address
     pub receiver: String,
-    /// Transferred token address
+    /// Transferred token addres    s
     pub token: C::Address,
     /// Transferred token address
     pub sub_prefix: Option<String>,
@@ -161,9 +172,9 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     /// Protocol key
     pub protocol_key: Option<C::PublicKey>,
     /// Commission rate
-    pub commission_rate: Decimal,
+    pub commission_rate: Dec,
     /// Maximum commission rate change
-    pub max_commission_rate_change: Decimal,
+    pub max_commission_rate_change: Dec,
     /// Path to the VP WASM code file
     pub validator_vp_code_path: PathBuf,
     /// Path to the TX WASM code file
@@ -293,6 +304,8 @@ pub struct QueryTransfers<C: NamadaTypes = SdkTypes> {
     pub owner: Option<C::BalanceOwner>,
     /// Address of a token
     pub token: Option<C::Address>,
+    /// sub-prefix if querying a multi-token
+    pub sub_prefix: Option<String>,
 }
 
 /// Query PoS bond(s)
@@ -325,7 +338,7 @@ pub struct TxCommissionRateChange<C: NamadaTypes = SdkTypes> {
     /// Validator address (should be self)
     pub validator: C::Address,
     /// Value to which the tx changes the commission rate
-    pub rate: Decimal,
+    pub rate: Dec,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -408,7 +421,7 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// wallet.
     pub wallet_alias_force: bool,
     /// The amount being payed to include the transaction
-    pub fee_amount: token::Amount,
+    pub fee_amount: InputAmount,
     /// The token in which the fee is being paid
     pub fee_token: C::Address,
     /// The max amount of gas used to process tx

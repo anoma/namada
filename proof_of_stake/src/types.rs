@@ -16,14 +16,17 @@ use namada_core::ledger::storage_api::collections::{
 };
 use namada_core::ledger::storage_api::{self, StorageRead};
 use namada_core::types::address::Address;
+use namada_core::types::dec::Dec;
 use namada_core::types::key::common;
 use namada_core::types::storage::{Epoch, KeySeg};
 use namada_core::types::token;
+use namada_core::types::token::Amount;
 pub use rev_order::ReverseOrdTokenAmount;
-use rust_decimal::prelude::{Decimal, ToPrimitive};
 
 use crate::parameters::PosParams;
 
+// TODO: replace `POS_MAX_DECIMAL_PLACES` with
+// core::types::token::NATIVE_MAX_DECIMAL_PLACES??
 const U64_MAX: u64 = u64::MAX;
 
 // TODO: add this to the spec
@@ -122,7 +125,7 @@ pub type TotalDeltas = crate::epoched::EpochedDelta<
 
 /// Epoched validator commission rate
 pub type CommissionRates =
-    crate::epoched::Epoched<Decimal, crate::epoched::OffsetPipelineLen>;
+    crate::epoched::Epoched<Dec, crate::epoched::OffsetPipelineLen>;
 
 /// Epoched validator's bonds
 pub type Bonds = crate::epoched::EpochedDelta<
@@ -181,17 +184,17 @@ pub struct SlashedAmount {
 /// Commission rate and max commission rate change per epoch for a validator
 pub struct CommissionPair {
     /// Validator commission rate
-    pub commission_rate: Decimal,
+    pub commission_rate: Dec,
     /// Validator max commission rate change per epoch
-    pub max_commission_change_per_epoch: Decimal,
+    pub max_commission_change_per_epoch: Dec,
 }
 
 /// Epoched rewards products
-pub type RewardsProducts = LazyMap<Epoch, Decimal>;
+pub type RewardsProducts = LazyMap<Epoch, Dec>;
 
 /// Consensus validator rewards accumulator (for tracking the fractional block
 /// rewards owed over the course of an epoch)
-pub type RewardsAccumulator = LazyMap<Address, Decimal>;
+pub type RewardsAccumulator = LazyMap<Address, Dec>;
 
 // --------------------------------------------------------------------------------------------
 
@@ -215,9 +218,9 @@ pub struct GenesisValidator {
     /// A public key used for signing validator's consensus actions
     pub consensus_key: common::PublicKey,
     /// Commission rate charged on rewards for delegators (bounded inside 0-1)
-    pub commission_rate: Decimal,
+    pub commission_rate: Dec,
     /// Maximum change in commission rate permitted per epoch
-    pub max_commission_rate_change: Decimal,
+    pub max_commission_rate_change: Dec,
 }
 
 /// An update of the consensus and below-capacity validator set.
@@ -236,7 +239,7 @@ pub struct ConsensusValidator {
     /// A public key used for signing validator's consensus actions
     pub consensus_key: common::PublicKey,
     /// Total bonded stake of the validator
-    pub bonded_stake: u64,
+    pub bonded_stake: token::Amount,
 }
 
 /// ID of a bond and/or an unbond.
@@ -287,7 +290,8 @@ impl Display for WeightedValidator {
         write!(
             f,
             "{} with bonded stake {}",
-            self.address, self.bonded_stake
+            self.address,
+            self.bonded_stake.to_string_native()
         )
     }
 }
@@ -395,7 +399,7 @@ pub struct Slash {
     /// A type of slashable event.
     pub r#type: SlashType,
     /// The cubic slashing rate for this validator
-    pub rate: Decimal,
+    pub rate: Dec,
 }
 
 /// Slashes applied to validator, to punish byzantine behavior by removing
@@ -492,7 +496,7 @@ impl Display for BondId {
 impl SlashType {
     /// Get the slash rate applicable to the given slash type from the PoS
     /// parameters.
-    pub fn get_slash_rate(&self, params: &PosParams) -> Decimal {
+    pub fn get_slash_rate(&self, params: &PosParams) -> Dec {
         match self {
             SlashType::DuplicateVote => params.duplicate_vote_min_slash_rate,
             SlashType::LightClientAttack => {
@@ -511,52 +515,13 @@ impl Display for SlashType {
     }
 }
 
-/// Multiply a value of type Decimal with one of type u64 and then return the
-/// truncated u64
-pub fn decimal_mult_u64(dec: Decimal, int: u64) -> u64 {
-    let prod = dec * Decimal::from(int);
-    // truncate the number to the floor
-    prod.to_u64().expect("Product is out of bounds")
-}
-
-/// Multiply a value of type Decimal with one of type i128 and then return the
-/// truncated i128
-pub fn decimal_mult_i128(dec: Decimal, int: i128) -> i128 {
-    let prod = dec * Decimal::from(int);
-    // truncate the number to the floor
-    prod.to_i128().expect("Product is out of bounds")
-}
-
-/// Multiply a value of type Decimal with one of type i128 and then convert it
-/// to an Amount type
-pub fn mult_change_to_amount(
-    dec: Decimal,
-    change: token::Change,
-) -> token::Amount {
-    let prod = dec * Decimal::from(change);
-    // truncate the number to the floor
-    token::Amount::from(prod.to_u64().expect("Product is out of bounds"))
-}
-
-/// Multiply a value of type Decimal with one of type Amount and then return the
-/// truncated Amount
-pub fn decimal_mult_amount(
-    dec: Decimal,
-    amount: token::Amount,
-) -> token::Amount {
-    let prod = dec * Decimal::from(amount);
-    // truncate the number to the floor
-    token::Amount::from(prod.to_u64().expect("Product is out of bounds"))
-}
-
 /// Calculate voting power in the tendermint context (which is stored as i64)
 /// from the number of tokens
-pub fn into_tm_voting_power(
-    votes_per_token: Decimal,
-    tokens: impl Into<u64>,
-) -> i64 {
-    let prod = decimal_mult_u64(votes_per_token, tokens.into());
-    i64::try_from(prod).expect("Invalid voting power")
+pub fn into_tm_voting_power(votes_per_token: Dec, tokens: Amount) -> i64 {
+    let pow = votes_per_token
+        * u128::try_from(tokens).expect("Voting power out of bounds");
+    i64::try_from(pow.to_uint().expect("Cant fail"))
+        .expect("Invalid voting power")
 }
 
 #[cfg(test)]
