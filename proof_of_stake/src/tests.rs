@@ -1973,8 +1973,9 @@ fn arb_genesis_validators(
                 // If there's a threshold, make sure that at least one validator
                 // has at least a stake greater or equal to the threshold to
                 // avoid having an empty consensus set.
-                threshold.map(|token| token.raw_amount().as_u64()).unwrap_or(1)
-                    ..=10_000_000_u64
+                threshold
+                    .map(|token| token.raw_amount().as_u64())
+                    .unwrap_or(1)..=10_000_000_u64
             } else {
                 1..=10_000_000_u64
             }
@@ -1994,7 +1995,8 @@ fn arb_genesis_validators(
                     let consensus_key = consensus_sk.to_public();
 
                     let commission_rate = Dec::new(5, 2).expect("Test failed");
-                    let max_commission_rate_change = Dec::new(1, 2).expect("Test failed");
+                    let max_commission_rate_change =
+                        Dec::new(1, 2).expect("Test failed");
                     GenesisValidator {
                         address,
                         tokens,

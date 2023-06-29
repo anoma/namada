@@ -3023,9 +3023,9 @@ pub mod args {
                     "The token address that queried transfers must involve.",
                 ))
                 .arg(
-                    SUB_PREFIX.def().about(
-                        "The token's sub prefix whose balance to query.",
-                    ),
+                    SUB_PREFIX
+                        .def()
+                        .help("The token's sub prefix whose balance to query."),
                 )
         }
     }

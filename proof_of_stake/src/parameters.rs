@@ -69,7 +69,7 @@ impl Default for PosParams {
             light_client_attack_min_slash_rate: Dec::new(1, 3)
                 .expect("Test failed"),
             cubic_slashing_window_length: 1,
-            validator_stake_threshold: token::Amount::whole(1_u64),
+            validator_stake_threshold: token::Amount::native_whole(1_u64),
         }
     }
 }

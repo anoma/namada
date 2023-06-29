@@ -102,8 +102,8 @@ pub async fn query_block<C: crate::ledger::queries::Client + Sync>(
 fn unwrap_client_response<C: crate::ledger::queries::Client, T>(
     response: Result<T, C::Error>,
 ) -> T {
-    response.unwrap_or_else(|_err| {
-        panic!("Error in the query");
+    response.unwrap_or_else(|err| {
+        panic!("Error in the query: {}", err);
     })
 }
 

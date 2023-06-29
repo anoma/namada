@@ -1091,7 +1091,7 @@ impl ConcretePosState {
                 tracing::debug!(
                     "Below-thresh val {}, stake {}",
                     &validator,
-                    stake
+                    stake.to_string_native()
                 );
 
                 let state = crate::validator_state_handle(&validator)
@@ -2983,7 +2983,8 @@ impl AbstractPosState {
             if max_bc > min_consensus {
                 println!(
                     "min_consensus = {}, max_bc = {}",
-                    min_consensus, max_bc
+                    min_consensus.to_string_native(),
+                    max_bc.to_string_native()
                 );
             }
             assert!(min_consensus >= max_bc);
@@ -3006,7 +3007,7 @@ impl AbstractPosState {
                 tracing::debug!(
                     "Below-thresh val {}, stake {} - ({:?})",
                     addr,
-                    &stake,
+                    stake.to_string_native(),
                     state
                 );
 

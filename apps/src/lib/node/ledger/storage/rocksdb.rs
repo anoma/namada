@@ -1312,7 +1312,7 @@ fn iter_subspace_prefix<'iter>(
         .get_column_family(SUBSPACE_CF)
         .expect("{SUBSPACE_CF} column family should exist");
     let db_prefix = "".to_owned();
-    let prefix = prefix.map(|k| k.to_string()).unwrap_or_default();
+    let prefix = prefix.map(|k| k.to_string());
     iter_prefix(db, subspace_cf, db_prefix, prefix)
 }
 
@@ -1632,19 +1632,19 @@ mod test {
         db.exec_batch(batch.0).unwrap();
 
         let itered_keys: Vec<Key> = db
-            .iter_optional_prefix(Some(&prefix_0))
+            .iter_prefix(Some(&prefix_0))
             .map(|(key, _val, _)| Key::parse(key).unwrap())
             .collect();
         itertools::assert_equal(keys_0, itered_keys);
 
         let itered_keys: Vec<Key> = db
-            .iter_optional_prefix(Some(&prefix_1))
+            .iter_prefix(Some(&prefix_1))
             .map(|(key, _val, _)| Key::parse(key).unwrap())
             .collect();
         itertools::assert_equal(keys_1, itered_keys);
 
         let itered_keys: Vec<Key> = db
-            .iter_optional_prefix(None)
+            .iter_prefix(None)
             .map(|(key, _val, _)| Key::parse(key).unwrap())
             .collect();
         itertools::assert_equal(all_keys, itered_keys);
