@@ -130,17 +130,20 @@ impl<U: WalletUtils> Wallet<U> {
         alias_force: bool,
         seed_and_derivation_path: Option<(Seed, DerivationPath)>,
         password: Option<Zeroizing<String>>,
-    ) -> Result<(String, common::SecretKey), GenRestoreKeyError> {
-        let (alias, key) = self.store.gen_key::<U>(
-            scheme,
-            alias,
-            alias_force,
-            seed_and_derivation_path,
-            password,
-        );
-        // Cache the newly added key
-        self.decrypted_key_cache.insert(alias.clone(), key.clone());
-        Ok((alias.into(), key))
+    ) -> Option<(String, common::SecretKey)> {
+        self.store
+            .gen_key::<U>(
+                scheme,
+                alias,
+                alias_force,
+                seed_and_derivation_path,
+                password,
+            )
+            .map(|(alias, key)| {
+                // Cache the newly added key
+                self.decrypted_key_cache.insert(alias.clone(), key.clone());
+                (alias.into(), key)
+            })
     }
 
     /// Restore a keypair from the user mnemonic code (read from stdin) using
@@ -159,7 +162,7 @@ impl<U: WalletUtils> Wallet<U> {
         alias_force: bool,
         derivation_path: Option<String>,
         password: Option<Zeroizing<String>>,
-    ) -> Result<(String, common::SecretKey), GenRestoreKeyError> {
+    ) -> Result<Option<(String, common::SecretKey)>, GenRestoreKeyError> {
         let parsed_derivation_path = derivation_path
             .map(|p| {
                 let is_default = p.eq_ignore_ascii_case("DEFAULT");
@@ -183,13 +186,13 @@ impl<U: WalletUtils> Wallet<U> {
         let passphrase = U::read_mnemonic_passphrase(false);
         let seed = Seed::new(&mnemonic, &passphrase);
 
-        self.gen_and_store_key(
+        Ok(self.gen_and_store_key(
             scheme,
             alias,
             alias_force,
             Some((seed, parsed_derivation_path)),
             password,
-        )
+        ))
     }
 
     /// Generate a new keypair and derive an implicit address from its public
@@ -211,7 +214,7 @@ impl<U: WalletUtils> Wallet<U> {
         alias_force: bool,
         password: Option<Zeroizing<String>>,
         derivation_path_and_mnemonic_rng: Option<(String, &mut U::Rng)>,
-    ) -> Result<(String, common::SecretKey), GenRestoreKeyError> {
+    ) -> Result<Option<(String, common::SecretKey)>, GenRestoreKeyError> {
         let parsed_path_and_rng = derivation_path_and_mnemonic_rng
             .map(|(raw_derivation_path, rng)| {
                 let is_default =
@@ -253,13 +256,13 @@ impl<U: WalletUtils> Wallet<U> {
             Ok((Seed::new(&mnemonic, &passphrase), path))
         }).transpose()?;
 
-        self.gen_and_store_key(
+        Ok(self.gen_and_store_key(
             scheme,
             alias,
             alias_force,
             seed_and_derivation_path,
             password,
-        )
+        ))
     }
 
     /// Generate a spending key and store it under the given alias in the wallet

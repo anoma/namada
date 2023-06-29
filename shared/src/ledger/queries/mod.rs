@@ -9,9 +9,7 @@ pub use types::Client;
 pub use types::{
     EncodedResponseQuery, RequestCtx, RequestQuery, ResponseQuery, Router,
 };
-use vp::VP;
-// Re-export to show in rustdoc!
-pub use vp::{Pos, Vp};
+use vp::{Vp, VP};
 
 use super::storage::traits::StorageHasher;
 use super::storage::{DBIter, DB};
@@ -22,7 +20,7 @@ use crate::types::storage::BlockHeight;
 mod router;
 mod shell;
 mod types;
-mod vp;
+pub mod vp;
 
 // Most commonly expected patterns should be declared first
 router! {RPC,
@@ -59,7 +57,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     if request.height != BlockHeight(0)
-        && request.height != ctx.wl_storage.storage.last_height
+        && request.height != ctx.wl_storage.storage.get_last_block_height()
     {
         return Err(storage_api::Error::new_const(
             "This query doesn't support arbitrary block heights, only the \

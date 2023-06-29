@@ -47,7 +47,6 @@ use crate::types::key::*;
 use crate::types::masp::TransferTarget;
 use crate::types::storage::{Epoch, RESERVED_ADDRESS_PREFIX};
 use crate::types::time::DateTimeUtc;
-use crate::types::transaction::decrypted::DecryptedTx;
 use crate::types::transaction::{pos, InitAccount, TxType, UpdateVp};
 use crate::types::{storage, token};
 use crate::vm;
@@ -368,12 +367,7 @@ where
     .await
     .unwrap();
 
-    let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
-        #[cfg(not(feature = "mainnet"))]
-        // To be able to dry-run testnet faucet withdrawal, pretend 
-        // that we got a valid PoW
-        has_valid_pow: true,
-    }));
+    let mut tx = Tx::new(TxType::Raw);
     tx.header.chain_id = args.chain_id.clone().expect("value should be there");
     tx.header.expiration = args.expiration;
     tx.set_data(Data::new(tx_data));

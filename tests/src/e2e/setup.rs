@@ -203,7 +203,7 @@ pub fn network(
         Some(5),
         &working_dir,
         &test_dir,
-        "validator",
+        None,
         format!("{}:{}", std::file!(), std::line!()),
     )?;
 
@@ -445,7 +445,7 @@ impl Test {
             timeout_sec,
             &self.working_dir,
             base_dir,
-            mode,
+            Some(mode),
             loc,
         )
     }
@@ -714,7 +714,7 @@ pub fn run_cmd<I, S>(
     timeout_sec: Option<u64>,
     working_dir: impl AsRef<Path>,
     base_dir: impl AsRef<Path>,
-    mode: &str,
+    mode: Option<&str>,
     loc: String,
 ) -> Result<NamadaCmd>
 where
@@ -740,13 +740,13 @@ where
         .env("TM_LOG_LEVEL", "info")
         .env("NAMADA_LOG_COLOR", "false")
         .current_dir(working_dir)
-        .args([
-            "--base-dir",
-            &base_dir.as_ref().to_string_lossy(),
-            "--mode",
-            mode,
-        ])
-        .args(args);
+        .args(["--base-dir", &base_dir.as_ref().to_string_lossy()]);
+
+    if let Some(mode) = mode {
+        run_cmd.args(["--mode", mode]);
+    }
+
+    run_cmd.args(args);
 
     let args: String =
         run_cmd.get_args().map(|s| s.to_string_lossy()).join(" ");

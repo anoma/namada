@@ -77,9 +77,14 @@ where
             Some(EPOCH_SWITCH_BLOCKS_DELAY)
         );
 
-        tracing::debug!(
-            "Block height: {height}, epoch: {current_epoch}, new epoch: \
+        tracing::info!(
+            "Block height: {height}, epoch: {current_epoch}, is new epoch: \
              {new_epoch}."
+        );
+        tracing::debug!(
+            "New epoch block delay for updating the Tendermint validator set: \
+             {:?}",
+            self.wl_storage.storage.update_epoch_blocks_delay
         );
 
         if new_epoch {
@@ -576,7 +581,7 @@ where
         hash: BlockHash,
         byzantine_validators: Vec<Evidence>,
     ) -> (BlockHeight, bool) {
-        let height = self.wl_storage.storage.last_height + 1;
+        let height = self.wl_storage.storage.get_last_block_height() + 1;
 
         self.gas_meter.reset();
 

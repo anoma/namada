@@ -3593,7 +3593,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.16.0"
+version = "0.17.2"
 dependencies = [
  "async-trait",
  "bellman",
@@ -3657,7 +3657,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.16.0"
+version = "0.17.2"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -3731,7 +3731,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.16.0"
+version = "0.17.2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3740,7 +3740,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.16.0"
+version = "0.17.2"
 dependencies = [
  "borsh",
  "data-encoding",
@@ -3757,7 +3757,7 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.16.0"
+version = "0.17.2"
 dependencies = [
  "borsh",
  "namada_core",
@@ -3766,7 +3766,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.16.0"
+version = "0.17.2"
 dependencies = [
  "chrono",
  "concat-idents",
@@ -3797,7 +3797,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.16.0"
+version = "0.17.2"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -3812,7 +3812,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.16.0"
+version = "0.17.2"
 dependencies = [
  "borsh",
  "hex",
@@ -3823,7 +3823,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.16.0"
+version = "0.17.2"
 dependencies = [
  "borsh",
  "namada_core",
@@ -3836,7 +3836,7 @@ dependencies = [
 
 [[package]]
 name = "namada_wasm_for_tests"
-version = "0.16.0"
+version = "0.17.2"
 dependencies = [
  "borsh",
  "getrandom 0.2.8",
@@ -4516,8 +4516,9 @@ dependencies = [
 
 [[package]]
 name = "proptest"
-version = "1.1.0"
-source = "git+https://github.com/heliaxdev/proptest?rev=8f1b4abe7ebd35c0781bf9a00a4ee59833ffa2a1#8f1b4abe7ebd35c0781bf9a00a4ee59833ffa2a1"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e35c06b98bf36aba164cc17cb25f7e232f5c4aeea73baa14b8a9f0d92dbfa65"
 dependencies = [
  "bit-set",
  "bitflags",

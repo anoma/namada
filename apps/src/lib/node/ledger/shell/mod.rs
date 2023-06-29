@@ -742,11 +742,13 @@ where
                         }
                     };
                 tracing::info!(
-                    "Slashing {} for {} in epoch {}, block height {}",
+                    "Slashing {} for {} in epoch {}, block height {} (current \
+                     epoch = {})",
                     validator,
                     slash_type,
                     evidence_epoch,
-                    evidence_height
+                    evidence_height,
+                    current_epoch
                 );
                 if let Err(err) = slash(
                     &mut self.wl_storage,
@@ -795,7 +797,7 @@ where
         tracing::info!(
             "Committed block hash: {}, height: {}",
             root,
-            self.wl_storage.storage.last_height,
+            self.wl_storage.storage.get_last_block_height(),
         );
         response.data = root.0.to_vec();
 

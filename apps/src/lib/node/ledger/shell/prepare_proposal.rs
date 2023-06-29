@@ -57,7 +57,7 @@ where
             let alloc = self.get_encrypted_txs_allocator();
             // add encrypted txs
             let (encrypted_txs, alloc) =
-                self.build_encrypted_txs(alloc, &req.txs, req.time);
+                self.build_encrypted_txs(alloc, &req.txs, &req.time);
             let mut txs = encrypted_txs;
 
             // decrypt the wrapper txs included in the previous block

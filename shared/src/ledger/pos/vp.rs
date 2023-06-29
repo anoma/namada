@@ -106,7 +106,7 @@ where
         // let mut changes: Vec<DataUpdate> = vec![];
         let _current_epoch = self.ctx.pre().get_block_epoch()?;
 
-        println!("\nVALIDATING TX\n");
+        tracing::debug!("\nValidating PoS Tx\n");
 
         for key in keys_changed {
             // println!("KEY: {}\n", key);
@@ -128,14 +128,13 @@ where
                 // Unknown changes to this address space are disallowed
                 // tracing::info!("PoS unrecognized key change {} rejected",
                 // key);
-                tracing::info!(
-                    "PoS unrecognized key change {} typically rejected but \
-                     letting pass for now while implementing new lazy PoS \
-                     storage",
+                tracing::debug!(
+                    "PoS key change {} - No action is taken currently.",
                     key
                 );
                 // return Ok(false);
             } else {
+                tracing::debug!("PoS unrecognized key change {}", key);
                 // Unknown changes anywhere else are permitted
             }
         }

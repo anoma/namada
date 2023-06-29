@@ -6,7 +6,7 @@ license = "GPL-3.0"
 name = "namada_apps"
 readme = "../README.md"
 resolver = "2"
-version = "0.16.0"
+version = "0.17.2"
 default-run = "namada"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -164,8 +164,7 @@ assert_matches = "1.5.0"
 namada = {path = "../shared", default-features = false, features = ["testing", "wasm-runtime"]}
 namada_test_utils = {path = "../test_utils"}
 bit-set = "0.5.2"
-# A fork with state machime testing
-proptest = {git = "https://github.com/heliaxdev/proptest", rev = "8f1b4abe7ebd35c0781bf9a00a4ee59833ffa2a1"}
+proptest = "1.2.0"
 tempfile = "3.2.0"
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tokio-test = "0.4.2"

@@ -9,7 +9,7 @@ use std::str::FromStr;
 
 use arse_merkle_tree::InternalKey;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use data_encoding::BASE32HEX_NOPAD;
+use data_encoding::{BASE32HEX_NOPAD, HEXUPPER};
 use ics23::CommitmentProof;
 use index_set::vec::VecIndexSet;
 use serde::{Deserialize, Serialize};
@@ -233,6 +233,12 @@ impl FromStr for BlockHeight {
     Deserialize,
 )]
 pub struct BlockHash(pub [u8; BLOCK_HASH_LENGTH]);
+
+impl Display for BlockHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", HEXUPPER.encode(&self.0))
+    }
+}
 
 impl From<Hash> for BlockHash {
     fn from(hash: Hash) -> Self {

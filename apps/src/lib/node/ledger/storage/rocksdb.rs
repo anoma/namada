@@ -28,6 +28,7 @@
 //!       - `root`: root hash
 //!       - `store`: the tree's store
 //!     - `hash`: block hash
+//!     - `time`: block time
 //!     - `epoch`: block epoch
 //!     - `address_gen`: established address generator
 //!     - `header`: block's header
@@ -653,6 +654,7 @@ impl DB for RocksDB {
         read_opts.set_iterate_upper_bound(next_height_prefix);
         let mut merkle_tree_stores = MerkleTreeStoresRead::default();
         let mut hash = None;
+        let mut time = None;
         let mut epoch = None;
         let mut pred_epochs = None;
         let mut address_gen = None;
@@ -701,6 +703,11 @@ impl DB for RocksDB {
                             types::decode(bytes).map_err(Error::CodingError)?,
                         )
                     }
+                    "time" => {
+                        time = Some(
+                            types::decode(bytes).map_err(Error::CodingError)?,
+                        )
+                    }
                     "epoch" => {
                         epoch = Some(
                             types::decode(bytes).map_err(Error::CodingError)?,
@@ -721,24 +728,29 @@ impl DB for RocksDB {
                 None => unknown_key_error(path)?,
             }
         }
-        match (hash, epoch, pred_epochs, address_gen) {
-            (Some(hash), Some(epoch), Some(pred_epochs), Some(address_gen)) => {
-                Ok(Some(BlockStateRead {
-                    merkle_tree_stores,
-                    hash,
-                    height,
-                    epoch,
-                    pred_epochs,
-                    results,
-                    next_epoch_min_start_height,
-                    next_epoch_min_start_time,
-                    update_epoch_blocks_delay,
-                    address_gen,
-                    tx_queue,
-                    ethereum_height,
-                    eth_events_queue,
-                }))
-            }
+        match (hash, time, epoch, pred_epochs, address_gen) {
+            (
+                Some(hash),
+                Some(time),
+                Some(epoch),
+                Some(pred_epochs),
+                Some(address_gen),
+            ) => Ok(Some(BlockStateRead {
+                merkle_tree_stores,
+                hash,
+                height,
+                time,
+                epoch,
+                pred_epochs,
+                results,
+                next_epoch_min_start_height,
+                next_epoch_min_start_time,
+                update_epoch_blocks_delay,
+                address_gen,
+                tx_queue,
+                ethereum_height,
+                eth_events_queue,
+            })),
             _ => Err(Error::Temporary {
                 error: "Essential data couldn't be read from the DB"
                     .to_string(),
@@ -757,6 +769,7 @@ impl DB for RocksDB {
             header,
             hash,
             height,
+            time,
             epoch,
             pred_epochs,
             next_epoch_min_start_height,
@@ -901,6 +914,15 @@ impl DB for RocksDB {
             batch
                 .0
                 .put_cf(block_cf, key.to_string(), types::encode(&hash));
+        }
+        // Block time
+        {
+            let key = prefix_key
+                .push(&"time".to_owned())
+                .map_err(Error::KeyError)?;
+            batch
+                .0
+                .put_cf(block_cf, key.to_string(), types::encode(&time));
         }
         // Block epoch
         {
@@ -1329,9 +1351,9 @@ impl DB for RocksDB {
 impl<'iter> DBIter<'iter> for RocksDB {
     type PrefixIter = PersistentPrefixIterator<'iter>;
 
-    fn iter_prefix(
+    fn iter_optional_prefix(
         &'iter self,
-        prefix: &Key,
+        prefix: Option<&Key>,
     ) -> PersistentPrefixIterator<'iter> {
         iter_subspace_prefix(self, prefix)
     }
@@ -1372,7 +1394,7 @@ impl<'iter> DBIter<'iter> for RocksDB {
 
 fn iter_subspace_prefix<'iter>(
     db: &'iter RocksDB,
-    prefix: &Key,
+    prefix: Option<&Key>,
 ) -> PersistentPrefixIterator<'iter> {
     let subspace_cf_key = ColumnFamilies::Subspace.as_str();
     let subspace_cf =
@@ -1380,7 +1402,11 @@ fn iter_subspace_prefix<'iter>(
             panic!("{subspace_cf_key} column family should exist: {err}")
         });
     let db_prefix = "".to_owned();
-    iter_prefix(db, subspace_cf, db_prefix, prefix.to_string())
+    let prefix_string = match prefix {
+        Some(prefix) => prefix.to_string(),
+        None => "".to_string(),
+    };
+    iter_prefix(db, subspace_cf, db_prefix, prefix_string)
 }
 
 fn iter_diffs_prefix(
@@ -1555,6 +1581,7 @@ mod test {
         let merkle_tree = MerkleTree::<Sha256Hasher>::default();
         let merkle_tree_stores = merkle_tree.stores();
         let hash = BlockHash::default();
+        let time = DateTimeUtc::now();
         let epoch = Epoch::default();
         let pred_epochs = Epochs::default();
         let height = BlockHeight::default();
@@ -1570,6 +1597,7 @@ mod test {
             header: None,
             hash: &hash,
             height,
+            time,
             epoch,
             results: &results,
             pred_epochs: &pred_epochs,
