@@ -366,6 +366,9 @@ pub enum ValidatorState {
     /// A validator who does not have enough stake to be considered in the
     /// `Consensus` validator set but still may have active bonds and unbonds
     BelowCapacity,
+    /// A validator who has stake less than the `validator_stake_threshold`
+    /// parameter
+    BelowThreshold,
     /// A validator who is deactivated via a tx when a validator no longer
     /// wants to be one (not implemented yet)
     Inactive,

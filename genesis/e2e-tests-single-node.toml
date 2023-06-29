@@ -37,6 +37,7 @@ Bertha = "1000000"
 Christel = "1000000"
 "Christel.public_key" = "100"
 Daewon = "1000000"
+Ester = "1000000"
 faucet = "9223372036854"
 "faucet.public_key" = "100"
 "validator-0.public_key" = "100"
@@ -50,6 +51,7 @@ Albert = "1000000"
 Bertha = "1000000"
 Christel = "1000000"
 Daewon = "1000000"
+Ester = "1000000"
 faucet = "9223372036854"
 
 [token.ETH]
@@ -61,6 +63,7 @@ Albert = "1000000"
 Bertha = "1000000"
 Christel = "1000000"
 Daewon = "1000000"
+Ester = "1000000"
 faucet = "9223372036854"
 
 [token.DOT]
@@ -72,6 +75,7 @@ Albert = "1000000"
 Bertha = "1000000"
 Christel = "1000000"
 Daewon = "1000000"
+Ester = "1000000"
 faucet = "9223372036854"
 
 [token.Schnitzel]
@@ -83,6 +87,7 @@ Albert = "1000000"
 Bertha = "1000000"
 Christel = "1000000"
 Daewon = "1000000"
+Ester = "1000000"
 faucet = "9223372036854"
 
 [token.Apfel]
@@ -94,6 +99,7 @@ Albert = "1000000"
 Bertha = "1000000"
 Christel = "1000000"
 Daewon = "1000000"
+Ester = "1000000"
 faucet = "9223372036854"
 
 [token.Kartoffel]
@@ -106,6 +112,7 @@ Albert = "1000000"
 Bertha = "1000000"
 Christel = "1000000"
 Daewon = "1000000"
+Ester = "1000000"
 faucet = "9223372036854"
 
 # Some established accounts present at genesis.
@@ -126,6 +133,8 @@ address = "atest1v4ehgw36xaryysfsx5unvve4g5my2vjz89p52sjxxgenzd348yuyyv3hg3pnjs3
 vp = "vp_masp"
 
 [implicit.Daewon]
+
+[implicit.Ester]
 
 # Wasm VP definitions
 
@@ -204,6 +213,9 @@ light_client_attack_min_slash_rate = "0.001"
 # Number of epochs above and below (separately) the current epoch to
 # consider when doing cubic slashing
 cubic_slashing_window_length = 1
+# The minimum amount of bonded tokens that a validator needs to be in
+# either the `consensus` or `below_capacity` validator sets
+validator_stake_threshold = "1"
 
 # Governance parameters.
 [gov_params]

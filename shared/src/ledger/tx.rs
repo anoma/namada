@@ -18,7 +18,7 @@ use masp_primitives::transaction::components::Amount;
 use namada_core::types::address::{masp, masp_tx_key, Address};
 use namada_core::types::dec::Dec;
 use namada_core::types::storage::Key;
-use namada_core::types::token::MaspDenom;
+use namada_core::types::token::{MaspDenom, TokenAddress};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::CommissionPair;
 use prost::EncodeError;
@@ -37,7 +37,7 @@ use crate::ibc_proto::cosmos::base::v1beta1::Coin;
 use crate::ledger::args::{self, InputAmount};
 use crate::ledger::governance::storage as gov_storage;
 use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
-use crate::ledger::rpc::{self, validate_amount, TxBroadcastData, TxResponse};
+use crate::ledger::rpc::{self, validate_amount, TxBroadcastData, TxResponse, format_denominated_amount};
 use crate::ledger::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::{Code, Data, MaspBuilder, Section, Signature, Tx};
@@ -969,8 +969,12 @@ pub async fn submit_bond<
     let balance_key = token::balance_key(&args.native_token, bond_source);
 
     // TODO Should we state the same error message for the native token?
+    
     check_balance_too_low_err(
-        &args.native_token,
+        &TokenAddress {
+            address: args.native_token,
+            sub_prefix: None,
+        },
         bond_source,
         args.amount,
         balance_key,
@@ -1072,7 +1076,10 @@ pub async fn submit_ibc_transfer<
     };
 
     check_balance_too_low_err(
-        &token,
+        &TokenAddress{
+            address: token.clone(),
+            sub_prefix: sub_prefix.clone(),
+        },
         &source,
         args.amount,
         balance_key,
@@ -1283,9 +1290,13 @@ pub async fn submit_transfer<
 
     args.amount = InputAmount::Validated(validated_amount);
     args.tx.fee_amount = InputAmount::Validated(validate_fee);
-
+    let sub_prefix = args.sub_prefix
+        .as_ref()
+        .map(|k| k.parse()
+            .expect("Could not parse multi-token sub-prefix")
+        );
     check_balance_too_low_err::<C>(
-        &token,
+        &TokenAddress{address: token.clone(), sub_prefix: sub_prefix.clone() },
         &source,
         validated_amount.amount,
         balance_key,
@@ -1765,7 +1776,7 @@ async fn target_exists_or_err<C: crate::ledger::queries::Client + Sync>(
 /// given amount, along with the balance even existing. force
 /// overrides this
 async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
-    token: &Address,
+    token: &TokenAddress,
     source: &Address,
     amount: token::Amount,
     balance_key: storage::Key,
@@ -1784,14 +1795,14 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
                          transfer is {} and the balance is {}.",
                         source,
                         token,
-                        amount.to_string_native(),
-                        balance.to_string_native()
+                        format_denominated_amount(client, token, amount).await,
+                        format_denominated_amount(client, token, balance).await,
                     );
                     Ok(())
                 } else {
                     Err(Error::BalanceTooLow(
                         source.clone(),
-                        token.clone(),
+                        token.address.clone(),
                         amount.to_string_native(),
                         balance.to_string_native(),
                     ))
@@ -1808,7 +1819,7 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
                 );
                 Ok(())
             } else {
-                Err(Error::NoBalanceForToken(source.clone(), token.clone()))
+                Err(Error::NoBalanceForToken(source.clone(), token.address.clone()))
             }
         }
     }

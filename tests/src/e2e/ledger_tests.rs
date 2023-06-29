@@ -409,11 +409,31 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--node",
             &validator_one_rpc,
         ],
-        // Submit a token transfer tx (from an implicit account)
+        // Submit a token transfer tx (from an ed25519 implicit account)
         vec![
             "transfer",
             "--source",
             DAEWON,
+            "--target",
+            ALBERT,
+            "--token",
+            NAM,
+            "--amount",
+            "10.1",
+            "--gas-amount",
+            "0",
+            "--gas-limit",
+            "0",
+            "--gas-token",
+            NAM,
+            "--node",
+            &validator_one_rpc,
+        ],
+        // Submit a token transfer tx (from a secp256k1 implicit account)
+        vec![
+            "transfer",
+            "--source",
+            ESTER,
             "--target",
             ALBERT,
             "--token",
@@ -835,7 +855,7 @@ fn masp_txs_and_queries() -> Result<()> {
             } else {
                 tx_args.clone()
             };
-            let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
+            let mut client = run!(test, Bin::Client, tx_args, Some(1000))?;
 
             if *tx_result == "Transaction is valid" && !dry_run {
                 client.exp_string("Transaction accepted")?;
