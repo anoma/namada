@@ -77,10 +77,11 @@ impl RewardsController {
         let control_val = p_gain * error - d_gain * delta_error;
 
         let last_inflation_amount = Decimal::from(last_inflation_amount);
-        let inflation = if last_inflation_amount + control_val > max_inflation {
+        let new_inflation_amount = last_inflation_amount + control_val;
+        let inflation = if new_inflation_amount > max_inflation {
             max_inflation
-        } else if last_inflation_amount + control_val > dec!(0.0) {
-            last_inflation_amount + control_val
+        } else if new_inflation_amount > dec!(0.0) {
+            new_inflation_amount
         } else {
             dec!(0.0)
         };

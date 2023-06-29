@@ -7,7 +7,7 @@ resolver = "2"
 version = "0.16.0"
 
 [features]
-default = []
+default = ["multicore"]
 mainnet = []
 ferveo-tpke = [
   "ferveo",
@@ -37,6 +37,10 @@ ibc-mocks = [
   "ibc/std",
 ]
 
+multicore = [
+  "bellman/multicore"
+]
+
 ethers-derive = [
   "ethbridge-structs/ethers-derive"
 ]
@@ -57,7 +61,7 @@ ark-serialize = {version = "0.3"}
 # branch = "bat/arse-merkle-tree"
 arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "e086b235ed6e68929bf73f617dd61cd17b000a56", default-features = false, features = ["std", "borsh"]}
 bech32 = "0.8.0"
-bellman = "0.11.2"
+bellman = { version = "0.11.2", default-features = false, features = ["groth16"] }
 borsh = "0.9.0"
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
 data-encoding = "2.3.2"
@@ -76,7 +80,8 @@ ics23 = "0.9.0"
 index-set = {git = "https://github.com/heliaxdev/index-set", tag = "v0.7.1", features = ["serialize-borsh", "serialize-serde"]}
 itertools = "0.10.0"
 libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
+# branch = "murisi/namada-integration"
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "cfea8c95d3f73077ca3e25380fd27e5b46e828fd" }
 num256 = "0.3.5"
 num-rational = "0.4.1"
 num-traits = "0.2.15"

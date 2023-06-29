@@ -15,8 +15,7 @@ use data_encoding::HEXLOWER;
 use itertools::Either;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
-use masp_primitives::primitives::ViewingKey;
-use masp_primitives::sapling::Node;
+use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::transaction::components::Amount;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::core::types::transaction::governance::ProposalType;
@@ -1545,6 +1544,30 @@ pub async fn query_delegations<C: namada::ledger::queries::Client + Sync>(
         println!("Found delegations to:");
         for delegation in delegations {
             println!("  {delegation}");
+        }
+    }
+}
+
+pub async fn query_find_validator<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
+    args: args::QueryFindValidator,
+) {
+    let args::QueryFindValidator { query: _, tm_addr } = args;
+    if tm_addr.len() != 40 {
+        eprintln!(
+            "Expected 40 characters in Tendermint address, got {}",
+            tm_addr.len()
+        );
+        cli::safe_exit(1);
+    }
+    let tm_addr = tm_addr.to_ascii_uppercase();
+    let validator = unwrap_client_response::<C, _>(
+        RPC.vp().pos().validator_by_tm_addr(client, &tm_addr).await,
+    );
+    match validator {
+        Some(address) => println!("Found validator address \"{address}\"."),
+        None => {
+            println!("No validator with Tendermint address {tm_addr} found.")
         }
     }
 }

@@ -20,6 +20,7 @@ use crate::ledger::native_vp::{self, governance, Ctx, NativeVp};
 // };
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::ledger::storage_api::StorageRead;
+use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Key, KeySeg};
 use crate::vm::WasmCacheAccess;
@@ -93,7 +94,7 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &[u8],
+        tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
@@ -110,9 +111,14 @@ where
         for key in keys_changed {
             // println!("KEY: {}\n", key);
             if is_params_key(key) {
+                let data = if let Some(data) = tx_data.data() {
+                    data
+                } else {
+                    return Ok(false);
+                };
                 if !governance::utils::is_proposal_accepted(
                     &self.ctx.pre(),
-                    tx_data,
+                    &data,
                 )
                 .map_err(Error::NativeVpError)?
                 {

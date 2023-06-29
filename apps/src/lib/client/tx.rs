@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use async_std::io;
 use async_std::io::prelude::WriteExt;
+use async_trait::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER_PERMISSIVE;
 use masp_proofs::prover::LocalTxProver;
@@ -15,19 +16,21 @@ use namada::ledger::rpc::{TxBroadcastData, TxResponse};
 use namada::ledger::signing::TxSigningKey;
 use namada::ledger::wallet::{Wallet, WalletUtils};
 use namada::ledger::{masp, tx};
-use namada::proto::Tx;
+use namada::proto::{Code, Data, Section, Tx};
 use namada::types::address::Address;
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
+use namada::types::hash::Hash;
 use namada::types::key::{self, *};
 use namada::types::storage::{Epoch, Key};
 use namada::types::token;
 use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
 };
-use namada::types::transaction::InitValidator;
+use namada::types::transaction::{InitValidator, TxType};
 use rust_decimal::Decimal;
+use sha2::{Digest as Sha2Digest, Sha256};
 use tendermint_rpc::HttpClient;
 
 use super::rpc;
@@ -35,9 +38,12 @@ use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::query_wasm_code_hash;
 use crate::client::signing::find_keypair;
+use crate::client::tx::tx::ProcessTxResponse;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::node::ledger::tendermint_node;
-use crate::wallet::{gen_validator_keys, read_and_confirm_pwd, CliWalletUtils};
+use crate::wallet::{
+    gen_validator_keys, read_and_confirm_encryption_password, CliWalletUtils,
+};
 
 pub async fn submit_custom<C>(
     client: &C,
@@ -128,14 +134,17 @@ pub async fn submit_init_validator<C>(
     let eth_cold_key_alias = format!("{}-eth-cold-key", alias);
     let account_key = account_key.unwrap_or_else(|| {
         println!("Generating validator account key...");
-        let password = read_and_confirm_pwd(unsafe_dont_encrypt);
+        let password =
+            read_and_confirm_encryption_password(unsafe_dont_encrypt);
         ctx.wallet
             .gen_key(
                 scheme,
                 Some(validator_key_alias.clone()),
-                password,
                 tx_args.wallet_alias_force,
+                password,
+                None,
             )
+            .expect("Key generation should not fail.")
             .1
             .ref_to()
     });
@@ -150,15 +159,18 @@ pub async fn submit_init_validator<C>(
         })
         .unwrap_or_else(|| {
             println!("Generating consensus key...");
-            let password = read_and_confirm_pwd(unsafe_dont_encrypt);
+            let password =
+                read_and_confirm_encryption_password(unsafe_dont_encrypt);
             ctx.wallet
                 .gen_key(
                     // Note that TM only allows ed25519 for consensus key
                     SchemeType::Ed25519,
                     Some(consensus_key_alias.clone()),
-                    password,
                     tx_args.wallet_alias_force,
+                    password,
+                    None,
                 )
+                .expect("Key generation should not fail.")
                 .1
         });
 
@@ -178,9 +190,11 @@ pub async fn submit_init_validator<C>(
                     // Note that ETH only allows secp256k1
                     SchemeType::Secp256k1,
                     Some(eth_cold_key_alias.clone()),
-                    password,
                     tx_args.wallet_alias_force,
+                    password,
+                    None,
                 )
+                .expect("Key generation should not fail.")
                 .1
                 .ref_to()
         });
@@ -201,9 +215,11 @@ pub async fn submit_init_validator<C>(
                     // Note that ETH only allows secp256k1
                     SchemeType::Secp256k1,
                     Some(eth_hot_key_alias.clone()),
-                    password,
                     tx_args.wallet_alias_force,
+                    password,
+                    None,
                 )
+                .expect("Key generation should not fail.")
                 .1
                 .ref_to()
         });
@@ -226,11 +242,12 @@ pub async fn submit_init_validator<C>(
         .expect("DKG sessions keys should have been created")
         .public();
 
-    let vp_code_path = String::from_utf8(validator_vp_code_path).unwrap();
-    let validator_vp_code_hash =
-        query_wasm_code_hash::<C>(client, vp_code_path)
-            .await
-            .unwrap();
+    let validator_vp_code_hash = query_wasm_code_hash::<C>(
+        client,
+        validator_vp_code_path.to_str().unwrap(),
+    )
+    .await
+    .unwrap();
 
     // Validate the commission rate data
     if commission_rate > Decimal::ONE || commission_rate < Decimal::ZERO {
@@ -258,6 +275,12 @@ pub async fn submit_init_validator<C>(
             .await
             .unwrap();
 
+    let mut tx = Tx::new(TxType::Raw);
+    let extra = tx.add_section(Section::ExtraData(Code::from_hash(
+        validator_vp_code_hash,
+    )));
+    let extra_hash =
+        Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
     let data = InitValidator {
         account_key,
         consensus_key: consensus_key.ref_to(),
@@ -269,15 +292,14 @@ pub async fn submit_init_validator<C>(
         dkg_key,
         commission_rate,
         max_commission_rate_change,
-        validator_vp_code_hash,
+        validator_vp_code_hash: extra_hash,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
-    let tx = Tx::new(
-        tx_code_hash.to_vec(),
-        Some(data),
-        tx_args.chain_id.clone().unwrap(),
-        tx_args.expiration,
-    );
+    tx.header.chain_id = tx_args.chain_id.clone().unwrap();
+    tx.header.expiration = tx_args.expiration;
+    tx.set_data(Data::new(data));
+    tx.set_code(Code::from_hash(tx_code_hash));
+
     let (mut ctx, result) = process_tx(
         client,
         ctx,
@@ -385,7 +407,7 @@ impl CLIShieldedUtils {
             && output_path.exists())
         {
             println!("MASP parameters not present, downloading...");
-            masp_proofs::download_parameters()
+            masp_proofs::download_masp_parameters(None)
                 .expect("MASP parameters not present or downloadable");
             println!("MASP parameter download complete, resuming execution...");
         }
@@ -406,6 +428,7 @@ impl Default for CLIShieldedUtils {
     }
 }
 
+#[async_trait(?Send)]
 impl masp::ShieldedUtils for CLIShieldedUtils {
     type C = tendermint_rpc::HttpClient;
 
@@ -424,7 +447,7 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
 
     /// Try to load the last saved shielded context from the given context
     /// directory. If this fails, then leave the current context unchanged.
-    fn load(self) -> std::io::Result<masp::ShieldedContext<Self>> {
+    async fn load(self) -> std::io::Result<masp::ShieldedContext<Self>> {
         // Try to load shielded context from file
         let mut ctx_file = File::open(self.context_dir.join(FILE_NAME))?;
         let mut bytes = Vec::new();
@@ -437,7 +460,10 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
     }
 
     /// Save this shielded context into its associated context directory
-    fn save(&self, ctx: &masp::ShieldedContext<Self>) -> std::io::Result<()> {
+    async fn save(
+        &self,
+        ctx: &masp::ShieldedContext<Self>,
+    ) -> std::io::Result<()> {
         // TODO: use mktemp crate?
         let tmp_path = self.context_dir.join(TMP_FILE_NAME);
         {
@@ -512,9 +538,9 @@ where
         serde_json::from_reader(file).expect("JSON was not well-formatted");
 
     let signer = WalletAddress::new(proposal.clone().author.to_string());
-    let governance_parameters = rpc::get_governance_parameters(client).await;
     let current_epoch = rpc::query_and_print_epoch(client).await;
 
+    let governance_parameters = rpc::get_governance_parameters(client).await;
     if proposal.voting_start_epoch <= current_epoch
         || proposal.voting_start_epoch.0
             % governance_parameters.min_proposal_period
@@ -605,13 +631,10 @@ where
             safe_exit(1)
         };
 
-        let balance = rpc::get_token_balance(
-            client,
-            &args.native_token,
-            &proposal.author,
-        )
-        .await
-        .unwrap_or_default();
+        let balance =
+            rpc::get_token_balance(client, &ctx.native_token, &proposal.author)
+                .await
+                .unwrap_or_default();
         if balance
             < token::Amount::from(governance_parameters.min_proposal_fund)
         {
@@ -629,18 +652,17 @@ where
             safe_exit(1);
         }
 
+        let mut tx = Tx::new(TxType::Raw);
         let data = init_proposal_data
             .try_to_vec()
             .expect("Encoding proposal data shouldn't fail");
         let tx_code_hash = query_wasm_code_hash(client, args::TX_INIT_PROPOSAL)
             .await
             .unwrap();
-        let tx = Tx::new(
-            tx_code_hash.to_vec(),
-            Some(data),
-            ctx.config.ledger.chain_id.clone(),
-            args.tx.expiration,
-        );
+        tx.header.chain_id = ctx.config.ledger.chain_id.clone();
+        tx.header.expiration = args.tx.expiration;
+        tx.set_data(Data::new(data));
+        tx.set_code(Code::from_hash(tx_code_hash));
 
         process_tx::<C>(
             client,
@@ -888,8 +910,18 @@ where
                 let data = tx_data
                     .try_to_vec()
                     .expect("Encoding proposal data shouldn't fail");
-                let tx_code = args.tx_code_path;
-                let tx = Tx::new(tx_code, Some(data), chain_id, expiration);
+
+                let tx_code_hash = query_wasm_code_hash(
+                    client,
+                    args.tx_code_path.to_str().unwrap(),
+                )
+                .await
+                .unwrap();
+                let mut tx = Tx::new(TxType::Raw);
+                tx.header.chain_id = chain_id;
+                tx.header.expiration = expiration;
+                tx.set_data(Data::new(data));
+                tx.set_code(Code::from_hash(tx_code_hash));
 
                 process_tx::<C>(
                     client,
@@ -964,7 +996,7 @@ pub async fn submit_reveal_pk_aux<C>(
     ctx: &mut Context,
     public_key: &common::PublicKey,
     args: &args::Tx,
-) -> Result<(), tx::Error>
+) -> Result<ProcessTxResponse, tx::Error>
 where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
@@ -1107,6 +1139,20 @@ where
     .await
 }
 
+pub async fn submit_unjail_validator<
+    C: namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    mut ctx: Context,
+    mut args: args::TxUnjailValidator,
+) -> Result<(), tx::Error> {
+    args.tx.chain_id = args
+        .tx
+        .chain_id
+        .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
+    tx::submit_unjail_validator::<C, _>(client, &mut ctx.wallet, args).await
+}
+
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
 async fn process_tx<C>(
@@ -1122,7 +1168,10 @@ where
     C::Error: std::fmt::Display,
 {
     let args = args::Tx {
-        chain_id: args.clone().chain_id.or_else(|| Some(tx.chain_id.clone())),
+        chain_id: args
+            .clone()
+            .chain_id
+            .or_else(|| Some(tx.header.chain_id.clone())),
         ..args.clone()
     };
     let res: Vec<Address> = tx::process_tx::<C, _>(
@@ -1134,7 +1183,8 @@ where
         #[cfg(not(feature = "mainnet"))]
         requires_pow,
     )
-    .await?;
+    .await?
+    .initialized_accounts();
     Ok((ctx, res))
 }
 

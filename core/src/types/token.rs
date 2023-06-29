@@ -1,17 +1,18 @@
 //! A basic fungible token
 
 use std::fmt::Display;
+use std::iter::Sum;
 use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use masp_primitives::transaction::Transaction;
 use rust_decimal::prelude::{Decimal, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::ibc::applications::transfer::Amount as IbcAmount;
 use crate::types::address::{masp, Address, DecodeError as AddressError};
+use crate::types::hash::Hash;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
 /// Amount in micro units. For different granularity another representation
@@ -150,13 +151,13 @@ impl<'de> serde::Deserialize<'de> for Amount {
 
 impl From<Amount> for Decimal {
     fn from(amount: Amount) -> Self {
-        Into::<Decimal>::into(amount.micro) / Into::<Decimal>::into(SCALE)
+        Into::<Decimal>::into(amount.micro)
     }
 }
 
 impl From<Decimal> for Amount {
     fn from(micro: Decimal) -> Self {
-        let res = (micro * Into::<Decimal>::into(SCALE)).to_u64().unwrap();
+        let res = micro.to_u64().unwrap();
         Self { micro: res }
     }
 }
@@ -236,6 +237,12 @@ impl Sub for Amount {
 impl SubAssign for Amount {
     fn sub_assign(&mut self, rhs: Self) {
         self.micro -= rhs.micro
+    }
+}
+
+impl Sum for Amount {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Amount::default(), |acc, next| acc + next)
     }
 }
 
@@ -491,7 +498,7 @@ pub struct Transfer {
     /// The unused storage location at which to place TxId
     pub key: Option<String>,
     /// Shielded transaction part
-    pub shielded: Option<Transaction>,
+    pub shielded: Option<Hash>,
 }
 
 #[allow(missing_docs)]

@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## Unreleased
+
+### DOCS
+
+- Adds specs for gas and fee ([#889](https://github.com/anoma/namada/pull/889))
+
 ## v0.16.0
 
 Namada 0.16.0 is a regular release focused on providing the Namada SDK
@@ -12,8 +18,29 @@ to developers.
 
 ### IMPROVEMENTS
 
+- Provide Namada SDK (in particular, the `namada`
+crate may now be usefully linked into user
+applications). ([#925](https://github.com/anoma/namada/pull/925))
 - Bump RocksDB crate to 0.21.0 to address compilation errors on certain C++
   toolchains. ([#1366](https://github.com/anoma/namada/pull/1366))
+
+## v0.15.4
+
+Namada 0.15.4 is a maintenance release addressing the invalid creation of blocks due to missing replay protection checks during prepare
+proposal.
+
+### BUG FIXES
+
+- Fixed a bug in `prepare_proposal` causing the creation
+  of blocks containing already applied transactions.
+  ([#1405](https://github.com/anoma/namada/pull/1405))
+
+### IMPROVEMENTS
+
+- Make Tendermint consensus paramenters configurable via Namada configuration.
+  ([#1399](https://github.com/anoma/namada/pull/1399))
+- Improved error logs in `process_proposal` and added more info to
+  `InternalStats` ([#1407](https://github.com/anoma/namada/pull/1407))
 
 ## v0.15.3
 

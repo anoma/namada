@@ -3,7 +3,7 @@ use namada_vp_prelude::*;
 #[validity_predicate]
 fn validate_tx(
     ctx: &Ctx,
-    tx_data: Vec<u8>,
+    tx_data: Tx,
     addr: Address,
     keys_changed: BTreeSet<storage::Key>,
     verifiers: BTreeSet<Address>,

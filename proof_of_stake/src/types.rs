@@ -3,7 +3,7 @@
 mod rev_order;
 
 use core::fmt::Debug;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::hash::Hash;
@@ -24,7 +24,7 @@ use rust_decimal::prelude::{Decimal, ToPrimitive};
 
 use crate::parameters::PosParams;
 
-// const U64_MAX: u64 = u64::MAX;
+const U64_MAX: u64 = u64::MAX;
 
 // TODO: add this to the spec
 /// Stored positions of validators in validator sets
@@ -140,14 +140,54 @@ pub type CommissionRates =
 pub type Bonds = crate::epoched::EpochedDelta<
     token::Change,
     crate::epoched::OffsetPipelineLen,
+    U64_MAX,
+>;
+
+/// An epoched lazy set of all known active validator addresses (consensus,
+/// below-capacity, jailed)
+pub type ValidatorAddresses = crate::epoched::NestedEpoched<
+    LazySet<Address>,
+    crate::epoched::OffsetPipelineLen,
+>;
+
+/// Slashes indexed by validator address and then block height (for easier
+/// retrieval and iteration when processing)
+pub type ValidatorSlashes = NestedMap<Address, Slashes>;
+
+/// Epoched slashes, where the outer epoch key is the epoch in which the slash
+/// is processed
+/// NOTE: the `enqueued_slashes_handle` this is used for shouldn't need these
+/// slashes earlier than `cubic_window_width` epochs behind the current
+pub type EpochedSlashes = crate::epoched::NestedEpoched<
+    ValidatorSlashes,
+    crate::epoched::OffsetUnbondingLen,
     23,
 >;
 
-/// Epochs validator's unbonds
+/// Epoched validator's unbonds
 pub type Unbonds = NestedMap<Epoch, LazyMap<Epoch, token::Amount>>;
 
 /// Consensus keys set, used to ensure uniqueness
 pub type ConsensusKeys = LazySet<common::PublicKey>;
+
+/// Total unbonded for validators needed for slashing computations.
+/// The outer `Epoch` corresponds to the epoch at which the unbond is active
+/// (affects the deltas, pipeline after submission). The inner `Epoch`
+/// corresponds to the epoch from which the underlying bond became active
+/// (affected deltas).
+pub type ValidatorUnbondRecords =
+    NestedMap<Epoch, LazyMap<Epoch, token::Amount>>;
+
+#[derive(
+    Debug, Clone, BorshSerialize, BorshDeserialize, Eq, Hash, PartialEq,
+)]
+/// TODO: slashed amount for thing
+pub struct SlashedAmount {
+    /// Perlangus
+    pub amount: token::Amount,
+    /// Churms
+    pub epoch: Epoch,
+}
 
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 /// Commission rate and max commission rate change per epoch for a validator
@@ -342,6 +382,9 @@ pub enum ValidatorState {
     /// A validator who is deactivated via a tx when a validator no longer
     /// wants to be one (not implemented yet)
     Inactive,
+    /// A `Jailed` validator has been prohibited from participating in
+    /// consensus due to a misbehavior
+    Jailed,
 }
 
 /// A slash applied to validator, to punish byzantine behavior by removing
@@ -365,16 +408,19 @@ pub struct Slash {
     pub block_height: u64,
     /// A type of slashable event.
     pub r#type: SlashType,
+    /// The cubic slashing rate for this validator
+    pub rate: Decimal,
 }
 
 /// Slashes applied to validator, to punish byzantine behavior by removing
 /// their staked tokens at and before the epoch of the slash.
 pub type Slashes = LazyVec<Slash>;
 
-/// A type of slashsable event.
+/// A type of slashable event.
 #[derive(
     Debug,
     Clone,
+    Copy,
     BorshDeserialize,
     BorshSerialize,
     BorshSchema,
@@ -413,7 +459,7 @@ pub struct BondsAndUnbondsDetail {
     /// Unbonds
     pub unbonds: Vec<UnbondDetails>,
     /// Slashes applied to any of the bonds and/or unbonds
-    pub slashes: HashSet<Slash>,
+    pub slashes: Vec<Slash>,
 }
 
 /// Bond with all its details
@@ -508,7 +554,10 @@ pub fn mult_change_to_amount(
 
 /// Multiply a value of type Decimal with one of type Amount and then return the
 /// truncated Amount
-pub fn mult_amount(dec: Decimal, amount: token::Amount) -> token::Amount {
+pub fn decimal_mult_amount(
+    dec: Decimal,
+    amount: token::Amount,
+) -> token::Amount {
     let prod = dec * Decimal::from(amount);
     // truncate the number to the floor
     token::Amount::from(prod.to_u64().expect("Product is out of bounds"))

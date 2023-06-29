@@ -82,6 +82,9 @@ router! {POS,
 
     ( "is_delegator" / [addr: Address ] / [epoch: opt Epoch] ) -> bool = is_delegator,
 
+    ( "validator_by_tm_addr" / [tm_addr: String] )
+        -> Option<Address> = validator_by_tm_addr,
+
 }
 
 // Handlers that implement the functions via `trait StorageRead`:
@@ -305,10 +308,9 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
-    let params = read_pos_params(ctx.wl_storage)?;
     let bond_id = BondId { source, validator };
 
-    bond_amount(ctx.wl_storage, &params, &bond_id, epoch)
+    bond_amount(ctx.wl_storage, &bond_id, epoch)
 }
 
 fn unbond<D, H>(
@@ -458,4 +460,16 @@ where
     H: 'static + StorageHasher + Sync,
 {
     find_all_slashes(ctx.wl_storage)
+}
+
+/// All slashes
+fn validator_by_tm_addr<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    tm_addr: String,
+) -> storage_api::Result<Option<Address>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    namada_proof_of_stake::find_validator_by_raw_hash(ctx.wl_storage, tm_addr)
 }

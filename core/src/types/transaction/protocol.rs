@@ -32,17 +32,25 @@ mod protocol_txs {
     use serde_json;
 
     use super::*;
-    use crate::proto::Tx;
+    use crate::proto::{Code, Data, Section, Signature, Tx, TxError};
     use crate::types::chain::ChainId;
     use crate::types::key::*;
-    use crate::types::transaction::{EllipticCurve, TxError, TxType};
+    use crate::types::transaction::{Digest, EllipticCurve, Sha256, TxType};
     use crate::types::vote_extensions::{
         bridge_pool_roots, ethereum_events, validator_set_update,
     };
 
     const TX_NEW_DKG_KP_WASM: &str = "tx_update_dkg_session_keypair.wasm";
 
-    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+    #[derive(
+        Clone,
+        Debug,
+        BorshSerialize,
+        BorshDeserialize,
+        BorshSchema,
+        Serialize,
+        Deserialize,
+    )]
     /// Txs sent by validators as part of internal protocols
     pub struct ProtocolTx {
         /// we require ProtocolTxs be signed
@@ -66,20 +74,27 @@ mod protocol_txs {
                     ))
                 })
         }
+
+        /// Produce a SHA-256 hash of this section
+        pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
+            hasher.update(
+                self.try_to_vec().expect("unable to serialize protocol"),
+            );
+            hasher
+        }
     }
 
-    /// DKG message wrapper type that adds Borsh encoding.
-    #[derive(Clone, Debug)]
-    pub struct DkgMessage(pub Message<EllipticCurve>);
-
-    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
-    #[allow(clippy::large_enum_variant)]
-    /// Types of protocol messages to be sent
-    pub enum ProtocolTxType {
-        /// Messages to be given to the DKG state machine
-        DKG(DkgMessage),
-        /// Tx requesting a new DKG session keypair
-        NewDkgKeypair(Tx),
+    /// Data associated with Ethereum protocol transactions.
+    #[derive(
+        Clone,
+        Debug,
+        BorshSerialize,
+        BorshDeserialize,
+        BorshSchema,
+        Serialize,
+        Deserialize,
+    )]
+    pub enum EthereumTxData {
         /// Ethereum events contained in vote extensions that
         /// are compressed before being included on chain
         EthereumEvents(ethereum_events::VextDigest),
@@ -96,27 +111,131 @@ mod protocol_txs {
         ValSetUpdateVext(validator_set_update::SignedVext),
     }
 
-    impl ProtocolTxType {
-        /// Sign a ProtocolTxType and wrap it up in a normal Tx
+    impl EthereumTxData {
+        /// Retrieve the protocol transaction type associated with
+        /// an instance of [Ethereum transaction data](EthereumTxData).
+        pub fn tx_type(&self) -> ProtocolTxType {
+            match self {
+                EthereumTxData::EthereumEvents(_) => {
+                    ProtocolTxType::EthereumEvents
+                }
+                EthereumTxData::BridgePool(_) => ProtocolTxType::BridgePool,
+                EthereumTxData::ValidatorSetUpdate(_) => {
+                    ProtocolTxType::ValidatorSetUpdate
+                }
+                EthereumTxData::EthEventsVext(_) => {
+                    ProtocolTxType::EthEventsVext
+                }
+                EthereumTxData::BridgePoolVext(_) => {
+                    ProtocolTxType::BridgePoolVext
+                }
+                EthereumTxData::ValSetUpdateVext(_) => {
+                    ProtocolTxType::ValSetUpdateVext
+                }
+            }
+        }
+
+        /// Sign transaction Ethereum data and wrap it in a [`Tx`].
         pub fn sign(
-            self,
+            &self,
             signing_key: &common::SecretKey,
             chain_id: ChainId,
         ) -> Tx {
-            let pk = signing_key.ref_to();
-            Tx::new(
-                vec![],
-                Some(
-                    TxType::Protocol(ProtocolTx { pk, tx: self })
-                        .try_to_vec()
-                        .expect("Could not serialize ProtocolTx"),
-                ),
-                chain_id,
-                None,
-            )
-            .sign(signing_key)
+            let mut outer_tx =
+                Tx::new(TxType::Protocol(Box::new(ProtocolTx {
+                    pk: signing_key.ref_to(),
+                    tx: self.tx_type(),
+                })));
+            outer_tx.header.chain_id = chain_id;
+            outer_tx.set_data(Data::new(
+                self.try_to_vec()
+                    .expect("Serializing eth protocol tx should not fail"),
+            ));
+            outer_tx.add_section(Section::Signature(Signature::new(
+                &outer_tx.header_hash(),
+                signing_key,
+            )));
+            outer_tx
         }
 
+        /// Deserialize Ethereum protocol transaction data.
+        pub fn deserialize(
+            tx_type: &ProtocolTxType,
+            data: &[u8],
+        ) -> Result<Self, TxError> {
+            let deserialize: fn(&[u8]) -> _ = match tx_type {
+                ProtocolTxType::EthereumEvents => |data| {
+                    BorshDeserialize::try_from_slice(data)
+                        .map(EthereumTxData::EthereumEvents)
+                },
+                ProtocolTxType::BridgePool => |data| {
+                    BorshDeserialize::try_from_slice(data)
+                        .map(EthereumTxData::BridgePool)
+                },
+                ProtocolTxType::ValidatorSetUpdate => |data| {
+                    BorshDeserialize::try_from_slice(data)
+                        .map(EthereumTxData::ValidatorSetUpdate)
+                },
+                ProtocolTxType::EthEventsVext => |data| {
+                    BorshDeserialize::try_from_slice(data)
+                        .map(EthereumTxData::EthEventsVext)
+                },
+                ProtocolTxType::BridgePoolVext => |data| {
+                    BorshDeserialize::try_from_slice(data)
+                        .map(EthereumTxData::BridgePoolVext)
+                },
+                ProtocolTxType::ValSetUpdateVext => |data| {
+                    BorshDeserialize::try_from_slice(data)
+                        .map(EthereumTxData::ValSetUpdateVext)
+                },
+                tx => {
+                    return Err(TxError::Deserialization(format!(
+                        "Not an Ethereum protocol tx: {tx:?}"
+                    )));
+                }
+            }
+            .map_err(|err| TxError::Deserialization(err.to_string()));
+            deserialize(data)
+        }
+    }
+
+    /// DKG message wrapper type that adds Borsh encoding.
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct DkgMessage(pub Message<EllipticCurve>);
+
+    #[derive(
+        Clone,
+        Debug,
+        BorshSerialize,
+        BorshDeserialize,
+        BorshSchema,
+        Serialize,
+        Deserialize,
+    )]
+    #[allow(clippy::large_enum_variant)]
+    /// Types of protocol messages to be sent
+    pub enum ProtocolTxType {
+        /// Messages to be given to the DKG state machine
+        DKG(DkgMessage),
+        /// Tx requesting a new DKG session keypair
+        NewDkgKeypair,
+        /// Ethereum events contained in vote extensions that
+        /// are compressed before being included on chain
+        EthereumEvents,
+        /// Collection of signatures over the Ethereum bridge
+        /// pool merkle root and nonce.
+        BridgePool,
+        /// Validator set updates contained in vote extensions
+        ValidatorSetUpdate,
+        /// Ethereum events seen by some validator
+        EthEventsVext,
+        /// Signature over the Ethereum bridge pool merkle root and nonce.
+        BridgePoolVext,
+        /// Validator set update signed by some validator
+        ValSetUpdateVext,
+    }
+
+    impl ProtocolTxType {
         /// Create a new tx requesting a new DKG session keypair
         pub fn request_new_dkg_keypair<'a, F>(
             data: UpdateDkgSessionKey,
@@ -124,7 +243,7 @@ mod protocol_txs {
             wasm_dir: &'a Path,
             wasm_loader: F,
             chain_id: ChainId,
-        ) -> Self
+        ) -> Tx
         where
             F: FnOnce(&'a str, &'static str) -> Vec<u8>,
         {
@@ -134,18 +253,22 @@ mod protocol_txs {
                     .expect("Converting path to string should not fail"),
                 TX_NEW_DKG_KP_WASM,
             );
-            Self::NewDkgKeypair(
-                Tx::new(
-                    code,
-                    Some(
-                        data.try_to_vec()
-                            .expect("Serializing request should not fail"),
-                    ),
-                    chain_id,
-                    None,
-                )
-                .sign(signing_key),
-            )
+            let mut outer_tx =
+                Tx::new(TxType::Protocol(Box::new(ProtocolTx {
+                    pk: signing_key.ref_to(),
+                    tx: Self::NewDkgKeypair,
+                })));
+            outer_tx.header.chain_id = chain_id;
+            outer_tx.set_code(Code::new(code));
+            outer_tx.set_data(Data::new(
+                data.try_to_vec()
+                    .expect("Serializing request should not fail"),
+            ));
+            outer_tx.add_section(Section::Signature(Signature::new(
+                &outer_tx.header_hash(),
+                signing_key,
+            )));
+            outer_tx
         }
     }
 

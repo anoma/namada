@@ -594,6 +594,19 @@ impl DB for RocksDB {
                 return Ok(None);
             }
         };
+        let update_epoch_blocks_delay: Option<u32> = match self
+            .0
+            .get_cf(state_cf, "update_epoch_blocks_delay")
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            None => {
+                tracing::error!(
+                    "Couldn't load epoch update block delay from the DB"
+                );
+                return Ok(None);
+            }
+        };
         let tx_queue: TxQueue = match self
             .0
             .get_cf(state_cf, "tx_queue")
@@ -719,6 +732,7 @@ impl DB for RocksDB {
                     results,
                     next_epoch_min_start_height,
                     next_epoch_min_start_time,
+                    update_epoch_blocks_delay,
                     address_gen,
                     tx_queue,
                     ethereum_height,
@@ -745,10 +759,11 @@ impl DB for RocksDB {
             height,
             epoch,
             pred_epochs,
-            results,
             next_epoch_min_start_height,
             next_epoch_min_start_time,
+            update_epoch_blocks_delay,
             address_gen,
+            results,
             tx_queue,
             ethereum_height,
             eth_events_queue,
@@ -792,6 +807,24 @@ impl DB for RocksDB {
             "next_epoch_min_start_time",
             types::encode(&next_epoch_min_start_time),
         );
+        if let Some(current_value) = self
+            .0
+            .get_cf(state_cf, "update_epoch_blocks_delay")
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            // Write the predecessor value for rollback
+            batch.0.put_cf(
+                state_cf,
+                "pred/update_epoch_blocks_delay",
+                current_value,
+            );
+        }
+        batch.0.put_cf(
+            state_cf,
+            "update_epoch_blocks_delay",
+            types::encode(&update_epoch_blocks_delay),
+        );
+
         // Tx queue
         if let Some(pred_tx_queue) = self
             .0
@@ -1527,6 +1560,7 @@ mod test {
         let height = BlockHeight::default();
         let next_epoch_min_start_height = BlockHeight::default();
         let next_epoch_min_start_time = DateTimeUtc::now();
+        let update_epoch_blocks_delay = None;
         let address_gen = EstablishedAddressGen::new("whatever");
         let tx_queue = TxQueue::default();
         let results = BlockResults::default();
@@ -1541,6 +1575,7 @@ mod test {
             pred_epochs: &pred_epochs,
             next_epoch_min_start_height,
             next_epoch_min_start_time,
+            update_epoch_blocks_delay,
             address_gen: &address_gen,
             tx_queue: &tx_queue,
             ethereum_height: None,

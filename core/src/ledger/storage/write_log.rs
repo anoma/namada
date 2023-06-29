@@ -440,11 +440,7 @@ impl WriteLog {
                 }
                 StorageModification::InitAccount { vp_code_hash } => {
                     storage
-                        .batch_write_subspace_val(
-                            batch,
-                            key,
-                            vp_code_hash.clone(),
-                        )
+                        .batch_write_subspace_val(batch, key, *vp_code_hash)
                         .map_err(Error::StorageError)?;
                 }
                 // temporary value isn't persisted
@@ -610,7 +606,7 @@ mod tests {
         // init
         let init_vp = "initialized".as_bytes().to_vec();
         let vp_hash = Hash::sha256(init_vp);
-        let (addr, gas) = write_log.init_account(&address_gen, vp_hash.clone());
+        let (addr, gas) = write_log.init_account(&address_gen, vp_hash);
         let vp_key = storage::Key::validity_predicate(&addr);
         assert_eq!(gas, (vp_key.len() + vp_hash.len()) as u64);
 
@@ -694,7 +690,7 @@ mod tests {
 
         // initialize an account
         let vp1 = Hash::sha256("vp1".as_bytes());
-        let (addr1, _) = write_log.init_account(&address_gen, vp1.clone());
+        let (addr1, _) = write_log.init_account(&address_gen, vp1);
         write_log.commit_tx();
 
         // write values

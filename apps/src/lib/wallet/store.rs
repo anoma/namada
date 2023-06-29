@@ -12,7 +12,7 @@ use file_lock::{FileLock, FileOptions};
 use namada::ledger::wallet::store::AddressVpType;
 #[cfg(feature = "dev")]
 use namada::ledger::wallet::StoredKeypair;
-use namada::ledger::wallet::{gen_sk, Store, ValidatorKeys};
+use namada::ledger::wallet::{gen_sk_rng, Store, ValidatorKeys};
 #[cfg(not(feature = "dev"))]
 use namada::types::address::Address;
 use namada::types::key::*;
@@ -177,9 +177,9 @@ pub fn gen_validator_keys(
             }
             k
         })
-        .unwrap_or_else(|| gen_sk(SchemeType::Secp256k1));
+        .unwrap_or_else(|| gen_sk_rng(SchemeType::Secp256k1));
     let protocol_keypair =
-        protocol_keypair.unwrap_or_else(|| gen_sk(protocol_keypair_scheme));
+        protocol_keypair.unwrap_or_else(|| gen_sk_rng(protocol_keypair_scheme));
     let dkg_keypair = ferveo_common::Keypair::<EllipticCurve>::new(
         &mut StdRng::from_entropy(),
     );

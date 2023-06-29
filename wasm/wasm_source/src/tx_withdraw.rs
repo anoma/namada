@@ -4,10 +4,9 @@
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
-    let signed = SignedTxData::try_from_slice(&tx_data[..])
-        .wrap_err("failed to decode SignedTxData")?;
-    let data = signed.data.ok_or_err_msg("Missing data")?;
+fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
+    let signed = tx_data;
+    let data = signed.data().ok_or_err_msg("Missing data")?;
     let withdraw = transaction::pos::Withdraw::try_from_slice(&data[..])
         .wrap_err("failed to decode Withdraw")?;
 
@@ -23,9 +22,9 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
 mod tests {
     use namada::ledger::pos::{GenesisValidator, PosParams, PosVP};
     use namada::proof_of_stake::unbond_handle;
-    use namada::proto::Tx;
-    use namada::types::chain::ChainId;
+    use namada::proto::{Code, Data, Signature, Tx};
     use namada::types::storage::Epoch;
+    use namada::types::transaction::TxType;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
@@ -136,10 +135,14 @@ mod tests {
 
         tx_host_env::commit_tx_and_block();
 
-        // Fast forward to pipeline + unbonding offset epoch so that it's
-        // possible to withdraw the unbonded tokens
+        // Fast forward to pipeline + unbonding + cubic_slashing_window_length
+        // offset epoch so that it's possible to withdraw the unbonded
+        // tokens
         tx_host_env::with(|env| {
-            for _ in 0..(pos_params.pipeline_len + pos_params.unbonding_len) {
+            for _ in 0..(pos_params.pipeline_len
+                + pos_params.unbonding_len
+                + pos_params.cubic_slashing_window_length)
+            {
                 env.wl_storage.storage.block.epoch =
                     env.wl_storage.storage.block.epoch.next();
             }
@@ -149,19 +152,35 @@ mod tests {
         } else {
             Epoch::default()
         };
-        let withdraw_epoch =
-            Epoch(pos_params.pipeline_len + pos_params.unbonding_len);
+        let withdraw_epoch = Epoch(
+            pos_params.pipeline_len
+                + pos_params.unbonding_len
+                + pos_params.cubic_slashing_window_length,
+        );
 
         assert_eq!(
             tx_host_env::with(|env| env.wl_storage.storage.block.epoch),
-            Epoch(pos_params.pipeline_len + pos_params.unbonding_len)
+            Epoch(
+                pos_params.pipeline_len
+                    + pos_params.unbonding_len
+                    + pos_params.cubic_slashing_window_length
+            )
         );
 
         let tx_code = vec![];
         let tx_data = withdraw.try_to_vec().unwrap();
-        let tx = Tx::new(tx_code, Some(tx_data), ChainId::default(), None);
-        let signed_tx = tx.sign(&key);
-        let tx_data = signed_tx.data.unwrap();
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(tx_code));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key,
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key,
+        )));
+        let signed_tx = tx.clone();
 
         // Read data before we apply tx:
         let pos_balance_key = token::balance_key(
@@ -184,7 +203,7 @@ mod tests {
 
         assert_eq!(unbond_pre, Some(unbonded_amount));
 
-        apply_tx(ctx(), tx_data)?;
+        apply_tx(ctx(), signed_tx)?;
 
         // Read the data after the tx is executed
         let unbond_post =

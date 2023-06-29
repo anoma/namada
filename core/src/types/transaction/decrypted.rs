@@ -3,18 +3,21 @@ pub use ark_bls12_381::Bls12_381 as EllipticCurve;
 /// Integration of Ferveo cryptographic primitives
 /// to enable decrypting txs.
 /// *Not wasm compatible*
-#[cfg(feature = "ferveo-tpke")]
 pub mod decrypted_tx {
-
+    #[cfg(feature = "ferveo-tpke")]
     use ark_ec::PairingEngine;
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+    use sha2::{Digest, Sha256};
 
-    use super::EllipticCurve;
-    use crate::proto::Tx;
-    use crate::types::chain::ChainId;
-    use crate::types::transaction::{Hash, TxType, WrapperTx};
-
-    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+    #[derive(
+        Clone,
+        Debug,
+        BorshSerialize,
+        BorshDeserialize,
+        BorshSchema,
+        serde::Serialize,
+        serde::Deserialize,
+    )]
     #[allow(clippy::large_enum_variant)]
     /// Holds the result of attempting to decrypt
     /// a transaction and the data necessary for
@@ -22,11 +25,6 @@ pub mod decrypted_tx {
     pub enum DecryptedTx {
         /// The decrypted payload
         Decrypted {
-            /// Inner tx.
-            // For some reason, we get `warning: fields `tx` and
-            // `has_valid_pow` are never read` even though they are being used!
-            #[allow(dead_code)]
-            tx: Tx,
             #[cfg(not(feature = "mainnet"))]
             /// A PoW solution can be used to allow zero-fee testnet
             /// transactions.
@@ -38,73 +36,33 @@ pub mod decrypted_tx {
             has_valid_pow: bool,
         },
         /// The wrapper whose payload could not be decrypted
-        Undecryptable(WrapperTx),
+        Undecryptable,
     }
 
     impl DecryptedTx {
-        /// Convert the inner tx value to bytes
-        pub fn to_bytes(&self) -> Vec<u8> {
-            match self {
-                DecryptedTx::Decrypted {
-                    tx,
-                    #[cfg(not(feature = "mainnet"))]
-                        has_valid_pow: _,
-                } => tx.to_bytes(),
-                DecryptedTx::Undecryptable(wrapper) => {
-                    wrapper.try_to_vec().unwrap()
-                }
-            }
-        }
-
-        /// Return the hash used as a commitment to the tx's contents in the
-        /// wrapper tx that includes this tx as an encrypted payload. The
-        /// commitment is computed on the unsigned tx if tx is signed
-        pub fn hash_commitment(&self) -> Hash {
-            match self {
-                DecryptedTx::Decrypted {
-                    tx,
-                    #[cfg(not(feature = "mainnet"))]
-                        has_valid_pow: _,
-                } => Hash(tx.unsigned_hash()),
-                DecryptedTx::Undecryptable(wrapper) => wrapper.tx_hash.clone(),
-            }
+        /// Produce a SHA-256 hash of this header
+        pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
+            hasher.update(
+                self.try_to_vec().expect("unable to serialize decrypted tx"),
+            );
+            hasher
         }
     }
 
     /// Verify that if the encrypted payload was marked
     /// "undecryptable", we should not be able to decrypt
     /// it
+    #[cfg(feature = "ferveo-tpke")]
     pub fn verify_decrypted_correctly(
         decrypted: &DecryptedTx,
-        privkey: <EllipticCurve as PairingEngine>::G2Affine,
+        mut otx: crate::proto::Tx,
+        privkey: <super::EllipticCurve as PairingEngine>::G2Affine,
     ) -> bool {
         match decrypted {
             DecryptedTx::Decrypted { .. } => true,
-            DecryptedTx::Undecryptable(tx) => tx.decrypt(privkey).is_err(),
-        }
-    }
-
-    impl From<DecryptedTx> for Tx {
-        fn from(decrypted: DecryptedTx) -> Self {
-            Tx::new(
-                vec![],
-                Some(
-                    TxType::Decrypted(decrypted)
-                        .try_to_vec()
-                        .expect("Encrypting transaction should not fail"),
-                ),
-                // If undecrytable we cannot extract the ChainId and
-                // expiration. If instead the tx gets decrypted
-                // successfully, the correct chain id and
-                // expiration are serialized inside the data field
-                // of the Tx, while the ones available
-                // in the chain_id and expiration field are just placeholders
-                ChainId(String::new()),
-                None,
-            )
+            DecryptedTx::Undecryptable => otx.decrypt(privkey).is_err(),
         }
     }
 }
 
-#[cfg(feature = "ferveo-tpke")]
 pub use decrypted_tx::*;

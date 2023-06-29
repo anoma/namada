@@ -12,7 +12,7 @@ use once_cell::unsync::Lazy;
 #[validity_predicate]
 fn validate_tx(
     ctx: &Ctx,
-    tx_data: Vec<u8>,
+    tx_data: Tx,
     addr: Address,
     keys_changed: BTreeSet<storage::Key>,
     verifiers: BTreeSet<Address>,
@@ -25,23 +25,14 @@ fn validate_tx(
         verifiers
     );
 
-    let signed_tx_data =
-        Lazy::new(|| SignedTxData::try_from_slice(&tx_data[..]));
-
-    let valid_sig = Lazy::new(|| match &*signed_tx_data {
-        Ok(signed_tx_data) => {
-            let pk = key::get(ctx, &addr);
-            match pk {
-                Ok(Some(pk)) => {
-                    matches!(
-                        ctx.verify_tx_signature(&pk, &signed_tx_data.sig),
-                        Ok(true)
-                    )
-                }
-                _ => false,
-            }
+    let valid_sig = Lazy::new(|| {
+        let pk = key::get(ctx, &addr);
+        match pk {
+            Ok(Some(pk)) => tx_data
+                .verify_signature(&pk, tx_data.data_sechash())
+                .is_ok(),
+            _ => false,
         }
-        _ => false,
     });
 
     if !is_valid_tx(ctx, &tx_data)? {
@@ -109,6 +100,8 @@ fn validate_tx(
 #[cfg(test)]
 mod tests {
     use address::testing::arb_non_internal_address;
+    use namada::proto::{Data, Signature};
+    use namada::types::transaction::TxType;
     use namada_test_utils::TestWasms;
     // Use this as `#[test]` annotation to enable logging
     use namada_tests::log::test;
@@ -116,7 +109,7 @@ mod tests {
     use namada_tests::vp::vp_host_env::storage::Key;
     use namada_tests::vp::*;
     use namada_tx_prelude::{StorageWrite, TxEnv};
-    use namada_vp_prelude::key::{RefTo, SigScheme};
+    use namada_vp_prelude::key::RefTo;
     use proptest::prelude::*;
     use storage::testing::arb_account_storage_key_no_vp;
 
@@ -128,7 +121,8 @@ mod tests {
     /// Test that no-op transaction (i.e. no storage modifications) accepted.
     #[test]
     fn test_no_op_transaction() {
-        let tx_data: Vec<u8> = vec![];
+        let mut tx_data = Tx::new(TxType::Raw);
+        tx_data.set_data(Data::new(vec![]));
         let addr: Address = address::testing::established_address_1();
         let keys_changed: BTreeSet<storage::Key> = BTreeSet::default();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -171,12 +165,14 @@ mod tests {
                 amount,
                 &None,
                 &None,
+                &None,
             )
             .unwrap();
         });
 
         let vp_env = vp_host_env::take();
-        let tx_data: Vec<u8> = vec![];
+        let mut tx_data = Tx::new(TxType::Raw);
+        tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -207,12 +203,13 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_hash)
+                .update_validity_predicate(address, vp_hash)
                 .unwrap();
         });
 
         let vp_env = vp_host_env::take();
-        let tx_data: Vec<u8> = vec![];
+        let mut tx_data = Tx::new(TxType::Raw);
+        tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -247,21 +244,25 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, &vp_hash)
+                .update_validity_predicate(address, vp_hash)
                 .unwrap();
         });
 
         let mut vp_env = vp_host_env::take();
-        let tx = vp_env.tx.clone();
-        let signed_tx = tx.sign(&keypair);
-        let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
-        vp_env.tx = signed_tx;
+        let mut tx = vp_env.tx.clone();
+        tx.set_data(Data::new(vec![]));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &keypair,
+        )));
+        let signed_tx = tx.clone();
+        vp_env.tx = signed_tx.clone();
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
                 .unwrap()
         );
     }
@@ -310,11 +311,12 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
         // Apply transfer in a transaction
-        tx_host_env::token::transfer(tx::ctx(), address, &target, &token, None, amount, &None, &None).unwrap();
+        tx_host_env::token::transfer(tx::ctx(), address, &target, &token, None, amount, &None, &None, &None).unwrap();
         });
 
         let vp_env = vp_host_env::take();
-        let tx_data: Vec<u8> = vec![];
+        let mut tx_data = Tx::new(TxType::Raw);
+        tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
         vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -352,13 +354,6 @@ mod tests {
         let challenge = testnet_pow::Challenge::new(&mut tx_env.wl_storage, &vp_owner, target.clone()).unwrap();
         let solution = challenge.solve();
         let solution_bytes = solution.try_to_vec().unwrap();
-        // The signature itself doesn't matter and is not being checked in this
-        // test, it's just used to construct `SignedTxData`
-        let sig = key::common::SigScheme::sign(&target_key, &solution_bytes);
-        let signed_solution = SignedTxData {
-            data: Some(solution_bytes),
-            sig,
-        };
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -367,13 +362,15 @@ mod tests {
             let valid = solution.validate(tx::ctx(), address, target.clone()).unwrap();
             assert!(valid);
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(tx::ctx(), address, &target, &token, None, amount, &None, &None).unwrap();
+            tx_host_env::token::transfer(tx::ctx(), address, &target, &token, None, amount, &None, &None, &None).unwrap();
         });
 
         let mut vp_env = vp_host_env::take();
         // This is set by the protocol when the wrapper tx has a valid PoW
         vp_env.has_valid_pow = true;
-        let tx_data: Vec<u8> = signed_solution.try_to_vec().unwrap();
+        let mut tx_data = Tx::new(TxType::Raw);
+        tx_data.set_data(Data::new(solution_bytes));
+        tx_data.add_section(Section::Signature(Signature::new(tx_data.data_sechash(), &target_key)));
         let keys_changed: BTreeSet<storage::Key> =
         vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -418,15 +415,16 @@ mod tests {
             });
 
             let mut vp_env = vp_host_env::take();
-            let tx = vp_env.tx.clone();
-            let signed_tx = tx.sign(&keypair);
-            let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
-            vp_env.tx = signed_tx;
+            let mut tx = vp_env.tx.clone();
+            tx.set_data(Data::new(vec![]));
+            tx.add_section(Section::Signature(Signature::new(tx.data_sechash(), &keypair)));
+            let signed_tx = tx.clone();
+            vp_env.tx = signed_tx.clone();
             let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
             let verifiers: BTreeSet<Address> = BTreeSet::default();
             vp_host_env::set(vp_env);
-            assert!(validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers).unwrap());
+            assert!(validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers).unwrap());
         }
     }
 }
