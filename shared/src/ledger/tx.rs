@@ -204,9 +204,12 @@ pub enum Error {
     /// Couldn't understand who the fee pair is
     #[error("{0}")]
     InvalidFeePayer(String),
-    /// Couldn't understand who the fee pair is
+    /// Account threshold is not set
     #[error("Account threshold must be set.")]
     MissingAccountThreshold,
+    /// Not enough signature
+    #[error("Account threshold is {0} but the valid signatures are {1}.")]
+    MissingSigningKeys(u8, u8),
     /// Other Errors that may show up when using the interface
     #[error("{0}")]
     Other(String),
@@ -242,6 +245,7 @@ pub async fn process_tx<
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     tx: Tx,
+    owner: &Address,
     default_signer: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<ProcessTxResponse, Error> {
@@ -250,6 +254,7 @@ pub async fn process_tx<
         wallet,
         tx,
         args,
+        owner,
         default_signer,
         #[cfg(not(feature = "mainnet"))]
         requires_pow,
@@ -671,6 +676,7 @@ pub async fn submit_validator_commission_change<
         wallet,
         &args.tx,
         tx,
+        &default_signer.clone(),
         TxSigningKey::WalletAddress(default_signer),
         #[cfg(not(feature = "mainnet"))]
         false,
@@ -717,6 +723,7 @@ pub async fn submit_unjail_validator<
         wallet,
         &args.tx,
         tx,
+        &default_signer.clone(),
         TxSigningKey::WalletAddress(default_signer),
         #[cfg(not(feature = "mainnet"))]
         false,
@@ -786,6 +793,7 @@ pub async fn submit_withdraw<
         wallet,
         &args.tx,
         tx,
+        &default_signer.clone(),
         TxSigningKey::WalletAddress(default_signer),
         #[cfg(not(feature = "mainnet"))]
         false,
@@ -867,6 +875,7 @@ pub async fn submit_unbond<
         wallet,
         &args.tx,
         tx,
+        &default_signer.clone(),
         TxSigningKey::WalletAddress(default_signer),
         #[cfg(not(feature = "mainnet"))]
         false,
@@ -984,6 +993,7 @@ pub async fn submit_bond<
         wallet,
         &args.tx,
         tx,
+        &default_signer.clone(),
         TxSigningKey::WalletAddress(default_signer),
         #[cfg(not(feature = "mainnet"))]
         false,
@@ -1122,6 +1132,7 @@ pub async fn submit_ibc_transfer<
         wallet,
         &args.tx,
         tx,
+        &args.source.clone(),
         TxSigningKey::WalletAddress(args.source),
         #[cfg(not(feature = "mainnet"))]
         false,
@@ -1251,6 +1262,7 @@ pub async fn submit_transfer<
     // signer. Also, if the transaction is shielded, redact the amount and token
     // types by setting the transparent value to 0 and token type to a constant.
     // This has no side-effect because transaction is to self.
+
     let (default_signer, amount, token, shielded_gas) =
         if source == masp_addr && target == masp_addr {
             // TODO Refactor me, we shouldn't rely on any specific token here.
@@ -1370,6 +1382,7 @@ pub async fn submit_transfer<
             wallet,
             &args.tx,
             tx,
+            &args.source.effective_address(),
             default_signer.clone(),
             #[cfg(not(feature = "mainnet"))]
             is_source_faucet,
@@ -1457,6 +1470,7 @@ pub async fn submit_init_account<
         wallet,
         &args.tx,
         tx,
+        &args.source.clone(),
         TxSigningKey::WalletAddress(args.source),
         #[cfg(not(feature = "mainnet"))]
         false,
@@ -1570,6 +1584,7 @@ pub async fn submit_update_vp<
         wallet,
         &args.tx,
         tx,
+        &args.addr.clone(),
         TxSigningKey::WalletAddress(args.addr),
         #[cfg(not(feature = "mainnet"))]
         false,
@@ -1598,6 +1613,7 @@ pub async fn submit_custom<
         wallet,
         &args.tx,
         tx,
+        &args.owner,
         TxSigningKey::None,
         #[cfg(not(feature = "mainnet"))]
         false,

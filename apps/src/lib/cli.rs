@@ -2140,6 +2140,7 @@ pub mod args {
                     std::fs::read(data_path)
                         .expect("Expected a file at given data path")
                 }),
+                owner: ctx.get(&self.owner),
             }
         }
     }
@@ -2149,10 +2150,12 @@ pub mod args {
             let tx = Tx::parse(matches);
             let code_path = CODE_PATH.parse(matches);
             let data_path = DATA_PATH_OPT.parse(matches);
+            let owner = OWNER.parse(matches);
             Self {
                 tx,
                 code_path,
                 data_path,
+                owner,
             }
         }
 

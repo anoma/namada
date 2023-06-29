@@ -80,6 +80,8 @@ pub struct TxCustom<C: NamadaTypes = SdkTypes> {
     pub code_path: C::Data,
     /// Path to the data file
     pub data_path: Option<C::Data>,
+    /// The address that correspond to the signatures/signing-keys
+    pub owner: C::Address,
 }
 
 /// Transfer transaction arguments

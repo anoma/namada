@@ -253,6 +253,7 @@ pub async fn submit_init_validator<
         ctx,
         &tx_args,
         tx,
+        &source.clone(),
         TxSigningKey::WalletAddress(source),
         #[cfg(not(feature = "mainnet"))]
         false,
@@ -630,6 +631,7 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
             ctx,
             &args.tx,
             tx,
+            &signer.clone(),
             TxSigningKey::WalletAddress(signer),
             #[cfg(not(feature = "mainnet"))]
             false,
@@ -882,6 +884,7 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
                     ctx,
                     &args.tx,
                     tx,
+                    &args.voter_address,
                     TxSigningKey::WalletAddress(args.voter_address.clone()),
                     #[cfg(not(feature = "mainnet"))]
                     false,
@@ -1079,6 +1082,7 @@ async fn process_tx<C: namada::ledger::queries::Client + Sync>(
     mut ctx: Context,
     args: &args::Tx,
     tx: Tx,
+    owner: &Address,
     default_signer: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<(Context, Vec<Address>), tx::Error> {
@@ -1094,6 +1098,7 @@ async fn process_tx<C: namada::ledger::queries::Client + Sync>(
         &mut ctx.wallet,
         &args,
         tx,
+        owner,
         default_signer,
         #[cfg(not(feature = "mainnet"))]
         requires_pow,

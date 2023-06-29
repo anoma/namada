@@ -19,7 +19,6 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::transaction::components::Amount;
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::core::types::account::Account;
 use namada::core::types::transaction::governance::ProposalType;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
@@ -34,7 +33,7 @@ use namada::ledger::pos::{
 };
 use namada::ledger::queries::RPC;
 use namada::ledger::rpc::{
-    enriched_bonds_and_unbonds, query_epoch, TxResponse,
+    self, enriched_bonds_and_unbonds, query_epoch, TxResponse,
 };
 use namada::ledger::storage::ConversionState;
 use namada::ledger::wallet::{AddressVpType, Wallet};
@@ -1117,9 +1116,17 @@ pub async fn query_account<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     args: args::QueryAccount,
 ) {
-    unwrap_client_response::<C, Option<Account>>(
-        RPC.shell().account(client, &args.owner).await,
-    );
+    let account = rpc::get_account_info(client, &args.owner).await;
+    if let Some(account) = account {
+        println!("Account address: {}", account.address);
+        println!("Account threshold: {}", account.threshold);
+        println!("Public keys:");
+        for (public_key, _) in account.public_keys_map.pk_to_idx {
+            println!("- {}", public_key);
+        }
+    } else {
+        println!("No account exists for {}", args.owner);
+    }
 }
 
 pub async fn query_protocol_parameters<

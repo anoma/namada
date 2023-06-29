@@ -15,6 +15,7 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::components::sapling::fees::{
     InputView, OutputView,
 };
+use namada_core::types::account::AccountPublicKeysMap;
 use namada_core::types::address::{masp, Address, ImplicitAddress};
 use namada_core::types::token::{self, Amount};
 use namada_core::types::transaction::{pos, MIN_FEE};
@@ -203,22 +204,44 @@ pub async fn sign_tx<
     wallet: &mut Wallet<U>,
     mut tx: Tx,
     args: &args::Tx,
+    owner: &Address,
     default: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<TxBroadcastData, Error> {
     let keypairs = tx_signer::<C, U>(client, wallet, args, default).await?;
-    // Sign over the transaction data
-    tx.add_section(Section::SectionSignature(MultiSignature::new(
+    let account = rpc::get_account_info(client, owner).await;
+
+    let (public_keys_index_map, threshold) = if let Some(account) = account {
+        (account.public_keys_map, account.threshold)
+    } else {
+        (AccountPublicKeysMap::empty(), 1u8)
+    };
+
+    let data_section_multisig = MultiSignature::new(
         tx.data_sechash(),
         &keypairs,
-        HashMap::new(),
-    )));
-    // Sign over the transaction code
-    tx.add_section(Section::SectionSignature(MultiSignature::new(
+        &public_keys_index_map,
+    );
+
+    let code_section_multisig = MultiSignature::new(
         tx.code_sechash(),
         &keypairs,
-        HashMap::new(),
-    )));
+        &public_keys_index_map,
+    );
+
+    if code_section_multisig.total_signatures() < threshold
+        || data_section_multisig.total_signatures() < threshold
+    {
+        return Err(Error::MissingSigningKeys(
+            threshold,
+            code_section_multisig.total_signatures(),
+        ));
+    }
+
+    // Sign over the transaction data
+    tx.add_section(Section::SectionSignature(data_section_multisig));
+    // Sign over the transaction code
+    tx.add_section(Section::SectionSignature(code_section_multisig));
 
     let epoch = rpc::query_epoch(client).await;
 

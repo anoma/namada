@@ -207,10 +207,10 @@ impl Parameters {
 
 /// Get the max signatures per transactio parameter
 pub fn max_signatures_per_transaction<S>(
-    storage: &S
+    storage: &S,
 ) -> storage_api::Result<Option<u8>>
 where
-    S: StorageRead
+    S: StorageRead,
 {
     let key = storage::get_max_signatures_per_transaction_key();
     storage.read(&key)

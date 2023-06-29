@@ -6,7 +6,9 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use namada_core::ledger::storage::LastBlock;
+#[cfg(not(feature = "mainnet"))]
 use namada_core::ledger::testnet_pow;
+use namada_core::types::account::Account;
 use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
 use namada_core::types::token::Amount;
@@ -748,6 +750,16 @@ pub async fn query_bond<C: crate::ledger::queries::Client + Sync>(
 ) -> token::Amount {
     unwrap_client_response::<C, token::Amount>(
         RPC.vp().pos().bond(client, source, validator, &epoch).await,
+    )
+}
+
+/// Query the accunt substorage space of an address
+pub async fn get_account_info<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    owner: &Address,
+) -> Option<Account> {
+    unwrap_client_response::<C, Option<Account>>(
+        RPC.shell().account(client, owner).await,
     )
 }
 

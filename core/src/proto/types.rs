@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 use std::convert::TryFrom;
 
 #[cfg(feature = "ferveo-tpke")]
@@ -258,7 +258,7 @@ impl MultiSignature {
     pub fn new(
         target: &crate::types::hash::Hash,
         secret_keys: &[common::SecretKey],
-        public_keys_index_map: HashMap<common::PublicKey, u8>,
+        public_keys_index_map: &AccountPublicKeysMap,
     ) -> Self {
         let signatures_public_keys_map =
             secret_keys.iter().map(|secret_key: &common::SecretKey| {
@@ -269,11 +269,10 @@ impl MultiSignature {
 
         let signatures = signatures_public_keys_map
             .filter_map(|(public_key, signature)| {
-                let public_key_index = public_keys_index_map.get(&public_key);
-                public_key_index.map(|index| SignatureIndex {
-                    signature,
-                    index: *index,
-                })
+                let public_key_index = public_keys_index_map
+                    .get_index_from_public_key(&public_key);
+                public_key_index
+                    .map(|index| SignatureIndex { signature, index })
             })
             .collect::<BTreeSet<SignatureIndex>>();
 
