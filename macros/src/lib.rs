@@ -42,7 +42,7 @@ pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
                     tx_data_len as _,
                 )
             };
-            let tx_data = slice.to_vec();
+            let tx_data = Tx::try_from_slice(slice).unwrap();
 
             // The context on WASM side is only provided by the VM once its
             // being executed (in here it's implicit). But because we want to
@@ -112,7 +112,7 @@ pub fn validity_predicate(
                     tx_data_len as _,
                 )
             };
-            let tx_data = slice.to_vec();
+            let tx_data = Tx::try_from_slice(slice).unwrap();
 
             let slice = unsafe {
                 core::slice::from_raw_parts(

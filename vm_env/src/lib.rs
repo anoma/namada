@@ -84,8 +84,8 @@ pub mod tx {
         // Get the current block height
         pub fn namada_tx_get_block_height() -> u64;
 
-        // Get the time of the current block header
-        pub fn namada_tx_get_block_time() -> i64;
+        // Get the current block header
+        pub fn namada_tx_get_block_header(height: u64) -> i64;
 
         // Get the current block hash
         pub fn namada_tx_get_block_hash(result_ptr: u64);
@@ -93,7 +93,7 @@ pub mod tx {
         // Get the current block epoch
         pub fn namada_tx_get_block_epoch() -> u64;
 
-        // Get the current tx id
+        // Get the current tx index
         pub fn namada_tx_get_tx_index() -> u32;
 
         // Get the native token address
@@ -166,6 +166,9 @@ pub mod vp {
         // Get the current block height
         pub fn namada_vp_get_block_height() -> u64;
 
+        // Get the current block header
+        pub fn namada_vp_get_block_header(height: u64) -> i64;
+
         // Get the current block hash
         pub fn namada_vp_get_block_hash(result_ptr: u64);
 
@@ -180,14 +183,6 @@ pub mod vp {
 
         // Get the native token address
         pub fn namada_vp_get_native_token(result_ptr: u64);
-
-        // Verify a transaction signature
-        pub fn namada_vp_verify_tx_signature(
-            pk_ptr: u64,
-            pk_len: u64,
-            sig_ptr: u64,
-            sig_len: u64,
-        ) -> i64;
 
         // Requires a node running with "Info" log level
         pub fn namada_vp_log_string(str_ptr: u64, str_len: u64);

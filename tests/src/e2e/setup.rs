@@ -15,8 +15,8 @@ use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use expectrl::process::unix::{PtyStream, UnixProcess};
 use expectrl::session::Session;
-use expectrl::stream::log::LoggedStream;
-use expectrl::{Eof, WaitStatus};
+use expectrl::stream::log::LogStream;
+use expectrl::{ControlCode, Eof, WaitStatus};
 use eyre::{eyre, Context};
 use itertools::{Either, Itertools};
 use namada::types::chain::ChainId;
@@ -26,7 +26,7 @@ use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
 use namada_apps::{config, wallet};
 use rand::Rng;
 use serde_json;
-use tempfile::{tempdir, TempDir};
+use tempfile::{tempdir, tempdir_in, TempDir};
 
 use crate::e2e::helpers::generate_bin_command;
 
@@ -41,6 +41,9 @@ pub const ENV_VAR_DEBUG: &str = "NAMADA_E2E_DEBUG";
 
 /// Env. var for keeping temporary files created by the E2E tests
 const ENV_VAR_KEEP_TEMP: &str = "NAMADA_E2E_KEEP_TEMP";
+
+/// Env. var for temporary path
+const ENV_VAR_TEMP_PATH: &str = "NAMADA_E2E_TEMP_PATH";
 
 /// Env. var to use a set of prebuilt binaries. This variable holds the path to
 /// a folder.
@@ -105,17 +108,6 @@ pub fn single_node_net() -> Result<Test> {
     network(|genesis| genesis, None)
 }
 
-/// Setup two networks with a single genesis validator node.
-pub fn two_single_node_nets() -> Result<(Test, Test)> {
-    Ok((
-        network(|genesis| genesis, None)?,
-        network(
-            |genesis| set_validators(1, genesis, |_| ANOTHER_CHAIN_PORT_OFFSET),
-            None,
-        )?,
-    ))
-}
-
 /// Setup a configurable network.
 pub fn network(
     mut update_genesis: impl FnMut(GenesisConfig) -> GenesisConfig,
@@ -176,7 +168,7 @@ pub fn network(
         Some(5),
         &working_dir,
         &test_dir,
-        "validator",
+        None,
         format!("{}:{}", std::file!(), std::line!()),
     )?;
 
@@ -258,8 +250,14 @@ impl TestDir {
             _ => false,
         };
 
+        let path_to_tmp = env::var(ENV_VAR_TEMP_PATH);
+        let temp_dir: TempDir = match path_to_tmp {
+            Ok(path) => tempdir_in(path),
+            _ => tempdir(),
+        }
+        .unwrap();
         if keep_temp {
-            let path = tempdir().unwrap().into_path();
+            let path = temp_dir.into_path();
             println!(
                 "{}: \"{}\"",
                 "Keeping test directory at".underline().yellow(),
@@ -267,7 +265,7 @@ impl TestDir {
             );
             Self(Either::Right(path))
         } else {
-            Self(Either::Left(tempdir().unwrap()))
+            Self(Either::Left(temp_dir))
         }
     }
 
@@ -407,7 +405,7 @@ impl Test {
             timeout_sec,
             &self.working_dir,
             base_dir,
-            mode,
+            Some(mode),
             loc,
         )
     }
@@ -447,7 +445,7 @@ pub fn working_dir() -> PathBuf {
 
 /// A command under test
 pub struct NamadaCmd {
-    pub session: Session<UnixProcess, LoggedStream<PtyStream, File>>,
+    pub session: Session<UnixProcess, LogStream<PtyStream, File>>,
     pub cmd_str: String,
     pub log_path: PathBuf,
 }
@@ -509,8 +507,9 @@ impl NamadaCmd {
         // Make sure that there is no unread output first
         let _ = self.exp_eof().unwrap();
 
-        let status = self.session.wait().unwrap();
-        assert_eq!(WaitStatus::Exited(self.session.pid(), 0), status);
+        let process = self.session.get_process();
+        let status = process.wait().unwrap();
+        assert_eq!(WaitStatus::Exited(process.pid(), 0), status);
     }
 
     /// Assert that the process exited with failure
@@ -518,8 +517,9 @@ impl NamadaCmd {
         // Make sure that there is no unread output first
         let _ = self.exp_eof().unwrap();
 
-        let status = self.session.wait().unwrap();
-        assert_ne!(WaitStatus::Exited(self.session.pid(), 0), status);
+        let process = self.session.get_process();
+        let status = process.wait().unwrap();
+        assert_ne!(WaitStatus::Exited(process.pid(), 0), status);
     }
 
     /// Wait until provided string is seen on stdout of child process.
@@ -588,17 +588,22 @@ impl NamadaCmd {
         }
     }
 
+    /// Send ctrl-c to to interrupt or terminate.
+    pub fn interrupt(&mut self) -> Result<()> {
+        self.send_control(ControlCode::EndOfText)
+    }
+
     /// Send a control code to the running process and consume resulting output
     /// line (which is empty because echo is off)
     ///
-    /// E.g. `send_control('c')` sends ctrl-c. Upper/smaller case does not
-    /// matter.
+    /// E.g. `send_control(ControlCode::EndOfText)` sends ctrl-c. Upper/smaller
+    /// case does not matter.
     ///
     /// Wrapper over the inner `Session`'s functions with custom error
     /// reporting.
-    pub fn send_control(&mut self, c: char) -> Result<()> {
+    pub fn send_control(&mut self, c: ControlCode) -> Result<()> {
         self.session
-            .send_control(c)
+            .send(c)
             .map_err(|e| eyre!("Error: {}\nCommand: {}", e, self))
     }
 
@@ -623,7 +628,7 @@ impl Drop for NamadaCmd {
             "> Sending Ctrl+C to command".underline().yellow(),
             self.cmd_str,
         );
-        let _result = self.send_control('c');
+        let _result = self.interrupt();
         match self.exp_eof() {
             Err(error) => {
                 eprintln!(
@@ -669,7 +674,7 @@ pub fn run_cmd<I, S>(
     timeout_sec: Option<u64>,
     working_dir: impl AsRef<Path>,
     base_dir: impl AsRef<Path>,
-    mode: &str,
+    mode: Option<&str>,
     loc: String,
 ) -> Result<NamadaCmd>
 where
@@ -693,13 +698,13 @@ where
         .env("TM_LOG_LEVEL", "info")
         .env("NAMADA_LOG_COLOR", "false")
         .current_dir(working_dir)
-        .args([
-            "--base-dir",
-            &base_dir.as_ref().to_string_lossy(),
-            "--mode",
-            mode,
-        ])
-        .args(args);
+        .args(["--base-dir", &base_dir.as_ref().to_string_lossy()]);
+
+    if let Some(mode) = mode {
+        run_cmd.args(["--mode", mode]);
+    }
+
+    run_cmd.args(args);
 
     let args: String =
         run_cmd.get_args().map(|s| s.to_string_lossy()).join(" ");
@@ -736,7 +741,7 @@ where
         .write(true)
         .create_new(true)
         .open(&log_path)?;
-    let mut session = session.with_log(logger).unwrap();
+    let mut session = expectrl::session::log(session, logger).unwrap();
 
     session.set_expect_timeout(timeout_sec.map(std::time::Duration::from_secs));
 
@@ -754,7 +759,8 @@ where
         sleep(1);
 
         // If the command failed, try print out its output
-        if let Ok(WaitStatus::Exited(_, result)) = cmd_process.session.status()
+        if let Ok(WaitStatus::Exited(_, result)) =
+            cmd_process.session.get_process().status()
         {
             if result != 0 {
                 let output = cmd_process.exp_eof().unwrap_or_else(|err| {

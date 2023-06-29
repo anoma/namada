@@ -4,7 +4,7 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada_vm_env"
 resolver = "2"
-version = "0.15.1"
+version = "0.17.2"
 
 [features]
 default = ["abciplus"]
@@ -16,6 +16,5 @@ abciplus = [
 namada_core = {path = "../core", default-features = false}
 borsh = "0.9.0"
 #libmasp = { git = "https://github.com/anoma/masp", branch = "murisi/masp-incentive" }
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "ea4fcc68d9412b94042c1c2f0ea0212394e1be37" }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "ea4fcc68d9412b94042c1c2f0ea0212394e1be37" }
+ masp_primitives = { git = "https://github.com/anoma/masp", rev = "9320c6b69b5d2e97134866871e960f0a31703813" }
 hex = "0.4.3"

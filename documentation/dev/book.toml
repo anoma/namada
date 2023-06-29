@@ -10,8 +10,8 @@ title = "Anoma - DOCS"
 [output.html]
 edit-url-template = "https://github.com/anoma/namada/edit/main/documentation/dev/{path}"
 git-repository-url = "https://github.com/anoma/namada"
-additional-css = ["assets/custom.css", "assets/mdbook-admonish.css"]
-additional-js = ["assets/mermaid.min.js", "assets/mermaid-init.js"]
+additional-css = ["assets/custom.css", "assets/mdbook-admonish.css", "theme/pagetoc.css"]
+additional-js = ["assets/mermaid.min.js", "assets/mermaid-init.js", "theme/pagetoc.js"]
 mathjax-support = true
 git-branch = "main"
 
@@ -31,3 +31,5 @@ renderer = ["html"]
 [preprocessor.admonish]
 command = "mdbook-admonish"
 assets_version = "2.0.0" # do not edit: managed by `mdbook-admonish install`
+
+[preprocessor.pagetoc]

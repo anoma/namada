@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
 
 use masp_primitives::asset_type::AssetType;
-use masp_primitives::legacy::TransparentAddress::{PublicKey, Script};
 use masp_primitives::transaction::components::Amount;
 /// Multi-asset shielded pool VP.
 use namada_vp_prelude::address::masp;
@@ -86,7 +85,7 @@ fn convert_amount(
 #[validity_predicate]
 fn validate_tx(
     ctx: &Ctx,
-    tx_data: Vec<u8>,
+    tx_data: Tx,
     addr: Address,
     keys_changed: BTreeSet<storage::Key>,
     verifiers: BTreeSet<Address>,
@@ -94,22 +93,30 @@ fn validate_tx(
     debug_log!(
         "vp_masp called with {} bytes data, address {}, keys_changed {:?}, \
          verifiers {:?}",
-        tx_data.len(),
+        tx_data.data().as_ref().map(|x| x.len()).unwrap_or(0),
         addr,
         keys_changed,
         verifiers,
     );
 
-    let signed = SignedTxData::try_from_slice(&tx_data[..]).unwrap();
-    // Also get the data as bytes for the VM.
-    let data = signed.data.as_ref().unwrap().clone();
+    let signed = tx_data;
     let transfer =
-        token::Transfer::try_from_slice(&signed.data.unwrap()[..]).unwrap();
+        token::Transfer::try_from_slice(&signed.data().unwrap()[..]).unwrap();
 
-    if let Some(shielded_tx) = transfer.shielded {
+    let shielded = transfer
+        .shielded
+        .as_ref()
+        .map(|hash| {
+            signed
+                .get_section(hash)
+                .and_then(Section::masp_tx)
+                .ok_or_err_msg("unable to find shielded section")
+        })
+        .transpose()?;
+    if let Some(shielded_tx) = shielded {
         let mut transparent_tx_pool = Amount::zero();
         // The Sapling value balance adds to the transparent tx pool
-        transparent_tx_pool += shielded_tx.value_balance.clone();
+        transparent_tx_pool += shielded_tx.sapling_value_balance();
 
         if transfer.source != masp() {
             // Handle transparent input
@@ -135,13 +142,15 @@ fn validate_tx(
             // 2. the transparent transaction value pool's amount must equal the
             // containing wrapper transaction's fee amount
             // Satisfies 1.
-            if !shielded_tx.vin.is_empty() {
-                debug_log!(
-                    "Transparent input to a transaction from the masp must be \
-                     0 but is {}",
-                    shielded_tx.vin.len()
-                );
-                return reject();
+            if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
+                if !transp_bundle.vin.is_empty() {
+                    debug_log!(
+                        "Transparent input to a transaction from the masp \
+                         must be 0 but is {}",
+                        transp_bundle.vin.len()
+                    );
+                    return reject();
+                }
             }
         }
 
@@ -155,18 +164,30 @@ fn validate_tx(
             // 4. Public key must be the hash of the target
 
             // Satisfies 1.
-            let out_length = shielded_tx.vout.len();
-            if !(1..=4).contains(&out_length) {
+            let transp_bundle =
+                shielded_tx.transparent_bundle().ok_or_err_msg(
+                    "Expected transparent outputs in unshielding transaction",
+                )?;
+            if transp_bundle.vout.len() != 1 {
                 debug_log!(
-                    "Transparent output to a transaction to the masp must be \
-                     beteween 1 and 4 but is {}",
-                    shielded_tx.vout.len()
+                    "Transparent output to a transaction from the masp must \
+                     be 1 but is {}",
+                    transp_bundle.vin.len()
                 );
 
                 return reject();
             }
+            let out_length = transp_bundle.vout.len();
+            if !(1..=4).contains(&out_length) {
+                debug_log!(
+                    "Transparent output to a transaction to the masp must be \
+                     beteween 1 and 4 but is {}",
+                    transp_bundle.vin.len()
+                );
 
-            let mut outs = shielded_tx.vout.iter();
+                return reject();
+            }
+            let mut outs = transp_bundle.vout.iter();
             let mut valid_count = 0;
             for denom in token::MaspDenom::iter() {
                 let out = match outs.next() {
@@ -193,7 +214,7 @@ fn validate_tx(
                     continue;
                 }
                 if !valid_transfer_amount(
-                    out.value,
+                    out.value as u64,
                     denom.denominate(&transfer.amount.amount),
                 ) {
                     return reject();
@@ -211,25 +232,19 @@ fn validate_tx(
                 transparent_tx_pool -= transp_amt;
 
                 // Satisfies 4.
-                match out.script_pubkey.address() {
-                    None | Some(Script(_)) => {}
-                    Some(PublicKey(pub_bytes)) => {
-                        let target_enc = transfer
-                            .target
-                            .try_to_vec()
-                            .expect("target address encoding");
+                let target_enc = transfer
+                    .target
+                    .try_to_vec()
+                    .expect("target address encoding");
 
-                        let hash =
-                            Ripemd160::digest(sha256(&target_enc).as_slice());
+                let hash = Ripemd160::digest(sha256(&target_enc).as_slice());
 
-                        if <[u8; 20]>::from(hash) != pub_bytes {
-                            debug_log!(
-                                "the public key of the output account does \
-                                 not match the transfer target"
-                            );
-                            return reject();
-                        }
-                    }
+                if <[u8; 20]>::from(hash) != out.address.0 {
+                    debug_log!(
+                        "the public key of the output account does not match \
+                         the transfer target"
+                    );
+                    return reject();
                 }
                 valid_count += 1;
             }
@@ -244,13 +259,15 @@ fn validate_tx(
             // 1. Zero transparent output
 
             // Satisfies 1.
-            if !shielded_tx.vout.is_empty() {
-                debug_log!(
-                    "Transparent output to a transaction from the masp must \
-                     be 0 but is {}",
-                    shielded_tx.vout.len()
-                );
-                return reject();
+            if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
+                if !transp_bundle.vout.is_empty() {
+                    debug_log!(
+                        "Transparent output to a transaction from the masp \
+                         must be 0 but is {}",
+                        transp_bundle.vin.len()
+                    );
+                    return reject();
+                }
             }
         }
 
@@ -267,8 +284,9 @@ fn validate_tx(
             }
             _ => {}
         }
+        // Do the expensive proof verification in the VM at the end.
+        ctx.verify_masp(shielded_tx.try_to_vec().unwrap())
+    } else {
+        reject()
     }
-
-    // Do the expensive proof verification in the VM at the end.
-    ctx.verify_masp(data)
 }

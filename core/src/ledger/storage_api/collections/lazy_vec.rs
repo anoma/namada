@@ -174,6 +174,12 @@ where
         }
     }
 
+    fn is_data_sub_key(&self, key: &storage::Key) -> bool {
+        let sub_key = self.is_valid_sub_key(key);
+        // The `SubKey::Len` is not data sub-key
+        matches!(sub_key, Ok(Some(SubKey::Data(_))))
+    }
+
     fn read_sub_key_data<ENV>(
         env: &ENV,
         storage_key: &storage::Key,
@@ -401,7 +407,7 @@ impl<T> LazyVec<T> {
 // `LazyVec` methods with borsh encoded values `T`
 impl<T> LazyVec<T>
 where
-    T: BorshSerialize + BorshDeserialize + 'static,
+    T: BorshSerialize + BorshDeserialize + 'static + Debug,
 {
     /// Appends an element to the back of a collection.
     pub fn push<S>(&self, storage: &mut S, val: T) -> Result<()>
@@ -464,6 +470,23 @@ where
         storage.read(&self.get_data_key(index))
     }
 
+    /// Read the first element
+    pub fn front<S>(&self, storage: &S) -> Result<Option<T>>
+    where
+        S: StorageRead,
+    {
+        self.get(storage, 0)
+    }
+
+    /// Read the last element
+    pub fn back<S>(&self, storage: &S) -> Result<Option<T>>
+    where
+        S: StorageRead,
+    {
+        let len = self.len(storage)?;
+        self.get(storage, len - 1)
+    }
+
     /// An iterator visiting all elements. The iterator element type is
     /// `Result<T>`, because iterator's call to `next` may fail with e.g. out of
     /// gas or data decoding error.
@@ -487,6 +510,7 @@ where
 mod test {
     use super::*;
     use crate::ledger::storage::testing::TestWlStorage;
+    use crate::ledger::storage_api::collections::lazy_map::{self, NestedMap};
     use crate::types::address::{self, Address};
 
     #[test]
@@ -575,6 +599,69 @@ mod test {
             lazy_vec.is_valid_sub_key(&storage_key2).unwrap(),
             Some(SubKey::Data(1))
         );
+
+        Ok(())
+    }
+
+    /// Test iterator on a `LazyVec` nested inside a `LazyMap`
+    #[test]
+    fn test_nested_lazy_vec_iter() -> storage_api::Result<()> {
+        let mut storage = TestWlStorage::default();
+
+        let prefix = storage::Key::parse("test").unwrap();
+        let handle = NestedMap::<Address, LazyVec<u32>>::open(prefix);
+
+        let key = address::testing::established_address_1();
+
+        // Push first value and check iterator
+        handle.at(&key).push(&mut storage, 15)?;
+        let expected = (
+            lazy_map::NestedSubKey::Data {
+                key: key.clone(),                // LazyMap key
+                nested_sub_key: SubKey::Data(0), // LazyVec index
+            },
+            15, // the value
+        );
+
+        let mut iter = handle.iter(&storage)?;
+        assert_eq!(iter.next().unwrap()?, expected);
+        assert!(iter.next().is_none());
+        drop(iter);
+
+        // Push second value and check iterator again
+        handle.at(&key).push(&mut storage, 1)?;
+        let expected2 = (
+            lazy_map::NestedSubKey::Data {
+                key: key.clone(),                // LazyMap key
+                nested_sub_key: SubKey::Data(1), // LazyVec index
+            },
+            1, // the value
+        );
+
+        let mut iter = handle.iter(&storage)?;
+        assert_eq!(iter.next().unwrap()?, expected);
+        assert_eq!(iter.next().unwrap()?, expected2);
+        assert!(iter.next().is_none());
+        drop(iter);
+
+        let key2 = address::testing::established_address_2();
+        // Push third value on a different outer key and check iterator again
+        handle.at(&key2).push(&mut storage, 9)?;
+        let expected3 = (
+            lazy_map::NestedSubKey::Data {
+                key: key2.clone(),               // LazyMap key
+                nested_sub_key: SubKey::Data(0), // LazyVec index
+            },
+            9, // the value
+        );
+
+        let mut iter = handle.iter(&storage)?;
+        assert!(key < key2, "sanity check - this influences the iter order");
+        assert_eq!(iter.next().unwrap()?, expected);
+        assert_eq!(iter.next().unwrap()?, expected2);
+        assert_eq!(iter.next().unwrap()?, expected3);
+        assert!(iter.next().is_none());
+        drop(iter);
 
         Ok(())
     }

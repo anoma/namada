@@ -614,6 +614,8 @@ impl From<Proof> for crate::tendermint::merkle::proof::Proof {
 
 #[cfg(test)]
 mod test {
+    use ics23::HostFunctionsManager;
+
     use super::*;
     use crate::ledger::storage::ics23_specs::{ibc_proof_specs, proof_specs};
     use crate::ledger::storage::traits::Sha256Hasher;
@@ -663,9 +665,11 @@ mod test {
                 _ => unreachable!(),
             };
         let subtree_root = if let Some(left) = &non_existence_proof.left {
-            ics23::calculate_existence_root(left).unwrap()
+            ics23::calculate_existence_root::<HostFunctionsManager>(left)
+                .unwrap()
         } else if let Some(right) = &non_existence_proof.right {
-            ics23::calculate_existence_root(right).unwrap()
+            ics23::calculate_existence_root::<HostFunctionsManager>(right)
+                .unwrap()
         } else {
             unreachable!()
         };
@@ -673,12 +677,13 @@ mod test {
             StoreType::sub_key(&ibc_non_key).expect("Test failed");
         let specs = ibc_proof_specs::<Sha256Hasher>();
 
-        let nep_verification_res = ics23::verify_non_membership(
-            &nep_commitment_proof,
-            &specs[0],
-            &subtree_root,
-            sub_key.to_string().as_bytes(),
-        );
+        let nep_verification_res =
+            ics23::verify_non_membership::<HostFunctionsManager>(
+                &nep_commitment_proof,
+                &specs[0],
+                &subtree_root,
+                sub_key.to_string().as_bytes(),
+            );
         assert!(nep_verification_res);
         let basetree_ep_commitment_proof = nep.base_proof;
         let basetree_ics23_ep =
@@ -686,15 +691,18 @@ mod test {
                 Ics23Proof::Exist(ep) => ep,
                 _ => unreachable!(),
             };
-        let basetree_root =
-            ics23::calculate_existence_root(&basetree_ics23_ep).unwrap();
-        let basetree_verification_res = ics23::verify_membership(
-            &basetree_ep_commitment_proof,
-            &specs[1],
-            &basetree_root,
-            store_type.to_string().as_bytes(),
-            &subtree_root,
-        );
+        let basetree_root = ics23::calculate_existence_root::<
+            HostFunctionsManager,
+        >(&basetree_ics23_ep)
+        .unwrap();
+        let basetree_verification_res =
+            ics23::verify_membership::<HostFunctionsManager>(
+                &basetree_ep_commitment_proof,
+                &specs[1],
+                &basetree_root,
+                store_type.to_string().as_bytes(),
+                &subtree_root,
+            );
         assert!(basetree_verification_res);
     }
 
@@ -715,7 +723,7 @@ mod test {
         let stores_write = tree.stores();
         let mut stores_read = MerkleTreeStoresRead::default();
         for st in StoreType::iter() {
-            stores_read.set_root(st, stores_write.root(st).clone());
+            stores_read.set_root(st, *stores_write.root(st));
             stores_read.set_store(stores_write.store(st).to_owned());
         }
         let restored_tree =
@@ -765,9 +773,11 @@ mod test {
                 Ics23Proof::Exist(ep) => ep,
                 _ => unreachable!(),
             };
-            sub_root =
-                ics23::calculate_existence_root(&existence_proof).unwrap();
-            assert!(ics23::verify_membership(
+            sub_root = ics23::calculate_existence_root::<HostFunctionsManager>(
+                &existence_proof,
+            )
+            .unwrap();
+            assert!(ics23::verify_membership::<HostFunctionsManager>(
                 &commitment_proof,
                 spec,
                 &sub_root,
@@ -822,9 +832,11 @@ mod test {
                 Ics23Proof::Exist(ep) => ep,
                 _ => unreachable!(),
             };
-            sub_root =
-                ics23::calculate_existence_root(&existence_proof).unwrap();
-            assert!(ics23::verify_membership(
+            sub_root = ics23::calculate_existence_root::<HostFunctionsManager>(
+                &existence_proof,
+            )
+            .unwrap();
+            assert!(ics23::verify_membership::<HostFunctionsManager>(
                 &commitment_proof,
                 spec,
                 &sub_root,
@@ -863,9 +875,11 @@ mod test {
                 _ => unreachable!(),
             };
         let subtree_root = if let Some(left) = &non_existence_proof.left {
-            ics23::calculate_existence_root(left).unwrap()
+            ics23::calculate_existence_root::<HostFunctionsManager>(left)
+                .unwrap()
         } else if let Some(right) = &non_existence_proof.right {
-            ics23::calculate_existence_root(right).unwrap()
+            ics23::calculate_existence_root::<HostFunctionsManager>(right)
+                .unwrap()
         } else {
             unreachable!()
         };
@@ -873,12 +887,13 @@ mod test {
             StoreType::sub_key(&ibc_non_key).expect("Test failed");
         let specs = ibc_proof_specs::<Sha256Hasher>();
 
-        let nep_verification_res = ics23::verify_non_membership(
-            &nep_commitment_proof,
-            &specs[0],
-            &subtree_root,
-            sub_key.to_string().as_bytes(),
-        );
+        let nep_verification_res =
+            ics23::verify_non_membership::<HostFunctionsManager>(
+                &nep_commitment_proof,
+                &specs[0],
+                &subtree_root,
+                sub_key.to_string().as_bytes(),
+            );
         assert!(nep_verification_res);
         let basetree_ep_commitment_proof = nep.base_proof;
         let basetree_ics23_ep =
@@ -886,15 +901,18 @@ mod test {
                 Ics23Proof::Exist(ep) => ep,
                 _ => unreachable!(),
             };
-        let basetree_root =
-            ics23::calculate_existence_root(&basetree_ics23_ep).unwrap();
-        let basetree_verification_res = ics23::verify_membership(
-            &basetree_ep_commitment_proof,
-            &specs[1],
-            &basetree_root,
-            store_type.to_string().as_bytes(),
-            &subtree_root,
-        );
+        let basetree_root = ics23::calculate_existence_root::<
+            HostFunctionsManager,
+        >(&basetree_ics23_ep)
+        .unwrap();
+        let basetree_verification_res =
+            ics23::verify_membership::<HostFunctionsManager>(
+                &basetree_ep_commitment_proof,
+                &specs[1],
+                &basetree_root,
+                store_type.to_string().as_bytes(),
+                &subtree_root,
+            );
         assert!(basetree_verification_res);
     }
 }

@@ -15,6 +15,7 @@ use utils::is_valid_validator_voting_period;
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::storage_api::StorageRead;
 use crate::ledger::{native_vp, pos};
+use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Epoch, Key};
 use crate::types::token;
@@ -53,7 +54,7 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &[u8],
+        tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
@@ -100,7 +101,13 @@ where
                 (KeyType::PROPOSAL_COMMIT, _) => {
                     self.is_valid_proposal_commit()
                 }
-                (KeyType::PARAMETER, _) => self.is_valid_parameter(tx_data),
+                (KeyType::PARAMETER, _) => self.is_valid_parameter(
+                    if let Some(data) = &tx_data.data() {
+                        data
+                    } else {
+                        return false;
+                    },
+                ),
                 (KeyType::BALANCE, _) => self.is_valid_balance(&native_token),
                 (KeyType::UNKNOWN_GOVERNANCE, _) => Ok(false),
                 (KeyType::UNKNOWN, _) => Ok(true),
@@ -676,7 +683,7 @@ where
 }
 
 #[allow(clippy::upper_case_acronyms)]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum KeyType {
     #[allow(non_camel_case_types)]
     COUNTER,

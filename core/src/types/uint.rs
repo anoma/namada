@@ -2,7 +2,7 @@
 //! An unsigned 256 integer type. Used for, among other things,
 //! the backing type of token amounts.
 use std::cmp::Ordering;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::Debug;
 use std::ops::{Add, AddAssign, BitXor, Div, Mul, Neg, Rem, Sub, SubAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -84,6 +84,7 @@ const MINUS_ZERO: Uint = Uint([0u64, 0u64, 0u64, 9223372036854775808]);
 #[derive(
     Copy,
     Clone,
+    Debug,
     Default,
     PartialEq,
     Eq,
@@ -381,18 +382,6 @@ impl From<i32> for I256 {
 impl std::iter::Sum for I256 {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.fold(I256::zero(), |acc, amt| acc + amt)
-    }
-}
-
-impl Display for I256 {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.to_string_native().as_str())
-    }
-}
-
-impl Debug for I256 {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(self, f)
     }
 }
 

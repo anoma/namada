@@ -1,0 +1,1 @@
+- Remove abci++ dependencies ([#1449](https://github.com/anoma/namada/pull/1449))

@@ -23,14 +23,13 @@ pub use namada_core::ledger::storage_api::{
 };
 pub use namada_core::ledger::vp_env::VpEnv;
 pub use namada_core::ledger::{parameters, testnet_pow};
-pub use namada_core::proto::{Signed, SignedTxData};
+pub use namada_core::proto::{Section, Tx};
 pub use namada_core::types::address::Address;
 use namada_core::types::chain::CHAIN_ID_LENGTH;
 use namada_core::types::hash::{Hash, HASH_LENGTH};
 use namada_core::types::internal::HostEnvResult;
-use namada_core::types::key::*;
 use namada_core::types::storage::{
-    BlockHash, BlockHeight, Epoch, TxIndex, BLOCK_HASH_LENGTH,
+    BlockHash, BlockHeight, Epoch, Header, TxIndex, BLOCK_HASH_LENGTH,
 };
 pub use namada_core::types::*;
 pub use namada_macros::validity_predicate;
@@ -50,7 +49,9 @@ pub fn is_tx_whitelisted(ctx: &Ctx) -> VpResult {
     let whitelist: Vec<String> = ctx.read_pre(&key)?.unwrap_or_default();
     // if whitelist is empty, allow any transaction
     Ok(whitelist.is_empty()
-        || whitelist.contains(&tx_hash.to_string().to_lowercase()))
+        || (tx_hash.is_some()
+            && whitelist
+                .contains(&tx_hash.unwrap().to_string().to_lowercase())))
 }
 
 pub fn is_vp_whitelisted(ctx: &Ctx, vp_hash: &[u8]) -> VpResult {
@@ -82,11 +83,14 @@ pub fn is_proposal_accepted(ctx: &Ctx, proposal_id: u64) -> VpResult {
 /// - tx is whitelisted, or
 /// - tx is executed by an approved governance proposal (no need to be
 ///   whitelisted)
-pub fn is_valid_tx(ctx: &Ctx, tx_data: &[u8]) -> VpResult {
+pub fn is_valid_tx(ctx: &Ctx, tx_data: &Tx) -> VpResult {
     if is_tx_whitelisted(ctx)? {
         accept()
     } else {
-        let proposal_id = u64::try_from_slice(tx_data).ok();
+        let proposal_id = tx_data
+            .data()
+            .as_ref()
+            .and_then(|x| u64::try_from_slice(x).ok());
 
         proposal_id.map_or(reject(), |id| is_proposal_accepted(ctx, id))
     }
@@ -238,6 +242,14 @@ impl<'view> VpEnv<'view> for Ctx {
         get_block_height()
     }
 
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, Error> {
+        // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
+        get_block_header(height)
+    }
+
     fn get_block_hash(&self) -> Result<BlockHash, Error> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_block_hash()
@@ -264,44 +276,35 @@ impl<'view> VpEnv<'view> for Ctx {
         iter_prefix_pre_impl(prefix)
     }
 
-    fn eval(&self, vp_code: Hash, input_data: Vec<u8>) -> Result<bool, Error> {
+    fn eval(&self, vp_code: Hash, input_data: Tx) -> Result<bool, Error> {
+        let input_data_bytes = BorshSerialize::try_to_vec(&input_data).unwrap();
         let result = unsafe {
             namada_vp_eval(
-                vp_code.as_ptr() as _,
-                vp_code.len() as _,
-                input_data.as_ptr() as _,
-                input_data.len() as _,
+                vp_code.0.as_ptr() as _,
+                vp_code.0.len() as _,
+                input_data_bytes.as_ptr() as _,
+                input_data_bytes.len() as _,
             )
         };
         Ok(HostEnvResult::is_success(result))
     }
 
-    fn verify_tx_signature(
-        &self,
-        pk: &common::PublicKey,
-        sig: &common::Signature,
-    ) -> Result<bool, Error> {
-        let pk = BorshSerialize::try_to_vec(pk).unwrap();
-        let sig = BorshSerialize::try_to_vec(sig).unwrap();
-        let valid = unsafe {
-            namada_vp_verify_tx_signature(
-                pk.as_ptr() as _,
-                pk.len() as _,
-                sig.as_ptr() as _,
-                sig.len() as _,
-            )
-        };
-        Ok(HostEnvResult::is_success(valid))
-    }
-
-    fn get_tx_code_hash(&self) -> Result<Hash, Error> {
-        let result = Vec::with_capacity(HASH_LENGTH);
+    fn get_tx_code_hash(&self) -> Result<Option<Hash>, Error> {
+        let result = Vec::with_capacity(HASH_LENGTH + 1);
         unsafe {
             namada_vp_get_tx_code_hash(result.as_ptr() as _);
         }
         let slice =
-            unsafe { slice::from_raw_parts(result.as_ptr(), HASH_LENGTH) };
-        Ok(Hash::try_from(slice).expect("Cannot convert the hash"))
+            unsafe { slice::from_raw_parts(result.as_ptr(), HASH_LENGTH + 1) };
+        Ok(if slice[0] == 1 {
+            Some(Hash(
+                slice[1..HASH_LENGTH + 1]
+                    .try_into()
+                    .expect("Cannot convert the hash"),
+            ))
+        } else {
+            None
+        })
     }
 
     fn verify_masp(&self, tx: Vec<u8>) -> Result<bool, self::Error> {
@@ -354,6 +357,13 @@ impl StorageRead for CtxPreStorageRead<'_> {
 
     fn get_block_height(&self) -> Result<BlockHeight, Error> {
         get_block_height()
+    }
+
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, Error> {
+        get_block_header(height)
     }
 
     fn get_block_hash(&self) -> Result<BlockHash, Error> {
@@ -419,6 +429,13 @@ impl StorageRead for CtxPostStorageRead<'_> {
         get_block_height()
     }
 
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, Error> {
+        get_block_header(height)
+    }
+
     fn get_block_hash(&self) -> Result<BlockHash, Error> {
         get_block_hash()
     }
@@ -471,6 +488,17 @@ fn get_chain_id() -> Result<String, Error> {
 
 fn get_block_height() -> Result<BlockHeight, Error> {
     Ok(BlockHeight(unsafe { namada_vp_get_block_height() }))
+}
+
+fn get_block_header(height: BlockHeight) -> Result<Option<Header>, Error> {
+    let read_result = unsafe { namada_vp_get_block_header(height.0) };
+    match read_from_buffer(read_result, namada_vp_result_buffer) {
+        Some(value) => Ok(Some(
+            Header::try_from_slice(&value[..])
+                .expect("The conversion shouldn't fail"),
+        )),
+        None => Ok(None),
+    }
 }
 
 fn get_block_hash() -> Result<BlockHash, Error> {

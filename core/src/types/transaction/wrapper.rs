@@ -1,27 +1,22 @@
 /// Integration of Ferveo cryptographic primitives
 /// to enable encrypted txs inside of normal txs.
 /// *Not wasm compatible*
-#[cfg(feature = "ferveo-tpke")]
 pub mod wrapper_tx {
-    use std::convert::TryFrom;
     use std::fmt::Formatter;
 
     pub use ark_bls12_381::Bls12_381 as EllipticCurve;
+    #[cfg(feature = "ferveo-tpke")]
     pub use ark_ec::{AffineCurve, PairingEngine};
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
     use serde::de::Error;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use sha2::{Digest, Sha256};
     use thiserror::Error;
 
-    use crate::proto::Tx;
     use crate::types::address::Address;
-    use crate::types::chain::ChainId;
     use crate::types::key::*;
     use crate::types::storage::Epoch;
-    use crate::types::time::DateTimeUtc;
     use crate::types::token::Amount;
-    use crate::types::transaction::encrypted::EncryptedTx;
-    use crate::types::transaction::{EncryptionKey, Hash, TxError, TxType};
     use crate::types::uint::Uint;
 
     /// Minimum fee amount in micro NAMs
@@ -59,11 +54,13 @@ pub mod wrapper_tx {
         BorshSchema,
         Serialize,
         Deserialize,
+        Eq,
     )]
     pub struct Fee {
         /// amount of the fee
         pub amount: Amount,
         /// address of the token
+        /// TODO: This should support multi-tokens
         pub token: Address,
     }
 
@@ -82,6 +79,7 @@ pub mod wrapper_tx {
         BorshSerialize,
         BorshDeserialize,
         BorshSchema,
+        Eq,
     )]
     pub struct GasLimit {
         multiplier: Uint,
@@ -220,11 +218,6 @@ pub mod wrapper_tx {
         pub epoch: Epoch,
         /// Max amount of gas that can be used when executing the inner tx
         pub gas_limit: GasLimit,
-        /// the encrypted payload
-        pub inner_tx: EncryptedTx,
-        /// sha-2 hash of the inner transaction acting as a commitment
-        /// the contents of the encrypted payload
-        pub tx_hash: Hash,
         #[cfg(not(feature = "mainnet"))]
         /// A PoW solution can be used to allow zero-fee testnet transactions
         pub pow_solution: Option<crate::ledger::testnet_pow::Solution>,
@@ -240,20 +233,15 @@ pub mod wrapper_tx {
             keypair: &common::SecretKey,
             epoch: Epoch,
             gas_limit: GasLimit,
-            tx: Tx,
-            encryption_key: EncryptionKey,
             #[cfg(not(feature = "mainnet"))] pow_solution: Option<
                 crate::ledger::testnet_pow::Solution,
             >,
         ) -> WrapperTx {
-            let inner_tx = EncryptedTx::encrypt(&tx.to_bytes(), encryption_key);
             Self {
                 fee,
                 pk: keypair.ref_to(),
                 epoch,
                 gas_limit,
-                inner_tx,
-                tx_hash: Hash(tx.unsigned_hash()),
                 #[cfg(not(feature = "mainnet"))]
                 pow_solution,
             }
@@ -265,71 +253,12 @@ pub mod wrapper_tx {
             Address::from(&self.pk)
         }
 
-        /// A validity check on the ciphertext.
-        pub fn validate_ciphertext(&self) -> bool {
-            self.inner_tx.0.check(&<EllipticCurve as PairingEngine>::G1Prepared::from(
-                -<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator(),
-            ))
-        }
-
-        /// Decrypt the wrapped transaction.
-        ///
-        /// Will fail if the inner transaction doesn't match the
-        /// hash commitment or we are unable to recover a
-        /// valid Tx from the decoded byte stream.
-        pub fn decrypt(
-            &self,
-            privkey: <EllipticCurve as PairingEngine>::G2Affine,
-        ) -> Result<Tx, WrapperTxErr> {
-            // decrypt the inner tx
-            let decrypted = self.inner_tx.decrypt(privkey);
-            let decrypted_tx = Tx::try_from(decrypted.as_ref())
-                .map_err(|_| WrapperTxErr::InvalidTx)?;
-
-            // check that the hash equals commitment
-            if decrypted_tx.unsigned_hash() != self.tx_hash.0 {
-                return Err(WrapperTxErr::DecryptedHash);
-            }
-
-            Ok(decrypted_tx)
-        }
-
-        /// Sign the wrapper transaction and convert to a normal Tx type
-        pub fn sign(
-            &self,
-            keypair: &common::SecretKey,
-            chain_id: ChainId,
-            expiration: Option<DateTimeUtc>,
-        ) -> Result<Tx, WrapperTxErr> {
-            if self.pk != keypair.ref_to() {
-                return Err(WrapperTxErr::InvalidKeyPair);
-            }
-            Ok(Tx::new(
-                vec![],
-                Some(
-                    TxType::Wrapper(self.clone())
-                        .try_to_vec()
-                        .expect("Could not serialize WrapperTx"),
-                ),
-                chain_id,
-                expiration,
-            )
-            .sign(keypair))
-        }
-
-        /// Validate the signature of a wrapper tx
-        pub fn validate_sig(
-            &self,
-            signed_data: [u8; 32],
-            sig: &common::Signature,
-        ) -> Result<(), TxError> {
-            common::SigScheme::verify_signature(&self.pk, &signed_data, sig)
-                .map_err(|err| {
-                    TxError::SigError(format!(
-                        "WrapperTx signature verification failed: {}",
-                        err
-                    ))
-                })
+        /// Produce a SHA-256 hash of this section
+        pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
+            hasher.update(
+                self.try_to_vec().expect("unable to serialize wrapper"),
+            );
+            hasher
         }
     }
 
@@ -417,8 +346,9 @@ pub mod wrapper_tx {
     #[cfg(test)]
     mod test_wrapper_tx {
         use super::*;
-        use crate::proto::SignedTxData;
+        use crate::proto::{Code, Data, Section, Signature, Tx, TxError};
         use crate::types::address::nam;
+        use crate::types::transaction::{Hash, TxType};
 
         fn gen_keypair() -> common::SecretKey {
             use rand::prelude::ThreadRng;
@@ -433,58 +363,62 @@ pub mod wrapper_tx {
         #[test]
         fn test_encryption_round_trip() {
             let keypair = gen_keypair();
-            let tx = Tx::new(
-                "wasm code".as_bytes().to_owned(),
-                Some("transaction data".as_bytes().to_owned()),
-                ChainId::default(),
-                Some(DateTimeUtc::now()),
-            );
-
-            let wrapper = WrapperTx::new(
-                Fee {
-                    amount: Amount::from_uint(10, 0).expect("Test failed"),
-                    token: nam(),
-                },
+            let mut wrapper =
+                Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount: 10.into(),
+                        token: nam(),
+                    },
+                    &keypair,
+                    Epoch(0),
+                    Default::default(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
+                ))));
+            wrapper.set_code(Code::new("wasm code".as_bytes().to_owned()));
+            wrapper
+                .set_data(Data::new("transaction data".as_bytes().to_owned()));
+            wrapper.add_section(Section::Signature(Signature::new(
+                &wrapper.header_hash(),
                 &keypair,
-                Epoch(0),
-                Default::default(),
-                tx.clone(),
-                Default::default(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
-            );
-            assert!(wrapper.validate_ciphertext());
+            )));
+            let mut encrypted_tx = wrapper.clone();
+            encrypted_tx.encrypt(&Default::default());
+            assert!(encrypted_tx.validate_ciphertext());
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-            let decrypted = wrapper.decrypt(privkey).expect("Test failed");
-            assert_eq!(tx, decrypted);
+            encrypted_tx.decrypt(privkey).expect("Test failed");
+            assert_eq!(wrapper.data(), encrypted_tx.data());
+            assert_eq!(wrapper.code(), encrypted_tx.code());
         }
 
         /// We test that when we try to decrypt a tx and it
         /// does not match the commitment, an error is returned
         #[test]
         fn test_decryption_invalid_hash() {
-            let tx = Tx::new(
-                "wasm code".as_bytes().to_owned(),
-                Some("transaction data".as_bytes().to_owned()),
-                ChainId::default(),
-                Some(DateTimeUtc::now()),
-            );
-
-            let mut wrapper = WrapperTx::new(
-                Fee {
-                    amount: Amount::from_uint(10, 0).expect("Test failed"),
-                    token: nam(),
-                },
-                &gen_keypair(),
-                Epoch(0),
-                Default::default(),
-                tx,
-                Default::default(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
-            );
+            let keypair = gen_keypair();
+            let mut wrapper =
+                Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount: 10.into(),
+                        token: nam(),
+                    },
+                    &keypair,
+                    Epoch(0),
+                    Default::default(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
+                ))));
+            wrapper.set_code(Code::new("wasm code".as_bytes().to_owned()));
+            wrapper
+                .set_data(Data::new("transaction data".as_bytes().to_owned()));
             // give a incorrect commitment to the decrypted contents of the tx
-            wrapper.tx_hash = Hash([0u8; 32]);
+            wrapper.set_code_sechash(Hash([0u8; 32]));
+            wrapper.set_data_sechash(Hash([0u8; 32]));
+            wrapper.add_section(Section::Signature(Signature::new(
+                &wrapper.header_hash(),
+                &keypair,
+            )));
+            wrapper.encrypt(&Default::default());
             assert!(wrapper.validate_ciphertext());
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
             let err = wrapper.decrypt(privkey).expect_err("Test failed");
@@ -496,17 +430,9 @@ pub mod wrapper_tx {
         /// via the signature.
         #[test]
         fn test_malleability_attack_detection() {
-            let pubkey = <EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator();
             let keypair = gen_keypair();
-            // The intended tx
-            let tx = Tx::new(
-                "wasm code".as_bytes().to_owned(),
-                Some("transaction data".as_bytes().to_owned()),
-                ChainId::default(),
-                Some(DateTimeUtc::now()),
-            );
             // the signed tx
-            let mut tx = WrapperTx::new(
+            let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount: Amount::from_uint(10, 0).expect("Test failed"),
                     token: nam(),
@@ -514,70 +440,42 @@ pub mod wrapper_tx {
                 &keypair,
                 Epoch(0),
                 Default::default(),
-                tx,
-                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
-            )
-            .sign(&keypair, ChainId::default(), None)
-            .expect("Test failed");
+            ))));
+
+            tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
+            tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+            tx.add_section(Section::Signature(Signature::new(
+                &tx.header_hash(),
+                &keypair,
+            )));
 
             // we now try to alter the inner tx maliciously
-            let mut wrapper = if let TxType::Wrapper(wrapper) =
-                crate::types::transaction::process_tx(tx.clone())
-                    .expect("Test failed")
-            {
-                wrapper
-            } else {
-                panic!("Test failed")
-            };
-
-            let mut signed_tx_data =
-                SignedTxData::try_from_slice(&tx.data.unwrap()[..])
-                    .expect("Test failed");
-
             // malicious transaction
-            let malicious = Tx::new(
-                "Give me all the money".as_bytes().to_owned(),
-                None,
-                ChainId::default(),
-                None,
-            );
-
             // We replace the inner tx with a malicious one
-            wrapper.inner_tx = EncryptedTx::encrypt(
-                &malicious.to_bytes(),
-                EncryptionKey(pubkey),
-            );
-
             // We change the commitment appropriately
-            wrapper.tx_hash = Hash(malicious.unsigned_hash());
+            let malicious = "Give me all the money".as_bytes().to_owned();
+            tx.set_data(Data::new(malicious.clone()));
+            tx.encrypt(&Default::default());
 
             // we check ciphertext validity still passes
-            assert!(wrapper.validate_ciphertext());
+            assert!(tx.validate_ciphertext());
             // we check that decryption still succeeds
-            let decrypted = wrapper.decrypt(
-                <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator()
+            tx.decrypt(
+                <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator(),
             )
                 .expect("Test failed");
-            assert_eq!(decrypted, malicious);
-
-            // we substitute in the modified wrapper
-            signed_tx_data.data = Some(
-                TxType::Wrapper(wrapper).try_to_vec().expect("Test failed"),
-            );
-            tx.data = Some(signed_tx_data.try_to_vec().expect("Test failed"));
+            assert_eq!(tx.data(), Some(malicious));
 
             // check that the signature is not valid
-            tx.verify_sig(&keypair.ref_to(), &signed_tx_data.sig)
+            tx.verify_signature(&keypair.ref_to(), &tx.header_hash())
                 .expect_err("Test failed");
             // check that the try from method also fails
-            let err = crate::types::transaction::process_tx(tx)
-                .expect_err("Test failed");
+            let err = tx.validate_header().expect_err("Test failed");
             assert_matches!(err, TxError::SigError(_));
         }
     }
 }
 
-#[cfg(feature = "ferveo-tpke")]
 pub use wrapper_tx::*;

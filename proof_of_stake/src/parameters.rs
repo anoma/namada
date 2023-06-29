@@ -2,6 +2,7 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::dec::Dec;
+use namada_core::types::storage::Epoch;
 use namada_core::types::uint::Uint;
 use thiserror::Error;
 
@@ -38,6 +39,9 @@ pub struct PosParams {
     /// Fraction of validator's stake that should be slashed on a light client
     /// attack.
     pub light_client_attack_min_slash_rate: Dec,
+    /// Number of epochs above and below (separately) the current epoch to
+    /// consider when doing cubic slashing
+    pub cubic_slashing_window_length: u64,
 }
 
 impl Default for PosParams {
@@ -60,6 +64,7 @@ impl Default for PosParams {
             // slash 0.1%
             light_client_attack_min_slash_rate: Dec::new(1, 3)
                 .expect("Test failed"),
+            cubic_slashing_window_length: 1,
         }
     }
 }
@@ -140,6 +145,29 @@ impl PosParams {
 
         errors
     }
+
+    /// Get the epoch offset from which an unbonded bond can withdrawn
+    pub fn withdrawable_epoch_offset(&self) -> u64 {
+        self.pipeline_len
+            + self.unbonding_len
+            + self.cubic_slashing_window_length
+    }
+
+    /// Get the epoch offset for processing slashes
+    pub fn slash_processing_epoch_offset(&self) -> u64 {
+        self.unbonding_len + self.cubic_slashing_window_length + 1
+    }
+
+    /// Get the first and the last epoch of a cubic slash window.
+    pub fn cubic_slash_epoch_window(
+        &self,
+        infraction_epoch: Epoch,
+    ) -> (Epoch, Epoch) {
+        let start = infraction_epoch
+            .sub_or_default(Epoch(self.cubic_slashing_window_length));
+        let end = infraction_epoch + self.cubic_slashing_window_length;
+        (start, end)
+    }
 }
 
 #[cfg(test)]
@@ -175,8 +203,8 @@ pub mod testing {
     prop_compose! {
         /// Generate arbitrary valid ([`PosParams::validate`]) PoS parameters.
         pub fn arb_pos_params(num_max_validator_slots: Option<u64>)
-            (pipeline_len in 2..8_u64)
-            (max_validator_slots in 1..num_max_validator_slots.unwrap_or(128),
+            (pipeline_len in Just(2))
+            (max_validator_slots in 3..num_max_validator_slots.unwrap_or(128),
             // `unbonding_len` > `pipeline_len`
             unbonding_len in pipeline_len + 1..pipeline_len + 8,
             pipeline_len in Just(pipeline_len),

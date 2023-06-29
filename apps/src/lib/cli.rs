@@ -175,6 +175,7 @@ pub mod cmds {
                 .subcommand(QueryBondedStake::def().display_order(3))
                 .subcommand(QuerySlashes::def().display_order(3))
                 .subcommand(QueryDelegations::def().display_order(3))
+                .subcommand(QueryFindValidator::def().display_order(3))
                 .subcommand(QueryResult::def().display_order(3))
                 .subcommand(QueryRawBytes::def().display_order(3))
                 .subcommand(QueryProposal::def().display_order(3))
@@ -213,6 +214,8 @@ pub mod cmds {
             let query_slashes = Self::parse_with_ctx(matches, QuerySlashes);
             let query_delegations =
                 Self::parse_with_ctx(matches, QueryDelegations);
+            let query_find_validator =
+                Self::parse_with_ctx(matches, QueryFindValidator);
             let query_result = Self::parse_with_ctx(matches, QueryResult);
             let query_raw_bytes = Self::parse_with_ctx(matches, QueryRawBytes);
             let query_proposal = Self::parse_with_ctx(matches, QueryProposal);
@@ -242,6 +245,7 @@ pub mod cmds {
                 .or(query_bonded_stake)
                 .or(query_slashes)
                 .or(query_delegations)
+                .or(query_find_validator)
                 .or(query_result)
                 .or(query_raw_bytes)
                 .or(query_proposal)
@@ -306,6 +310,7 @@ pub mod cmds {
         QueryCommissionRate(QueryCommissionRate),
         QuerySlashes(QuerySlashes),
         QueryDelegations(QueryDelegations),
+        QueryFindValidator(QueryFindValidator),
         QueryRawBytes(QueryRawBytes),
         QueryProposal(QueryProposal),
         QueryProposalResult(QueryProposalResult),
@@ -359,6 +364,7 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     #[allow(clippy::large_enum_variant)]
     pub enum WalletKey {
+        Restore(KeyRestore),
         Gen(KeyGen),
         Find(KeyFind),
         List(KeyList),
@@ -371,10 +377,11 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let generate = SubCmd::parse(matches).map(Self::Gen);
+                let restore = SubCmd::parse(matches).map(Self::Restore);
                 let lookup = SubCmd::parse(matches).map(Self::Find);
                 let list = SubCmd::parse(matches).map(Self::List);
                 let export = SubCmd::parse(matches).map(Self::Export);
-                generate.or(lookup).or(list).or(export)
+                generate.or(restore).or(lookup).or(list).or(export)
             })
         }
 
@@ -385,10 +392,36 @@ pub mod cmds {
                      look-up keys.",
                 )
                 .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand(KeyRestore::def())
                 .subcommand(KeyGen::def())
                 .subcommand(KeyFind::def())
                 .subcommand(KeyList::def())
                 .subcommand(Export::def())
+        }
+    }
+
+    /// Restore a keypair and implicit address from the mnemonic code
+    #[derive(Clone, Debug)]
+    pub struct KeyRestore(pub args::KeyAndAddressRestore);
+
+    impl SubCmd for KeyRestore {
+        const CMD: &'static str = "restore";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::KeyAndAddressRestore::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Restores a keypair from the given mnemonic code and HD \
+                     derivation path and derives the implicit address from \
+                     its public key. Stores the keypair and the address with \
+                     the given alias.",
+                )
+                .add_args::<args::KeyAndAddressRestore>()
         }
     }
 
@@ -408,7 +441,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Generates a keypair with a given alias and derive the \
+                    "Generates a keypair with a given alias and derives the \
                      implicit address from its public key. The address will \
                      be stored with the same alias.",
                 )
@@ -617,7 +650,7 @@ pub mod cmds {
 
     /// Generate a payment address from a viewing key or payment address
     #[derive(Clone, Debug)]
-    pub struct MaspGenPayAddr(pub args::MaspPayAddrGen);
+    pub struct MaspGenPayAddr(pub args::MaspPayAddrGen<args::CliTypes>);
 
     impl SubCmd for MaspGenPayAddr {
         const CMD: &'static str = "gen-addr";
@@ -633,13 +666,14 @@ pub mod cmds {
                 .about(
                     "Generates a payment address from the given spending key",
                 )
-                .add_args::<args::MaspPayAddrGen>()
+                .add_args::<args::MaspPayAddrGen<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
     pub enum WalletAddress {
         Gen(AddressGen),
+        Restore(AddressRestore),
         Find(AddressOrAliasFind),
         List(AddressList),
         Add(AddressAdd),
@@ -651,10 +685,11 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let gen = SubCmd::parse(matches).map(Self::Gen);
+                let restore = SubCmd::parse(matches).map(Self::Restore);
                 let find = SubCmd::parse(matches).map(Self::Find);
                 let list = SubCmd::parse(matches).map(Self::List);
                 let add = SubCmd::parse(matches).map(Self::Add);
-                gen.or(find).or(list).or(add)
+                gen.or(restore).or(find).or(list).or(add)
             })
         }
 
@@ -666,6 +701,7 @@ pub mod cmds {
                 )
                 .setting(AppSettings::SubcommandRequiredElseHelp)
                 .subcommand(AddressGen::def())
+                .subcommand(AddressRestore::def())
                 .subcommand(AddressOrAliasFind::def())
                 .subcommand(AddressList::def())
                 .subcommand(AddressAdd::def())
@@ -688,11 +724,36 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Generates a keypair with a given alias and derive the \
+                    "Generates a keypair with a given alias and derives the \
                      implicit address from its public key. The address will \
                      be stored with the same alias.",
                 )
                 .add_args::<args::KeyAndAddressGen>()
+        }
+    }
+
+    /// Restore a keypair and an implicit address from the mnemonic code
+    #[derive(Clone, Debug)]
+    pub struct AddressRestore(pub args::KeyAndAddressRestore);
+
+    impl SubCmd for AddressRestore {
+        const CMD: &'static str = "restore";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                AddressRestore(args::KeyAndAddressRestore::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Restores a keypair from the given mnemonic code and HD \
+                     derivation path and derives the implicit address from \
+                     its public key. Stores the keypair and the address with \
+                     the given alias.",
+                )
+                .add_args::<args::KeyAndAddressRestore>()
         }
     }
 
@@ -938,7 +999,7 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryResult(pub args::QueryResult);
+    pub struct QueryResult(pub args::QueryResult<args::CliTypes>);
 
     impl SubCmd for QueryResult {
         const CMD: &'static str = "tx-result";
@@ -952,12 +1013,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query the result of a transaction.")
-                .add_args::<args::QueryResult>()
+                .add_args::<args::QueryResult<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryProposal(pub args::QueryProposal);
+    pub struct QueryProposal(pub args::QueryProposal<args::CliTypes>);
 
     impl SubCmd for QueryProposal {
         const CMD: &'static str = "query-proposal";
@@ -974,12 +1035,14 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query proposals.")
-                .add_args::<args::QueryProposal>()
+                .add_args::<args::QueryProposal<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryProposalResult(pub args::QueryProposalResult);
+    pub struct QueryProposalResult(
+        pub args::QueryProposalResult<args::CliTypes>,
+    );
 
     impl SubCmd for QueryProposalResult {
         const CMD: &'static str = "query-proposal-result";
@@ -996,12 +1059,14 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query proposals result.")
-                .add_args::<args::QueryProposalResult>()
+                .add_args::<args::QueryProposalResult<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryProtocolParameters(pub args::QueryProtocolParameters);
+    pub struct QueryProtocolParameters(
+        pub args::QueryProtocolParameters<args::CliTypes>,
+    );
 
     impl SubCmd for QueryProtocolParameters {
         const CMD: &'static str = "query-protocol-parameters";
@@ -1020,12 +1085,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query protocol parameters.")
-                .add_args::<args::QueryProtocolParameters>()
+                .add_args::<args::QueryProtocolParameters<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxCustom(pub args::TxCustom);
+    pub struct TxCustom(pub args::TxCustom<args::CliTypes>);
 
     impl SubCmd for TxCustom {
         const CMD: &'static str = "tx";
@@ -1039,12 +1104,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Send a transaction with custom WASM code.")
-                .add_args::<args::TxCustom>()
+                .add_args::<args::TxCustom<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxTransfer(pub args::TxTransfer);
+    pub struct TxTransfer(pub args::TxTransfer<crate::cli::args::CliTypes>);
 
     impl SubCmd for TxTransfer {
         const CMD: &'static str = "transfer";
@@ -1058,12 +1123,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Send a signed transfer transaction.")
-                .add_args::<args::TxTransfer>()
+                .add_args::<args::TxTransfer<crate::cli::args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxIbcTransfer(pub args::TxIbcTransfer);
+    pub struct TxIbcTransfer(pub args::TxIbcTransfer<args::CliTypes>);
 
     impl SubCmd for TxIbcTransfer {
         const CMD: &'static str = "ibc-transfer";
@@ -1077,12 +1142,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Send a signed IBC transfer transaction.")
-                .add_args::<args::TxIbcTransfer>()
+                .add_args::<args::TxIbcTransfer<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxUpdateVp(pub args::TxUpdateVp);
+    pub struct TxUpdateVp(pub args::TxUpdateVp<args::CliTypes>);
 
     impl SubCmd for TxUpdateVp {
         const CMD: &'static str = "update";
@@ -1099,12 +1164,12 @@ pub mod cmds {
                     "Send a signed transaction to update account's validity \
                      predicate.",
                 )
-                .add_args::<args::TxUpdateVp>()
+                .add_args::<args::TxUpdateVp<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxInitAccount(pub args::TxInitAccount);
+    pub struct TxInitAccount(pub args::TxInitAccount<args::CliTypes>);
 
     impl SubCmd for TxInitAccount {
         const CMD: &'static str = "init-account";
@@ -1121,12 +1186,12 @@ pub mod cmds {
                     "Send a signed transaction to create a new established \
                      account.",
                 )
-                .add_args::<args::TxInitAccount>()
+                .add_args::<args::TxInitAccount<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxInitValidator(pub args::TxInitValidator);
+    pub struct TxInitValidator(pub args::TxInitValidator<args::CliTypes>);
 
     impl SubCmd for TxInitValidator {
         const CMD: &'static str = "init-validator";
@@ -1143,12 +1208,12 @@ pub mod cmds {
                     "Send a signed transaction to create a new validator \
                      account.",
                 )
-                .add_args::<args::TxInitValidator>()
+                .add_args::<args::TxInitValidator<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct Bond(pub args::Bond);
+    pub struct Bond(pub args::Bond<args::CliTypes>);
 
     impl SubCmd for Bond {
         const CMD: &'static str = "bond";
@@ -1162,12 +1227,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Bond tokens in PoS system.")
-                .add_args::<args::Bond>()
+                .add_args::<args::Bond<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct Unbond(pub args::Unbond);
+    pub struct Unbond(pub args::Unbond<args::CliTypes>);
 
     impl SubCmd for Unbond {
         const CMD: &'static str = "unbond";
@@ -1181,12 +1246,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Unbond tokens from a PoS bond.")
-                .add_args::<args::Unbond>()
+                .add_args::<args::Unbond<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct Withdraw(pub args::Withdraw);
+    pub struct Withdraw(pub args::Withdraw<args::CliTypes>);
 
     impl SubCmd for Withdraw {
         const CMD: &'static str = "withdraw";
@@ -1200,12 +1265,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Withdraw tokens from previously unbonded PoS bond.")
-                .add_args::<args::Withdraw>()
+                .add_args::<args::Withdraw<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryEpoch(pub args::Query);
+    pub struct QueryEpoch(pub args::Query<args::CliTypes>);
 
     impl SubCmd for QueryEpoch {
         const CMD: &'static str = "epoch";
@@ -1219,12 +1284,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query the epoch of the last committed block.")
-                .add_args::<args::Query>()
+                .add_args::<args::Query<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryConversions(pub args::QueryConversions);
+    pub struct QueryConversions(pub args::QueryConversions<args::CliTypes>);
 
     impl SubCmd for QueryConversions {
         const CMD: &'static str = "conversions";
@@ -1238,12 +1303,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query currently applicable conversions.")
-                .add_args::<args::QueryConversions>()
+                .add_args::<args::QueryConversions<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryBlock(pub args::Query);
+    pub struct QueryBlock(pub args::Query<args::CliTypes>);
 
     impl SubCmd for QueryBlock {
         const CMD: &'static str = "block";
@@ -1257,12 +1322,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query the last committed block.")
-                .add_args::<args::Query>()
+                .add_args::<args::Query<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryBalance(pub args::QueryBalance);
+    pub struct QueryBalance(pub args::QueryBalance<args::CliTypes>);
 
     impl SubCmd for QueryBalance {
         const CMD: &'static str = "balance";
@@ -1276,12 +1341,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query balance(s) of tokens.")
-                .add_args::<args::QueryBalance>()
+                .add_args::<args::QueryBalance<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryBonds(pub args::QueryBonds);
+    pub struct QueryBonds(pub args::QueryBonds<args::CliTypes>);
 
     impl SubCmd for QueryBonds {
         const CMD: &'static str = "bonds";
@@ -1295,12 +1360,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query PoS bond(s).")
-                .add_args::<args::QueryBonds>()
+                .add_args::<args::QueryBonds<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryBondedStake(pub args::QueryBondedStake);
+    pub struct QueryBondedStake(pub args::QueryBondedStake<args::CliTypes>);
 
     impl SubCmd for QueryBondedStake {
         const CMD: &'static str = "bonded-stake";
@@ -1314,12 +1379,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query PoS bonded stake.")
-                .add_args::<args::QueryBondedStake>()
+                .add_args::<args::QueryBondedStake<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryTransfers(pub args::QueryTransfers);
+    pub struct QueryTransfers(pub args::QueryTransfers<args::CliTypes>);
 
     impl SubCmd for QueryTransfers {
         const CMD: &'static str = "show-transfers";
@@ -1333,12 +1398,14 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query the accepted transfers to date.")
-                .add_args::<args::QueryConversions>()
+                .add_args::<args::QueryTransfers<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryCommissionRate(pub args::QueryCommissionRate);
+    pub struct QueryCommissionRate(
+        pub args::QueryCommissionRate<args::CliTypes>,
+    );
 
     impl SubCmd for QueryCommissionRate {
         const CMD: &'static str = "commission-rate";
@@ -1352,12 +1419,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query commission rate.")
-                .add_args::<args::QueryCommissionRate>()
+                .add_args::<args::QueryCommissionRate<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QuerySlashes(pub args::QuerySlashes);
+    pub struct QuerySlashes(pub args::QuerySlashes<args::CliTypes>);
 
     impl SubCmd for QuerySlashes {
         const CMD: &'static str = "slashes";
@@ -1374,12 +1441,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query PoS applied slashes.")
-                .add_args::<args::QuerySlashes>()
+                .add_args::<args::QuerySlashes<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryDelegations(pub args::QueryDelegations);
+    pub struct QueryDelegations(pub args::QueryDelegations<args::CliTypes>);
 
     impl SubCmd for QueryDelegations {
         const CMD: &'static str = "delegations";
@@ -1396,12 +1463,34 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Find PoS delegations from the given owner address.")
-                .add_args::<args::QueryDelegations>()
+                .add_args::<args::QueryDelegations<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryRawBytes(pub args::QueryRawBytes);
+    pub struct QueryFindValidator(pub args::QueryFindValidator<args::CliTypes>);
+
+    impl SubCmd for QueryFindValidator {
+        const CMD: &'static str = "find-validator";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryFindValidator(args::QueryFindValidator::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Find a PoS validator by its Tendermint address.")
+                .add_args::<args::QueryFindValidator<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryRawBytes(pub args::QueryRawBytes<args::CliTypes>);
 
     impl SubCmd for QueryRawBytes {
         const CMD: &'static str = "query-bytes";
@@ -1415,12 +1504,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query the raw bytes of a given storage key")
-                .add_args::<args::QueryRawBytes>()
+                .add_args::<args::QueryRawBytes<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxInitProposal(pub args::InitProposal);
+    pub struct TxInitProposal(pub args::InitProposal<args::CliTypes>);
 
     impl SubCmd for TxInitProposal {
         const CMD: &'static str = "init-proposal";
@@ -1437,12 +1526,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Create a new proposal.")
-                .add_args::<args::InitProposal>()
+                .add_args::<args::InitProposal<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxVoteProposal(pub args::VoteProposal);
+    pub struct TxVoteProposal(pub args::VoteProposal<args::CliTypes>);
 
     impl SubCmd for TxVoteProposal {
         const CMD: &'static str = "vote-proposal";
@@ -1459,12 +1548,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Vote a proposal.")
-                .add_args::<args::VoteProposal>()
+                .add_args::<args::VoteProposal<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxRevealPk(pub args::RevealPk);
+    pub struct TxRevealPk(pub args::RevealPk<args::CliTypes>);
 
     impl SubCmd for TxRevealPk {
         const CMD: &'static str = "reveal-pk";
@@ -1489,7 +1578,7 @@ pub mod cmds {
                      signature verification on transactions authorized by \
                      this account.",
                 )
-                .add_args::<args::RevealPk>()
+                .add_args::<args::RevealPk<args::CliTypes>>()
         }
     }
 
@@ -1499,6 +1588,8 @@ pub mod cmds {
         FetchWasms(FetchWasms),
         InitNetwork(InitNetwork),
         InitGenesisValidator(InitGenesisValidator),
+        PkToTmAddress(PkToTmAddress),
+        DefaultBaseDir(DefaultBaseDir),
     }
 
     impl SubCmd for Utils {
@@ -1513,10 +1604,16 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::InitNetwork);
                 let init_genesis =
                     SubCmd::parse(matches).map(Self::InitGenesisValidator);
+                let pk_to_tm_address =
+                    SubCmd::parse(matches).map(Self::PkToTmAddress);
+                let default_base_dir =
+                    SubCmd::parse(matches).map(Self::DefaultBaseDir);
                 join_network
                     .or(fetch_wasms)
                     .or(init_network)
                     .or(init_genesis)
+                    .or(pk_to_tm_address)
+                    .or(default_base_dir)
             })
         }
 
@@ -1527,6 +1624,8 @@ pub mod cmds {
                 .subcommand(FetchWasms::def())
                 .subcommand(InitNetwork::def())
                 .subcommand(InitGenesisValidator::def())
+                .subcommand(PkToTmAddress::def())
+                .subcommand(DefaultBaseDir::def())
                 .setting(AppSettings::SubcommandRequiredElseHelp)
         }
     }
@@ -1610,6 +1709,51 @@ pub mod cmds {
                 .add_args::<args::InitGenesisValidator>()
         }
     }
+
+    #[derive(Clone, Debug)]
+    pub struct PkToTmAddress(pub args::PkToTmAddress);
+
+    impl SubCmd for PkToTmAddress {
+        const CMD: &'static str = "pk-to-tm";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::PkToTmAddress::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Convert a validator's consensus public key to a \
+                     Tendermint address.",
+                )
+                .add_args::<args::PkToTmAddress>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct DefaultBaseDir(pub args::DefaultBaseDir);
+
+    impl SubCmd for DefaultBaseDir {
+        const CMD: &'static str = "default-base-dir";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::DefaultBaseDir::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Print the default base directory that would be used if \
+                     --base-dir or NAMADA_BASE_DIR were not used to set the \
+                     base directory.",
+                )
+                .add_args::<args::DefaultBaseDir>()
+        }
+    }
 }
 
 pub mod args {
@@ -1620,6 +1764,7 @@ pub mod args {
     use std::str::FromStr;
 
     use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
+    pub use namada::ledger::args::*;
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::dec::Dec;
@@ -1629,144 +1774,168 @@ pub mod args {
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
     use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
-    use namada::types::transaction::GasLimit;
 
     use super::context::*;
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
-    use crate::config;
-    use crate::config::{Action, ActionAtHeight, TendermintMode};
+    use crate::config::{self, Action, ActionAtHeight, TendermintMode};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
-    const ADDRESS: Arg<WalletAddress> = arg("address");
-    const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
-    const ALIAS: Arg<String> = arg("alias");
-    const ALLOW_DUPLICATE_IP: ArgFlag = flag("allow-duplicate-ip");
-    const AMOUNT: Arg<token::DenominatedAmount> = arg("amount");
-    const ARCHIVE_DIR: ArgOpt<PathBuf> = arg_opt("archive-dir");
-    const BALANCE_OWNER: ArgOpt<WalletBalanceOwner> = arg_opt("owner");
-    const BASE_DIR: ArgDefault<PathBuf> = arg_default(
+    pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
+    pub const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
+    pub const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
+    pub const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
+    pub const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
+    pub const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
+    pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
+    pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
+    pub const VP_USER_WASM: &str = "vp_user.wasm";
+    pub const TX_BOND_WASM: &str = "tx_bond.wasm";
+    pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
+    pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
+    pub const TX_CHANGE_COMMISSION_WASM: &str =
+        "tx_change_validator_commission.wasm";
+    pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
+
+    pub const ADDRESS: Arg<WalletAddress> = arg("address");
+    pub const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
+    pub const ALIAS: Arg<String> = arg("alias");
+    pub const ALIAS_FORCE: ArgFlag = flag("alias-force");
+    pub const ALLOW_DUPLICATE_IP: ArgFlag = flag("allow-duplicate-ip");
+    pub const AMOUNT: Arg<token::DenominatedAmount> = arg("amount");
+    pub const ARCHIVE_DIR: ArgOpt<PathBuf> = arg_opt("archive-dir");
+    pub const BALANCE_OWNER: ArgOpt<WalletBalanceOwner> = arg_opt("owner");
+    pub const BASE_DIR: ArgDefault<PathBuf> = arg_default(
         "base-dir",
         DefaultFn(|| match env::var("NAMADA_BASE_DIR") {
-            Ok(dir) => dir.into(),
-            Err(_) => config::DEFAULT_BASE_DIR.into(),
+            Ok(dir) => PathBuf::from(dir),
+            Err(_) => config::get_default_namada_folder(),
         }),
     );
-    const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
-    // const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
-    const BROADCAST_ONLY: ArgFlag = flag("broadcast-only");
-    const CHAIN_ID: Arg<ChainId> = arg("chain-id");
-    const CHAIN_ID_OPT: ArgOpt<ChainId> = CHAIN_ID.opt();
-    const CHAIN_ID_PREFIX: Arg<ChainIdPrefix> = arg("chain-prefix");
-    const CHANNEL_ID: Arg<ChannelId> = arg("channel-id");
-    const CODE_PATH: Arg<PathBuf> = arg("code-path");
-    const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
-    const COMMISSION_RATE: Arg<Dec> = arg("commission-rate");
-    const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<Timeout> = arg_default(
+    pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
+    // pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
+    pub const BROADCAST_ONLY: ArgFlag = flag("broadcast-only");
+    pub const CHAIN_ID: Arg<ChainId> = arg("chain-id");
+    pub const CHAIN_ID_OPT: ArgOpt<ChainId> = CHAIN_ID.opt();
+    pub const CHAIN_ID_PREFIX: Arg<ChainIdPrefix> = arg("chain-prefix");
+    pub const CHANNEL_ID: Arg<ChannelId> = arg("channel-id");
+    pub const CODE_PATH: Arg<PathBuf> = arg("code-path");
+    pub const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
+    pub const COMMISSION_RATE: Arg<Dec> = arg("commission-rate");
+    pub const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<Timeout> = arg_default(
         "consensus-timeout-commit",
         DefaultFn(|| Timeout::from_str("1s").unwrap()),
     );
-    const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
-    const DATA_PATH: Arg<PathBuf> = arg("data-path");
-    const DECRYPT: ArgFlag = flag("decrypt");
-    const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
-    const DRY_RUN_TX: ArgFlag = flag("dry-run");
-    const DUMP_TX: ArgFlag = flag("dump-tx");
-    const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
-    const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
-    const FORCE: ArgFlag = flag("force");
-    const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
-    const GAS_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
+    pub const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
+    pub const DATA_PATH: Arg<PathBuf> = arg("data-path");
+    pub const DECRYPT: ArgFlag = flag("decrypt");
+    pub const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
+    pub const DRY_RUN_TX: ArgFlag = flag("dry-run");
+    pub const DUMP_TX: ArgFlag = flag("dump-tx");
+    pub const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
+    pub const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
+    pub const FORCE: ArgFlag = flag("force");
+    pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
+    pub const GAS_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
         "gas-amount",
         DefaultFn(|| token::DenominatedAmount {
             amount: token::Amount::default(),
             denom: NATIVE_MAX_DECIMAL_PLACES.into(),
         }),
     );
-    const GAS_LIMIT: ArgDefault<token::DenominatedAmount> = arg_default(
+    pub const GAS_LIMIT: ArgDefault<token::DenominatedAmount> = arg_default(
         "gas-limit",
         DefaultFn(|| token::DenominatedAmount {
             amount: token::Amount::default(),
             denom: NATIVE_MAX_DECIMAL_PLACES.into(),
         }),
     );
-    const GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
-        arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".into()));
-    const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
-    const GENESIS_VALIDATOR: ArgOpt<String> = arg("genesis-validator").opt();
-    const HALT_ACTION: ArgFlag = flag("halt");
-    const HISTORIC: ArgFlag = flag("historic");
-    const LEDGER_ADDRESS_ABOUT: &str =
+    pub const GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
+        arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".parse().unwrap()));
+    pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
+    pub const GENESIS_VALIDATOR: ArgOpt<String> =
+        arg("genesis-validator").opt();
+    pub const HALT_ACTION: ArgFlag = flag("halt");
+    pub const HD_WALLET_DERIVATION_PATH: Arg<String> = arg("hd-path");
+    pub const HD_WALLET_DERIVATION_PATH_OPT: ArgOpt<String> =
+        HD_WALLET_DERIVATION_PATH.opt();
+    pub const HISTORIC: ArgFlag = flag("historic");
+    pub const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
-    const LEDGER_ADDRESS_DEFAULT: ArgDefault<TendermintAddress> =
+    pub const LEDGER_ADDRESS_DEFAULT: ArgDefault<TendermintAddress> =
         LEDGER_ADDRESS.default(DefaultFn(|| {
             let raw = "127.0.0.1:26657";
             TendermintAddress::from_str(raw).unwrap()
         }));
 
-    const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("node");
-    const LOCALHOST: ArgFlag = flag("localhost");
-    const MASP_VALUE: Arg<MaspValue> = arg("value");
-    const MAX_COMMISSION_RATE_CHANGE: Arg<Dec> =
+    pub const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("node");
+    pub const LOCALHOST: ArgFlag = flag("localhost");
+    pub const MASP_VALUE: Arg<MaspValue> = arg("value");
+    pub const MAX_COMMISSION_RATE_CHANGE: Arg<Dec> =
         arg("max-commission-rate-change");
-    const MODE: ArgOpt<String> = arg_opt("mode");
-    const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
-    const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
-    const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
-    const OUT_FILE_PATH_OPT: ArgOpt<PathBuf> = arg_opt("out-file-path");
-    const OWNER: Arg<WalletAddress> = arg("owner");
-    const OWNER_OPT: ArgOpt<WalletAddress> = OWNER.opt();
-    const PIN: ArgFlag = flag("pin");
-    const PORT_ID: ArgDefault<PortId> = arg_default(
+    pub const MODE: ArgOpt<String> = arg_opt("mode");
+    pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
+    pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
+    pub const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
+    pub const OUT_FILE_PATH_OPT: ArgOpt<PathBuf> = arg_opt("out-file-path");
+    pub const OWNER: Arg<WalletAddress> = arg("owner");
+    pub const OWNER_OPT: ArgOpt<WalletAddress> = OWNER.opt();
+    pub const PIN: ArgFlag = flag("pin");
+    pub const PORT_ID: ArgDefault<PortId> = arg_default(
         "port-id",
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
     );
-    const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
-    const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
-    const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
-    const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
-    const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
-    const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
-    const PROPOSAL_VOTE_PGF_OPT: ArgOpt<String> = arg_opt("pgf");
-    const PROPOSAL_VOTE_ETH_OPT: ArgOpt<String> = arg_opt("eth");
-    const PROPOSAL_VOTE: Arg<String> = arg("vote");
-    const RAW_ADDRESS: Arg<Address> = arg("address");
-    const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
-    const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
-    const RECEIVER: Arg<String> = arg("receiver");
-    const SCHEME: ArgDefault<SchemeType> =
+    pub const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
+    pub const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
+    pub const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
+    pub const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
+    pub const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
+    pub const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
+    pub const PROPOSAL_VOTE_PGF_OPT: ArgOpt<String> = arg_opt("pgf");
+    pub const PROPOSAL_VOTE_ETH_OPT: ArgOpt<String> = arg_opt("eth");
+    pub const PROPOSAL_VOTE: Arg<String> = arg("vote");
+    pub const RAW_ADDRESS: Arg<Address> = arg("address");
+    pub const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
+    pub const RAW_PUBLIC_KEY: Arg<common::PublicKey> = arg("public-key");
+    pub const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> =
+        arg_opt("public-key");
+    pub const RECEIVER: Arg<String> = arg("receiver");
+    pub const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
-    const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
-    const SIGNING_KEY_OPT: ArgOpt<WalletKeypair> = SIGNING_KEY.opt();
-    const SIGNING_KEY: Arg<WalletKeypair> = arg("signing-key");
-    const SOURCE: Arg<WalletAddress> = arg("source");
-    const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
-    const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
-    const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
-    const SUSPEND_ACTION: ArgFlag = flag("suspend");
-    const TENDERMINT_TX_INDEX: ArgFlag = flag("tx-index");
-    const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
-    const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
-    const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
-    const TOKEN: Arg<WalletAddress> = arg("token");
-    const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
-    const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
-    const TX_HASH: Arg<String> = arg("tx-hash");
-    const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
-    const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
-    const VALIDATOR: Arg<WalletAddress> = arg("validator");
-    const VALIDATOR_OPT: ArgOpt<WalletAddress> = VALIDATOR.opt();
-    const VALIDATOR_ACCOUNT_KEY: ArgOpt<WalletPublicKey> =
+    pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
+    pub const SIGNING_KEY_OPT: ArgOpt<WalletKeypair> = SIGNING_KEY.opt();
+    pub const SIGNING_KEY: Arg<WalletKeypair> = arg("signing-key");
+    pub const SOURCE: Arg<WalletAddress> = arg("source");
+    pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
+    pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
+    pub const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
+    pub const SUSPEND_ACTION: ArgFlag = flag("suspend");
+    pub const TENDERMINT_TX_INDEX: ArgFlag = flag("tx-index");
+    pub const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
+    pub const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
+    pub const TM_ADDRESS: Arg<String> = arg("tm-address");
+    pub const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
+    pub const TOKEN: Arg<WalletAddress> = arg("token");
+    pub const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
+    pub const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
+    pub const TX_HASH: Arg<String> = arg("tx-hash");
+    pub const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
+    pub const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
+    pub const VALIDATOR: Arg<WalletAddress> = arg("validator");
+    pub const VALIDATOR_OPT: ArgOpt<WalletAddress> = VALIDATOR.opt();
+    pub const VALIDATOR_ACCOUNT_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("account-key");
-    const VALIDATOR_CONSENSUS_KEY: ArgOpt<WalletKeypair> =
+    pub const VALIDATOR_CONSENSUS_KEY: ArgOpt<WalletKeypair> =
         arg_opt("consensus-key");
-    const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> = arg_opt("validator-code-path");
-    const VALUE: ArgOpt<String> = arg_opt("value");
-    const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
-    const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
-    const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
+    pub const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> =
+        arg_opt("validator-code-path");
+    pub const VALUE: ArgOpt<String> = arg_opt("value");
+    pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
+    pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
+    pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
+    pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
 
     /// Global command arguments
     #[derive(Clone, Debug)]
@@ -1801,7 +1970,10 @@ pub mod args {
                      configuration and state is stored. This value can also \
                      be set via `NAMADA_BASE_DIR` environment variable, but \
                      the argument takes precedence, if specified. Defaults to \
-                     `.namada`.",
+                     `$XDG_DATA_HOME/namada` (`$HOME/.local/share/namada` \
+                     where `XDG_DATA_HOME` is unset) on \
+                     Unix,`$HOME/Library/Application Support/Namada` on \
+                     Mac,and `%AppData%\\Namada` on Windows.",
                 ))
                 .arg(WASM_DIR.def().about(
                     "Directory with built WASM validity predicates, \
@@ -1930,16 +2102,20 @@ pub mod args {
         }
     }
 
-    /// Transaction associated results arguments
-    #[derive(Clone, Debug)]
-    pub struct QueryResult {
-        /// Common query args
-        pub query: Query,
-        /// Hash of transaction to lookup
-        pub tx_hash: String,
+    pub trait CliToSdk<X>: Args {
+        fn to_sdk(self, ctx: &mut Context) -> X;
     }
 
-    impl Args for QueryResult {
+    impl CliToSdk<QueryResult<SdkTypes>> for QueryResult<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryResult<SdkTypes> {
+            QueryResult::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                tx_hash: self.tx_hash,
+            }
+        }
+    }
+
+    impl Args for QueryResult<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let tx_hash = TX_HASH.parse(matches);
@@ -1947,7 +2123,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>().arg(
+            app.add_args::<Query<CliTypes>>().arg(
                 TX_HASH
                     .def()
                     .about("The hash of the transaction being looked up."),
@@ -1955,18 +2131,20 @@ pub mod args {
         }
     }
 
-    /// Custom transaction arguments
-    #[derive(Clone, Debug)]
-    pub struct TxCustom {
-        /// Common tx arguments
-        pub tx: Tx,
-        /// Path to the tx WASM code file
-        pub code_path: PathBuf,
-        /// Path to the data file
-        pub data_path: Option<PathBuf>,
+    impl CliToSdk<TxCustom<SdkTypes>> for TxCustom<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxCustom<SdkTypes> {
+            TxCustom::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                code_path: ctx.read_wasm(self.code_path),
+                data_path: self.data_path.map(|data_path| {
+                    std::fs::read(data_path)
+                        .expect("Expected a file at given data path")
+                }),
+            }
+        }
     }
 
-    impl Args for TxCustom {
+    impl Args for TxCustom<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let code_path = CODE_PATH.parse(matches);
@@ -1979,7 +2157,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx<CliTypes>>()
                 .arg(
                     CODE_PATH
                         .def()
@@ -1993,36 +2171,22 @@ pub mod args {
         }
     }
 
-    /// Transfer transaction arguments
-    #[derive(Clone, Debug)]
-    pub struct TxTransfer {
-        /// Common tx arguments
-        pub tx: Tx,
-        /// Transfer source address
-        pub source: WalletTransferSource,
-        /// Transfer target address
-        pub target: WalletTransferTarget,
-        /// Transferred token address
-        pub token: WalletAddress,
-        /// Transferred token address
-        pub sub_prefix: Option<String>,
-        /// Transferred token amount
-        pub amount: InputAmount,
+    impl CliToSdk<TxTransfer<SdkTypes>> for TxTransfer<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxTransfer<SdkTypes> {
+            TxTransfer::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                source: ctx.get_cached(&self.source),
+                target: ctx.get(&self.target),
+                token: ctx.get(&self.token),
+                sub_prefix: self.sub_prefix,
+                amount: self.amount,
+                native_token: ctx.native_token.clone(),
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            }
+        }
     }
 
-    /// An amount read in by the cli
-    #[derive(Copy, Clone, Debug)]
-    pub enum InputAmount {
-        /// An amount whose representation has been validated
-        /// against the allowed representation in storage
-        Validated(token::DenominatedAmount),
-        /// The parsed amount read in from the cli. It has
-        /// not yet been validated against the allowed
-        /// representation in storage.
-        Unvalidated(token::DenominatedAmount),
-    }
-
-    impl Args for TxTransfer {
+    impl Args for TxTransfer<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let source = TRANSFER_SOURCE.parse(matches);
@@ -2030,6 +2194,7 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let sub_prefix = SUB_PREFIX.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
+            let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
             Self {
                 tx,
                 source,
@@ -2037,11 +2202,13 @@ pub mod args {
                 token,
                 sub_prefix,
                 amount,
+                native_token: (),
+                tx_code_path,
             }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx<CliTypes>>()
                 .arg(TRANSFER_SOURCE.def().about(
                     "The source account address. The source's key may be used \
                      to produce the signature.",
@@ -2056,32 +2223,25 @@ pub mod args {
         }
     }
 
-    /// IBC transfer transaction arguments
-    #[derive(Clone, Debug)]
-    pub struct TxIbcTransfer {
-        /// Common tx arguments
-        pub tx: Tx,
-        /// Transfer source address
-        pub source: WalletAddress,
-        /// Transfer target address
-        pub receiver: String,
-        /// Transferred token address
-        pub token: WalletAddress,
-        /// Transferred token address
-        pub sub_prefix: Option<String>,
-        /// Transferred token amount
-        pub amount: token::Amount,
-        /// Port ID
-        pub port_id: PortId,
-        /// Channel ID
-        pub channel_id: ChannelId,
-        /// Timeout height of the destination chain
-        pub timeout_height: Option<u64>,
-        /// Timeout timestamp offset
-        pub timeout_sec_offset: Option<u64>,
+    impl CliToSdk<TxIbcTransfer<SdkTypes>> for TxIbcTransfer<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxIbcTransfer<SdkTypes> {
+            TxIbcTransfer::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                source: ctx.get(&self.source),
+                receiver: self.receiver,
+                token: ctx.get(&self.token),
+                sub_prefix: self.sub_prefix,
+                amount: self.amount,
+                port_id: self.port_id,
+                channel_id: self.channel_id,
+                timeout_height: self.timeout_height,
+                timeout_sec_offset: self.timeout_sec_offset,
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            }
+        }
     }
 
-    impl Args for TxIbcTransfer {
+    impl Args for TxIbcTransfer<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let source = SOURCE.parse(matches);
@@ -2093,6 +2253,7 @@ pub mod args {
             let channel_id = CHANNEL_ID.parse(matches);
             let timeout_height = TIMEOUT_HEIGHT.parse(matches);
             let timeout_sec_offset = TIMEOUT_SEC_OFFSET.parse(matches);
+            let tx_code_path = PathBuf::from(TX_IBC_WASM);
             Self {
                 tx,
                 source,
@@ -2104,11 +2265,12 @@ pub mod args {
                 channel_id,
                 timeout_height,
                 timeout_sec_offset,
+                tx_code_path,
             }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx<CliTypes>>()
                 .arg(SOURCE.def().about(
                     "The source account address. The source's key is used to \
                      produce the signature.",
@@ -2130,35 +2292,38 @@ pub mod args {
         }
     }
 
-    /// Transaction to initialize a new account
-    #[derive(Clone, Debug)]
-    pub struct TxInitAccount {
-        /// Common tx arguments
-        pub tx: Tx,
-        /// Address of the source account
-        pub source: WalletAddress,
-        /// Path to the VP WASM code file for the new account
-        pub vp_code_path: Option<PathBuf>,
-        /// Public key for the new account
-        pub public_key: WalletPublicKey,
+    impl CliToSdk<TxInitAccount<SdkTypes>> for TxInitAccount<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxInitAccount<SdkTypes> {
+            TxInitAccount::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                source: ctx.get(&self.source),
+                vp_code_path: self.vp_code_path.to_path_buf(),
+                tx_code_path: self.tx_code_path.to_path_buf(),
+                public_key: ctx.get_cached(&self.public_key),
+            }
+        }
     }
 
-    impl Args for TxInitAccount {
+    impl Args for TxInitAccount<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let source = SOURCE.parse(matches);
-            let vp_code_path = CODE_PATH_OPT.parse(matches);
+            let vp_code_path = CODE_PATH_OPT
+                .parse(matches)
+                .unwrap_or_else(|| PathBuf::from(VP_USER_WASM));
+            let tx_code_path = PathBuf::from(TX_INIT_ACCOUNT_WASM);
             let public_key = PUBLIC_KEY.parse(matches);
             Self {
                 tx,
                 source,
                 vp_code_path,
                 public_key,
+                tx_code_path,
             }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx<CliTypes>>()
                 .arg(SOURCE.def().about(
                     "The source account's address that signs the transaction.",
                 ))
@@ -2174,22 +2339,27 @@ pub mod args {
         }
     }
 
-    /// Transaction to initialize a new account
-    #[derive(Clone, Debug)]
-    pub struct TxInitValidator {
-        pub tx: Tx,
-        pub source: WalletAddress,
-        pub scheme: SchemeType,
-        pub account_key: Option<WalletPublicKey>,
-        pub consensus_key: Option<WalletKeypair>,
-        pub protocol_key: Option<WalletPublicKey>,
-        pub commission_rate: Dec,
-        pub max_commission_rate_change: Dec,
-        pub validator_vp_code_path: Option<PathBuf>,
-        pub unsafe_dont_encrypt: bool,
+    impl CliToSdk<TxInitValidator<SdkTypes>> for TxInitValidator<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxInitValidator<SdkTypes> {
+            TxInitValidator::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                source: ctx.get(&self.source),
+                scheme: self.scheme,
+                account_key: self.account_key.map(|x| ctx.get_cached(&x)),
+                consensus_key: self.consensus_key.map(|x| ctx.get_cached(&x)),
+                protocol_key: self.protocol_key.map(|x| ctx.get_cached(&x)),
+                commission_rate: self.commission_rate,
+                max_commission_rate_change: self.max_commission_rate_change,
+                validator_vp_code_path: self
+                    .validator_vp_code_path
+                    .to_path_buf(),
+                unsafe_dont_encrypt: self.unsafe_dont_encrypt,
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            }
+        }
     }
 
-    impl Args for TxInitValidator {
+    impl Args for TxInitValidator<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let source = SOURCE.parse(matches);
@@ -2200,8 +2370,11 @@ pub mod args {
             let commission_rate = COMMISSION_RATE.parse(matches);
             let max_commission_rate_change =
                 MAX_COMMISSION_RATE_CHANGE.parse(matches);
-            let validator_vp_code_path = VALIDATOR_CODE_PATH.parse(matches);
+            let validator_vp_code_path = VALIDATOR_CODE_PATH
+                .parse(matches)
+                .unwrap_or_else(|| PathBuf::from(VP_USER_WASM));
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
+            let tx_code_path = PathBuf::from(TX_INIT_VALIDATOR_WASM);
             Self {
                 tx,
                 source,
@@ -2213,11 +2386,12 @@ pub mod args {
                 max_commission_rate_change,
                 validator_vp_code_path,
                 unsafe_dont_encrypt,
+                tx_code_path,
             }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx<CliTypes>>()
                 .arg(SOURCE.def().about(
                     "The source account's address that signs the transaction.",
                 ))
@@ -2260,31 +2434,33 @@ pub mod args {
         }
     }
 
-    /// Transaction to update a VP arguments
-    #[derive(Clone, Debug)]
-    pub struct TxUpdateVp {
-        /// Common tx arguments
-        pub tx: Tx,
-        /// Path to the VP WASM code file
-        pub vp_code_path: PathBuf,
-        /// Address of the account whose VP is to be updated
-        pub addr: WalletAddress,
+    impl CliToSdk<TxUpdateVp<SdkTypes>> for TxUpdateVp<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxUpdateVp<SdkTypes> {
+            TxUpdateVp::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                vp_code_path: self.vp_code_path,
+                tx_code_path: self.tx_code_path,
+                addr: ctx.get(&self.addr),
+            }
+        }
     }
 
-    impl Args for TxUpdateVp {
+    impl Args for TxUpdateVp<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let vp_code_path = CODE_PATH.parse(matches);
             let addr = ADDRESS.parse(matches);
+            let tx_code_path = PathBuf::from(TX_UPDATE_VP_WASM);
             Self {
                 tx,
                 vp_code_path,
                 addr,
+                tx_code_path,
             }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx<CliTypes>>()
                 .arg(
                     CODE_PATH.def().about(
                         "The path to the new validity predicate WASM code.",
@@ -2297,21 +2473,20 @@ pub mod args {
         }
     }
 
-    /// Bond arguments
-    #[derive(Clone, Debug)]
-    pub struct Bond {
-        /// Common tx arguments
-        pub tx: Tx,
-        /// Validator address
-        pub validator: WalletAddress,
-        /// Amount of tokens to stake in a bond
-        pub amount: token::Amount,
-        /// Source address for delegations. For self-bonds, the validator is
-        /// also the source.
-        pub source: Option<WalletAddress>,
+    impl CliToSdk<Bond<SdkTypes>> for Bond<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> Bond<SdkTypes> {
+            Bond::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                validator: ctx.get(&self.validator),
+                amount: self.amount,
+                source: self.source.map(|x| ctx.get(&x)),
+                native_token: ctx.native_token.clone(),
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            }
+        }
     }
 
-    impl Args for Bond {
+    impl Args for Bond<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let validator = VALIDATOR.parse(matches);
@@ -2325,16 +2500,19 @@ pub mod args {
                 })
                 .amount;
             let source = SOURCE_OPT.parse(matches);
+            let tx_code_path = PathBuf::from(TX_BOND_WASM);
             Self {
                 tx,
                 validator,
                 amount,
                 source,
+                native_token: (),
+                tx_code_path,
             }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx<CliTypes>>()
                 .arg(VALIDATOR.def().about("Validator address."))
                 .arg(AMOUNT.def().about("Amount of tokens to stake in a bond."))
                 .arg(SOURCE_OPT.def().about(
@@ -2344,21 +2522,19 @@ pub mod args {
         }
     }
 
-    /// Unbond arguments
-    #[derive(Clone, Debug)]
-    pub struct Unbond {
-        /// Common tx arguments
-        pub tx: Tx,
-        /// Validator address
-        pub validator: WalletAddress,
-        /// Amount of tokens to unbond from a bond
-        pub amount: token::Amount,
-        /// Source address for unbonding from delegations. For unbonding from
-        /// self-bonds, the validator is also the source
-        pub source: Option<WalletAddress>,
+    impl CliToSdk<Unbond<SdkTypes>> for Unbond<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> Unbond<SdkTypes> {
+            Unbond::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                validator: ctx.get(&self.validator),
+                amount: self.amount,
+                source: self.source.map(|x| ctx.get(&x)),
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            }
+        }
     }
 
-    impl Args for Unbond {
+    impl Args for Unbond<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let validator = VALIDATOR.parse(matches);
@@ -2372,16 +2548,18 @@ pub mod args {
                 })
                 .amount;
             let source = SOURCE_OPT.parse(matches);
+            let tx_code_path = PathBuf::from(TX_UNBOND_WASM);
             Self {
                 tx,
                 validator,
                 amount,
                 source,
+                tx_code_path,
             }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx<CliTypes>>()
                 .arg(VALIDATOR.def().about("Validator address."))
                 .arg(
                     AMOUNT
@@ -2395,32 +2573,50 @@ pub mod args {
                 ))
         }
     }
-
     #[derive(Clone, Debug)]
-    pub struct InitProposal {
+    pub struct InitProposal<C: NamadaTypes = SdkTypes> {
         /// Common tx arguments
-        pub tx: Tx,
+        pub tx: Tx<C>,
         /// The proposal file path
         pub proposal_data: PathBuf,
         /// Flag if proposal should be run offline
         pub offline: bool,
+        /// Native token address
+        pub native_token: C::NativeAddress,
+        /// Path to the TX WASM code file
+        pub tx_code_path: PathBuf,
     }
 
-    impl Args for InitProposal {
+    impl CliToSdk<InitProposal<SdkTypes>> for InitProposal<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> InitProposal<SdkTypes> {
+            InitProposal::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                proposal_data: self.proposal_data,
+                offline: self.offline,
+                native_token: ctx.native_token.clone(),
+                tx_code_path: self.tx_code_path,
+            }
+        }
+    }
+
+    impl Args for InitProposal<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let proposal_data = DATA_PATH.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
+            let tx_code_path = PathBuf::from(TX_INIT_PROPOSAL);
 
             Self {
                 tx,
                 proposal_data,
                 offline,
+                native_token: (),
+                tx_code_path,
             }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx<CliTypes>>()
                 .arg(DATA_PATH.def().about(
                     "The data path file (json) that describes the proposal.",
                 ))
@@ -2433,9 +2629,9 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
-    pub struct VoteProposal {
+    pub struct VoteProposal<C: NamadaTypes = SdkTypes> {
         /// Common tx arguments
-        pub tx: Tx,
+        pub tx: Tx<C>,
         /// Proposal id
         pub proposal_id: Option<u64>,
         /// The vote
@@ -2448,9 +2644,26 @@ pub mod args {
         pub offline: bool,
         /// The proposal file path
         pub proposal_data: Option<PathBuf>,
+        /// Path to the TX WASM code file
+        pub tx_code_path: PathBuf,
     }
 
-    impl Args for VoteProposal {
+    impl CliToSdk<VoteProposal<SdkTypes>> for VoteProposal<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> VoteProposal<SdkTypes> {
+            VoteProposal::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                proposal_id: self.proposal_id,
+                vote: self.vote,
+                offline: self.offline,
+                proposal_data: self.proposal_data,
+                tx_code_path: self.tx_code_path.to_path_buf(),
+                proposal_pgf: self.proposal_pgf,
+                proposal_eth: self.proposal_eth,
+            }
+        }
+    }
+
+    impl Args for VoteProposal<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let proposal_id = PROPOSAL_ID_OPT.parse(matches);
@@ -2459,6 +2672,7 @@ pub mod args {
             let vote = PROPOSAL_VOTE.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
             let proposal_data = DATA_PATH_OPT.parse(matches);
+            let tx_code_path = PathBuf::from(TX_VOTE_PROPOSAL);
 
             Self {
                 tx,
@@ -2468,11 +2682,12 @@ pub mod args {
                 proposal_eth,
                 offline,
                 proposal_data,
+                tx_code_path,
             }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx<CliTypes>>()
                 .arg(
                     PROPOSAL_ID_OPT
                         .def()
@@ -2527,15 +2742,16 @@ pub mod args {
         }
     }
 
-    #[derive(Clone, Debug)]
-    pub struct RevealPk {
-        /// Common tx arguments
-        pub tx: Tx,
-        /// A public key to be revealed on-chain
-        pub public_key: WalletPublicKey,
+    impl CliToSdk<RevealPk<SdkTypes>> for RevealPk<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> RevealPk<SdkTypes> {
+            RevealPk::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                public_key: ctx.get_cached(&self.public_key),
+            }
+        }
     }
 
-    impl Args for RevealPk {
+    impl Args for RevealPk<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let public_key = PUBLIC_KEY.parse(matches);
@@ -2544,20 +2760,21 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx<CliTypes>>()
                 .arg(PUBLIC_KEY.def().about("A public key to reveal."))
         }
     }
 
-    #[derive(Clone, Debug)]
-    pub struct QueryProposal {
-        /// Common query args
-        pub query: Query,
-        /// Proposal id
-        pub proposal_id: Option<u64>,
+    impl CliToSdk<QueryProposal<SdkTypes>> for QueryProposal<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryProposal<SdkTypes> {
+            QueryProposal::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                proposal_id: self.proposal_id,
+            }
+        }
     }
 
-    impl Args for QueryProposal {
+    impl Args for QueryProposal<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let proposal_id = PROPOSAL_ID_OPT.parse(matches);
@@ -2566,15 +2783,15 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx<CliTypes>>()
                 .arg(PROPOSAL_ID_OPT.def().about("The proposal identifier."))
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryProposalResult {
+    pub struct QueryProposalResult<C: NamadaTypes = SdkTypes> {
         /// Common query args
-        pub query: Query,
+        pub query: Query<C>,
         /// Proposal id
         pub proposal_id: Option<u64>,
         /// Flag if proposal result should be run on offline data
@@ -2583,7 +2800,18 @@ pub mod args {
         pub proposal_folder: Option<PathBuf>,
     }
 
-    impl Args for QueryProposalResult {
+    impl CliToSdk<QueryProposalResult<SdkTypes>> for QueryProposalResult<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryProposalResult<SdkTypes> {
+            QueryProposalResult::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                proposal_id: self.proposal_id,
+                offline: self.offline,
+                proposal_folder: self.proposal_folder,
+            }
+        }
+    }
+
+    impl Args for QueryProposalResult<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let proposal_id = PROPOSAL_ID_OPT.parse(matches);
@@ -2599,7 +2827,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query<CliTypes>>()
                 .arg(PROPOSAL_ID_OPT.def().about("The proposal identifier."))
                 .arg(
                     PROPOSAL_OFFLINE
@@ -2622,13 +2850,20 @@ pub mod args {
         }
     }
 
-    #[derive(Clone, Debug)]
-    pub struct QueryProtocolParameters {
-        /// Common query args
-        pub query: Query,
+    impl CliToSdk<QueryProtocolParameters<SdkTypes>>
+        for QueryProtocolParameters<CliTypes>
+    {
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> QueryProtocolParameters<SdkTypes> {
+            QueryProtocolParameters::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+            }
+        }
     }
 
-    impl Args for QueryProtocolParameters {
+    impl Args for QueryProtocolParameters<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
 
@@ -2636,36 +2871,37 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query<CliTypes>>()
         }
     }
 
-    /// Withdraw arguments
-    #[derive(Clone, Debug)]
-    pub struct Withdraw {
-        /// Common tx arguments
-        pub tx: Tx,
-        /// Validator address
-        pub validator: WalletAddress,
-        /// Source address for withdrawing from delegations. For withdrawing
-        /// from self-bonds, the validator is also the source
-        pub source: Option<WalletAddress>,
+    impl CliToSdk<Withdraw<SdkTypes>> for Withdraw<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> Withdraw<SdkTypes> {
+            Withdraw::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                validator: ctx.get(&self.validator),
+                source: self.source.map(|x| ctx.get(&x)),
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            }
+        }
     }
 
-    impl Args for Withdraw {
+    impl Args for Withdraw<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let validator = VALIDATOR.parse(matches);
             let source = SOURCE_OPT.parse(matches);
+            let tx_code_path = PathBuf::from(TX_WITHDRAW_WASM);
             Self {
                 tx,
                 validator,
                 source,
+                tx_code_path,
             }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx<CliTypes>>()
                 .arg(VALIDATOR.def().about("Validator address."))
                 .arg(SOURCE_OPT.def().about(
                     "Source address for withdrawing from delegations. For \
@@ -2675,18 +2911,17 @@ pub mod args {
         }
     }
 
-    /// Query asset conversions
-    #[derive(Clone, Debug)]
-    pub struct QueryConversions {
-        /// Common query args
-        pub query: Query,
-        /// Address of a token
-        pub token: Option<WalletAddress>,
-        /// Epoch of the asset
-        pub epoch: Option<Epoch>,
+    impl CliToSdk<QueryConversions<SdkTypes>> for QueryConversions<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryConversions<SdkTypes> {
+            QueryConversions::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                token: self.token.map(|x| ctx.get(&x)),
+                epoch: self.epoch,
+            }
+        }
     }
 
-    impl Args for QueryConversions {
+    impl Args for QueryConversions<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let token = TOKEN_OPT.parse(matches);
@@ -2699,7 +2934,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query<CliTypes>>()
                 .arg(
                     EPOCH
                         .def()
@@ -2713,22 +2948,19 @@ pub mod args {
         }
     }
 
-    /// Query token balance(s)
-    #[derive(Clone, Debug)]
-    pub struct QueryBalance {
-        /// Common query args
-        pub query: Query,
-        /// Address of an owner
-        pub owner: Option<WalletBalanceOwner>,
-        /// Address of a token
-        pub token: Option<WalletAddress>,
-        /// Whether not to convert balances
-        pub no_conversions: bool,
-        /// Sub prefix of an account
-        pub sub_prefix: Option<String>,
+    impl CliToSdk<QueryBalance<SdkTypes>> for QueryBalance<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryBalance<SdkTypes> {
+            QueryBalance::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                owner: self.owner.map(|x| ctx.get_cached(&x)),
+                token: self.token.map(|x| ctx.get(&x)),
+                no_conversions: self.no_conversions,
+                sub_prefix: self.sub_prefix,
+            }
+        }
     }
 
-    impl Args for QueryBalance {
+    impl Args for QueryBalance<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let owner = BALANCE_OWNER.parse(matches);
@@ -2745,7 +2977,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query<CliTypes>>()
                 .arg(
                     BALANCE_OWNER
                         .def()
@@ -2769,20 +3001,18 @@ pub mod args {
         }
     }
 
-    /// Query historical transfer(s)
-    #[derive(Clone, Debug)]
-    pub struct QueryTransfers {
-        /// Common query args
-        pub query: Query,
-        /// Address of an owner
-        pub owner: Option<WalletBalanceOwner>,
-        /// Address of a token
-        pub token: Option<WalletAddress>,
-        /// sub-prefix if querying a multi-token
-        pub sub_prefix: Option<String>,
+    impl CliToSdk<QueryTransfers<SdkTypes>> for QueryTransfers<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryTransfers<SdkTypes> {
+            QueryTransfers::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                owner: self.owner.map(|x| ctx.get_cached(&x)),
+                token: self.token.map(|x| ctx.get(&x)),
+                sub_prefix: self.sub_prefix,
+            }
+        }
     }
 
-    impl Args for QueryTransfers {
+    impl Args for QueryTransfers<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let owner = BALANCE_OWNER.parse(matches);
@@ -2797,7 +3027,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query<CliTypes>>()
                 .arg(BALANCE_OWNER.def().about(
                     "The account address that queried transfers must involve.",
                 ))
@@ -2812,18 +3042,17 @@ pub mod args {
         }
     }
 
-    /// Query PoS bond(s)
-    #[derive(Clone, Debug)]
-    pub struct QueryBonds {
-        /// Common query args
-        pub query: Query,
-        /// Address of an owner
-        pub owner: Option<WalletAddress>,
-        /// Address of a validator
-        pub validator: Option<WalletAddress>,
+    impl CliToSdk<QueryBonds<SdkTypes>> for QueryBonds<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryBonds<SdkTypes> {
+            QueryBonds::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                owner: self.owner.map(|x| ctx.get(&x)),
+                validator: self.validator.map(|x| ctx.get(&x)),
+            }
+        }
     }
 
-    impl Args for QueryBonds {
+    impl Args for QueryBonds<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let owner = OWNER_OPT.parse(matches);
@@ -2836,7 +3065,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query<CliTypes>>()
                 .arg(
                     OWNER_OPT.def().about(
                         "The owner account address whose bonds to query.",
@@ -2850,18 +3079,17 @@ pub mod args {
         }
     }
 
-    /// Query PoS bonded stake
-    #[derive(Clone, Debug)]
-    pub struct QueryBondedStake {
-        /// Common query args
-        pub query: Query,
-        /// Address of a validator
-        pub validator: Option<WalletAddress>,
-        /// Epoch in which to find bonded stake
-        pub epoch: Option<Epoch>,
+    impl CliToSdk<QueryBondedStake<SdkTypes>> for QueryBondedStake<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryBondedStake<SdkTypes> {
+            QueryBondedStake::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                validator: self.validator.map(|x| ctx.get(&x)),
+                epoch: self.epoch,
+            }
+        }
     }
 
-    impl Args for QueryBondedStake {
+    impl Args for QueryBondedStake<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let validator = VALIDATOR_OPT.parse(matches);
@@ -2874,7 +3102,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query<CliTypes>>()
                 .arg(VALIDATOR_OPT.def().about(
                     "The validator's address whose bonded stake to query.",
                 ))
@@ -2885,31 +3113,35 @@ pub mod args {
         }
     }
 
-    #[derive(Clone, Debug)]
-    /// Commission rate change args
-    pub struct TxCommissionRateChange {
-        /// Common tx arguments
-        pub tx: Tx,
-        /// Validator address (should be self)
-        pub validator: WalletAddress,
-        /// Value to which the tx changes the commission rate
-        pub rate: Dec,
+    impl CliToSdk<TxCommissionRateChange<SdkTypes>>
+        for TxCommissionRateChange<CliTypes>
+    {
+        fn to_sdk(self, ctx: &mut Context) -> TxCommissionRateChange<SdkTypes> {
+            TxCommissionRateChange::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                validator: ctx.get(&self.validator),
+                rate: self.rate,
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            }
+        }
     }
 
-    impl Args for TxCommissionRateChange {
+    impl Args for TxCommissionRateChange<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let validator = VALIDATOR.parse(matches);
             let rate = COMMISSION_RATE.parse(matches);
+            let tx_code_path = PathBuf::from(TX_CHANGE_COMMISSION_WASM);
             Self {
                 tx,
                 validator,
                 rate,
+                tx_code_path,
             }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Tx<CliTypes>>()
                 .arg(VALIDATOR.def().about(
                     "The validator's address whose commission rate to change.",
                 ))
@@ -2921,18 +3153,54 @@ pub mod args {
         }
     }
 
-    /// Query PoS commission rate
-    #[derive(Clone, Debug)]
-    pub struct QueryCommissionRate {
-        /// Common query args
-        pub query: Query,
-        /// Address of a validator
-        pub validator: WalletAddress,
-        /// Epoch in which to find commission rate
-        pub epoch: Option<Epoch>,
+    impl CliToSdk<TxUnjailValidator<SdkTypes>> for TxUnjailValidator<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxUnjailValidator<SdkTypes> {
+            TxUnjailValidator {
+                tx: self.tx.to_sdk(ctx),
+                validator: ctx.get(&self.validator),
+                tx_code_path: self
+                    .tx_code_path
+                    .as_path()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+                    .into_bytes(),
+            }
+        }
     }
 
-    impl Args for QueryCommissionRate {
+    impl Args for TxUnjailValidator<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let validator = VALIDATOR.parse(matches);
+            let tx_code_path = PathBuf::from(TX_UNJAIL_VALIDATOR_WASM);
+            Self {
+                tx,
+                validator,
+                tx_code_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx<CliTypes>>().arg(
+                VALIDATOR.def().about(
+                    "The address of the jailed validator to re-activate.",
+                ),
+            )
+        }
+    }
+
+    impl CliToSdk<QueryCommissionRate<SdkTypes>> for QueryCommissionRate<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryCommissionRate<SdkTypes> {
+            QueryCommissionRate::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                validator: ctx.get(&self.validator),
+                epoch: self.epoch,
+            }
+        }
+    }
+
+    impl Args for QueryCommissionRate<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let validator = VALIDATOR.parse(matches);
@@ -2945,7 +3213,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query<CliTypes>>()
                 .arg(VALIDATOR.def().about(
                     "The validator's address whose commission rate to query.",
                 ))
@@ -2956,16 +3224,16 @@ pub mod args {
         }
     }
 
-    /// Query PoS slashes
-    #[derive(Clone, Debug)]
-    pub struct QuerySlashes {
-        /// Common query args
-        pub query: Query,
-        /// Address of a validator
-        pub validator: Option<WalletAddress>,
+    impl CliToSdk<QuerySlashes<SdkTypes>> for QuerySlashes<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QuerySlashes<SdkTypes> {
+            QuerySlashes::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                validator: self.validator.map(|x| ctx.get(&x)),
+            }
+        }
     }
 
-    impl Args for QuerySlashes {
+    impl Args for QuerySlashes<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let validator = VALIDATOR_OPT.parse(matches);
@@ -2973,7 +3241,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>().arg(
+            app.add_args::<Query<CliTypes>>().arg(
                 VALIDATOR_OPT
                     .def()
                     .about("The validator's address whose slashes to query."),
@@ -2981,16 +3249,7 @@ pub mod args {
         }
     }
 
-    /// Query PoS delegations
-    #[derive(Clone, Debug)]
-    pub struct QueryDelegations {
-        /// Common query args
-        pub query: Query,
-        /// Address of an owner
-        pub owner: WalletAddress,
-    }
-
-    impl Args for QueryDelegations {
+    impl Args for QueryDelegations<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let owner = OWNER.parse(matches);
@@ -2998,7 +3257,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>().arg(
+            app.add_args::<Query<CliTypes>>().arg(
                 OWNER.def().about(
                     "The address of the owner of the delegations to find.",
                 ),
@@ -3006,16 +3265,50 @@ pub mod args {
         }
     }
 
-    /// Query the raw bytes of given storage key
-    #[derive(Clone, Debug)]
-    pub struct QueryRawBytes {
-        /// The storage key to query
-        pub storage_key: storage::Key,
-        /// Common query args
-        pub query: Query,
+    impl CliToSdk<QueryDelegations<SdkTypes>> for QueryDelegations<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryDelegations<SdkTypes> {
+            QueryDelegations::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                owner: ctx.get(&self.owner),
+            }
+        }
     }
 
-    impl Args for QueryRawBytes {
+    impl Args for QueryFindValidator<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let tm_addr = TM_ADDRESS.parse(matches);
+            Self { query, tm_addr }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>().arg(
+                TM_ADDRESS
+                    .def()
+                    .about("The address of the validator in Tendermint."),
+            )
+        }
+    }
+
+    impl CliToSdk<QueryFindValidator<SdkTypes>> for QueryFindValidator<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryFindValidator<SdkTypes> {
+            QueryFindValidator::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                tm_addr: self.tm_addr,
+            }
+        }
+    }
+
+    impl CliToSdk<QueryRawBytes<SdkTypes>> for QueryRawBytes<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryRawBytes<SdkTypes> {
+            QueryRawBytes::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                storage_key: self.storage_key,
+            }
+        }
+    }
+
+    impl Args for QueryRawBytes<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let storage_key = STORAGE_KEY.parse(matches);
             let query = Query::parse(matches);
@@ -3023,41 +3316,52 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query<CliTypes>>()
                 .arg(STORAGE_KEY.def().about("Storage key"))
         }
     }
-    /// Common transaction arguments
+
+    /// The concrete types being used in the CLI
     #[derive(Clone, Debug)]
-    pub struct Tx {
-        /// Simulate applying the transaction
-        pub dry_run: bool,
-        /// Dump the transaction bytes
-        pub dump_tx: bool,
-        /// Submit the transaction even if it doesn't pass client checks
-        pub force: bool,
-        /// Do not wait for the transaction to be added to the blockchain
-        pub broadcast_only: bool,
-        /// The address of the ledger node as host:port
-        pub ledger_address: TendermintAddress,
-        /// If any new account is initialized by the tx, use the given alias to
-        /// save it in the wallet.
-        pub initialized_account_alias: Option<String>,
-        /// The amount being payed to include the transaction
-        pub fee_amount: InputAmount,
-        /// The token in which the fee is being paid
-        pub fee_token: WalletAddress,
-        /// The max amount of gas used to process tx
-        pub gas_limit: GasLimit,
-        /// The optional expiration of the transaction
-        pub expiration: Option<DateTimeUtc>,
-        /// Sign the tx with the key for the given alias from your wallet
-        pub signing_key: Option<WalletKeypair>,
-        /// Sign the tx with the keypair of the public key of the given address
-        pub signer: Option<WalletAddress>,
+    pub struct CliTypes;
+
+    impl NamadaTypes for CliTypes {
+        type Address = WalletAddress;
+        type BalanceOwner = WalletBalanceOwner;
+        type Data = PathBuf;
+        type Keypair = WalletKeypair;
+        type NativeAddress = ();
+        type PublicKey = WalletPublicKey;
+        type TendermintAddress = TendermintAddress;
+        type TransferSource = WalletTransferSource;
+        type TransferTarget = WalletTransferTarget;
+        type ViewingKey = WalletViewingKey;
     }
 
-    impl Args for Tx {
+    impl CliToSdk<Tx<SdkTypes>> for Tx<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> Tx<SdkTypes> {
+            Tx::<SdkTypes> {
+                dry_run: self.dry_run,
+                dump_tx: self.dump_tx,
+                force: self.force,
+                broadcast_only: self.broadcast_only,
+                ledger_address: (),
+                initialized_account_alias: self.initialized_account_alias,
+                wallet_alias_force: self.wallet_alias_force,
+                fee_amount: self.fee_amount,
+                fee_token: ctx.get(&self.fee_token),
+                gas_limit: self.gas_limit,
+                signing_key: self.signing_key.map(|x| ctx.get_cached(&x)),
+                signer: self.signer.map(|x| ctx.get(&x)),
+                tx_reveal_code_path: self.tx_reveal_code_path,
+                password: self.password,
+                expiration: self.expiration,
+                chain_id: self.chain_id,
+            }
+        }
+    }
+
+    impl Args for Tx<CliTypes> {
         fn def(app: App) -> App {
             app.arg(
                 DRY_RUN_TX
@@ -3084,6 +3388,9 @@ pub mod args {
                  alias to save it in the wallet. If multiple accounts are \
                  initialized, the alias will be the prefix of each new \
                  address joined with a number.",
+            ))
+            .arg(WALLET_ALIAS_FORCE.def().about(
+                "Override the alias without confirmation if it already exists.",
             ))
             .arg(GAS_AMOUNT.def().about(
                 "The amount being paid for the inclusion of this transaction",
@@ -3128,14 +3435,17 @@ pub mod args {
             let broadcast_only = BROADCAST_ONLY.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
+            let wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
             let fee_amount =
                 InputAmount::Unvalidated(GAS_AMOUNT.parse(matches));
             let fee_token = GAS_TOKEN.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches).amount.into();
             let expiration = EXPIRATION_OPT.parse(matches);
-
             let signing_key = SIGNING_KEY_OPT.parse(matches);
             let signer = SIGNER.parse(matches);
+            let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
+            let chain_id = CHAIN_ID_OPT.parse(matches);
+            let password = None;
             Self {
                 dry_run,
                 dump_tx,
@@ -3143,24 +3453,27 @@ pub mod args {
                 broadcast_only,
                 ledger_address,
                 initialized_account_alias,
+                wallet_alias_force,
                 fee_amount,
                 fee_token,
                 gas_limit,
                 expiration,
                 signing_key,
                 signer,
+                tx_reveal_code_path,
+                password,
+                chain_id,
             }
         }
     }
 
-    /// Common query arguments
-    #[derive(Clone, Debug)]
-    pub struct Query {
-        /// The address of the ledger node as host:port
-        pub ledger_address: TendermintAddress,
+    impl CliToSdk<Query<SdkTypes>> for Query<CliTypes> {
+        fn to_sdk(self, _ctx: &mut Context) -> Query<SdkTypes> {
+            Query::<SdkTypes> { ledger_address: () }
+        }
     }
 
-    impl Args for Query {
+    impl Args for Query<CliTypes> {
         fn def(app: App) -> App {
             app.arg(
                 LEDGER_ADDRESS_DEFAULT
@@ -3177,24 +3490,15 @@ pub mod args {
         }
     }
 
-    /// MASP add key or address arguments
-    #[derive(Clone, Debug)]
-    pub struct MaspAddrKeyAdd {
-        /// Key alias
-        pub alias: String,
-        /// Any MASP value
-        pub value: MaspValue,
-        /// Don't encrypt the keypair
-        pub unsafe_dont_encrypt: bool,
-    }
-
     impl Args for MaspAddrKeyAdd {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
+            let alias_force = ALIAS_FORCE.parse(matches);
             let value = MASP_VALUE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
+                alias_force,
                 value,
                 unsafe_dont_encrypt,
             }
@@ -3206,6 +3510,9 @@ pub mod args {
                     .def()
                     .about("An alias to be associated with the new entry."),
             )
+            .arg(ALIAS_FORCE.def().about(
+                "Override the alias without confirmation if it already exists.",
+            ))
             .arg(
                 MASP_VALUE
                     .def()
@@ -3218,21 +3525,14 @@ pub mod args {
         }
     }
 
-    /// MASP generate spending key arguments
-    #[derive(Clone, Debug)]
-    pub struct MaspSpendKeyGen {
-        /// Key alias
-        pub alias: String,
-        /// Don't encrypt the keypair
-        pub unsafe_dont_encrypt: bool,
-    }
-
     impl Args for MaspSpendKeyGen {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
+            let alias_force = ALIAS_FORCE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
+                alias_force,
                 unsafe_dont_encrypt,
             }
         }
@@ -3250,24 +3550,26 @@ pub mod args {
         }
     }
 
-    /// MASP generate payment address arguments
-    #[derive(Clone, Debug)]
-    pub struct MaspPayAddrGen {
-        /// Key alias
-        pub alias: String,
-        /// Viewing key
-        pub viewing_key: WalletViewingKey,
-        /// Pin
-        pub pin: bool,
+    impl CliToSdk<MaspPayAddrGen<SdkTypes>> for MaspPayAddrGen<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> MaspPayAddrGen<SdkTypes> {
+            MaspPayAddrGen::<SdkTypes> {
+                alias: self.alias,
+                alias_force: self.alias_force,
+                viewing_key: ctx.get_cached(&self.viewing_key),
+                pin: self.pin,
+            }
+        }
     }
 
-    impl Args for MaspPayAddrGen {
+    impl Args for MaspPayAddrGen<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
+            let alias_force = ALIAS_FORCE.parse(matches);
             let viewing_key = VIEWING_KEY.parse(matches);
             let pin = PIN.parse(matches);
             Self {
                 alias,
+                alias_force,
                 viewing_key,
                 pin,
             }
@@ -3279,6 +3581,9 @@ pub mod args {
                     "An alias to be associated with the payment address.",
                 ),
             )
+            .arg(ALIAS_FORCE.def().about(
+                "Override the alias without confirmation if it already exists.",
+            ))
             .arg(VIEWING_KEY.def().about("The viewing key."))
             .arg(PIN.def().about(
                 "Require that the single transaction to this address be \
@@ -3287,26 +3592,65 @@ pub mod args {
         }
     }
 
-    /// Wallet generate key and implicit address arguments
-    #[derive(Clone, Debug)]
-    pub struct KeyAndAddressGen {
-        /// Scheme type
-        pub scheme: SchemeType,
-        /// Key alias
-        pub alias: Option<String>,
-        /// Don't encrypt the keypair
-        pub unsafe_dont_encrypt: bool,
+    impl Args for KeyAndAddressRestore {
+        fn parse(matches: &ArgMatches) -> Self {
+            let scheme = SCHEME.parse(matches);
+            let alias = ALIAS_OPT.parse(matches);
+            let alias_force = ALIAS_FORCE.parse(matches);
+            let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
+            let derivation_path = HD_WALLET_DERIVATION_PATH_OPT.parse(matches);
+            Self {
+                scheme,
+                alias,
+                alias_force,
+                unsafe_dont_encrypt,
+                derivation_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(SCHEME.def().about(
+                "The type of key that should be added. Argument must be \
+                 either ed25519 or secp256k1. If none provided, the default \
+                 key scheme is ed25519.",
+            ))
+            .arg(ALIAS_OPT.def().about(
+                "The key and address alias. If none provided, the alias will \
+                 be the public key hash.",
+            ))
+            .arg(
+                ALIAS_FORCE
+                    .def()
+                    .about("Force overwrite the alias if it already exists."),
+            )
+            .arg(UNSAFE_DONT_ENCRYPT.def().about(
+                "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
+                 used in a live network.",
+            ))
+            .arg(HD_WALLET_DERIVATION_PATH_OPT.def().about(
+                "HD key derivation path. Use keyword `default` to refer to a \
+                 scheme default path:\n- m/44'/60'/0'/0/0 for secp256k1 \
+                 scheme\n- m/44'/877'/0'/0'/0' for ed25519 scheme.\nFor \
+                 ed25519, all path indices will be promoted to hardened \
+                 indexes. If none is specified, the scheme default path is \
+                 used.",
+            ))
+        }
     }
 
     impl Args for KeyAndAddressGen {
         fn parse(matches: &ArgMatches) -> Self {
             let scheme = SCHEME.parse(matches);
             let alias = ALIAS_OPT.parse(matches);
+            let alias_force = ALIAS_FORCE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
+            let derivation_path = HD_WALLET_DERIVATION_PATH_OPT.parse(matches);
             Self {
                 scheme,
                 alias,
+                alias_force,
                 unsafe_dont_encrypt,
+                derivation_path,
             }
         }
 
@@ -3320,20 +3664,23 @@ pub mod args {
                 "The key and address alias. If none provided, the alias will \
                  be the public key hash.",
             ))
+            .arg(ALIAS_FORCE.def().about(
+                "Override the alias without confirmation if it already exists.",
+            ))
             .arg(UNSAFE_DONT_ENCRYPT.def().about(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
             ))
+            .arg(HD_WALLET_DERIVATION_PATH_OPT.def().about(
+                "Generate a new key and wallet using BIP39 mnemonic code and \
+                 HD derivation path. Use keyword `default` to refer to a \
+                 scheme default path:\n- m/44'/60'/0'/0/0 for secp256k1 \
+                 scheme\n- m/44'/877'/0'/0'/0' for ed25519 scheme.\nFor \
+                 ed25519, all path indices will be promoted to hardened \
+                 indexes. If none specified, mnemonic code and derivation \
+                 path are not used.",
+            ))
         }
-    }
-
-    /// Wallet key lookup arguments
-    #[derive(Clone, Debug)]
-    pub struct KeyFind {
-        pub public_key: Option<common::PublicKey>,
-        pub alias: Option<String>,
-        pub value: Option<String>,
-        pub unsafe_show_secret: bool,
     }
 
     impl Args for KeyFind {
@@ -3377,13 +3724,6 @@ pub mod args {
         }
     }
 
-    /// Wallet find shielded address or key arguments
-    #[derive(Clone, Debug)]
-    pub struct AddrKeyFind {
-        pub alias: String,
-        pub unsafe_show_secret: bool,
-    }
-
     impl Args for AddrKeyFind {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
@@ -3402,13 +3742,6 @@ pub mod args {
                         .about("UNSAFE: Print the spending key values."),
                 )
         }
-    }
-
-    /// Wallet list shielded keys arguments
-    #[derive(Clone, Debug)]
-    pub struct MaspKeysList {
-        pub decrypt: bool,
-        pub unsafe_show_secret: bool,
     }
 
     impl Args for MaspKeysList {
@@ -3431,13 +3764,6 @@ pub mod args {
         }
     }
 
-    /// Wallet list keys arguments
-    #[derive(Clone, Debug)]
-    pub struct KeyList {
-        pub decrypt: bool,
-        pub unsafe_show_secret: bool,
-    }
-
     impl Args for KeyList {
         fn parse(matches: &ArgMatches) -> Self {
             let decrypt = DECRYPT.parse(matches);
@@ -3458,12 +3784,6 @@ pub mod args {
         }
     }
 
-    /// Wallet key export arguments
-    #[derive(Clone, Debug)]
-    pub struct KeyExport {
-        pub alias: String,
-    }
-
     impl Args for KeyExport {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
@@ -3478,13 +3798,6 @@ pub mod args {
                     .about("The alias of the key you wish to export."),
             )
         }
-    }
-
-    /// Wallet address lookup arguments
-    #[derive(Clone, Debug)]
-    pub struct AddressOrAliasFind {
-        pub alias: Option<String>,
-        pub address: Option<Address>,
     }
 
     impl Args for AddressOrAliasFind {
@@ -3513,18 +3826,16 @@ pub mod args {
         }
     }
 
-    /// Wallet address add arguments
-    #[derive(Clone, Debug)]
-    pub struct AddressAdd {
-        pub alias: String,
-        pub address: Address,
-    }
-
     impl Args for AddressAdd {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
+            let alias_force = ALIAS_FORCE.parse(matches);
             let address = RAW_ADDRESS.parse(matches);
-            Self { alias, address }
+            Self {
+                alias,
+                alias_force,
+                address,
+            }
         }
 
         fn def(app: App) -> App {
@@ -3533,6 +3844,9 @@ pub mod args {
                     .def()
                     .about("An alias to be associated with the address."),
             )
+            .arg(ALIAS_FORCE.def().about(
+                "Override the alias without confirmation if it already exists.",
+            ))
             .arg(
                 RAW_ADDRESS
                     .def()
@@ -3571,6 +3885,38 @@ pub mod args {
             .arg(DONT_PREFETCH_WASM.def().about(
                 "Do not pre-fetch WASM.",
             ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct PkToTmAddress {
+        pub public_key: common::PublicKey,
+    }
+
+    impl Args for PkToTmAddress {
+        fn parse(matches: &ArgMatches) -> Self {
+            let public_key = RAW_PUBLIC_KEY.parse(matches);
+            Self { public_key }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(RAW_PUBLIC_KEY.def().about(
+                "The consensus public key to be converted to Tendermint \
+                 address.",
+            ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct DefaultBaseDir {}
+
+    impl Args for DefaultBaseDir {
+        fn parse(_matches: &ArgMatches) -> Self {
+            Self {}
+        }
+
+        fn def(app: App) -> App {
+            app
         }
     }
 

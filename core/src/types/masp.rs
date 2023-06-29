@@ -9,7 +9,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sha2::{Digest, Sha256};
 
 use crate::types::address::{
-    masp, Address, DecodeError, BECH32M_VARIANT, HASH_LEN,
+    masp, Address, DecodeError, BECH32M_VARIANT, HASH_HEX_LEN,
 };
 
 /// human-readable part of Bech32m encoded address
@@ -132,7 +132,7 @@ impl<'de> serde::Deserialize<'de> for ExtendedViewingKey {
     BorshSerialize,
     BorshDeserialize,
 )]
-pub struct PaymentAddress(masp_primitives::primitives::PaymentAddress, bool);
+pub struct PaymentAddress(masp_primitives::sapling::PaymentAddress, bool);
 
 impl PaymentAddress {
     /// Turn this PaymentAddress into a pinned/unpinned one
@@ -153,18 +153,18 @@ impl PaymentAddress {
         let mut hasher = Sha256::new();
         hasher.update(bytes);
         // hex of the first 40 chars of the hash
-        format!("{:.width$X}", hasher.finalize(), width = HASH_LEN)
+        format!("{:.width$X}", hasher.finalize(), width = HASH_HEX_LEN)
     }
 }
 
-impl From<PaymentAddress> for masp_primitives::primitives::PaymentAddress {
+impl From<PaymentAddress> for masp_primitives::sapling::PaymentAddress {
     fn from(addr: PaymentAddress) -> Self {
         addr.0
     }
 }
 
-impl From<masp_primitives::primitives::PaymentAddress> for PaymentAddress {
-    fn from(addr: masp_primitives::primitives::PaymentAddress) -> Self {
+impl From<masp_primitives::sapling::PaymentAddress> for PaymentAddress {
+    fn from(addr: masp_primitives::sapling::PaymentAddress) -> Self {
         Self(addr, false)
     }
 }
@@ -222,7 +222,7 @@ impl FromStr for PaymentAddress {
         };
         let bytes: Vec<u8> = FromBase32::from_base32(&base32)
             .map_err(DecodeError::DecodeBase32)?;
-        masp_primitives::primitives::PaymentAddress::from_bytes(
+        masp_primitives::sapling::PaymentAddress::from_bytes(
             &bytes.try_into().map_err(addr_len_err)?,
         )
         .ok_or_else(addr_data_err)
@@ -363,6 +363,14 @@ impl TransferSource {
     pub fn spending_key(&self) -> Option<ExtendedSpendingKey> {
         match self {
             Self::ExtendedSpendingKey(x) => Some(*x),
+            _ => None,
+        }
+    }
+
+    /// Get the contained Address, if any
+    pub fn address(&self) -> Option<Address> {
+        match self {
+            Self::Address(x) => Some(x.clone()),
             _ => None,
         }
     }

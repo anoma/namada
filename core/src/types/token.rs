@@ -1,20 +1,22 @@
 //! A basic fungible token
 
 use std::fmt::{Display, Formatter};
+use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
-use masp_primitives::transaction::Transaction;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::dec::POS_DECIMAL_PRECISION;
+use crate::ibc::applications::transfer::Amount as IbcAmount;
 use crate::ledger::storage_api::token::read_denom;
 use crate::ledger::storage_api::StorageRead;
 use crate::types::address::{masp, Address, DecodeError as AddressError};
 use crate::types::dec::Dec;
+use crate::types::hash::Hash;
 use crate::types::storage;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::uint::{self, Uint, I256};
@@ -496,18 +498,21 @@ impl Add<u64> for Amount {
     }
 }
 
-impl std::iter::Sum for Amount {
-    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Amount::zero(), |acc, amt| acc + amt)
-    }
-}
-
 impl Mul<u64> for Amount {
     type Output = Amount;
 
     fn mul(mut self, rhs: u64) -> Self::Output {
         self.raw *= rhs;
         self
+    }
+}
+
+impl Mul<Amount> for u64 {
+    type Output = Amount;
+
+    fn mul(self, mut rhs: Amount) -> Self::Output {
+        rhs.raw *= self;
+        rhs
     }
 }
 
@@ -571,6 +576,12 @@ impl Sub for Amount {
 impl SubAssign for Amount {
     fn sub_assign(&mut self, rhs: Self) {
         self.raw -= rhs.raw
+    }
+}
+
+impl Sum for Amount {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Amount::default(), |acc, next| acc + next)
     }
 }
 
@@ -658,6 +669,8 @@ impl From<Amount> for Uint {
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    Serialize,
+    Deserialize,
 )]
 #[repr(u8)]
 #[allow(missing_docs)]
@@ -701,6 +714,20 @@ impl MaspDenom {
         } else {
             val
         }
+    }
+}
+
+impl TryFrom<IbcAmount> for Amount {
+    type Error = AmountParseError;
+
+    fn try_from(amount: IbcAmount) -> Result<Self, Self::Error> {
+        // TODO: https://github.com/anoma/namada/issues/1089
+        // TODO: OVERFLOW CHECK PLEASE (PATCH IBC TO ALLOW GETTING
+        // IBCAMOUNT::MAX OR SIMILAR) if amount > u64::MAX.into() {
+        //    return Err(AmountParseError::InvalidRange);
+        //}
+        DenominatedAmount::from_str(&amount.to_string())
+            .map(|a| a.amount * NATIVE_SCALE)
     }
 }
 
@@ -899,6 +926,16 @@ pub fn is_any_multitoken_balance_key(
     }
 }
 
+/// Check if the given storage key is token or multitoken balance key for
+/// unspecified token. If it is, returns the token and owner addresses.
+pub fn is_any_token_or_multitoken_balance_key(
+    key: &Key,
+) -> Option<[&Address; 2]> {
+    is_any_multitoken_balance_key(key)
+        .map(|a| a.1)
+        .or_else(|| is_any_token_balance_key(key))
+}
+
 fn multitoken_balance_owner(key: &Key) -> Option<(Key, &Address)> {
     let len = key.segments.len();
     if len < 4 {
@@ -949,7 +986,7 @@ pub struct Transfer {
     /// The unused storage location at which to place TxId
     pub key: Option<String>,
     /// Shielded transaction part
-    pub shielded: Option<Transaction>,
+    pub shielded: Option<Hash>,
 }
 
 #[allow(missing_docs)]
@@ -961,35 +998,6 @@ pub enum TransferError {
     Amount(AmountParseError),
     #[error("No token is specified")]
     NoToken,
-}
-
-#[cfg(any(feature = "abciplus", feature = "abcipp"))]
-impl TryFrom<crate::ledger::ibc::data::FungibleTokenPacketData> for Transfer {
-    type Error = TransferError;
-
-    fn try_from(
-        data: crate::ledger::ibc::data::FungibleTokenPacketData,
-    ) -> Result<Self, Self::Error> {
-        let source =
-            Address::decode(&data.sender).map_err(TransferError::Address)?;
-        let target =
-            Address::decode(&data.receiver).map_err(TransferError::Address)?;
-        let token_str =
-            data.denom.split('/').last().ok_or(TransferError::NoToken)?;
-        let token =
-            Address::decode(token_str).map_err(TransferError::Address)?;
-        let amount = DenominatedAmount::from_str(&data.amount)
-            .map_err(TransferError::Amount)?;
-        Ok(Self {
-            source,
-            target,
-            token,
-            sub_prefix: None,
-            amount,
-            key: None,
-            shielded: None,
-        })
-    }
 }
 
 #[cfg(test)]
