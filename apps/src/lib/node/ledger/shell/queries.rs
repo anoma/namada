@@ -168,8 +168,11 @@ mod test_queries {
                         prev_epoch = Some(curr_epoch);
                         shell.start_new_epoch_in(EPOCH_NUM_BLOCKS);
                     }
-                    shell.wl_storage.storage.last_height =
-                        BlockHeight(curr_block_height - 1);
+                    if let Some(b) =
+                        shell.wl_storage.storage.last_block.as_mut()
+                    {
+                        b.height = BlockHeight(curr_block_height - 1);
+                    }
                     assert_eq!(
                         curr_block_height,
                         shell

@@ -7,7 +7,6 @@ use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::{DBIter, StorageHasher, TempWlStorage, DB};
 use namada::proto::Tx;
 use namada::types::internal::TxInQueue;
-use namada::types::storage::BlockHeight;
 use namada::types::time::DateTimeUtc;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{
@@ -32,7 +31,7 @@ use crate::facade::tendermint_proto::abci::{tx_record::TxAction, TxRecord};
 use crate::facade::tendermint_proto::google::protobuf::Timestamp;
 #[cfg(feature = "abcipp")]
 use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
-use crate::node::ledger::shell::{process_tx, ShellMode};
+use crate::node::ledger::shell::ShellMode;
 use crate::node::ledger::shims::abcipp_shim_types::shim::{response, TxBytes};
 
 impl<D, H> Shell<D, H>
@@ -57,7 +56,7 @@ where
             let alloc = self.get_encrypted_txs_allocator();
             // add encrypted txs
             let (encrypted_txs, alloc) =
-                self.build_encrypted_txs(alloc, &req.txs, &req.time);
+                self.build_encrypted_txs(alloc, &req.txs, req.time);
             let mut txs = encrypted_txs;
 
             // decrypt the wrapper txs included in the previous block
@@ -284,7 +283,7 @@ where
         // this is because we have not decided any block through
         // consensus yet (hence height 0), which in turn means we
         // have not committed any vote extensions to a block either.
-        if self.wl_storage.storage.last_height == BlockHeight(0) {
+        if self.wl_storage.storage.last_block.is_none() {
             return vec![];
         }
 
@@ -350,7 +349,7 @@ where
         mut alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
         txs: &[TxBytes],
     ) -> Vec<TxBytes> {
-        if self.wl_storage.storage.last_height == BlockHeight(0) {
+        if self.wl_storage.storage.last_block.is_none() {
             // genesis should not contain vote extensions.
             //
             // this is because we have not decided any block through
@@ -420,26 +419,22 @@ mod test_prepare_proposal {
     #[cfg(feature = "abcipp")]
     use std::collections::{BTreeSet, HashMap};
 
-    use borsh::{BorshDeserialize, BorshSerialize};
+    use borsh::BorshSerialize;
     use namada::core::ledger::storage_api::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
     use namada::ledger::pos::PosQueries;
     use namada::ledger::replay_protection;
-    use namada::proof_of_stake::{
-        consensus_validator_set_handle, Epoch, Epoch,
-    };
+    use namada::proof_of_stake::{consensus_validator_set_handle, Epoch};
     #[cfg(feature = "abcipp")]
     use namada::proto::SignableEthMessage;
-    use namada::proto::{
-        Code, Data, Header, Section, Signature, Signed, SignedTxData,
-    };
+    use namada::proto::{Code, Data, Header, Section, Signature, Signed};
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
     use namada::types::key::common;
     use namada::types::key::RefTo;
     use namada::types::storage::BlockHeight;
-    use namada::types::transaction::protocol::ProtocolTxType;
+    use namada::types::transaction::protocol::EthereumTxData;
     use namada::types::transaction::{Fee, TxType, WrapperTx};
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::bridge_pool_roots;
@@ -471,7 +466,7 @@ mod test_prepare_proposal {
             .expect("Test failed")
             .to_owned();
         let evts = {
-            let prev_height = shell.wl_storage.storage.last_height;
+            let prev_height = shell.wl_storage.storage.get_last_block_height();
             let ext = ethereum_events::Vext::empty(
                 prev_height,
                 validator_addr.clone(),
@@ -493,7 +488,7 @@ mod test_prepare_proposal {
             )
             .sig;
             bridge_pool_roots::Vext {
-                block_height: shell.wl_storage.storage.last_height,
+                block_height: shell.wl_storage.storage.get_last_block_height(),
                 validator_addr,
                 sig,
             }
@@ -532,7 +527,7 @@ mod test_prepare_proposal {
         }
         #[cfg(not(feature = "abcipp"))]
         {
-            let tx = ProtocolTxType::EthEventsVext(vext)
+            let tx = EthereumTxData::EthEventsVext(vext)
                 .sign(
                     shell.mode.get_protocol_key().expect("Test failed"),
                     shell.chain_id.clone(),
@@ -651,7 +646,10 @@ mod test_prepare_proposal {
         }
 
         let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
-        assert_eq!(shell.wl_storage.storage.last_height, LAST_HEIGHT);
+        assert_eq!(
+            shell.wl_storage.storage.get_last_block_height(),
+            LAST_HEIGHT
+        );
 
         check_invalid(&shell, LAST_HEIGHT + 2);
         check_invalid(&shell, LAST_HEIGHT + 1);
@@ -783,94 +781,6 @@ mod test_prepare_proposal {
     }
 
     /// Test if Ethereum events validation and inclusion in a block
-    /// behaves as expected, considering honest validators.
-    #[cfg(feature = "abcipp")]
-    #[test]
-    fn test_prepare_proposal_vext_normal_op() {
-        const LAST_HEIGHT: BlockHeight = BlockHeight(3);
-
-        let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
-
-        let (protocol_key, _, _) = wallet::defaults::validator_keys();
-        let validator_addr = wallet::defaults::validator_address();
-
-        let ethereum_event = EthereumEvent::TransfersToNamada {
-            nonce: 0u64.into(),
-            transfers: vec![],
-            valid_transfers_map: vec![],
-        };
-        let ethereum_events = {
-            let ext = ethereum_events::Vext {
-                validator_addr: validator_addr.clone(),
-                block_height: LAST_HEIGHT,
-                ethereum_events: vec![ethereum_event],
-            }
-            .sign(&protocol_key);
-            assert!(ext.verify(&protocol_key.ref_to()).is_ok());
-            ext
-        };
-        let bp_root = {
-            let to_sign = get_bp_bytes_to_sign();
-            let sig = Signed::<_, SignableEthMessage>::new(
-                shell.mode.get_eth_bridge_keypair().expect("Test failed"),
-                to_sign,
-            )
-            .sig;
-            bridge_pool_roots::Vext {
-                block_height: shell.wl_storage.storage.last_height,
-                validator_addr,
-                sig,
-            }
-            .sign(shell.mode.get_protocol_key().expect("Test failed"))
-        };
-        let vote_extension = VoteExtension {
-            ethereum_events: Some(ethereum_events),
-            bridge_pool_root: Some(bp_root),
-            validator_set_update: None,
-        };
-        let vote = ExtendedVoteInfo {
-            vote_extension: vote_extension.try_to_vec().unwrap(),
-            ..Default::default()
-        };
-
-        let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
-            local_last_commit: Some(ExtendedCommitInfo {
-                votes: vec![vote],
-                ..Default::default()
-            }),
-            ..Default::default()
-        });
-        let rsp_digest = {
-            assert_eq!(rsp.txs.len(), 2);
-            let tx_bytes = rsp.txs.remove(0);
-            let got = Tx::try_from(tx_bytes.as_slice()).expect("Test failed");
-            let got_signed_tx =
-                SignedTxData::try_from_slice(&got.data.unwrap()[..]).unwrap();
-            let protocol_tx =
-                TxType::try_from_slice(&got_signed_tx.data.unwrap()[..])
-                    .unwrap();
-
-            let protocol_tx = match protocol_tx {
-                TxType::Protocol(protocol_tx) => protocol_tx.tx,
-                _ => panic!("Test failed"),
-            };
-
-            match protocol_tx {
-                ProtocolTxType::EthereumEvents(digest) => digest,
-                _ => panic!("Test failed"),
-            }
-        };
-
-        let digest = manually_assemble_digest(
-            &protocol_key,
-            vote_extension.ethereum_events.expect("Test failed"),
-            LAST_HEIGHT,
-        );
-
-        assert_eq!(rsp_digest, digest);
-    }
-
-    /// Test if Ethereum events validation and inclusion in a block
     /// behaves as expected, considering <= 2/3 voting power.
     #[test]
     #[cfg_attr(
@@ -957,7 +867,10 @@ mod test_prepare_proposal {
                 )
                 .sig;
                 bridge_pool_roots::Vext {
-                    block_height: shell.wl_storage.storage.last_height,
+                    block_height: shell
+                        .wl_storage
+                        .storage
+                        .get_last_block_height(),
                     validator_addr: shell
                         .mode
                         .get_validator_address()
@@ -987,7 +900,7 @@ mod test_prepare_proposal {
         }
         #[cfg(not(feature = "abcipp"))]
         {
-            let vote = ProtocolTxType::EthEventsVext(
+            let vote = EthereumTxData::EthEventsVext(
                 signed_eth_ev_vote_extension.clone(),
             )
             .sign(&protocol_key, shell.chain_id.clone())
@@ -1000,18 +913,9 @@ mod test_prepare_proposal {
 
             let tx_bytes = rsp.txs.remove(0);
             let got = Tx::try_from(&tx_bytes[..]).unwrap();
-            let got_signed_tx =
-                SignedTxData::try_from_slice(&got.data.unwrap()[..]).unwrap();
-            let protocol_tx =
-                TxType::try_from_slice(&got_signed_tx.data.unwrap()[..])
-                    .unwrap();
-            let protocol_tx = match protocol_tx {
-                TxType::Protocol(protocol_tx) => protocol_tx.tx,
-                _ => panic!("Test failed"),
-            };
-
-            let rsp_ext = match protocol_tx {
-                ProtocolTxType::EthEventsVext(ext) => ext,
+            let eth_tx_data = (&got).try_into().expect("Test failed");
+            let rsp_ext = match eth_tx_data {
+                EthereumTxData::EthEventsVext(ext) => ext,
                 _ => panic!("Test failed"),
             };
 
@@ -1195,7 +1099,7 @@ mod test_prepare_proposal {
     /// transaction is not included in the block
     #[test]
     fn test_inner_tx_hash() {
-        let (mut shell, _) = test_utils::setup(1);
+        let (mut shell, _recv, _, _) = test_utils::setup();
 
         let keypair = crate::wallet::defaults::daewon_keypair();
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -1247,7 +1151,7 @@ mod test_prepare_proposal {
     /// only one gets accepted
     #[test]
     fn test_inner_tx_hash_same_block() {
-        let (shell, _) = test_utils::setup(1);
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let keypair = crate::wallet::defaults::daewon_keypair();
         let keypair_2 = crate::wallet::defaults::daewon_keypair();
@@ -1312,7 +1216,7 @@ mod test_prepare_proposal {
     /// Test that expired wrapper transactions are not included in the block
     #[test]
     fn test_expired_wrapper_tx() {
-        let (shell, _) = test_utils::setup(1);
+        let (shell, _recv, _, _) = test_utils::setup();
         let keypair = gen_keypair();
         let tx_time = DateTimeUtc::now();
         let mut wrapper_tx =

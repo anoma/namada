@@ -11,7 +11,6 @@ use wasmer::{BaseTunables, Module, Store};
 use super::memory::{Limit, WasmMemory};
 use super::TxCache;
 use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
-use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::proto::{Commitment, Section, Tx};
@@ -326,13 +325,6 @@ where
         vp_code_hash: Hash,
         input_data: Tx,
     ) -> HostEnvResult {
-        let vp_code_hash = match Hash::try_from(&vp_code_hash[..]) {
-            Ok(hash) => hash,
-            Err(err) => {
-                tracing::warn!("VP wasm code hash error {}", err);
-                return HostEnvResult::Fail;
-            }
-        };
         match self.eval_native_result(ctx, vp_code_hash, input_data) {
             Ok(ok) => HostEnvResult::from(ok),
             Err(err) => {

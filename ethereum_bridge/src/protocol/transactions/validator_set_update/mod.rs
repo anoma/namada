@@ -212,7 +212,7 @@ mod test_valset_upd_state_changes {
     fn test_seen_has_complete_proof() {
         let (mut wl_storage, keys) = test_utils::setup_default_storage();
 
-        let last_height = wl_storage.storage.last_height;
+        let last_height = wl_storage.storage.get_last_block_height();
         let signing_epoch = wl_storage
             .pos_queries()
             .get_epoch(last_height)
@@ -312,7 +312,7 @@ mod test_valset_upd_state_changes {
                 (address::testing::established_address_2(), 25_000_u64.into()),
             ]));
 
-        let last_height = wl_storage.storage.last_height;
+        let last_height = wl_storage.storage.get_last_block_height();
         let signing_epoch = wl_storage
             .pos_queries()
             .get_epoch(last_height)

@@ -191,7 +191,7 @@ where
         vote_extensions.into_iter().map(|vote_extension| {
             self.validate_bp_roots_vext_and_get_it_back(
                 vote_extension,
-                self.wl_storage.storage.last_height,
+                self.wl_storage.storage.get_last_block_height(),
             )
         })
     }
@@ -224,7 +224,7 @@ where
         let vexts_epoch = self
             .wl_storage
             .pos_queries()
-            .get_epoch(self.wl_storage.storage.last_height)
+            .get_epoch(self.wl_storage.storage.get_last_block_height())
             .expect(
                 "The epoch of the last block height should always be known",
             );
@@ -359,17 +359,17 @@ mod test_bp_vote_extensions {
         let to_sign = get_bp_bytes_to_sign();
         let sig = Signed::<_, SignableEthMessage>::new(&hot_key, to_sign).sig;
         let vote_ext = bridge_pool_roots::Vext {
-            block_height: shell.wl_storage.storage.last_height,
+            block_height: shell.wl_storage.storage.get_last_block_height(),
             validator_addr: bertha_address(),
             sig,
         }
         .sign(&bertha_keypair());
         shell.wl_storage.storage.block.height =
-            shell.wl_storage.storage.last_height;
+            shell.wl_storage.storage.get_last_block_height();
         shell.commit();
         assert!(shell.validate_bp_roots_vext(
             vote_ext,
-            shell.wl_storage.storage.last_height
+            shell.wl_storage.storage.get_last_block_height()
         ));
     }
 
@@ -386,7 +386,7 @@ mod test_bp_vote_extensions {
             .expect("Test failed")
             .clone();
         shell.wl_storage.storage.block.height =
-            shell.wl_storage.storage.last_height;
+            shell.wl_storage.storage.get_last_block_height();
         shell.commit();
         let to_sign = get_bp_bytes_to_sign();
         let sig = Signed::<_, SignableEthMessage>::new(
@@ -395,7 +395,7 @@ mod test_bp_vote_extensions {
         )
         .sig;
         let vote_ext = bridge_pool_roots::Vext {
-            block_height: shell.wl_storage.storage.last_height,
+            block_height: shell.wl_storage.storage.get_last_block_height(),
             validator_addr: address,
             sig,
         }
@@ -406,7 +406,7 @@ mod test_bp_vote_extensions {
         );
         assert!(shell.validate_bp_roots_vext(
             vote_ext,
-            shell.wl_storage.storage.last_height,
+            shell.wl_storage.storage.get_last_block_height(),
         ))
     }
 
@@ -434,7 +434,7 @@ mod test_bp_vote_extensions {
         )
         .sig;
         let bp_root = bridge_pool_roots::Vext {
-            block_height: shell.wl_storage.storage.last_height,
+            block_height: shell.wl_storage.storage.get_last_block_height(),
             validator_addr: address.clone(),
             sig,
         }
@@ -467,7 +467,7 @@ mod test_bp_vote_extensions {
             .expect("Test failed")
             .clone();
         shell.wl_storage.storage.block.height =
-            shell.wl_storage.storage.last_height;
+            shell.wl_storage.storage.get_last_block_height();
         shell.commit();
         let to_sign = get_bp_bytes_to_sign();
         let sig = Signed::<_, SignableEthMessage>::new(
@@ -476,7 +476,7 @@ mod test_bp_vote_extensions {
         )
         .sig;
         let vote_ext = bridge_pool_roots::Vext {
-            block_height: shell.wl_storage.storage.last_height,
+            block_height: shell.wl_storage.storage.get_last_block_height(),
             validator_addr: address,
             sig,
         }
@@ -504,13 +504,13 @@ mod test_bp_vote_extensions {
             .expect("Test failed")
             .clone();
         shell.wl_storage.storage.block.height =
-            shell.wl_storage.storage.last_height;
+            shell.wl_storage.storage.get_last_block_height();
         shell.commit();
         let to_sign = get_bp_bytes_to_sign();
         let sig =
             Signed::<_, SignableEthMessage>::new(&signing_key, to_sign).sig;
         let bp_root = bridge_pool_roots::Vext {
-            block_height: shell.wl_storage.storage.last_height,
+            block_height: shell.wl_storage.storage.get_last_block_height(),
             validator_addr: address,
             sig,
         }
@@ -540,14 +540,14 @@ mod test_bp_vote_extensions {
         )
         .sig;
         let bp_root = bridge_pool_roots::Vext {
-            block_height: shell.wl_storage.storage.last_height,
+            block_height: shell.wl_storage.storage.get_last_block_height(),
             validator_addr: address,
             sig,
         }
         .sign(&bertha_keypair());
         assert!(!shell.validate_bp_roots_vext(
             bp_root,
-            shell.wl_storage.storage.last_height
+            shell.wl_storage.storage.get_last_block_height()
         ))
     }
 
@@ -568,7 +568,7 @@ mod test_bp_vote_extensions {
 
         assert!(!shell.validate_bp_roots_vext(
             bp_root,
-            shell.wl_storage.storage.last_height
+            shell.wl_storage.storage.get_last_block_height()
         ))
     }
 
@@ -578,7 +578,7 @@ mod test_bp_vote_extensions {
     fn test_block_height_too_high() {
         let (shell, _, _, _) = setup_at_height(3u64);
         reject_incorrect_block_number(
-            shell.wl_storage.storage.last_height + 1,
+            shell.wl_storage.storage.get_last_block_height() + 1,
             &shell,
         );
     }
@@ -590,7 +590,7 @@ mod test_bp_vote_extensions {
     fn test_block_height_too_low() {
         let (shell, _, _, _) = setup_at_height(3u64);
         reject_incorrect_block_number(
-            (shell.wl_storage.storage.last_height.0 - 1).into(),
+            (shell.wl_storage.storage.get_last_block_height().0 - 1).into(),
             &shell,
         );
     }
@@ -616,14 +616,14 @@ mod test_bp_vote_extensions {
         )
         .sig;
         let bp_root = bridge_pool_roots::Vext {
-            block_height: shell.wl_storage.storage.last_height,
+            block_height: shell.wl_storage.storage.get_last_block_height(),
             validator_addr: address,
             sig,
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(!shell.validate_bp_roots_vext(
             bp_root,
-            shell.wl_storage.storage.last_height
+            shell.wl_storage.storage.get_last_block_height()
         ))
     }
 
@@ -640,14 +640,14 @@ mod test_bp_vote_extensions {
         )
         .sig;
         let bp_root = bridge_pool_roots::Vext {
-            block_height: shell.wl_storage.storage.last_height,
+            block_height: shell.wl_storage.storage.get_last_block_height(),
             validator_addr: address,
             sig,
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(!shell.validate_bp_roots_vext(
             bp_root,
-            shell.wl_storage.storage.last_height
+            shell.wl_storage.storage.get_last_block_height()
         ))
     }
 

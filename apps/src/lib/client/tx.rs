@@ -188,7 +188,8 @@ pub async fn submit_init_validator<C>(
         })
         .unwrap_or_else(|| {
             println!("Generating Eth cold key...");
-            let password = read_and_confirm_pwd(unsafe_dont_encrypt);
+            let password =
+                read_and_confirm_encryption_password(unsafe_dont_encrypt);
             ctx.wallet
                 .gen_key(
                     // Note that ETH only allows secp256k1
@@ -199,6 +200,7 @@ pub async fn submit_init_validator<C>(
                     None,
                 )
                 .expect("Key generation should not fail.")
+                .expect("No existing alias expected.")
                 .1
                 .ref_to()
         });
@@ -213,7 +215,8 @@ pub async fn submit_init_validator<C>(
         })
         .unwrap_or_else(|| {
             println!("Generating Eth hot key...");
-            let password = read_and_confirm_pwd(unsafe_dont_encrypt);
+            let password =
+                read_and_confirm_encryption_password(unsafe_dont_encrypt);
             ctx.wallet
                 .gen_key(
                     // Note that ETH only allows secp256k1
@@ -224,6 +227,7 @@ pub async fn submit_init_validator<C>(
                     None,
                 )
                 .expect("Key generation should not fail.")
+                .expect("No existing alias expected.")
                 .1
                 .ref_to()
         });

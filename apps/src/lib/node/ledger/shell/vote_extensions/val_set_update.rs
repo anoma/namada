@@ -62,7 +62,7 @@ where
         (token::Amount, validator_set_update::SignedVext),
         VoteExtensionError,
     > {
-        if self.wl_storage.storage.last_height.0 == 0 {
+        if self.wl_storage.storage.last_block.is_none() {
             tracing::debug!(
                 "Dropping validator set update vote extension issued at \
                  genesis"
@@ -203,7 +203,8 @@ where
         vote_extensions: Vec<validator_set_update::SignedVext>,
     ) -> Option<validator_set_update::VextDigest> {
         #[cfg(not(feature = "abcipp"))]
-        if self.wl_storage.storage.last_height.0 == 0 {
+        #[allow(clippy::question_mark)]
+        if self.wl_storage.storage.last_block.is_none() {
             return None;
         }
 
@@ -211,7 +212,7 @@ where
         let vexts_epoch = self
             .wl_storage
             .pos_queries()
-            .get_epoch(self.wl_storage.storage.last_height)
+            .get_epoch(self.wl_storage.storage.get_last_block_height())
             .expect(
                 "The epoch of the last block height should always be known",
             );
@@ -397,7 +398,10 @@ mod test_vote_extensions {
                 )
                 .sig;
                 bridge_pool_roots::Vext {
-                    block_height: shell.wl_storage.storage.last_height,
+                    block_height: shell
+                        .wl_storage
+                        .storage
+                        .get_last_block_height(),
                     validator_addr,
                     sig,
                 }
@@ -481,7 +485,10 @@ mod test_vote_extensions {
                 )
                 .sig;
                 bridge_pool_roots::Vext {
-                    block_height: shell.wl_storage.storage.last_height,
+                    block_height: shell
+                        .wl_storage
+                        .storage
+                        .get_last_block_height(),
                     validator_addr,
                     sig,
                 }
@@ -657,7 +664,10 @@ mod test_vote_extensions {
                 )
                 .sig;
                 bridge_pool_roots::Vext {
-                    block_height: shell.wl_storage.storage.last_height,
+                    block_height: shell
+                        .wl_storage
+                        .storage
+                        .get_last_block_height(),
                     validator_addr,
                     sig,
                 }

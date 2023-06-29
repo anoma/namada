@@ -244,7 +244,6 @@ pub async fn process_tx<C, U>(
 ) -> Result<ProcessTxResponse, Error>
 where
     C: crate::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
     U: WalletUtils,
 {
     let to_broadcast = sign_tx::<C, U>(
@@ -296,7 +295,6 @@ pub async fn submit_reveal_pk<C, U>(
 ) -> Result<(), Error>
 where
     C: crate::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
     U: WalletUtils,
 {
     let args::RevealPk {
@@ -322,7 +320,6 @@ pub async fn reveal_pk_if_needed<C, U>(
 ) -> Result<bool, Error>
 where
     C: crate::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
     U: WalletUtils,
 {
     let addr: Address = public_key.into();
@@ -353,7 +350,6 @@ pub async fn submit_reveal_pk_aux<C, U>(
 ) -> Result<ProcessTxResponse, Error>
 where
     C: crate::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
     U: WalletUtils,
 {
     let addr: Address = public_key.into();
@@ -485,7 +481,6 @@ pub async fn submit_tx<C>(
 ) -> Result<TxResponse, Error>
 where
     C: crate::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
 {
     let (_, wrapper_hash, decrypted_hash) = match &to_broadcast {
         TxBroadcastData::Wrapper {
@@ -610,7 +605,6 @@ pub async fn submit_validator_commission_change<C, U>(
 ) -> Result<(), Error>
 where
     C: crate::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
     U: WalletUtils,
 {
     let epoch = rpc::query_epoch(client).await;
@@ -755,7 +749,6 @@ pub async fn submit_withdraw<C, U>(
 ) -> Result<(), Error>
 where
     C: crate::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
     U: WalletUtils,
 {
     let epoch = rpc::query_epoch(client).await;
@@ -826,7 +819,6 @@ pub async fn submit_unbond<C, U>(
 ) -> Result<(), Error>
 where
     C: crate::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
     U: WalletUtils,
 {
     let source = args.source.clone();
@@ -957,7 +949,6 @@ pub async fn submit_bond<C, U>(
 ) -> Result<(), Error>
 where
     C: crate::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
     U: WalletUtils,
 {
     let validator =
@@ -1058,7 +1049,6 @@ pub async fn submit_ibc_transfer<C, U>(
 ) -> Result<(), Error>
 where
     C: crate::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
     U: WalletUtils,
 {
     // Check that the source address exists on chain
@@ -1242,7 +1232,6 @@ pub async fn submit_transfer<C, U, V>(
 ) -> Result<(), Error>
 where
     C: crate::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
     V: WalletUtils,
     U: ShieldedUtils<C = C>,
 {
@@ -1446,7 +1435,6 @@ pub async fn submit_init_account<C, U>(
 ) -> Result<(), Error>
 where
     C: crate::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
     U: WalletUtils,
 {
     let public_key = args.public_key;
@@ -1502,7 +1490,6 @@ pub async fn submit_update_vp<C, U>(
 ) -> Result<(), Error>
 where
     C: crate::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
     U: WalletUtils,
 {
     let addr = args.addr.clone();
@@ -1593,7 +1580,6 @@ pub async fn submit_custom<C, U>(
 ) -> Result<(), Error>
 where
     C: crate::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
     U: WalletUtils,
 {
     let mut tx = Tx::new(TxType::Raw);

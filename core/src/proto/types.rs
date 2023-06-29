@@ -1,10 +1,13 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
+use std::hash::{Hash, Hasher};
+use std::marker::PhantomData;
 
 #[cfg(feature = "ferveo-tpke")]
 use ark_ec::AffineCurve;
 #[cfg(feature = "ferveo-tpke")]
 use ark_ec::PairingEngine;
+use borsh::schema::{Declaration, Definition};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use masp_primitives::transaction::builder::Builder;
 use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
@@ -1066,9 +1069,9 @@ impl Tx {
         for section in &self.sections {
             if let Section::Signature(sig_sec) = section {
                 if sig_sec.pub_key == *pk && sig_sec.target == *hash {
-                    return common::SigScheme::verify_signature_raw(
+                    return common::SigScheme::verify_signature(
                         pk,
-                        &hash.0,
+                        hash,
                         &sig_sec.signature,
                     );
                 }

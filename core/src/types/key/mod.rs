@@ -426,7 +426,19 @@ impl SignableBytes for crate::types::hash::Hash {
     }
 }
 
+impl SignableBytes for &crate::types::hash::Hash {
+    fn signable_hash<H: StorageHasher>(&self) -> [u8; 32] {
+        self.0
+    }
+}
+
 impl SignableBytes for crate::types::keccak::KeccakHash {
+    fn signable_hash<H: StorageHasher>(&self) -> [u8; 32] {
+        self.0
+    }
+}
+
+impl SignableBytes for &crate::types::keccak::KeccakHash {
     fn signable_hash<H: StorageHasher>(&self) -> [u8; 32] {
         self.0
     }

@@ -115,7 +115,7 @@ fn gen(
         password.clone(),
     );
     let (eth_cold_key, eth_cold_sk) =
-        gen_key_to_store(SchemeType::Secp256k1, &password);
+        gen_key_to_store(SchemeType::Secp256k1, password.clone());
     let (tendermint_node_key, tendermint_node_sk) = gen_key_to_store(
         // Note that TM only allows ed25519 for node IDs
         SchemeType::Ed25519,

@@ -15,6 +15,7 @@ use namada_core::types::token::{balance_key, Amount};
 
 use crate::ledger::native_vp::ethereum_bridge::authorize;
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader, VpEnv};
+use crate::proto::Tx;
 use crate::vm::WasmCacheAccess;
 
 /// Validity predicate for the Ethereum bridge
@@ -126,12 +127,11 @@ where
     /// no wasm transactions should be able to modify those keys.
     fn validate_tx(
         &self,
-        tx_data: &[u8],
+        _: &Tx,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool, Self::Error> {
         tracing::debug!(
-            tx_data_len = tx_data.len(),
             keys_changed_len = keys_changed.len(),
             verifiers_len = verifiers.len(),
             "Ethereum Bridge VP triggered",
@@ -419,7 +419,6 @@ mod tests {
     use namada_core::ledger::eth_bridge;
     use namada_core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use namada_core::ledger::storage_api::StorageWrite;
-    use namada_core::types::chain::ChainId;
     use namada_ethereum_bridge::parameters::{
         Contracts, EthereumBridgeConfig, UpgradeableContract,
     };
@@ -436,6 +435,7 @@ mod tests {
     use crate::types::ethereum_events;
     use crate::types::ethereum_events::EthAddress;
     use crate::types::storage::TxIndex;
+    use crate::types::transaction::TxType;
     use crate::vm::wasm::VpCache;
     use crate::vm::WasmCacheRwAccess;
 
@@ -671,7 +671,7 @@ mod tests {
         let verifiers = BTreeSet::from([BRIDGE_POOL_ADDRESS]);
 
         // set up the VP
-        let tx = Tx::new(vec![], None, ChainId::default(), None);
+        let tx = Tx::new(TxType::Raw);
         let vp = EthBridge {
             ctx: setup_ctx(
                 &tx,
@@ -682,11 +682,7 @@ mod tests {
             ),
         };
 
-        let res = vp.validate_tx(
-            &tx.try_to_vec().expect("Test failed"),
-            &keys_changed,
-            &verifiers,
-        );
+        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         assert!(res.expect("Test failed"));
     }
 
@@ -725,7 +721,7 @@ mod tests {
         let verifiers = BTreeSet::from([BRIDGE_POOL_ADDRESS]);
 
         // set up the VP
-        let tx = Tx::new(vec![], None, ChainId::default(), None);
+        let tx = Tx::new(TxType::Raw);
         let vp = EthBridge {
             ctx: setup_ctx(
                 &tx,
@@ -736,11 +732,7 @@ mod tests {
             ),
         };
 
-        let res = vp.validate_tx(
-            &tx.try_to_vec().expect("Test failed"),
-            &keys_changed,
-            &verifiers,
-        );
+        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         assert!(!res.expect("Test failed"));
     }
 
@@ -782,7 +774,7 @@ mod tests {
         let verifiers = BTreeSet::from([]);
 
         // set up the VP
-        let tx = Tx::new(vec![], None, ChainId::default(), None);
+        let tx = Tx::new(TxType::Raw);
         let vp = EthBridge {
             ctx: setup_ctx(
                 &tx,
@@ -793,11 +785,7 @@ mod tests {
             ),
         };
 
-        let res = vp.validate_tx(
-            &tx.try_to_vec().expect("Test failed"),
-            &keys_changed,
-            &verifiers,
-        );
+        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         assert!(!res.expect("Test failed"));
     }
 }

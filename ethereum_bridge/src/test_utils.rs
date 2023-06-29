@@ -139,7 +139,9 @@ pub fn init_storage_with_validators(
 ) -> HashMap<Address, TestValidatorKeys> {
     // set last height to a reasonable value;
     // it should allow vote extensions to be cast
-    wl_storage.storage.last_height = 3.into();
+    if let Some(b) = wl_storage.storage.last_block.as_mut() {
+        b.height = 3.into();
+    }
 
     let mut all_keys = HashMap::new();
     let validators =

@@ -21,7 +21,9 @@ use namada::types::address::Address;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::types::token::{total_supply_key, Amount};
-use namada::types::transaction::protocol::ProtocolTxType;
+use namada::types::transaction::protocol::{
+    ethereum_tx_data_variants, ProtocolTxType,
+};
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use rust_decimal::prelude::Decimal;
 
@@ -332,13 +334,18 @@ where
                     continue;
                 }
                 TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                    ProtocolTxType::BridgePoolVext(_)
-                    | ProtocolTxType::BridgePool(_)
-                    | ProtocolTxType::ValSetUpdateVext(_)
-                    | ProtocolTxType::ValidatorSetUpdate(_) => {
-                        (Event::new_tx_event(&tx_type, height.0), None)
+                    ProtocolTxType::BridgePoolVext
+                    | ProtocolTxType::BridgePool
+                    | ProtocolTxType::ValSetUpdateVext
+                    | ProtocolTxType::ValidatorSetUpdate => {
+                        (Event::new_tx_event(&tx, height.0), None)
                     }
-                    ProtocolTxType::EthEventsVext(ref ext) => {
+                    ProtocolTxType::EthEventsVext => {
+                        let ext =
+                            ethereum_tx_data_variants::EthEventsVext::try_from(
+                                &tx,
+                            )
+                            .unwrap();
                         if self
                             .mode
                             .get_validator_address()
@@ -351,14 +358,20 @@ where
                                 self.mode.dequeue_eth_event(event);
                             }
                         }
-                        (Event::new_tx_event(&tx_type, height.0), None)
+                        (Event::new_tx_event(&tx, height.0), None)
                     }
-                    ProtocolTxType::EthereumEvents(ref digest) => {
+                    ProtocolTxType::EthereumEvents => {
+                        let digest =
+                            ethereum_tx_data_variants::EthereumEvents::try_from(
+                                &tx,
+                            ).unwrap();
                         if let Some(address) =
                             self.mode.get_validator_address().cloned()
                         {
-                            let this_signer =
-                                &(address, self.wl_storage.storage.last_height);
+                            let this_signer = &(
+                                address,
+                                self.wl_storage.storage.get_last_block_height(),
+                            );
                             for MultiSignedEthEvent { event, signers } in
                                 &digest.events
                             {
@@ -367,7 +380,7 @@ where
                                 }
                             }
                         }
-                        (Event::new_tx_event(&tx_type, height.0), None)
+                        (Event::new_tx_event(&tx, height.0), None)
                     }
                     ref protocol_tx_type => {
                         tracing::error!(
@@ -985,7 +998,8 @@ mod test_finalize_block {
     use namada::types::transaction::governance::{
         InitProposalData, ProposalType, VoteProposalData,
     };
-    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
+    use namada::types::transaction::protocol::EthereumTxData;
+    use namada::types::transaction::{Fee, WrapperTx, MIN_FEE};
     use namada::types::vote_extensions::ethereum_events;
     use namada_test_utils::TestWasms;
     use rust_decimal_macros::dec;
@@ -1346,7 +1360,7 @@ mod test_finalize_block {
         let protocol_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
 
-        let tx = ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
+        let tx = EthereumTxData::EthereumEvents(ethereum_events::VextDigest {
             signatures: Default::default(),
             events: vec![],
         })
@@ -1397,7 +1411,7 @@ mod test_finalize_block {
 
         // ---- The protocol tx that includes this event on-chain
         let ext = ethereum_events::Vext {
-            block_height: shell.wl_storage.storage.last_height,
+            block_height: shell.wl_storage.storage.get_last_block_height(),
             ethereum_events: vec![event.clone()],
             validator_addr: address.clone(),
         }
@@ -1408,13 +1422,13 @@ mod test_finalize_block {
                 event,
                 signers: BTreeSet::from([(
                     address.clone(),
-                    shell.wl_storage.storage.last_height,
+                    shell.wl_storage.storage.get_last_block_height(),
                 )]),
             };
 
             let digest = ethereum_events::VextDigest {
                 signatures: vec![(
-                    (address, shell.wl_storage.storage.last_height),
+                    (address, shell.wl_storage.storage.get_last_block_height()),
                     ext.sig,
                 )]
                 .into_iter()
@@ -1422,7 +1436,7 @@ mod test_finalize_block {
                 events: vec![signed],
             };
             ProcessedTx {
-                tx: ProtocolTxType::EthereumEvents(digest)
+                tx: EthereumTxData::EthereumEvents(digest)
                     .sign(&protocol_key, shell.chain_id.clone())
                     .to_bytes(),
                 result: TxResult {
@@ -1475,13 +1489,13 @@ mod test_finalize_block {
 
         // ---- The protocol tx that includes this event on-chain
         let ext = ethereum_events::Vext {
-            block_height: shell.wl_storage.storage.last_height,
+            block_height: shell.wl_storage.storage.get_last_block_height(),
             ethereum_events: vec![event],
             validator_addr: address,
         }
         .sign(&protocol_key);
         let processed_tx = ProcessedTx {
-            tx: ProtocolTxType::EthEventsVext(ext)
+            tx: EthereumTxData::EthEventsVext(ext)
                 .sign(&protocol_key, shell.chain_id.clone())
                 .to_bytes(),
             result: TxResult {
@@ -1658,14 +1672,17 @@ mod test_finalize_block {
             let ext = {
                 let ext = ethereum_events::Vext {
                     validator_addr,
-                    block_height: shell.wl_storage.storage.last_height,
+                    block_height: shell
+                        .wl_storage
+                        .storage
+                        .get_last_block_height(),
                     ethereum_events: vec![ethereum_event],
                 }
                 .sign(&protocol_key);
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
-            let tx = ProtocolTxType::EthEventsVext(ext)
+            let tx = EthereumTxData::EthEventsVext(ext)
                 .sign(&protocol_key, shell.chain_id.clone());
             (tx, TestBpAction::CheckNonceIncremented)
         });
@@ -1677,7 +1694,7 @@ mod test_finalize_block {
     fn test_bp_roots_protocol_tx() {
         test_bp(|shell: &mut TestShell| {
             let vext = shell.extend_vote_with_bp_roots().expect("Test failed");
-            let tx = ProtocolTxType::BridgePoolVext(vext).sign(
+            let tx = EthereumTxData::BridgePoolVext(vext).sign(
                 shell.mode.get_protocol_key().expect("Test failed"),
                 shell.chain_id.clone(),
             );
@@ -2206,7 +2223,10 @@ mod test_finalize_block {
     #[test]
     fn test_ledger_slashing() -> storage_api::Result<()> {
         let num_validators = 7_u64;
-        let (mut shell, _) = setup(num_validators);
+        let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
+            last_height: 0,
+            num_validators,
+        });
         let mut params = read_pos_params(&shell.wl_storage).unwrap();
         params.unbonding_len = 4;
         write_pos_params(&mut shell.wl_storage, params.clone())?;
@@ -2578,7 +2598,10 @@ mod test_finalize_block {
     ) -> storage_api::Result<()> {
         // Setup the network with pipeline_len = 2, unbonding_len = 4
         // let num_validators = 8_u64;
-        let (mut shell, _) = setup(num_validators);
+        let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
+            last_height: 0,
+            num_validators,
+        });
         let mut params = read_pos_params(&shell.wl_storage).unwrap();
         params.unbonding_len = 4;
         params.max_validator_slots = 4;
@@ -3436,7 +3459,7 @@ mod test_finalize_block {
             .wl_storage
             .write(&proposal_execution_key, ())
             .expect("Test failed.");
-        let tx = Tx::new(vec![], None, shell.chain_id.clone(), None);
+        let tx = Tx::new(TxType::Raw);
         let new_min_confirmations = MinimumConfirmations::from(unsafe {
             NonZeroU64::new_unchecked(42)
         });
@@ -3460,19 +3483,18 @@ mod test_finalize_block {
         );
         let parameters = ParametersVp { ctx };
         let result = parameters
-            .validate_tx(
-                0u64.try_to_vec().expect("Test failed").as_slice(),
-                &keys_changed,
-                &verifiers,
-            )
+            .validate_tx(&tx, &keys_changed, &verifiers)
             .expect("Test failed");
         assert!(result);
 
         // we advance forward to the next epoch
         let mut req = FinalizeBlock::default();
         req.header.time = namada::types::time::DateTimeUtc::now();
-        shell.wl_storage.storage.last_height =
-            shell.wl_storage.pos_queries().get_current_decision_height() + 11;
+        let current_decision_height =
+            shell.wl_storage.pos_queries().get_current_decision_height();
+        if let Some(b) = shell.wl_storage.storage.last_block.as_mut() {
+            b.height = current_decision_height + 11;
+        }
         shell.finalize_block(req).expect("Test failed");
         shell.commit();
         let _ = control_receiver.recv().await.expect("Test failed");

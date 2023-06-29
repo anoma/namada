@@ -134,7 +134,6 @@ pub async fn tx_signer<C, U>(
 ) -> Result<common::SecretKey, Error>
 where
     C: crate::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
     U: WalletUtils,
 {
     // Override the default signing key source if possible
@@ -195,7 +194,6 @@ pub async fn sign_tx<C, U>(
 ) -> Result<TxBroadcastData, Error>
 where
     C: crate::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
     U: WalletUtils,
 {
     let keypair = tx_signer::<C, U>(client, wallet, args, default).await?;

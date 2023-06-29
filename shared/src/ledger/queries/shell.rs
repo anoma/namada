@@ -86,8 +86,6 @@ where
     use crate::types::transaction::decrypted::DecryptedTx;
     use crate::types::transaction::TxType;
 
-    let mut gas_meter = BlockGasMeter::default();
-    let mut write_log = WriteLog::default();
     let mut tx = Tx::try_from(&request.data[..]).into_storage_result()?;
     tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
         #[cfg(not(feature = "mainnet"))]

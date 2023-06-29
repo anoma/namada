@@ -44,7 +44,7 @@ use crate::types::hash::{Error as HashError, Hash};
 use crate::types::internal::TxQueue;
 use crate::types::storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
-    Header, Key, KeySeg, TxIndex, BLOCK_HASH_LENGTH,
+    Header, Key, KeySeg, MembershipProof, TxIndex, BLOCK_HASH_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
 use crate::types::{ethereum_structs, token};

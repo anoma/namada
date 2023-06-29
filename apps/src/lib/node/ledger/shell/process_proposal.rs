@@ -4,12 +4,13 @@
 use data_encoding::HEXUPPER;
 use namada::core::hints;
 use namada::core::ledger::storage::WlStorage;
-use namada::core::types::hash::Hash;
 use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::TempWlStorage;
 use namada::types::internal::TxInQueue;
-use namada::types::transaction::protocol::ProtocolTxType;
+use namada::types::transaction::protocol::{
+    ethereum_tx_data_variants, ProtocolTxType,
+};
 #[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
 
@@ -331,7 +332,7 @@ where
             let epoch = self
                 .wl_storage
                 .pos_queries()
-                .get_epoch(self.wl_storage.storage.last_height);
+                .get_epoch(self.wl_storage.storage.get_last_block_height());
             u64::from(
                 self.wl_storage.pos_queries().get_total_voting_power(epoch),
             )
@@ -503,44 +504,65 @@ where
                     }
                 }
                 match protocol_tx.tx {
-                    ProtocolTxType::EthEventsVext(ext) => self
-                        .validate_eth_events_vext_and_get_it_back(
+                    ProtocolTxType::EthEventsVext => {
+                        let ext =
+                            ethereum_tx_data_variants::EthEventsVext::try_from(
+                                &tx,
+                            )
+                            .unwrap();
+                        self.validate_eth_events_vext_and_get_it_back(
                             ext,
-                            self.wl_storage.storage.last_height,
+                            self.wl_storage.storage.get_last_block_height(),
                         )
                         .map(|_| TxResult {
                             code: ErrorCodes::Ok.into(),
                             info: "Process Proposal accepted this transaction"
                                 .into(),
                         })
-                        .unwrap_or_else(|err| TxResult {
-                            code: ErrorCodes::InvalidVoteExtension.into(),
-                            info: format!(
-                                "Process proposal rejected this proposal \
-                                 because one of the included Ethereum events \
-                                 vote extensions was invalid: {err}"
-                            ),
-                        }),
-                    ProtocolTxType::BridgePoolVext(ext) => self
-                        .validate_bp_roots_vext_and_get_it_back(
+                        .unwrap_or_else(|err| {
+                            TxResult {
+                                code: ErrorCodes::InvalidVoteExtension.into(),
+                                info: format!(
+                                    "Process proposal rejected this proposal \
+                                     because one of the included Ethereum \
+                                     events vote extensions was invalid: {err}"
+                                ),
+                            }
+                        })
+                    }
+                    ProtocolTxType::BridgePoolVext => {
+                        let ext =
+                            ethereum_tx_data_variants::BridgePoolVext::try_from(
+                                &tx,
+                            )
+                            .unwrap();
+                        self.validate_bp_roots_vext_and_get_it_back(
                             ext,
-                            self.wl_storage.storage.last_height,
+                            self.wl_storage.storage.get_last_block_height(),
                         )
                         .map(|_| TxResult {
                             code: ErrorCodes::Ok.into(),
                             info: "Process Proposal accepted this transaction"
                                 .into(),
                         })
-                        .unwrap_or_else(|err| TxResult {
-                            code: ErrorCodes::InvalidVoteExtension.into(),
-                            info: format!(
-                                "Process proposal rejected this proposal \
-                                 because one of the included Bridge pool \
-                                 root's vote extensions was invalid: {err}"
-                            ),
-                        }),
-                    ProtocolTxType::ValSetUpdateVext(ext) => self
-                        .validate_valset_upd_vext_and_get_it_back(
+                        .unwrap_or_else(|err| {
+                            TxResult {
+                                code: ErrorCodes::InvalidVoteExtension.into(),
+                                info: format!(
+                                    "Process proposal rejected this proposal \
+                                     because one of the included Bridge pool \
+                                     root's vote extensions was invalid: {err}"
+                                ),
+                            }
+                        })
+                    }
+                    ProtocolTxType::ValSetUpdateVext => {
+                        let ext =
+                            ethereum_tx_data_variants::ValSetUpdateVext::try_from(
+                                &tx,
+                            )
+                            .unwrap();
+                        self.validate_valset_upd_vext_and_get_it_back(
                             ext,
                             // n.b. only accept validator set updates issued at
                             // the current epoch (signing off on the validators
@@ -552,21 +574,31 @@ where
                             info: "Process Proposal accepted this transaction"
                                 .into(),
                         })
-                        .unwrap_or_else(|err| TxResult {
-                            code: ErrorCodes::InvalidVoteExtension.into(),
-                            info: format!(
-                                "Process proposal rejected this proposal \
-                                 because one of the included validator set \
-                                 update vote extensions was invalid: {err}"
-                            ),
-                        }),
-                    ProtocolTxType::EthereumEvents(digest) => {
+                        .unwrap_or_else(|err| {
+                            TxResult {
+                                code: ErrorCodes::InvalidVoteExtension.into(),
+                                info: format!(
+                                    "Process proposal rejected this proposal \
+                                     because one of the included validator \
+                                     set update vote extensions was invalid: \
+                                     {err}"
+                                ),
+                            }
+                        })
+                    }
+                    ProtocolTxType::EthereumEvents => {
+                        let digest =
+                            ethereum_tx_data_variants::EthereumEvents::try_from(
+                                &tx,
+                            )
+                            .unwrap();
                         #[cfg(feature = "abcipp")]
                         {
                             metadata.digests.eth_ev_digest_num += 1;
                         }
-                        let extensions = digest
-                            .decompress(self.wl_storage.storage.last_height);
+                        let extensions = digest.decompress(
+                            self.wl_storage.storage.get_last_block_height(),
+                        );
                         let valid_extensions = self
                             .validate_eth_events_vext_list(extensions)
                             .map(|maybe_ext| {
@@ -575,7 +607,12 @@ where
 
                         self.validate_vexts_in_proposal(valid_extensions)
                     }
-                    ProtocolTxType::BridgePool(digest) => {
+                    ProtocolTxType::BridgePool => {
+                        let digest =
+                            ethereum_tx_data_variants::BridgePool::try_from(
+                                &tx,
+                            )
+                            .unwrap();
                         #[cfg(feature = "abcipp")]
                         {
                             metadata.digests.bridge_pool_roots += 1;
@@ -587,7 +624,12 @@ where
                             });
                         self.validate_vexts_in_proposal(valid_extensions)
                     }
-                    ProtocolTxType::ValidatorSetUpdate(digest) => {
+                    ProtocolTxType::ValidatorSetUpdate => {
+                        let digest =
+                            ethereum_tx_data_variants::ValidatorSetUpdate::try_from(
+                                &tx,
+                            )
+                            .unwrap();
                         if !self
                             .wl_storage
                             .ethbridge_queries()
@@ -834,7 +876,7 @@ where
     fn has_proper_eth_events_num(&self, meta: &ValidationMeta) -> bool {
         if self.wl_storage.ethbridge_queries().is_bridge_active() {
             meta.digests.eth_ev_digest_num
-                == usize::from(self.wl_storage.storage.last_height.0 != 0)
+                == usize::from(self.wl_storage.storage.last_block.is_some())
         } else {
             meta.digests.eth_ev_digest_num == 0
         }
@@ -846,7 +888,7 @@ where
     fn has_proper_bp_roots_num(&self, meta: &ValidationMeta) -> bool {
         if self.wl_storage.ethbridge_queries().is_bridge_active() {
             meta.digests.bridge_pool_roots
-                == usize::from(self.wl_storage.storage.last_height.0 != 0)
+                == usize::from(self.wl_storage.storage.last_block.is_some())
         } else {
             meta.digests.bridge_pool_roots == 0
         }
@@ -868,7 +910,7 @@ where
                 {
                     meta.digests.valset_upd_digest_num
                         == usize::from(
-                            self.wl_storage.storage.last_height.0 != 0,
+                            self.wl_storage.storage.last_block.is_some(),
                         )
                 } else {
                     true
@@ -896,11 +938,9 @@ mod test_process_proposal {
 
     #[cfg(feature = "abcipp")]
     use assert_matches::assert_matches;
-    use borsh::BorshDeserialize;
     use namada::ledger::parameters::storage::get_wrapper_tx_fees_key;
     use namada::proto::{
         Code, Data, Section, SignableEthMessage, Signature, Signed,
-        SignedTxData,
     };
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::hash::Hash;
@@ -909,13 +949,8 @@ mod test_process_proposal {
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
     use namada::types::token::Amount;
-    use namada::types::transaction::encrypted::EncryptedTx;
-    use namada::types::transaction::protocol::{
-        ProtocolTx, ProtocolTxType, ProtocolTxType,
-    };
-    use namada::types::transaction::{
-        EncryptionKey, Fee, Fee, WrapperTx, WrapperTx, MIN_FEE, MIN_FEE,
-    };
+    use namada::types::transaction::protocol::EthereumTxData;
+    use namada::types::transaction::{Fee, WrapperTx, MIN_FEE};
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::bridge_pool_roots::MultiSignedVext;
     #[cfg(feature = "abcipp")]
@@ -941,14 +976,17 @@ mod test_process_proposal {
             .expect("Test failed")
             .clone();
         let ext = ethereum_events::Vext::empty(
-            shell.wl_storage.storage.last_height,
+            shell.wl_storage.storage.get_last_block_height(),
             addr.clone(),
         )
         .sign(protocol_key);
-        ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
+        EthereumTxData::EthereumEvents(ethereum_events::VextDigest {
             signatures: {
                 let mut s = HashMap::new();
-                s.insert((addr, shell.wl_storage.storage.last_height), ext.sig);
+                s.insert(
+                    (addr, shell.wl_storage.storage.get_last_block_height()),
+                    ext.sig,
+                );
                 s
             },
             events: vec![],
@@ -965,7 +1003,7 @@ mod test_process_proposal {
         let tx = shell
             .compress_bridge_pool_roots(vec![bp_root])
             .expect("Test failed");
-        ProtocolTxType::BridgePool(tx)
+        EthereumTxData::BridgePool(tx)
             .sign(
                 shell.mode.get_protocol_key().expect("Test failed"),
                 shell.chain_id.clone(),
@@ -997,7 +1035,10 @@ mod test_process_proposal {
                 signatures: {
                     let mut s = HashMap::new();
                     s.insert(
-                        (validator_addr, shell.wl_storage.storage.last_height),
+                        (
+                            validator_addr,
+                            shell.wl_storage.storage.get_last_block_height(),
+                        ),
                         signed_vote_extension.sig,
                     );
                     s
@@ -1005,7 +1046,7 @@ mod test_process_proposal {
                 events: vec![],
             }
         };
-        let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
+        let tx = EthereumTxData::EthereumEvents(vote_extension_digest)
             .sign(&protocol_key, shell.chain_id.clone())
             .to_bytes();
         let request = ProcessProposal {
@@ -1025,7 +1066,7 @@ mod test_process_proposal {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let vext = shell.extend_vote_with_bp_roots().expect("Test failed");
         let tx =
-            ProtocolTxType::BridgePool(MultiSignedVext(HashSet::from([vext])))
+            EthereumTxData::BridgePool(MultiSignedVext(HashSet::from([vext])))
                 .sign(
                     shell.mode.get_protocol_key().expect("Test failed."),
                     shell.chain_id.clone(),
@@ -1046,7 +1087,7 @@ mod test_process_proposal {
         vote_extension_digest: ethereum_events::VextDigest,
         protocol_key: common::SecretKey,
     ) {
-        let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
+        let tx = EthereumTxData::EthereumEvents(vote_extension_digest)
             .sign(&protocol_key, shell.chain_id.clone())
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
@@ -1081,11 +1122,11 @@ mod test_process_proposal {
         };
         let ext = ethereum_events::Vext {
             validator_addr: addr.clone(),
-            block_height: shell.wl_storage.storage.last_height,
+            block_height: shell.wl_storage.storage.get_last_block_height(),
             ethereum_events: vec![event],
         }
         .sign(protocol_key);
-        let tx = ProtocolTxType::EthEventsVext(ext)
+        let tx = EthereumTxData::EthEventsVext(ext)
             .sign(protocol_key, shell.chain_id.clone())
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
@@ -1123,7 +1164,7 @@ mod test_process_proposal {
     fn check_rejected_bp_roots_bridge_inactive() {
         let (mut shell, _a, _b, _c) = test_utils::setup_at_height(3);
         shell.wl_storage.storage.block.height =
-            shell.wl_storage.storage.last_height;
+            shell.wl_storage.storage.get_last_block_height();
         shell.commit();
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
         let addr = shell.mode.get_validator_address().expect("Test failed");
@@ -1134,12 +1175,12 @@ mod test_process_proposal {
         )
         .sig;
         let vote_ext = bridge_pool_roots::Vext {
-            block_height: shell.wl_storage.storage.last_height,
+            block_height: shell.wl_storage.storage.get_last_block_height(),
             validator_addr: addr.clone(),
             sig,
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
-        let tx = ProtocolTxType::BridgePoolVext(vote_ext)
+        let tx = EthereumTxData::BridgePoolVext(vote_ext)
             .sign(protocol_key, shell.chain_id.clone())
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
@@ -1179,7 +1220,7 @@ mod test_process_proposal {
     fn check_rejected_vext_bridge_inactive() {
         let (mut shell, _a, _b, _c) = test_utils::setup_at_height(3);
         shell.wl_storage.storage.block.height =
-            shell.wl_storage.storage.last_height;
+            shell.wl_storage.storage.get_last_block_height();
         shell.commit();
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
         let addr = shell.mode.get_validator_address().expect("Test failed");
@@ -1190,13 +1231,13 @@ mod test_process_proposal {
         )
         .sig;
         let vote_ext = bridge_pool_roots::Vext {
-            block_height: shell.wl_storage.storage.last_height,
+            block_height: shell.wl_storage.storage.get_last_block_height(),
             validator_addr: addr.clone(),
             sig,
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         let mut txs = vec![
-            ProtocolTxType::BridgePool(vote_ext.into())
+            EthereumTxData::BridgePool(vote_ext.into())
                 .sign(protocol_key, shell.chain_id.clone())
                 .to_bytes(),
         ];
@@ -1208,7 +1249,7 @@ mod test_process_proposal {
         };
         let ext = ethereum_events::Vext {
             validator_addr: addr.clone(),
-            block_height: shell.wl_storage.storage.last_height,
+            block_height: shell.wl_storage.storage.get_last_block_height(),
             ethereum_events: vec![event.clone()],
         }
         .sign(protocol_key);
@@ -1216,7 +1257,10 @@ mod test_process_proposal {
             signatures: {
                 let mut s = HashMap::new();
                 s.insert(
-                    (addr.clone(), shell.wl_storage.storage.last_height),
+                    (
+                        addr.clone(),
+                        shell.wl_storage.storage.get_last_block_height(),
+                    ),
                     ext.sig,
                 );
                 s
@@ -1227,14 +1271,14 @@ mod test_process_proposal {
                     let mut s = BTreeSet::new();
                     s.insert((
                         addr.clone(),
-                        shell.wl_storage.storage.last_height,
+                        shell.wl_storage.storage.get_last_block_height(),
                     ));
                     s
                 },
             }],
         };
         txs.push(
-            ProtocolTxType::EthereumEvents(vote_extension_digest)
+            EthereumTxData::EthereumEvents(vote_extension_digest)
                 .sign(protocol_key, shell.chain_id.clone())
                 .to_bytes(),
         );
@@ -1274,7 +1318,7 @@ mod test_process_proposal {
         vote_extension: ethereum_events::SignedVext,
         protocol_key: common::SecretKey,
     ) {
-        let tx = ProtocolTxType::EthEventsVext(vote_extension)
+        let tx = EthereumTxData::EthEventsVext(vote_extension)
             .sign(&protocol_key, shell.chain_id.clone())
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
@@ -1329,7 +1373,10 @@ mod test_process_proposal {
                 signatures: {
                     let mut s = HashMap::new();
                     s.insert(
-                        (addr.clone(), shell.wl_storage.storage.last_height),
+                        (
+                            addr.clone(),
+                            shell.wl_storage.storage.get_last_block_height(),
+                        ),
                         ext.sig,
                     );
                     s
@@ -1338,7 +1385,10 @@ mod test_process_proposal {
                     event,
                     signers: {
                         let mut s = BTreeSet::new();
-                        s.insert((addr, shell.wl_storage.storage.last_height));
+                        s.insert((
+                            addr,
+                            shell.wl_storage.storage.get_last_block_height(),
+                        ));
                         s
                     },
                 }],
@@ -1544,6 +1594,9 @@ mod test_process_proposal {
             wrapper.fee.amount = 0.into();
         } else {
             panic!("Test failed")
+        };
+        let request = ProcessProposal {
+            txs: vec![new_tx.to_bytes()],
         };
 
         match shell.process_proposal(request) {
@@ -2300,21 +2353,20 @@ mod test_process_proposal {
         wrapper.header.chain_id = wrong_chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        let mut protocol_tx = wrapper.clone();
         wrapper.add_section(Section::Signature(Signature::new(
             &wrapper.header_hash(),
             &keypair,
         )));
         wrapper.encrypt(&Default::default());
 
-        protocol_tx.update_header(TxType::Protocol(Box::new(ProtocolTx {
-            pk: keypair.ref_to(),
-            tx: ProtocolTxType::EthereumStateUpdate,
-        })));
-        protocol_tx.add_section(Section::Signature(Signature::new(
-            &protocol_tx.header_hash(),
-            &keypair,
-        )));
+        let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
+        let protocol_tx = EthereumTxData::EthEventsVext({
+            let bertha_key = wallet::defaults::bertha_keypair();
+            let bertha_addr = wallet::defaults::bertha_address();
+            ethereum_events::Vext::empty(1234_u64.into(), bertha_addr)
+                .sign(&bertha_key)
+        })
+        .sign(protocol_key, wrong_chain_id.clone());
 
         // Run validation
         let request = ProcessProposal {
@@ -2491,6 +2543,7 @@ mod test_process_proposal {
         };
         match shell.process_proposal(request) {
             Ok(response) => {
+                assert_eq!(response.len(), 1);
                 assert_eq!(
                     response[0].result.code,
                     u32::from(ErrorCodes::ExpiredDecryptedTx)
@@ -2509,45 +2562,26 @@ mod test_process_proposal {
     fn test_include_only_protocol_txs() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(1u64);
         let keypair = gen_keypair();
-        let tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some(b"transaction data".to_vec()),
-            shell.chain_id.clone(),
-            None,
-        );
-        let wrapper = WrapperTx::new(
+        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 1234.into(),
+                amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
             0.into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        )
-        .sign(&keypair, shell.chain_id.clone(), None)
-        .expect("Test failed")
-        .to_bytes();
+        ))));
+        wrapper.header.chain_id = shell.chain_id.clone();
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper.encrypt(&Default::default());
+        let wrapper = wrapper.to_bytes();
         for height in [1u64, 2] {
-            shell.wl_storage.storage.last_height = height.into();
-            #[cfg(feature = "abcipp")]
-            let response = {
-                let request = ProcessProposal {
-                    txs: vec![wrapper.clone(), get_empty_eth_ev_digest(&shell)],
-                };
-                if let Err(TestError::RejectProposal(mut resp)) =
-                    shell.process_proposal(request)
-                {
-                    assert_eq!(resp.len(), 2);
-                    resp.remove(0)
-                } else {
-                    panic!("Test failed")
-                }
-            };
-            #[cfg(not(feature = "abcipp"))]
+            if let Some(b) = shell.wl_storage.storage.last_block.as_mut() {
+                b.height = height.into();
+            }
             let response = {
                 let request = ProcessProposal {
                     txs: vec![wrapper.clone()],

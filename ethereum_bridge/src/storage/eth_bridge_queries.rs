@@ -193,7 +193,7 @@ where
                 .read_subspace_val_with_height(
                     &get_nonce_key(),
                     height,
-                    self.wl_storage.storage.last_height,
+                    self.wl_storage.storage.get_last_block_height(),
                 )
                 .expect("Reading signed Bridge pool nonce shouldn't fail.")
                 .expect("Reading signed Bridge pool nonce shouldn't fail."),

@@ -323,7 +323,7 @@ where
         vote_extensions.into_iter().map(|vote_extension| {
             self.validate_eth_events_vext_and_get_it_back(
                 vote_extension,
-                self.wl_storage.storage.last_height,
+                self.wl_storage.storage.get_last_block_height(),
             )
         })
     }
@@ -353,7 +353,8 @@ where
         vote_extensions: Vec<Signed<ethereum_events::Vext>>,
     ) -> Option<ethereum_events::VextDigest> {
         #[cfg(not(feature = "abcipp"))]
-        if self.wl_storage.storage.last_height == BlockHeight(0) {
+        #[allow(clippy::question_mark)]
+        if self.wl_storage.storage.last_block.is_none() {
             return None;
         }
 
@@ -361,7 +362,7 @@ where
         let vexts_epoch = self
             .wl_storage
             .pos_queries()
-            .get_epoch(self.wl_storage.storage.last_height)
+            .get_epoch(self.wl_storage.storage.get_last_block_height())
             .expect(
                 "The epoch of the last block height should always be known",
             );
@@ -769,7 +770,10 @@ mod test_vote_extensions {
                     .sig;
                     Some(
                         bridge_pool_roots::Vext {
-                            block_height: shell.wl_storage.storage.last_height,
+                            block_height: shell
+                                .wl_storage
+                                .storage
+                                .get_last_block_height(),
                             validator_addr: address,
                             sig,
                         }
@@ -901,7 +905,7 @@ mod test_vote_extensions {
                 valid_transfers_map: vec![true],
                 relayer: gen_established_address(),
             }],
-            block_height: shell.wl_storage.storage.last_height,
+            block_height: shell.wl_storage.storage.get_last_block_height(),
             validator_addr: address.clone(),
         };
 
@@ -924,7 +928,10 @@ mod test_vote_extensions {
                 )
                 .sig;
                 bridge_pool_roots::Vext {
-                    block_height: shell.wl_storage.storage.last_height,
+                    block_height: shell
+                        .wl_storage
+                        .storage
+                        .get_last_block_height(),
                     validator_addr: address.clone(),
                     sig,
                 }
@@ -949,12 +956,13 @@ mod test_vote_extensions {
             );
         }
 
-        ethereum_events.block_height = shell.wl_storage.storage.last_height + 1;
+        ethereum_events.block_height =
+            shell.wl_storage.storage.get_last_block_height() + 1;
         let signed_vext = ethereum_events
             .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(!shell.validate_eth_events_vext(
             signed_vext,
-            shell.wl_storage.storage.last_height
+            shell.wl_storage.storage.get_last_block_height()
         ))
     }
 
@@ -979,7 +987,7 @@ mod test_vote_extensions {
                 valid_transfers_map: vec![true],
                 relayer: gen_established_address(),
             }],
-            block_height: shell.wl_storage.storage.last_height,
+            block_height: shell.wl_storage.storage.get_last_block_height(),
             validator_addr: address.clone(),
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
@@ -998,7 +1006,7 @@ mod test_vote_extensions {
         );
         assert!(!shell.validate_eth_events_vext(
             vote_ext,
-            shell.wl_storage.storage.last_height
+            shell.wl_storage.storage.get_last_block_height()
         ))
     }
 }

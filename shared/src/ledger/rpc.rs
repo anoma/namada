@@ -47,7 +47,6 @@ pub async fn query_tx_status<C>(
 ) -> Halt<Event>
 where
     C: crate::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
 {
     time::Sleep {
         strategy: time::LinearBackoff {

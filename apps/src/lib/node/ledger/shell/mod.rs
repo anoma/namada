@@ -46,7 +46,7 @@ use namada::types::ethereum_events::EthereumEvent;
 use namada::types::internal::TxInQueue;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
-use namada::types::time::{DateTimeUtc, TimeZone, Utc};
+use namada::types::time::DateTimeUtc;
 use namada::types::token::{self};
 #[cfg(not(feature = "mainnet"))]
 use namada::types::transaction::MIN_FEE;
@@ -1008,9 +1008,10 @@ where
         tx_bytes: &[u8],
         r#_type: MempoolTxType,
     ) -> response::CheckTx {
-        use namada::types::transaction::protocol::ProtocolTx;
         #[cfg(not(feature = "abcipp"))]
-        use namada::types::transaction::protocol::ProtocolTxType;
+        use namada::types::transaction::protocol::{
+            ethereum_tx_data_variants, ProtocolTxType,
+        };
 
         let mut response = response::CheckTx::default();
 
@@ -1063,78 +1064,90 @@ where
         };
 
         match tx_type.tx_type {
-            #[cfg(not(feature = "abcipp"))]
-            TxType::Protocol(ProtocolTx {
-                tx: ProtocolTxType::EthEventsVext(ext),
-                ..
-            }) => {
-                if let Err(err) = self.validate_eth_events_vext_and_get_it_back(
-                    ext,
-                    self.wl_storage.storage.last_height,
-                ) {
-                    response.code = ErrorCodes::InvalidVoteExtension.into();
-                    response.log = format!(
-                        "{INVALID_MSG}: Invalid Ethereum events vote \
-                         extension: {err}",
-                    );
-                } else {
-                    response.log = String::from(VALID_MSG);
+            TxType::Protocol(protocol_tx) => match protocol_tx.tx {
+                #[cfg(not(feature = "abcipp"))]
+                ProtocolTxType::EthEventsVext => {
+                    let ext =
+                        ethereum_tx_data_variants::EthEventsVext::try_from(&tx)
+                            .unwrap();
+                    if let Err(err) = self
+                        .validate_eth_events_vext_and_get_it_back(
+                            ext,
+                            self.wl_storage.storage.get_last_block_height(),
+                        )
+                    {
+                        response.code = ErrorCodes::InvalidVoteExtension.into();
+                        response.log = format!(
+                            "{INVALID_MSG}: Invalid Ethereum events vote \
+                             extension: {err}",
+                        );
+                    } else {
+                        response.log = String::from(VALID_MSG);
+                    }
                 }
-            }
-            #[cfg(not(feature = "abcipp"))]
-            TxType::Protocol(ProtocolTx {
-                tx: ProtocolTxType::BridgePoolVext(ext),
-                ..
-            }) => {
-                if let Err(err) = self.validate_bp_roots_vext_and_get_it_back(
-                    ext,
-                    self.wl_storage.storage.last_height,
-                ) {
-                    response.code = ErrorCodes::InvalidVoteExtension.into();
-                    response.log = format!(
-                        "{INVALID_MSG}: Invalid Brige pool roots vote \
-                         extension: {err}",
-                    );
-                } else {
-                    response.log = String::from(VALID_MSG);
+                #[cfg(not(feature = "abcipp"))]
+                ProtocolTxType::BridgePoolVext => {
+                    let ext =
+                        ethereum_tx_data_variants::BridgePoolVext::try_from(
+                            &tx,
+                        )
+                        .unwrap();
+                    if let Err(err) = self
+                        .validate_bp_roots_vext_and_get_it_back(
+                            ext,
+                            self.wl_storage.storage.get_last_block_height(),
+                        )
+                    {
+                        response.code = ErrorCodes::InvalidVoteExtension.into();
+                        response.log = format!(
+                            "{INVALID_MSG}: Invalid Brige pool roots vote \
+                             extension: {err}",
+                        );
+                    } else {
+                        response.log = String::from(VALID_MSG);
+                    }
                 }
-            }
-            #[cfg(not(feature = "abcipp"))]
-            TxType::Protocol(ProtocolTx {
-                tx: ProtocolTxType::ValSetUpdateVext(ext),
-                ..
-            }) => {
-                if let Err(err) = self.validate_valset_upd_vext_and_get_it_back(
-                    ext,
-                    // n.b. only accept validator set updates
-                    // issued at the last committed epoch
-                    // (signing off on the validators of the
-                    // next epoch). at the second height
-                    // within an epoch, the new epoch is
-                    // committed to storage, so `last_epoch`
-                    // reflects the current value of the
-                    // epoch.
-                    self.wl_storage.storage.last_epoch,
-                ) {
-                    response.code = ErrorCodes::InvalidVoteExtension.into();
-                    response.log = format!(
-                        "{INVALID_MSG}: Invalid validator set update vote \
-                         extension: {err}",
-                    );
-                } else {
-                    response.log = String::from(VALID_MSG);
-                    // validator set update votes should be decided
-                    // as soon as possible
-                    response.priority = i64::MAX;
+                #[cfg(not(feature = "abcipp"))]
+                ProtocolTxType::ValSetUpdateVext => {
+                    let ext =
+                        ethereum_tx_data_variants::ValSetUpdateVext::try_from(
+                            &tx,
+                        )
+                        .unwrap();
+                    if let Err(err) = self
+                        .validate_valset_upd_vext_and_get_it_back(
+                            ext,
+                            // n.b. only accept validator set updates
+                            // issued at the last committed epoch
+                            // (signing off on the validators of the
+                            // next epoch). at the second height
+                            // within an epoch, the new epoch is
+                            // committed to storage, so `last_epoch`
+                            // reflects the current value of the
+                            // epoch.
+                            self.wl_storage.storage.last_epoch,
+                        )
+                    {
+                        response.code = ErrorCodes::InvalidVoteExtension.into();
+                        response.log = format!(
+                            "{INVALID_MSG}: Invalid validator set update vote \
+                             extension: {err}",
+                        );
+                    } else {
+                        response.log = String::from(VALID_MSG);
+                        // validator set update votes should be decided
+                        // as soon as possible
+                        response.priority = i64::MAX;
+                    }
                 }
-            }
-            TxType::Protocol(ProtocolTx { .. }) => {
-                response.code = ErrorCodes::InvalidTx.into();
-                response.log = format!(
-                    "{INVALID_MSG}: The given protocol tx cannot be added to \
-                     the mempool"
-                );
-            }
+                _ => {
+                    response.code = ErrorCodes::InvalidTx.into();
+                    response.log = format!(
+                        "{INVALID_MSG}: The given protocol tx cannot be added \
+                         to the mempool"
+                    );
+                }
+            },
             TxType::Wrapper(wrapper) => {
                 // Replay protection check
                 let mut inner_tx = tx;
@@ -1151,9 +1164,8 @@ where
                 {
                     response.code = ErrorCodes::ReplayTx.into();
                     response.log = format!(
-                        "{INVALID_MSG}: Inner transaction hash {} already in \
-                         storage, replay attempt",
-                        wrapper.tx_hash
+                        "{INVALID_MSG}: Inner transaction hash \
+                         {inner_tx_hash} already in storage, replay attempt",
                     );
                     return response;
                 }
@@ -1206,7 +1218,7 @@ where
                     return response;
                 }
             }
-            TxType::Raw(_) => {
+            TxType::Raw => {
                 response.code = ErrorCodes::InvalidTx.into();
                 response.log = format!(
                     "{INVALID_MSG}: Raw transactions cannot be accepted into \
@@ -1345,7 +1357,9 @@ mod test_utils {
 
     use namada::core::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
     use namada::ledger::storage::mockdb::MockDB;
-    use namada::ledger::storage::{update_allowed_conversions, Sha256Hasher};
+    use namada::ledger::storage::{
+        update_allowed_conversions, LastBlock, Sha256Hasher,
+    };
     use namada::ledger::storage_api::StorageWrite;
     use namada::proto::{Code, Data};
     use namada::types::address;
@@ -1356,9 +1370,7 @@ mod test_utils {
     use namada::types::key::*;
     use namada::types::storage::{BlockHash, Epoch, Header};
     use namada::types::time::DateTimeUtc;
-    use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::transaction::{Fee, TxType, WrapperTx};
-    use namada::types::vote_extensions::ethereum_events;
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
@@ -1371,7 +1383,6 @@ mod test_utils {
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
-    use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
     use crate::node::ledger::storage::{PersistentDB, PersistentStorageHasher};
 
     #[derive(Error, Debug)]
@@ -1461,27 +1472,6 @@ mod test_utils {
         hasher.finalize(&mut output);
 
         KeccakHash(output)
-    }
-
-    /// Extract an [`ethereum_events::SignedVext`], from a set of
-    /// serialized [`TxBytes`].
-    #[allow(dead_code)]
-    pub fn extract_eth_events_vext(
-        tx_bytes: TxBytes,
-    ) -> ethereum_events::SignedVext {
-        let got = Tx::try_from(&tx_bytes[..]).unwrap();
-        let got_signed_tx =
-            SignedTxData::try_from_slice(&got.data.unwrap()[..]).unwrap();
-        let protocol_tx =
-            TxType::try_from_slice(&got_signed_tx.data.unwrap()[..]).unwrap();
-        let protocol_tx = match protocol_tx {
-            TxType::Protocol(protocol_tx) => protocol_tx.tx,
-            _ => panic!("Test failed"),
-        };
-        match protocol_tx {
-            ProtocolTxType::EthEventsVext(ext) => ext,
-            _ => panic!("Test failed"),
-        }
     }
 
     /// A wrapper around the shell that implements
@@ -1637,7 +1627,7 @@ mod test_utils {
         /// Start a counter for the next epoch in `num_blocks`.
         pub fn start_new_epoch_in(&mut self, num_blocks: u64) {
             self.wl_storage.storage.next_epoch_min_start_height =
-                self.wl_storage.storage.last_height + num_blocks;
+                self.wl_storage.storage.get_last_block_height() + num_blocks;
             self.wl_storage.storage.next_epoch_min_start_time =
                 DateTimeUtc::now();
         }
@@ -1655,8 +1645,13 @@ mod test_utils {
         pub fn start_new_epoch(&mut self) -> Epoch {
             self.start_new_epoch_in(1);
 
-            self.wl_storage.storage.last_height =
+            let next_epoch_min_start_height =
                 self.wl_storage.storage.next_epoch_min_start_height;
+            if let Some(LastBlock { height, .. }) =
+                self.wl_storage.storage.last_block.as_mut()
+            {
+                *height = next_epoch_min_start_height;
+            }
             self.finalize_and_commit();
 
             for _i in 0..EPOCH_SWITCH_BLOCKS_DELAY {
@@ -1896,7 +1891,7 @@ mod abciplus_mempool_tests {
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::key::RefTo;
     use namada::types::storage::BlockHeight;
-    use namada::types::transaction::protocol::ProtocolTxType;
+    use namada::types::transaction::protocol::EthereumTxData;
     use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
 
     use super::*;
@@ -1921,10 +1916,10 @@ mod abciplus_mempool_tests {
             transfers: vec![],
             valid_transfers_map: vec![],
         };
-        let eth_vext = ProtocolTxType::EthEventsVext(
+        let eth_vext = EthereumTxData::EthEventsVext(
             ethereum_events::Vext {
                 validator_addr: address.clone(),
-                block_height: shell.wl_storage.storage.last_height,
+                block_height: shell.wl_storage.storage.get_last_block_height(),
                 ethereum_events: vec![ethereum_event],
             }
             .sign(protocol_key),
@@ -1935,9 +1930,9 @@ mod abciplus_mempool_tests {
         let to_sign = test_utils::get_bp_bytes_to_sign();
         let hot_key = shell.mode.get_eth_bridge_keypair().expect("Test failed");
         let sig = Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig;
-        let bp_vext = ProtocolTxType::BridgePoolVext(
+        let bp_vext = EthereumTxData::BridgePoolVext(
             bridge_pool_roots::Vext {
-                block_height: shell.wl_storage.storage.last_height,
+                block_height: shell.wl_storage.storage.get_last_block_height(),
                 validator_addr: address,
                 sig,
             }
@@ -1984,7 +1979,7 @@ mod abciplus_mempool_tests {
             assert!(ext.verify(&protocol_key.ref_to()).is_ok());
             ext
         };
-        let tx = ProtocolTxType::EthEventsVext(ext)
+        let tx = EthereumTxData::EthEventsVext(ext)
             .sign(&protocol_key, shell.chain_id.clone())
             .to_bytes();
         let rsp = shell.mempool_validate(&tx, Default::default());
@@ -2267,60 +2262,5 @@ mod test_mempool_validate {
             MempoolTxType::NewTransaction,
         );
         assert_eq!(result.code, u32::from(ErrorCodes::ExpiredTx));
-    }
-
-    /// Test that the mempool rejects invalid txs.
-    #[test]
-    fn test_mempool_rejects_invalid_tx() {
-        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
-        let non_wrapper_tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some("transaction_data".as_bytes().to_owned()),
-            shell.chain_id.clone(),
-            None,
-        )
-        .to_bytes();
-        let rsp = shell.mempool_validate(&non_wrapper_tx, Default::default());
-        assert!(rsp.code != u32::from(ErrorCodes::Ok));
-    }
-
-    /// Test that if an error is encountered while trying to process a tx,
-    /// it is prohibited from making its way onto the mempool.
-    #[test]
-    fn test_mempool_error_in_processing_tx() {
-        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
-        let keypair = test_utils::gen_keypair();
-        let tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some("transaction_data".as_bytes().to_owned()),
-            shell.chain_id.clone(),
-            None,
-        );
-        // an unsigned wrapper will cause an error in processing
-        let wrapper = Tx::new(
-            "".as_bytes().to_owned(),
-            Some(
-                WrapperTx::new(
-                    Fee {
-                        amount: 0.into(),
-                        token: shell.wl_storage.storage.native_token.clone(),
-                    },
-                    &keypair,
-                    Epoch(0),
-                    0.into(),
-                    tx,
-                    Default::default(),
-                    #[cfg(not(feature = "mainnet"))]
-                    None,
-                )
-                .try_to_vec()
-                .expect("Test failed"),
-            ),
-            shell.chain_id.clone(),
-            None,
-        )
-        .to_bytes();
-        let rsp = shell.mempool_validate(&wrapper, Default::default());
-        assert_eq!(rsp.code, u32::from(ErrorCodes::InvalidSig));
     }
 }

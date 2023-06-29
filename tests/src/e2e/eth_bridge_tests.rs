@@ -4,6 +4,7 @@ use std::num::NonZeroU64;
 use std::ops::ControlFlow;
 use std::str::FromStr;
 
+use expectrl::ControlCode;
 use borsh::{BorshDeserialize, BorshSerialize};
 use color_eyre::eyre::{eyre, Result};
 use namada::eth_bridge::oracle;
@@ -79,7 +80,7 @@ fn run_ledger_with_ethereum_events_endpoint() -> Result<()> {
     )?;
     ledger.exp_string("Namada ledger node started")?;
 
-    ledger.send_control('c')?;
+    ledger.send_control(ControlCode::EndOfText)?;
     ledger.exp_string(
         "Stopping listening for Borsh-serialized Ethereum events",
     )?;
@@ -1214,7 +1215,7 @@ async fn test_submit_validator_set_udpate() -> Result<()> {
 
     // shut down ledger
     let mut ledger = bg_ledger.foreground();
-    ledger.send_control('c')?;
+    ledger.send_control(ControlCode::EndOfText)?;
     ledger.exp_string("Namada ledger node has shut down.")?;
     ledger.exp_eof()?;
     drop(ledger);

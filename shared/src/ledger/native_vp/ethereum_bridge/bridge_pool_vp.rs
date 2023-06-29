@@ -25,7 +25,7 @@ use crate::ledger::native_vp::ethereum_bridge::vp::check_balance_changes;
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
-use crate::proto::SignedTxData;
+use crate::proto::Tx;
 use crate::types::address::{nam, Address, InternalAddress};
 use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::ethereum_events::EthAddress;
@@ -269,29 +269,21 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &[u8],
+        tx: &Tx,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool, Error> {
         tracing::debug!(
-            tx_data_len = tx_data.len(),
             keys_changed_len = keys_changed.len(),
             verifiers_len = _verifiers.len(),
             "Ethereum Bridge Pool VP triggered",
         );
-        let signed: SignedTxData = BorshDeserialize::try_from_slice(tx_data)
-            .map_err(|e| Error(e.into()))?;
-
-        let transfer: PendingTransfer = match signed.data {
-            Some(data) => BorshDeserialize::try_from_slice(data.as_slice())
-                .map_err(|e| Error(e.into()))?,
-            None => {
-                tracing::debug!(
-                    "Rejecting transaction as there was no signed data"
-                );
-                return Ok(false);
-            }
+        let Some(tx_data) = tx.data() else {
+            return Err(eyre!("No transaction data found").into());
         };
+        let transfer: PendingTransfer =
+            BorshDeserialize::try_from_slice(&tx_data[..])
+                .map_err(|e| Error(e.into()))?;
 
         let pending_key = get_pending_key(&transfer);
         // check that transfer is not already in the pool
@@ -372,7 +364,7 @@ where
 mod test_bridge_pool_vp {
     use std::env::temp_dir;
 
-    use borsh::{BorshDeserialize, BorshSerialize};
+    use borsh::BorshSerialize;
     use namada_core::ledger::eth_bridge::storage::bridge_pool::get_signed_root_key;
     use namada_core::types::address;
     use namada_ethereum_bridge::parameters::{
@@ -386,13 +378,13 @@ mod test_bridge_pool_vp {
     use crate::ledger::storage::write_log::WriteLog;
     use crate::ledger::storage::{Storage, WlStorage};
     use crate::ledger::storage_api::StorageWrite;
-    use crate::proto::Tx;
+    use crate::proto::Data;
     use crate::types::address::wnam;
     use crate::types::chain::ChainId;
     use crate::types::eth_bridge_pool::{GasFee, TransferToEthereum};
     use crate::types::hash::Hash;
-    use crate::types::key::{common, ed25519, SecretKey, SigScheme};
     use crate::types::storage::TxIndex;
+    use crate::types::transaction::TxType;
     use crate::vm::wasm::VpCache;
     use crate::vm::WasmCacheRwAccess;
 
@@ -432,18 +424,6 @@ mod test_bridge_pool_vp {
     pub fn established_address_1() -> Address {
         Address::decode("atest1v4ehgw36g56ngwpk8ppnzsf4xqeyvsf3xq6nxde5gseyys3nxgenvvfex5cnyd2rx9zrzwfctgx7sp")
             .expect("The token address decoding shouldn't fail")
-    }
-
-    fn bertha_keypair() -> common::SecretKey {
-        // generated from
-        // [`namada::types::key::ed25519::gen_keypair`]
-        let bytes = [
-            240, 3, 224, 69, 201, 148, 60, 53, 112, 79, 80, 107, 101, 127, 186,
-            6, 176, 162, 113, 224, 62, 8, 183, 187, 124, 234, 244, 251, 92, 36,
-            119, 243,
-        ];
-        let ed_sk = ed25519::SecretKey::try_from_slice(&bytes).unwrap();
-        ed_sk.try_to_sk().unwrap()
     }
 
     /// The bridge pool at the beginning of all tests
@@ -609,7 +589,7 @@ mod test_bridge_pool_vp {
     {
         // setup
         let mut wl_storage = setup_storage();
-        let tx = Tx::new(vec![], None, ChainId::default(), None);
+        let tx = Tx::new(TxType::Raw);
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {
@@ -665,16 +645,10 @@ mod test_bridge_pool_vp {
             ),
         };
 
-        let to_sign = transfer.try_to_vec().expect("Test failed");
-        let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
-        let signed = SignedTxData {
-            data: Some(to_sign),
-            sig,
-        }
-        .try_to_vec()
-        .expect("Test failed");
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_data(Data::new(transfer.try_to_vec().expect("Test failed")));
 
-        let res = vp.validate_tx(&signed, &keys_changed, &verifiers);
+        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         match expect {
             Expect::True => assert!(res.expect("Test failed")),
             Expect::False => assert!(!res.expect("Test failed")),
@@ -954,7 +928,7 @@ mod test_bridge_pool_vp {
     fn test_adding_transfer_twice_fails() {
         // setup
         let mut wl_storage = setup_storage();
-        let tx = Tx::new(vec![], None, ChainId::default(), None);
+        let tx = Tx::new(TxType::Raw);
 
         // the transfer to be added to the pool
         let transfer = initial_pool();
@@ -1009,16 +983,10 @@ mod test_bridge_pool_vp {
             ),
         };
 
-        let to_sign = transfer.try_to_vec().expect("Test failed");
-        let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
-        let signed = SignedTxData {
-            data: Some(to_sign),
-            sig,
-        }
-        .try_to_vec()
-        .expect("Test failed");
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_data(Data::new(transfer.try_to_vec().expect("Test failed")));
 
-        let res = vp.validate_tx(&signed, &keys_changed, &verifiers);
+        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         assert!(!res.expect("Test failed"));
     }
 
@@ -1028,7 +996,7 @@ mod test_bridge_pool_vp {
     fn test_zero_gas_fees_rejected() {
         // setup
         let mut wl_storage = setup_storage();
-        let tx = Tx::new(vec![], None, ChainId::default(), None);
+        let tx = Tx::new(TxType::Raw);
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {
@@ -1075,17 +1043,11 @@ mod test_bridge_pool_vp {
             ),
         };
 
-        let to_sign = transfer.try_to_vec().expect("Test failed");
-        let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
-        let signed = SignedTxData {
-            data: Some(to_sign),
-            sig,
-        }
-        .try_to_vec()
-        .expect("Test failed");
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_data(Data::new(transfer.try_to_vec().expect("Test failed")));
 
         let res = vp
-            .validate_tx(&signed, &keys_changed, &verifiers)
+            .validate_tx(&tx, &keys_changed, &verifiers)
             .expect("Test failed");
         assert!(!res);
     }
@@ -1098,7 +1060,7 @@ mod test_bridge_pool_vp {
         let mut wl_storage = setup_storage();
         let eb_account_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
-        let tx = Tx::new(vec![], None, ChainId::default(), None);
+        let tx = Tx::new(TxType::Raw);
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {
@@ -1167,17 +1129,11 @@ mod test_bridge_pool_vp {
             ),
         };
 
-        let to_sign = transfer.try_to_vec().expect("Test failed");
-        let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
-        let signed = SignedTxData {
-            data: Some(to_sign),
-            sig,
-        }
-        .try_to_vec()
-        .expect("Test failed");
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_data(Data::new(transfer.try_to_vec().expect("Test failed")));
 
         let res = vp
-            .validate_tx(&signed, &keys_changed, &verifiers)
+            .validate_tx(&tx, &keys_changed, &verifiers)
             .expect("Test failed");
         assert!(res);
     }
@@ -1189,7 +1145,7 @@ mod test_bridge_pool_vp {
     fn test_reject_mint_wnam() {
         // setup
         let mut wl_storage = setup_storage();
-        let tx = Tx::new(vec![], None, ChainId::default(), None);
+        let tx = Tx::new(TxType::Raw);
         let eb_account_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
 
@@ -1260,17 +1216,11 @@ mod test_bridge_pool_vp {
             ),
         };
 
-        let to_sign = transfer.try_to_vec().expect("Test failed");
-        let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
-        let signed = SignedTxData {
-            data: Some(to_sign),
-            sig,
-        }
-        .try_to_vec()
-        .expect("Test failed");
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_data(Data::new(transfer.try_to_vec().expect("Test failed")));
 
         let res = vp
-            .validate_tx(&signed, &keys_changed, &verifiers)
+            .validate_tx(&tx, &keys_changed, &verifiers)
             .expect("Test failed");
         assert!(!res);
     }
@@ -1303,7 +1253,7 @@ mod test_bridge_pool_vp {
             )
             .expect("Test failed");
         wl_storage.write_log.commit_tx();
-        let tx = Tx::new(vec![], None, ChainId::default(), None);
+        let tx = Tx::new(TxType::Raw);
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {
@@ -1380,17 +1330,11 @@ mod test_bridge_pool_vp {
             ),
         };
 
-        let to_sign = transfer.try_to_vec().expect("Test failed");
-        let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
-        let signed = SignedTxData {
-            data: Some(to_sign),
-            sig,
-        }
-        .try_to_vec()
-        .expect("Test failed");
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_data(Data::new(transfer.try_to_vec().expect("Test failed")));
 
         let res = vp
-            .validate_tx(&signed, &keys_changed, &verifiers)
+            .validate_tx(&tx, &keys_changed, &verifiers)
             .expect("Test failed");
         assert!(!res);
     }
