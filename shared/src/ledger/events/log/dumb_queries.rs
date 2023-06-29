@@ -6,51 +6,114 @@
 //! tm.event='NewBlock' AND <accepted|applied>.<$attr>='<$value>'
 //! ```
 
+use std::collections::HashMap;
+
+use crate::ibc::core::ics04_channel::packet::Sequence;
+use crate::ibc::core::ics24_host::identifier::{ChannelId, ClientId, PortId};
+use crate::ibc::Height as IbcHeight;
 use crate::ledger::events::{Event, EventType};
 use crate::types::hash::Hash;
+use crate::types::storage::BlockHeight;
 
 /// A [`QueryMatcher`] verifies if a Namada event matches a
 /// given Tendermint query.
 #[derive(Debug, Clone)]
 pub struct QueryMatcher {
     event_type: EventType,
-    attr: String,
-    value: Hash,
+    attributes: HashMap<String, String>,
 }
 
 impl QueryMatcher {
     /// Checks if this [`QueryMatcher`] validates the
     /// given [`Event`].
     pub fn matches(&self, event: &Event) -> bool {
-        event.event_type == self.event_type
-            && event
-                .attributes
-                .get(&self.attr)
-                .and_then(|value| {
-                    value
-                        .as_str()
-                        .try_into()
-                        .map(|v: Hash| v == self.value)
-                        .ok()
-                })
-                .unwrap_or_default()
+        if event.event_type != self.event_type {
+            return false;
+        }
+
+        self.attributes.iter().all(|(key, value)| {
+            match event.attributes.get(key) {
+                Some(v) => v == value,
+                None => false,
+            }
+        })
     }
 
     /// Returns a query matching the given accepted transaction hash.
     pub fn accepted(tx_hash: Hash) -> Self {
+        let mut attributes = HashMap::new();
+        attributes.insert("hash".to_string(), tx_hash.to_string());
         Self {
             event_type: EventType::Accepted,
-            attr: "hash".to_string(),
-            value: tx_hash,
+            attributes,
         }
     }
 
     /// Returns a query matching the given applied transaction hash.
     pub fn applied(tx_hash: Hash) -> Self {
+        let mut attributes = HashMap::new();
+        attributes.insert("hash".to_string(), tx_hash.to_string());
         Self {
             event_type: EventType::Applied,
-            attr: "hash".to_string(),
-            value: tx_hash,
+            attributes,
+        }
+    }
+
+    /// Returns a query matching the given IBC UpdateClient parameters
+    pub fn ibc_update_client(
+        client_id: ClientId,
+        consensus_height: BlockHeight,
+    ) -> Self {
+        use crate::ibc::core::ics02_client::events::{
+            CLIENT_ID_ATTRIBUTE_KEY, CONSENSUS_HEIGHTS_ATTRIBUTE_KEY,
+        };
+        use crate::ibc::events::IbcEventType;
+
+        let mut attributes = HashMap::new();
+        attributes
+            .insert(CLIENT_ID_ATTRIBUTE_KEY.to_string(), client_id.to_string());
+        attributes.insert(
+            CONSENSUS_HEIGHTS_ATTRIBUTE_KEY.to_string(),
+            IbcHeight::new(0, consensus_height.0)
+                .expect("invalid height")
+                .to_string(),
+        );
+        Self {
+            event_type: EventType::Ibc(
+                IbcEventType::UpdateClient.as_str().to_string(),
+            ),
+            attributes,
+        }
+    }
+
+    /// Returns a query matching the given IBC packet parameters
+    pub fn ibc_packet(
+        event_type: EventType,
+        source_port: PortId,
+        source_channel: ChannelId,
+        destination_port: PortId,
+        destination_channel: ChannelId,
+        sequence: Sequence,
+    ) -> Self {
+        let mut attributes = HashMap::new();
+        attributes
+            .insert("packet_src_port".to_string(), source_port.to_string());
+        attributes.insert(
+            "packet_src_channel".to_string(),
+            source_channel.to_string(),
+        );
+        attributes.insert(
+            "packet_dst_port".to_string(),
+            destination_port.to_string(),
+        );
+        attributes.insert(
+            "packet_dst_channel".to_string(),
+            destination_channel.to_string(),
+        );
+        attributes.insert("packet_sequence".to_string(), sequence.to_string());
+        Self {
+            event_type,
+            attributes,
         }
     }
 }
@@ -66,10 +129,11 @@ mod tests {
         const HASH: &str =
             "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF";
 
+        let mut attributes = HashMap::new();
+        attributes.insert("hash".to_string(), HASH.to_string());
         let matcher = QueryMatcher {
             event_type: EventType::Accepted,
-            attr: "hash".to_string(),
-            value: HASH.try_into().unwrap(),
+            attributes,
         };
 
         let tests = {

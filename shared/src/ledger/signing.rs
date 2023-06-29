@@ -386,6 +386,7 @@ pub async fn sign_wrapper<
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn other_err<T>(string: String) -> Result<T, Error> {
     Err(Error::Other(string))
 }

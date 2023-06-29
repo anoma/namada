@@ -123,7 +123,7 @@ pub async fn query_transfers<
         || Either::Right(wallet.get_addresses().into_values().collect()),
         Either::Left,
     );
-    let _ = shielded.load();
+    let _ = shielded.load().await;
     // Obtain the effects of all shielded and transparent transactions
     let transfers = shielded
         .query_tx_deltas(
@@ -421,7 +421,7 @@ pub async fn query_pinned_balance<
         .values()
         .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
         .collect();
-    let _ = shielded.load();
+    let _ = shielded.load().await;
     // Print the token balances by payment address
     let pinned_error = Err(PinnedBalanceError::InvalidViewingKey);
     for owner in owners {
@@ -778,14 +778,14 @@ pub async fn query_shielded_balance<
         Some(viewing_key) => vec![viewing_key],
         None => wallet.get_viewing_keys().values().copied().collect(),
     };
-    let _ = shielded.load();
+    let _ = shielded.load().await;
     let fvks: Vec<_> = viewing_keys
         .iter()
         .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
         .collect();
     shielded.fetch(client, &[], &fvks).await;
     // Save the update state so that future fetches can be short-circuited
-    let _ = shielded.save();
+    let _ = shielded.save().await;
     // The epoch is required to identify timestamped tokens
     let epoch = query_and_print_epoch(client).await;
     // Map addresses to token names
