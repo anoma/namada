@@ -596,7 +596,7 @@ pub async fn submit_validator_commission_change<
 >(
     client: &C,
     wallet: &mut Wallet<U>,
-    args: args::TxCommissionRateChange,
+    args: args::CommissionRateChange,
 ) -> Result<(), Error> {
     let epoch = rpc::query_epoch(client).await;
 

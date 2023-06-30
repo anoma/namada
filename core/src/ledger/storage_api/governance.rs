@@ -11,6 +11,8 @@ use crate::types::transaction::governance::{
 pub fn init_proposal<S>(
     storage: &mut S,
     data: InitProposalData,
+    content: Vec<u8>,
+    code: Option<Vec<u8>>,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -23,18 +25,21 @@ where
     };
 
     let content_key = storage::get_content_key(proposal_id);
-    storage.write_bytes(&content_key, data.content)?;
+    storage.write_bytes(&content_key, content)?;
 
     let author_key = storage::get_author_key(proposal_id);
     storage.write(&author_key, data.author.clone())?;
 
     let proposal_type_key = storage::get_proposal_type_key(proposal_id);
     match data.r#type {
-        ProposalType::Default(Some(ref code)) => {
+        ProposalType::Default(Some(_)) => {
             // Remove wasm code and write it under a different subkey
             storage.write(&proposal_type_key, ProposalType::Default(None))?;
             let proposal_code_key = storage::get_proposal_code_key(proposal_id);
-            storage.write_bytes(&proposal_code_key, code)?
+            let proposal_code = code.ok_or(storage_api::Error::new_const(
+                "Missing proposal code",
+            ))?;
+            storage.write_bytes(&proposal_code_key, proposal_code)?
         }
         _ => storage.write(&proposal_type_key, data.r#type.clone())?,
     }
