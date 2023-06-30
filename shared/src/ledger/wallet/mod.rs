@@ -18,6 +18,7 @@ use rand_core::RngCore;
 pub use store::{gen_sk_rng, AddressVpType, Store};
 use thiserror::Error;
 use zeroize::Zeroizing;
+use namada_core::types::token::{Denomination, TokenAddress};
 
 use self::derivation_path::{DerivationPath, DerivationPathError};
 pub use self::keys::{DecryptionError, StoredKeypair};
@@ -110,6 +111,7 @@ pub struct Wallet<U: WalletUtils> {
     store: Store,
     decrypted_key_cache: HashMap<Alias, common::SecretKey>,
     decrypted_spendkey_cache: HashMap<Alias, ExtendedSpendingKey>,
+    token_denom_cache: HashMap<TokenAddress, Denomination>,
 }
 
 impl<U: WalletUtils> Wallet<U> {
@@ -120,6 +122,7 @@ impl<U: WalletUtils> Wallet<U> {
             store,
             decrypted_key_cache: HashMap::default(),
             decrypted_spendkey_cache: HashMap::default(),
+            token_denom_cache: Default::default(),
         }
     }
 
@@ -654,6 +657,16 @@ impl<U: WalletUtils> Wallet<U> {
     ) {
         // defaults to an empty set
         self.store.add_vp_type_to_address(vp_type, address)
+    }
+
+    /// Check the cache to see if the given token's denomination is present.
+    pub fn get_token_denom(&self, token: &TokenAddress) -> Option<Denomination> {
+        self.token_denom_cache.get(token).cloned()
+    }
+
+    /// Cache the denomination of a given token.
+    pub fn cache_token_denom(&mut self, token: TokenAddress, denom: Denomination) {
+        self.token_denom_cache.insert(token, denom);
     }
 
     /// Provide immutable access to the backing store

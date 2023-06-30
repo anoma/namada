@@ -246,7 +246,7 @@ pub async fn sign_wrapper<
     U: WalletUtils,
 >(
     client: &C,
-    #[allow(unused_variables)] wallet: &mut Wallet<U>,
+    wallet: &mut Wallet<U>,
     args: &args::Tx,
     epoch: Epoch,
     mut tx: Tx,
@@ -280,8 +280,8 @@ pub async fn sign_wrapper<
         let err_msg = format!(
             "The wrapper transaction source doesn't have enough balance to \
              pay fee {}, got {}.",
-            format_denominated_amount(client, &token_addr, fee_amount).await,
-            format_denominated_amount(client, &token_addr, balance).await,
+            format_denominated_amount(client, wallet,&token_addr, fee_amount).await,
+            format_denominated_amount(client, wallet,&token_addr, balance).await,
         );
         eprintln!("{}", err_msg);
         if !args.force && cfg!(feature = "mainnet") {
@@ -432,8 +432,13 @@ fn make_ledger_amount_addr(
 
 /// Adds a Ledger output line describing a given transaction amount and asset
 /// type
-async fn make_ledger_amount_asset<C: crate::ledger::queries::Client + Sync>(
+#[allow(clippy::too_many_arguments)]
+async fn make_ledger_amount_asset<
+    C: crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
+    wallet: &mut Wallet<U>,
     tokens: &HashMap<Address, String>,
     output: &mut Vec<String>,
     amount: u64,
@@ -448,7 +453,7 @@ async fn make_ledger_amount_asset<C: crate::ledger::queries::Client + Sync>(
             sub_prefix: sub_prefix.clone(),
         };
         let formatted_amt =
-            format_denominated_amount(client, &token_addr, amount.into()).await;
+            format_denominated_amount(client, wallet, &token_addr, amount.into()).await;
         if let Some(token) = tokens.get(token) {
             output.push(format!(
                 "{}Amount: {} {}",
@@ -867,6 +872,7 @@ pub async fn to_ledger_vector<
                 tv.output.push(format!("Sender : {}", vk));
                 make_ledger_amount_asset(
                     client,
+                    wallet,
                     &tokens,
                     &mut tv.output,
                     input.value(),
@@ -895,6 +901,7 @@ pub async fn to_ledger_vector<
                 tv.output.push(format!("Destination : {}", pa));
                 make_ledger_amount_asset(
                     client,
+                    wallet,
                     &tokens,
                     &mut tv.output,
                     output.value(),
@@ -1081,12 +1088,13 @@ pub async fn to_ledger_vector<
         };
         let gas_limit = format_denominated_amount(
             client,
+            wallet,
             &gas_token,
             Amount::from(wrapper.gas_limit),
         )
         .await;
         let gas_amount =
-            format_denominated_amount(client, &gas_token, wrapper.fee.amount)
+            format_denominated_amount(client, wallet, &gas_token, wrapper.fee.amount)
                 .await;
         tv.output_expert.extend(vec![
             format!("Timestamp : {}", tx.header.timestamp.0),

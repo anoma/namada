@@ -23,6 +23,7 @@ use crate::ledger::governance::storage as gov_storage;
 use crate::ledger::native_vp::governance::utils::Votes;
 use crate::ledger::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
 use crate::ledger::queries::RPC;
+use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::Tx;
 use crate::tendermint::merkle::proof::Proof;
 use crate::tendermint_rpc::error::Error as TError;
@@ -988,23 +989,33 @@ pub async fn validate_amount<C: crate::ledger::queries::Client + Sync>(
 /// correctly as a string.
 pub async fn format_denominated_amount<
     C: crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
 >(
     client: &C,
+    wallet: &mut Wallet<U>,
     token: &TokenAddress,
     amount: token::Amount,
 ) -> String {
-    let denom = unwrap_client_response::<C, Option<Denomination>>(
-        RPC.vp()
-            .token()
-            .denomination(client, &token.address, &token.sub_prefix)
-            .await,
-    )
-    .unwrap_or_else(|| {
-        println!(
-            "No denomination found for token: {token}, defaulting to zero \
-             decimal places"
-        );
-        0.into()
-    });
+    let denom = match wallet.get_token_denom(token) {
+        Some(denom) => denom,
+        None => {
+            let denom = unwrap_client_response::<C, Option<Denomination>>(
+                RPC.vp()
+                    .token()
+                    .denomination(client, &token.address, &token.sub_prefix)
+                    .await,
+            )
+            .unwrap_or_else(|| {
+                println!(
+                        "No denomination found for token: {token}, defaulting to zero \
+                        decimal places"
+                );
+                0.into()
+            });
+            wallet.cache_token_denom(token.clone(), denom);
+            denom
+        }
+    };
+
     DenominatedAmount { amount, denom }.to_string()
 }

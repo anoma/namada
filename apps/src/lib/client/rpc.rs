@@ -204,7 +204,7 @@ pub async fn query_transfers<
                 print!(
                     " {}{} {}",
                     sign,
-                    format_denominated_amount(client, asset, change.into(),)
+                    format_denominated_amount(client, wallet,asset, change.into(),)
                         .await,
                     asset.format_with_alias(&token_alias)
                 );
@@ -229,6 +229,7 @@ pub async fn query_transfers<
                         sign,
                         format_denominated_amount(
                             client,
+                            wallet,
                             &token_addr,
                             val.into(),
                         )
@@ -329,6 +330,7 @@ pub async fn query_transparent_balance<
                 Some(balance) => {
                     let balance = format_denominated_amount(
                         client,
+                        wallet,
                         &TokenAddress {
                             address: token,
                             sub_prefix,
@@ -489,6 +491,7 @@ pub async fn query_pinned_balance<
                 } else {
                     let formatted = format_denominated_amount(
                         client,
+                        wallet,
                         &token_address,
                         total_balance.into(),
                     )
@@ -520,6 +523,7 @@ pub async fn query_pinned_balance<
                     }
                     let formatted = format_denominated_amount(
                         client,
+                        wallet,
                         token_addr,
                         (*value).into(),
                     )
@@ -548,7 +552,7 @@ pub async fn query_pinned_balance<
 
 async fn print_balances<C: namada::ledger::queries::Client + Sync>(
     client: &C,
-    wallet: &Wallet<CliWalletUtils>,
+    wallet: &mut Wallet<CliWalletUtils>,
     balances: impl Iterator<Item = (storage::Key, token::Amount)>,
     token: &Address,
     target: Option<&Address>,
@@ -568,6 +572,7 @@ async fn print_balances<C: namada::ledger::queries::Client + Sync>(
                     sub_prefix.clone(),
                     format_denominated_amount(
                         client,
+                        wallet,
                         &TokenAddress {
                             address: tok.clone(),
                             sub_prefix: Some(sub_prefix)
@@ -588,6 +593,7 @@ async fn print_balances<C: namada::ledger::queries::Client + Sync>(
                             ": {}, owned by {}",
                             format_denominated_amount(
                                 client,
+                                wallet,
                                 &TokenAddress {
                                     address: tok.clone(),
                                     sub_prefix: None
@@ -830,6 +836,7 @@ pub async fn query_shielded_balance<
                     token_address.format_with_alias(&token_alias),
                     format_denominated_amount(
                         client,
+                        wallet,
                         &token_address,
                         token::Amount::from(total_balance)
                     )
@@ -915,6 +922,7 @@ pub async fn query_shielded_balance<
                 );
                 let formatted = format_denominated_amount(
                     client,
+                    wallet,
                     &token_address,
                     token_balance.into(),
                 )
@@ -1000,6 +1008,7 @@ pub async fn query_shielded_balance<
                     }
                     let formatted = format_denominated_amount(
                         client,
+                        wallet,
                         address,
                         (*val).into(),
                     )
@@ -1059,7 +1068,7 @@ pub async fn print_decoded_balance<
                     wallet,
                     &token_addr.address
                 )),
-                format_denominated_amount(client, token_addr, (*amount).into())
+                format_denominated_amount(client, wallet,token_addr, (*amount).into())
                     .await,
             );
         }
@@ -1087,7 +1096,7 @@ pub async fn print_decoded_balance_with_epoch<
             "{} | {} : {}",
             token_addr.format_with_alias(&alias),
             epoch,
-            format_denominated_amount(client, token_addr, asset_value).await,
+            format_denominated_amount(client, wallet, token_addr, asset_value).await,
         );
     }
 }
