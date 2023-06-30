@@ -10,9 +10,10 @@ mod tests {
         lazy_set, LazyCollection, LazySet,
     };
     use proptest::prelude::*;
-    use proptest::prop_state_machine;
-    use proptest::state_machine::{ReferenceStateMachine, StateMachineTest};
     use proptest::test_runner::Config;
+    use proptest_state_machine::{
+        prop_state_machine, ReferenceStateMachine, StateMachineTest,
+    };
     use test_log::test;
 
     use crate::tx::tx_host_env;

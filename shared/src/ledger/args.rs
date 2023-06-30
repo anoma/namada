@@ -1,7 +1,10 @@
 //! Structures encapsulating SDK arguments
+use std::path::PathBuf;
+
 use namada_core::types::chain::ChainId;
 use namada_core::types::time::DateTimeUtc;
 use rust_decimal::Decimal;
+use zeroize::Zeroizing;
 
 use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
 use crate::types::address::Address;
@@ -97,7 +100,7 @@ pub struct TxTransfer<C: NamadaTypes = SdkTypes> {
     /// Native token address
     pub native_token: C::NativeAddress,
     /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    pub tx_code_path: PathBuf,
 }
 
 /// IBC transfer transaction arguments
@@ -124,7 +127,7 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     /// Timeout timestamp offset
     pub timeout_sec_offset: Option<u64>,
     /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    pub tx_code_path: PathBuf,
 }
 
 /// Transaction to initialize a new account
@@ -134,12 +137,10 @@ pub struct TxInitAccount<C: NamadaTypes = SdkTypes> {
     pub tx: Tx<C>,
     /// Address of the source account
     pub source: C::Address,
-    /// Wasm VP for the new account
-    pub vp_code: C::Data,
     /// Path to the VP WASM code file for the new account
-    pub vp_code_path: C::Data,
+    pub vp_code_path: PathBuf,
     /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    pub tx_code_path: PathBuf,
     /// Public key for the new account
     pub public_key: C::PublicKey,
 }
@@ -164,9 +165,9 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     /// Maximum commission rate change
     pub max_commission_rate_change: Decimal,
     /// Path to the VP WASM code file
-    pub validator_vp_code_path: C::Data,
+    pub validator_vp_code_path: PathBuf,
     /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    pub tx_code_path: PathBuf,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
 }
@@ -177,9 +178,9 @@ pub struct TxUpdateVp<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// Path to the VP WASM code file
-    pub vp_code_path: C::Data,
+    pub vp_code_path: PathBuf,
     /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    pub tx_code_path: PathBuf,
     /// Address of the account whose VP is to be updated
     pub addr: C::Address,
 }
@@ -199,7 +200,7 @@ pub struct Bond<C: NamadaTypes = SdkTypes> {
     /// Native token address
     pub native_token: C::NativeAddress,
     /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    pub tx_code_path: PathBuf,
 }
 
 /// Unbond arguments
@@ -215,7 +216,7 @@ pub struct Unbond<C: NamadaTypes = SdkTypes> {
     /// self-bonds, the validator is also the source
     pub source: Option<C::Address>,
     /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    pub tx_code_path: PathBuf,
 }
 
 /// Reveal public key
@@ -254,7 +255,7 @@ pub struct Withdraw<C: NamadaTypes = SdkTypes> {
     /// from self-bonds, the validator is also the source
     pub source: Option<C::Address>,
     /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    pub tx_code_path: PathBuf,
 }
 
 /// Query asset conversions
@@ -326,6 +327,17 @@ pub struct TxCommissionRateChange<C: NamadaTypes = SdkTypes> {
     /// Value to which the tx changes the commission rate
     pub rate: Decimal,
     /// Path to the TX WASM code file
+    pub tx_code_path: PathBuf,
+}
+
+#[derive(Clone, Debug)]
+/// Re-activate a jailed validator args
+pub struct TxUnjailValidator<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Validator address (should be self)
+    pub validator: C::Address,
+    /// Path to the TX WASM code file
     pub tx_code_path: C::Data,
 }
 
@@ -356,6 +368,15 @@ pub struct QueryDelegations<C: NamadaTypes = SdkTypes> {
     pub query: Query<C>,
     /// Address of an owner
     pub owner: C::Address,
+}
+
+/// Query PoS to find a validator
+#[derive(Clone, Debug)]
+pub struct QueryFindValidator<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+    /// Tendermint address
+    pub tm_addr: String,
 }
 
 /// Query the raw bytes of given storage key
@@ -400,10 +421,10 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub signing_key: Option<C::Keypair>,
     /// Sign the tx with the keypair of the public key of the given address
     pub signer: Option<C::Address>,
-    /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    /// Path to the TX WASM code file to reveal PK
+    pub tx_reveal_code_path: PathBuf,
     /// Password to decrypt key
-    pub password: Option<String>,
+    pub password: Option<Zeroizing<String>>,
 }
 
 /// MASP add key or address arguments
@@ -454,6 +475,23 @@ pub struct KeyAndAddressGen {
     pub alias_force: bool,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
+    /// BIP44 derivation path
+    pub derivation_path: Option<String>,
+}
+
+/// Wallet restore key and implicit address arguments
+#[derive(Clone, Debug)]
+pub struct KeyAndAddressRestore {
+    /// Scheme type
+    pub scheme: SchemeType,
+    /// Key alias
+    pub alias: Option<String>,
+    /// Whether to force overwrite the alias, if provided
+    pub alias_force: bool,
+    /// Don't encrypt the keypair
+    pub unsafe_dont_encrypt: bool,
+    /// BIP44 derivation path
+    pub derivation_path: Option<String>,
 }
 
 /// Wallet key lookup arguments

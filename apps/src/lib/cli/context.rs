@@ -1,6 +1,6 @@
 //! CLI input types can be used for command arguments
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
@@ -89,7 +89,7 @@ impl Context {
         let mut config = Config::load(
             &global_args.base_dir,
             &global_config.default_chain_id,
-            global_args.mode.clone(),
+            None,
         );
 
         let chain_dir = global_args
@@ -194,9 +194,30 @@ impl Context {
         wasm_loader::read_wasm_or_exit(self.wasm_dir(), file_name)
     }
 
-    /// Get address with vp type
+    /// Try to find an alias for a given address from the wallet. If not found,
+    /// formats the address into a string.
+    pub fn lookup_alias(&self, addr: &Address) -> String {
+        match self.wallet.find_alias(addr) {
+            Some(alias) => alias.to_string(),
+            None => addr.to_string(),
+        }
+    }
+
+    /// Get addresses with tokens VP type.
     pub fn tokens(&self) -> HashSet<Address> {
         self.wallet.get_addresses_with_vp_type(AddressVpType::Token)
+    }
+
+    /// Get addresses with tokens VP type associated with their aliases.
+    pub fn tokens_with_aliases(&self) -> HashMap<Address, String> {
+        self.wallet
+            .get_addresses_with_vp_type(AddressVpType::Token)
+            .into_iter()
+            .map(|addr| {
+                let alias = self.lookup_alias(&addr);
+                (addr, alias)
+            })
+            .collect()
     }
 }
 

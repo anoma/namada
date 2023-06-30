@@ -253,6 +253,13 @@ pub async fn main() -> Result<()> {
                     rpc::query_delegations(&client, &mut ctx.wallet, args)
                         .await;
                 }
+                Sub::QueryFindValidator(QueryFindValidator(args)) => {
+                    let client =
+                        HttpClient::new(args.query.ledger_address.clone())
+                            .unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_find_validator(&client, args).await;
+                }
                 Sub::QueryResult(QueryResult(args)) => {
                     wait_until_node_is_synched(&args.query.ledger_address)
                         .await;
@@ -319,6 +326,9 @@ pub async fn main() -> Result<()> {
             Utils::PkToTmAddress(PkToTmAddress(args)) => {
                 utils::pk_to_tm_address(global_args, args)
             }
+            Utils::DefaultBaseDir(DefaultBaseDir(args)) => {
+                utils::default_base_dir(global_args, args)
+            }
         },
     }
     Ok(())
@@ -341,7 +351,7 @@ async fn wait_until_node_is_synched(ledger_address: &TendermintAddress) {
                 if is_at_least_height_one && !is_catching_up {
                     return;
                 } else {
-                    if try_count > MAX_TRIES {
+                    if try_count == MAX_TRIES {
                         println!(
                             "Node is still catching up, wait for it to finish \
                              synching."
@@ -351,9 +361,9 @@ async fn wait_until_node_is_synched(ledger_address: &TendermintAddress) {
                         println!(
                             " Waiting for {} ({}/{} tries)...",
                             if is_at_least_height_one {
-                                "a first block"
-                            } else {
                                 "node to sync"
+                            } else {
+                                "a first block"
                             },
                             try_count + 1,
                             MAX_TRIES

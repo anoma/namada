@@ -1,8 +1,6 @@
 //! The parameters used for the chain's genesis
 
 use std::collections::HashMap;
-#[cfg(not(feature = "dev"))]
-use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
@@ -12,8 +10,6 @@ use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{GenesisValidator, PosParams};
 use namada::types::address::Address;
-#[cfg(not(feature = "dev"))]
-use namada::types::chain::ChainId;
 use namada::types::chain::ProposalBytes;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
@@ -308,6 +304,9 @@ pub mod genesis_config {
         // light client attack.
         // XXX: u64 doesn't work with toml-rs!
         pub light_client_attack_min_slash_rate: Decimal,
+        /// Number of epochs above and below (separately) the current epoch to
+        /// consider when doing cubic slashing
+        pub cubic_slashing_window_length: u64,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -653,6 +652,7 @@ pub mod genesis_config {
             target_staked_ratio,
             duplicate_vote_min_slash_rate,
             light_client_attack_min_slash_rate,
+            cubic_slashing_window_length,
         } = pos_params;
         let pos_params = PosParams {
             max_validator_slots,
@@ -665,6 +665,7 @@ pub mod genesis_config {
             target_staked_ratio,
             duplicate_vote_min_slash_rate,
             light_client_attack_min_slash_rate,
+            cubic_slashing_window_length,
         };
 
         let mut genesis = Genesis {
@@ -880,14 +881,17 @@ pub struct Parameters {
     pub wrapper_tx_fees: Option<token::Amount>,
 }
 
-#[cfg(not(feature = "dev"))]
-pub fn genesis(base_dir: impl AsRef<Path>, chain_id: &ChainId) -> Genesis {
+#[cfg(not(any(test, feature = "dev")))]
+pub fn genesis(
+    base_dir: impl AsRef<std::path::Path>,
+    chain_id: &namada::types::chain::ChainId,
+) -> Genesis {
     let path = base_dir
         .as_ref()
         .join(format!("{}.toml", chain_id.as_str()));
     genesis_config::read_genesis_config(path)
 }
-#[cfg(feature = "dev")]
+#[cfg(any(test, feature = "dev"))]
 pub fn genesis(num_validators: u64) -> Genesis {
     use namada::types::address::{self};
     use rust_decimal_macros::dec;

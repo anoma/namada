@@ -1,21 +1,25 @@
 //! Provides functionality for managing keys and addresses for a user
 pub mod alias;
+mod derivation_path;
 mod keys;
 pub mod pre_genesis;
 pub mod store;
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
-use std::marker::PhantomData;
 use std::str::FromStr;
 
 use alias::Alias;
+use bip39::{Language, Mnemonic, MnemonicType, Seed};
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::zip32::ExtendedFullViewingKey;
 pub use pre_genesis::gen_key_to_store;
-pub use store::{gen_sk, AddressVpType, Store};
+use rand_core::RngCore;
+pub use store::{gen_sk_rng, AddressVpType, Store};
 use thiserror::Error;
+use zeroize::Zeroizing;
 
+use self::derivation_path::{DerivationPath, DerivationPathError};
 pub use self::keys::{DecryptionError, StoredKeypair};
 pub use self::store::{ConfirmationResponse, ValidatorData, ValidatorKeys};
 use crate::types::address::Address;
@@ -24,47 +28,68 @@ use crate::types::masp::{
     ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
 };
 
+/// Errors of key generation / recovery
+#[derive(Error, Debug)]
+pub enum GenRestoreKeyError {
+    /// Derivation path parse error
+    #[error("Derivation path parse error")]
+    DerivationPathError(DerivationPathError),
+    /// Mnemonic generation error
+    #[error("Mnemonic generation error")]
+    MnemonicGenerationError,
+    /// Mnemonic input error
+    #[error("Mnemonic input error")]
+    MnemonicInputError,
+}
+
 /// Captures the interactive parts of the wallet's functioning
 pub trait WalletUtils {
     /// The location where the wallet is stored
     type Storage;
-    /// Read the password for encryption/decryption from the file/env/stdin.
-    /// Panics if all options are empty/invalid.
-    fn read_password(prompt_msg: &str) -> String;
+    /// Secure random number generator
+    type Rng: RngCore;
+
+    /// Generates a random mnemonic of the given mnemonic type.
+    fn generate_mnemonic_code(
+        mnemonic_type: MnemonicType,
+        rng: &mut Self::Rng,
+    ) -> Result<Mnemonic, GenRestoreKeyError> {
+        const BITS_PER_BYTE: usize = 8;
+
+        // generate random mnemonic
+        let entropy_size = mnemonic_type.entropy_bits() / BITS_PER_BYTE;
+        let mut bytes = vec![0u8; entropy_size];
+        rand::RngCore::fill_bytes(rng, &mut bytes);
+        let mnemonic = Mnemonic::from_entropy(&bytes, Language::English)
+            .expect("Mnemonic creation should not fail");
+
+        Ok(mnemonic)
+    }
+
+    /// Read the password for decryption from the file/env/stdin.
+    fn read_decryption_password() -> Zeroizing<String>;
+
+    /// Read the password for encryption from the file/env/stdin.
+    /// If the password is read from stdin, the implementation is expected
+    /// to ask for a confirmation.
+    fn read_encryption_password() -> Zeroizing<String>;
 
     /// Read an alias from the file/env/stdin.
     fn read_alias(prompt_msg: &str) -> String;
 
+    /// Read mnemonic code from the file/env/stdin.
+    fn read_mnemonic_code() -> Result<Mnemonic, GenRestoreKeyError>;
+
+    /// Read a mnemonic code from the file/env/stdin.
+    fn read_mnemonic_passphrase(confirm: bool) -> Zeroizing<String>;
+
     /// The given alias has been selected but conflicts with another alias in
     /// the store. Offer the user to either replace existing mapping, alter the
-    /// chosen alias to a name of their chosing, or cancel the aliasing.
+    /// chosen alias to a name of their choice, or cancel the aliasing.
     fn show_overwrite_confirmation(
         alias: &Alias,
         alias_for: &str,
     ) -> store::ConfirmationResponse;
-}
-
-/// A degenerate implementation of wallet interactivity
-pub struct SdkWalletUtils<U>(PhantomData<U>);
-
-impl<U> WalletUtils for SdkWalletUtils<U> {
-    type Storage = U;
-
-    fn read_password(_prompt_msg: &str) -> String {
-        panic!("attempted to prompt for password in non-interactive mode");
-    }
-
-    fn read_alias(_prompt_msg: &str) -> String {
-        panic!("attempted to prompt for alias in non-interactive mode");
-    }
-
-    fn show_overwrite_confirmation(
-        _alias: &Alias,
-        _alias_for: &str,
-    ) -> store::ConfirmationResponse {
-        // Automatically replace aliases in non-interactive mode
-        store::ConfirmationResponse::Replace
-    }
 }
 
 /// The error that is produced when a given key cannot be obtained
@@ -98,33 +123,153 @@ impl<U: WalletUtils> Wallet<U> {
         }
     }
 
+    fn gen_and_store_key(
+        &mut self,
+        scheme: SchemeType,
+        alias: Option<String>,
+        alias_force: bool,
+        seed_and_derivation_path: Option<(Seed, DerivationPath)>,
+        password: Option<Zeroizing<String>>,
+    ) -> Option<(String, common::SecretKey)> {
+        self.store
+            .gen_key::<U>(
+                scheme,
+                alias,
+                alias_force,
+                seed_and_derivation_path,
+                password,
+            )
+            .map(|(alias, key)| {
+                // Cache the newly added key
+                self.decrypted_key_cache.insert(alias.clone(), key.clone());
+                (alias.into(), key)
+            })
+    }
+
+    /// Restore a keypair from the user mnemonic code (read from stdin) using
+    /// a given BIP44 derivation path and derive an implicit address from its
+    /// public part and insert them into the store with the provided alias,
+    /// converted to lower case. If none provided, the alias will be the public
+    /// key hash (in lowercase too).
+    /// The key is encrypted with the provided password. If no password
+    /// provided, will prompt for password from stdin.
+    /// Stores the key in decrypted key cache and returns the alias of the key
+    /// and a reference-counting pointer to the key.
+    pub fn derive_key_from_user_mnemonic_code(
+        &mut self,
+        scheme: SchemeType,
+        alias: Option<String>,
+        alias_force: bool,
+        derivation_path: Option<String>,
+        password: Option<Zeroizing<String>>,
+    ) -> Result<Option<(String, common::SecretKey)>, GenRestoreKeyError> {
+        let parsed_derivation_path = derivation_path
+            .map(|p| {
+                let is_default = p.eq_ignore_ascii_case("DEFAULT");
+                if is_default {
+                    Ok(DerivationPath::default_for_scheme(scheme))
+                } else {
+                    DerivationPath::from_path_str(scheme, &p)
+                        .map_err(GenRestoreKeyError::DerivationPathError)
+                }
+            })
+            .transpose()?
+            .unwrap_or_else(|| DerivationPath::default_for_scheme(scheme));
+        if !parsed_derivation_path.is_compatible(scheme) {
+            println!(
+                "WARNING: the specified derivation path may be incompatible \
+                 with the chosen cryptography scheme."
+            )
+        }
+        println!("Using HD derivation path {}", parsed_derivation_path);
+        let mnemonic = U::read_mnemonic_code()?;
+        let passphrase = U::read_mnemonic_passphrase(false);
+        let seed = Seed::new(&mnemonic, &passphrase);
+
+        Ok(self.gen_and_store_key(
+            scheme,
+            alias,
+            alias_force,
+            Some((seed, parsed_derivation_path)),
+            password,
+        ))
+    }
+
     /// Generate a new keypair and derive an implicit address from its public
     /// and insert them into the store with the provided alias, converted to
     /// lower case. If none provided, the alias will be the public key hash (in
-    /// lowercase too). If the key is to be encrypted, will prompt for
-    /// password from stdin. Stores the key in decrypted key cache and
+    /// lowercase too). If the alias already exists, optionally force overwrite
+    /// the keypair for the alias.
+    /// If no encryption password is provided, the keypair will be stored raw
+    /// without encryption.
+    /// Stores the key in decrypted key cache and
     /// returns the alias of the key and a reference-counting pointer to the
     /// key.
+    /// If a derivation path is specified, derive the key from a generated BIP39
+    /// mnemonic code. Use provided rng for mnemonic code generation.
     pub fn gen_key(
         &mut self,
         scheme: SchemeType,
         alias: Option<String>,
-        password: Option<String>,
-        force_alias: bool,
-    ) -> (String, common::SecretKey) {
-        let (alias, key) =
-            self.store
-                .gen_key::<U>(scheme, alias, password, force_alias);
-        // Cache the newly added key
-        self.decrypted_key_cache.insert(alias.clone(), key.clone());
-        (alias.into(), key)
+        alias_force: bool,
+        password: Option<Zeroizing<String>>,
+        derivation_path_and_mnemonic_rng: Option<(String, &mut U::Rng)>,
+    ) -> Result<Option<(String, common::SecretKey)>, GenRestoreKeyError> {
+        let parsed_path_and_rng = derivation_path_and_mnemonic_rng
+            .map(|(raw_derivation_path, rng)| {
+                let is_default =
+                    raw_derivation_path.eq_ignore_ascii_case("DEFAULT");
+                let parsed_derivation_path = if is_default {
+                    Ok(DerivationPath::default_for_scheme(scheme))
+                } else {
+                    DerivationPath::from_path_str(scheme, &raw_derivation_path)
+                        .map_err(GenRestoreKeyError::DerivationPathError)
+                };
+                parsed_derivation_path.map(|p| (p, rng))
+            })
+            .transpose()?;
+
+        // Check if the path is compatible with the selected scheme
+        if parsed_path_and_rng.is_some() {
+            let (parsed_derivation_path, _) =
+                parsed_path_and_rng.as_ref().unwrap();
+            if !parsed_derivation_path.is_compatible(scheme) {
+                println!(
+                    "WARNING: the specified derivation path may be \
+                     incompatible with the chosen cryptography scheme."
+                )
+            }
+            println!("Using HD derivation path {}", parsed_derivation_path);
+        }
+
+        let seed_and_derivation_path //: Option<Result<Seed, GenRestoreKeyError>>
+        = parsed_path_and_rng.map(|(path, rng)| {
+            const MNEMONIC_TYPE: MnemonicType = MnemonicType::Words24;
+            let mnemonic = U::generate_mnemonic_code(MNEMONIC_TYPE, rng)?;
+            println!(
+                "Safely store your {} words mnemonic.",
+                MNEMONIC_TYPE.word_count()
+            );
+            println!("{}", mnemonic.clone().into_phrase());
+
+            let passphrase = U::read_mnemonic_passphrase(true);
+            Ok((Seed::new(&mnemonic, &passphrase), path))
+        }).transpose()?;
+
+        Ok(self.gen_and_store_key(
+            scheme,
+            alias,
+            alias_force,
+            seed_and_derivation_path,
+            password,
+        ))
     }
 
     /// Generate a spending key and store it under the given alias in the wallet
     pub fn gen_spending_key(
         &mut self,
         alias: String,
-        password: Option<String>,
+        password: Option<Zeroizing<String>>,
         force_alias: bool,
     ) -> (String, ExtendedSpendingKey) {
         let (alias, key) =
@@ -163,7 +308,7 @@ impl<U: WalletUtils> Wallet<U> {
     pub fn find_key(
         &mut self,
         alias_pkh_or_pk: impl AsRef<str>,
-        password: Option<String>,
+        password: Option<Zeroizing<String>>,
     ) -> Result<common::SecretKey, FindKeyError> {
         // Try cache first
         if let Some(cached_key) = self
@@ -191,7 +336,7 @@ impl<U: WalletUtils> Wallet<U> {
     pub fn find_spending_key(
         &mut self,
         alias: impl AsRef<str>,
-        password: Option<String>,
+        password: Option<Zeroizing<String>>,
     ) -> Result<ExtendedSpendingKey, FindKeyError> {
         // Try cache first
         if let Some(cached_key) =
@@ -238,7 +383,7 @@ impl<U: WalletUtils> Wallet<U> {
     pub fn find_key_by_pk(
         &mut self,
         pk: &common::PublicKey,
-        password: Option<String>,
+        password: Option<Zeroizing<String>>,
     ) -> Result<common::SecretKey, FindKeyError> {
         // Try to look-up alias for the given pk. Otherwise, use the PKH string.
         let pkh: PublicKeyHash = pk.into();
@@ -270,7 +415,7 @@ impl<U: WalletUtils> Wallet<U> {
     pub fn find_key_by_pkh(
         &mut self,
         pkh: &PublicKeyHash,
-        password: Option<String>,
+        password: Option<Zeroizing<String>>,
     ) -> Result<common::SecretKey, FindKeyError> {
         // Try to look-up alias for the given pk. Otherwise, use the PKH string.
         let alias = self
@@ -304,16 +449,15 @@ impl<U: WalletUtils> Wallet<U> {
         decrypted_key_cache: &mut HashMap<Alias, T>,
         stored_key: &StoredKeypair<T>,
         alias: Alias,
-        password: Option<String>,
+        password: Option<Zeroizing<String>>,
     ) -> Result<T, FindKeyError>
     where
         <T as std::str::FromStr>::Err: Display,
     {
         match stored_key {
             StoredKeypair::Encrypted(encrypted) => {
-                let password = password.unwrap_or_else(|| {
-                    U::read_password("Enter decryption password: ")
-                });
+                let password =
+                    password.unwrap_or_else(U::read_decryption_password);
                 let key = encrypted
                     .decrypt(password)
                     .map_err(FindKeyError::KeyDecryptionError)?;
@@ -455,7 +599,7 @@ impl<U: WalletUtils> Wallet<U> {
         &mut self,
         alias: String,
         spend_key: ExtendedSpendingKey,
-        password: Option<String>,
+        password: Option<Zeroizing<String>>,
         force_alias: bool,
     ) -> Option<String> {
         self.store

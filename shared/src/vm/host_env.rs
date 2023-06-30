@@ -22,13 +22,11 @@ use crate::types::address::{self, Address};
 use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
 use crate::types::internal::HostEnvResult;
-use crate::types::key::*;
 use crate::types::storage::{BlockHeight, Key, TxIndex};
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use crate::vm::{HostRef, MutHostRef};
 
-const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
 const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
 
 /// These runtime errors will abort tx WASM execution immediately
@@ -92,6 +90,8 @@ where
     pub iterators: MutHostRef<'a, &'a PrefixIterators<'a, DB>>,
     /// Transaction gas meter.
     pub gas_meter: MutHostRef<'a, &'a BlockGasMeter>,
+    /// The transaction code is used for signature verification
+    pub tx: HostRef<'a, &'a Tx>,
     /// The transaction index is used to identify a shielded transaction's
     /// parent
     pub tx_index: HostRef<'a, &'a TxIndex>,
@@ -132,6 +132,7 @@ where
         write_log: &mut WriteLog,
         iterators: &mut PrefixIterators<'a, DB>,
         gas_meter: &mut BlockGasMeter,
+        tx: &Tx,
         tx_index: &TxIndex,
         verifiers: &mut BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,
@@ -142,6 +143,7 @@ where
         let write_log = unsafe { MutHostRef::new(write_log) };
         let iterators = unsafe { MutHostRef::new(iterators) };
         let gas_meter = unsafe { MutHostRef::new(gas_meter) };
+        let tx = unsafe { HostRef::new(tx) };
         let tx_index = unsafe { HostRef::new(tx_index) };
         let verifiers = unsafe { MutHostRef::new(verifiers) };
         let result_buffer = unsafe { MutHostRef::new(result_buffer) };
@@ -154,6 +156,7 @@ where
             write_log,
             iterators,
             gas_meter,
+            tx,
             tx_index,
             verifiers,
             result_buffer,
@@ -196,6 +199,7 @@ where
             write_log: self.write_log.clone(),
             iterators: self.iterators.clone(),
             gas_meter: self.gas_meter.clone(),
+            tx: self.tx.clone(),
             tx_index: self.tx_index.clone(),
             verifiers: self.verifiers.clone(),
             result_buffer: self.result_buffer.clone(),
@@ -287,8 +291,8 @@ pub trait VpEvaluator {
     fn eval(
         &self,
         ctx: VpCtx<'static, Self::Db, Self::H, Self::Eval, Self::CA>,
-        vp_code: Vec<u8>,
-        input_data: Vec<u8>,
+        vp_code_hash: Hash,
+        input_data: Tx,
     ) -> HostEnvResult;
 }
 
@@ -1481,9 +1485,9 @@ where
     Ok(height.0)
 }
 
-/// Getting the block height function exposed to the wasm VM Tx
-/// environment. The height is that of the block to which the current
-/// transaction is being applied.
+/// Getting the transaction index function exposed to the wasm VM Tx
+/// environment. The index is that of the transaction being applied
+/// in the current block.
 pub fn tx_get_tx_index<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
 ) -> TxResult<u32>
@@ -1725,9 +1729,16 @@ where
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let tx = unsafe { env.ctx.tx.get() };
     let hash = vp_host_fns::get_tx_code_hash(gas_meter, tx)?;
+    let mut result_bytes = vec![];
+    if let Some(hash) = hash {
+        result_bytes.push(1);
+        result_bytes.extend(hash.0);
+    } else {
+        result_bytes.push(0);
+    };
     let gas = env
         .memory
-        .write_bytes(result_ptr, hash.0)
+        .write_bytes(result_ptr, result_bytes)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     vp_host_fns::add_gas(gas_meter, gas)
 }
@@ -1751,43 +1762,6 @@ where
     Ok(epoch.0)
 }
 
-/// Verify a transaction signature.
-pub fn vp_verify_tx_signature<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
-    pk_ptr: u64,
-    pk_len: u64,
-    sig_ptr: u64,
-    sig_len: u64,
-) -> vp_host_fns::EnvResult<i64>
-where
-    MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-    EVAL: VpEvaluator,
-    CA: WasmCacheAccess,
-{
-    let (pk, gas) = env
-        .memory
-        .read_bytes(pk_ptr, pk_len as _)
-        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
-    let gas_meter = unsafe { env.ctx.gas_meter.get() };
-    vp_host_fns::add_gas(gas_meter, gas)?;
-    let pk: common::PublicKey = BorshDeserialize::try_from_slice(&pk)
-        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
-
-    let (sig, gas) = env
-        .memory
-        .read_bytes(sig_ptr, sig_len as _)
-        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
-    vp_host_fns::add_gas(gas_meter, gas)?;
-    let sig: common::Signature = BorshDeserialize::try_from_slice(&sig)
-        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
-
-    vp_host_fns::add_gas(gas_meter, VERIFY_TX_SIG_GAS_COST)?;
-    let tx = unsafe { env.ctx.tx.get() };
-    Ok(HostEnvResult::from(tx.verify_sig(&pk, &sig).is_ok()).to_i64())
-}
-
 /// Verify a ShieldedTransaction.
 pub fn vp_verify_masp<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
@@ -1801,7 +1775,7 @@ where
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
-    use crate::types::token::Transfer;
+    use masp_primitives::transaction::Transaction;
 
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let (tx_bytes, gas) = env
@@ -1810,17 +1784,14 @@ where
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     vp_host_fns::add_gas(gas_meter, gas)?;
 
-    let full_tx: Transfer =
+    let shielded: Transaction =
         BorshDeserialize::try_from_slice(tx_bytes.as_slice())
             .map_err(vp_host_fns::RuntimeError::EncodingError)?;
 
-    match full_tx.shielded {
-        Some(shielded_tx) => Ok(HostEnvResult::from(
-            crate::ledger::masp::verify_shielded_tx(&shielded_tx),
-        )
-        .to_i64()),
-        None => Ok(HostEnvResult::Fail.to_i64()),
-    }
+    Ok(
+        HostEnvResult::from(crate::ledger::masp::verify_shielded_tx(&shielded))
+            .to_i64(),
+    )
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
@@ -1893,10 +1864,10 @@ where
     EVAL: VpEvaluator<Db = DB, H = H, Eval = EVAL, CA = CA>,
     CA: WasmCacheAccess,
 {
-    let (vp_code, gas) =
-        env.memory
-            .read_bytes(vp_code_ptr, vp_code_len as _)
-            .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+    let (vp_code_hash, gas) = env
+        .memory
+        .read_bytes(vp_code_ptr, vp_code_len as _)
+        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_host_fns::add_gas(gas_meter, gas)?;
 
@@ -1905,10 +1876,18 @@ where
         .read_bytes(input_data_ptr, input_data_len as _)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     vp_host_fns::add_gas(gas_meter, gas)?;
+    let input_data: Tx = BorshDeserialize::try_from_slice(&input_data)
+        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
+    let vp_code_hash = Hash(vp_code_hash.try_into().map_err(|e| {
+        vp_host_fns::RuntimeError::EncodingError(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Not a valid hash: {:?}", e),
+        ))
+    })?);
 
     let eval_runner = unsafe { env.ctx.eval_runner.get() };
     Ok(eval_runner
-        .eval(env.ctx.clone(), vp_code, input_data)
+        .eval(env.ctx.clone(), vp_code_hash, input_data)
         .to_i64())
 }
 
@@ -2002,6 +1981,7 @@ pub mod testing {
         iterators: &mut PrefixIterators<'static, DB>,
         verifiers: &mut BTreeSet<Address>,
         gas_meter: &mut BlockGasMeter,
+        tx: &Tx,
         tx_index: &TxIndex,
         result_buffer: &mut Option<Vec<u8>>,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
@@ -2013,11 +1993,12 @@ pub mod testing {
         CA: WasmCacheAccess,
     {
         TxVmEnv::new(
-            NativeMemory::default(),
+            NativeMemory,
             storage,
             write_log,
             iterators,
             gas_meter,
+            tx,
             tx_index,
             verifiers,
             result_buffer,
@@ -2052,7 +2033,7 @@ pub mod testing {
         CA: WasmCacheAccess,
     {
         VpVmEnv::new(
-            NativeMemory::default(),
+            NativeMemory,
             address,
             storage,
             write_log,

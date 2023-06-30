@@ -16,7 +16,7 @@ use crate::ibc::core::ics24_host::path::{
     ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
 use crate::ibc::core::ics24_host::Path;
-use crate::types::address::{Address, InternalAddress, HASH_LEN};
+use crate::types::address::{Address, InternalAddress, HASH_HEX_LEN};
 use crate::types::storage::{self, DbKeySeg, Key, KeySeg};
 
 const CLIENTS_COUNTER: &str = "clients/counter";
@@ -500,7 +500,7 @@ pub fn token_hash_from_denom(denom: impl AsRef<str>) -> Result<Option<String>> {
 pub fn calc_hash(denom: impl AsRef<str>) -> String {
     let mut hasher = Sha256::new();
     hasher.update(denom.as_ref());
-    format!("{:.width$x}", hasher.finalize(), width = HASH_LEN)
+    format!("{:.width$x}", hasher.finalize(), width = HASH_HEX_LEN)
 }
 
 /// Key's prefix of the received token over IBC

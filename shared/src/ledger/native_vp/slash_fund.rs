@@ -10,6 +10,7 @@ use thiserror::Error;
 use crate::ledger::native_vp::{self, governance, Ctx, NativeVp};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::ledger::storage_api::StorageRead;
+use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::token;
@@ -48,7 +49,7 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &[u8],
+        tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
@@ -60,9 +61,14 @@ where
                     if addr.ne(&slash_fund::ADDRESS) {
                         return true;
                     }
+                    let data = if let Some(data) = tx_data.data() {
+                        data
+                    } else {
+                        return false;
+                    };
                     governance::utils::is_proposal_accepted(
                         &self.ctx.pre(),
-                        tx_data,
+                        &data,
                     )
                     .unwrap_or(false)
                 }

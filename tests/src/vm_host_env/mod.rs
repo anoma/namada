@@ -27,20 +27,18 @@ mod tests {
         get_dummy_header as tm_dummy_header, Error as IbcError,
     };
     use namada::ledger::tx_env::TxEnv;
-    use namada::proto::{SignedTxData, Tx};
-    use namada::types::chain::ChainId;
+    use namada::proto::{Code, Data, Section, Signature, Tx};
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
     use namada::types::time::DateTimeUtc;
     use namada::types::token::{self, Amount};
+    use namada::types::transaction::TxType;
     use namada::types::{address, key};
     use namada_core::ledger::ibc::context::transfer_mod::testing::DummyTransferModule;
     use namada_core::ledger::ibc::Error as IbcActionError;
     use namada_test_utils::TestWasms;
-    use namada_tx_prelude::{
-        BorshDeserialize, BorshSerialize, StorageRead, StorageWrite,
-    };
+    use namada_tx_prelude::{BorshSerialize, StorageRead, StorageWrite};
     use namada_vp_prelude::VpEnv;
     use prost::Message;
     use test_log::test;
@@ -452,38 +450,42 @@ mod tests {
         let expiration = Some(DateTimeUtc::now());
         for data in &[
             // Tx with some arbitrary data
-            Some(vec![1, 2, 3, 4].repeat(10)),
+            vec![1, 2, 3, 4].repeat(10),
             // Tx without any data
-            None,
+            vec![],
         ] {
             let signed_tx_data = vp_host_env::with(|env| {
-                env.tx = Tx::new(
-                    code.clone(),
-                    data.clone(),
-                    env.wl_storage.storage.chain_id.clone(),
-                    expiration,
-                )
-                .sign(&keypair);
-                let tx_data = env.tx.data.as_ref().expect("data should exist");
-
-                SignedTxData::try_from_slice(&tx_data[..])
-                    .expect("decoding signed data we just signed")
+                let mut tx = Tx::new(TxType::Raw);
+                tx.header.chain_id = env.wl_storage.storage.chain_id.clone();
+                tx.header.expiration = expiration;
+                tx.set_code(Code::new(code.clone()));
+                tx.set_data(Data::new(data.clone()));
+                tx.add_section(Section::Signature(Signature::new(
+                    tx.code_sechash(),
+                    &keypair,
+                )));
+                tx.add_section(Section::Signature(Signature::new(
+                    tx.data_sechash(),
+                    &keypair,
+                )));
+                env.tx = tx;
+                env.tx.clone()
             });
-            assert_eq!(&signed_tx_data.data, data);
+            assert_eq!(signed_tx_data.data().as_ref(), Some(data));
             assert!(
-                vp::CTX
-                    .verify_tx_signature(&pk, &signed_tx_data.sig)
-                    .unwrap()
+                signed_tx_data
+                    .verify_signature(&pk, signed_tx_data.data_sechash())
+                    .is_ok()
             );
 
             let other_keypair = key::testing::keypair_2();
             assert!(
-                !vp::CTX
-                    .verify_tx_signature(
+                signed_tx_data
+                    .verify_signature(
                         &other_keypair.ref_to(),
-                        &signed_tx_data.sig
+                        signed_tx_data.data_sechash()
                     )
-                    .unwrap()
+                    .is_err()
             );
         }
     }
@@ -535,7 +537,18 @@ mod tests {
         // evaluating without any code should fail
         let empty_code = Hash::zero();
         let input_data = vec![];
-        let result = vp::CTX.eval(empty_code, input_data).unwrap();
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(input_data));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        let result = vp::CTX.eval(empty_code, tx).unwrap();
         assert!(!result);
 
         // evaluating the VP template which always returns `true` should pass
@@ -547,7 +560,18 @@ mod tests {
             env.wl_storage.storage.write(&key, code.clone()).unwrap();
         });
         let input_data = vec![];
-        let result = vp::CTX.eval(code_hash, input_data).unwrap();
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(input_data));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        let result = vp::CTX.eval(code_hash, tx).unwrap();
         assert!(result);
 
         // evaluating the VP template which always returns `false` shouldn't
@@ -560,7 +584,18 @@ mod tests {
             env.wl_storage.storage.write(&key, code.clone()).unwrap();
         });
         let input_data = vec![];
-        let result = vp::CTX.eval(code_hash, input_data).unwrap();
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(input_data));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        let result = vp::CTX.eval(code_hash, tx).unwrap();
         assert!(!result);
     }
 
@@ -575,14 +610,17 @@ mod tests {
         let msg = ibc::msg_create_client();
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
 
         // create a client with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -612,14 +650,17 @@ mod tests {
         let msg = ibc::msg_update_client(client_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
         // update the client with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -652,14 +693,17 @@ mod tests {
         let msg = ibc::msg_connection_open_init(client_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
         // init a connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -688,14 +732,17 @@ mod tests {
         let msg = ibc::msg_connection_open_ack(conn_id, client_state);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
         // open the connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -729,14 +776,17 @@ mod tests {
         let msg = ibc::msg_connection_open_try(client_id, client_state);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
         // open try a connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -765,14 +815,17 @@ mod tests {
         let msg = ibc::msg_connection_open_confirm(conn_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
         // open the connection with the mssage
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -808,14 +861,17 @@ mod tests {
         let msg = ibc::msg_channel_open_init(port_id.clone(), conn_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
         // init a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -844,14 +900,17 @@ mod tests {
         let msg = ibc::msg_channel_open_ack(port_id, channel_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
         // open the channle with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -887,14 +946,17 @@ mod tests {
         let msg = ibc::msg_channel_open_try(port_id.clone(), conn_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
         // try open a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -923,14 +985,18 @@ mod tests {
         let msg = ibc::msg_channel_open_confirm(port_id, channel_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
         // open a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -968,14 +1034,18 @@ mod tests {
         let msg = ibc::msg_channel_close_init(port_id, channel_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
         // close the channel with the message
         let mut actions = tx_host_env::ibc::ibc_actions(tx::ctx());
         // the dummy module closes the channel
@@ -1021,14 +1091,18 @@ mod tests {
         let msg = ibc::msg_channel_close_confirm(port_id, channel_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
 
         // close the channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1071,14 +1145,18 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
         // send the token and a packet with the data
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1120,14 +1198,18 @@ mod tests {
         let msg = ibc::msg_packet_ack(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
         // ack the packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1196,14 +1278,18 @@ mod tests {
         let msg = ibc::msg_transfer(port_id, channel_id, hashed_denom, &sender);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
         // send the token and a packet with the data
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1272,14 +1358,18 @@ mod tests {
         let msg = ibc::msg_packet_recv(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1361,14 +1451,17 @@ mod tests {
         let msg = ibc::msg_packet_recv(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1453,14 +1546,18 @@ mod tests {
         let msg = ibc::msg_packet_recv(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1549,14 +1646,17 @@ mod tests {
         let msg = ibc::msg_timeout(packet, ibc::Sequence::from(1));
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
 
         // timeout the packet
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1635,14 +1735,17 @@ mod tests {
         let msg = ibc::msg_timeout_on_close(packet, ibc::Sequence::from(1));
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
-            code_or_hash: vec![],
-            data: Some(tx_data.clone()),
-            timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &key::testing::keypair_1(),
+        )));
 
         // timeout the packet
         tx_host_env::ibc::ibc_actions(tx::ctx())

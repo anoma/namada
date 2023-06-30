@@ -9,6 +9,7 @@ use data_encoding::HEXLOWER;
 use orion::{aead, kdf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use zeroize::Zeroizing;
 
 use crate::ledger::wallet::WalletUtils;
 
@@ -152,7 +153,7 @@ where
     /// Construct a keypair for storage. If no password is provided, the keypair
     /// will be stored raw without encryption. Returns the key for storing and a
     /// reference-counting point to the raw key.
-    pub fn new(keypair: T, password: Option<String>) -> (Self, T) {
+    pub fn new(keypair: T, password: Option<Zeroizing<String>>) -> (Self, T) {
         match password {
             Some(password) => (
                 Self::Encrypted(EncryptedKeypair::new(&keypair, password)),
@@ -168,14 +169,13 @@ where
     pub fn get<U: WalletUtils>(
         &self,
         decrypt: bool,
-        password: Option<String>,
+        password: Option<Zeroizing<String>>,
     ) -> Result<T, DecryptionError> {
         match self {
             StoredKeypair::Encrypted(encrypted_keypair) => {
                 if decrypt {
-                    let password = password.unwrap_or_else(|| {
-                        U::read_password("Enter decryption password: ")
-                    });
+                    let password = password
+                        .unwrap_or_else(|| U::read_decryption_password());
                     let key = encrypted_keypair.decrypt(password)?;
                     Ok(key)
                 } else {
@@ -197,9 +197,9 @@ where
 
 impl<T: BorshSerialize + BorshDeserialize> EncryptedKeypair<T> {
     /// Encrypt a keypair and store it with its salt.
-    pub fn new(keypair: &T, password: String) -> Self {
+    pub fn new(keypair: &T, password: Zeroizing<String>) -> Self {
         let salt = encryption_salt();
-        let encryption_key = encryption_key(&salt, password);
+        let encryption_key = encryption_key(&salt, &password);
 
         let data = keypair
             .try_to_vec()
@@ -214,14 +214,17 @@ impl<T: BorshSerialize + BorshDeserialize> EncryptedKeypair<T> {
     }
 
     /// Decrypt an encrypted keypair
-    pub fn decrypt(&self, password: String) -> Result<T, DecryptionError> {
+    pub fn decrypt(
+        &self,
+        password: Zeroizing<String>,
+    ) -> Result<T, DecryptionError> {
         let salt_len = encryption_salt().len();
         let (raw_salt, cipher) = self.0.split_at(salt_len);
 
         let salt = kdf::Salt::from_slice(raw_salt)
             .map_err(|_| DecryptionError::BadSalt)?;
 
-        let encryption_key = encryption_key(&salt, password);
+        let encryption_key = encryption_key(&salt, &password);
 
         let decrypted_data = aead::open(&encryption_key, cipher)
             .map_err(|_| DecryptionError::DecryptionError)?;
@@ -237,7 +240,7 @@ fn encryption_salt() -> kdf::Salt {
 }
 
 /// Make encryption secret key from a password.
-fn encryption_key(salt: &kdf::Salt, password: String) -> kdf::SecretKey {
+fn encryption_key(salt: &kdf::Salt, password: &str) -> kdf::SecretKey {
     kdf::Password::from_slice(password.as_bytes())
         .and_then(|password| kdf::derive_key(&password, salt, 3, 1 << 17, 32))
         .expect("Generation of encryption secret key shouldn't fail")

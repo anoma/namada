@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::{self, Display};
 use std::ops::{Index, IndexMut};
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
@@ -13,7 +14,7 @@ use crate::ledger::native_vp::governance::utils::ProposalEvent;
 use crate::tendermint_proto::abci::EventAttribute;
 use crate::types::ibc::IbcEvent;
 #[cfg(feature = "ferveo-tpke")]
-use crate::types::transaction::{hash_tx, TxType};
+use crate::types::transaction::TxType;
 
 /// Indicates if an event is emitted do to
 /// an individual Tx or the nature of a finalized block
@@ -63,46 +64,60 @@ impl Display for EventType {
     }
 }
 
+impl FromStr for EventType {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "accepted" => Ok(EventType::Accepted),
+            "applied" => Ok(EventType::Applied),
+            "proposal" => Ok(EventType::Proposal),
+            // IBC
+            "update_client" => Ok(EventType::Ibc("update_client".to_string())),
+            "send_packet" => Ok(EventType::Ibc("send_packet".to_string())),
+            "write_acknowledgement" => {
+                Ok(EventType::Ibc("write_acknowledgement".to_string()))
+            }
+            _ => Err(Error::InvalidEventType),
+        }
+    }
+}
+
 impl Event {
     /// Creates a new event with the hash and height of the transaction
     /// already filled in
     #[cfg(feature = "ferveo-tpke")]
-    pub fn new_tx_event(tx: &TxType, height: u64) -> Self {
-        let mut event = match tx {
-            TxType::Wrapper(wrapper) => {
+    pub fn new_tx_event(tx: &crate::proto::Tx, height: u64) -> Self {
+        let mut event = match tx.header().tx_type {
+            TxType::Wrapper(_) => {
                 let mut event = Event {
                     event_type: EventType::Accepted,
                     level: EventLevel::Tx,
                     attributes: HashMap::new(),
                 };
-                event["hash"] = hash_tx(
-                    &wrapper
-                        .try_to_vec()
-                        .expect("Serializing wrapper should not fail"),
-                )
-                .to_string();
+                event["hash"] = tx.header_hash().to_string();
                 event
             }
-            TxType::Decrypted(decrypted) => {
+            TxType::Decrypted(_) => {
                 let mut event = Event {
                     event_type: EventType::Applied,
                     level: EventLevel::Tx,
                     attributes: HashMap::new(),
                 };
-                event["hash"] = decrypted.hash_commitment().to_string();
+                event["hash"] = tx
+                    .clone()
+                    .update_header(TxType::Raw)
+                    .header_hash()
+                    .to_string();
                 event
             }
-            tx @ TxType::Protocol(_) => {
+            TxType::Protocol(_) => {
                 let mut event = Event {
                     event_type: EventType::Applied,
                     level: EventLevel::Tx,
                     attributes: HashMap::new(),
                 };
-                event["hash"] = hash_tx(
-                    &tx.try_to_vec()
-                        .expect("Serializing protocol tx should not fail"),
-                )
-                .to_string();
+                event["hash"] = tx.header_hash().to_string();
                 event
             }
             _ => unreachable!(),
@@ -199,6 +214,9 @@ impl Attributes {
 /// Errors to do with emitting events.
 #[derive(Error, Debug)]
 pub enum Error {
+    /// Error when parsing an event type
+    #[error("Invalid event type")]
+    InvalidEventType,
     /// Error when parsing attributes from an event JSON.
     #[error("Json missing `attributes` field")]
     MissingAttributes,

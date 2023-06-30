@@ -1,6 +1,7 @@
 //! Provides functionality for managing validator keys
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use zeroize::Zeroizing;
 
 use crate::ledger::wallet;
 use crate::ledger::wallet::{store, StoredKeypair};
@@ -67,10 +68,10 @@ impl ValidatorStore {
 /// Generate a key and then encrypt it
 pub fn gen_key_to_store(
     scheme: SchemeType,
-    password: &Option<String>,
+    password: Option<Zeroizing<String>>,
 ) -> (StoredKeypair<common::SecretKey>, common::SecretKey) {
-    let sk = store::gen_sk(scheme);
-    StoredKeypair::new(sk, password.clone())
+    let sk = store::gen_sk_rng(scheme);
+    StoredKeypair::new(sk, password)
 }
 
 impl From<wallet::keys::DecryptionError> for ReadError {

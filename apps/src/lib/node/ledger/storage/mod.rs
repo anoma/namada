@@ -248,7 +248,7 @@ mod tests {
 
         // insert
         let vp1 = Hash::sha256("vp1".as_bytes());
-        storage.write(&key, vp1.clone()).expect("write failed");
+        storage.write(&key, vp1).expect("write failed");
 
         // check
         let (vp_code_hash, gas) =
@@ -356,14 +356,16 @@ mod tests {
         let is_last_write = blocks_write_value.last().unwrap().1;
 
         // The upper bound is arbitrary.
-        for height in storage.last_height.0..storage.last_height.0 + 10 {
+        for height in storage.get_last_block_height().0
+            ..storage.get_last_block_height().0 + 10
+        {
             let height = BlockHeight::from(height);
             let (value_bytes, _gas) = storage.read_with_height(&key, height)?;
             if is_last_write {
                 let value_bytes =
                     value_bytes.expect("Should have been written");
                 let value: BlockHeight = types::decode(value_bytes).unwrap();
-                assert_eq!(value, storage.last_height);
+                assert_eq!(value, storage.get_last_block_height());
             } else if value_bytes.is_some() {
                 let value: BlockHeight =
                     types::decode(value_bytes.unwrap()).unwrap();

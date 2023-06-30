@@ -86,7 +86,7 @@ impl BorshSchema for PublicKey {
     }
 }
 
-#[allow(clippy::derive_hash_xor_eq)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 impl Hash for PublicKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.to_bytes().hash(state);
@@ -291,7 +291,7 @@ impl BorshSchema for Signature {
     }
 }
 
-#[allow(clippy::derive_hash_xor_eq)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 impl Hash for Signature {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.to_bytes().hash(state);
@@ -334,6 +334,10 @@ impl super::SigScheme for SigScheme {
         R: CryptoRng + RngCore,
     {
         SecretKey(Box::new(ed25519_consensus::SigningKey::new(csprng)))
+    }
+
+    fn from_bytes(bytes: [u8; 32]) -> SecretKey {
+        SecretKey(Box::new(ed25519_consensus::SigningKey::from(bytes)))
     }
 
     fn sign(keypair: &SecretKey, data: impl AsRef<[u8]>) -> Self::Signature {

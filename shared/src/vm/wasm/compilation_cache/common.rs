@@ -164,8 +164,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                         hash.to_string()
                     );
                     // Put into cache, ignore result if it's full
-                    let _ =
-                        in_memory.put_with_weight(hash.clone(), module.clone());
+                    let _ = in_memory.put_with_weight(*hash, module.clone());
 
                     return Ok(Some((module, store)));
                 }
@@ -196,13 +195,12 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
 
                     // Update progress
                     let mut progress = self.progress.write().unwrap();
-                    progress.insert(hash.clone(), Compilation::Done);
+                    progress.insert(*hash, Compilation::Done);
 
                     // Put into cache, ignore the result (fails if the module
                     // cannot fit into the cache)
                     let mut in_memory = self.in_memory.write().unwrap();
-                    let _ =
-                        in_memory.put_with_weight(hash.clone(), module.clone());
+                    let _ = in_memory.put_with_weight(*hash, module.clone());
 
                     return Ok(Some((module, store)));
                 }
@@ -304,7 +302,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
             drop(progress);
             return self.fetch(&hash);
         }
-        progress.insert(hash.clone(), Compilation::Compiling);
+        progress.insert(hash, Compilation::Compiling);
         drop(progress);
 
         tracing::info!("Compiling {} {}.", N::name(), hash.to_string());
@@ -317,7 +315,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
 
                     // Update progress
                     let mut progress = self.progress.write().unwrap();
-                    progress.insert(hash.clone(), Compilation::Done);
+                    progress.insert(hash, Compilation::Done);
 
                     // Put into cache, ignore result if it's full
                     let mut in_memory = self.in_memory.write().unwrap();
@@ -364,13 +362,13 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                         progress.insert(hash, Compilation::Done);
                         return;
                     }
-                    progress.insert(hash.clone(), Compilation::Compiling);
+                    progress.insert(hash, Compilation::Compiling);
                     drop(progress);
                     let progress = self.progress.clone();
                     let code = code.as_ref().to_vec();
                     let dir = self.dir.clone();
                     std::thread::spawn(move || {
-                        tracing::info!("Compiling {}.", hash.to_string());
+                        tracing::info!("Compiling WASM {}.", hash.to_string());
 
                         let (_module, _store) =
                             match wasm::run::prepare_wasm_code(code) {
@@ -378,10 +376,24 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                                     Ok((module, store)) => {
                                         let mut progress =
                                             progress.write().unwrap();
-                                        progress.insert(
-                                            hash.clone(),
-                                            Compilation::Done,
+                                        progress
+                                            .insert(hash, Compilation::Done);
+                                        tracing::info!(
+                                            "Finished compiling WASM {hash}."
                                         );
+                                        if progress.values().all(
+                                            |compilation| {
+                                                matches!(
+                                                    compilation,
+                                                    Compilation::Done
+                                                )
+                                            },
+                                        ) {
+                                            tracing::info!(
+                                                "Finished compiling all {}.",
+                                                N::name()
+                                            )
+                                        }
                                         file_write_module(&dir, &module, &hash);
                                         (module, store)
                                     }

@@ -21,40 +21,129 @@ exclude = [
   "wasm_for_tests",
 ]
 
+[workspace.package]
+authors = ["Heliax AG <hello@heliax.dev>"]
+edition = "2021"
+documentation = "https://docs.namada.net/"
+homepage = "https://namada.net/"
+keywords = ["blockchain", "privacy", "crypto", "protocol", "network"]
+license = "GPL-3.0"
+readme = "README.md"
+repository = "https://github.com/anoma/namada"
+version = "0.17.5"
+
+[workspace.dependencies]
+ark-bls12-381 = {version = "0.3"}
+ark-serialize = {version = "0.3"}
+ark-std = "0.3.0"
+# branch = "bat/arse-merkle-tree"
+arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "e086b235ed6e68929bf73f617dd61cd17b000a56", default-features = false, features = ["std", "borsh"]}
+assert_cmd = "1.0.7"
+assert_matches = "1.5.0"
+async-std = "1.11.0"
+async-trait = {version = "0.1.51"}
+base58 = "0.2.0"
+base64 = "0.13.0"
+bech32 = "0.8.0"
+bimap = {version = "0.6.2", features = ["serde"]}
+bit-set = "0.5.2"
+blake2b-rs = "0.2.0"
+byte-unit = "4.0.13"
+byteorder = "1.4.2"
+borsh = "0.9.0"
+chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
+circular-queue = "0.2.6"
+clap = {git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2", default-features = false, features = ["std", "suggestions", "color", "cargo"]}
+clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
+color-eyre = "0.5.10"
+concat-idents = "1.1.2"
+config = "0.11.0"
+data-encoding = "2.3.2"
+derivation-path = "0.2.0"
+derivative = "2.2.0"
+directories = "4.0.1"
+ed25519-consensus = "1.2.0"
+escargot = "0.5.7"
+expectrl = "0.7.0"
+eyre = "0.6.5"
+ferveo = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
+ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
+file-lock = "2.0.2"
+file-serve = "0.2.0"
+flate2 = "1.0.22"
+fs_extra = "1.2.0"
+futures = "0.3"
+git2 = "0.13.25"
+ibc-relayer = {git = "https://github.com/heliaxdev/hermes.git", rev = "a4ad1355fc0b05908881854aa27221cb2b878ac5", default-features = false}
+ibc-relayer-types = {git = "https://github.com/heliaxdev/hermes.git", rev = "a4ad1355fc0b05908881854aa27221cb2b878ac5", default-features = false}
+ics23 = "0.9.0"
+index-set = {git = "https://github.com/heliaxdev/index-set", tag = "v0.7.1", features = ["serialize-borsh", "serialize-serde"]}
+itertools = "0.10.0"
+libc = "0.2.97"
+libloading = "0.7.2"
+libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
+# branch = "murisi/namada-integration"
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "cfea8c95d3f73077ca3e25380fd27e5b46e828fd" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "cfea8c95d3f73077ca3e25380fd27e5b46e828fd", default-features = false, features = ["local-prover"] }
+num_cpus = "1.13.0"
+num-derive = "0.3.3"
+num-rational = "0.4.1"
+num-traits = "0.2.14"
+once_cell = "1.8.0"
+orion = "0.16.0"
+paste = "1.0.9"
+pretty_assertions = "0.7.2"
+proptest = "1.2.0"
+proptest-state-machine = "0.1.0"
+prost = "0.11.6"
+prost-types = "0.11.6"
+rand = {version = "0.8", default-features = false}
+rand_core = {version = "0.6", default-features = false}
+rayon = "=1.5.3"
+regex = "1.4.5"
+reqwest = "0.11.4"
+ripemd = "0.1"
+rlimit = "0.5.4"
+rocksdb = {version = "0.21.0", features = ['zstd', 'jemalloc'], default-features = false}
+rpassword = "5.0.1"
+rust_decimal = { version = "=1.26.1", features = ["borsh"] }
+rust_decimal_macros = "=1.26.1"
+serde = {version = "1.0.125", features = ["derive"]}
+serde_bytes = "0.11.5"
+serde_json = "1.0.62"
+sha2 = "0.9.3"
+signal-hook = "0.3.9"
+slip10_ed25519 = "0.1.3"
+# sysinfo with disabled multithread feature
+sysinfo = {version = "=0.21.1", default-features = false}
+tar = "0.4.37"
+tempfile = {version = "3.2.0"}
+tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "02b256829e80f8cfecf3fa0d625c2a76c79cd043"}
+test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
+tiny-bip39 = {git = "https://github.com/anoma/tiny-bip39.git", rev = "bf0f6d8713589b83af7a917366ec31f5275c0e57"}
+tiny-hderive = "0.3.0"
+thiserror = "1.0.38"
+tokio = {version = "1.8.2", default-features = false}
+tokio-test = "0.4.2"
+toml = "0.5.8"
+tonic = "0.8.3"
+tonic-build = "0.8.4"
+tower = "0.4"
+# Also, using the same version of tendermint-rs as we do here.
+tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "367d8d958b83c501ed2c09e9c4595f8bf75a0b01"}
+tracing = "0.1.30"
+tracing-log = "0.1.2"
+tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
+wasmparser = "0.83.0"
+winapi = "0.3.9"
+zeroize = {version = "1.5.5", features = ["zeroize_derive"]}
+
 [patch.crates-io]
 # TODO temp patch for <https://github.com/near/borsh-rs/issues/82>, <https://github.com/near/borsh-rs/issues/84> and more tba.
 borsh = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
 borsh-derive = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
 borsh-derive-internal = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
 borsh-schema-derive-internal = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
-# The following 3 crates patch a work-around for https://github.com/smol-rs/polling/issues/38 breaking namada tooling build with nightly 2022-05-20
-polling = {git = "https://github.com/heliaxdev/polling.git", rev = "02a655775282879459a3460e2646b60c005bca2c"}
-async-io = {git = "https://github.com/heliaxdev/async-io.git", rev = "9285dad39c9a37ecd0dbd498c5ce5b0e65b02489"}
-async-process = {git = "https://github.com/heliaxdev/async-process.git", rev = "e42c527e87d937da9e01aaeb563c0b948580dc89"}
-# borsh = {path = "../borsh-rs/borsh"}
-# borsh-derive = {path = "../borsh-rs/borsh-derive"}
-# borsh-derive-internal = {path = "../borsh-rs/borsh-derive-internal"}
-# borsh-schema-derive-internal = {path = "../borsh-rs/borsh-schema-derive-internal"}
-
-# patched to a commit on the `eth-bridge-integration+consensus-timeout` branch of our fork
-tendermint = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "4db3c5ea09fae4057008d22bf9e96bf541b55b35"}
-tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "4db3c5ea09fae4057008d22bf9e96bf541b55b35"}
-tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "4db3c5ea09fae4057008d22bf9e96bf541b55b35"}
-tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "4db3c5ea09fae4057008d22bf9e96bf541b55b35"}
-tendermint-testgen = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "4db3c5ea09fae4057008d22bf9e96bf541b55b35"}
-tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "4db3c5ea09fae4057008d22bf9e96bf541b55b35"}
-
-# patched to a commit on the `eth-bridge-integration` branch of our fork
-ibc = {git = "https://github.com/heliaxdev/cosmos-ibc-rs.git", rev = "2d7edc16412b60cabf78163fe24a6264e11f77a9"}
-ibc-proto = {git = "https://github.com/heliaxdev/ibc-proto-rs.git", rev = "7e527b5b8c95d83351e93ceafc14ac853224283f"}
-ibc-relayer = {git = "https://github.com/heliaxdev/hermes.git", rev = "8e2ff3479edc0653f34b22df450d451eedd2c2ab"}
-ibc-relayer-types = {git = "https://github.com/heliaxdev/hermes.git", rev = "8e2ff3479edc0653f34b22df450d451eedd2c2ab"}
-
-# patched to a commit on the `eth-bridge-integration` branch of our fork
-tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "79069a441cee7d9955a3d826d29656a0fb16115c"}
-
-# patched to the yanked 1.2.0 until masp updates bitvec
-funty = { git = "https://github.com/bitvecto-rs/funty/", rev = "7ef0d890fbcd8b3def1635ac1a877fc298488446" }
 
 [profile.release]
 lto = true
