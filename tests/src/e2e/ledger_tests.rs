@@ -3085,7 +3085,7 @@ fn proposal_submission() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
-    client.exp_string("nam: 999500")?;
+    client.exp_string("nam: 1000000")?;
     client.assert_success();
 
     // 13. Check if governance funds are 0
@@ -3109,7 +3109,7 @@ fn proposal_submission() -> Result<()> {
 
     let mut client =
         run!(test, Bin::Client, query_protocol_parameters, Some(30))?;
-    client.exp_regex(".*Min. proposal grace epochs: 6.*")?;
+    client.exp_regex(".*Min. proposal grace epochs: 9.*")?;
     client.assert_success();
 
     Ok(())
