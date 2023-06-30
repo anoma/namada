@@ -340,7 +340,7 @@ pub async fn has_revealed_pk<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     addr: &Address,
 ) -> bool {
-    rpc::get_public_key(client, addr).await.is_some()
+    rpc::get_account_info(client, addr).await.is_some()
 }
 
 /// Submit transaction to reveal the given public key

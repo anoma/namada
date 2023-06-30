@@ -102,6 +102,7 @@ impl TestTxEnv {
         epoch_duration: Option<EpochDuration>,
         vp_whitelist: Option<Vec<String>>,
         tx_whitelist: Option<Vec<String>>,
+        max_signatures_per_transaction: Option<u8>
     ) {
         parameters::update_epoch_parameter(
             &mut self.wl_storage,
@@ -121,6 +122,8 @@ impl TestTxEnv {
             vp_whitelist.unwrap_or_default(),
         )
         .unwrap();
+        parameters::update_max_signature_per_tx(&mut self.wl_storage, max_signatures_per_transaction.unwrap_or(15))
+            .unwrap();
     }
 
     pub fn store_wasm_code(&mut self, code: Vec<u8>) {
@@ -153,6 +156,19 @@ impl TestTxEnv {
                 .write(&key, vp_code)
                 .expect("Unable to write VP");
         }
+    }
+
+    /// Set public key for the address.
+    pub fn write_account_threshold(
+        &mut self,
+        address: &Address,
+        threshold: u8,
+    ) {
+        let storage_key = key::threshold_key(address);
+        self.wl_storage
+            .storage
+            .write(&storage_key, threshold.try_to_vec().unwrap())
+            .unwrap();
     }
 
     /// Commit the genesis state. Typically, you'll want to call this after
@@ -199,12 +215,9 @@ impl TestTxEnv {
         &mut self,
         address: &Address,
         public_key: &key::common::PublicKey,
+        index: u8
     ) {
-        let storage_key = key::pk_key(address);
-        self.wl_storage
-            .storage
-            .write(&storage_key, public_key.try_to_vec().unwrap())
-            .unwrap();
+        key::pks_handle(address).insert(&mut self.wl_storage, index, public_key.clone()).unwrap();
     }
 
     /// Apply the tx changes to the write log.

@@ -78,7 +78,7 @@ pub async fn find_keypair<
                 "Looking-up public key of {} from the ledger...",
                 addr.encode()
             );
-            let public_key = rpc::get_public_key(client, addr).await.ok_or(
+            let public_key = rpc::get_public_key_at(client, addr, 0).await.ok_or(
                 Error::Other(format!(
                     "No public key found for the address {}",
                     addr.encode()
@@ -214,7 +214,8 @@ pub async fn sign_tx<
     let (public_keys_index_map, threshold) = if let Some(account) = account {
         (account.public_keys_map, account.threshold)
     } else {
-        (AccountPublicKeysMap::empty(), 1u8)
+        let pks = args.signing_keys.iter().map(|sk| sk.ref_to()).collect::<Vec<common::PublicKey>>();
+        (AccountPublicKeysMap::from_iter(pks), 1u8)
     };
 
     let data_section_multisig = MultiSignature::new(

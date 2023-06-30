@@ -718,7 +718,7 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
 
         let proposal: OfflineProposal =
             serde_json::from_reader(file).expect("JSON was not well-formatted");
-        let public_key = rpc::get_public_key(client, &proposal.address)
+        let public_key = namada::ledger::rpc::get_public_key_at(client, &proposal.address, 0)
             .await
             .expect("Public key should exist.");
         if !proposal.check_signature(&public_key) {

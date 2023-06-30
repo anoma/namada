@@ -29,7 +29,7 @@ use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::types::governance::{ProposalVote, VotePower};
 use crate::types::hash::Hash;
-use crate::types::key::*;
+use crate::types::key::common;
 use crate::types::storage::{BlockHeight, BlockResults, Epoch, PrefixValue};
 use crate::types::token::balance_key;
 use crate::types::{storage, token};
@@ -121,15 +121,6 @@ pub async fn get_token_balance<C: crate::ledger::queries::Client + Sync>(
 ) -> Option<token::Amount> {
     let balance_key = balance_key(token, owner);
     query_storage_value(client, &balance_key).await
-}
-
-/// Get account's public key stored in its storage sub-space
-pub async fn get_public_key<C: crate::ledger::queries::Client + Sync>(
-    client: &C,
-    address: &Address,
-) -> Option<common::PublicKey> {
-    let key = pk_key(address);
-    query_storage_value(client, &key).await
 }
 
 /// Check if the given address is a known validator.
@@ -761,6 +752,22 @@ pub async fn get_account_info<C: crate::ledger::queries::Client + Sync>(
     unwrap_client_response::<C, Option<Account>>(
         RPC.shell().account(client, owner).await,
     )
+}
+
+/// Query an account substorage at a specific index
+pub async fn get_public_key_at<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    owner: &Address,
+    index: u8
+) -> Option<common::PublicKey> {
+    let account = unwrap_client_response::<C, Option<Account>>(
+        RPC.shell().account(client, owner).await,
+    );
+    if let Some(account) = account {
+        account.get_public_key_from_index(index)
+    } else {
+        None
+    }
 }
 
 /// Query a validator's unbonds for a given epoch

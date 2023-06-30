@@ -359,6 +359,20 @@ where
     storage.write_bytes(&key, implicit_vp)
 }
 
+/// Update the max signatures per transaction storage parameter
+pub fn update_max_signature_per_tx<S>(
+    storage: &mut S,
+    value: u8
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = storage::get_max_signatures_per_transaction_key();
+    // Using `fn write_bytes` here, because implicit_vp doesn't need to be
+    // encoded, it's bytes already.
+    storage.write(&key, value)
+}
+
 /// Read the the epoch duration parameter from store
 pub fn read_epoch_duration_parameter<S>(
     storage: &S,

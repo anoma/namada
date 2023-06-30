@@ -21,7 +21,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use super::address::Address;
-use super::storage::{self, DbKeySeg, Key, KeySeg};
+use super::storage::{self, DbKeySeg, Key};
 use crate::ledger::storage_api::collections::{lazy_map, LazyCollection};
 use crate::types::address;
 
@@ -31,15 +31,6 @@ struct Keys {
     public_keys: &'static str,
     threshold: &'static str,
     protocol_public_keys: &'static str,
-}
-
-const PK_STORAGE_KEY: &str = "public_key";
-
-/// Obtain a storage key for user's public key.
-pub fn pk_key(owner: &Address) -> storage::Key {
-    Key::from(owner.to_db_key())
-        .push(&PK_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
 }
 
 /// Obtain a storage key for user's public key.
@@ -55,18 +46,6 @@ pub fn pks_key_prefix(owner: &Address) -> storage::Key {
 /// Object that LazyMap handler for the user's public key subspace
 pub fn pks_handle(owner: &Address) -> LazyMap<u8, common::PublicKey> {
     LazyMap::open(pks_key_prefix(owner))
-}
-
-/// Check if the given storage key is a public key. If it is, returns the owner.
-pub fn is_pk_key(key: &Key) -> Option<&Address> {
-    match &key.segments[..] {
-        [DbKeySeg::AddressSeg(owner), DbKeySeg::StringSeg(key)]
-            if key == PK_STORAGE_KEY =>
-        {
-            Some(owner)
-        }
-        _ => None,
-    }
 }
 
 /// Check if the given storage key is a public key. If it is, returns the owner.

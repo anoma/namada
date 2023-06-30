@@ -4,6 +4,7 @@ use super::*;
 use crate::types::account::AccountPublicKeysMap;
 use crate::types::address::Address;
 use crate::types::key::*;
+use crate::types::storage::Key;
 
 /// Init the subspace of a new account
 pub fn init_account_storage<S>(
@@ -69,6 +70,20 @@ pub fn exists<S>(storage: &S, owner: &Address) -> Result<bool>
 where
     S: StorageRead,
 {
-    let public_keys_prefix_key = pks_key_prefix(owner);
-    storage.has_key(&public_keys_prefix_key)
+    let vp_key = Key::validity_predicate(owner);
+    storage.has_key(&vp_key)
+}
+
+/// Set public key at specific index
+pub fn set_public_key_at<S>(
+    storage: &mut S,
+    owner: &Address,
+    public_key: &common::PublicKey,
+    index: u8
+) -> Result<()>
+where
+    S: StorageWrite + StorageRead,
+{
+    pks_handle(owner).insert(storage, index, public_key.clone())?;
+    Ok(())
 }
