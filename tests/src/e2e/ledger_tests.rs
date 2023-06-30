@@ -643,6 +643,7 @@ fn masp_txs_and_queries() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
+
     let txs_args = vec![
         // 2. Attempt to spend 10 BTC at SK(A) to PA(B)
         (
@@ -847,7 +848,13 @@ fn masp_txs_and_queries() -> Result<()> {
             "Transaction is valid",
         ),
     ];
-
+    // Wait till epoch boundary
+    loop {
+        let ep = epoch_sleep(&test, &validator_one_rpc, 60)?;
+        if ep >= Epoch(1) {
+            break;
+        }
+    }
     for (tx_args, tx_result) in &txs_args {
         for &dry_run in &[true, false] {
             let tx_args = if dry_run && tx_args[0] == "transfer" {
