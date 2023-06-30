@@ -9,9 +9,7 @@ use namada_tx_prelude::*;
 fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
     let data = signed.data().ok_or_err_msg("Missing data")?;
     let transfer = PendingTransfer::try_from_slice(&data[..])
-        .map_err(|e| {
-        Error::wrap("Error deserializing PendingTransfer", e)
-    })?;
+        .map_err(|e| Error::wrap("Error deserializing PendingTransfer", e))?;
     log_string("Received transfer to add to pool.");
     // pay the gas fees
     let GasFee { amount, ref payer } = transfer.gas_fee;

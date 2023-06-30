@@ -4,9 +4,9 @@ use std::num::NonZeroU64;
 use std::ops::ControlFlow;
 use std::str::FromStr;
 
-use expectrl::ControlCode;
 use borsh::{BorshDeserialize, BorshSerialize};
 use color_eyre::eyre::{eyre, Result};
+use expectrl::ControlCode;
 use namada::eth_bridge::oracle;
 use namada::eth_bridge::storage::vote_tallies;
 use namada::ledger::eth_bridge::{

@@ -9,8 +9,7 @@ mod test_bridge_pool_vp {
         ADDRESS,
     };
     use namada::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
-    use namada::proto::{Tx, Code, Data, Section, Signature};
-    use namada::types::transaction::TxType;
+    use namada::proto::{Code, Data, Section, Signature, Tx};
     use namada::types::address::{nam, wnam};
     use namada::types::chain::ChainId;
     use namada::types::eth_bridge_pool::{
@@ -19,6 +18,7 @@ mod test_bridge_pool_vp {
     use namada::types::ethereum_events::EthAddress;
     use namada::types::key::{common, ed25519, SecretKey};
     use namada::types::token::Amount;
+    use namada::types::transaction::TxType;
     use namada_apps::wallet::defaults::{albert_address, bertha_address};
     use namada_apps::wasm_loader;
 
