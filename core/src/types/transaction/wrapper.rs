@@ -2,11 +2,14 @@
 /// to enable encrypted txs inside of normal txs.
 /// *Not wasm compatible*
 pub mod wrapper_tx {
+    use std::fmt::Formatter;
+
     pub use ark_bls12_381::Bls12_381 as EllipticCurve;
     #[cfg(feature = "ferveo-tpke")]
     pub use ark_ec::{AffineCurve, PairingEngine};
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-    use serde::{Deserialize, Serialize};
+    use serde::de::Error;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use sha2::{Digest, Sha256};
     use thiserror::Error;
 
@@ -14,6 +17,7 @@ pub mod wrapper_tx {
     use crate::types::key::*;
     use crate::types::storage::Epoch;
     use crate::types::token::Amount;
+    use crate::types::uint::Uint;
 
     /// Minimum fee amount in micro NAMs
     pub const MIN_FEE: u64 = 100;
@@ -56,6 +60,7 @@ pub mod wrapper_tx {
         /// amount of the fee
         pub amount: Amount,
         /// address of the token
+        /// TODO: This should support multi-tokens
         pub token: Address,
     }
 
@@ -67,52 +72,95 @@ pub mod wrapper_tx {
     /// This struct only stores the multiple of GAS_LIMIT_RESOLUTION,
     /// not the raw amount
     #[derive(
+        Default,
         Debug,
         Clone,
         PartialEq,
-        Serialize,
-        Deserialize,
         BorshSerialize,
         BorshDeserialize,
         BorshSchema,
         Eq,
     )]
-    #[serde(from = "u64")]
-    #[serde(into = "u64")]
     pub struct GasLimit {
-        multiplier: u64,
+        multiplier: Uint,
+    }
+
+    impl Serialize for GasLimit {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            let limit = Uint::from(self).to_string();
+            Serialize::serialize(&limit, serializer)
+        }
+    }
+
+    impl<'de> Deserialize<'de> for GasLimit {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            struct GasLimitVisitor;
+
+            impl<'a> serde::de::Visitor<'a> for GasLimitVisitor {
+                type Value = GasLimit;
+
+                fn expecting(
+                    &self,
+                    formatter: &mut Formatter,
+                ) -> std::fmt::Result {
+                    formatter.write_str(
+                        "A string representing 256-bit unsigned integer",
+                    )
+                }
+
+                fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+                where
+                    E: Error,
+                {
+                    let uint = Uint::from_dec_str(v)
+                        .map_err(|e| E::custom(e.to_string()))?;
+                    Ok(GasLimit::from(uint))
+                }
+            }
+            deserializer.deserialize_any(GasLimitVisitor)
+        }
     }
 
     impl GasLimit {
         /// We refund unused gas up to GAS_LIMIT_RESOLUTION
-        pub fn refund_amount(&self, used_gas: u64) -> Amount {
-            if used_gas < (u64::from(self) - GAS_LIMIT_RESOLUTION) {
-                // we refund only up to GAS_LIMIT_RESOLUTION
-                GAS_LIMIT_RESOLUTION
-            } else if used_gas >= u64::from(self) {
-                // Gas limit was under estimated, no refund
-                0
-            } else {
-                // compute refund
-                u64::from(self) - used_gas
-            }
-            .into()
+        pub fn refund_amount(&self, used_gas: Uint) -> Amount {
+            Amount::from_uint(
+                if used_gas
+                    < (Uint::from(self) - Uint::from(GAS_LIMIT_RESOLUTION))
+                {
+                    // we refund only up to GAS_LIMIT_RESOLUTION
+                    Uint::from(GAS_LIMIT_RESOLUTION)
+                } else if used_gas >= Uint::from(self) {
+                    // Gas limit was under estimated, no refund
+                    Uint::from(0)
+                } else {
+                    // compute refund
+                    Uint::from(self) - used_gas
+                },
+                0,
+            )
+            .unwrap()
         }
     }
 
     /// Round the input number up to the next highest multiple
     /// of GAS_LIMIT_RESOLUTION
-    impl From<u64> for GasLimit {
-        fn from(amount: u64) -> GasLimit {
-            // we could use the ceiling function but this way avoids casts to
-            // floats
-            if GAS_LIMIT_RESOLUTION * (amount / GAS_LIMIT_RESOLUTION) < amount {
+    impl From<Uint> for GasLimit {
+        fn from(amount: Uint) -> GasLimit {
+            let gas_limit_resolution = Uint::from(GAS_LIMIT_RESOLUTION);
+            if gas_limit_resolution * (amount / gas_limit_resolution) < amount {
                 GasLimit {
-                    multiplier: (amount / GAS_LIMIT_RESOLUTION) + 1,
+                    multiplier: (amount / gas_limit_resolution) + 1,
                 }
             } else {
                 GasLimit {
-                    multiplier: (amount / GAS_LIMIT_RESOLUTION),
+                    multiplier: (amount / gas_limit_resolution),
                 }
             }
         }
@@ -122,20 +170,20 @@ pub mod wrapper_tx {
     /// of GAS_LIMIT_RESOLUTION
     impl From<Amount> for GasLimit {
         fn from(amount: Amount) -> GasLimit {
-            GasLimit::from(u64::from(amount))
+            GasLimit::from(Uint::from(amount))
         }
     }
 
     /// Get back the gas limit as a raw number
-    impl From<&GasLimit> for u64 {
-        fn from(limit: &GasLimit) -> u64 {
+    impl From<&GasLimit> for Uint {
+        fn from(limit: &GasLimit) -> Uint {
             limit.multiplier * GAS_LIMIT_RESOLUTION
         }
     }
 
     /// Get back the gas limit as a raw number
-    impl From<GasLimit> for u64 {
-        fn from(limit: GasLimit) -> u64 {
+    impl From<GasLimit> for Uint {
+        fn from(limit: GasLimit) -> Uint {
             limit.multiplier * GAS_LIMIT_RESOLUTION
         }
     }
@@ -143,7 +191,8 @@ pub mod wrapper_tx {
     /// Get back the gas limit as a raw number, viewed as an Amount
     impl From<GasLimit> for Amount {
         fn from(limit: GasLimit) -> Amount {
-            Amount::from(limit.multiplier * GAS_LIMIT_RESOLUTION)
+            Amount::from_uint(limit.multiplier * GAS_LIMIT_RESOLUTION, 0)
+                .unwrap()
         }
     }
 
@@ -221,10 +270,12 @@ pub mod wrapper_tx {
         /// Test that serializing converts GasLimit to u64 correctly
         #[test]
         fn test_gas_limit_roundtrip() {
-            let limit = GasLimit { multiplier: 1 };
+            let limit = GasLimit {
+                multiplier: 1.into(),
+            };
             // Test serde roundtrip
             let js = serde_json::to_string(&limit).expect("Test failed");
-            assert_eq!(js, format!("{}", GAS_LIMIT_RESOLUTION));
+            assert_eq!(js, format!(r#""{}""#, GAS_LIMIT_RESOLUTION));
             let new_limit: GasLimit =
                 serde_json::from_str(&js).expect("Test failed");
             assert_eq!(new_limit, limit);
@@ -243,35 +294,52 @@ pub mod wrapper_tx {
         /// multiple
         #[test]
         fn test_deserialize_not_multiple_of_resolution() {
-            let js = serde_json::to_string(&(GAS_LIMIT_RESOLUTION + 1))
-                .expect("Test failed");
+            let js = format!(r#""{}""#, &(GAS_LIMIT_RESOLUTION + 1));
             let limit: GasLimit =
                 serde_json::from_str(&js).expect("Test failed");
-            assert_eq!(limit, GasLimit { multiplier: 2 });
+            assert_eq!(
+                limit,
+                GasLimit {
+                    multiplier: 2.into()
+                }
+            );
         }
 
         /// Test that refund is calculated correctly
         #[test]
         fn test_gas_limit_refund() {
-            let limit = GasLimit { multiplier: 1 };
-            let refund = limit.refund_amount(GAS_LIMIT_RESOLUTION - 1);
-            assert_eq!(refund, Amount::from(1u64));
+            let limit = GasLimit {
+                multiplier: 1.into(),
+            };
+            let refund =
+                limit.refund_amount(Uint::from(GAS_LIMIT_RESOLUTION - 1));
+            assert_eq!(refund, Amount::from_uint(1, 0).expect("Test failed"));
         }
 
         /// Test that we don't refund more than GAS_LIMIT_RESOLUTION
         #[test]
         fn test_gas_limit_too_high_no_refund() {
-            let limit = GasLimit { multiplier: 2 };
-            let refund = limit.refund_amount(GAS_LIMIT_RESOLUTION - 1);
-            assert_eq!(refund, Amount::from(GAS_LIMIT_RESOLUTION));
+            let limit = GasLimit {
+                multiplier: 2.into(),
+            };
+            let refund =
+                limit.refund_amount(Uint::from(GAS_LIMIT_RESOLUTION - 1));
+            assert_eq!(
+                refund,
+                Amount::from_uint(GAS_LIMIT_RESOLUTION, 0)
+                    .expect("Test failed")
+            );
         }
 
         /// Test that if gas usage was underestimated, we issue no refund
         #[test]
         fn test_gas_limit_too_low_no_refund() {
-            let limit = GasLimit { multiplier: 1 };
-            let refund = limit.refund_amount(GAS_LIMIT_RESOLUTION + 1);
-            assert_eq!(refund, Amount::from(0u64));
+            let limit = GasLimit {
+                multiplier: 1.into(),
+            };
+            let refund =
+                limit.refund_amount(Uint::from(GAS_LIMIT_RESOLUTION + 1));
+            assert_eq!(refund, Amount::default());
         }
     }
 
@@ -303,19 +371,19 @@ pub mod wrapper_tx {
                     },
                     &keypair,
                     Epoch(0),
-                    0.into(),
+                    Default::default(),
                     #[cfg(not(feature = "mainnet"))]
                     None,
                 ))));
             wrapper.set_code(Code::new("wasm code".as_bytes().to_owned()));
             wrapper
                 .set_data(Data::new("transaction data".as_bytes().to_owned()));
-            wrapper.add_section(Section::Signature(Signature::new(
-                &wrapper.header_hash(),
-                &keypair,
-            )));
             let mut encrypted_tx = wrapper.clone();
             encrypted_tx.encrypt(&Default::default());
+            wrapper.add_section(Section::Signature(Signature::new(
+                vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
+                &keypair,
+            )));
             assert!(encrypted_tx.validate_ciphertext());
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
             encrypted_tx.decrypt(privkey).expect("Test failed");
@@ -336,7 +404,7 @@ pub mod wrapper_tx {
                     },
                     &keypair,
                     Epoch(0),
-                    0.into(),
+                    Default::default(),
                     #[cfg(not(feature = "mainnet"))]
                     None,
                 ))));
@@ -346,11 +414,11 @@ pub mod wrapper_tx {
             // give a incorrect commitment to the decrypted contents of the tx
             wrapper.set_code_sechash(Hash([0u8; 32]));
             wrapper.set_data_sechash(Hash([0u8; 32]));
+            wrapper.encrypt(&Default::default());
             wrapper.add_section(Section::Signature(Signature::new(
-                &wrapper.header_hash(),
+                vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
                 &keypair,
             )));
-            wrapper.encrypt(&Default::default());
             assert!(wrapper.validate_ciphertext());
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
             let err = wrapper.decrypt(privkey).expect_err("Test failed");
@@ -366,22 +434,18 @@ pub mod wrapper_tx {
             // the signed tx
             let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount: 10.into(),
+                    amount: Amount::from_uint(10, 0).expect("Test failed"),
                     token: nam(),
                 },
                 &keypair,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             ))));
 
             tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
             tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-            tx.add_section(Section::Signature(Signature::new(
-                &tx.header_hash(),
-                &keypair,
-            )));
 
             // we now try to alter the inner tx maliciously
             // malicious transaction
@@ -390,6 +454,11 @@ pub mod wrapper_tx {
             let malicious = "Give me all the money".as_bytes().to_owned();
             tx.set_data(Data::new(malicious.clone()));
             tx.encrypt(&Default::default());
+
+            tx.add_section(Section::Signature(Signature::new(
+                vec![tx.header_hash(), tx.sections[0].get_hash()],
+                &keypair,
+            )));
 
             // we check ciphertext validity still passes
             assert!(tx.validate_ciphertext());
@@ -401,10 +470,10 @@ pub mod wrapper_tx {
             assert_eq!(tx.data(), Some(malicious));
 
             // check that the signature is not valid
-            tx.verify_signature(&keypair.ref_to(), &tx.header_hash())
+            tx.verify_signature(&keypair.ref_to(), &tx.sechashes())
                 .expect_err("Test failed");
             // check that the try from method also fails
-            let err = tx.validate_header().expect_err("Test failed");
+            let err = tx.validate_tx().expect_err("Test failed");
             assert_matches!(err, TxError::SigError(_));
         }
     }

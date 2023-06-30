@@ -461,11 +461,7 @@ mod tests {
                 tx.set_code(Code::new(code.clone()));
                 tx.set_data(Data::new(data.clone()));
                 tx.add_section(Section::Signature(Signature::new(
-                    tx.code_sechash(),
-                    &keypair,
-                )));
-                tx.add_section(Section::Signature(Signature::new(
-                    tx.data_sechash(),
+                    vec![*tx.code_sechash(), *tx.data_sechash()],
                     &keypair,
                 )));
                 env.tx = tx;
@@ -474,7 +470,13 @@ mod tests {
             assert_eq!(signed_tx_data.data().as_ref(), Some(data));
             assert!(
                 signed_tx_data
-                    .verify_signature(&pk, signed_tx_data.data_sechash())
+                    .verify_signature(
+                        &pk,
+                        &[
+                            *signed_tx_data.data_sechash(),
+                            *signed_tx_data.code_sechash(),
+                        ],
+                    )
                     .is_ok()
             );
 
@@ -483,7 +485,10 @@ mod tests {
                 signed_tx_data
                     .verify_signature(
                         &other_keypair.ref_to(),
-                        signed_tx_data.data_sechash()
+                        &[
+                            *signed_tx_data.data_sechash(),
+                            *signed_tx_data.code_sechash(),
+                        ],
                     )
                     .is_err()
             );
@@ -541,11 +546,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(input_data));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         let result = vp::CTX.eval(empty_code, tx).unwrap();
@@ -564,11 +565,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(input_data));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         let result = vp::CTX.eval(code_hash, tx).unwrap();
@@ -588,11 +585,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(input_data));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         let result = vp::CTX.eval(code_hash, tx).unwrap();
@@ -614,11 +607,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
 
@@ -654,11 +643,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // update the client with the message
@@ -697,11 +682,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // init a connection with the message
@@ -736,11 +717,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // open the connection with the message
@@ -780,11 +757,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // open try a connection with the message
@@ -819,11 +792,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // open the connection with the mssage
@@ -865,11 +834,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // init a channel with the message
@@ -904,11 +869,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // open the channle with the message
@@ -950,11 +911,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // try open a channel with the message
@@ -990,11 +947,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // open a channel with the message
@@ -1039,11 +992,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // close the channel with the message
@@ -1096,11 +1045,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
 
@@ -1150,11 +1095,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // send the token and a packet with the data
@@ -1203,11 +1144,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // ack the packet with the message
@@ -1225,7 +1162,7 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&balance_key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::whole(0)));
+        assert_eq!(balance, Some(Amount::native_whole(0)));
         let escrow_key = token::balance_key(
             &token,
             &address::Address::Internal(address::InternalAddress::IbcEscrow),
@@ -1233,7 +1170,7 @@ mod tests {
         let escrow: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&escrow_key).expect("read error")
         });
-        assert_eq!(escrow, Some(Amount::whole(100)));
+        assert_eq!(escrow, Some(Amount::native_whole(100)));
     }
 
     #[test]
@@ -1253,7 +1190,7 @@ mod tests {
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
         let key_prefix = ibc_storage::ibc_token_prefix(&denom).unwrap();
         let balance_key = token::multitoken_balance_key(&key_prefix, &sender);
-        let init_bal = Amount::whole(100);
+        let init_bal = Amount::native_whole(100);
         writes.insert(balance_key.clone(), init_bal.try_to_vec().unwrap());
         // original denom
         let hash = ibc_storage::calc_hash(&denom);
@@ -1283,11 +1220,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // send the token and a packet with the data
@@ -1311,7 +1244,7 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&balance_key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::whole(0)));
+        assert_eq!(balance, Some(Amount::native_whole(0)));
         let burn_key = token::balance_key(
             &token,
             &address::Address::Internal(address::InternalAddress::IbcBurn),
@@ -1319,7 +1252,7 @@ mod tests {
         let burn: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&burn_key).expect("read error")
         });
-        assert_eq!(burn, Some(Amount::whole(100)));
+        assert_eq!(burn, Some(Amount::native_whole(100)));
     }
 
     #[test]
@@ -1363,11 +1296,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // receive a packet with the message
@@ -1393,7 +1322,7 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::whole(100)));
+        assert_eq!(balance, Some(Amount::native_whole(100)));
     }
 
     #[test]
@@ -1422,7 +1351,7 @@ mod tests {
             &token,
             &address::Address::Internal(address::InternalAddress::IbcEscrow),
         );
-        let val = Amount::whole(100).try_to_vec().unwrap();
+        let val = Amount::native_whole(100).try_to_vec().unwrap();
         tx_host_env::with(|env| {
             env.wl_storage
                 .storage
@@ -1455,11 +1384,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // receive a packet with the message
@@ -1480,11 +1405,11 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::whole(200)));
+        assert_eq!(balance, Some(Amount::native_whole(200)));
         let escrow: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&escrow_key).expect("read error")
         });
-        assert_eq!(escrow, Some(Amount::whole(0)));
+        assert_eq!(escrow, Some(Amount::native_whole(0)));
     }
 
     #[test]
@@ -1513,7 +1438,7 @@ mod tests {
             &token,
             &address::Address::Internal(address::InternalAddress::IbcEscrow),
         );
-        let val = Amount::whole(100).try_to_vec().unwrap();
+        let val = Amount::native_whole(100).try_to_vec().unwrap();
         tx_host_env::with(|env| {
             env.wl_storage
                 .storage
@@ -1551,11 +1476,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
         // receive a packet with the message
@@ -1579,11 +1500,11 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::whole(100)));
+        assert_eq!(balance, Some(Amount::native_whole(100)));
         let escrow: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&escrow_key).expect("read error")
         });
-        assert_eq!(escrow, Some(Amount::whole(0)));
+        assert_eq!(escrow, Some(Amount::native_whole(0)));
     }
 
     #[test]
@@ -1650,11 +1571,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
 
@@ -1739,11 +1656,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(tx_data.clone()));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &key::testing::keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &key::testing::keypair_1(),
         )));
 

@@ -19,17 +19,15 @@ use namada::ledger::{masp, pos, tx};
 use namada::proof_of_stake::parameters::PosParams;
 use namada::proto::{Code, Data, Section, Tx};
 use namada::types::address::Address;
+use namada::types::dec::Dec;
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
-use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::storage::{Epoch, Key};
 use namada::types::token;
 use namada::types::transaction::governance::{ProposalType, VoteProposalData};
 use namada::types::transaction::{InitValidator, TxType};
-use rust_decimal::Decimal;
-use sha2::{Digest as Sha2Digest, Sha256};
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
@@ -182,7 +180,7 @@ pub async fn submit_init_validator<
     .unwrap();
 
     // Validate the commission rate data
-    if commission_rate > Decimal::ONE || commission_rate < Decimal::ZERO {
+    if commission_rate > Dec::one() || commission_rate < Dec::zero() {
         eprintln!(
             "The validator commission rate must not exceed 1.0 or 100%, and \
              it must be 0 or positive"
@@ -191,8 +189,8 @@ pub async fn submit_init_validator<
             safe_exit(1)
         }
     }
-    if max_commission_rate_change > Decimal::ONE
-        || max_commission_rate_change < Decimal::ZERO
+    if max_commission_rate_change > Dec::one()
+        || max_commission_rate_change < Dec::zero()
     {
         eprintln!(
             "The validator maximum change in commission rate per epoch must \
@@ -211,8 +209,6 @@ pub async fn submit_init_validator<
     let extra = tx.add_section(Section::ExtraData(Code::from_hash(
         validator_vp_code_hash,
     )));
-    let extra_hash =
-        Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
     let data = InitValidator {
         account_key,
         consensus_key: consensus_key.ref_to(),
@@ -220,7 +216,7 @@ pub async fn submit_init_validator<
         dkg_key,
         commission_rate,
         max_commission_rate_change,
-        validator_vp_code_hash: extra_hash,
+        validator_vp_code_hash: extra.get_hash(),
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
     tx.header.chain_id = tx_args.chain_id.clone().unwrap();
@@ -578,7 +574,11 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
                 .await
                 .unwrap_or_default();
         if balance
-            < token::Amount::from(governance_parameters.min_proposal_fund)
+            < token::Amount::from_uint(
+                governance_parameters.min_proposal_fund,
+                0,
+            )
+            .unwrap()
         {
             eprintln!(
                 "Address {} doesn't have enough funds.",
@@ -605,19 +605,14 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
             let content_sec = tx.add_section(Section::ExtraData(Code::new(
                 init_proposal_content,
             )));
-            let content_sec_hash = Hash(
-                content_sec.hash(&mut Sha256::new()).finalize_reset().into(),
-            );
-            init_proposal_data.content = content_sec_hash;
+            init_proposal_data.content = content_sec.get_hash();
         }
         // Put any proposal code into an extra section
         if let Some(init_proposal_code) = init_proposal_code {
             let code_sec = tx
                 .add_section(Section::ExtraData(Code::new(init_proposal_code)));
-            let code_sec_hash =
-                Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into());
             init_proposal_data.r#type =
-                ProposalType::Default(Some(code_sec_hash));
+                ProposalType::Default(Some(code_sec.get_hash()));
         }
         let data = init_proposal_data
             .try_to_vec()
@@ -673,7 +668,10 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
                         )
                     })
                 {
-                    set.insert((address, cap.into()));
+                    set.insert((
+                        address,
+                        token::Amount::from_uint(cap, 0).unwrap(),
+                    ));
                 }
 
                 ProposalVote::Yay(VoteType::PGFCouncil(set))
@@ -1139,4 +1137,52 @@ pub async fn submit_tx<C: namada::ledger::queries::Client + Sync>(
     to_broadcast: TxBroadcastData,
 ) -> Result<TxResponse, tx::Error> {
     tx::submit_tx(client, to_broadcast).await
+}
+
+#[cfg(test)]
+mod test_tx {
+    use masp_primitives::transaction::components::Amount;
+    use namada::ledger::masp::{make_asset_type, MaspAmount};
+    use namada::types::address::testing::gen_established_address;
+    use namada::types::storage::DbKeySeg;
+    use namada::types::token::MaspDenom;
+
+    use super::*;
+
+    #[test]
+    fn test_masp_add_amount() {
+        let address_1 = gen_established_address();
+        let prefix_1: Key =
+            DbKeySeg::StringSeg("eth_seg".parse().unwrap()).into();
+        let prefix_2: Key =
+            DbKeySeg::StringSeg("crypto_kitty".parse().unwrap()).into();
+        let denom_1 = MaspDenom::One;
+        let denom_2 = MaspDenom::Three;
+        let epoch = Epoch::default();
+        let _masp_amount = MaspAmount::default();
+
+        let asset_base = make_asset_type(
+            Some(epoch),
+            &address_1,
+            &Some(prefix_1.clone()),
+            denom_1,
+        );
+        let _asset_denom =
+            make_asset_type(Some(epoch), &address_1, &Some(prefix_1), denom_2);
+        let _asset_prefix =
+            make_asset_type(Some(epoch), &address_1, &Some(prefix_2), denom_1);
+
+        let _amount_base =
+            Amount::from_pair(asset_base, 16).expect("Test failed");
+        let _amount_denom =
+            Amount::from_pair(asset_base, 2).expect("Test failed");
+        let _amount_prefix =
+            Amount::from_pair(asset_base, 4).expect("Test failed");
+
+        // masp_amount += amount_base;
+        // assert_eq!(masp_amount.get((epoch,)), Uint::zero());
+        // Amount::from_pair(atype, amount)
+        // MaspDenom::One
+        // assert_eq!(zero.abs(), Uint::zero());
+    }
 }

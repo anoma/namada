@@ -9,7 +9,7 @@
 pub mod context;
 mod utils;
 
-use clap::{AppSettings, ArgGroup, ArgMatches};
+use clap::{ArgGroup, ArgMatches, ColorChoice};
 use color_eyre::eyre::Result;
 pub use utils::safe_exit;
 use utils::*;
@@ -26,8 +26,6 @@ const CLIENT_CMD: &str = "client";
 const WALLET_CMD: &str = "wallet";
 
 pub mod cmds {
-    use clap::AppSettings;
-
     use super::utils::*;
     use super::{args, ArgMatches, CLIENT_CMD, NODE_CMD, WALLET_CMD};
 
@@ -129,7 +127,8 @@ pub mod cmds {
             <Self as Cmd>::add_sub(
                 App::new(Self::CMD)
                     .about("Node sub-commands.")
-                    .setting(AppSettings::SubcommandRequiredElseHelp),
+                    .subcommand_required(true)
+                    .arg_required_else_help(true),
             )
         }
     }
@@ -283,7 +282,8 @@ pub mod cmds {
             <Self as Cmd>::add_sub(
                 App::new(Self::CMD)
                     .about("Client sub-commands.")
-                    .setting(AppSettings::SubcommandRequiredElseHelp),
+                    .subcommand_required(true)
+                    .arg_required_else_help(true),
             )
         }
     }
@@ -361,7 +361,8 @@ pub mod cmds {
             <Self as Cmd>::add_sub(
                 App::new(Self::CMD)
                     .about("Wallet sub-commands.")
-                    .setting(AppSettings::SubcommandRequiredElseHelp),
+                    .subcommand_required(true)
+                    .arg_required_else_help(true),
             )
         }
     }
@@ -396,7 +397,8 @@ pub mod cmds {
                     "Keypair management, including methods to generate and \
                      look-up keys.",
                 )
-                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand_required(true)
+                .arg_required_else_help(true)
                 .subcommand(KeyRestore::def())
                 .subcommand(KeyGen::def())
                 .subcommand(KeyFind::def())
@@ -544,7 +546,8 @@ pub mod cmds {
                      including methods to generate and look-up addresses and \
                      keys.",
                 )
-                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand_required(true)
+                .arg_required_else_help(true)
                 .subcommand(MaspGenSpendKey::def())
                 .subcommand(MaspGenPayAddr::def())
                 .subcommand(MaspAddAddrKey::def())
@@ -704,7 +707,8 @@ pub mod cmds {
                     "Address management, including methods to generate and \
                      look-up addresses.",
                 )
-                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand_required(true)
+                .arg_required_else_help(true)
                 .subcommand(AddressGen::def())
                 .subcommand(AddressRestore::def())
                 .subcommand(AddressOrAliasFind::def())
@@ -980,7 +984,8 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand_required(true)
+                .arg_required_else_help(true)
                 .about("Configuration sub-commands.")
                 .subcommand(ConfigGen::def())
         }
@@ -1656,7 +1661,8 @@ pub mod cmds {
                 .subcommand(InitGenesisValidator::def())
                 .subcommand(PkToTmAddress::def())
                 .subcommand(DefaultBaseDir::def())
-                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand_required(true)
+                .arg_required_else_help(true)
         }
     }
 
@@ -1797,12 +1803,13 @@ pub mod args {
     pub use namada::ledger::args::*;
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
+    use namada::types::dec::Dec;
     use namada::types::key::*;
     use namada::types::masp::MaspValue;
     use namada::types::storage::{self, BlockHeight, Epoch};
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
-    use rust_decimal::Decimal;
+    use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
 
     use super::context::*;
     use super::utils::*;
@@ -1832,7 +1839,7 @@ pub mod args {
     pub const ALIAS: Arg<String> = arg("alias");
     pub const ALIAS_FORCE: ArgFlag = flag("alias-force");
     pub const ALLOW_DUPLICATE_IP: ArgFlag = flag("allow-duplicate-ip");
-    pub const AMOUNT: Arg<token::Amount> = arg("amount");
+    pub const AMOUNT: Arg<token::DenominatedAmount> = arg("amount");
     pub const ARCHIVE_DIR: ArgOpt<PathBuf> = arg_opt("archive-dir");
     pub const BALANCE_OWNER: ArgOpt<WalletBalanceOwner> = arg_opt("owner");
     pub const BASE_DIR: ArgDefault<PathBuf> = arg_default(
@@ -1851,7 +1858,7 @@ pub mod args {
     pub const CHANNEL_ID: Arg<ChannelId> = arg("channel-id");
     pub const CODE_PATH: Arg<PathBuf> = arg("code-path");
     pub const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
-    pub const COMMISSION_RATE: Arg<Decimal> = arg("commission-rate");
+    pub const COMMISSION_RATE: Arg<Dec> = arg("commission-rate");
     pub const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<Timeout> = arg_default(
         "consensus-timeout-commit",
         DefaultFn(|| Timeout::from_str("1s").unwrap()),
@@ -1866,10 +1873,20 @@ pub mod args {
     pub const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
     pub const FORCE: ArgFlag = flag("force");
     pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
-    pub const GAS_AMOUNT: ArgDefault<token::Amount> =
-        arg_default("gas-amount", DefaultFn(|| token::Amount::from(0)));
-    pub const GAS_LIMIT: ArgDefault<token::Amount> =
-        arg_default("gas-limit", DefaultFn(|| token::Amount::from(0)));
+    pub const GAS_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
+        "gas-amount",
+        DefaultFn(|| token::DenominatedAmount {
+            amount: token::Amount::default(),
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        }),
+    );
+    pub const GAS_LIMIT: ArgDefault<token::DenominatedAmount> = arg_default(
+        "gas-limit",
+        DefaultFn(|| token::DenominatedAmount {
+            amount: token::Amount::default(),
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        }),
+    );
     pub const GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".parse().unwrap()));
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
@@ -1892,7 +1909,7 @@ pub mod args {
     pub const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("node");
     pub const LOCALHOST: ArgFlag = flag("localhost");
     pub const MASP_VALUE: Arg<MaspValue> = arg("value");
-    pub const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =
+    pub const MAX_COMMISSION_RATE_CHANGE: Arg<Dec> =
         arg("max-commission-rate-change");
     pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
@@ -1978,8 +1995,8 @@ pub mod args {
         /// Add global args definition. Should be added to every top-level
         /// command.
         pub fn def(app: App) -> App {
-            app.arg(CHAIN_ID_OPT.def().about("The chain ID."))
-                .arg(BASE_DIR.def().about(
+            app.arg(CHAIN_ID_OPT.def().help("The chain ID."))
+                .arg(BASE_DIR.def().help(
                     "The base directory is where the nodes, client and wallet \
                      configuration and state is stored. This value can also \
                      be set via `NAMADA_BASE_DIR` environment variable, but \
@@ -1989,7 +2006,7 @@ pub mod args {
                      Unix,`$HOME/Library/Application Support/Namada` on \
                      Mac,and `%AppData%\\Namada` on Windows.",
                 ))
-                .arg(WASM_DIR.def().about(
+                .arg(WASM_DIR.def().help(
                     "Directory with built WASM validity predicates, \
                      transactions. This value can also be set via \
                      `NAMADA_WASM_DIR` environment variable, but the argument \
@@ -2010,7 +2027,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(NAMADA_START_TIME.def().about(
+            app.arg(NAMADA_START_TIME.def().help(
                 "The start time of the ledger. Accepts a relaxed form of \
                  RFC3339. A space or a 'T' are accepted as the separator \
                  between the date and time components. Additional spaces are \
@@ -2046,18 +2063,18 @@ pub mod args {
             app.arg(
                 NAMADA_START_TIME
                     .def()
-                    .about("The start time of the ledger."),
+                    .help("The start time of the ledger."),
             )
-            .arg(BLOCK_HEIGHT.def().about("The block height to run until."))
-            .arg(HALT_ACTION.def().about("Halt at the given block height"))
+            .arg(BLOCK_HEIGHT.def().help("The block height to run until."))
+            .arg(HALT_ACTION.def().help("Halt at the given block height"))
             .arg(
                 SUSPEND_ACTION
                     .def()
-                    .about("Suspend consensus at the given block height"),
+                    .help("Suspend consensus at the given block height"),
             )
             .group(
                 ArgGroup::new("find_flags")
-                    .args(&[HALT_ACTION.name, SUSPEND_ACTION.name])
+                    .args([HALT_ACTION.name, SUSPEND_ACTION.name])
                     .required(true),
             )
         }
@@ -2088,17 +2105,19 @@ pub mod args {
 
         fn def(app: App) -> App {
             app
-                // .arg(BLOCK_HEIGHT_OPT.def().about(
+                // .arg(BLOCK_HEIGHT_OPT.def().help(
                 //     "The block height to dump. Defaults to latest committed
                 // block.", ))
-                .arg(OUT_FILE_PATH_OPT.def().about(
+                .arg(OUT_FILE_PATH_OPT.def().help(
                     "Path for the output file (omitting file extension). \
                      Defaults to \"db_dump.{block_height}.toml\" in the \
                      current working directory.",
                 ))
-                .arg(HISTORIC.def().about(
-                    "If provided, dump also the diff of the last height",
-                ))
+                .arg(
+                    HISTORIC.def().help(
+                        "If provided, dump also the diff of the last height",
+                    ),
+                )
         }
     }
 
@@ -2126,7 +2145,7 @@ pub mod args {
             app.add_args::<Query<CliTypes>>().arg(
                 TX_HASH
                     .def()
-                    .about("The hash of the transaction being looked up."),
+                    .help("The hash of the transaction being looked up."),
             )
         }
     }
@@ -2161,9 +2180,9 @@ pub mod args {
                 .arg(
                     CODE_PATH
                         .def()
-                        .about("The path to the transaction's WASM code."),
+                        .help("The path to the transaction's WASM code."),
                 )
-                .arg(DATA_PATH_OPT.def().about(
+                .arg(DATA_PATH_OPT.def().help(
                     "The data file at this path containing arbitrary bytes \
                      will be passed to the transaction code when it's \
                      executed.",
@@ -2193,7 +2212,7 @@ pub mod args {
             let target = TRANSFER_TARGET.parse(matches);
             let token = TOKEN.parse(matches);
             let sub_prefix = SUB_PREFIX.parse(matches);
-            let amount = AMOUNT.parse(matches);
+            let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
             Self {
                 tx,
@@ -2209,17 +2228,17 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(TRANSFER_SOURCE.def().about(
+                .arg(TRANSFER_SOURCE.def().help(
                     "The source account address. The source's key may be used \
                      to produce the signature.",
                 ))
-                .arg(TRANSFER_TARGET.def().about(
+                .arg(TRANSFER_TARGET.def().help(
                     "The target account address. The target's key may be used \
                      to produce the signature.",
                 ))
-                .arg(TOKEN.def().about("The transfer token."))
-                .arg(SUB_PREFIX.def().about("The token's sub prefix."))
-                .arg(AMOUNT.def().about("The amount to transfer in decimal."))
+                .arg(TOKEN.def().help("The transfer token."))
+                .arg(SUB_PREFIX.def().help("The token's sub prefix."))
+                .arg(AMOUNT.def().help("The amount to transfer in decimal."))
         }
     }
 
@@ -2260,7 +2279,7 @@ pub mod args {
                 receiver,
                 token,
                 sub_prefix,
-                amount,
+                amount: amount.amount,
                 port_id,
                 channel_id,
                 timeout_height,
@@ -2271,24 +2290,24 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(SOURCE.def().about(
+                .arg(SOURCE.def().help(
                     "The source account address. The source's key is used to \
                      produce the signature.",
                 ))
-                .arg(RECEIVER.def().about(
+                .arg(RECEIVER.def().help(
                     "The receiver address on the destination chain as string.",
                 ))
-                .arg(TOKEN.def().about("The transfer token."))
-                .arg(SUB_PREFIX.def().about("The token's sub prefix."))
-                .arg(AMOUNT.def().about("The amount to transfer in decimal."))
-                .arg(PORT_ID.def().about("The port ID."))
-                .arg(CHANNEL_ID.def().about("The channel ID."))
+                .arg(TOKEN.def().help("The transfer token."))
+                .arg(SUB_PREFIX.def().help("The token's sub prefix."))
+                .arg(AMOUNT.def().help("The amount to transfer in decimal."))
+                .arg(PORT_ID.def().help("The port ID."))
+                .arg(CHANNEL_ID.def().help("The channel ID."))
                 .arg(
                     TIMEOUT_HEIGHT
                         .def()
-                        .about("The timeout height of the destination chain."),
+                        .help("The timeout height of the destination chain."),
                 )
-                .arg(TIMEOUT_SEC_OFFSET.def().about("The timeout as seconds."))
+                .arg(TIMEOUT_SEC_OFFSET.def().help("The timeout as seconds."))
         }
     }
 
@@ -2324,15 +2343,15 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(SOURCE.def().about(
+                .arg(SOURCE.def().help(
                     "The source account's address that signs the transaction.",
                 ))
-                .arg(CODE_PATH_OPT.def().about(
+                .arg(CODE_PATH_OPT.def().help(
                     "The path to the validity predicate WASM code to be used \
                      for the new account. Uses the default user VP if none \
                      specified.",
                 ))
-                .arg(PUBLIC_KEY.def().about(
+                .arg(PUBLIC_KEY.def().help(
                     "A public key to be used for the new account in \
                      hexadecimal encoding.",
                 ))
@@ -2392,42 +2411,42 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(SOURCE.def().about(
+                .arg(SOURCE.def().help(
                     "The source account's address that signs the transaction.",
                 ))
-                .arg(SCHEME.def().about(
+                .arg(SCHEME.def().help(
                     "The key scheme/type used for the validator keys. \
                      Currently supports ed25519 and secp256k1.",
                 ))
-                .arg(VALIDATOR_ACCOUNT_KEY.def().about(
+                .arg(VALIDATOR_ACCOUNT_KEY.def().help(
                     "A public key for the validator account. A new one will \
                      be generated if none given.",
                 ))
-                .arg(VALIDATOR_CONSENSUS_KEY.def().about(
+                .arg(VALIDATOR_CONSENSUS_KEY.def().help(
                     "A consensus key for the validator account. A new one \
                      will be generated if none given.",
                 ))
-                .arg(PROTOCOL_KEY.def().about(
+                .arg(PROTOCOL_KEY.def().help(
                     "A public key for signing protocol transactions. A new \
                      one will be generated if none given.",
                 ))
-                .arg(COMMISSION_RATE.def().about(
+                .arg(COMMISSION_RATE.def().help(
                     "The commission rate charged by the validator for \
                      delegation rewards. Expressed as a decimal between 0 and \
                      1. This is a required parameter.",
                 ))
-                .arg(MAX_COMMISSION_RATE_CHANGE.def().about(
+                .arg(MAX_COMMISSION_RATE_CHANGE.def().help(
                     "The maximum change per epoch in the commission rate \
                      charged by the validator for delegation rewards. \
                      Expressed as a decimal between 0 and 1. This is a \
                      required parameter.",
                 ))
-                .arg(VALIDATOR_CODE_PATH.def().about(
+                .arg(VALIDATOR_CODE_PATH.def().help(
                     "The path to the validity predicate WASM code to be used \
                      for the validator account. Uses the default validator VP \
                      if none specified.",
                 ))
-                .arg(UNSAFE_DONT_ENCRYPT.def().about(
+                .arg(UNSAFE_DONT_ENCRYPT.def().help(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \
                      use this for keys used in a live network.",
                 ))
@@ -2462,11 +2481,11 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
                 .arg(
-                    CODE_PATH.def().about(
+                    CODE_PATH.def().help(
                         "The path to the new validity predicate WASM code.",
                     ),
                 )
-                .arg(ADDRESS.def().about(
+                .arg(ADDRESS.def().help(
                     "The account's address. It's key is used to produce the \
                      signature.",
                 ))
@@ -2491,6 +2510,14 @@ pub mod args {
             let tx = Tx::parse(matches);
             let validator = VALIDATOR.parse(matches);
             let amount = AMOUNT.parse(matches);
+            let amount = amount
+                .canonical()
+                .increase_precision(NATIVE_MAX_DECIMAL_PLACES.into())
+                .unwrap_or_else(|e| {
+                    println!("Could not parse bond amount: {:?}", e);
+                    safe_exit(1);
+                })
+                .amount;
             let source = SOURCE_OPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_BOND_WASM);
             Self {
@@ -2505,9 +2532,9 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(VALIDATOR.def().about("Validator address."))
-                .arg(AMOUNT.def().about("Amount of tokens to stake in a bond."))
-                .arg(SOURCE_OPT.def().about(
+                .arg(VALIDATOR.def().help("Validator address."))
+                .arg(AMOUNT.def().help("Amount of tokens to stake in a bond."))
+                .arg(SOURCE_OPT.def().help(
                     "Source address for delegations. For self-bonds, the \
                      validator is also the source.",
                 ))
@@ -2531,6 +2558,14 @@ pub mod args {
             let tx = Tx::parse(matches);
             let validator = VALIDATOR.parse(matches);
             let amount = AMOUNT.parse(matches);
+            let amount = amount
+                .canonical()
+                .increase_precision(NATIVE_MAX_DECIMAL_PLACES.into())
+                .unwrap_or_else(|e| {
+                    println!("Could not parse bond amount: {:?}", e);
+                    safe_exit(1);
+                })
+                .amount;
             let source = SOURCE_OPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_UNBOND_WASM);
             Self {
@@ -2544,13 +2579,13 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(VALIDATOR.def().about("Validator address."))
+                .arg(VALIDATOR.def().help("Validator address."))
                 .arg(
                     AMOUNT
                         .def()
-                        .about("Amount of tokens to unbond from a bond."),
+                        .help("Amount of tokens to unbond from a bond."),
                 )
-                .arg(SOURCE_OPT.def().about(
+                .arg(SOURCE_OPT.def().help(
                     "Source address for unbonding from delegations. For \
                      unbonding from self-bonds, the validator is also the \
                      source.",
@@ -2601,13 +2636,13 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(DATA_PATH.def().about(
+                .arg(DATA_PATH.def().help(
                     "The data path file (json) that describes the proposal.",
                 ))
                 .arg(
                     PROPOSAL_OFFLINE
                         .def()
-                        .about("Flag if the proposal vote should run offline."),
+                        .help("Flag if the proposal vote should run offline."),
                 )
         }
     }
@@ -2675,8 +2710,8 @@ pub mod args {
                 .arg(
                     PROPOSAL_ID_OPT
                         .def()
-                        .about("The proposal identifier.")
-                        .conflicts_with_all(&[
+                        .help("The proposal identifier.")
+                        .conflicts_with_all([
                             PROPOSAL_OFFLINE.name,
                             DATA_PATH_OPT.name,
                         ]),
@@ -2684,12 +2719,12 @@ pub mod args {
                 .arg(
                     PROPOSAL_VOTE
                         .def()
-                        .about("The vote for the proposal. Either yay or nay"),
+                        .help("The vote for the proposal. Either yay or nay"),
                 )
                 .arg(
                     PROPOSAL_VOTE_PGF_OPT
                         .def()
-                        .about(
+                        .help(
                             "The list of proposed councils and spending \
                              caps:\n$council1 $cap1 $council2 $cap2 ... \
                              (council is bech32m encoded address, cap is \
@@ -2701,7 +2736,7 @@ pub mod args {
                 .arg(
                     PROPOSAL_VOTE_ETH_OPT
                         .def()
-                        .about(
+                        .help(
                             "The signing key and message bytes (hex encoded) \
                              to be signed: $signing_key $message",
                         )
@@ -2711,13 +2746,13 @@ pub mod args {
                 .arg(
                     PROPOSAL_OFFLINE
                         .def()
-                        .about("Flag if the proposal vote should run offline.")
+                        .help("Flag if the proposal vote should run offline.")
                         .conflicts_with(PROPOSAL_ID.name),
                 )
                 .arg(
                     DATA_PATH_OPT
                         .def()
-                        .about(
+                        .help(
                             "The data path file (json) that describes the \
                              proposal.",
                         )
@@ -2745,7 +2780,7 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(PUBLIC_KEY.def().about("A public key to reveal."))
+                .arg(PUBLIC_KEY.def().help("A public key to reveal."))
         }
     }
 
@@ -2768,7 +2803,7 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(PROPOSAL_ID_OPT.def().about("The proposal identifier."))
+                .arg(PROPOSAL_ID_OPT.def().help("The proposal identifier."))
         }
     }
 
@@ -2812,11 +2847,11 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
-                .arg(PROPOSAL_ID_OPT.def().about("The proposal identifier."))
+                .arg(PROPOSAL_ID_OPT.def().help("The proposal identifier."))
                 .arg(
                     PROPOSAL_OFFLINE
                         .def()
-                        .about(
+                        .help(
                             "Flag if the proposal result should run on \
                              offline data.",
                         )
@@ -2825,7 +2860,7 @@ pub mod args {
                 .arg(
                     DATA_PATH_OPT
                         .def()
-                        .about(
+                        .help(
                             "The path to the folder containing the proposal \
                              json and votes",
                         )
@@ -2886,8 +2921,8 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(VALIDATOR.def().about("Validator address."))
-                .arg(SOURCE_OPT.def().about(
+                .arg(VALIDATOR.def().help("Validator address."))
+                .arg(SOURCE_OPT.def().help(
                     "Source address for withdrawing from delegations. For \
                      withdrawing from self-bonds, the validator is also the \
                      source.",
@@ -2922,10 +2957,10 @@ pub mod args {
                 .arg(
                     EPOCH
                         .def()
-                        .about("The epoch for which to query conversions."),
+                        .help("The epoch for which to query conversions."),
                 )
                 .arg(
-                    TOKEN_OPT.def().about(
+                    TOKEN_OPT.def().help(
                         "The token address for which to query conversions.",
                     ),
                 )
@@ -2965,22 +3000,22 @@ pub mod args {
                 .arg(
                     BALANCE_OWNER
                         .def()
-                        .about("The account address whose balance to query."),
+                        .help("The account address whose balance to query."),
                 )
                 .arg(
                     TOKEN_OPT
                         .def()
-                        .about("The token's address whose balance to query."),
+                        .help("The token's address whose balance to query."),
                 )
                 .arg(
-                    NO_CONVERSIONS.def().about(
+                    NO_CONVERSIONS.def().help(
                         "Whether not to automatically perform conversions.",
                     ),
                 )
                 .arg(
-                    SUB_PREFIX.def().about(
-                        "The token's sub prefix whose balance to query.",
-                    ),
+                    SUB_PREFIX
+                        .def()
+                        .help("The token's sub prefix whose balance to query."),
                 )
         }
     }
@@ -2991,6 +3026,7 @@ pub mod args {
                 query: self.query.to_sdk(ctx),
                 owner: self.owner.map(|x| ctx.get_cached(&x)),
                 token: self.token.map(|x| ctx.get(&x)),
+                sub_prefix: self.sub_prefix,
             }
         }
     }
@@ -3000,21 +3036,28 @@ pub mod args {
             let query = Query::parse(matches);
             let owner = BALANCE_OWNER.parse(matches);
             let token = TOKEN_OPT.parse(matches);
+            let sub_prefix = SUB_PREFIX.parse(matches);
             Self {
                 query,
                 owner,
                 token,
+                sub_prefix,
             }
         }
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
-                .arg(BALANCE_OWNER.def().about(
+                .arg(BALANCE_OWNER.def().help(
                     "The account address that queried transfers must involve.",
                 ))
-                .arg(TOKEN_OPT.def().about(
+                .arg(TOKEN_OPT.def().help(
                     "The token address that queried transfers must involve.",
                 ))
+                .arg(
+                    SUB_PREFIX
+                        .def()
+                        .help("The token's sub prefix whose balance to query."),
+                )
         }
     }
 
@@ -3043,14 +3086,14 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
                 .arg(
-                    OWNER_OPT.def().about(
+                    OWNER_OPT.def().help(
                         "The owner account address whose bonds to query.",
                     ),
                 )
                 .arg(
                     VALIDATOR_OPT
                         .def()
-                        .about("The validator's address whose bonds to query."),
+                        .help("The validator's address whose bonds to query."),
                 )
         }
     }
@@ -3079,10 +3122,10 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
-                .arg(VALIDATOR_OPT.def().about(
+                .arg(VALIDATOR_OPT.def().help(
                     "The validator's address whose bonded stake to query.",
                 ))
-                .arg(EPOCH.def().about(
+                .arg(EPOCH.def().help(
                     "The epoch at which to query (last committed, if not \
                      specified).",
                 ))
@@ -3118,13 +3161,13 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(VALIDATOR.def().about(
+                .arg(VALIDATOR.def().help(
                     "The validator's address whose commission rate to change.",
                 ))
                 .arg(
                     COMMISSION_RATE
                         .def()
-                        .about("The desired new commission rate."),
+                        .help("The desired new commission rate."),
                 )
         }
     }
@@ -3159,7 +3202,7 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>().arg(
-                VALIDATOR.def().about(
+                VALIDATOR.def().help(
                     "The address of the jailed validator to re-activate.",
                 ),
             )
@@ -3190,10 +3233,10 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
-                .arg(VALIDATOR.def().about(
+                .arg(VALIDATOR.def().help(
                     "The validator's address whose commission rate to query.",
                 ))
-                .arg(EPOCH.def().about(
+                .arg(EPOCH.def().help(
                     "The epoch at which to query (last committed, if not \
                      specified).",
                 ))
@@ -3220,7 +3263,7 @@ pub mod args {
             app.add_args::<Query<CliTypes>>().arg(
                 VALIDATOR_OPT
                     .def()
-                    .about("The validator's address whose slashes to query."),
+                    .help("The validator's address whose slashes to query."),
             )
         }
     }
@@ -3234,7 +3277,7 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>().arg(
-                OWNER.def().about(
+                OWNER.def().help(
                     "The address of the owner of the delegations to find.",
                 ),
             )
@@ -3261,7 +3304,7 @@ pub mod args {
             app.add_args::<Query<CliTypes>>().arg(
                 TM_ADDRESS
                     .def()
-                    .about("The address of the validator in Tendermint."),
+                    .help("The address of the validator in Tendermint."),
             )
         }
     }
@@ -3293,7 +3336,7 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
-                .arg(STORAGE_KEY.def().about("Storage key"))
+                .arg(STORAGE_KEY.def().help("Storage key"))
         }
     }
 
@@ -3342,42 +3385,42 @@ pub mod args {
             app.arg(
                 DRY_RUN_TX
                     .def()
-                    .about("Simulate the transaction application."),
+                    .help("Simulate the transaction application."),
             )
-            .arg(DUMP_TX.def().about("Dump transaction bytes to a file."))
-            .arg(FORCE.def().about(
+            .arg(DUMP_TX.def().help("Dump transaction bytes to a file."))
+            .arg(FORCE.def().help(
                 "Submit the transaction even if it doesn't pass client checks.",
             ))
-            .arg(BROADCAST_ONLY.def().about(
+            .arg(BROADCAST_ONLY.def().help(
                 "Do not wait for the transaction to be applied. This will \
                  return once the transaction is added to the mempool.",
             ))
             .arg(
                 LEDGER_ADDRESS_DEFAULT
                     .def()
-                    .about(LEDGER_ADDRESS_ABOUT)
+                    .help(LEDGER_ADDRESS_ABOUT)
                     // This used to be "ledger-address", alias for compatibility
                     .alias("ledger-address"),
             )
-            .arg(ALIAS_OPT.def().about(
+            .arg(ALIAS_OPT.def().help(
                 "If any new account is initialized by the tx, use the given \
                  alias to save it in the wallet. If multiple accounts are \
                  initialized, the alias will be the prefix of each new \
                  address joined with a number.",
             ))
-            .arg(WALLET_ALIAS_FORCE.def().about(
+            .arg(WALLET_ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
             ))
-            .arg(GAS_AMOUNT.def().about(
+            .arg(GAS_AMOUNT.def().help(
                 "The amount being paid for the inclusion of this transaction",
             ))
-            .arg(GAS_TOKEN.def().about("The token for paying the gas"))
+            .arg(GAS_TOKEN.def().help("The token for paying the gas"))
             .arg(
-                GAS_LIMIT.def().about(
+                GAS_LIMIT.def().help(
                     "The maximum amount of gas needed to run transaction",
                 ),
             )
-            .arg(EXPIRATION_OPT.def().about(
+            .arg(EXPIRATION_OPT.def().help(
                 "The expiration datetime of the transaction, after which the \
                  tx won't be accepted anymore. All of these examples are \
                  equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
@@ -3386,7 +3429,7 @@ pub mod args {
             .arg(
                 SIGNING_KEY_OPT
                     .def()
-                    .about(
+                    .help(
                         "Sign the transaction with the key for the given \
                          public key, public key hash or alias from your \
                          wallet.",
@@ -3396,12 +3439,13 @@ pub mod args {
             .arg(
                 SIGNER
                     .def()
-                    .about(
+                    .help(
                         "Sign the transaction with the keypair of the public \
                          key of the given address.",
                     )
                     .conflicts_with(SIGNING_KEY_OPT.name),
             )
+            .arg(CHAIN_ID_OPT.def().help("The chain ID."))
         }
 
         fn parse(matches: &ArgMatches) -> Self {
@@ -3412,9 +3456,10 @@ pub mod args {
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
             let wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
-            let fee_amount = GAS_AMOUNT.parse(matches);
+            let fee_amount =
+                InputAmount::Unvalidated(GAS_AMOUNT.parse(matches));
             let fee_token = GAS_TOKEN.parse(matches);
-            let gas_limit = GAS_LIMIT.parse(matches).into();
+            let gas_limit = GAS_LIMIT.parse(matches).amount.into();
             let expiration = EXPIRATION_OPT.parse(matches);
             let signing_key = SIGNING_KEY_OPT.parse(matches);
             let signer = SIGNER.parse(matches);
@@ -3453,7 +3498,7 @@ pub mod args {
             app.arg(
                 LEDGER_ADDRESS_DEFAULT
                     .def()
-                    .about(LEDGER_ADDRESS_ABOUT)
+                    .help(LEDGER_ADDRESS_ABOUT)
                     // This used to be "ledger-address", alias for compatibility
                     .alias("ledger-address"),
             )
@@ -3483,17 +3528,17 @@ pub mod args {
             app.arg(
                 ALIAS
                     .def()
-                    .about("An alias to be associated with the new entry."),
+                    .help("An alias to be associated with the new entry."),
             )
-            .arg(ALIAS_FORCE.def().about(
+            .arg(ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
             ))
             .arg(
                 MASP_VALUE
                     .def()
-                    .about("A spending key, viewing key, or payment address."),
+                    .help("A spending key, viewing key, or payment address."),
             )
-            .arg(UNSAFE_DONT_ENCRYPT.def().about(
+            .arg(UNSAFE_DONT_ENCRYPT.def().help(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
             ))
@@ -3516,9 +3561,12 @@ pub mod args {
             app.arg(
                 ALIAS
                     .def()
-                    .about("An alias to be associated with the spending key."),
+                    .help("An alias to be associated with the spending key."),
             )
-            .arg(UNSAFE_DONT_ENCRYPT.def().about(
+            .arg(ALIAS_FORCE.def().help(
+                "Override the alias without confirmation if it already exists.",
+            ))
+            .arg(UNSAFE_DONT_ENCRYPT.def().help(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
             ))
@@ -3552,15 +3600,15 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(
-                ALIAS.def().about(
+                ALIAS.def().help(
                     "An alias to be associated with the payment address.",
                 ),
             )
-            .arg(ALIAS_FORCE.def().about(
+            .arg(ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
             ))
-            .arg(VIEWING_KEY.def().about("The viewing key."))
-            .arg(PIN.def().about(
+            .arg(VIEWING_KEY.def().help("The viewing key."))
+            .arg(PIN.def().help(
                 "Require that the single transaction to this address be \
                  pinned.",
             ))
@@ -3584,25 +3632,25 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(SCHEME.def().about(
+            app.arg(SCHEME.def().help(
                 "The type of key that should be added. Argument must be \
                  either ed25519 or secp256k1. If none provided, the default \
                  key scheme is ed25519.",
             ))
-            .arg(ALIAS_OPT.def().about(
+            .arg(ALIAS_OPT.def().help(
                 "The key and address alias. If none provided, the alias will \
                  be the public key hash.",
             ))
             .arg(
                 ALIAS_FORCE
                     .def()
-                    .about("Force overwrite the alias if it already exists."),
+                    .help("Force overwrite the alias if it already exists."),
             )
-            .arg(UNSAFE_DONT_ENCRYPT.def().about(
+            .arg(UNSAFE_DONT_ENCRYPT.def().help(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
             ))
-            .arg(HD_WALLET_DERIVATION_PATH_OPT.def().about(
+            .arg(HD_WALLET_DERIVATION_PATH_OPT.def().help(
                 "HD key derivation path. Use keyword `default` to refer to a \
                  scheme default path:\n- m/44'/60'/0'/0/0 for secp256k1 \
                  scheme\n- m/44'/877'/0'/0'/0' for ed25519 scheme.\nFor \
@@ -3630,23 +3678,23 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(SCHEME.def().about(
+            app.arg(SCHEME.def().help(
                 "The type of key that should be generated. Argument must be \
                  either ed25519 or secp256k1. If none provided, the default \
                  key scheme is ed25519.",
             ))
-            .arg(ALIAS_OPT.def().about(
+            .arg(ALIAS_OPT.def().help(
                 "The key and address alias. If none provided, the alias will \
                  be the public key hash.",
             ))
-            .arg(ALIAS_FORCE.def().about(
+            .arg(ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
             ))
-            .arg(UNSAFE_DONT_ENCRYPT.def().about(
+            .arg(UNSAFE_DONT_ENCRYPT.def().help(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
             ))
-            .arg(HD_WALLET_DERIVATION_PATH_OPT.def().about(
+            .arg(HD_WALLET_DERIVATION_PATH_OPT.def().help(
                 "Generate a new key and wallet using BIP39 mnemonic code and \
                  HD derivation path. Use keyword `default` to refer to a \
                  scheme default path:\n- m/44'/60'/0'/0/0 for secp256k1 \
@@ -3677,24 +3725,24 @@ pub mod args {
             app.arg(
                 RAW_PUBLIC_KEY_OPT
                     .def()
-                    .about("A public key associated with the keypair.")
-                    .conflicts_with_all(&[ALIAS_OPT.name, VALUE.name]),
+                    .help("A public key associated with the keypair.")
+                    .conflicts_with_all([ALIAS_OPT.name, VALUE.name]),
             )
             .arg(
                 ALIAS_OPT
                     .def()
-                    .about("An alias associated with the keypair.")
+                    .help("An alias associated with the keypair.")
                     .conflicts_with(VALUE.name),
             )
             .arg(
-                VALUE.def().about(
-                    "A public key or alias associated with the keypair.",
-                ),
+                VALUE
+                    .def()
+                    .help("A public key or alias associated with the keypair."),
             )
             .arg(
                 UNSAFE_SHOW_SECRET
                     .def()
-                    .about("UNSAFE: Print the secret key."),
+                    .help("UNSAFE: Print the secret key."),
             )
         }
     }
@@ -3710,11 +3758,11 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(ALIAS.def().about("The alias that is to be found."))
+            app.arg(ALIAS.def().help("The alias that is to be found."))
                 .arg(
                     UNSAFE_SHOW_SECRET
                         .def()
-                        .about("UNSAFE: Print the spending key values."),
+                        .help("UNSAFE: Print the spending key values."),
                 )
         }
     }
@@ -3730,11 +3778,11 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(DECRYPT.def().about("Decrypt keys that are encrypted."))
+            app.arg(DECRYPT.def().help("Decrypt keys that are encrypted."))
                 .arg(
                     UNSAFE_SHOW_SECRET
                         .def()
-                        .about("UNSAFE: Print the spending key values."),
+                        .help("UNSAFE: Print the spending key values."),
                 )
         }
     }
@@ -3750,11 +3798,11 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(DECRYPT.def().about("Decrypt keys that are encrypted."))
+            app.arg(DECRYPT.def().help("Decrypt keys that are encrypted."))
                 .arg(
                     UNSAFE_SHOW_SECRET
                         .def()
-                        .about("UNSAFE: Print the secret keys."),
+                        .help("UNSAFE: Print the secret keys."),
                 )
         }
     }
@@ -3768,9 +3816,7 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(
-                ALIAS
-                    .def()
-                    .about("The alias of the key you wish to export."),
+                ALIAS.def().help("The alias of the key you wish to export."),
             )
         }
     }
@@ -3786,16 +3832,16 @@ pub mod args {
             app.arg(
                 ALIAS_OPT
                     .def()
-                    .about("An alias associated with the address."),
+                    .help("An alias associated with the address."),
             )
             .arg(
                 RAW_ADDRESS_OPT
                     .def()
-                    .about("The bech32m encoded address string."),
+                    .help("The bech32m encoded address string."),
             )
             .group(
                 ArgGroup::new("find_flags")
-                    .args(&[ALIAS_OPT.name, RAW_ADDRESS_OPT.name])
+                    .args([ALIAS_OPT.name, RAW_ADDRESS_OPT.name])
                     .required(true),
             )
         }
@@ -3817,15 +3863,15 @@ pub mod args {
             app.arg(
                 ALIAS
                     .def()
-                    .about("An alias to be associated with the address."),
+                    .help("An alias to be associated with the address."),
             )
-            .arg(ALIAS_FORCE.def().about(
+            .arg(ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
             ))
             .arg(
                 RAW_ADDRESS
                     .def()
-                    .about("The bech32m encoded address string."),
+                    .help("The bech32m encoded address string."),
             )
         }
     }
@@ -3853,11 +3899,11 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the repository: \
+            app.arg(CHAIN_ID.def().help("The chain ID. The chain must be known in the repository: \
                                           https://github.com/heliaxdev/anoma-network-config"))
-                .arg(GENESIS_VALIDATOR.def().about("The alias of the genesis validator that you want to set up as, if any."))
-                .arg(PRE_GENESIS_PATH.def().about("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\"."))
-            .arg(DONT_PREFETCH_WASM.def().about(
+                .arg(GENESIS_VALIDATOR.def().help("The alias of the genesis validator that you want to set up as, if any."))
+                .arg(PRE_GENESIS_PATH.def().help("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\"."))
+            .arg(DONT_PREFETCH_WASM.def().help(
                 "Do not pre-fetch WASM.",
             ))
         }
@@ -3875,7 +3921,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(RAW_PUBLIC_KEY.def().about(
+            app.arg(RAW_PUBLIC_KEY.def().help(
                 "The consensus public key to be converted to Tendermint \
                  address.",
             ))
@@ -3907,7 +3953,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository, in which case it should have pre-built wasms available for download."))
+            app.arg(CHAIN_ID.def().help("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository, in which case it should have pre-built wasms available for download."))
         }
     }
 
@@ -3951,41 +3997,41 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(
-                GENESIS_PATH.def().about(
+                GENESIS_PATH.def().help(
                     "Path to the preliminary genesis configuration file.",
                 ),
             )
             .arg(
                 WASM_CHECKSUMS_PATH
                     .def()
-                    .about("Path to the WASM checksums file."),
+                    .help("Path to the WASM checksums file."),
             )
-            .arg(CHAIN_ID_PREFIX.def().about(
+            .arg(CHAIN_ID_PREFIX.def().help(
                 "The chain ID prefix. Up to 19 alphanumeric, '.', '-' or '_' \
                  characters.",
             ))
-            .arg(UNSAFE_DONT_ENCRYPT.def().about(
+            .arg(UNSAFE_DONT_ENCRYPT.def().help(
                 "UNSAFE: Do not encrypt the generated keypairs. Do not use \
                  this for keys used in a live network.",
             ))
-            .arg(CONSENSUS_TIMEOUT_COMMIT.def().about(
+            .arg(CONSENSUS_TIMEOUT_COMMIT.def().help(
                 "The Tendermint consensus timeout_commit configuration as \
                  e.g. `1s` or `1000ms`. Defaults to 10 seconds.",
             ))
-            .arg(LOCALHOST.def().about(
+            .arg(LOCALHOST.def().help(
                 "Use localhost address for P2P and RPC connections for the \
                  validators ledger",
             ))
-            .arg(ALLOW_DUPLICATE_IP.def().about(
+            .arg(ALLOW_DUPLICATE_IP.def().help(
                 "Toggle to disable guard against peers connecting from the \
                  same IP. This option shouldn't be used in mainnet.",
             ))
             .arg(
                 DONT_ARCHIVE
                     .def()
-                    .about("Do NOT create the release archive."),
+                    .help("Do NOT create the release archive."),
             )
-            .arg(ARCHIVE_DIR.def().about(
+            .arg(ARCHIVE_DIR.def().help(
                 "Specify a directory into which to store the archive. Default \
                  is the current working directory.",
             ))
@@ -3995,8 +4041,8 @@ pub mod args {
     #[derive(Clone, Debug)]
     pub struct InitGenesisValidator {
         pub alias: String,
-        pub commission_rate: Decimal,
-        pub max_commission_rate_change: Decimal,
+        pub commission_rate: Dec,
+        pub max_commission_rate_change: Dec,
         pub net_address: SocketAddr,
         pub unsafe_dont_encrypt: bool,
         pub key_scheme: SchemeType,
@@ -4022,26 +4068,26 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(ALIAS.def().about("The validator address alias."))
-                .arg(NET_ADDRESS.def().about(
+            app.arg(ALIAS.def().help("The validator address alias."))
+                .arg(NET_ADDRESS.def().help(
                     "Static {host:port} of your validator node's P2P address. \
                      Namada uses port `26656` for P2P connections by default, \
                      but you can configure a different value.",
                 ))
-                .arg(COMMISSION_RATE.def().about(
+                .arg(COMMISSION_RATE.def().help(
                     "The commission rate charged by the validator for \
                      delegation rewards. This is a required parameter.",
                 ))
-                .arg(MAX_COMMISSION_RATE_CHANGE.def().about(
+                .arg(MAX_COMMISSION_RATE_CHANGE.def().help(
                     "The maximum change per epoch in the commission rate \
                      charged by the validator for delegation rewards. This is \
                      a required parameter.",
                 ))
-                .arg(UNSAFE_DONT_ENCRYPT.def().about(
+                .arg(UNSAFE_DONT_ENCRYPT.def().help(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \
                      use this for keys used in a live network.",
                 ))
-                .arg(SCHEME.def().about(
+                .arg(SCHEME.def().help(
                     "The key scheme/type used for the validator keys. \
                      Currently supports ed25519 and secp256k1.",
                 ))
@@ -4077,7 +4123,6 @@ pub enum NamadaClient {
 
 pub fn namada_client_cli() -> Result<NamadaClient> {
     let app = namada_client_app();
-    let mut app = cmds::NamadaClient::add_sub(app);
     let matches = app.clone().get_matches();
     match Cmd::parse(&matches) {
         Some(cmd) => {
@@ -4093,6 +4138,7 @@ pub fn namada_client_cli() -> Result<NamadaClient> {
             }
         }
         None => {
+            let mut app = app;
             app.print_help().unwrap();
             safe_exit(2);
         }
@@ -4108,7 +4154,9 @@ fn namada_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada command line interface.")
-        .setting(AppSettings::SubcommandRequiredElseHelp);
+        .color(ColorChoice::Auto)
+        .subcommand_required(true)
+        .arg_required_else_help(true);
     cmds::Namada::add_sub(args::Global::def(app))
 }
 
@@ -4116,7 +4164,9 @@ fn namada_node_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada node command line interface.")
-        .setting(AppSettings::SubcommandRequiredElseHelp);
+        .color(ColorChoice::Auto)
+        .subcommand_required(true)
+        .arg_required_else_help(true);
     cmds::NamadaNode::add_sub(args::Global::def(app))
 }
 
@@ -4124,7 +4174,9 @@ fn namada_client_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada client command line interface.")
-        .setting(AppSettings::SubcommandRequiredElseHelp);
+        .color(ColorChoice::Auto)
+        .subcommand_required(true)
+        .arg_required_else_help(true);
     cmds::NamadaClient::add_sub(args::Global::def(app))
 }
 
@@ -4132,6 +4184,8 @@ fn namada_wallet_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada wallet command line interface.")
-        .setting(AppSettings::SubcommandRequiredElseHelp);
+        .color(ColorChoice::Auto)
+        .subcommand_required(true)
+        .arg_required_else_help(true);
     cmds::NamadaWallet::add_sub(args::Global::def(app))
 }

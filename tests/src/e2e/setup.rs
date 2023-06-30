@@ -21,6 +21,7 @@ use eyre::{eyre, Context};
 use itertools::{Either, Itertools};
 use namada::types::chain::ChainId;
 use namada_apps::client::utils;
+use namada_apps::client::utils::REDUCED_CLI_PRINTING;
 use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
 use namada_apps::{config, wallet};
 use once_cell::sync::Lazy;
@@ -118,7 +119,7 @@ pub fn network(
             eprintln!("Failed setting up colorful error reports {}", err);
         }
     });
-
+    env::set_var(REDUCED_CLI_PRINTING, "true");
     let working_dir = working_dir();
     let test_dir = TestDir::new();
 
@@ -795,6 +796,7 @@ pub mod constants {
     pub const CHRISTEL: &str = "Christel";
     pub const CHRISTEL_KEY: &str = "Christel-key";
     pub const DAEWON: &str = "Daewon";
+    pub const ESTER: &str = "Ester";
     pub const MATCHMAKER_KEY: &str = "matchmaker-key";
     pub const MASP: &str = "atest1v4ehgw36xaryysfsx5unvve4g5my2vjz89p52sjxxgenzd348yuyyv3hg3pnjs35g5unvde4ca36y5";
 

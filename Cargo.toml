@@ -30,7 +30,7 @@ keywords = ["blockchain", "privacy", "crypto", "protocol", "network"]
 license = "GPL-3.0"
 readme = "README.md"
 repository = "https://github.com/anoma/namada"
-version = "0.17.4"
+version = "0.17.5"
 
 [workspace.dependencies]
 ark-bls12-381 = {version = "0.3"}
@@ -53,7 +53,7 @@ byteorder = "1.4.2"
 borsh = "0.9.0"
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
 circular-queue = "0.2.6"
-clap = {git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2", default-features = false, features = ["std", "suggestions", "color", "cargo"]}
+clap = "4.3.4"
 clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
 color-eyre = "0.5.10"
 concat-idents = "1.1.2"
@@ -83,8 +83,8 @@ libc = "0.2.97"
 libloading = "0.7.2"
 libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
 # branch = "murisi/namada-integration"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "cfea8c95d3f73077ca3e25380fd27e5b46e828fd" }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "cfea8c95d3f73077ca3e25380fd27e5b46e828fd", default-features = false, features = ["local-prover"] }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "9320c6b69b5d2e97134866871e960f0a31703813" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "9320c6b69b5d2e97134866871e960f0a31703813", default-features = false, features = ["local-prover"] }
 num_cpus = "1.13.0"
 num-derive = "0.3.3"
 num-rational = "0.4.1"
@@ -132,9 +132,10 @@ tower = "0.4"
 # Also, using the same version of tendermint-rs as we do here.
 tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "367d8d958b83c501ed2c09e9c4595f8bf75a0b01"}
 tracing = "0.1.30"
+tracing-appender = "0.2.2"
 tracing-log = "0.1.2"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
-wasmparser = "0.83.0"
+wasmparser = "0.107.0"
 winapi = "0.3.9"
 zeroize = {version = "1.5.5", features = ["zeroize_derive"]}
 
