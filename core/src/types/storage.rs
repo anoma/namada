@@ -780,36 +780,6 @@ impl KeySeg for BlockHeight {
     }
 }
 
-impl KeySeg for Epoch {
-    fn parse(string: String) -> Result<Self> {
-        string
-            .split_once('=')
-            .and_then(|(prefix, epoch)| (prefix == "E").then_some(epoch))
-            .ok_or_else(|| {
-                Error::ParseKeySeg(format!(
-                    "Invalid epoch prefix on key: {string}"
-                ))
-            })
-            .and_then(|epoch| {
-                epoch.parse::<u64>().map_err(|e| {
-                    Error::ParseKeySeg(format!(
-                        "Unexpected epoch value {epoch}, {e}"
-                    ))
-                })
-            })
-            .map(Epoch)
-    }
-
-    fn raw(&self) -> String {
-        let &Epoch(epoch) = self;
-        format!("E={epoch}")
-    }
-
-    fn to_db_key(&self) -> DbKeySeg {
-        DbKeySeg::StringSeg(self.raw())
-    }
-}
-
 impl KeySeg for Address {
     fn parse(mut seg: String) -> Result<Self> {
         match seg.chars().next() {
@@ -921,6 +891,24 @@ impl_int_key_seg!(u16, i16, 2);
 impl_int_key_seg!(u32, i32, 4);
 impl_int_key_seg!(u64, i64, 8);
 impl_int_key_seg!(u128, i128, 16);
+
+impl KeySeg for Epoch {
+    fn parse(string: String) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let raw = u64::parse(string)?;
+        Ok(Epoch(raw))
+    }
+
+    fn raw(&self) -> String {
+        self.to_string()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        self.0.to_db_key()
+    }
+}
 
 impl KeySeg for common::PublicKey {
     fn parse(string: String) -> Result<Self>
