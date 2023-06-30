@@ -18,6 +18,7 @@ use namada_core::ledger::storage::write_log::StorageModification;
 use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
 use namada_core::proto::Tx;
 use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::dec::Dec;
 use namada_core::types::storage::Key;
 use namada_proof_of_stake::read_pos_params;
 use thiserror::Error;
@@ -224,19 +225,19 @@ pub fn get_dummy_header() -> crate::types::storage::Header {
 #[cfg(any(test, feature = "testing"))]
 pub fn get_dummy_genesis_validator()
 -> namada_proof_of_stake::types::GenesisValidator {
-    use rust_decimal::prelude::Decimal;
-
     use crate::core::types::address::testing::established_address_1;
     use crate::types::key::testing::common_sk_from_simple_seed;
     use crate::types::token::Amount;
 
     let address = established_address_1();
-    let tokens = Amount::whole(1);
+    let tokens = Amount::native_whole(1);
     let consensus_sk = common_sk_from_simple_seed(0);
     let consensus_key = consensus_sk.to_public();
 
-    let commission_rate = Decimal::new(1, 1);
-    let max_commission_rate_change = Decimal::new(1, 1);
+    let commission_rate =
+        Dec::new(1, 1).expect("expected 0.1 to be a valid decimal");
+    let max_commission_rate_change =
+        Dec::new(1, 1).expect("expected 0.1 to be a valid decimal");
     namada_proof_of_stake::types::GenesisValidator {
         address,
         tokens,
@@ -1963,7 +1964,7 @@ mod tests {
         // init balance
         let sender = established_address_1();
         let balance_key = balance_key(&nam(), &sender);
-        let amount = Amount::whole(100);
+        let amount = Amount::native_whole(100);
         wl_storage
             .write_log
             .write(&balance_key, amount.try_to_vec().unwrap())
@@ -2416,7 +2417,7 @@ mod tests {
         // init the escrow balance
         let balance_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::IbcEscrow));
-        let amount = Amount::whole(100);
+        let amount = Amount::native_whole(100);
         wl_storage
             .write_log
             .write(&balance_key, amount.try_to_vec().unwrap())
@@ -2565,7 +2566,7 @@ mod tests {
         // init the escrow balance
         let balance_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::IbcEscrow));
-        let amount = Amount::whole(100);
+        let amount = Amount::native_whole(100);
         wl_storage
             .write_log
             .write(&balance_key, amount.try_to_vec().unwrap())

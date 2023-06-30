@@ -3,22 +3,21 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
-use clap::ArgMatches;
+use clap::{ArgAction, ArgMatches};
 use color_eyre::eyre::Result;
 
 use super::args;
 use super::context::{Context, FromContext};
 
 // We only use static strings
-pub type App = clap::App<'static>;
-pub type ClapArg = clap::Arg<'static>;
+pub type App = clap::Command;
+pub type ClapArg = clap::Arg;
 
 pub trait Cmd: Sized {
     fn add_sub(app: App) -> App;
     fn parse(matches: &ArgMatches) -> Option<Self>;
 
     fn parse_or_print_help(app: App) -> Result<(Self, Context)> {
-        let mut app = Self::add_sub(app);
         let matches = app.clone().get_matches();
         match Self::parse(&matches) {
             Some(cmd) => {
@@ -27,6 +26,7 @@ pub trait Cmd: Sized {
                 Ok((cmd, context))
             }
             None => {
+                let mut app = app;
                 app.print_help().unwrap();
                 safe_exit(2);
             }
@@ -160,7 +160,7 @@ impl<T> Arg<T> {
     pub fn def(&self) -> ClapArg {
         ClapArg::new(self.name)
             .long(self.name)
-            .takes_value(true)
+            .num_args(1)
             .required(true)
     }
 }
@@ -177,14 +177,14 @@ where
 
 impl<T> Arg<FromContext<T>> {
     pub fn parse(&self, matches: &ArgMatches) -> FromContext<T> {
-        let raw = matches.value_of(self.name).unwrap();
+        let raw = matches.get_one::<String>(self.name).unwrap();
         FromContext::new(raw.to_string())
     }
 }
 
 impl<T> ArgOpt<T> {
     pub fn def(&self) -> ClapArg {
-        ClapArg::new(self.name).long(self.name).takes_value(true)
+        ClapArg::new(self.name).long(self.name).num_args(1)
     }
 }
 
@@ -200,7 +200,7 @@ where
 
 impl<T> ArgOpt<FromContext<T>> {
     pub fn parse(&self, matches: &ArgMatches) -> Option<FromContext<T>> {
-        let raw = matches.value_of(self.name)?;
+        let raw = matches.get_one::<String>(self.name).map(|s| s.as_str())?;
         Some(FromContext::new(raw.to_string()))
     }
 }
@@ -211,7 +211,7 @@ where
     <T as FromStr>::Err: Debug,
 {
     pub fn def(&self) -> ClapArg {
-        ClapArg::new(self.name).long(self.name).takes_value(true)
+        ClapArg::new(self.name).long(self.name).num_args(1)
     }
 
     pub fn parse(&self, matches: &ArgMatches) -> T {
@@ -228,7 +228,7 @@ where
     <T as FromStr>::Err: Debug,
 {
     pub fn def(&self) -> ClapArg {
-        ClapArg::new(self.name).long(self.name).takes_value(true)
+        ClapArg::new(self.name).long(self.name).num_args(1)
     }
 
     pub fn parse(&self, matches: &ArgMatches) -> FromContext<T> {
@@ -242,11 +242,13 @@ where
 
 impl ArgFlag {
     pub fn def(&self) -> ClapArg {
-        ClapArg::new(self.name).long(self.name).takes_value(false)
+        ClapArg::new(self.name)
+            .long(self.name)
+            .action(ArgAction::SetTrue)
     }
 
     pub fn parse(&self, matches: &ArgMatches) -> bool {
-        matches.is_present(self.name)
+        matches.get_flag(self.name)
     }
 }
 
@@ -257,14 +259,16 @@ where
     <T as FromStr>::Err: Debug,
 {
     pub fn def(&self) -> ClapArg {
-        ClapArg::new(self.name).long(self.name).multiple(true)
+        ClapArg::new(self.name)
+            .long(self.name)
+            .action(ArgAction::Append)
     }
 
     pub fn parse(&self, matches: &ArgMatches) -> Vec<T> {
         matches
-            .values_of(self.name)
+            .get_many(self.name)
             .unwrap_or_default()
-            .map(|raw| {
+            .map(|raw: &String| {
                 raw.parse().unwrap_or_else(|e| {
                     eprintln!(
                         "Failed to parse the {} argument. Raw value: {}, \
@@ -307,11 +311,11 @@ where
     T: FromStr,
     T::Err: Debug,
 {
-    args.value_of(field).map(|arg| {
-        arg.parse().unwrap_or_else(|e| {
+    args.get_one::<String>(field).map(|s| {
+        s.as_str().parse().unwrap_or_else(|e| {
             eprintln!(
                 "Failed to parse the argument {}. Raw value: {}, error: {:?}",
-                field, arg, e
+                field, s, e
             );
             safe_exit(1)
         })

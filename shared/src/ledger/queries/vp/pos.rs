@@ -207,7 +207,7 @@ where
 /// `None`. The total stake is a sum of validator's self-bonds and delegations
 /// to their address.
 /// Returns `None` when the given address is not a validator address. For a
-/// validator with `0` stake, this returns `Ok(token::Amount::default())`.
+/// validator with `0` stake, this returns `Ok(token::Amount::zero())`.
 fn validator_stake<D, H>(
     ctx: RequestCtx<'_, D, H>,
     validator: Address,
@@ -415,7 +415,7 @@ where
     let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
 
     let handle = unbond_handle(&source, &validator);
-    let mut total = token::Amount::default();
+    let mut total = token::Amount::zero();
     for result in handle.iter(ctx.wl_storage)? {
         let (
             lazy_map::NestedSubKey::Data {
