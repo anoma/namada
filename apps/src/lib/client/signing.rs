@@ -1,144 +1,48 @@
 //! Helpers for making digital signatures using cryptographic keys from the
 //! wallet.
 
+use namada::ledger::rpc::TxBroadcastData;
+use namada::ledger::signing::TxSigningKey;
+use namada::ledger::tx;
+use namada::ledger::wallet::{Wallet, WalletUtils};
+use namada::proof_of_stake::Epoch;
+use namada::proto::Tx;
+use namada::types::address::Address;
+use namada::types::key::*;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-use borsh::BorshSerialize;
-use namada::ledger::parameters::storage as parameter_storage;
-use namada::proof_of_stake::Epoch;
-use namada::proto::Tx;
-use namada::types::address::{self, Address, ImplicitAddress};
-use namada::types::hash::Hash;
-use namada::types::key::*;
-use namada::types::token;
-use namada::types::token::Amount;
-use namada::types::transaction::{hash_tx, DecryptedTx, Fee, WrapperTx};
-
-use super::rpc;
-use super::tx::gen_shielded_transfer;
-use crate::cli::context::{FromContext, WalletAddress, WalletKeypair};
-use crate::cli::{self, args, Context};
-use crate::client::tendermint_rpc_types::TxBroadcastData;
-use crate::facade::tendermint_config::net::Address as TendermintAddress;
-use crate::facade::tendermint_rpc::HttpClient;
-use crate::wallet::Wallet;
+use crate::cli::args;
 
 /// Find the public key for the given address and try to load the keypair
 /// for it from the wallet. Panics if the key cannot be found or loaded.
-pub async fn find_keypair(
-    wallet: &mut Wallet,
+pub async fn find_keypair<
+    C: namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
+    client: &C,
+    wallet: &mut Wallet<U>,
     addr: &Address,
-    ledger_address: TendermintAddress,
-) -> common::SecretKey {
-    match addr {
-        Address::Established(_) => {
-            println!(
-                "Looking-up public key of {} from the ledger...",
-                addr.encode()
-            );
-            let public_key = rpc::get_public_key(addr, ledger_address)
-                .await
-                .unwrap_or_else(|| {
-                    eprintln!(
-                        "No public key found for the address {}",
-                        addr.encode()
-                    );
-                    cli::safe_exit(1);
-                });
-            wallet.find_key_by_pk(&public_key).unwrap_or_else(|err| {
-                eprintln!(
-                    "Unable to load the keypair from the wallet for public \
-                     key {}. Failed with: {}",
-                    public_key, err
-                );
-                cli::safe_exit(1)
-            })
-        }
-        Address::Implicit(ImplicitAddress(pkh)) => {
-            wallet.find_key_by_pkh(pkh).unwrap_or_else(|err| {
-                eprintln!(
-                    "Unable to load the keypair from the wallet for the \
-                     implicit address {}. Failed with: {}",
-                    addr.encode(),
-                    err
-                );
-                cli::safe_exit(1)
-            })
-        }
-        Address::Internal(_) => {
-            eprintln!(
-                "Internal address {} doesn't have any signing keys.",
-                addr
-            );
-            cli::safe_exit(1)
-        }
-    }
-}
-
-/// Carries types that can be directly/indirectly used to sign a transaction.
-#[allow(clippy::large_enum_variant)]
-#[derive(Clone)]
-pub enum TxSigningKey {
-    // Do not sign any transaction
-    None,
-    // Obtain the actual keypair from wallet and use that to sign
-    WalletKeypair(WalletKeypair),
-    // Obtain the keypair corresponding to given address from wallet and sign
-    WalletAddress(WalletAddress),
-    // Directly use the given secret key to sign transactions
-    SecretKey(common::SecretKey),
+) -> Result<common::SecretKey, tx::Error> {
+    namada::ledger::signing::find_keypair::<C, U>(client, wallet, addr, None)
+        .await
 }
 
 /// Given CLI arguments and some defaults, determine the rightful transaction
 /// signer. Return the given signing key or public key of the given signer if
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, panics.
-pub async fn tx_signer(
-    ctx: &mut Context,
+pub async fn tx_signer<
+    C: namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
+    client: &C,
+    wallet: &mut Wallet<U>,
     args: &args::Tx,
-    mut default: TxSigningKey,
-) -> common::SecretKey {
-    // Override the default signing key source if possible
-    if let Some(signing_key) = &args.signing_key {
-        default = TxSigningKey::WalletKeypair(signing_key.clone());
-    } else if let Some(signer) = &args.signer {
-        default = TxSigningKey::WalletAddress(signer.clone());
-    }
-    // Now actually fetch the signing key and apply it
-    match default {
-        TxSigningKey::WalletKeypair(signing_key) => {
-            ctx.get_cached(&signing_key)
-        }
-        TxSigningKey::WalletAddress(signer) => {
-            let signer = ctx.get(&signer);
-            let signing_key = find_keypair(
-                &mut ctx.wallet,
-                &signer,
-                args.ledger_address.clone(),
-            )
-            .await;
-            // Check if the signer is implicit account that needs to reveal its
-            // PK first
-            if matches!(signer, Address::Implicit(_)) {
-                let pk: common::PublicKey = signing_key.ref_to();
-                super::tx::reveal_pk_if_needed(ctx, &pk, args).await;
-            }
-            signing_key
-        }
-        TxSigningKey::SecretKey(signing_key) => {
-            // Check if the signing key needs to reveal its PK first
-            let pk: common::PublicKey = signing_key.ref_to();
-            super::tx::reveal_pk_if_needed(ctx, &pk, args).await;
-            signing_key
-        }
-        TxSigningKey::None => {
-            panic!(
-                "All transactions must be signed; please either specify the \
-                 key or the address from which to look up the signing key."
-            );
-        }
-    }
+    default: TxSigningKey,
+) -> Result<common::SecretKey, tx::Error> {
+    namada::ledger::signing::tx_signer::<C, U>(client, wallet, args, default)
+        .await
 }
 
 /// Sign a transaction with a given signing key or public key of a given signer.
@@ -151,97 +55,40 @@ pub async fn tx_signer(
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
 ///
 /// If the tx fee is to be unshielded, it also returns the unshielding epoch.
-pub async fn sign_tx(
-    ctx: &mut Context,
+pub async fn sign_tx<
+    C: namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
+    client: &C,
+    wallet: &mut Wallet<U>,
     tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,
     mut updated_balance: Option<Amount>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> (TxBroadcastData, Option<Epoch>) {
-    if args.dump_tx {
-        dump_tx_helper(ctx, &tx, "unsigned", None);
-    }
-
-    let mut keypair = tx_signer(ctx, args, default).await;
-    let tx = tx.sign(&keypair);
-    if args.dump_tx {
-        dump_tx_helper(ctx, &tx, "signed", None);
-    }
-
-    let epoch = rpc::query_and_print_epoch(args::Query {
-        ledger_address: args.ledger_address.clone(),
-    })
-    .await;
-    let (broadcast_data, unshielding_epoch) = if args.dry_run {
-        let tx = Tx::from(DecryptedTx::Decrypted {
-            tx,
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: true,
-        });
-        (TxBroadcastData::DryRun(tx), None)
-    } else {
-        sign_wrapper(
-            ctx,
-            args,
-            epoch,
-            tx,
-            Cow::Borrowed(&keypair),
-            updated_balance,
-            #[cfg(not(feature = "mainnet"))]
-            requires_pow,
-        )
-        .await
-    };
-
-    if args.dump_tx && !(args.dry_run || args.dry_run_wrapper) {
-        let (wrapper_tx, wrapper_hash) = match broadcast_data {
-            TxBroadcastData::DryRun(_) => panic!(
-                "somehow created a dry run transaction without --dry-run or --dry-run-wrapper"
-            ),
-            TxBroadcastData::Live {
-                ref tx,
-                ref wrapper_hash,
-                decrypted_hash: _,
-            } => (tx, wrapper_hash),
-        };
-
-        dump_tx_helper(ctx, wrapper_tx, "wrapper", Some(wrapper_hash));
-    }
-
-    (broadcast_data, unshielding_epoch)
-}
-
-pub fn dump_tx_helper(
-    ctx: &Context,
-    tx: &Tx,
-    extension: &str,
-    precomputed_hash: Option<&String>,
-) {
-    let chain_dir = ctx.config.ledger.chain_dir();
-    let hash = match precomputed_hash {
-        Some(hash) => hash.to_owned(),
-        None => {
-            let hash: Hash = tx
-                .hash()
-                .as_ref()
-                .try_into()
-                .expect("expected hash of dumped tx to be a hash");
-            format!("{}", hash)
-        }
-    };
-    let filename = chain_dir.join(hash).with_extension(extension);
-    let tx_bytes = tx.to_bytes();
-
-    std::fs::write(filename, tx_bytes)
-        .expect("expected to be able to write tx dump file");
+) -> Result<(TxBroadcastData, Option<Epoch>), tx::Error> {
+    namada::ledger::signing::sign_tx::<C, U>(
+        client,
+        wallet,
+        tx,
+        args,
+        default,
+        #[cfg(not(feature = "mainnet"))]
+        requires_pow,
+    )
+    .await
 }
 
 /// Create a wrapper tx from a normal tx. Get the hash of the
 /// wrapper and its payload which is needed for monitoring its
 /// progress on chain. Accepts an optional balance reflecting any modification applied to it by the inner tx for a correct fee validation.
-pub async fn sign_wrapper<'key>(
-    ctx: &mut Context,
+pub async fn sign_wrapper<
+    'key,
+    C: namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
+    client: &C,
+    wallet: &mut Wallet<U>,
     args: &args::Tx,
     epoch: Epoch,
     tx: Tx,
@@ -249,244 +96,16 @@ pub async fn sign_wrapper<'key>(
     mut updated_balance: Option<Amount>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (TxBroadcastData, Option<Epoch>) {
-    let client = HttpClient::new(args.ledger_address.clone()).unwrap();
-
-    if args.disposable_signing_key {
-        // Generate a disposable keypair to sign the wrapper if requested
-        let mut csprng = rand::rngs::OsRng {};
-        keypair = Cow::Owned(
-            ed25519::SigScheme::generate(&mut csprng)
-                .try_to_sk()
-                .unwrap(),
-        );
-        updated_balance = Some(Amount::default());
-    }
-
-    let fee_token = ctx.get(&args.fee_token);
-    let fee_amount = match args.fee_amount {
-        Some(amount) => amount,
-        None => {
-            let gas_cost_key = parameter_storage::get_gas_cost_key();
-            match rpc::query_storage_value::<BTreeMap<Address, Amount>>(
-                &client,
-                &gas_cost_key,
-            )
-            .await
-            .map(|map| map.get(&fee_token).map(ToOwned::to_owned))
-            .flatten()
-            {
-                Some(amount) => amount,
-                None => {
-                    if !args.force {
-                        eprintln!(
-                            "Could not retrieve the gas cost for token {}",
-                            fee_token
-                        );
-                        cli::safe_exit(1)
-                    } else {
-                        1.into()
-                    }
-                }
-            }
-        }
-    };
-
-    let source = Address::from(&keypair.ref_to());
-    let mut updated_balance = match updated_balance {
-        Some(balance) => balance,
-        None => {
-            let balance_key = token::balance_key(&fee_token, &source);
-
-            rpc::query_storage_value::<token::Amount>(&client, &balance_key)
-                .await
-                .unwrap_or_default()
-        }
-    };
-
-    let total_fee: Amount =
-        u64::checked_mul(fee_amount.into(), u64::from(&args.gas_limit))
-            .expect("Fee computation shouldn't overflow")
-            .into();
-    let (unshield, unshielding_epoch) = match total_fee
-        .checked_sub(updated_balance)
-    {
-        Some(diff) => {
-            if let Some(spending_key) = args.fee_unshield {
-                // Unshield funds for fee payment
-                let tx_args = args::Tx {
-                    fee_amount: Some(0.into()),
-                    fee_unshield: None,
-                    ..args.to_owned()
-                };
-                let transfer_args = args::TxTransfer {
-                    tx: tx_args,
-                    source: FromContext::new(spending_key.to_string()),
-                    target: FromContext::new(source.to_string()),
-                    token: args.fee_token.to_owned(),
-                    sub_prefix: None,
-                    amount: diff,
-                };
-
-                match gen_shielded_transfer(ctx, &client, &transfer_args).await
-                {
-                    Ok(Some((transaction, _data, unshielding_epoch))) => {
-                        let spends = transaction.shielded_spends.len();
-                        let converts = transaction.shielded_converts.len();
-                        let outs = transaction.shielded_outputs.len();
-
-                        let mut descriptions =
-                            spends.checked_add(converts).unwrap_or_else(|| {
-                                if !args.force && cfg!(feature = "mainnet") {
-                                    eprintln!(
-                                        "Overflow in fee unshielding \
-                                         descriptions"
-                                    );
-                                    cli::safe_exit(1)
-                                } else {
-                                    usize::MAX
-                                }
-                            });
-
-                        descriptions = descriptions
-                            .checked_add(outs)
-                            .unwrap_or_else(|| {
-                                if !args.force && cfg!(feature = "mainnet") {
-                                    eprintln!(
-                                        "Overflow in fee unshielding \
-                                         descriptions"
-                                    );
-                                    cli::safe_exit(1);
-                                } else {
-                                    usize::MAX
-                                }
-                            });
-
-                        let descriptions_limit_key=  parameter_storage::get_fee_unshielding_descriptions_limit_key();
-                        let descriptions_limit =
-                            rpc::query_storage_value::<u64>(
-                                &client,
-                                &descriptions_limit_key,
-                            )
-                            .await
-                            .unwrap();
-
-                        if u64::try_from(descriptions).unwrap_or_else(|_| {
-                            if !args.force && cfg!(feature = "mainnet") {
-                                eprintln!(
-                                    "Overflow in fee unshielding descriptions"
-                                );
-                                cli::safe_exit(1);
-                            } else {
-                                u64::MAX
-                            }
-                        }) > descriptions_limit
-                            && !args.force
-                            && cfg!(feature = "mainnet")
-                        {
-                            eprintln!(
-                                "Fee unshielding descriptions exceed the limit"
-                            );
-                            cli::safe_exit(1);
-                        }
-
-                        updated_balance += diff;
-                        (Some(transaction), Some(unshielding_epoch))
-                    }
-                    Ok(None) => {
-                        eprintln!("Missing unshielding transaction");
-                        if !args.force && cfg!(feature = "mainnet") {
-                            cli::safe_exit(1);
-                        }
-
-                        (None, None)
-                    }
-                    Err(e) => {
-                        eprintln!("Error in fee unshielding generation: {}", e);
-                        if !args.force && cfg!(feature = "mainnet") {
-                            cli::safe_exit(1);
-                        }
-
-                        (None, None)
-                    }
-                }
-            } else {
-                eprintln!(
-                    "The wrapper transaction source doesn't have enough \
-                     balance to pay fee. Fee: {fee_amount}, balance: \
-                     {updated_balance}."
-                );
-                if !args.force && cfg!(feature = "mainnet") {
-                    cli::safe_exit(1);
-                }
-
-                (None, None)
-            }
-        }
-        None => (None, None),
-    };
-
-    #[cfg(not(feature = "mainnet"))]
-    // A PoW solution can be used to allow zero-fee testnet transactions
-    let pow_solution: Option<namada::core::ledger::testnet_pow::Solution> = {
-        // If the address derived from the keypair doesn't have enough balance
-        // to pay for the fee, allow to find a PoW solution instead.
-        if requires_pow || updated_balance < total_fee {
-            println!(
-                "The transaction requires the completion of a PoW challenge."
-            );
-            // Obtain a PoW challenge for faucet withdrawal
-            let challenge = rpc::get_testnet_pow_challenge(
-                source,
-                args.ledger_address.clone(),
-            )
-            .await;
-
-            // Solve the solution, this blocks until a solution is found
-            let solution = challenge.solve();
-            Some(solution)
-        } else {
-            None
-        }
-    };
-
-    let tx = {
-        WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: fee_amount,
-                token: fee_token,
-            },
-            &keypair,
-            epoch,
-            args.gas_limit.clone(),
-            tx,
-            // TODO: Actually use the fetched encryption key but use the default if dry-running the wrapper
-            Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            pow_solution,
-            unshield,
-        )
-    };
-
-    let signed_wrapper = tx
-        .sign(
-            &keypair,
-            ctx.config.ledger.chain_id.clone(),
-            args.expiration,
-        )
-        .expect("Wrapper tx signing keypair should be correct");
-    let to_broadcast = if args.dry_run_wrapper {
-        TxBroadcastData::DryRun(signed_wrapper)
-    } else {
-        // We use this to determine when the wrapper tx makes it on-chain
-        let wrapper_hash = hash_tx(&tx.try_to_vec().unwrap()).to_string();
-        // We use this to determine when the decrypted inner tx makes it
-        // on-chain
-        let decrypted_hash = tx.tx_hash.to_string();
-        TxBroadcastData::Live {
-            tx: signed_wrapper,
-            wrapper_hash,
-            decrypted_hash,
-        }
-    };
-    (to_broadcast, unshielding_epoch)
+    namada::ledger::signing::sign_wrapper(
+        client,
+        wallet,
+        args,
+        epoch,
+        tx,
+        keypair,
+        updated_balance,
+        #[cfg(not(feature = "mainnet"))]
+        requires_pow,
+    )
+    .await
 }

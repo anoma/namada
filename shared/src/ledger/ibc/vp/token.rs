@@ -23,7 +23,7 @@ use crate::ibc_proto::google::protobuf::Any;
 use crate::ledger::ibc::storage as ibc_storage;
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
-use crate::proto::SignedTxData;
+use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::token::{self, Amount, AmountParseError};
@@ -84,13 +84,12 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &[u8],
+        tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
-        let signed =
-            SignedTxData::try_from_slice(tx_data).map_err(Error::Decoding)?;
-        let tx_data = &signed.data.ok_or(Error::NoTxData)?;
+        let signed = tx_data;
+        let tx_data = signed.data().ok_or(Error::NoTxData)?;
 
         // Check the non-onwer balance updates
         let ibc_keys_changed: HashSet<Key> = keys_changed

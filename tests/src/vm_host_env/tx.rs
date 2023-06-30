@@ -9,14 +9,15 @@ use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{Sha256Hasher, WlStorage};
 use namada::proto::Tx;
 use namada::types::address::Address;
+use namada::types::hash::Hash;
 use namada::types::storage::{Key, TxIndex};
 use namada::types::time::DurationSecs;
+pub use namada::types::transaction::TxType;
 use namada::types::{key, token};
 use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::run::Error;
 use namada::vm::wasm::{self, TxCache, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
-use namada_core::types::hash::Hash;
 use namada_tx_prelude::{BorshSerialize, Ctx};
 use tempfile::TempDir;
 
@@ -62,12 +63,12 @@ impl Default for TestTxEnv {
             wasm::compilation_cache::common::testing::cache();
         let (tx_wasm_cache, tx_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-
         let wl_storage = WlStorage {
             storage: TestStorage::default(),
             write_log: WriteLog::default(),
         };
-        let chain_id = wl_storage.storage.chain_id.clone();
+        let mut tx = Tx::new(TxType::Raw);
+        tx.header.chain_id = wl_storage.storage.chain_id.clone();
         Self {
             wl_storage,
             iterators: PrefixIterators::default(),
@@ -79,7 +80,7 @@ impl Default for TestTxEnv {
             vp_cache_dir,
             tx_wasm_cache,
             tx_cache_dir,
-            tx: Tx::new(vec![], None, chain_id, None),
+            tx,
         }
     }
 }
@@ -207,15 +208,13 @@ impl TestTxEnv {
 
     /// Apply the tx changes to the write log.
     pub fn execute_tx(&mut self) -> Result<(), Error> {
-        let empty_data = vec![];
         wasm::run::tx(
             &self.wl_storage.storage,
             &mut self.wl_storage.write_log,
             &mut self.gas_meter,
             &BTreeMap::default(),
             &self.tx_index,
-            &self.tx.code_or_hash,
-            self.tx.data.as_ref().unwrap_or(&empty_data),
+            &self.tx,
             &mut self.vp_wasm_cache,
             &mut self.tx_wasm_cache,
         )
@@ -337,7 +336,7 @@ mod native_tx_host_env {
                                 vp_cache_dir: _,
                                 tx_wasm_cache,
                                 tx_cache_dir: _,
-                                tx: _,
+                                tx,
                             }: &mut TestTxEnv| {
 
                             let tx_env = vm::host_env::testing::tx_env(
@@ -346,6 +345,7 @@ mod native_tx_host_env {
                                 iterators,
                                 verifiers,
                                 gas_meter,
+                                tx,
                                 tx_index,
                                 result_buffer,
                                 vp_wasm_cache,
@@ -376,7 +376,7 @@ mod native_tx_host_env {
                                 vp_cache_dir: _,
                                 tx_wasm_cache,
                                 tx_cache_dir: _,
-                                tx: _,
+                                tx,
                             }: &mut TestTxEnv| {
 
                             let tx_env = vm::host_env::testing::tx_env(
@@ -385,6 +385,7 @@ mod native_tx_host_env {
                                 iterators,
                                 verifiers,
                                 gas_meter,
+                                tx,
                                 tx_index,
                                 result_buffer,
                                 vp_wasm_cache,

@@ -52,12 +52,14 @@ impl From<bool> for HostEnvResult {
 mod tx_queue {
     use borsh::{BorshDeserialize, BorshSerialize};
 
+    use crate::proto::Tx;
+
     /// A wrapper for `crate::types::transaction::WrapperTx` to conditionally
     /// add `has_valid_pow` flag for only used in testnets.
     #[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
-    pub struct WrapperTxInQueue {
+    pub struct TxInQueue {
         /// Wrapper tx
-        pub tx: crate::types::transaction::WrapperTx,
+        pub tx: Tx,
         /// The available gas remaining for the inner tx (for gas accounting). This allows for a more detailed logging about the gas used by the wrapper and that used by the inner
         pub gas: u64,
         #[cfg(not(feature = "mainnet"))]
@@ -70,23 +72,21 @@ mod tx_queue {
 
     #[derive(Default, Debug, Clone, BorshDeserialize, BorshSerialize)]
     /// Wrapper txs to be decrypted in the next block proposal
-    pub struct TxQueue(std::collections::VecDeque<WrapperTxInQueue>);
+    pub struct TxQueue(std::collections::VecDeque<TxInQueue>);
 
     impl TxQueue {
         /// Add a new wrapper at the back of the queue
-        pub fn push(&mut self, wrapper: WrapperTxInQueue) {
+        pub fn push(&mut self, wrapper: TxInQueue) {
             self.0.push_back(wrapper);
         }
 
         /// Remove the wrapper at the head of the queue
-        pub fn pop(&mut self) -> Option<WrapperTxInQueue> {
+        pub fn pop(&mut self) -> Option<TxInQueue> {
             self.0.pop_front()
         }
 
         /// Get an iterator over the queue
-        pub fn iter(
-            &self,
-        ) -> impl std::iter::Iterator<Item = &WrapperTxInQueue> {
+        pub fn iter(&self) -> impl std::iter::Iterator<Item = &TxInQueue> {
             self.0.iter()
         }
 
@@ -98,11 +98,11 @@ mod tx_queue {
 
         /// Get reference to the element at the given index.
         /// Returns [`None`] if index exceeds the queue lenght.
-        pub fn get(&self, index: usize) -> Option<&WrapperTxInQueue> {
+        pub fn get(&self, index: usize) -> Option<&TxInQueue> {
             self.0.get(index)
         }
     }
 }
 
 #[cfg(feature = "ferveo-tpke")]
-pub use tx_queue::{TxQueue, WrapperTxInQueue};
+pub use tx_queue::{TxInQueue, TxQueue};

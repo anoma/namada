@@ -32,14 +32,22 @@ mod protocol_txs {
     use serde_json;
 
     use super::*;
-    use crate::proto::Tx;
+    use crate::proto::{Code, Data, Section, Signature, Tx, TxError};
     use crate::types::chain::ChainId;
     use crate::types::key::*;
-    use crate::types::transaction::{EllipticCurve, TxError, TxType};
+    use crate::types::transaction::{Digest, EllipticCurve, Sha256, TxType};
 
     const TX_NEW_DKG_KP_WASM: &str = "tx_update_dkg_session_keypair.wasm";
 
-    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+    #[derive(
+        Clone,
+        Debug,
+        BorshSerialize,
+        BorshDeserialize,
+        BorshSchema,
+        Serialize,
+        Deserialize,
+    )]
     /// Txs sent by validators as part of internal protocols
     pub struct ProtocolTx {
         /// we require ProtocolTxs be signed
@@ -63,49 +71,42 @@ mod protocol_txs {
                     ))
                 })
         }
+
+        /// Produce a SHA-256 hash of this section
+        pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
+            hasher.update(
+                self.try_to_vec().expect("unable to serialize protocol"),
+            );
+            hasher
+        }
     }
 
     /// DKG message wrapper type that adds Borsh encoding.
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, Serialize, Deserialize)]
     pub struct DkgMessage(pub Message<EllipticCurve>);
 
-    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+    #[derive(
+        Clone,
+        Debug,
+        BorshSerialize,
+        BorshDeserialize,
+        BorshSchema,
+        Serialize,
+        Deserialize,
+    )]
     #[allow(clippy::large_enum_variant)]
     /// Types of protocol messages to be sent
     pub enum ProtocolTxType {
         /// Messages to be given to the DKG state machine
         DKG(DkgMessage),
         /// Tx requesting a new DKG session keypair
-        NewDkgKeypair(Tx),
+        NewDkgKeypair,
         /// Aggregation of Ethereum state changes
         /// voted on by validators in last block
-        EthereumStateUpdate(Tx),
+        EthereumStateUpdate,
     }
 
     impl ProtocolTxType {
-        /// Sign a ProtocolTxType and wrap it up in a normal Tx
-        pub fn sign(
-            self,
-            pk: &common::PublicKey,
-            signing_key: &common::SecretKey,
-            chain_id: ChainId,
-        ) -> Tx {
-            Tx::new(
-                vec![],
-                Some(
-                    TxType::Protocol(ProtocolTx {
-                        pk: pk.clone(),
-                        tx: self,
-                    })
-                    .try_to_vec()
-                    .expect("Could not serialize ProtocolTx"),
-                ),
-                chain_id,
-                None,
-            )
-            .sign(signing_key)
-        }
-
         /// Create a new tx requesting a new DKG session keypair
         pub fn request_new_dkg_keypair<'a, F>(
             data: UpdateDkgSessionKey,
@@ -113,7 +114,7 @@ mod protocol_txs {
             wasm_dir: &'a Path,
             wasm_loader: F,
             chain_id: ChainId,
-        ) -> Self
+        ) -> Tx
         where
             F: FnOnce(&'a str, &'static str) -> Vec<u8>,
         {
@@ -123,18 +124,22 @@ mod protocol_txs {
                     .expect("Converting path to string should not fail"),
                 TX_NEW_DKG_KP_WASM,
             );
-            Self::NewDkgKeypair(
-                Tx::new(
-                    code,
-                    Some(
-                        data.try_to_vec()
-                            .expect("Serializing request should not fail"),
-                    ),
-                    chain_id,
-                    None,
-                )
-                .sign(signing_key),
-            )
+            let mut outer_tx =
+                Tx::new(TxType::Protocol(Box::new(ProtocolTx {
+                    pk: signing_key.ref_to(),
+                    tx: Self::NewDkgKeypair,
+                })));
+            outer_tx.header.chain_id = chain_id;
+            outer_tx.set_code(Code::new(code));
+            outer_tx.set_data(Data::new(
+                data.try_to_vec()
+                    .expect("Serializing request should not fail"),
+            ));
+            outer_tx.add_section(Section::Signature(Signature::new(
+                &outer_tx.header_hash(),
+                signing_key,
+            )));
+            outer_tx
         }
     }
 

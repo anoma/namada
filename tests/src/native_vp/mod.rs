@@ -63,9 +63,12 @@ impl TestNativeVpEnv {
             keys_changed: &self.keys_changed,
             verifiers: &self.verifiers,
         };
-        let tx_data = self.tx_env.tx.data.as_ref().cloned().unwrap_or_default();
         let native_vp = init_native_vp(ctx);
 
-        native_vp.validate_tx(&tx_data, &self.keys_changed, &self.verifiers)
+        native_vp.validate_tx(
+            &self.tx_env.tx,
+            &self.keys_changed,
+            &self.verifiers,
+        )
     }
 }

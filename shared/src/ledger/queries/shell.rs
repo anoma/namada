@@ -2,19 +2,22 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
+use namada_core::ledger::storage::LastBlock;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
-use namada_core::types::storage::BlockResults;
+use namada_core::types::storage::{BlockResults, KeySeg};
 
+use crate::ibc::core::ics04_channel::packet::Sequence;
+use crate::ibc::core::ics24_host::identifier::{ChannelId, ClientId, PortId};
 use crate::ledger::events::log::dumb_queries;
-use crate::ledger::events::Event;
+use crate::ledger::events::{Event, EventType};
 use crate::ledger::queries::types::{RequestCtx, RequestQuery};
 use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
 use crate::tendermint::merkle::proof::Proof;
-use crate::types::storage::{self, Epoch, PrefixValue};
+use crate::types::storage::{self, BlockHeight, Epoch, PrefixValue};
 #[cfg(any(test, feature = "async-client"))]
 use crate::types::transaction::TxResult;
 
@@ -28,6 +31,9 @@ type Conversion = (
 router! {SHELL,
     // Epoch of the last committed block
     ( "epoch" ) -> Epoch = epoch,
+
+    // Query the last committed block
+    ( "last_block" ) -> Option<LastBlock> = last_block,
 
     // Raw storage access - read value
     ( "value" / [storage_key: storage::Key] )
@@ -56,6 +62,11 @@ router! {SHELL,
     // was the transaction applied?
     ( "applied" / [tx_hash: Hash] ) -> Option<Event> = applied,
 
+    // IBC UpdateClient event
+    ( "ibc_client_update" / [client_id: ClientId] / [consensus_height: BlockHeight] ) -> Option<Event> = ibc_client_update,
+
+    // IBC packet event
+    ( "ibc_packet" / [event_type: EventType] / [source_port: PortId] / [source_channel: ChannelId] / [destination_port: PortId] / [destination_channel: ChannelId] / [sequence: Sequence]) -> Option<Event> = ibc_packet,
 }
 
 // Handlers:
@@ -81,8 +92,9 @@ where
     use crate::types::storage::TxIndex;
     use crate::types::transaction::wrapper::wrapper_tx::PairingEngine;
     use crate::types::transaction::{
-        AffineCurve, DecryptedTx, EllipticCurve, TxType,
+        AffineCurve, , EllipticCurve, TxType,
     };
+
     let gas_table: BTreeMap<String, u64> = ctx
         .wl_storage
         .read(&parameters::storage::get_gas_table_storage_key())
@@ -207,12 +219,13 @@ where
         ctx.wl_storage.storage.block.height.0 as usize + 1
     ];
     iter.for_each(|(key, value, _gas)| {
-        let key = key
-            .parse::<usize>()
-            .expect("expected integer for block height");
+        let key = u64::parse(key).expect("expected integer for block height");
         let value = BlockResults::try_from_slice(&value)
             .expect("expected BlockResults bytes");
-        results[key] = value;
+        let idx: usize = key
+            .try_into()
+            .expect("expected block height to fit into usize");
+        results[idx] = value;
     });
     Ok(results)
 }
@@ -271,6 +284,16 @@ where
     Ok(data)
 }
 
+fn last_block<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+) -> storage_api::Result<Option<LastBlock>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    Ok(ctx.wl_storage.storage.last_block.clone())
+}
+
 /// Returns data with `vec![]` when the storage key is not found. For all
 /// borsh-encoded types, it is safe to check `data.is_empty()` to see if the
 /// value was found, except for unit - see `fn query_storage_value` in
@@ -286,7 +309,7 @@ where
 {
     if let Some(past_height_limit) = ctx.storage_read_past_height_limit {
         if request.height.0 + past_height_limit
-            < ctx.wl_storage.storage.last_height.0
+            < ctx.wl_storage.storage.get_last_block_height().0
         {
             return Err(storage_api::Error::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -431,6 +454,56 @@ where
         .cloned())
 }
 
+fn ibc_client_update<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    client_id: ClientId,
+    consensus_height: BlockHeight,
+) -> storage_api::Result<Option<Event>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let matcher = dumb_queries::QueryMatcher::ibc_update_client(
+        client_id,
+        consensus_height,
+    );
+    Ok(ctx
+        .event_log
+        .iter_with_matcher(matcher)
+        .by_ref()
+        .next()
+        .cloned())
+}
+
+fn ibc_packet<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    event_type: EventType,
+    source_port: PortId,
+    source_channel: ChannelId,
+    destination_port: PortId,
+    destination_channel: ChannelId,
+    sequence: Sequence,
+) -> storage_api::Result<Option<Event>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let matcher = dumb_queries::QueryMatcher::ibc_packet(
+        event_type,
+        source_port,
+        source_channel,
+        destination_port,
+        destination_channel,
+        sequence,
+    );
+    Ok(ctx
+        .event_log
+        .iter_with_matcher(matcher)
+        .by_ref()
+        .next()
+        .cloned())
+}
+
 #[cfg(test)]
 mod test {
     use borsh::{BorshDeserialize, BorshSerialize};
@@ -439,9 +512,11 @@ mod test {
     use crate::ledger::queries::testing::TestClient;
     use crate::ledger::queries::RPC;
     use crate::ledger::storage_api::{self, StorageWrite};
-    use crate::proto::Tx;
+    use crate::proto::{Code, Data, Tx};
     use crate::types::hash::Hash;
     use crate::types::storage::Key;
+    use crate::types::transaction::decrypted::DecryptedTx;
+    use crate::types::transaction::TxType;
     use crate::types::{address, token};
 
     #[test]
@@ -488,13 +563,16 @@ mod test {
         assert_eq!(current_epoch, read_epoch);
 
         // Request dry run tx
-        let tx = Tx::new(
-            tx_hash.to_vec(),
-            None,
-            client.wl_storage.storage.chain_id.clone(),
-            None,
-        );
-        let tx_bytes = tx.to_bytes();
+        let mut outer_tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
+            #[cfg(not(feature = "mainnet"))]
+            // To be able to dry-run testnet faucet withdrawal, pretend 
+            // that we got a valid PoW
+            has_valid_pow: true,
+        }));
+        outer_tx.header.chain_id = client.wl_storage.storage.chain_id.clone();
+        outer_tx.set_code(Code::from_hash(tx_hash));
+        outer_tx.set_data(Data::new(vec![]));
+        let tx_bytes = outer_tx.to_bytes();
         let result = RPC
             .shell()
             .dry_run_tx(&client, Some(tx_bytes), None, false)

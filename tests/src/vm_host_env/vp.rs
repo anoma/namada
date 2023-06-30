@@ -8,6 +8,7 @@ use namada::ledger::storage::{Sha256Hasher, WlStorage};
 use namada::proto::Tx;
 use namada::types::address::{self, Address};
 use namada::types::storage::{self, Key, TxIndex};
+use namada::types::transaction::TxType;
 use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::{self, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
@@ -68,13 +69,14 @@ impl Default for TestVpEnv {
             storage: TestStorage::default(),
             write_log: WriteLog::default(),
         };
-        let chain_id = wl_storage.storage.chain_id.clone();
+        let mut tx = Tx::new(TxType::Raw);
+        tx.header.chain_id = wl_storage.storage.chain_id.clone();
         Self {
             addr: address::testing::established_address_1(),
             wl_storage,
             iterators: PrefixIterators::default(),
             gas_meter: VpGasMeter::new(10_000_000, 0),
-            tx: Tx::new(vec![], None, chain_id, None),
+            tx,
             tx_index: TxIndex::default(),
             keys_changed: BTreeSet::default(),
             verifiers: BTreeSet::default(),
@@ -361,12 +363,6 @@ mod native_vp_host_env {
     native_host_fn!(vp_get_tx_code_hash(result_ptr: u64));
     native_host_fn!(vp_get_block_epoch() -> u64);
     native_host_fn!(vp_get_native_token(result_ptr: u64));
-    native_host_fn!(vp_verify_tx_signature(
-            pk_ptr: u64,
-            pk_len: u64,
-            sig_ptr: u64,
-            sig_len: u64,
-        ) -> i64);
     native_host_fn!(vp_eval(
             vp_code_ptr: u64,
             vp_code_len: u64,

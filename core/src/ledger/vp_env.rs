@@ -4,9 +4,9 @@
 use borsh::BorshDeserialize;
 
 use super::storage_api::{self, StorageRead};
+use crate::proto::Tx;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
-use crate::types::key::common;
 use crate::types::storage::{
     BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
 };
@@ -91,20 +91,11 @@ where
     fn eval(
         &self,
         vp_code: Hash,
-        input_data: Vec<u8>,
-    ) -> Result<bool, storage_api::Error>;
-
-    /// Verify a transaction signature. The signature is expected to have been
-    /// produced on the encoded transaction [`crate::proto::Tx`]
-    /// using [`crate::proto::Tx::sign`].
-    fn verify_tx_signature(
-        &self,
-        pk: &common::PublicKey,
-        sig: &common::Signature,
+        input_data: Tx,
     ) -> Result<bool, storage_api::Error>;
 
     /// Get a tx hash
-    fn get_tx_code_hash(&self) -> Result<Hash, storage_api::Error>;
+    fn get_tx_code_hash(&self) -> Result<Option<Hash>, storage_api::Error>;
 
     /// Verify a MASP transaction
     fn verify_masp(&self, tx: Vec<u8>) -> Result<bool, storage_api::Error>;

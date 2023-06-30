@@ -1,22 +1,26 @@
 //! CLI input types can be used for command arguments
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use color_eyre::eyre::Result;
+use namada::ledger::masp::ShieldedContext;
+use namada::ledger::wallet::store::AddressVpType;
+use namada::ledger::wallet::Wallet;
 use namada::types::address::Address;
 use namada::types::chain::ChainId;
 use namada::types::key::*;
 use namada::types::masp::*;
 
 use super::args;
-use crate::client::tx::ShieldedContext;
+use crate::client::tx::CLIShieldedUtils;
+use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
-use crate::config::{self, genesis, Config};
-use crate::wallet::{AddressVpType, Wallet};
+use crate::config::{self, Config};
+use crate::wallet::CliWalletUtils;
 use crate::wasm_loader;
 
 /// Env. var to set chain ID
@@ -66,13 +70,13 @@ pub struct Context {
     /// Global arguments
     pub global_args: args::Global,
     /// The wallet
-    pub wallet: Wallet,
+    pub wallet: Wallet<CliWalletUtils>,
     /// The global configuration
     pub global_config: GlobalConfig,
     /// The ledger configuration for a specific chain ID
     pub config: Config,
     /// The context fr shielded operations
-    pub shielded: ShieldedContext,
+    pub shielded: ShieldedContext<CLIShieldedUtils>,
     /// Native token's address
     pub native_token: Address,
 }
@@ -85,7 +89,7 @@ impl Context {
         let mut config = Config::load(
             &global_args.base_dir,
             &global_config.default_chain_id,
-            global_args.mode.clone(),
+            None,
         );
 
         let chain_dir = global_args
@@ -107,13 +111,12 @@ impl Context {
                 "{}.toml",
                 global_config.default_chain_id.as_str()
             ));
-            let default_genesis = genesis::genesis_config::open_genesis_config(
-                genesis_file_path,
-            )?;
-            Wallet::load_or_new_from_genesis(&chain_dir, default_genesis)
+            let default_genesis =
+                genesis_config::open_genesis_config(genesis_file_path)?;
+            crate::wallet::load_or_new_from_genesis(&chain_dir, default_genesis)
         };
         #[cfg(feature = "dev")]
-        let wallet = Wallet::load_or_new(&chain_dir);
+        let wallet = crate::wallet::load_or_new(&chain_dir);
 
         // If the WASM dir specified, put it in the config
         match global_args.wasm_dir.as_ref() {
@@ -132,7 +135,7 @@ impl Context {
             wallet,
             global_config,
             config,
-            shielded: ShieldedContext::new(chain_dir),
+            shielded: CLIShieldedUtils::new(chain_dir),
             native_token,
         })
     }
@@ -202,9 +205,30 @@ impl Context {
         wasm_loader::read_wasm_or_exit(self.wasm_dir(), file_name)
     }
 
-    /// Get address with vp type
+    /// Try to find an alias for a given address from the wallet. If not found,
+    /// formats the address into a string.
+    pub fn lookup_alias(&self, addr: &Address) -> String {
+        match self.wallet.find_alias(addr) {
+            Some(alias) => alias.to_string(),
+            None => addr.to_string(),
+        }
+    }
+
+    /// Get addresses with tokens VP type.
     pub fn tokens(&self) -> HashSet<Address> {
         self.wallet.get_addresses_with_vp_type(AddressVpType::Token)
+    }
+
+    /// Get addresses with tokens VP type associated with their aliases.
+    pub fn tokens_with_aliases(&self) -> HashMap<Address, String> {
+        self.wallet
+            .get_addresses_with_vp_type(AddressVpType::Token)
+            .into_iter()
+            .map(|addr| {
+                let alias = self.lookup_alias(&addr);
+                (addr, alias)
+            })
+            .collect()
     }
 }
 
@@ -362,7 +386,7 @@ impl ArgFromMutContext for common::SecretKey {
         FromStr::from_str(raw).or_else(|_parse_err| {
             // Or it can be an alias
             ctx.wallet
-                .find_key(raw)
+                .find_key(raw, None)
                 .map_err(|_find_err| format!("Unknown key {}", raw))
         })
     }
@@ -379,13 +403,13 @@ impl ArgFromMutContext for common::PublicKey {
             // Or it can be a public key hash in hex string
             FromStr::from_str(raw)
                 .map(|pkh: PublicKeyHash| {
-                    let key = ctx.wallet.find_key_by_pkh(&pkh).unwrap();
+                    let key = ctx.wallet.find_key_by_pkh(&pkh, None).unwrap();
                     key.ref_to()
                 })
                 // Or it can be an alias that may be found in the wallet
                 .or_else(|_parse_err| {
                     ctx.wallet
-                        .find_key(raw)
+                        .find_key(raw, None)
                         .map(|x| x.ref_to())
                         .map_err(|x| x.to_string())
                 })
@@ -403,7 +427,7 @@ impl ArgFromMutContext for ExtendedSpendingKey {
         FromStr::from_str(raw).or_else(|_parse_err| {
             // Or it is a stored alias of one
             ctx.wallet
-                .find_spending_key(raw)
+                .find_spending_key(raw, None)
                 .map_err(|_find_err| format!("Unknown spending key {}", raw))
         })
     }

@@ -148,9 +148,10 @@ mod tests {
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use namada_tx_prelude::Address;
     use proptest::prelude::*;
-    use proptest::prop_state_machine;
-    use proptest::state_machine::{ReferenceStateMachine, StateMachineTest};
     use proptest::test_runner::Config;
+    use proptest_state_machine::{
+        prop_state_machine, ReferenceStateMachine, StateMachineTest,
+    };
     use test_log::test;
 
     use super::testing::{
@@ -569,7 +570,7 @@ pub mod testing {
     use namada::proof_of_stake::storage::BondId;
     use namada::proof_of_stake::types::ValidatorState;
     use namada::proof_of_stake::{
-        read_num_consensus_validators, read_pos_params, unbond_handle,
+        get_num_consensus_validators, read_pos_params, unbond_handle,
         ADDRESS as POS_ADDRESS,
     };
     use namada::types::key::common::PublicKey;
@@ -1567,10 +1568,10 @@ pub mod testing {
     /// Find if there are any vacant consensus validator slots
     pub fn has_vacant_consensus_validator_slots(
         params: &PosParams,
-        _current_epoch: Epoch,
+        current_epoch: Epoch,
     ) -> bool {
         let num_consensus_validators =
-            read_num_consensus_validators(tx::ctx()).unwrap();
+            get_num_consensus_validators(tx::ctx(), current_epoch).unwrap();
         params.max_validator_slots > num_consensus_validators
     }
 }

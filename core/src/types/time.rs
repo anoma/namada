@@ -97,34 +97,25 @@ impl From<std::time::Duration> for DurationNanos {
 pub struct Rfc3339String(pub String);
 
 /// A duration in seconds precision.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+#[serde(try_from = "Rfc3339String", into = "Rfc3339String")]
 pub struct DateTimeUtc(pub DateTime<Utc>);
 
-impl Serialize for DateTimeUtc {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        Serialize::serialize(&self.to_rfc3339(), serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for DateTimeUtc {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        use serde::de::Error;
-
-        let raw: String = Deserialize::deserialize(deserializer)?;
-        let actual = DateTime::parse_from_rfc3339(&raw).map_err(|e| {
-            D::Error::custom(format!(
-                "Could not deserialize DateTimeUtc: {}",
-                e
-            ))
-        })?;
-
-        Ok(Self(actual.into()))
+impl Display for DateTimeUtc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_rfc3339())
     }
 }
 
@@ -137,6 +128,11 @@ impl DateTimeUtc {
     /// Returns an rfc3339 string or an error.
     pub fn to_rfc3339(&self) -> String {
         chrono::DateTime::to_rfc3339(&self.0)
+    }
+
+    /// Returns the DateTimeUtc corresponding to one second in the future
+    pub fn next_second(&self) -> Self {
+        *self + DurationSecs(0)
     }
 }
 
@@ -182,7 +178,8 @@ impl BorshSerialize for DateTimeUtc {
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {
-        BorshSerialize::serialize(&self.to_rfc3339(), writer)
+        let raw = self.0.to_rfc3339();
+        BorshSerialize::serialize(&raw, writer)
     }
 }
 
