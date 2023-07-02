@@ -6,7 +6,6 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use color_eyre::eyre::{eyre, Result};
-use expectrl::ControlCode;
 use namada::eth_bridge::oracle;
 use namada::eth_bridge::storage::vote_tallies;
 use namada::ledger::eth_bridge::{

@@ -11,10 +11,7 @@ use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::ibc::IbcEvent;
 use namada_core::types::storage::{BlockHeight, Header, Key};
-use namada_core::types::token::{
-    self, is_any_token_balance_key, is_any_token_or_multitoken_balance_key,
-    Amount,
-};
+use namada_core::types::token::{self, Amount};
 
 use super::Error;
 use crate::ledger::native_vp::CtxPreStorageRead;

@@ -284,7 +284,9 @@ mod tests {
     use namada_core::types::ethereum_events::{
         EthereumEvent, TransferToNamada,
     };
-    use namada_core::types::token::Amount;
+    use namada_core::types::token::{
+        balance_key, minted_balance_key, minter_key, Amount,
+    };
 
     use super::*;
     use crate::protocol::transactions::utils::GetVoters;
@@ -335,7 +337,7 @@ mod tests {
             apply_updates(&mut wl_storage, updates, voting_powers)?;
 
         let eth_msg_keys: vote_tallies::Keys<EthereumEvent> = (&body).into();
-        let wrapped_erc20_keys: wrapped_erc20s::Keys = (&asset).into();
+        let wrapped_erc20_token = wrapped_erc20s::token(&asset);
         assert_eq!(
             BTreeSet::from_iter(vec![
                 eth_msg_keys.body(),
@@ -343,8 +345,9 @@ mod tests {
                 eth_msg_keys.seen_by(),
                 eth_msg_keys.voting_power(),
                 eth_msg_keys.voting_started_epoch(),
-                wrapped_erc20_keys.balance(&receiver),
-                wrapped_erc20_keys.supply(),
+                balance_key(&wrapped_erc20_token, &receiver),
+                minted_balance_key(&wrapped_erc20_token),
+                minter_key(&wrapped_erc20_token),
             ]),
             changed_keys
         );
@@ -375,8 +378,8 @@ mod tests {
         let epoch_bytes = epoch_bytes.unwrap();
         assert_eq!(Epoch::try_from_slice(&epoch_bytes)?, Epoch(0));
 
-        let wrapped_erc20_balance_bytes =
-            wl_storage.read_bytes(&wrapped_erc20_keys.balance(&receiver))?;
+        let wrapped_erc20_balance_bytes = wl_storage
+            .read_bytes(&balance_key(&wrapped_erc20_token, &receiver))?;
         let wrapped_erc20_balance_bytes = wrapped_erc20_balance_bytes.unwrap();
         assert_eq!(
             Amount::try_from_slice(&wrapped_erc20_balance_bytes)?,
@@ -384,7 +387,7 @@ mod tests {
         );
 
         let wrapped_erc20_supply_bytes =
-            wl_storage.read_bytes(&wrapped_erc20_keys.supply())?;
+            wl_storage.read_bytes(&minted_balance_key(&wrapped_erc20_token))?;
         let wrapped_erc20_supply_bytes = wrapped_erc20_supply_bytes.unwrap();
         assert_eq!(
             Amount::try_from_slice(&wrapped_erc20_supply_bytes)?,
@@ -435,7 +438,7 @@ mod tests {
             "No gas should be used for a derived transaction"
         );
         let eth_msg_keys = vote_tallies::Keys::from(&event);
-        let dai_keys = wrapped_erc20s::Keys::from(&DAI_ERC20_ETH_ADDRESS);
+        let dai_token = wrapped_erc20s::token(&DAI_ERC20_ETH_ADDRESS);
         assert_eq!(
             tx_result.changed_keys,
             BTreeSet::from_iter(vec![
@@ -444,8 +447,9 @@ mod tests {
                 eth_msg_keys.seen_by(),
                 eth_msg_keys.voting_power(),
                 eth_msg_keys.voting_started_epoch(),
-                dai_keys.balance(&receiver),
-                dai_keys.supply(),
+                balance_key(&dai_token, &receiver),
+                minted_balance_key(&dai_token),
+                minter_key(&dai_token),
             ])
         );
         assert!(tx_result.vps_result.accepted_vps.is_empty());

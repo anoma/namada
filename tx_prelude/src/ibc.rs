@@ -12,7 +12,7 @@ use namada_core::ledger::tx_env::TxEnv;
 use namada_core::types::address::{Address, InternalAddress};
 pub use namada_core::types::ibc::IbcEvent;
 use namada_core::types::storage::{BlockHeight, Header, Key};
-use namada_core::types::token::{DenominatedAmount, Amount};
+use namada_core::types::token::Amount;
 
 use crate::token::{burn, mint, transfer};
 use crate::{Ctx, KeyValIterator};
@@ -78,7 +78,7 @@ impl IbcStorageContext for Ctx {
         token: &Address,
         amount: Amount,
     ) -> std::result::Result<(), Self::Error> {
-        let amount = DenominatedAmount::native(amount);
+        let amount = amount.denominated(token, self)?;
         transfer(self, src, dest, token, amount, &None, &None, &None)
     }
 

@@ -19,7 +19,6 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
         payer,
         &bridge_pool::BRIDGE_POOL_ADDRESS,
         &nam_addr,
-        None,
         amount.native_denominated(),
         &None,
         &None,
@@ -39,7 +38,6 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
             sender,
             &eth_bridge::ADDRESS,
             &nam_addr,
-            None,
             amount.native_denominated(),
             &None,
             &None,
@@ -47,18 +45,13 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
         )?;
     } else {
         // Otherwise we escrow ERC20 tokens.
-        let sub_prefix = Some(wrapped_erc20s::sub_prefix(&asset));
-        let amount = amount.denominated(
-            &eth_bridge::ADDRESS,
-            sub_prefix.as_ref(),
-            ctx,
-        )?;
+        let token = wrapped_erc20s::token(&asset);
+        let amount = amount.denominated(&eth_bridge::ADDRESS, ctx)?;
         token::transfer(
             ctx,
             sender,
             &bridge_pool::BRIDGE_POOL_ADDRESS,
-            &eth_bridge::ADDRESS,
-            sub_prefix,
+            &token,
             amount,
             &None,
             &None,

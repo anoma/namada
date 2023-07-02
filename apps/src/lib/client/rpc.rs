@@ -46,7 +46,7 @@ use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
-use namada::types::token::{Change, Denomination, MaspDenom, TokenAddress};
+use namada::types::token::{Change, Denomination, MaspDenom};
 use namada::types::{storage, token};
 use tokio::time::Instant;
 
@@ -119,7 +119,6 @@ pub async fn query_transfers<
     args: args::QueryTransfers,
 ) {
     let query_token = args.token;
-    let sub_prefix = args.sub_prefix.map(|s| Key::parse(s).unwrap());
     let query_owner = args.owner.map_or_else(
         || Either::Right(wallet.get_addresses().into_values().collect()),
         Either::Left,
@@ -173,10 +172,8 @@ pub async fn query_transfers<
         // Check if this transfer pertains to the supplied token
         relevant &= match &query_token {
             Some(token) => {
-                let check = |(tok, chg): (&TokenAddress, &Change)| {
-                    tok.sub_prefix == sub_prefix
-                        && &tok.address == token
-                        && !chg.is_zero()
+                let check = |(tok, chg): (&Address, &Change)| {
+                    &tok.address == token && !chg.is_zero()
                 };
                 tfer_delta.values().cloned().any(
                     |MaspChange { ref asset, change }| check((asset, &change)),
@@ -431,13 +428,8 @@ pub async fn query_pinned_balance<
             (Ok((balance, epoch)), Some(token), sub_prefix) => {
                 let token_alias = lookup_alias(wallet, token);
 
-                let token_address = TokenAddress {
-                    address: token.clone(),
-                    sub_prefix: sub_prefix
-                        .map(|string| Key::parse(string).unwrap()),
-                };
                 let total_balance = balance
-                    .get(&(epoch, token_address.clone()))
+                    .get(&(epoch, token.clone()))
                     .cloned()
                     .unwrap_or_default();
 
@@ -447,12 +439,12 @@ pub async fn query_pinned_balance<
                          Received no shielded {}",
                         owner,
                         epoch,
-                        token_address.format_with_alias(&token_alias)
+                        token.format_with_alias(&token_alias)
                     );
                 } else {
                     let formatted = format_denominated_amount(
                         client,
-                        &token_address,
+                        &token,
                         total_balance.into(),
                     )
                     .await;
@@ -462,7 +454,7 @@ pub async fn query_pinned_balance<
                         owner,
                         epoch,
                         formatted,
-                        token_address.format_with_alias(&token_alias),
+                        token.format_with_alias(&token_alias),
                     );
                 }
             }
@@ -760,27 +752,22 @@ pub async fn query_shielded_balance<
 
             let token_alias = lookup_alias(wallet, &token);
 
-            let token_address = TokenAddress {
-                address: token,
-                sub_prefix: args.sub_prefix.map(|k| Key::parse(k).unwrap()),
-            };
-
             let total_balance = balance
-                .get(&(epoch, token_address.clone()))
+                .get(&(epoch, token.clone()))
                 .cloned()
                 .unwrap_or_default();
             if total_balance.is_zero() {
                 println!(
                     "No shielded {} balance found for given key",
-                    token_address.format_with_alias(&token_alias)
+                    token.format_with_alias(&token_alias)
                 );
             } else {
                 println!(
                     "{}: {}",
-                    token_address.format_with_alias(&token_alias),
+                    token.format_with_alias(&token_alias),
                     format_denominated_amount(
                         client,
-                        &token_address,
+                        &token,
                         token::Amount::from(total_balance)
                     )
                     .await
@@ -813,9 +800,6 @@ pub async fn query_shielded_balance<
                 }
             }
 
-            // These are the asset types for which we have human-readable names
-            let mut read_tokens: HashMap<Address, Vec<Option<Key>>> =
-                HashMap::new();
             // Print non-zero balances whose asset types can be decoded
             // TODO Implement a function for this
 
@@ -835,71 +819,20 @@ pub async fn query_shielded_balance<
                     }
                 }
             }
-            for (
-                (
-                    fvk,
-                    TokenAddress {
-                        address: addr,
-                        sub_prefix,
-                    },
-                ),
-                token_balance,
-            ) in balance_map
-            {
-                read_tokens
-                    .entry(addr.clone())
-                    .and_modify(|addr_vec| addr_vec.push(sub_prefix.clone()))
-                    .or_insert_with(|| vec![sub_prefix.clone()]);
-                let token_address = TokenAddress {
-                    address: addr,
-                    sub_prefix,
-                };
+            for ((fvk, token), token_balance) in balance_map {
                 // Only assets with the current timestamp count
                 let alias = tokens
-                    .get(&token_address.address)
+                    .get(&token)
                     .map(|a| a.to_string())
-                    .unwrap_or_else(|| token_address.address.to_string());
-                println!(
-                    "Shielded Token {}:",
-                    token_address.format_with_alias(&alias),
-                );
+                    .unwrap_or_else(|| token.to_string());
+                println!("Shielded Token {}:", alias);
                 let formatted = format_denominated_amount(
                     client,
-                    &token_address,
+                    &token,
                     token_balance.into(),
                 )
                 .await;
                 println!("  {}, owned by {}", formatted, fvk);
-            }
-            // Print zero balances for remaining assets
-            for token in tokens {
-                if let Some(sub_addrs) = read_tokens.get(&token) {
-                    let token_alias = lookup_alias(wallet, &token);
-                    for sub_addr in sub_addrs {
-                        match sub_addr {
-                            // abstract out these prints
-                            Some(sub_addr) => {
-                                println!(
-                                    "Shielded Token {}/{}:",
-                                    token_alias, sub_addr
-                                );
-                                println!(
-                                    "No shielded {}/{} balance found for any \
-                                     wallet key",
-                                    token_alias, sub_addr
-                                );
-                            }
-                            None => {
-                                println!("Shielded Token {}:", token_alias,);
-                                println!(
-                                    "No shielded {} balance found for any \
-                                     wallet key",
-                                    token_alias
-                                );
-                            }
-                        }
-                    }
-                }
             }
         }
         // Here the user wants to know the balance for a specific token across
@@ -918,16 +851,9 @@ pub async fn query_shielded_balance<
             println!("Shielded Token {}:", token_alias);
             let mut found_any = false;
             let token_alias = lookup_alias(wallet, &token);
-            let token_address = TokenAddress {
-                address: token.clone(),
-                sub_prefix: args
-                    .sub_prefix
-                    .as_ref()
-                    .map(|k| Key::parse(k).unwrap()),
-            };
             println!(
                 "Shielded Token {}:",
-                token_address.format_with_alias(&token_alias),
+                token.format_with_alias(&token_alias),
             );
             for fvk in viewing_keys {
                 // Query the multi-asset balance at the given spending key
@@ -960,7 +886,7 @@ pub async fn query_shielded_balance<
             if !found_any {
                 println!(
                     "No shielded {} balance found for any wallet key",
-                    token_address.format_with_alias(&token_alias),
+                    token.format_with_alias(&token_alias),
                 );
             }
         }
@@ -2270,10 +2196,7 @@ pub async fn validate_amount<C: namada::ledger::queries::Client + Sync>(
         InputAmount::Validated(amt) => return amt,
     };
     let denom = unwrap_client_response::<C, Option<Denomination>>(
-        RPC.vp()
-            .token()
-            .denomination(client, token, sub_prefix)
-            .await,
+        RPC.vp().token().denomination(client, token).await,
     )
     .unwrap_or_else(|| {
         if force {

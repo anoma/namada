@@ -2,7 +2,6 @@ use namada_core::ledger::storage::{DBIter, StorageHasher, DB};
 use namada_core::ledger::storage_api;
 use namada_core::ledger::storage_api::token::read_denom;
 use namada_core::types::address::Address;
-use namada_core::types::storage::Key;
 use namada_core::types::token;
 
 use crate::ledger::queries::RequestCtx;

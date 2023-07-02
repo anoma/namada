@@ -17,7 +17,6 @@ use masp_primitives::transaction::components::transparent::fees::{
 use masp_primitives::transaction::components::Amount;
 use namada_core::types::address::{masp, masp_tx_key, Address};
 use namada_core::types::dec::Dec;
-use namada_core::types::storage::Key;
 use namada_core::types::token::MaspDenom;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::CommissionPair;
@@ -548,18 +547,18 @@ where
 
 /// decode components of a masp note
 pub fn decode_component<K, F>(
-    (addr, sub, denom, epoch): (Address, Option<Key>, MaspDenom, Epoch),
+    (addr, denom, epoch): (Address, MaspDenom, Epoch),
     val: i128,
     res: &mut HashMap<K, token::Change>,
     mk_key: F,
 ) where
-    F: FnOnce(Address, Option<Key>, Epoch) -> K,
+    F: FnOnce(Address, Epoch) -> K,
     K: Eq + std::hash::Hash,
 {
     let decoded_change = token::Change::from_masp_denominated(val, denom)
         .expect("expected this to fit");
 
-    res.entry(mk_key(addr, sub, epoch))
+    res.entry(mk_key(addr, epoch))
         .and_modify(|val| *val += decoded_change)
         .or_insert(decoded_change);
 }
@@ -1231,7 +1230,7 @@ async fn add_asset_type<
     C: crate::ledger::queries::Client + Sync,
     U: ShieldedUtils<C = C>,
 >(
-    asset_types: &mut HashSet<(Address, Option<Key>, MaspDenom, Epoch)>,
+    asset_types: &mut HashSet<(Address, MaspDenom, Epoch)>,
     shielded: &mut ShieldedContext<U>,
     client: &C,
     asset_type: AssetType,
@@ -1259,7 +1258,7 @@ async fn used_asset_types<
     shielded: &mut ShieldedContext<U>,
     client: &C,
     builder: &Builder<P, R, K, N>,
-) -> Result<HashSet<(Address, Option<Key>, MaspDenom, Epoch)>, RpcError> {
+) -> Result<HashSet<(Address, MaspDenom, Epoch)>, RpcError> {
     let mut asset_types = HashSet::new();
     // Collect all the asset types used in the Sapling inputs
     for input in builder.sapling_inputs() {
@@ -1324,21 +1323,14 @@ pub async fn build_transfer<
     let balance_key = token::balance_key(&token, &source);
 
     // validate the amount given
-    let validated_amount = validate_amount(
-        client,
-        args.amount,
-        &token,
-        &sub_prefix,
-        args.tx.force,
-    )
-    .await
-    .expect("expected to validate amount");
+    let validated_amount =
+        validate_amount(client, args.amount, &token, args.tx.force)
+            .await
+            .expect("expected to validate amount");
     let validate_fee = validate_amount(
         client,
         args.tx.fee_amount,
         &args.tx.fee_token,
-        // TODO: Currently multi-tokens cannot be used to pay fees
-        &None,
         args.tx.force,
     )
     .await

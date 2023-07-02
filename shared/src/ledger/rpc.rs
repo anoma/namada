@@ -13,7 +13,7 @@ use namada_core::ledger::testnet_pow;
 use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
 use namada_core::types::token::{
-    Amount, DenominatedAmount, Denomination, MaspDenom, TokenAddress,
+    Amount, DenominatedAmount, Denomination, MaspDenom,
 };
 use namada_proof_of_stake::types::{BondsAndUnbondsDetails, CommissionPair};
 use serde::Serialize;
@@ -241,7 +241,6 @@ pub async fn query_conversion<C: crate::ledger::queries::Client + Sync>(
     asset_type: AssetType,
 ) -> Option<(
     Address,
-    Option<Key>,
     MaspDenom,
     Epoch,
     masp_primitives::transaction::components::Amount,
@@ -954,7 +953,6 @@ pub async fn validate_amount<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     amount: InputAmount,
     token: &Address,
-    sub_prefix: &Option<Key>,
     force: bool,
 ) -> Option<token::DenominatedAmount> {
     let input_amount = match amount {
@@ -962,10 +960,7 @@ pub async fn validate_amount<C: crate::ledger::queries::Client + Sync>(
         InputAmount::Validated(amt) => return Some(amt),
     };
     let denom = unwrap_client_response::<C, Option<Denomination>>(
-        RPC.vp()
-            .token()
-            .denomination(client, token, sub_prefix)
-            .await,
+        RPC.vp().token().denomination(client, token).await,
     )
     .or_else(|| {
         if force {
@@ -1065,7 +1060,7 @@ pub async fn format_denominated_amount<
     amount: token::Amount,
 ) -> String {
     let denom = unwrap_client_response::<C, Option<Denomination>>(
-        RPC.vp().token().denomination(client, &token.address).await,
+        RPC.vp().token().denomination(client, token).await,
     )
     .unwrap_or_else(|| {
         println!(

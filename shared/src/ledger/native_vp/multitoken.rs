@@ -12,6 +12,7 @@ use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::token::{
     is_any_minted_balance_key, is_any_token_balance_key, minter_key, Amount,
+    Change,
 };
 use crate::vm::WasmCacheAccess;
 
@@ -55,7 +56,7 @@ where
         let mut changes = HashMap::new();
         let mut mints = HashMap::new();
         for key in keys_changed {
-            if let Some((token, _)) = is_any_token_balance_key(key) {
+            if let Some([token, _]) = is_any_token_balance_key(key) {
                 let pre: Amount = self.ctx.read_pre(key)?.unwrap_or_default();
                 let post: Amount = self.ctx.read_post(key)?.unwrap_or_default();
                 let diff = post.change() - pre.change();
@@ -87,7 +88,7 @@ where
         Ok(changes.iter().all(|(token, change)| {
             let mint = match mints.get(token) {
                 Some(mint) => *mint,
-                None => 0,
+                None => Change::zero(),
             };
             *change == mint
         }))

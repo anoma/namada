@@ -60,7 +60,7 @@ pub async fn build_bridge_pool_tx<
 
     let sub_prefix = Some(wrapped_erc20s::sub_prefix(&asset));
     let DenominatedAmount { amount, .. } =
-        validate_amount(client, amount, &BRIDGE_ADDRESS, &sub_prefix, tx.force)
+        validate_amount(client, amount, &BRIDGE_ADDRESS, tx.force)
             .await
             .expect("Failed to validate amount");
     let transfer = PendingTransfer {

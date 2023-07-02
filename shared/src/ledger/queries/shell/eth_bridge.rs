@@ -17,7 +17,7 @@ use namada_core::types::ethereum_events::{
 };
 use namada_core::types::ethereum_structs::RelayProof;
 use namada_core::types::storage::{BlockHeight, DbKeySeg, Key};
-use namada_core::types::token::Amount;
+use namada_core::types::token::{minted_balance_key, Amount};
 use namada_core::types::vote_extensions::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,
 };
@@ -128,8 +128,8 @@ where
             "Wrapped NAM's supply is not kept track of",
         ));
     }
-    let keys: wrapped_erc20s::Keys = (&asset).into();
-    ctx.wl_storage.read(&keys.supply())
+    let token = wrapped_erc20s::token(&asset);
+    ctx.wl_storage.read(&minted_balance_key(&token))
 }
 
 /// Helper function to read a smart contract from storage.
@@ -1420,10 +1420,10 @@ mod test_ethbridge_router {
 
         // write tokens to storage
         let amount = Amount::native_whole(12345);
-        let keys: wrapped_erc20s::Keys = (&ERC20_TOKEN).into();
+        let token = wrapped_erc20s::token(&ERC20_TOKEN);
         client
             .wl_storage
-            .write(&keys.supply(), amount)
+            .write(&minted_balance_key(&token), amount)
             .expect("Test failed");
 
         // check that the supply was updated
