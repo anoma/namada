@@ -1559,7 +1559,10 @@ mod test_process_proposal {
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
         assert_eq!(
             response.result.info,
-            String::from("Wrapper transactions must be signed")
+            String::from(
+                "WrapperTx signature verification failed: Transaction doesn't \
+                 have any data with a signature."
+            )
         );
     }
 
@@ -2474,7 +2477,7 @@ mod test_process_proposal {
             None,
         ))));
         wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.header.expiration = Some(DateTimeUtc::now());
+        wrapper.header.expiration = Some(DateTimeUtc::default());
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
@@ -2517,7 +2520,7 @@ mod test_process_proposal {
             None,
         ))));
         wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.header.expiration = Some(DateTimeUtc::now());
+        wrapper.header.expiration = Some(DateTimeUtc::default());
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper
             .set_data(Data::new("new transaction data".as_bytes().to_owned()));
@@ -2576,7 +2579,10 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.encrypt(&Default::default());
+        wrapper.add_section(Section::Signature(Signature::new(
+            &wrapper.header_hash(),
+            &keypair,
+        )));
         let wrapper = wrapper.to_bytes();
         for height in [1u64, 2] {
             if let Some(b) = shell.wl_storage.storage.last_block.as_mut() {
