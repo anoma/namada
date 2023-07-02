@@ -26,7 +26,7 @@ use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
 use crate::proto::Tx;
-use crate::types::address::{nam, Address, InternalAddress};
+use crate::types::address::{Address, InternalAddress};
 use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::ethereum_events::EthAddress;
 use crate::types::storage::Key;
@@ -64,7 +64,7 @@ where
     /// Get the change in the balance of an account
     /// associated with an address
     fn account_balance_delta(&self, address: &Address) -> Option<SignedAmount> {
-        let account_key = balance_key(&nam(), address);
+        let account_key = balance_key(&self.ctx.storage.native_token, address);
         let before: Amount = (&self.ctx)
             .read_pre_value(&account_key)
             .unwrap_or_else(|error| {
@@ -100,8 +100,12 @@ where
         {
             match check_balance_changes(
                 &self.ctx,
-                (&escrow_key).try_into().expect("This should not fail"),
-                (&owner_key).try_into().expect("This should not fail"),
+                (&self.ctx.storage.native_token, &escrow_key)
+                    .try_into()
+                    .expect("This should not fail"),
+                (&self.ctx.storage.native_token, &owner_key)
+                    .try_into()
+                    .expect("This should not fail"),
             ) {
                 Ok(Some((sender, _, amount)))
                     if check_delta(&sender, &amount, transfer) => {}
@@ -379,7 +383,7 @@ mod test_bridge_pool_vp {
     use crate::ledger::storage::{Storage, WlStorage};
     use crate::ledger::storage_api::StorageWrite;
     use crate::proto::Data;
-    use crate::types::address::wnam;
+    use crate::types::address::{nam, wnam};
     use crate::types::chain::ChainId;
     use crate::types::eth_bridge_pool::{GasFee, TransferToEthereum};
     use crate::types::hash::Hash;

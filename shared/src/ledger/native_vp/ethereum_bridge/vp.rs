@@ -9,7 +9,7 @@ use namada_core::ledger::eth_bridge::storage::{
 };
 use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::{eth_bridge, storage as ledger_storage};
-use namada_core::types::address::{nam, Address, InternalAddress};
+use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::Key;
 use namada_core::types::token::{balance_key, Amount};
 
@@ -43,7 +43,8 @@ where
         &self,
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool, Error> {
-        let escrow_key = balance_key(&nam(), &eth_bridge::ADDRESS);
+        let escrow_key =
+            balance_key(&self.ctx.storage.native_token, &eth_bridge::ADDRESS);
         let escrow_pre: Amount = if let Ok(Some(bytes)) =
             self.ctx.read_bytes_pre(&escrow_key)
         {
@@ -137,7 +138,10 @@ where
             "Ethereum Bridge VP triggered",
         );
 
-        let (key_a, key_b) = match determine_check_type(keys_changed)? {
+        let (key_a, key_b) = match determine_check_type(
+            &self.ctx.storage.native_token,
+            keys_changed,
+        )? {
             Some(CheckType::Erc20Transfer(key_a, key_b)) => (key_a, key_b),
             Some(CheckType::Escrow) => return self.check_escrow(verifiers),
             None => return Ok(false),
@@ -175,12 +179,13 @@ where
 ///  2. If two erc20 keys where changed, this is a transfer that needs
 ///     to be checked.
 fn determine_check_type(
+    nam_addr: &Address,
     keys_changed: &BTreeSet<Key>,
 ) -> Result<Option<CheckType>, Error> {
     // we aren't concerned with keys that changed outside of our account
     let keys_changed: HashSet<_> = keys_changed
         .iter()
-        .filter(|key| storage::is_eth_bridge_key(key))
+        .filter(|key| storage::is_eth_bridge_key(nam_addr, key))
         .collect();
     if keys_changed.is_empty() {
         return Err(Error(eyre!(
@@ -192,7 +197,7 @@ fn determine_check_type(
         relevant_keys.len = keys_changed.len(),
         "Found keys changed under our account"
     );
-    if keys_changed.len() == 1 && keys_changed.contains(&escrow_key()) {
+    if keys_changed.len() == 1 && keys_changed.contains(&escrow_key(nam_addr)) {
         return Ok(Some(CheckType::Escrow));
     } else if keys_changed.len() != 2 {
         tracing::debug!(
@@ -204,7 +209,7 @@ fn determine_check_type(
 
     let mut keys = HashSet::<_>::default();
     for key in keys_changed.into_iter() {
-        let key = match wrapped_erc20s::Key::try_from(key) {
+        let key = match wrapped_erc20s::Key::try_from((nam_addr, key)) {
             Ok(key) => {
                 // Disallow changes to any supply keys via wasm transactions,
                 // since these should only ever be changed via FinalizeBlock
@@ -431,7 +436,7 @@ mod tests {
     use crate::ledger::storage::write_log::WriteLog;
     use crate::ledger::storage::{Storage, WlStorage};
     use crate::proto::Tx;
-    use crate::types::address::wnam;
+    use crate::types::address::{nam, wnam};
     use crate::types::ethereum_events;
     use crate::types::ethereum_events::EthAddress;
     use crate::types::storage::TxIndex;
@@ -520,7 +525,7 @@ mod tests {
     fn test_error_if_triggered_without_keys_changed() {
         let keys_changed = BTreeSet::new();
 
-        let result = determine_check_type(&keys_changed);
+        let result = determine_check_type(&nam(), &keys_changed);
 
         assert!(result.is_err());
     }
@@ -530,18 +535,18 @@ mod tests {
         {
             let keys_changed = BTreeSet::from_iter(vec![arbitrary_key(); 3]);
 
-            let result = determine_check_type(&keys_changed);
+            let result = determine_check_type(&nam(), &keys_changed);
 
             assert_matches!(result, Ok(None));
         }
         {
             let keys_changed = BTreeSet::from_iter(vec![
-                escrow_key(),
+                escrow_key(&nam()),
                 arbitrary_key(),
                 arbitrary_key(),
             ]);
 
-            let result = determine_check_type(&keys_changed);
+            let result = determine_check_type(&nam(), &keys_changed);
 
             assert_matches!(result, Ok(None));
         }
@@ -553,7 +558,7 @@ mod tests {
             let keys_changed =
                 BTreeSet::from_iter(vec![arbitrary_key(), arbitrary_key()]);
 
-            let result = determine_check_type(&keys_changed);
+            let result = determine_check_type(&nam(), &keys_changed);
 
             assert_matches!(result, Ok(None));
         }
@@ -567,7 +572,7 @@ mod tests {
                 .supply(),
             ]);
 
-            let result = determine_check_type(&keys_changed);
+            let result = determine_check_type(&nam(), &keys_changed);
 
             assert_matches!(result, Ok(None));
         }
@@ -584,7 +589,7 @@ mod tests {
                 ),
             ]);
 
-            let result = determine_check_type(&keys_changed);
+            let result = determine_check_type(&nam(), &keys_changed);
 
             assert_matches!(result, Ok(None));
         }
@@ -610,7 +615,7 @@ mod tests {
                 ),
             ]);
 
-            let result = determine_check_type(&keys_changed);
+            let result = determine_check_type(&nam(), &keys_changed);
 
             assert_matches!(result, Ok(None));
         }
@@ -628,7 +633,7 @@ mod tests {
                 ),
             ]);
 
-            let result = determine_check_type(&keys_changed);
+            let result = determine_check_type(&nam(), &keys_changed);
 
             assert_matches!(result, Ok(None));
         }

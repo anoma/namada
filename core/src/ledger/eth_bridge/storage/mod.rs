@@ -3,9 +3,9 @@ pub mod bridge_pool;
 pub mod wrapped_erc20s;
 
 use super::ADDRESS;
-use crate::types::address::Address;
 use crate::ledger::parameters::storage::*;
 use crate::ledger::parameters::ADDRESS as PARAM_ADDRESS;
+use crate::types::address::Address;
 use crate::types::storage::{Key, KeySeg};
 use crate::types::token::balance_key;
 

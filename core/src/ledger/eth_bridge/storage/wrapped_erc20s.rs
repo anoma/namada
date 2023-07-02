@@ -103,11 +103,13 @@ fn has_erc20_segment(key: &storage::Key) -> bool {
     )
 }
 
-impl TryFrom<&storage::Key> for Key {
+impl TryFrom<(&Address, &storage::Key)> for Key {
     type Error = eyre::Error;
 
-    fn try_from(key: &storage::Key) -> Result<Self, Self::Error> {
-        if !super::is_eth_bridge_key(key) {
+    fn try_from(
+        (nam_addr, key): (&Address, &storage::Key),
+    ) -> Result<Self, Self::Error> {
+        if !super::is_eth_bridge_key(nam_addr, key) {
             return Err(eyre!("key does not belong to the EthBridge"));
         }
         if !has_erc20_segment(key) {
@@ -171,7 +173,7 @@ mod test {
 
     use super::*;
     use crate::ledger::eth_bridge::ADDRESS;
-    use crate::types::address::Address;
+    use crate::types::address::{nam, Address};
     use crate::types::ethereum_events::testing::{
         DAI_ERC20_ETH_ADDRESS, DAI_ERC20_ETH_ADDRESS_CHECKSUMMED,
     };
@@ -322,7 +324,7 @@ mod test {
         ))
         .expect("Should be able to construct key for test");
 
-        let result: Result<Key, _> = Key::try_from(&key);
+        let result: Result<Key, _> = Key::try_from((&nam(), &key));
 
         let mt_key = match result {
             Ok(mt_key) => mt_key,
@@ -349,7 +351,7 @@ mod test {
         ))
         .expect("Should be able to construct key for test");
 
-        let result: Result<Key, _> = Key::try_from(&key);
+        let result: Result<Key, _> = Key::try_from((&nam(), &key));
 
         let mt_key = match result {
             Ok(mt_key) => mt_key,
