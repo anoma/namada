@@ -526,7 +526,9 @@ fn format_outputs(output: &mut Vec<String>) {
 
 /// Adds a Ledger output for the sender and destination for transparent and MASP
 /// transactions
-pub async fn make_ledger_masp_endpoints<C: crate::ledger::queries::Client + Sync>(
+pub async fn make_ledger_masp_endpoints<
+    C: crate::ledger::queries::Client + Sync,
+>(
     client: &C,
     tokens: &HashMap<Address, String>,
     output: &mut Vec<String>,
@@ -558,7 +560,8 @@ pub async fn make_ledger_masp_endpoints<C: crate::ledger::queries::Client + Sync
                 &sapling_input.asset_type(),
                 assets,
                 "Sending ",
-            ).await;
+            )
+            .await;
         }
     }
     if transfer.target != masp() {
@@ -585,7 +588,8 @@ pub async fn make_ledger_masp_endpoints<C: crate::ledger::queries::Client + Sync
                 &sapling_output.asset_type(),
                 assets,
                 "Receiving ",
-            ).await;
+            )
+            .await;
         }
     }
     if transfer.source != masp() && transfer.target != masp() {
@@ -909,7 +913,8 @@ pub async fn to_ledger_vector<
             &transfer,
             builder,
             &asset_types,
-        ).await;
+        )
+        .await;
         make_ledger_masp_endpoints(
             client,
             &tokens,
@@ -917,7 +922,8 @@ pub async fn to_ledger_vector<
             &transfer,
             builder,
             &asset_types,
-        ).await;
+        )
+        .await;
     } else if code_hash == ibc_hash {
         let msg = Any::decode(
             tx.data()
