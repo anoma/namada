@@ -410,6 +410,8 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub dry_run: bool,
     /// Dump the transaction bytes to file
     pub dump_tx: bool,
+    /// The output directory path to where serialize the transaction
+    pub output_folder: Option<PathBuf>,
     /// Submit the transaction even if it doesn't pass client checks
     pub force: bool,
     /// Do not wait for the transaction to be added to the blockchain

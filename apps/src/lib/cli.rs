@@ -1896,6 +1896,8 @@ pub mod args {
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     pub const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
     pub const OUT_FILE_PATH_OPT: ArgOpt<PathBuf> = arg_opt("out-file-path");
+    pub const OUTPUT_FOLDER_PATH: ArgOpt<PathBuf> =
+        arg_opt("output-folder-path");
     pub const OWNER: Arg<WalletAddress> = arg("owner");
     pub const OWNER_OPT: ArgOpt<WalletAddress> = OWNER.opt();
     pub const PIN: ArgFlag = flag("pin");
@@ -1922,7 +1924,8 @@ pub mod args {
     pub const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
     pub const SIGNING_KEYS: ArgMulti<WalletKeypair> = arg_multi("signing-keys");
-    pub const SIGNATURES: ArgMulti<WalletKeypair> = arg_multi("signatures-paths");
+    pub const SIGNATURES: ArgMulti<WalletKeypair> =
+        arg_multi("signatures-paths");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
@@ -2337,10 +2340,15 @@ pub mod args {
                      for the new account. Uses the default user VP if none \
                      specified.",
                 ))
-                .arg(PUBLIC_KEYS.def().about(
-                    "A list public keys to be associated with the new account \
-                     in hexadecimal encoding.",
-                ).min_values(1))
+                .arg(
+                    PUBLIC_KEYS
+                        .def()
+                        .about(
+                            "A list public keys to be associated with the new \
+                             account in hexadecimal encoding.",
+                        )
+                        .min_values(1),
+                )
                 .arg(THRESOLD.def().about(
                     "The minimum number of signature to be provided for \
                      authorization. Must be less then the maximum number of \
@@ -2497,10 +2505,15 @@ pub mod args {
                     "The account's address. It's key is used to produce the \
                      signature.",
                 ))
-                .arg(PUBLIC_KEYS.def().about(
-                    "A list public keys to be associated with the new account \
-                     in hexadecimal encoding.",
-                ).min_values(1))
+                .arg(
+                    PUBLIC_KEYS
+                        .def()
+                        .about(
+                            "A list public keys to be associated with the new \
+                             account in hexadecimal encoding.",
+                        )
+                        .min_values(1),
+                )
                 .arg(THRESOLD.def().about(
                     "The minimum number of signature to be provided for \
                      authorization. Must be less then the maximum number of \
@@ -3385,6 +3398,7 @@ pub mod args {
             Tx::<SdkTypes> {
                 dry_run: self.dry_run,
                 dump_tx: self.dump_tx,
+                output_folder: self.output_folder,
                 force: self.force,
                 broadcast_only: self.broadcast_only,
                 ledger_address: (),
@@ -3461,6 +3475,9 @@ pub mod args {
                 "Sign the transaction with the key for the given public key, \
                  public key hash or alias from your wallet.",
             ))
+            .arg(OUTPUT_FOLDER_PATH.def().about(
+                "The output folder path where the artifact will be stored.",
+            ))
         }
 
         fn parse(matches: &ArgMatches) -> Self {
@@ -3480,6 +3497,7 @@ pub mod args {
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;
+            let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
             Self {
                 dry_run,
                 dump_tx,
@@ -3497,6 +3515,7 @@ pub mod args {
                 tx_reveal_code_path,
                 password,
                 chain_id,
+                output_folder,
             }
         }
     }

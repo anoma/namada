@@ -923,9 +923,11 @@ impl Tx {
         let tx_filename = format!("{}.tx", self.header_hash());
         let tx_filename_clone_error = tx_filename.clone();
         let tx_filename_clone_ok = tx_filename.clone();
-        let out = File::create(&path.join(tx_filename)).unwrap();
+        let out = File::create(path.join(tx_filename)).unwrap();
         serde_json::to_writer_pretty(out, &self)
-            .map_err(|_| Error::InvalidJSONDeserialization(tx_filename_clone_error))
+            .map_err(|_| {
+                Error::InvalidJSONDeserialization(tx_filename_clone_error)
+            })
             .map(|_| path.join(tx_filename_clone_ok))
     }
 
