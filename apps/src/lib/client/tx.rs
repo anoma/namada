@@ -1098,6 +1098,7 @@ async fn process_tx<C: namada::ledger::queries::Client + Sync>(
             .or_else(|| Some(tx.header.chain_id.clone())),
         ..args.clone()
     };
+
     let res: Vec<Address> = tx::process_tx::<C, _>(
         client,
         &mut ctx.wallet,

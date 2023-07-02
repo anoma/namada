@@ -1,6 +1,9 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashSet};
 use std::convert::TryFrom;
+use std::env;
+use std::fs::File;
+use std::path::PathBuf;
 
 #[cfg(feature = "ferveo-tpke")]
 use ark_ec::AffineCurve;
@@ -54,6 +57,8 @@ pub enum Error {
     InvalidTimestamp(prost_types::TimestampError),
     #[error("The section signature is invalid: {0}")]
     InvalidSectionSignature(String),
+    #[error("Couldn't serialize transaction from JSON at {0}")]
+    InvalidJSONDeserialization(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -906,6 +911,22 @@ impl Tx {
             header: Header::new(header),
             sections: vec![],
         }
+    }
+
+    /// Dump to file
+    // TODO: refactor
+    pub fn dump(&self, path: Option<PathBuf>) -> Result<PathBuf> {
+        let path = path
+            .unwrap_or(env::current_dir().expect(
+                "Should be able to get the current working directory.",
+            ));
+        let tx_filename = format!("{}.tx", self.header_hash());
+        let tx_filename_clone_error = tx_filename.clone();
+        let tx_filename_clone_ok = tx_filename.clone();
+        let out = File::create(&path.join(tx_filename)).unwrap();
+        serde_json::to_writer_pretty(out, &self)
+            .map_err(|_| Error::InvalidJSONDeserialization(tx_filename_clone_error))
+            .map(|_| path.join(tx_filename_clone_ok))
     }
 
     /// Get the transaction header

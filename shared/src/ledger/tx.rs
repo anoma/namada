@@ -223,6 +223,8 @@ pub enum ProcessTxResponse {
     Broadcast(Response),
     /// Result of dry running transaction
     DryRun,
+    /// Dump transaction to disk
+    Dump
 }
 
 impl ProcessTxResponse {
@@ -249,6 +251,18 @@ pub async fn process_tx<
     default_signer: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<ProcessTxResponse, Error> {
+    if args.dump_tx {
+        match tx.dump(None) {
+            Ok(filepath) => {
+                println!("File correctly serialized to {}.", filepath.to_string_lossy());
+            },
+            Err(_) => {
+                eprintln!("Couldn't serialize the transaction to disk..")
+            },
+        }
+        return Ok(ProcessTxResponse::Dump)
+    }
+    
     let to_broadcast = sign_tx::<C, U>(
         client,
         wallet,

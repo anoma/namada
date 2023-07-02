@@ -408,7 +408,7 @@ pub struct QueryRawBytes<C: NamadaTypes = SdkTypes> {
 pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// Simulate applying the transaction
     pub dry_run: bool,
-    /// Dump the transaction bytes
+    /// Dump the transaction bytes to file
     pub dump_tx: bool,
     /// Submit the transaction even if it doesn't pass client checks
     pub force: bool,

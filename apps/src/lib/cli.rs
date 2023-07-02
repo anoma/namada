@@ -1922,6 +1922,7 @@ pub mod args {
     pub const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
     pub const SIGNING_KEYS: ArgMulti<WalletKeypair> = arg_multi("signing-keys");
+    pub const SIGNATURES: ArgMulti<WalletKeypair> = arg_multi("signatures-paths");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
@@ -2339,7 +2340,7 @@ pub mod args {
                 .arg(PUBLIC_KEYS.def().about(
                     "A list public keys to be associated with the new account \
                      in hexadecimal encoding.",
-                ))
+                ).min_values(1))
                 .arg(THRESOLD.def().about(
                     "The minimum number of signature to be provided for \
                      authorization. Must be less then the maximum number of \
@@ -2499,7 +2500,7 @@ pub mod args {
                 .arg(PUBLIC_KEYS.def().about(
                     "A list public keys to be associated with the new account \
                      in hexadecimal encoding.",
-                ))
+                ).min_values(1))
                 .arg(THRESOLD.def().about(
                     "The minimum number of signature to be provided for \
                      authorization. Must be less then the maximum number of \
