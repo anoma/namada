@@ -437,479 +437,499 @@ mod tests {
         );
     }
 
-    // /// Test that a PoS action that must be authorized is accepted with a
-    // valid /// signature.
-    // #[test]
-    // fn test_signed_pos_action_accepted() {
-    //     // Init PoS genesis
-    //     let pos_params = PosParams::default();
-    //     let validator = address::testing::established_address_3();
-    //     let initial_stake = token::Amount::from(10_098_123);
-    //     let consensus_key = key::testing::keypair_2().ref_to();
-    //     let commission_rate = rust_decimal::Decimal::new(5, 2);
-    //     let max_commission_rate_change = rust_decimal::Decimal::new(1, 2);
+    /// Test that a PoS action that must be authorized is accepted with a
+    /// valid signature.
+    #[test]
+    fn test_signed_pos_action_accepted() {
+        // Init PoS genesis
+        let pos_params = PosParams::default();
+        let validator = address::testing::established_address_3();
+        let initial_stake = token::Amount::from(10_098_123);
+        let consensus_key = key::testing::keypair_2().ref_to();
+        let commission_rate = rust_decimal::Decimal::new(5, 2);
+        let max_commission_rate_change = rust_decimal::Decimal::new(1, 2);
 
-    //     let genesis_validators = [GenesisValidator {
-    //         address: validator.clone(),
-    //         tokens: initial_stake,
-    //         consensus_key,
-    //         commission_rate,
-    //         max_commission_rate_change,
-    //     }];
+        let genesis_validators = [GenesisValidator {
+            address: validator.clone(),
+            tokens: initial_stake,
+            consensus_key,
+            commission_rate,
+            max_commission_rate_change,
+        }];
 
-    //     init_pos(&genesis_validators[..], &pos_params, Epoch(0));
+        init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
-    //     // Initialize a tx environment
-    //     let mut tx_env = tx_host_env::take();
+        // Initialize a tx environment
+        let mut tx_env = tx_host_env::take();
 
-    //     let secret_key = key::testing::keypair_1();
-    //     let public_key = secret_key.ref_to();
-    //     let vp_owner: Address = (&public_key).into();
-    //     let target = address::testing::established_address_2();
-    //     let token = address::nam();
-    //     let amount = token::Amount::from(10_098_123);
-    //     let bond_amount = token::Amount::from(5_098_123);
-    //     let unbond_amount = token::Amount::from(3_098_123);
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let vp_owner: Address = (&public_key).into();
+        let target = address::testing::established_address_2();
+        let token = address::nam();
+        let amount = token::Amount::from(10_098_123);
+        let bond_amount = token::Amount::from(5_098_123);
+        let unbond_amount = token::Amount::from(3_098_123);
 
-    //     // Spawn the accounts to be able to modify their storage
-    //     tx_env.spawn_accounts([&target, &token]);
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&target, &token]);
 
-    //     // Credit the tokens to the VP owner before running the transaction
-    // to     // be able to transfer from it
-    //     tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        // Credit the tokens to the VP owner before running the transaction to
+        // be able to transfer from it
+        tx_env.credit_tokens(&vp_owner, &token, None, amount);
 
-    //     let _ = storage_api::account::set_public_key_at(tx_host_env::ctx(),
-    // &vp_owner, &public_key, 0);
+        let _ = storage_api::account::set_public_key_at(
+            tx_host_env::ctx(),
+            &vp_owner,
+            &public_key,
+            0,
+        );
 
-    //     // Initialize VP environment from a transaction
-    //     vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
-    //         // Bond the tokens, then unbond some of them
-    //         tx::ctx()
-    //             .bond_tokens(Some(&vp_owner), &validator, bond_amount)
-    //             .unwrap();
-    //         tx::ctx()
-    //             .unbond_tokens(Some(&vp_owner), &validator, unbond_amount)
-    //             .unwrap();
-    //     });
+        // Initialize VP environment from a transaction
+        vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
+            // Bond the tokens, then unbond some of them
+            tx::ctx()
+                .bond_tokens(Some(&vp_owner), &validator, bond_amount)
+                .unwrap();
+            tx::ctx()
+                .unbond_tokens(Some(&vp_owner), &validator, unbond_amount)
+                .unwrap();
+        });
 
-    //     let mut vp_env = vp_host_env::take();
-    //     let mut tx = vp_env.tx.clone();
-    //     tx.add_section(Section::Signature(Signature::new(
-    //         tx.data_sechash(),
-    //         &secret_key,
-    //     )));
-    //     let signed_tx = tx.clone();
-    //     vp_env.tx = signed_tx.clone();
-    //     let keys_changed: BTreeSet<storage::Key> =
-    //         vp_env.all_touched_storage_keys();
-    //     let verifiers: BTreeSet<Address> = BTreeSet::default();
-    //     vp_host_env::set(vp_env);
-    //     assert!(
-    //         validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-    //             .unwrap()
-    //     );
-    // }
+        let mut vp_env = vp_host_env::take();
+        let mut tx = vp_env.tx.clone();
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &secret_key,
+        )));
+        let signed_tx = tx.clone();
+        vp_env.tx = signed_tx.clone();
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+        assert!(
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
+    }
 
-    // /// Test that a debit transfer without a valid signature is rejected.
-    // #[test]
-    // fn test_unsigned_debit_transfer_rejected() {
-    //     // Initialize a tx environment
-    //     let mut tx_env = TestTxEnv::default();
+    /// Test that a debit transfer without a valid signature is rejected.
+    #[test]
+    fn test_unsigned_debit_transfer_rejected() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
 
-    //     let secret_key = key::testing::keypair_1();
-    //     let public_key = secret_key.ref_to();
-    //     let vp_owner: Address = (&public_key).into();
-    //     let target = address::testing::established_address_2();
-    //     let token = address::nam();
-    //     let amount = token::Amount::from(10_098_123);
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let vp_owner: Address = (&public_key).into();
+        let target = address::testing::established_address_2();
+        let token = address::nam();
+        let amount = token::Amount::from(10_098_123);
 
-    //     // Spawn the accounts to be able to modify their storage
-    //     tx_env.spawn_accounts([&vp_owner, &target, &token]);
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&vp_owner, &target, &token]);
 
-    //     // Credit the tokens to the VP owner before running the transaction
-    // to     // be able to transfer from it
-    //     tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        // Credit the tokens to the VP owner before running the transaction to
+        // be able to transfer from it
+        tx_env.credit_tokens(&vp_owner, &token, None, amount);
 
-    //     // Initialize VP environment from a transaction
-    //     vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
-    //         // Apply transfer in a transaction
-    //         tx_host_env::token::transfer(
-    //             tx::ctx(),
-    //             address,
-    //             &target,
-    //             &token,
-    //             None,
-    //             amount,
-    //             &None,
-    //             &None,
-    //             &None,
-    //         )
-    //         .unwrap();
-    //     });
+        // Initialize VP environment from a transaction
+        vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
+            // Apply transfer in a transaction
+            tx_host_env::token::transfer(
+                tx::ctx(),
+                address,
+                &target,
+                &token,
+                None,
+                amount,
+                &None,
+                &None,
+                &None,
+            )
+            .unwrap();
+        });
 
-    //     let vp_env = vp_host_env::take();
-    //     let mut tx_data = Tx::new(TxType::Raw);
-    //     tx_data.set_data(Data::new(vec![]));
-    //     let keys_changed: BTreeSet<storage::Key> =
-    //         vp_env.all_touched_storage_keys();
-    //     let verifiers: BTreeSet<Address> = BTreeSet::default();
-    //     vp_host_env::set(vp_env);
-    //     assert!(
-    //         !validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-    //             .unwrap()
-    //     );
-    // }
+        let vp_env = vp_host_env::take();
+        let mut tx_data = Tx::new(TxType::Raw);
+        tx_data.set_data(Data::new(vec![]));
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+        assert!(
+            !validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
+    }
 
-    // /// Test that a debit transfer with a valid signature is accepted.
-    // #[test]
-    // fn test_signed_debit_transfer_accepted() {
-    //     // Initialize a tx environment
-    //     let mut tx_env = TestTxEnv::default();
+    /// Test that a debit transfer with a valid signature is accepted.
+    #[test]
+    fn test_signed_debit_transfer_accepted() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
 
-    //     let secret_key = key::testing::keypair_1();
-    //     let public_key = secret_key.ref_to();
-    //     let vp_owner: Address = (&public_key).into();
-    //     let target = address::testing::established_address_2();
-    //     let token = address::nam();
-    //     let amount = token::Amount::from(10_098_123);
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let vp_owner: Address = (&public_key).into();
+        let target = address::testing::established_address_2();
+        let token = address::nam();
+        let amount = token::Amount::from(10_098_123);
 
-    //     // Spawn the accounts to be able to modify their storage
-    //     tx_env.spawn_accounts([&vp_owner, &target, &token]);
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&vp_owner, &target, &token]);
 
-    //     // Credit the tokens to the VP owner before running the transaction
-    // to     // be able to transfer from it
-    //     tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        // Credit the tokens to the VP owner before running the transaction to
+        // be able to transfer from it
+        tx_env.credit_tokens(&vp_owner, &token, None, amount);
 
-    //     let _ = storage_api::account::set_public_key_at(tx_host_env::ctx(),
-    // &vp_owner, &public_key, 0);
+        let _ = storage_api::account::set_public_key_at(
+            tx_host_env::ctx(),
+            &vp_owner,
+            &public_key,
+            0,
+        );
 
-    //     // Initialize VP environment from a transaction
-    //     vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
-    //         // Apply transfer in a transaction
-    //         tx_host_env::token::transfer(
-    //             tx::ctx(),
-    //             address,
-    //             &target,
-    //             &token,
-    //             None,
-    //             amount,
-    //             &None,
-    //             &None,
-    //             &None,
-    //         )
-    //         .unwrap();
-    //     });
+        // Initialize VP environment from a transaction
+        vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
+            // Apply transfer in a transaction
+            tx_host_env::token::transfer(
+                tx::ctx(),
+                address,
+                &target,
+                &token,
+                None,
+                amount,
+                &None,
+                &None,
+                &None,
+            )
+            .unwrap();
+        });
 
-    //     let mut vp_env = vp_host_env::take();
-    //     let mut tx = vp_env.tx.clone();
-    //     tx.add_section(Section::Signature(Signature::new(
-    //         tx.data_sechash(),
-    //         &secret_key,
-    //     )));
-    //     let signed_tx = tx.clone();
-    //     vp_env.tx = signed_tx.clone();
-    //     let keys_changed: BTreeSet<storage::Key> =
-    //         vp_env.all_touched_storage_keys();
-    //     let verifiers: BTreeSet<Address> = BTreeSet::default();
-    //     vp_host_env::set(vp_env);
-    //     assert!(
-    //         validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-    //             .unwrap()
-    //     );
-    // }
+        let mut vp_env = vp_host_env::take();
+        let mut tx = vp_env.tx.clone();
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &secret_key,
+        )));
+        let signed_tx = tx.clone();
+        vp_env.tx = signed_tx.clone();
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+        assert!(
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
+    }
 
-    // /// Test that a transfer on with accounts other than self is accepted.
-    // #[test]
-    // fn test_transfer_between_other_parties_accepted() {
-    //     // Initialize a tx environment
-    //     let mut tx_env = TestTxEnv::default();
+    /// Test that a transfer on with accounts other than self is accepted.
+    #[test]
+    fn test_transfer_between_other_parties_accepted() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
 
-    //     let secret_key = key::testing::keypair_1();
-    //     let public_key = secret_key.ref_to();
-    //     let vp_owner: Address = (&public_key).into();
-    //     let source = address::testing::established_address_2();
-    //     let target = address::testing::established_address_3();
-    //     let token = address::nam();
-    //     let amount = token::Amount::from(10_098_123);
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let vp_owner: Address = (&public_key).into();
+        let source = address::testing::established_address_2();
+        let target = address::testing::established_address_3();
+        let token = address::nam();
+        let amount = token::Amount::from(10_098_123);
 
-    //     // Spawn the accounts to be able to modify their storage
-    //     tx_env.spawn_accounts([&vp_owner, &source, &target, &token]);
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&vp_owner, &source, &target, &token]);
 
-    //     // Credit the tokens to the VP owner before running the transaction
-    // to     // be able to transfer from it
-    //     tx_env.credit_tokens(&source, &token, None, amount);
+        // Credit the tokens to the VP owner before running the transaction to
+        // be able to transfer from it
+        tx_env.credit_tokens(&source, &token, None, amount);
 
-    //     // Initialize VP environment from a transaction
-    //     vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
-    //         tx::ctx().insert_verifier(address).unwrap();
-    //         // Apply transfer in a transaction
-    //         tx_host_env::token::transfer(
-    //             tx::ctx(),
-    //             &source,
-    //             &target,
-    //             &token,
-    //             None,
-    //             amount,
-    //             &None,
-    //             &None,
-    //             &None,
-    //         )
-    //         .unwrap();
-    //     });
+        // Initialize VP environment from a transaction
+        vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
+            tx::ctx().insert_verifier(address).unwrap();
+            // Apply transfer in a transaction
+            tx_host_env::token::transfer(
+                tx::ctx(),
+                &source,
+                &target,
+                &token,
+                None,
+                amount,
+                &None,
+                &None,
+                &None,
+            )
+            .unwrap();
+        });
 
-    //     let vp_env = vp_host_env::take();
-    //     let mut tx_data = Tx::new(TxType::Raw);
-    //     tx_data.set_data(Data::new(vec![]));
-    //     let keys_changed: BTreeSet<storage::Key> =
-    //         vp_env.all_touched_storage_keys();
-    //     let verifiers: BTreeSet<Address> = BTreeSet::default();
-    //     vp_host_env::set(vp_env);
-    //     assert!(
-    //         validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-    //             .unwrap()
-    //     );
-    // }
+        let vp_env = vp_host_env::take();
+        let mut tx_data = Tx::new(TxType::Raw);
+        tx_data.set_data(Data::new(vec![]));
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+        assert!(
+            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
+    }
 
-    // /// Generates a keypair, derive an implicit address from it and generate
-    // /// a storage key inside its storage.
-    // fn arb_account_storage_subspace_key()
-    // -> impl Strategy<Value = (key::common::SecretKey, Address, Key)> {
-    //     // Generate a keypair
-    //     key::testing::arb_common_keypair().prop_flat_map(|sk| {
-    //         let pk = sk.ref_to();
-    //         let addr: Address = (&pk).into();
-    //         // Generate a storage key other than its VP key (VP cannot be
-    //         // modified directly via `write`, it has to be modified via
-    //         // `tx::update_validity_predicate`.
-    //         let storage_key = arb_account_storage_key_no_vp(addr.clone());
-    //         (Just(sk), Just(addr), storage_key)
-    //     })
-    // }
+    /// Generates a keypair, derive an implicit address from it and generate
+    /// a storage key inside its storage.
+    fn arb_account_storage_subspace_key()
+    -> impl Strategy<Value = (key::common::SecretKey, Address, Key)> {
+        // Generate a keypair
+        key::testing::arb_common_keypair().prop_flat_map(|sk| {
+            let pk = sk.ref_to();
+            let addr: Address = (&pk).into();
+            // Generate a storage key other than its VP key (VP cannot be
+            // modified directly via `write`, it has to be modified via
+            // `tx::update_validity_predicate`.
+            let storage_key = arb_account_storage_key_no_vp(addr.clone());
+            (Just(sk), Just(addr), storage_key)
+        })
+    }
 
-    // proptest! {
-    //     /// Test that an unsigned tx that performs arbitrary storage writes
-    // or     /// deletes to  the account is rejected.
-    //     #[test]
-    //     fn test_unsigned_arb_storage_write_rejected(
-    //         (_sk, vp_owner, storage_key) in
-    // arb_account_storage_subspace_key(),         // Generate bytes to
+    proptest! {
+        /// Test that an unsigned tx that performs arbitrary storage writes
+    /// or deletes to  the account is rejected.
+        #[test]
+        fn test_unsigned_arb_storage_write_rejected(
+            (_sk, vp_owner, storage_key) in
+    arb_account_storage_subspace_key(),         // Generate bytes to
     // write. If `None`, delete from the key instead         storage_value
-    // in any::<Option<Vec<u8>>>(),     ) {
-    //         // Initialize a tx environment
-    //         let mut tx_env = TestTxEnv::default();
+    in any::<Option<Vec<u8>>>(),     ) {
+            // Initialize a tx environment
+            let mut tx_env = TestTxEnv::default();
 
-    //         // Spawn all the accounts in the storage key to be able to modify
-    //         // their storage
-    //         let storage_key_addresses = storage_key.find_addresses();
-    //         tx_env.spawn_accounts(storage_key_addresses);
+            // Spawn all the accounts in the storage key to be able to modify
+            // their storage
+            let storage_key_addresses = storage_key.find_addresses();
+            tx_env.spawn_accounts(storage_key_addresses);
 
-    //         // Initialize VP environment from a transaction
-    //         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
-    //             // Write or delete some data in the transaction
-    //             if let Some(value) = &storage_value {
-    //                 tx::ctx().write(&storage_key, value).unwrap();
-    //             } else {
-    //                 tx::ctx().delete(&storage_key).unwrap();
-    //             }
-    //         });
+            // Initialize VP environment from a transaction
+            vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
+                // Write or delete some data in the transaction
+                if let Some(value) = &storage_value {
+                    tx::ctx().write(&storage_key, value).unwrap();
+                } else {
+                    tx::ctx().delete(&storage_key).unwrap();
+                }
+            });
 
-    //         let vp_env = vp_host_env::take();
-    //         let mut tx_data = Tx::new(TxType::Raw);
-    //         tx_data.set_data(Data::new(vec![]));
-    //         let keys_changed: BTreeSet<storage::Key> =
-    //             vp_env.all_touched_storage_keys();
-    //         let verifiers: BTreeSet<Address> = BTreeSet::default();
-    //         vp_host_env::set(vp_env);
-    //         assert!(!validate_tx(&CTX, tx_data, vp_owner, keys_changed,
-    // verifiers).unwrap());     }
-    // }
+            let vp_env = vp_host_env::take();
+            let mut tx_data = Tx::new(TxType::Raw);
+            tx_data.set_data(Data::new(vec![]));
+            let keys_changed: BTreeSet<storage::Key> =
+                vp_env.all_touched_storage_keys();
+            let verifiers: BTreeSet<Address> = BTreeSet::default();
+            vp_host_env::set(vp_env);
+            assert!(!validate_tx(&CTX, tx_data, vp_owner, keys_changed,
+    verifiers).unwrap());     }
+    }
 
-    // proptest! {
-    //     /// Test that a signed tx that performs arbitrary storage writes or
-    //     /// deletes to the account is accepted.
-    //     #[test]
-    //     fn test_signed_arb_storage_write(
-    //         (secret_key, vp_owner, storage_key) in
-    // arb_account_storage_subspace_key(),         // Generate bytes to
+    proptest! {
+        /// Test that a signed tx that performs arbitrary storage writes or
+        /// deletes to the account is accepted.
+        #[test]
+        fn test_signed_arb_storage_write(
+            (secret_key, vp_owner, storage_key) in
+    arb_account_storage_subspace_key(),         // Generate bytes to
     // write. If `None`, delete from the key instead         storage_value
-    // in any::<Option<Vec<u8>>>(),     ) {
-    //         // Initialize a tx environment
-    //         let mut tx_env = TestTxEnv::default();
+    in any::<Option<Vec<u8>>>(),     ) {
+            // Initialize a tx environment
+            let mut tx_env = TestTxEnv::default();
 
-    //         // Spawn all the accounts in the storage key to be able to modify
-    //         // their storage
-    //         let storage_key_addresses = storage_key.find_addresses();
-    //         tx_env.spawn_accounts(storage_key_addresses);
+            // Spawn all the accounts in the storage key to be able to modify
+            // their storage
+            let storage_key_addresses = storage_key.find_addresses();
+            tx_env.spawn_accounts(storage_key_addresses);
 
-    //         let public_key = secret_key.ref_to();
-    //         let _ =
-    // storage_api::account::set_public_key_at(tx_host_env::ctx(), &vp_owner,
-    // &public_key, 0);
+            let public_key = secret_key.ref_to();
+            let _ =
+    storage_api::account::set_public_key_at(tx_host_env::ctx(), &vp_owner,
+    &public_key, 0);
 
-    //         // Initialize VP environment from a transaction
-    //         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
-    //             // Write or delete some data in the transaction
-    //             if let Some(value) = &storage_value {
-    //                 tx::ctx().write(&storage_key, value).unwrap();
-    //             } else {
-    //                 tx::ctx().delete(&storage_key).unwrap();
-    //             }
-    //         });
+            // Initialize VP environment from a transaction
+            vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
+                // Write or delete some data in the transaction
+                if let Some(value) = &storage_value {
+                    tx::ctx().write(&storage_key, value).unwrap();
+                } else {
+                    tx::ctx().delete(&storage_key).unwrap();
+                }
+            });
 
-    //         let mut vp_env = vp_host_env::take();
-    //         let mut tx = vp_env.tx.clone();
-    //         tx.add_section(Section::Signature(Signature::new(tx.
-    // data_sechash(), &secret_key)));         let signed_tx = tx.clone();
-    //         vp_env.tx = signed_tx.clone();
-    //         let keys_changed: BTreeSet<storage::Key> =
-    //         vp_env.all_touched_storage_keys();
-    //         let verifiers: BTreeSet<Address> = BTreeSet::default();
-    //         vp_host_env::set(vp_env);
-    //         assert!(validate_tx(&CTX, signed_tx, vp_owner, keys_changed,
-    // verifiers).unwrap());     }
-    // }
+            let mut vp_env = vp_host_env::take();
+            let mut tx = vp_env.tx.clone();
+            tx.add_section(Section::Signature(Signature::new(tx.
+    data_sechash(), &secret_key)));         let signed_tx = tx.clone();
+            vp_env.tx = signed_tx.clone();
+            let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+            let verifiers: BTreeSet<Address> = BTreeSet::default();
+            vp_host_env::set(vp_env);
+            assert!(validate_tx(&CTX, signed_tx, vp_owner, keys_changed,
+    verifiers).unwrap());     }
+    }
 
-    // /// Test that a validity predicate update without a valid signature is
-    // /// rejected.
-    // #[test]
-    // fn test_unsigned_vp_update_rejected() {
-    //     // Initialize a tx environment
-    //     let mut tx_env = TestTxEnv::default();
+    /// Test that a validity predicate update without a valid signature is
+    /// rejected.
+    #[test]
+    fn test_unsigned_vp_update_rejected() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
 
-    //     let secret_key = key::testing::keypair_1();
-    //     let public_key = secret_key.ref_to();
-    //     let vp_owner: Address = (&public_key).into();
-    //     let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
-    //     let vp_hash = sha256(&vp_code);
-    //     // for the update
-    //     tx_env.store_wasm_code(vp_code);
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let vp_owner: Address = (&public_key).into();
+        let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
+        let vp_hash = sha256(&vp_code);
+        // for the update
+        tx_env.store_wasm_code(vp_code);
 
-    //     // Spawn the accounts to be able to modify their storage
-    //     tx_env.spawn_accounts([&vp_owner]);
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&vp_owner]);
 
-    //     // Initialize VP environment from a transaction
-    //     vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
-    //         // Update VP in a transaction
-    //         tx::ctx()
-    //             .update_validity_predicate(address, vp_hash)
-    //             .unwrap();
-    //     });
+        // Initialize VP environment from a transaction
+        vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
+            // Update VP in a transaction
+            tx::ctx()
+                .update_validity_predicate(address, vp_hash)
+                .unwrap();
+        });
 
-    //     let vp_env = vp_host_env::take();
-    //     let mut tx_data = Tx::new(TxType::Raw);
-    //     tx_data.set_data(Data::new(vec![]));
-    //     let keys_changed: BTreeSet<storage::Key> =
-    //         vp_env.all_touched_storage_keys();
-    //     let verifiers: BTreeSet<Address> = BTreeSet::default();
-    //     vp_host_env::set(vp_env);
-    //     assert!(
-    //         !validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-    //             .unwrap()
-    //     );
-    // }
+        let vp_env = vp_host_env::take();
+        let mut tx_data = Tx::new(TxType::Raw);
+        tx_data.set_data(Data::new(vec![]));
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+        assert!(
+            !validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
+    }
 
-    // /// Test that a tx is rejected if not whitelisted
-    // #[test]
-    // fn test_tx_not_whitelisted_rejected() {
-    //     // Initialize a tx environment
-    //     let mut tx_env = TestTxEnv::default();
+    /// Test that a tx is rejected if not whitelisted
+    #[test]
+    fn test_tx_not_whitelisted_rejected() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
 
-    //     let secret_key = key::testing::keypair_1();
-    //     let public_key = secret_key.ref_to();
-    //     let vp_owner: Address = (&public_key).into();
-    //     let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
-    //     let vp_hash = sha256(&vp_code);
-    //     // for the update
-    //     tx_env.store_wasm_code(vp_code);
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let vp_owner: Address = (&public_key).into();
+        let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
+        let vp_hash = sha256(&vp_code);
+        // for the update
+        tx_env.store_wasm_code(vp_code);
 
-    //     tx_env.init_parameters(
-    //         None,
-    //         Some(vec![vp_hash.to_string()]),
-    //         Some(vec!["some_hash".to_string()]),
-    //         None
-    //     );
+        tx_env.init_parameters(
+            None,
+            Some(vec![vp_hash.to_string()]),
+            Some(vec!["some_hash".to_string()]),
+            None,
+        );
 
-    //     // Spawn the accounts to be able to modify their storage
-    //     tx_env.spawn_accounts([&vp_owner]);
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&vp_owner]);
 
-    //     let _ = storage_api::account::set_public_key_at(tx_host_env::ctx(),
-    // &vp_owner, &public_key, 0);
+        let _ = storage_api::account::set_public_key_at(
+            tx_host_env::ctx(),
+            &vp_owner,
+            &public_key,
+            0,
+        );
 
-    //     // Initialize VP environment from a transaction
-    //     vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
-    //         // Update VP in a transaction
-    //         tx::ctx()
-    //             .update_validity_predicate(address, vp_hash)
-    //             .unwrap();
-    //     });
+        // Initialize VP environment from a transaction
+        vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
+            // Update VP in a transaction
+            tx::ctx()
+                .update_validity_predicate(address, vp_hash)
+                .unwrap();
+        });
 
-    //     let mut vp_env = vp_host_env::take();
-    //     let mut tx = vp_env.tx.clone();
-    //     tx.set_data(Data::new(vec![]));
-    //     tx.add_section(Section::Signature(Signature::new(
-    //         tx.data_sechash(),
-    //         &secret_key,
-    //     )));
-    //     let signed_tx = tx.clone();
-    //     vp_env.tx = signed_tx.clone();
-    //     let keys_changed: BTreeSet<storage::Key> =
-    //         vp_env.all_touched_storage_keys();
-    //     let verifiers: BTreeSet<Address> = BTreeSet::default();
-    //     vp_host_env::set(vp_env);
-    //     assert!(
-    //         !validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-    //             .unwrap()
-    //     );
-    // }
+        let mut vp_env = vp_host_env::take();
+        let mut tx = vp_env.tx.clone();
+        tx.set_data(Data::new(vec![]));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &secret_key,
+        )));
+        let signed_tx = tx.clone();
+        vp_env.tx = signed_tx.clone();
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+        assert!(
+            !validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
+    }
 
-    // #[test]
-    // fn test_tx_whitelisted_accepted() {
-    //     // Initialize a tx environment
-    //     let mut tx_env = TestTxEnv::default();
+    #[test]
+    fn test_tx_whitelisted_accepted() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
 
-    //     let secret_key = key::testing::keypair_1();
-    //     let public_key = secret_key.ref_to();
-    //     let vp_owner: Address = (&public_key).into();
-    //     let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
-    //     let vp_hash = sha256(&vp_code);
-    //     // for the update
-    //     tx_env.store_wasm_code(vp_code);
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let vp_owner: Address = (&public_key).into();
+        let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
+        let vp_hash = sha256(&vp_code);
+        // for the update
+        tx_env.store_wasm_code(vp_code);
 
-    //     // hardcoded hash of VP_ALWAYS_TRUE_WASM
-    //     tx_env.init_parameters(None, None, Some(vec![vp_hash.to_string()]),
-    // None);
+        // hardcoded hash of VP_ALWAYS_TRUE_WASM
+        tx_env.init_parameters(
+            None,
+            None,
+            Some(vec![vp_hash.to_string()]),
+            None,
+        );
 
-    //     // Spawn the accounts to be able to modify their storage
-    //     tx_env.spawn_accounts([&vp_owner]);
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&vp_owner]);
 
-    //     let _ = storage_api::account::set_public_key_at(tx_host_env::ctx(),
-    // &vp_owner, &public_key, 0);
+        let _ = storage_api::account::set_public_key_at(
+            tx_host_env::ctx(),
+            &vp_owner,
+            &public_key,
+            0,
+        );
 
-    //     // Initialize VP environment from a transaction
-    //     vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
-    //         // Update VP in a transaction
-    //         tx::ctx()
-    //             .update_validity_predicate(address, vp_hash)
-    //             .unwrap();
-    //     });
+        // Initialize VP environment from a transaction
+        vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
+            // Update VP in a transaction
+            tx::ctx()
+                .update_validity_predicate(address, vp_hash)
+                .unwrap();
+        });
 
-    //     let mut vp_env = vp_host_env::take();
-    //     let mut tx = vp_env.tx.clone();
-    //     tx.set_code(Code::from_hash(vp_hash));
-    //     tx.set_data(Data::new(vec![]));
-    //     tx.add_section(Section::Signature(Signature::new(
-    //         tx.data_sechash(),
-    //         &secret_key,
-    //     )));
-    //     let signed_tx = tx.clone();
-    //     vp_env.tx = signed_tx.clone();
-    //     let keys_changed: BTreeSet<storage::Key> =
-    //         vp_env.all_touched_storage_keys();
-    //     let verifiers: BTreeSet<Address> = BTreeSet::default();
-    //     vp_host_env::set(vp_env);
-    //     assert!(
-    //         validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-    //             .unwrap()
-    //     );
-    // }
+        let mut vp_env = vp_host_env::take();
+        let mut tx = vp_env.tx.clone();
+        tx.set_code(Code::from_hash(vp_hash));
+        tx.set_data(Data::new(vec![]));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &secret_key,
+        )));
+        let signed_tx = tx.clone();
+        vp_env.tx = signed_tx.clone();
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+        assert!(
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
+    }
 }

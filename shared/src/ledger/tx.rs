@@ -245,7 +245,7 @@ pub async fn process_tx<
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     tx: Tx,
-    owner: Option<&Address>,
+    owner: Option<Address>,
     default_signer: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<ProcessTxResponse, Error> {
@@ -676,7 +676,7 @@ pub async fn submit_validator_commission_change<
         wallet,
         &args.tx,
         tx,
-        Some(&default_signer.clone()),
+        Some(default_signer.clone()),
         TxSigningKey::WalletAddress(default_signer),
         #[cfg(not(feature = "mainnet"))]
         false,
@@ -723,7 +723,7 @@ pub async fn submit_unjail_validator<
         wallet,
         &args.tx,
         tx,
-        Some(&default_signer.clone()),
+        Some(default_signer.clone()),
         TxSigningKey::WalletAddress(default_signer),
         #[cfg(not(feature = "mainnet"))]
         false,
@@ -793,7 +793,7 @@ pub async fn submit_withdraw<
         wallet,
         &args.tx,
         tx,
-        Some(&default_signer.clone()),
+        Some(default_signer.clone()),
         TxSigningKey::WalletAddress(default_signer),
         #[cfg(not(feature = "mainnet"))]
         false,
@@ -875,7 +875,7 @@ pub async fn submit_unbond<
         wallet,
         &args.tx,
         tx,
-        Some(&default_signer.clone()),
+        Some(default_signer.clone()),
         TxSigningKey::WalletAddress(default_signer),
         #[cfg(not(feature = "mainnet"))]
         false,
@@ -993,7 +993,7 @@ pub async fn submit_bond<
         wallet,
         &args.tx,
         tx,
-        Some(&default_signer.clone()),
+        Some(default_signer.clone()),
         TxSigningKey::WalletAddress(default_signer),
         #[cfg(not(feature = "mainnet"))]
         false,
@@ -1132,7 +1132,7 @@ pub async fn submit_ibc_transfer<
         wallet,
         &args.tx,
         tx,
-        Some(&args.source.clone()),
+        Some(args.source.clone()),
         TxSigningKey::WalletAddress(args.source),
         #[cfg(not(feature = "mainnet"))]
         false,
@@ -1376,13 +1376,28 @@ pub async fn submit_transfer<
         // Finally store the Traansfer WASM code in the Tx
         tx.set_code(Code::from_hash(tx_code_hash));
 
+        #[cfg(not(feature = "mainnet"))]
+        let owner = if is_source_faucet {
+            None
+        } else {
+            let transfer_source = &args.source;
+            let transfer_address = transfer_source.effective_address();
+            Some(transfer_address)
+        };
+        #[cfg(feature = "mainnet")]
+        let transfer_source = &args.source;
+        #[cfg(feature = "mainnet")]
+        let transfer_address = transfer_source.effective_address();
+        #[cfg(feature = "mainnet")]
+        let owner = Some(transfer_address);
+
         // Dry-run/broadcast/submit the transaction
         let result = process_tx::<C, V>(
             client,
             wallet,
             &args.tx,
             tx,
-            Some(&args.source.effective_address()),
+            owner,
             default_signer.clone(),
             #[cfg(not(feature = "mainnet"))]
             is_source_faucet,
@@ -1585,7 +1600,7 @@ pub async fn submit_update_account<
         wallet,
         &args.tx,
         tx,
-        Some(&args.addr.clone()),
+        Some(args.addr.clone()),
         TxSigningKey::WalletAddress(args.addr),
         #[cfg(not(feature = "mainnet"))]
         false,
@@ -1614,7 +1629,7 @@ pub async fn submit_custom<
         wallet,
         &args.tx,
         tx,
-        Some(&args.owner),
+        Some(args.owner),
         TxSigningKey::None,
         #[cfg(not(feature = "mainnet"))]
         false,

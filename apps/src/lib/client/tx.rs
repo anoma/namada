@@ -632,7 +632,7 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
             ctx,
             &args.tx,
             tx,
-            Some(&signer.clone()),
+            Some(signer.clone()),
             TxSigningKey::WalletAddress(signer),
             #[cfg(not(feature = "mainnet"))]
             false,
@@ -889,7 +889,7 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
                     ctx,
                     &args.tx,
                     tx,
-                    Some(&args.voter_address),
+                    Some(args.voter_address.clone()),
                     TxSigningKey::WalletAddress(args.voter_address.clone()),
                     #[cfg(not(feature = "mainnet"))]
                     false,
@@ -1087,7 +1087,7 @@ async fn process_tx<C: namada::ledger::queries::Client + Sync>(
     mut ctx: Context,
     args: &args::Tx,
     tx: Tx,
-    owner: Option<&Address>,
+    owner: Option<Address>,
     default_signer: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<(Context, Vec<Address>), tx::Error> {
