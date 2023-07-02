@@ -358,8 +358,6 @@ pub async fn sign_wrapper<
 
     // Remove all the sensitive sections
     tx.protocol_filter();
-    // Encrypt all sections not relating to the header
-    tx.encrypt(&Default::default());
     // Then sign over the bound wrapper committing to all other sections
     tx.add_section(Section::Signature(Signature::new(tx.sechashes(), keypair)));
     // We use this to determine when the wrapper tx makes it on-chain
