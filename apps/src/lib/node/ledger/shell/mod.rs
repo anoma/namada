@@ -186,8 +186,7 @@ pub fn reset(config: config::Ledger) -> Result<()> {
         res => res.map_err(Error::RemoveDB)?,
     };
     // reset Tendermint state
-    tendermint_node::reset(config.tendermint_dir())
-        .map_err(Error::Tendermint)?;
+    tendermint_node::reset(config.cometbft_dir()).map_err(Error::Tendermint)?;
     Ok(())
 }
 
@@ -195,7 +194,7 @@ pub fn rollback(config: config::Ledger) -> Result<()> {
     // Rollback Tendermint state
     tracing::info!("Rollback Tendermint state");
     let tendermint_block_height =
-        tendermint_node::rollback(config.tendermint_dir())
+        tendermint_node::rollback(config.cometbft_dir())
             .map_err(Error::Tendermint)?;
 
     // Rollback Namada state
@@ -295,7 +294,7 @@ where
         let chain_id = config.chain_id;
         let db_path = config.shell.db_dir(&chain_id);
         let base_dir = config.shell.base_dir;
-        let mode = config.tendermint.tendermint_mode;
+        let mode = config.shell.tendermint_mode;
         let storage_read_past_height_limit =
             config.shell.storage_read_past_height_limit;
         if !Path::new(&base_dir).is_dir() {
@@ -531,7 +530,10 @@ where
                 };
                 // Disregard evidences that should have already been processed
                 // at this time
-                if evidence_epoch + pos_params.unbonding_len < current_epoch {
+                if evidence_epoch + pos_params.slash_processing_epoch_offset()
+                    - pos_params.cubic_slashing_window_length
+                    <= current_epoch
+                {
                     tracing::info!(
                         "Skipping outdated evidence from epoch \
                          {evidence_epoch}"
@@ -590,11 +592,13 @@ where
                         }
                     };
                 tracing::info!(
-                    "Slashing {} for {} in epoch {}, block height {}",
+                    "Slashing {} for {} in epoch {}, block height {} (current \
+                     epoch = {})",
                     validator,
                     slash_type,
                     evidence_epoch,
-                    evidence_height
+                    evidence_height,
+                    current_epoch
                 );
                 if let Err(err) = slash(
                     &mut self.wl_storage,
@@ -660,7 +664,7 @@ where
         tracing::info!(
             "Committed block hash: {}, height: {}",
             root,
-            self.wl_storage.storage.last_height,
+            self.wl_storage.storage.get_last_block_height(),
         );
         response.data = root.0;
         response
@@ -1106,7 +1110,7 @@ mod test_utils {
         pub fn init_chain(
             &mut self,
             req: RequestInitChain,
-            #[cfg(feature = "dev")] num_validators: u64,
+            num_validators: u64,
         ) {
             self.shell
                 .init_chain(req, num_validators)

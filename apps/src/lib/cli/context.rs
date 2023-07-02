@@ -89,7 +89,7 @@ impl Context {
         let mut config = Config::load(
             &global_args.base_dir,
             &global_config.default_chain_id,
-            global_args.mode.clone(),
+            None,
         );
 
         let chain_dir = global_args

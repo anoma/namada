@@ -1,22 +1,12 @@
-#[cfg(not(feature = "abcipp"))]
-use tower_abci::{Request, Response};
 #[cfg(feature = "abcipp")]
 use tower_abci_abcipp::{Request, Response};
+
+#[cfg(not(feature = "abcipp"))]
+use crate::facade::tower_abci::{Request, Response};
 
 pub mod shim {
     use std::convert::TryFrom;
 
-    #[cfg(not(feature = "abcipp"))]
-    use tendermint_proto::abci::{
-        RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
-        RequestFlush, RequestInfo, RequestInitChain, RequestListSnapshots,
-        RequestLoadSnapshotChunk, RequestOfferSnapshot, RequestPrepareProposal,
-        RequestProcessProposal, RequestQuery, ResponseApplySnapshotChunk,
-        ResponseCheckTx, ResponseCommit, ResponseEcho, ResponseEndBlock,
-        ResponseFlush, ResponseInfo, ResponseInitChain, ResponseListSnapshots,
-        ResponseLoadSnapshotChunk, ResponseOfferSnapshot,
-        ResponsePrepareProposal, ResponseQuery, VoteInfo,
-    };
     #[cfg(feature = "abcipp")]
     use tendermint_proto_abcipp::abci::{
         RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
@@ -33,6 +23,17 @@ pub mod shim {
     use thiserror::Error;
 
     use super::{Request as Req, Response as Resp};
+    #[cfg(not(feature = "abcipp"))]
+    use crate::facade::tendermint_proto::abci::{
+        RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
+        RequestFlush, RequestInfo, RequestInitChain, RequestListSnapshots,
+        RequestLoadSnapshotChunk, RequestOfferSnapshot, RequestPrepareProposal,
+        RequestProcessProposal, RequestQuery, ResponseApplySnapshotChunk,
+        ResponseCheckTx, ResponseCommit, ResponseEcho, ResponseEndBlock,
+        ResponseFlush, ResponseInfo, ResponseInitChain, ResponseListSnapshots,
+        ResponseLoadSnapshotChunk, ResponseOfferSnapshot,
+        ResponsePrepareProposal, ResponseQuery, VoteInfo,
+    };
     use crate::node::ledger::shell;
 
     pub type TxBytes = Vec<u8>;
@@ -199,14 +200,14 @@ pub mod shim {
         use namada::types::hash::Hash;
         use namada::types::storage::{BlockHash, Header};
         use namada::types::time::DateTimeUtc;
-        #[cfg(not(feature = "abcipp"))]
-        use tendermint_proto::abci::Misbehavior as Evidence;
         #[cfg(feature = "abcipp")]
         use tendermint_proto_abcipp::abci::{
             Misbehavior as Evidence, RequestFinalizeBlock,
         };
 
         use super::VoteInfo;
+        #[cfg(not(feature = "abcipp"))]
+        use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
 
         pub struct VerifyHeader;
 
@@ -423,7 +424,9 @@ pub mod shim {
         }
 
         #[cfg(not(feature = "abcipp"))]
-        impl From<FinalizeBlock> for tendermint_proto::abci::ResponseEndBlock {
+        impl From<FinalizeBlock>
+            for crate::facade::tendermint_proto::abci::ResponseEndBlock
+        {
             fn from(resp: FinalizeBlock) -> Self {
                 Self {
                     events: resp

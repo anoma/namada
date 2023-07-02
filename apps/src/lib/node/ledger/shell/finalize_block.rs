@@ -75,9 +75,14 @@ where
             Some(EPOCH_SWITCH_BLOCKS_DELAY)
         );
 
-        tracing::debug!(
-            "Block height: {height}, epoch: {current_epoch}, new epoch: \
+        tracing::info!(
+            "Block height: {height}, epoch: {current_epoch}, is new epoch: \
              {new_epoch}."
+        );
+        tracing::debug!(
+            "New epoch block delay for updating the Tendermint validator set: \
+             {:?}",
+            self.wl_storage.storage.update_epoch_blocks_delay
         );
 
         if new_epoch {
@@ -369,7 +374,9 @@ where
                         }
                         for ibc_event in &result.ibc_events {
                             // Add the IBC event besides the tx_event
-                            let event = Event::from(ibc_event.clone());
+                            let mut event = Event::from(ibc_event.clone());
+                            // Add the height for IBC event query
+                            event["height"] = height.to_string();
                             response.events.push(event);
                         }
                         match serde_json::to_string(
@@ -531,7 +538,7 @@ where
         hash: BlockHash,
         byzantine_validators: Vec<Evidence>,
     ) -> (BlockHeight, bool) {
-        let height = self.wl_storage.storage.last_height + 1;
+        let height = self.wl_storage.storage.get_last_block_height() + 1;
 
         self.gas_meter.reset();
 
@@ -890,7 +897,6 @@ fn pos_votes_from_abci(
 #[cfg(test)]
 mod test_finalize_block {
     use std::collections::{BTreeMap, BTreeSet};
-    use std::str::FromStr;
 
     use data_encoding::HEXUPPER;
     use namada::ledger::parameters::EpochDuration;
@@ -1335,12 +1341,11 @@ mod test_finalize_block {
 
         // Collect all storage key-vals into a sorted map
         let store_block_state = |shell: &TestShell| -> BTreeMap<_, _> {
-            let prefix: Key = FromStr::from_str("").unwrap();
             shell
                 .wl_storage
                 .storage
                 .db
-                .iter_prefix(&prefix)
+                .iter_optional_prefix(None)
                 .map(|(key, val, _gas)| (key, val))
                 .collect()
         };

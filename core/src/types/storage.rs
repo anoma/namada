@@ -9,7 +9,7 @@ use std::str::FromStr;
 use arse_merkle_tree::traits::Value;
 use arse_merkle_tree::{InternalKey, Key as TreeKey};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use data_encoding::BASE32HEX_NOPAD;
+use data_encoding::{BASE32HEX_NOPAD, HEXUPPER};
 use index_set::vec::VecIndexSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -207,6 +207,12 @@ impl From<BlockHeight> for u64 {
     Deserialize,
 )]
 pub struct BlockHash(pub [u8; BLOCK_HASH_LENGTH]);
+
+impl Display for BlockHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", HEXUPPER.encode(&self.0))
+    }
+}
 
 impl From<Hash> for BlockHash {
     fn from(hash: Hash) -> Self {
@@ -474,11 +480,16 @@ impl Value for TreeBytes {
 impl Key {
     /// Parses string and returns a key
     pub fn parse(string: impl AsRef<str>) -> Result<Self> {
-        let mut segments = Vec::new();
-        for s in string.as_ref().split(KEY_SEGMENT_SEPARATOR) {
-            segments.push(DbKeySeg::parse(s.to_owned())?);
+        let string = string.as_ref();
+        if string.is_empty() {
+            Err(Error::ParseKeySeg(string.to_string()))
+        } else {
+            let mut segments = Vec::new();
+            for s in string.split(KEY_SEGMENT_SEPARATOR) {
+                segments.push(DbKeySeg::parse(s.to_owned())?);
+            }
+            Ok(Key { segments })
         }
-        Ok(Key { segments })
     }
 
     /// Returns a new key with segments of `Self` and the given segment
@@ -959,7 +970,7 @@ impl Epoch {
         (start_ix..end_ix).map(Epoch::from)
     }
 
-    /// TODO
+    /// Iterate a range of epochs, inclusive of the start and end.
     pub fn iter_bounds_inclusive(
         start: Self,
         end: Self,

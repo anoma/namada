@@ -7,22 +7,20 @@ use shell::SHELL;
 #[cfg(any(test, feature = "async-client"))]
 pub use types::Client;
 pub use types::{
-    EncodedResponseQuery, RequestCtx, RequestQuery, ResponseQuery, Router,
+    EncodedResponseQuery, Error, RequestCtx, RequestQuery, ResponseQuery,
+    Router,
 };
-use vp::VP;
-// Re-export to show in rustdoc!
-pub use vp::{Pos, Vp};
+use vp::{Vp, VP};
 
 use super::storage::{DBIter, StorageHasher, DB};
 use super::storage_api;
-use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::storage::BlockHeight;
 
 #[macro_use]
 mod router;
 mod shell;
 mod types;
-mod vp;
+pub mod vp;
 
 // Most commonly expected patterns should be declared first
 router! {RPC,
@@ -59,7 +57,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     if request.height != BlockHeight(0)
-        && request.height != ctx.wl_storage.storage.last_height
+        && request.height != ctx.wl_storage.storage.get_last_block_height()
     {
         return Err(storage_api::Error::new_const(
             "This query doesn't support arbitrary block heights, only the \
@@ -101,6 +99,7 @@ mod testing {
     use super::*;
     use crate::ledger::events::log::EventLog;
     use crate::ledger::storage::testing::TestWlStorage;
+    use crate::tendermint_rpc::error::Error as RpcError;
     use crate::types::storage::BlockHeight;
     use crate::vm::wasm::{self, TxCache, VpCache};
     use crate::vm::WasmCacheRoAccess;

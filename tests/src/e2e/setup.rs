@@ -15,17 +15,18 @@ use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use expectrl::process::unix::{PtyStream, UnixProcess};
 use expectrl::session::Session;
-use expectrl::stream::log::LoggedStream;
-use expectrl::{Eof, WaitStatus};
+use expectrl::stream::log::LogStream;
+use expectrl::{ControlCode, Eof, WaitStatus};
 use eyre::{eyre, Context};
 use itertools::{Either, Itertools};
 use namada::types::chain::ChainId;
 use namada_apps::client::utils;
 use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
 use namada_apps::{config, wallet};
+use once_cell::sync::Lazy;
 use rand::Rng;
 use serde_json;
-use tempfile::{tempdir, TempDir};
+use tempfile::{tempdir, tempdir_in, TempDir};
 
 use crate::e2e::helpers::generate_bin_command;
 
@@ -40,6 +41,9 @@ pub const ENV_VAR_DEBUG: &str = "NAMADA_E2E_DEBUG";
 
 /// Env. var for keeping temporary files created by the E2E tests
 const ENV_VAR_KEEP_TEMP: &str = "NAMADA_E2E_KEEP_TEMP";
+
+/// Env. var for temporary path
+const ENV_VAR_TEMP_PATH: &str = "NAMADA_E2E_TEMP_PATH";
 
 /// Env. var to use a set of prebuilt binaries. This variable holds the path to
 /// a folder.
@@ -164,7 +168,6 @@ pub fn network(
         Some(5),
         &working_dir,
         &test_dir,
-        "validator",
         format!("{}:{}", std::file!(), std::line!()),
     )?;
 
@@ -202,6 +205,7 @@ pub fn network(
         test_dir,
         net,
         genesis,
+        async_runtime: Default::default(),
     })
 }
 
@@ -222,6 +226,7 @@ pub struct Test {
     pub test_dir: TestDir,
     pub net: Network,
     pub genesis: GenesisConfig,
+    pub async_runtime: LazyAsyncRuntime,
 }
 
 #[derive(Debug)]
@@ -246,8 +251,14 @@ impl TestDir {
             _ => false,
         };
 
+        let path_to_tmp = env::var(ENV_VAR_TEMP_PATH);
+        let temp_dir: TempDir = match path_to_tmp {
+            Ok(path) => tempdir_in(path),
+            _ => tempdir(),
+        }
+        .unwrap();
         if keep_temp {
-            let path = tempdir().unwrap().into_path();
+            let path = temp_dir.into_path();
             println!(
                 "{}: \"{}\"",
                 "Keeping test directory at".underline().yellow(),
@@ -255,7 +266,7 @@ impl TestDir {
             );
             Self(Either::Right(path))
         } else {
-            Self(Either::Left(tempdir().unwrap()))
+            Self(Either::Left(temp_dir))
         }
     }
 
@@ -274,6 +285,15 @@ impl Drop for Test {
                 path.to_string_lossy()
             );
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct LazyAsyncRuntime(Lazy<tokio::runtime::Runtime>);
+
+impl Default for LazyAsyncRuntime {
+    fn default() -> Self {
+        Self(Lazy::new(|| tokio::runtime::Runtime::new().unwrap()))
     }
 }
 
@@ -385,19 +405,7 @@ impl Test {
         S: AsRef<OsStr>,
     {
         let base_dir = self.get_base_dir(&who);
-        let mode = match &who {
-            Who::NonValidator => "full",
-            Who::Validator(_) => "validator",
-        };
-        run_cmd(
-            bin,
-            args,
-            timeout_sec,
-            &self.working_dir,
-            base_dir,
-            mode,
-            loc,
-        )
+        run_cmd(bin, args, timeout_sec, &self.working_dir, base_dir, loc)
     }
 
     pub fn get_base_dir(&self, who: &Who) -> PathBuf {
@@ -412,22 +420,27 @@ impl Test {
                 .join(config::DEFAULT_BASE_DIR),
         }
     }
+
+    /// Get an async runtime.
+    pub fn async_runtime(&self) -> &tokio::runtime::Runtime {
+        Lazy::force(&self.async_runtime.0)
+    }
 }
 
 /// A helper that should be ran on start of every e2e test case.
 pub fn working_dir() -> PathBuf {
     let working_dir = fs::canonicalize("..").unwrap();
 
-    // Check that tendermint is either on $PATH or `TENDERMINT` env var is set
-    if std::env::var("TENDERMINT").is_err() {
+    // Check that cometbft is either on $PATH or `COMETBFT` env var is set
+    if std::env::var("COMETBFT").is_err() {
         Command::new("which")
-            .arg("tendermint")
+            .arg("cometbft")
             .assert()
             .try_success()
             .expect(
-                "The env variable TENDERMINT must be set and point to a local \
-                 build of the tendermint abci++ branch, or the tendermint \
-                 binary must be on PATH",
+                "The env variable COMETBFT must be set and point to a local \
+                 build of the cometbft abci++ branch, or the cometbft binary \
+                 must be on PATH",
             );
     }
     working_dir
@@ -435,7 +448,7 @@ pub fn working_dir() -> PathBuf {
 
 /// A command under test
 pub struct NamadaCmd {
-    pub session: Session<UnixProcess, LoggedStream<PtyStream, File>>,
+    pub session: Session<UnixProcess, LogStream<PtyStream, File>>,
     pub cmd_str: String,
     pub log_path: PathBuf,
 }
@@ -497,8 +510,9 @@ impl NamadaCmd {
         // Make sure that there is no unread output first
         let _ = self.exp_eof().unwrap();
 
-        let status = self.session.wait().unwrap();
-        assert_eq!(WaitStatus::Exited(self.session.pid(), 0), status);
+        let process = self.session.get_process();
+        let status = process.wait().unwrap();
+        assert_eq!(WaitStatus::Exited(process.pid(), 0), status);
     }
 
     /// Assert that the process exited with failure
@@ -506,8 +520,9 @@ impl NamadaCmd {
         // Make sure that there is no unread output first
         let _ = self.exp_eof().unwrap();
 
-        let status = self.session.wait().unwrap();
-        assert_ne!(WaitStatus::Exited(self.session.pid(), 0), status);
+        let process = self.session.get_process();
+        let status = process.wait().unwrap();
+        assert_ne!(WaitStatus::Exited(process.pid(), 0), status);
     }
 
     /// Wait until provided string is seen on stdout of child process.
@@ -576,17 +591,22 @@ impl NamadaCmd {
         }
     }
 
+    /// Send ctrl-c to to interrupt or terminate.
+    pub fn interrupt(&mut self) -> Result<()> {
+        self.send_control(ControlCode::EndOfText)
+    }
+
     /// Send a control code to the running process and consume resulting output
     /// line (which is empty because echo is off)
     ///
-    /// E.g. `send_control('c')` sends ctrl-c. Upper/smaller case does not
-    /// matter.
+    /// E.g. `send_control(ControlCode::EndOfText)` sends ctrl-c. Upper/smaller
+    /// case does not matter.
     ///
     /// Wrapper over the inner `Session`'s functions with custom error
     /// reporting.
-    pub fn send_control(&mut self, c: char) -> Result<()> {
+    pub fn send_control(&mut self, c: ControlCode) -> Result<()> {
         self.session
-            .send_control(c)
+            .send(c)
             .map_err(|e| eyre!("Error: {}\nCommand: {}", e, self))
     }
 
@@ -611,7 +631,7 @@ impl Drop for NamadaCmd {
             "> Sending Ctrl+C to command".underline().yellow(),
             self.cmd_str,
         );
-        let _result = self.send_control('c');
+        let _result = self.interrupt();
         match self.exp_eof() {
             Err(error) => {
                 eprintln!(
@@ -657,7 +677,6 @@ pub fn run_cmd<I, S>(
     timeout_sec: Option<u64>,
     working_dir: impl AsRef<Path>,
     base_dir: impl AsRef<Path>,
-    mode: &str,
     loc: String,
 ) -> Result<NamadaCmd>
 where
@@ -681,13 +700,9 @@ where
         .env("TM_LOG_LEVEL", "info")
         .env("NAMADA_LOG_COLOR", "false")
         .current_dir(working_dir)
-        .args([
-            "--base-dir",
-            &base_dir.as_ref().to_string_lossy(),
-            "--mode",
-            mode,
-        ])
-        .args(args);
+        .args(["--base-dir", &base_dir.as_ref().to_string_lossy()]);
+
+    run_cmd.args(args);
 
     let args: String =
         run_cmd.get_args().map(|s| s.to_string_lossy()).join(" ");
@@ -724,7 +739,7 @@ where
         .write(true)
         .create_new(true)
         .open(&log_path)?;
-    let mut session = session.with_log(logger).unwrap();
+    let mut session = expectrl::session::log(session, logger).unwrap();
 
     session.set_expect_timeout(timeout_sec.map(std::time::Duration::from_secs));
 
@@ -742,7 +757,8 @@ where
         sleep(1);
 
         // If the command failed, try print out its output
-        if let Ok(WaitStatus::Exited(_, result)) = cmd_process.session.status()
+        if let Ok(WaitStatus::Exited(_, result)) =
+            cmd_process.session.get_process().status()
         {
             if result != 0 {
                 let output = cmd_process.exp_eof().unwrap_or_else(|err| {

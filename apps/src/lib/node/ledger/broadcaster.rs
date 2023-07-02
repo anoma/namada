@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::facade::tendermint_rpc::{Client, HttpClient};
@@ -13,7 +15,7 @@ pub struct Broadcaster {
 impl Broadcaster {
     /// Create a new broadcaster that will send Http messages
     /// over the given url.
-    pub fn new(url: &str, receiver: UnboundedReceiver<Vec<u8>>) -> Self {
+    pub fn new(url: SocketAddr, receiver: UnboundedReceiver<Vec<u8>>) -> Self {
         Self {
             client: HttpClient::new(format!("http://{}", url).as_str())
                 .unwrap(),

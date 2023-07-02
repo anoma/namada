@@ -40,7 +40,7 @@ use crate::{
     bond_tokens, bonds_and_unbonds, consensus_validator_set_handle,
     copy_validator_sets_and_positions, find_validator_by_raw_hash,
     get_num_consensus_validators, init_genesis,
-    insert_validator_into_validator_set, process_slashes,
+    insert_validator_into_validator_set, is_validator, process_slashes,
     read_below_capacity_validator_set_addresses_with_stake,
     read_consensus_validator_set_addresses_with_stake, read_total_stake,
     read_validator_delta_value, read_validator_stake, slash,
@@ -109,19 +109,29 @@ proptest! {
 proptest! {
     // Generate arb valid input for `test_slashes_with_unbonding_aux`
     #![proptest_config(Config {
-        cases: 1,
+        cases: 5,
         .. Config::default()
     })]
     #[test]
     fn test_slashes_with_unbonding(
-        pos_params in arb_pos_params(Some(5)),
+        (params, genesis_validators, unbond_delay)
+            in test_slashes_with_unbonding_params()
+    ) {
+        test_slashes_with_unbonding_aux(
+            params, genesis_validators, unbond_delay)
+    }
+}
+
+fn test_slashes_with_unbonding_params()
+-> impl Strategy<Value = (PosParams, Vec<GenesisValidator>, u64)> {
+    let params = arb_pos_params(Some(5));
+    params.prop_flat_map(|params| {
+        let unbond_delay = 0..(params.slash_processing_epoch_offset() * 2);
         // Must have at least 4 validators so we can slash one and the cubic
         // slash rate will be less than 100%
-        genesis_validators in arb_genesis_validators(4..10),
-
-    ) {
-        test_slashes_with_unbonding_aux(pos_params, genesis_validators)
-    }
+        let validators = arb_genesis_validators(4..10);
+        (Just(params), validators, unbond_delay)
+    })
 }
 
 /// Test genesis initialization
@@ -779,6 +789,7 @@ fn test_become_validator_aux(
         min(validators.len() as u64, params.max_validator_slots),
         num_consensus_before
     );
+    assert!(!is_validator(&s, &new_validator).unwrap());
 
     // Initialize the validator account
     let consensus_key = new_validator_consensus_key.to_public();
@@ -792,6 +803,7 @@ fn test_become_validator_aux(
         Decimal::new(5, 2),
     )
     .unwrap();
+    assert!(is_validator(&s, &new_validator).unwrap());
 
     let num_consensus_after =
         get_num_consensus_validators(&s, current_epoch + params.pipeline_len)
@@ -880,6 +892,7 @@ fn test_become_validator_aux(
 fn test_slashes_with_unbonding_aux(
     mut params: PosParams,
     validators: Vec<GenesisValidator>,
+    unbond_delay: u64,
 ) {
     // This can be useful for debugging:
     params.pipeline_len = 2;
@@ -939,13 +952,16 @@ fn test_slashes_with_unbonding_aux(
         super::process_slashes(&mut s, current_epoch).unwrap();
     }
 
+    // Advance more epochs randomly from the generated delay
+    for _ in 0..unbond_delay {
+        current_epoch = advance_epoch(&mut s, &params);
+    }
+
     // Unbond half of the tokens
     let unbond_amount = decimal_mult_amount(dec!(0.5), val_tokens);
     println!("Going to unbond {unbond_amount}");
     let unbond_epoch = current_epoch;
     unbond_tokens(&mut s, None, val_addr, unbond_amount, unbond_epoch).unwrap();
-
-    // current_epoch = advance_epoch(&mut s, &params);
 
     // Discover second slash
     let slash_1_evidence_epoch = current_epoch;
@@ -974,10 +990,23 @@ fn test_slashes_with_unbonding_aux(
     let token = staking_token_address(&s);
     let val_balance_pre = read_balance(&s, &token, val_addr).unwrap();
 
+    let bond_id = BondId {
+        source: val_addr.clone(),
+        validator: val_addr.clone(),
+    };
+    let binding =
+        super::bonds_and_unbonds(&s, None, Some(val_addr.clone())).unwrap();
+    let details = binding.get(&bond_id).unwrap();
+    let exp_withdraw_from_details = details.unbonds[0].amount
+        - details.unbonds[0].slashed_amount.unwrap_or_default();
+
     withdraw_tokens(&mut s, None, val_addr, current_epoch).unwrap();
 
     let val_balance_post = read_balance(&s, &token, val_addr).unwrap();
     let withdrawn_tokens = val_balance_post - val_balance_pre;
+    println!("Withdrew {withdrawn_tokens} tokens");
+
+    assert_eq!(exp_withdraw_from_details, withdrawn_tokens);
 
     let slash_rate_0 = validator_slashes_handle(val_addr)
         .get(&s, 0)
@@ -989,7 +1018,7 @@ fn test_slashes_with_unbonding_aux(
         .unwrap()
         .unwrap()
         .rate;
-    println!("Slash 0 rate {slash_rate_0}, slash 1 {slash_rate_1}");
+    println!("Slash 0 rate {slash_rate_0}, slash 1 rate {slash_rate_1}");
 
     let expected_withdrawn_amount = decimal_mult_amount(
         dec!(1) - slash_rate_1,

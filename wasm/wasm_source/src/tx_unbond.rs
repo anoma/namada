@@ -351,10 +351,12 @@ mod tests {
         // };
 
         // Ensure that the unbond is structured as expected, withdrawable at
-        // pipeline + unbonding offsets
+        // pipeline + unbonding + cubic_slash_window offsets
         let actual_unbond_amount = unbond_handle
             .at(&Epoch::from(
-                pos_params.pipeline_len + pos_params.unbonding_len,
+                pos_params.pipeline_len
+                    + pos_params.unbonding_len
+                    + pos_params.cubic_slashing_window_length,
             ))
             .get(ctx(), &start_epoch)?;
         assert_eq!(
@@ -364,8 +366,10 @@ mod tests {
              unbonded amount"
         );
 
-        for epoch in
-            start_epoch.0..(pos_params.pipeline_len + pos_params.unbonding_len)
+        for epoch in start_epoch.0
+            ..(pos_params.pipeline_len
+                + pos_params.unbonding_len
+                + pos_params.cubic_slashing_window_length)
         {
             let bond_amount =
                 bond_handle.get_sum(ctx(), Epoch(epoch), &pos_params)?;

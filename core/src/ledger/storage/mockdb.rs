@@ -101,6 +101,7 @@ impl DB for MockDB {
         let upper_prefix = format!("{}/", height.next_height().raw());
         let mut merkle_tree_stores = MerkleTreeStoresRead::default();
         let mut hash = None;
+        let mut time = None;
         let mut epoch = None;
         let mut pred_epochs = None;
         let mut address_gen = None;
@@ -137,6 +138,11 @@ impl DB for MockDB {
                             types::decode(bytes).map_err(Error::CodingError)?,
                         )
                     }
+                    "time" => {
+                        time = Some(
+                            types::decode(bytes).map_err(Error::CodingError)?,
+                        )
+                    }
                     "epoch" => {
                         epoch = Some(
                             types::decode(bytes).map_err(Error::CodingError)?,
@@ -157,23 +163,28 @@ impl DB for MockDB {
                 None => unknown_key_error(path)?,
             }
         }
-        match (hash, epoch, pred_epochs, address_gen) {
-            (Some(hash), Some(epoch), Some(pred_epochs), Some(address_gen)) => {
-                Ok(Some(BlockStateRead {
-                    merkle_tree_stores,
-                    hash,
-                    height,
-                    epoch,
-                    pred_epochs,
-                    next_epoch_min_start_height,
-                    next_epoch_min_start_time,
-                    update_epoch_blocks_delay,
-                    address_gen,
-                    results,
-                    #[cfg(feature = "ferveo-tpke")]
-                    tx_queue,
-                }))
-            }
+        match (hash, time, epoch, pred_epochs, address_gen) {
+            (
+                Some(hash),
+                Some(time),
+                Some(epoch),
+                Some(pred_epochs),
+                Some(address_gen),
+            ) => Ok(Some(BlockStateRead {
+                merkle_tree_stores,
+                hash,
+                height,
+                time,
+                epoch,
+                pred_epochs,
+                next_epoch_min_start_height,
+                next_epoch_min_start_time,
+                update_epoch_blocks_delay,
+                address_gen,
+                results,
+                #[cfg(feature = "ferveo-tpke")]
+                tx_queue,
+            })),
             _ => Err(Error::Temporary {
                 error: "Essential data couldn't be read from the DB"
                     .to_string(),
@@ -191,6 +202,7 @@ impl DB for MockDB {
             merkle_tree_stores,
             header,
             hash,
+            time,
             height,
             epoch,
             pred_epochs,
@@ -269,6 +281,15 @@ impl DB for MockDB {
             self.0
                 .borrow_mut()
                 .insert(key.to_string(), types::encode(&hash));
+        }
+        // Block time
+        {
+            let key = prefix_key
+                .push(&"time".to_owned())
+                .map_err(Error::KeyError)?;
+            self.0
+                .borrow_mut()
+                .insert(key.to_string(), types::encode(&time));
         }
         // Block epoch
         {
@@ -493,9 +514,21 @@ impl DB for MockDB {
 impl<'iter> DBIter<'iter> for MockDB {
     type PrefixIter = MockPrefixIterator;
 
-    fn iter_prefix(&'iter self, prefix: &Key) -> MockPrefixIterator {
+    fn iter_optional_prefix(
+        &'iter self,
+        prefix: Option<&Key>,
+    ) -> MockPrefixIterator {
         let db_prefix = "subspace/".to_owned();
-        let prefix = format!("{}{}", db_prefix, prefix);
+        let prefix = format!(
+            "{}{}",
+            db_prefix,
+            match prefix {
+                None => "".to_string(),
+                Some(prefix) => {
+                    prefix.to_string()
+                }
+            }
+        );
         let iter = self.0.borrow().clone().into_iter();
         MockPrefixIterator::new(MockIterator { prefix, iter }, db_prefix)
     }

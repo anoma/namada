@@ -5,11 +5,12 @@ use borsh::BorshDeserialize;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
+use namada_core::ledger::storage::LastBlock;
 use namada_core::ledger::testnet_pow;
 use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
 use namada_core::types::token::Amount;
-use namada_proof_of_stake::types::CommissionPair;
+use namada_proof_of_stake::types::{BondsAndUnbondsDetails, CommissionPair};
 use serde::Serialize;
 use tokio::time::Duration;
 
@@ -17,6 +18,7 @@ use crate::ledger::events::Event;
 use crate::ledger::governance::parameters::GovParams;
 use crate::ledger::governance::storage as gov_storage;
 use crate::ledger::native_vp::governance::utils::Votes;
+use crate::ledger::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
 use crate::ledger::queries::RPC;
 use crate::proto::Tx;
 use crate::tendermint::merkle::proof::Proof;
@@ -81,22 +83,16 @@ pub async fn query_tx_status<C: crate::ledger::queries::Client + Sync>(
 pub async fn query_epoch<C: crate::ledger::queries::Client + Sync>(
     client: &C,
 ) -> Epoch {
-    let epoch = unwrap_client_response::<C, _>(RPC.shell().epoch(client).await);
-    epoch
+    unwrap_client_response::<C, _>(RPC.shell().epoch(client).await)
 }
 
-/// Query the last committed block
+/// Query the last committed block, if any.
 pub async fn query_block<C: crate::ledger::queries::Client + Sync>(
     client: &C,
-) -> crate::tendermint_rpc::endpoint::block::Response {
-    let response = client.latest_block().await.unwrap();
-    println!(
-        "Last committed block ID: {}, height: {}, time: {}",
-        response.block_id,
-        response.block.header.height,
-        response.block.header.time
-    );
-    response
+) -> Option<LastBlock> {
+    // NOTE: We're not using `client.latest_block()` because it may return an
+    // updated block from pre-commit before it's actually committed
+    unwrap_client_response::<C, _>(RPC.shell().last_block(client).await)
 }
 
 /// A helper to unwrap client's response. Will shut down process on error.
@@ -884,4 +880,43 @@ pub async fn get_bond_amount_at<C: crate::ledger::queries::Client + Sync>(
             .await,
     );
     Some(total_active)
+}
+
+/// Get bonds and unbonds with all details (slashes and rewards, if any)
+/// grouped by their bond IDs.
+pub async fn bonds_and_unbonds<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    source: &Option<Address>,
+    validator: &Option<Address>,
+) -> BondsAndUnbondsDetails {
+    unwrap_client_response::<C, _>(
+        RPC.vp()
+            .pos()
+            .bonds_and_unbonds(client, source, validator)
+            .await,
+    )
+}
+
+/// Get bonds and unbonds with all details (slashes and rewards, if any)
+/// grouped by their bond IDs, enriched with extra information calculated from
+/// the data.
+pub async fn enriched_bonds_and_unbonds<
+    C: crate::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    current_epoch: Epoch,
+    source: &Option<Address>,
+    validator: &Option<Address>,
+) -> EnrichedBondsAndUnbondsDetails {
+    unwrap_client_response::<C, _>(
+        RPC.vp()
+            .pos()
+            .enriched_bonds_and_unbonds(
+                client,
+                current_epoch,
+                source,
+                validator,
+            )
+            .await,
+    )
 }

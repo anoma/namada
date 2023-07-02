@@ -70,7 +70,7 @@ $(patsubst %,check_%,$(wasms)): check_%:
 
 # `cargo test` one of the wasms, e.g. `make test_tx_transfer`
 $(patsubst %,test_%,$(wasms)): test_%:
-	$(cargo) test --features $* \
+	$(cargo) +$(nightly) test --features $* \
 		-- \
 		-Z unstable-options --report-time
 

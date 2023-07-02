@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -27,7 +27,7 @@ use crate::config::genesis::genesis_config::{
     self, GenesisConfig, HexString, ValidatorPreGenesisConfig,
 };
 use crate::config::global::GlobalConfig;
-use crate::config::{self, Config, TendermintMode};
+use crate::config::{self, get_default_namada_folder, Config, TendermintMode};
 use crate::facade::tendermint::node::Id as TendermintNodeId;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::node::ledger::tendermint_node;
@@ -233,11 +233,7 @@ pub async fn join_network(
             let base_dir = base_dir.clone();
             let chain_id = chain_id.clone();
             tokio::task::spawn_blocking(move || {
-                let mut config = Config::load(
-                    &base_dir,
-                    &chain_id,
-                    global_args.mode.clone(),
-                );
+                let mut config = Config::load(&base_dir, &chain_id, None);
                 config.wasm_dir = wasm_dir;
                 config.write(&base_dir, &chain_id, true).unwrap();
             })
@@ -290,7 +286,7 @@ pub async fn join_network(
             })
             .clone();
 
-        let tm_home_dir = chain_dir.join("tendermint");
+        let tm_home_dir = chain_dir.join("cometbft");
 
         // Write consensus key to tendermint home
         tendermint_node::write_validator_key(
@@ -323,27 +319,20 @@ pub async fn join_network(
         let chain_id = chain_id.clone();
         tokio::task::spawn_blocking(move || {
             let mut config = Config::load(&base_dir, &chain_id, None);
+            config.ledger.shell.tendermint_mode = TendermintMode::Validator;
 
-            config.ledger.tendermint.tendermint_mode =
-                TendermintMode::Validator;
-            // Validator node should turned off peer exchange reactor
-            config.ledger.tendermint.p2p_pex = false;
             // Remove self from persistent peers
-            config
-                .ledger
-                .tendermint
-                .p2p_persistent_peers
-                .retain(|peer| {
-                    if let TendermintAddress::Tcp {
-                        peer_id: Some(peer_id),
-                        ..
-                    } = peer
-                    {
-                        node_id != *peer_id
-                    } else {
-                        true
-                    }
-                });
+            config.ledger.cometbft.p2p.persistent_peers.retain(|peer| {
+                if let TendermintAddress::Tcp {
+                    peer_id: Some(peer_id),
+                    ..
+                } = peer
+                {
+                    node_id != *peer_id
+                } else {
+                    true
+                }
+            });
             config.write(&base_dir, &chain_id, true).unwrap();
         })
         .await
@@ -456,7 +445,7 @@ pub fn init_network(
         let validator_dir = accounts_dir.join(name);
 
         let chain_dir = validator_dir.join(&accounts_temp_dir);
-        let tm_home_dir = chain_dir.join("tendermint");
+        let tm_home_dir = chain_dir.join("cometbft");
 
         // Find or generate tendermint node key
         let node_pk = try_parse_public_key(
@@ -507,7 +496,8 @@ pub fn init_network(
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let (_alias, keypair) = wallet
                 .gen_key(SchemeType::Ed25519, Some(alias), true, password, None)
-                .expect("Key generation should not fail.");
+                .expect("Key generation should not fail.")
+                .expect("No existing alias expected.");
 
             // Write consensus key for Tendermint
             tendermint_node::write_validator_key(&tm_home_dir, &keypair);
@@ -526,7 +516,8 @@ pub fn init_network(
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let (_alias, keypair) = wallet
                 .gen_key(SchemeType::Ed25519, Some(alias), true, password, None)
-                .expect("Key generation should not fail.");
+                .expect("Key generation should not fail.")
+                .expect("No existing alias expected.");
             keypair.ref_to()
         });
 
@@ -541,7 +532,8 @@ pub fn init_network(
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let (_alias, keypair) = wallet
                 .gen_key(SchemeType::Ed25519, Some(alias), true, password, None)
-                .expect("Key generation should not fail.");
+                .expect("Key generation should not fail.")
+                .expect("No existing alias expected.");
             keypair.ref_to()
         });
 
@@ -632,7 +624,8 @@ pub fn init_network(
                         password,
                         None,
                     )
-                    .expect("Key generation should not fail.");
+                    .expect("Key generation should not fail.")
+                    .expect("No existing alias expected.");
                 let public_key =
                     genesis_config::HexString(keypair.ref_to().to_string());
                 config.public_key = Some(public_key);
@@ -740,7 +733,7 @@ pub fn init_network(
             // directories.
             config.ledger.shell.base_dir = config::DEFAULT_BASE_DIR.into();
             // Add a ledger P2P persistent peers
-            config.ledger.tendermint.p2p_persistent_peers = persistent_peers
+            config.ledger.cometbft.p2p.persistent_peers = persistent_peers
                     .iter()
                     .enumerate()
                     .filter_map(|(index, peer)|
@@ -751,37 +744,39 @@ pub fn init_network(
                             None
                         })
                     .collect();
-            config.ledger.tendermint.consensus_timeout_commit =
+
+            config.ledger.cometbft.consensus.timeout_commit =
                 consensus_timeout_commit;
-            config.ledger.tendermint.p2p_allow_duplicate_ip =
-                allow_duplicate_ip;
-            config.ledger.tendermint.p2p_addr_book_strict = !localhost;
+            config.ledger.cometbft.p2p.allow_duplicate_ip = allow_duplicate_ip;
+            config.ledger.cometbft.p2p.addr_book_strict = !localhost;
             // Clear the net address from the config and use it to set ports
             let net_address = validator_config.net_address.take().unwrap();
+            let ip = SocketAddr::from_str(&net_address).unwrap().ip();
             let first_port = SocketAddr::from_str(&net_address).unwrap().port();
             if !localhost {
-                config
-                    .ledger
-                    .tendermint
-                    .p2p_address
-                    .set_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
+                config.ledger.cometbft.p2p.laddr = TendermintAddress::from_str(
+                    &format!("0.0.0.0:{}", first_port),
+                )
+                .unwrap();
             }
-            config.ledger.tendermint.p2p_address.set_port(first_port);
+            config.ledger.cometbft.p2p.laddr =
+                TendermintAddress::from_str(&format!("{}:{}", ip, first_port))
+                    .unwrap();
             if !localhost {
-                config
-                    .ledger
-                    .tendermint
-                    .rpc_address
-                    .set_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
+                config.ledger.cometbft.rpc.laddr = TendermintAddress::from_str(
+                    &format!("0.0.0.0:{}", first_port + 1),
+                )
+                .unwrap();
             }
-            config
-                .ledger
-                .tendermint
-                .rpc_address
-                .set_port(first_port + 1);
-            config.ledger.shell.ledger_address.set_port(first_port + 2);
-            // Validator node should turned off peer exchange reactor
-            config.ledger.tendermint.p2p_pex = false;
+            config.ledger.cometbft.rpc.laddr = TendermintAddress::from_str(
+                &format!("{}:{}", ip, first_port + 1),
+            )
+            .unwrap();
+
+            config.ledger.cometbft.proxy_app = TendermintAddress::from_str(
+                &format!("{}:{}", ip, first_port + 2),
+            )
+            .unwrap();
 
             config.write(&validator_dir, &chain_id, true).unwrap();
         },
@@ -789,19 +784,15 @@ pub fn init_network(
 
     // Update the ledger config persistent peers and save it
     let mut config = Config::load(&global_args.base_dir, &chain_id, None);
-    config.ledger.tendermint.p2p_persistent_peers = persistent_peers;
-    config.ledger.tendermint.consensus_timeout_commit =
-        consensus_timeout_commit;
-    config.ledger.tendermint.p2p_allow_duplicate_ip = allow_duplicate_ip;
+    config.ledger.cometbft.p2p.persistent_peers = persistent_peers;
+    config.ledger.cometbft.consensus.timeout_commit = consensus_timeout_commit;
+    config.ledger.cometbft.p2p.allow_duplicate_ip = allow_duplicate_ip;
     // Open P2P address
     if !localhost {
-        config
-            .ledger
-            .tendermint
-            .p2p_address
-            .set_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
+        config.ledger.cometbft.p2p.laddr =
+            TendermintAddress::from_str("0.0.0.0:26656").unwrap();
     }
-    config.ledger.tendermint.p2p_addr_book_strict = !localhost;
+    config.ledger.cometbft.p2p.addr_book_strict = !localhost;
     config.ledger.genesis_time = genesis.genesis_time.into();
     config
         .write(&global_args.base_dir, &chain_id, true)
@@ -888,7 +879,8 @@ fn init_established_account(
                 password,
                 None, // do not use mnemonic code / HD derivation path
             )
-            .expect("Key generation should not fail.");
+            .expect("Key generation should not fail.")
+            .expect("No existing alias expected.");
         let public_key =
             genesis_config::HexString(keypair.ref_to().to_string());
         config.public_key = Some(public_key);
@@ -904,6 +896,18 @@ pub fn pk_to_tm_address(
 ) {
     let tm_addr = tm_consensus_key_raw_hash(&public_key);
     println!("{tm_addr}");
+}
+
+pub fn default_base_dir(
+    _global_args: args::Global,
+    _args: args::DefaultBaseDir,
+) {
+    println!(
+        "{}",
+        get_default_namada_folder().to_str().expect(
+            "expected a default namada folder to be possible to determine"
+        )
+    );
 }
 
 /// Initialize genesis validator's address, consensus key and validator account

@@ -1,8 +1,13 @@
 package = namada
 
+# Some env vars defaults if not specified
+NAMADA_E2E_USE_PREBUILT_BINARIES ?= true
+NAMADA_E2E_DEBUG ?= true
+RUST_BACKTRACE ?= 1
+
 cargo := $(env) cargo
 rustup := $(env) rustup
-debug-env := RUST_BACKTRACE=1 RUST_LOG=$(package)=debug
+debug-env := RUST_BACKTRACE=$(RUST_BACKTRACE) RUST_LOG=$(package)=debug
 debug-cargo := $(env) $(debug-env) cargo
 # Nightly build is currently used for rustfmt and clippy.
 nightly := $(shell cat rust-nightly-version)
@@ -16,11 +21,24 @@ wasm_templates := wasm/tx_template wasm/vp_template
 # TODO upgrade libp2p
 audit-ignores += RUSTSEC-2021-0076
 
+# Workspace crates
+crates := namada_core
+crates += namada
+crates += namada_apps
+crates += namada_encoding_spec
+crates += namada_macros
+crates += namada_proof_of_stake
+crates += namada_test_utils
+crates += namada_tests
+crates += namada_tx_prelude
+crates += namada_vm_env
+crates += namada_vp_prelude
+
 build:
 	$(cargo) build
 
 build-test:
-	$(cargo) +$(nightly) build --tests -Z unstable-options
+	$(cargo) build --tests
 
 build-release:
 	NAMADA_DEV=false $(cargo) build --release --package namada_apps --manifest-path Cargo.toml
@@ -44,6 +62,10 @@ check:
 check-mainnet:
 	$(cargo) check --workspace --features "mainnet"
 
+# Check that every crate can be built with default features
+check-crates:
+	$(foreach p,$(crates), echo "Checking $(p)"; cargo +$(nightly) check -Z unstable-options --tests -p $(p) && ) true
+
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 
 clippy:
@@ -58,11 +80,14 @@ clippy-mainnet:
 clippy-fix:
 	$(cargo) +$(nightly) clippy --fix -Z unstable-options --all-targets --allow-dirty --allow-staged
 
-install: tendermint
-	NAMADA_DEV=false $(cargo) install --path ./apps --locked
-
 tendermint:
 	./scripts/get_tendermint.sh
+
+install: cometbft
+	NAMADA_DEV=false $(cargo) install --path ./apps --locked
+
+cometbft:
+	./scripts/get_cometbft.sh
 
 run-ledger:
 	# runs the node
@@ -81,13 +106,10 @@ audit:
 
 test: test-unit test-e2e test-wasm
 
-# NOTE: `unstable-options` are used twice for all unit tests - 1st to compile 
-# with allowing to use unstable features in test, 2nd to run with `report-time`
 test-unit-coverage:
 	$(cargo) +$(nightly) llvm-cov --output-dir target \
 		--features namada/testing \
 		--html \
-		-Z unstable-options \
 		-- --skip e2e -Z unstable-options --report-time
 
 # NOTE: `TEST_FILTER` is prepended with `e2e::`. Since filters in `cargo test`
@@ -95,24 +117,18 @@ test-unit-coverage:
 # that directly follows `e2e::`, e.g. `TEST_FILTER=multitoken_tests` would run
 # all tests that start with `e2e::multitoken_tests`.
 test-e2e:
-ifdef NAMADA_E2E_NO_PREBUILT_BINARIES
-	RUST_BACKTRACE=1 $(cargo) +$(nightly) test e2e::$(TEST_FILTER) \
+	NAMADA_E2E_USE_PREBUILT_BINARIES=$(NAMADA_E2E_USE_PREBUILT_BINARIES) \
+	NAMADA_E2E_DEBUG=$(NAMADA_E2E_DEBUG) \
+	RUST_BACKTRACE=$(RUST_BACKTRACE) \
+	$(cargo) +$(nightly) test e2e::$(TEST_FILTER) \
 	-Z unstable-options \
 	-- \
 	--test-threads=1 \
 	-Z unstable-options --report-time
-else
-	NAMADA_E2E_USE_PREBUILT_BINARIES=true RUST_BACKTRACE=1 $(cargo) +$(nightly) test e2e::$(TEST_FILTER) \
-	-Z unstable-options \
-	-- \
-	--test-threads=1 \
-	-Z unstable-options --report-time
-endif
 
 test-unit:
 	$(cargo) +$(nightly) test \
 		$(TEST_FILTER) \
-		-Z unstable-options \
 		-- --skip e2e \
 		-Z unstable-options --report-time
 
@@ -120,14 +136,12 @@ test-unit-mainnet:
 	$(cargo) +$(nightly) test \
 		--features "mainnet" \
 		$(TEST_FILTER) \
-		-Z unstable-options \
 		-- --skip e2e \
 		-Z unstable-options --report-time
 
 test-unit-debug:
 	$(debug-cargo) +$(nightly) test \
 		$(TEST_FILTER) -- \
-		-Z unstable-options \
 		-- --skip e2e \
 		--nocapture \
 		-Z unstable-options --report-time
@@ -135,7 +149,7 @@ test-unit-debug:
 test-wasm:
 	make -C $(wasms) test
 
-test-wasm-template = $(cargo) test \
+test-wasm-template = $(cargo) +$(nightly) test \
 	--manifest-path $(wasm)/Cargo.toml \
 		-- \
 		-Z unstable-options --report-time
@@ -143,8 +157,7 @@ test-wasm-templates:
 	$(foreach wasm,$(wasm_templates),$(test-wasm-template) && ) true
 
 test-debug:
-	$(debug-cargo) test \
-		-Z unstable-options \
+	$(debug-cargo) +$(nightly) test \
 		-- \
 		--nocapture \
 		-Z unstable-options --report-time

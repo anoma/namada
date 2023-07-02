@@ -27,11 +27,15 @@ use namada_apps::client::tx::CLIShieldedUtils;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
+use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
+use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_test_utils::TestWasms;
 use serde_json::json;
 use setup::constants::*;
 
-use super::helpers::{get_height, is_debug_mode, wait_for_block_height};
+use super::helpers::{
+    get_height, is_debug_mode, wait_for_block_height, wait_for_wasm_pre_compile,
+};
 use super::setup::get_all_wasms_hashes;
 use crate::e2e::helpers::{
     epoch_sleep, find_address, find_bonded_stake, get_actor_rpc, get_epoch,
@@ -94,8 +98,13 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     non_validator.exp_string("Namada ledger node started")?;
     non_validator.exp_string("This node is not a validator")?;
 
+    wait_for_wasm_pre_compile(&mut validator_0)?;
     let bg_validator_0 = validator_0.background();
+
+    wait_for_wasm_pre_compile(&mut validator_1)?;
     let bg_validator_1 = validator_1.background();
+
+    wait_for_wasm_pre_compile(&mut non_validator)?;
     let _bg_non_validator = non_validator.background();
 
     // 2. Cross over epoch to check for consensus with multiple nodes
@@ -180,7 +189,7 @@ fn test_namada_shuts_down_if_tendermint_dies() -> Result<()> {
     // 2. Kill the tendermint node
     sleep(1);
     Command::new("pkill")
-        .args(["tendermint"])
+        .args(["cometbft"])
         .spawn()
         .expect("Test failed")
         .wait()
@@ -223,7 +232,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 
     // 2. Shut it down
     let mut ledger = bg_ledger.foreground();
-    ledger.send_control('c')?;
+    ledger.interrupt()?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
     ledger.exp_string("Namada ledger node has shut down.")?;
@@ -240,7 +249,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     ledger.exp_string("Last state root hash:")?;
 
     // 4. Shut it down
-    ledger.send_control('c')?;
+    ledger.interrupt()?;
     // Wait for it to stop
     ledger.exp_eof()?;
     drop(ledger);
@@ -304,7 +313,7 @@ fn suspend_ledger() -> Result<()> {
 
     // 3. Shut it down
     let mut ledger = bg_ledger.foreground();
-    ledger.send_control('c')?;
+    ledger.interrupt()?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
     ledger.exp_string("Namada ledger node has shut down.")?;
@@ -354,8 +363,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
     let _bg_ledger = ledger.background();
 
     // for a custom tx
@@ -607,8 +615,7 @@ fn masp_txs_and_queries() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
 
     let _bg_ledger = ledger.background();
 
@@ -862,8 +869,7 @@ fn masp_pinned_txs() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
 
     let _bg_ledger = ledger.background();
 
@@ -1026,8 +1032,7 @@ fn masp_incentives() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
 
     let _bg_ledger = ledger.background();
 
@@ -1726,8 +1731,7 @@ fn invalid_transactions() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
 
     let bg_ledger = ledger.background();
 
@@ -1771,7 +1775,7 @@ fn invalid_transactions() -> Result<()> {
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
 
     // 3. Shut it down
-    ledger.send_control('c')?;
+    ledger.interrupt()?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
     ledger.exp_string("Namada ledger node has shut down.")?;
@@ -1786,6 +1790,8 @@ fn invalid_transactions() -> Result<()> {
 
     // There should be previous state now
     ledger.exp_string("Last state root hash:")?;
+    // Wait for a block by which time the RPC should be ready
+    ledger.exp_string("Committed block hash")?;
     let _bg_ledger = ledger.background();
 
     // 5. Submit an invalid transactions (invalid token address)
@@ -1867,8 +1873,7 @@ fn pos_bonds() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -2068,8 +2073,11 @@ fn pos_rewards() -> Result<()> {
     validator_2.exp_string("Namada ledger node started")?;
     validator_2.exp_string("This node is a validator")?;
 
+    wait_for_wasm_pre_compile(&mut validator_0)?;
     let bg_validator_0 = validator_0.background();
+    wait_for_wasm_pre_compile(&mut validator_1)?;
     let bg_validator_1 = validator_1.background();
+    wait_for_wasm_pre_compile(&mut validator_2)?;
     let bg_validator_2 = validator_2.background();
 
     let validator_zero_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -2216,8 +2224,7 @@ fn test_bond_queries() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -2342,8 +2349,15 @@ All unbonds total withdrawable: 412\r",
 #[test]
 fn pos_init_validator() -> Result<()> {
     let pipeline_len = 1;
+    let validator_stake = 200000_u64;
     let test = setup::network(
         |genesis| {
+            assert_eq!(
+                genesis.validator.get("validator-0").unwrap().tokens,
+                Some(validator_stake),
+                "Assuming this stake, we give the same amount to the new \
+                 validator to have half of voting power",
+            );
             let parameters = ParametersConfig {
                 min_num_of_blocks: 4,
                 epochs_per_year: 31_536_000,
@@ -2364,17 +2378,28 @@ fn pos_init_validator() -> Result<()> {
         None,
     )?;
 
-    // 1. Run the ledger node
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+    // 1. Run a validator and non-validator ledger node
+    let args = ["ledger"];
+    let mut validator_0 =
+        run_as!(test, Who::Validator(0), Bin::Node, args, Some(60))?;
+    let mut non_validator =
+        run_as!(test, Who::NonValidator, Bin::Node, args, Some(60))?;
+
+    wait_for_wasm_pre_compile(&mut validator_0)?;
+    // let _bg_ledger = validator_0.background();
+
+    wait_for_wasm_pre_compile(&mut non_validator)?;
+    // let _bg_ledger = non_validator.background();
 
     // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
-    let _bg_ledger = ledger.background();
+    validator_0.exp_string("Committed block hash")?;
+    let _bg_validator_0 = validator_0.background();
+    non_validator.exp_string("Committed block hash")?;
+    let bg_non_validator = non_validator.background();
 
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let non_validator_rpc = get_actor_rpc(&test, &Who::NonValidator);
 
-    // 2. Initialize a new validator account
+    // 2. Initialize a new validator account with the non-validator node
     let new_validator = "new-validator";
     let new_validator_key = format!("{}-key", new_validator);
     let tx_args = vec![
@@ -2395,7 +2420,7 @@ fn pos_init_validator() -> Result<()> {
         "--max-commission-rate-change",
         "0.01",
         "--node",
-        &validator_one_rpc,
+        &non_validator_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
@@ -2420,12 +2445,14 @@ fn pos_init_validator() -> Result<()> {
         "--gas-token",
         NAM,
         "--node",
-        &validator_one_rpc,
+        &non_validator_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
     //     Then self-bond the tokens:
+    let delegation = 5_u64;
+    let delegation_str = &delegation.to_string();
     let tx_args = vec![
         "bond",
         "--validator",
@@ -2433,7 +2460,7 @@ fn pos_init_validator() -> Result<()> {
         "--source",
         BERTHA,
         "--amount",
-        "1000.5",
+        delegation_str,
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -2441,13 +2468,14 @@ fn pos_init_validator() -> Result<()> {
         "--gas-token",
         NAM,
         "--node",
-        &validator_one_rpc,
+        &non_validator_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // 4. Transfer some NAM to the new validator
+    let validator_stake_str = &validator_stake.to_string();
     let tx_args = vec![
         "transfer",
         "--source",
@@ -2457,7 +2485,7 @@ fn pos_init_validator() -> Result<()> {
         "--token",
         NAM,
         "--amount",
-        "10999.5",
+        validator_stake_str,
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -2465,7 +2493,7 @@ fn pos_init_validator() -> Result<()> {
         "--gas-token",
         NAM,
         "--node",
-        &validator_one_rpc,
+        &non_validator_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
@@ -2477,7 +2505,7 @@ fn pos_init_validator() -> Result<()> {
         "--validator",
         new_validator,
         "--amount",
-        "10000",
+        validator_stake_str,
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -2485,15 +2513,38 @@ fn pos_init_validator() -> Result<()> {
         "--gas-token",
         NAM,
         "--node",
-        &validator_one_rpc,
+        &non_validator_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
+    // Stop the non-validator node and run it as the new validator
+    let mut non_validator = bg_non_validator.foreground();
+    non_validator.interrupt()?;
+
+    // it takes a bit before the node is shutdown. We dont want flasky test.
+    sleep(6);
+
+    let loc = format!("{}:{}", std::file!(), std::line!());
+    let validator_1_base_dir = test.get_base_dir(&Who::NonValidator);
+    let mut validator_1 = setup::run_cmd(
+        Bin::Node,
+        args,
+        Some(60),
+        &test.working_dir,
+        validator_1_base_dir,
+        loc,
+    )?;
+
+    validator_1.exp_string("Namada ledger node started")?;
+    validator_1.exp_string("This node is a validator")?;
+    validator_1.exp_string("Committed block hash")?;
+    let _bg_validator_1 = validator_1.background();
+
     // 6. Wait for the pipeline epoch when the validator's bonded stake should
     // be non-zero
-    let epoch = get_epoch(&test, &validator_one_rpc)?;
+    let epoch = get_epoch(&test, &non_validator_rpc)?;
     let earliest_update_epoch = epoch + pipeline_len;
     println!(
         "Current epoch: {}, earliest epoch with updated bonded stake: {}",
@@ -2505,7 +2556,7 @@ fn pos_init_validator() -> Result<()> {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!("Timed out waiting for epoch: {}", earliest_update_epoch);
         }
-        let epoch = get_epoch(&test, &validator_one_rpc)?;
+        let epoch = get_epoch(&test, &non_validator_rpc)?;
         if epoch >= earliest_update_epoch {
             break;
         }
@@ -2513,8 +2564,11 @@ fn pos_init_validator() -> Result<()> {
 
     // 7. Check the new validator's bonded stake
     let bonded_stake =
-        find_bonded_stake(&test, new_validator, &validator_one_rpc)?;
-    assert_eq!(bonded_stake, token::Amount::from_str("11_000.5").unwrap());
+        find_bonded_stake(&test, new_validator, &non_validator_rpc)?;
+    assert_eq!(
+        bonded_stake,
+        token::Amount::whole(validator_stake + delegation)
+    );
 
     Ok(())
 }
@@ -2535,8 +2589,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     let mut ledger =
         run_as!(*test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
     let bg_ledger = ledger.background();
 
     let validator_one_rpc = Arc::new(get_actor_rpc(&test, &Who::Validator(0)));
@@ -2565,7 +2618,6 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     // We collect to run the threads in parallel.
     #[allow(clippy::needless_collect)]
     let tasks: Vec<std::thread::JoinHandle<_>> = (0..4)
-        .into_iter()
         .map(|_| {
             let test = Arc::clone(&test);
             let validator_one_rpc = Arc::clone(&validator_one_rpc);
@@ -2573,7 +2625,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
             std::thread::spawn(move || {
                 let mut args = (*tx_args).clone();
                 args.push(&*validator_one_rpc);
-                let mut client = run!(*test, Bin::Client, args, Some(40))?;
+                let mut client = run!(*test, Bin::Client, args, Some(80))?;
                 client.exp_string("Transaction accepted")?;
                 client.exp_string("Transaction applied")?;
                 client.exp_string("Transaction is valid.")?;
@@ -2649,8 +2701,7 @@ fn proposal_submission() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -3004,6 +3055,7 @@ fn eth_governance_proposal() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Namada ledger node started")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -3229,6 +3281,7 @@ fn pgf_governance_proposal() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Namada ledger node started")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -3503,8 +3556,7 @@ fn proposal_offline() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -3703,7 +3755,6 @@ fn test_genesis_validators() -> Result<()> {
         Some(5),
         &working_dir,
         &test_dir,
-        "validator",
         format!("{}:{}", std::file!(), std::line!()),
     )?;
     init_genesis_validator_0.assert_success();
@@ -3745,7 +3796,6 @@ fn test_genesis_validators() -> Result<()> {
         Some(5),
         &working_dir,
         &test_dir,
-        "validator",
         format!("{}:{}", std::file!(), std::line!()),
     )?;
     init_genesis_validator_1.assert_success();
@@ -3822,7 +3872,6 @@ fn test_genesis_validators() -> Result<()> {
         Some(5),
         &working_dir,
         &test_dir,
-        "validator",
         format!("{}:{}", std::file!(), std::line!()),
     )?;
 
@@ -3841,6 +3890,7 @@ fn test_genesis_validators() -> Result<()> {
         test_dir,
         net,
         genesis,
+        async_runtime: Default::default(),
     };
 
     // Host the network archive to make it available for `join-network` commands
@@ -3904,13 +3954,31 @@ fn test_genesis_validators() -> Result<()> {
     // `join-network` use the defaults
     let update_config = |ix: u8, mut config: Config| {
         let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
-        config.ledger.tendermint.p2p_address.set_port(first_port);
-        config
-            .ledger
-            .tendermint
-            .rpc_address
-            .set_port(first_port + 1);
-        config.ledger.shell.ledger_address.set_port(first_port + 2);
+        let p2p_addr =
+            convert_tm_addr_to_socket_addr(&config.ledger.cometbft.p2p.laddr)
+                .ip()
+                .to_string();
+
+        config.ledger.cometbft.p2p.laddr = TendermintAddress::from_str(
+            &format!("{}:{}", p2p_addr, first_port),
+        )
+        .unwrap();
+        let rpc_addr =
+            convert_tm_addr_to_socket_addr(&config.ledger.cometbft.rpc.laddr)
+                .ip()
+                .to_string();
+        config.ledger.cometbft.rpc.laddr = TendermintAddress::from_str(
+            &format!("{}:{}", rpc_addr, first_port + 1),
+        )
+        .unwrap();
+        let proxy_app_addr =
+            convert_tm_addr_to_socket_addr(&config.ledger.cometbft.proxy_app)
+                .ip()
+                .to_string();
+        config.ledger.cometbft.proxy_app = TendermintAddress::from_str(
+            &format!("{}:{}", proxy_app_addr, first_port + 2),
+        )
+        .unwrap();
         config
     };
 
@@ -3955,10 +4023,9 @@ fn test_genesis_validators() -> Result<()> {
     non_validator.exp_string("Namada ledger node started")?;
     non_validator.exp_string("This node is not a validator")?;
 
-    // Wait for a first block
-    validator_0.exp_string("Committed block hash")?;
-    validator_1.exp_string("Committed block hash")?;
-    non_validator.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut validator_0)?;
+    wait_for_wasm_pre_compile(&mut validator_1)?;
+    wait_for_wasm_pre_compile(&mut non_validator)?;
 
     let bg_validator_0 = validator_0.background();
     let bg_validator_1 = validator_1.background();
@@ -4009,7 +4076,9 @@ fn test_genesis_validators() -> Result<()> {
     // Find the block height on the validator
     let after_tx_height = get_height(&test, &validator_0_rpc)?;
 
-    // Wait for the non-validator to be synced to at least the same height
+    // Wait for the second validator and non-validator to be synced to at least
+    // the same height
+    wait_for_block_height(&test, &validator_1_rpc, after_tx_height, 10)?;
     wait_for_block_height(&test, &non_validator_rpc, after_tx_height, 10)?;
 
     let query_balance_args = |ledger_rpc| {
@@ -4092,13 +4161,31 @@ fn double_signing_gets_slashed() -> Result<()> {
 
     let update_config = |ix: u8, mut config: Config| {
         let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
-        config.ledger.tendermint.p2p_address.set_port(first_port);
-        config
-            .ledger
-            .tendermint
-            .rpc_address
-            .set_port(first_port + 1);
-        config.ledger.shell.ledger_address.set_port(first_port + 2);
+        let p2p_addr =
+            convert_tm_addr_to_socket_addr(&config.ledger.cometbft.p2p.laddr)
+                .ip()
+                .to_string();
+
+        config.ledger.cometbft.p2p.laddr = TendermintAddress::from_str(
+            &format!("{}:{}", p2p_addr, first_port),
+        )
+        .unwrap();
+        let rpc_addr =
+            convert_tm_addr_to_socket_addr(&config.ledger.cometbft.rpc.laddr)
+                .ip()
+                .to_string();
+        config.ledger.cometbft.rpc.laddr = TendermintAddress::from_str(
+            &format!("{}:{}", rpc_addr, first_port + 1),
+        )
+        .unwrap();
+        let proxy_app_addr =
+            convert_tm_addr_to_socket_addr(&config.ledger.cometbft.proxy_app)
+                .ip()
+                .to_string();
+        config.ledger.cometbft.proxy_app = TendermintAddress::from_str(
+            &format!("{}:{}", proxy_app_addr, first_port + 2),
+        )
+        .unwrap();
         config
     };
 
@@ -4119,7 +4206,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     let node_sk = key::common::SecretKey::Ed25519(node_sk);
     let tm_home_dir = validator_0_base_dir_copy
         .join(test.net.chain_id.as_str())
-        .join("tendermint");
+        .join("cometbft");
     let _node_pk =
         client::utils::write_tendermint_node_key(&tm_home_dir, node_sk);
 
@@ -4133,11 +4220,11 @@ fn double_signing_gets_slashed() -> Result<()> {
         Some(40),
         &test.working_dir,
         validator_0_base_dir_copy,
-        "validator",
         loc,
     )?;
     validator_0_copy.exp_string("Namada ledger node started")?;
     validator_0_copy.exp_string("This node is a validator")?;
+    wait_for_wasm_pre_compile(&mut validator_0_copy)?;
     let _bg_validator_0_copy = validator_0_copy.background();
 
     // 5. Submit a valid token transfer tx to validator 0
@@ -4161,9 +4248,10 @@ fn double_signing_gets_slashed() -> Result<()> {
         "--node",
         &validator_one_rpc,
     ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction is valid.")?;
-    client.assert_success();
+    let _client = run!(test, Bin::Client, tx_args, Some(40))?;
+    // We don't wait for tx result - sometimes the node may crash before while
+    // it's being applied, because the slashed validator will stop voting and
+    // rewards calculation then fails with `InsufficientVotes`.
 
     // 6. Wait for double signing evidence
     let mut validator_1 = bg_validator_1.foreground();
@@ -4190,8 +4278,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    // Wait for a first block
-    ledger.exp_string("Committed block hash")?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
