@@ -404,8 +404,9 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
+        tx.set_code(Code::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.data_sechash()],
+            vec![*tx.data_sechash(), *tx.code_sechash()],
             &keypair,
         )));
         let signed_tx = tx.clone();
@@ -570,8 +571,9 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
+        tx.set_code(Code::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.data_sechash()],
+            vec![*tx.data_sechash(), *tx.code_sechash()],
             &secret_key,
         )));
         let signed_tx = tx.clone();
@@ -729,7 +731,8 @@ mod tests {
             let mut vp_env = vp_host_env::take();
             let mut tx = vp_env.tx.clone();
             tx.set_data(Data::new(vec![]));
-            tx.add_section(Section::Signature(Signature::new(vec![*tx.data_sechash()], &keypair)));
+            tx.set_code(Code::new(vec![]));
+            tx.add_section(Section::Signature(Signature::new(vec![*tx.data_sechash(), *tx.code_sechash()], &keypair)));
             let signed_tx = tx.clone();
             vp_env.tx = signed_tx.clone();
             let keys_changed: BTreeSet<storage::Key> =
@@ -809,8 +812,9 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
+        tx.set_code(Code::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.data_sechash()],
+            vec![*tx.data_sechash(), *tx.code_sechash()],
             &keypair,
         )));
         let signed_tx = tx.clone();
@@ -856,8 +860,9 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
+        tx.set_code(Code::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.data_sechash()],
+            vec![*tx.data_sechash(), *tx.code_sechash()],
             &keypair,
         )));
         let signed_tx = tx.clone();
@@ -904,8 +909,9 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
+        tx.set_code(Code::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.data_sechash()],
+            vec![*tx.data_sechash(), *tx.code_sechash()],
             &keypair,
         )));
         let signed_tx = tx.clone();
@@ -956,8 +962,9 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
+        tx.set_code(Code::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.data_sechash()],
+            vec![*tx.data_sechash(), *tx.code_sechash()],
             &keypair,
         )));
         let signed_tx = tx.clone();
@@ -985,8 +992,8 @@ mod tests {
         // for the update
         tx_env.store_wasm_code(vp_code);
 
-        // hardcoded hash of VP_ALWAYS_TRUE_WASM
-        tx_env.init_parameters(None, None, Some(vec![vp_hash.to_string()]));
+        let empty_sha256 = sha256(&[]).to_string();
+        tx_env.init_parameters(None, None, Some(vec![empty_sha256]));
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
@@ -1003,7 +1010,7 @@ mod tests {
 
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
-        tx.set_code(Code::from_hash(vp_hash));
+        tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
             vec![*tx.data_sechash(), *tx.code_sechash()],
