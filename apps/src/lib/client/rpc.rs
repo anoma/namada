@@ -1121,8 +1121,8 @@ pub async fn query_account<C: namada::ledger::queries::Client + Sync>(
 ) {
     let account = rpc::get_account_info(client, &args.owner).await;
     if let Some(account) = account {
-        println!("Account address: {}", account.address);
-        println!("Account threshold: {}", account.threshold);
+        println!("Address: {}", account.address);
+        println!("Threshold: {}", account.threshold);
         println!("Public keys:");
         for (public_key, _) in account.public_keys_map.pk_to_idx {
             println!("- {}", public_key);

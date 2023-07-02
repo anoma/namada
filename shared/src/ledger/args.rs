@@ -137,8 +137,6 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
 pub struct TxInitAccount<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
-    /// Address of the source account
-    pub source: C::Address,
     /// Path to the VP WASM code file for the new account
     pub vp_code_path: PathBuf,
     /// Path to the TX WASM code file
@@ -154,8 +152,6 @@ pub struct TxInitAccount<C: NamadaTypes = SdkTypes> {
 pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
-    /// Source
-    pub source: C::Address,
     /// Signature scheme
     pub scheme: SchemeType,
     /// Account keys

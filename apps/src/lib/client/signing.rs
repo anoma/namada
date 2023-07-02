@@ -59,7 +59,7 @@ pub async fn sign_tx<
     wallet: &mut Wallet<U>,
     tx: Tx,
     args: &args::Tx,
-    owner: &Address,
+    owner: Option<&Address>,
     default: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<TxBroadcastData, tx::Error> {

@@ -204,15 +204,21 @@ pub async fn sign_tx<
     wallet: &mut Wallet<U>,
     mut tx: Tx,
     args: &args::Tx,
-    owner: &Address,
+    owner: Option<&Address>,
     default: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<TxBroadcastData, Error> {
     let keypairs = tx_signer::<C, U>(client, wallet, args, default).await?;
-    let account = rpc::get_account_info(client, owner).await;
-
-    let (public_keys_index_map, threshold) = if let Some(account) = account {
-        (account.public_keys_map, account.threshold)
+    
+    let (public_keys_index_map, threshold) = if let Some(owner) = owner {
+        let account = rpc::get_account_info(client, owner).await;
+        let (public_keys_index_map, threshold) = if let Some(account) = account {
+            (account.public_keys_map, account.threshold)
+        } else {
+            let pks = args.signing_keys.iter().map(|sk| sk.ref_to()).collect::<Vec<common::PublicKey>>();
+            (AccountPublicKeysMap::from_iter(pks), 1u8)
+        };
+        (public_keys_index_map, threshold)
     } else {
         let pks = args.signing_keys.iter().map(|sk| sk.ref_to()).collect::<Vec<common::PublicKey>>();
         (AccountPublicKeysMap::from_iter(pks), 1u8)

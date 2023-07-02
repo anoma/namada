@@ -1155,7 +1155,7 @@ pub mod cmds {
     pub struct TxUpdateAccount(pub args::TxUpdateAccount<args::CliTypes>);
 
     impl SubCmd for TxUpdateAccount {
-        const CMD: &'static str = "update";
+        const CMD: &'static str = "update-account";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
@@ -1297,7 +1297,7 @@ pub mod cmds {
     pub struct QueryAccount(pub args::QueryAccount<args::CliTypes>);
 
     impl SubCmd for QueryAccount {
-        const CMD: &'static str = "account";
+        const CMD: &'static str = "query-account";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
@@ -2299,7 +2299,6 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> TxInitAccount<SdkTypes> {
             TxInitAccount::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                source: ctx.get(&self.source),
                 vp_code_path: self.vp_code_path.to_path_buf(),
                 tx_code_path: self.tx_code_path.to_path_buf(),
                 public_keys: self
@@ -2315,7 +2314,6 @@ pub mod args {
     impl Args for TxInitAccount<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let source = SOURCE.parse(matches);
             let vp_code_path = CODE_PATH_OPT
                 .parse(matches)
                 .unwrap_or_else(|| PathBuf::from(VP_USER_WASM));
@@ -2324,7 +2322,6 @@ pub mod args {
             let threshold = THRESOLD.parse(matches);
             Self {
                 tx,
-                source,
                 vp_code_path,
                 public_keys,
                 threshold,
@@ -2334,9 +2331,6 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(SOURCE.def().about(
-                    "The source account's address that signs the transaction.",
-                ))
                 .arg(CODE_PATH_OPT.def().about(
                     "The path to the validity predicate WASM code to be used \
                      for the new account. Uses the default user VP if none \
@@ -2358,7 +2352,6 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> TxInitValidator<SdkTypes> {
             TxInitValidator::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                source: ctx.get(&self.source),
                 scheme: self.scheme,
                 account_keys: self
                     .account_keys
@@ -2382,7 +2375,6 @@ pub mod args {
     impl Args for TxInitValidator<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let source = SOURCE.parse(matches);
             let scheme = SCHEME.parse(matches);
             let account_keys = VALIDATOR_ACCOUNT_KEYS.parse(matches);
             let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
@@ -2398,7 +2390,6 @@ pub mod args {
             let threshold = THRESOLD.parse(matches);
             Self {
                 tx,
-                source,
                 scheme,
                 account_keys,
                 threshold,
@@ -2414,9 +2405,6 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(SOURCE.def().about(
-                    "The source account's address that signs the transaction.",
-                ))
                 .arg(SCHEME.def().about(
                     "The key scheme/type used for the validator keys. \
                      Currently supports ed25519 and secp256k1.",
