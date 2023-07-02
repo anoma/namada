@@ -2299,8 +2299,8 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> TxInitAccount<SdkTypes> {
             TxInitAccount::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                vp_code_path: self.vp_code_path.to_path_buf(),
-                tx_code_path: self.tx_code_path.to_path_buf(),
+                vp_code_path: self.vp_code_path,
+                tx_code_path: self.tx_code_path,
                 public_keys: self
                     .public_keys
                     .iter()

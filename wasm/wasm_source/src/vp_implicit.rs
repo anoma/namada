@@ -235,8 +235,7 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(addr.clone(), tx_env, |_address| {
             // Apply reveal_pk in a transaction
-            tx_host_env::key::reveal_pk(&mut tx::ctx(), &public_key).unwrap();;
-
+            tx_host_env::key::reveal_pk(&mut tx::ctx(), &public_key).unwrap();
         });
 
         let vp_env = vp_host_env::take();
@@ -299,7 +298,12 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(addr.clone(), tx_env, |_address| {
             // Do the same as reveal_pk, but with the wrong key
-            let _ = storage_api::account::set_public_key_at(tx_host_env::ctx(), &addr, &mismatched_pk, 0);
+            let _ = storage_api::account::set_public_key_at(
+                tx_host_env::ctx(),
+                &addr,
+                &mismatched_pk,
+                0,
+            );
         });
 
         let vp_env = vp_host_env::take();
@@ -391,12 +395,7 @@ mod tests {
         // Initialize a tx environment
         let mut tx_env = tx_host_env::take();
 
-        tx_env.init_parameters(
-            None,
-            Some(vec![]),
-            Some(vec![]),
-            None
-        );
+        tx_env.init_parameters(None, Some(vec![]), Some(vec![]), None);
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -438,8 +437,8 @@ mod tests {
         );
     }
 
-    // /// Test that a PoS action that must be authorized is accepted with a valid
-    // /// signature.
+    // /// Test that a PoS action that must be authorized is accepted with a
+    // valid /// signature.
     // #[test]
     // fn test_signed_pos_action_accepted() {
     //     // Init PoS genesis
@@ -475,11 +474,12 @@ mod tests {
     //     // Spawn the accounts to be able to modify their storage
     //     tx_env.spawn_accounts([&target, &token]);
 
-    //     // Credit the tokens to the VP owner before running the transaction to
-    //     // be able to transfer from it
+    //     // Credit the tokens to the VP owner before running the transaction
+    // to     // be able to transfer from it
     //     tx_env.credit_tokens(&vp_owner, &token, None, amount);
 
-    //     let _ = storage_api::account::set_public_key_at(tx_host_env::ctx(), &vp_owner, &public_key, 0);
+    //     let _ = storage_api::account::set_public_key_at(tx_host_env::ctx(),
+    // &vp_owner, &public_key, 0);
 
     //     // Initialize VP environment from a transaction
     //     vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
@@ -526,8 +526,8 @@ mod tests {
     //     // Spawn the accounts to be able to modify their storage
     //     tx_env.spawn_accounts([&vp_owner, &target, &token]);
 
-    //     // Credit the tokens to the VP owner before running the transaction to
-    //     // be able to transfer from it
+    //     // Credit the tokens to the VP owner before running the transaction
+    // to     // be able to transfer from it
     //     tx_env.credit_tokens(&vp_owner, &token, None, amount);
 
     //     // Initialize VP environment from a transaction
@@ -576,11 +576,12 @@ mod tests {
     //     // Spawn the accounts to be able to modify their storage
     //     tx_env.spawn_accounts([&vp_owner, &target, &token]);
 
-    //     // Credit the tokens to the VP owner before running the transaction to
-    //     // be able to transfer from it
+    //     // Credit the tokens to the VP owner before running the transaction
+    // to     // be able to transfer from it
     //     tx_env.credit_tokens(&vp_owner, &token, None, amount);
 
-    //     let _ = storage_api::account::set_public_key_at(tx_host_env::ctx(), &vp_owner, &public_key, 0);
+    //     let _ = storage_api::account::set_public_key_at(tx_host_env::ctx(),
+    // &vp_owner, &public_key, 0);
 
     //     // Initialize VP environment from a transaction
     //     vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -634,8 +635,8 @@ mod tests {
     //     // Spawn the accounts to be able to modify their storage
     //     tx_env.spawn_accounts([&vp_owner, &source, &target, &token]);
 
-    //     // Credit the tokens to the VP owner before running the transaction to
-    //     // be able to transfer from it
+    //     // Credit the tokens to the VP owner before running the transaction
+    // to     // be able to transfer from it
     //     tx_env.credit_tokens(&source, &token, None, amount);
 
     //     // Initialize VP environment from a transaction
@@ -686,14 +687,14 @@ mod tests {
     // }
 
     // proptest! {
-    //     /// Test that an unsigned tx that performs arbitrary storage writes or
-    //     /// deletes to  the account is rejected.
+    //     /// Test that an unsigned tx that performs arbitrary storage writes
+    // or     /// deletes to  the account is rejected.
     //     #[test]
     //     fn test_unsigned_arb_storage_write_rejected(
-    //         (_sk, vp_owner, storage_key) in arb_account_storage_subspace_key(),
-    //         // Generate bytes to write. If `None`, delete from the key instead
-    //         storage_value in any::<Option<Vec<u8>>>(),
-    //     ) {
+    //         (_sk, vp_owner, storage_key) in
+    // arb_account_storage_subspace_key(),         // Generate bytes to
+    // write. If `None`, delete from the key instead         storage_value
+    // in any::<Option<Vec<u8>>>(),     ) {
     //         // Initialize a tx environment
     //         let mut tx_env = TestTxEnv::default();
 
@@ -719,8 +720,8 @@ mod tests {
     //             vp_env.all_touched_storage_keys();
     //         let verifiers: BTreeSet<Address> = BTreeSet::default();
     //         vp_host_env::set(vp_env);
-    //         assert!(!validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers).unwrap());
-    //     }
+    //         assert!(!validate_tx(&CTX, tx_data, vp_owner, keys_changed,
+    // verifiers).unwrap());     }
     // }
 
     // proptest! {
@@ -728,10 +729,10 @@ mod tests {
     //     /// deletes to the account is accepted.
     //     #[test]
     //     fn test_signed_arb_storage_write(
-    //         (secret_key, vp_owner, storage_key) in arb_account_storage_subspace_key(),
-    //         // Generate bytes to write. If `None`, delete from the key instead
-    //         storage_value in any::<Option<Vec<u8>>>(),
-    //     ) {
+    //         (secret_key, vp_owner, storage_key) in
+    // arb_account_storage_subspace_key(),         // Generate bytes to
+    // write. If `None`, delete from the key instead         storage_value
+    // in any::<Option<Vec<u8>>>(),     ) {
     //         // Initialize a tx environment
     //         let mut tx_env = TestTxEnv::default();
 
@@ -741,7 +742,9 @@ mod tests {
     //         tx_env.spawn_accounts(storage_key_addresses);
 
     //         let public_key = secret_key.ref_to();
-    //         let _ = storage_api::account::set_public_key_at(tx_host_env::ctx(), &vp_owner, &public_key, 0);
+    //         let _ =
+    // storage_api::account::set_public_key_at(tx_host_env::ctx(), &vp_owner,
+    // &public_key, 0);
 
     //         // Initialize VP environment from a transaction
     //         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
@@ -755,15 +758,15 @@ mod tests {
 
     //         let mut vp_env = vp_host_env::take();
     //         let mut tx = vp_env.tx.clone();
-    //         tx.add_section(Section::Signature(Signature::new(tx.data_sechash(), &secret_key)));
-    //         let signed_tx = tx.clone();
+    //         tx.add_section(Section::Signature(Signature::new(tx.
+    // data_sechash(), &secret_key)));         let signed_tx = tx.clone();
     //         vp_env.tx = signed_tx.clone();
     //         let keys_changed: BTreeSet<storage::Key> =
     //         vp_env.all_touched_storage_keys();
     //         let verifiers: BTreeSet<Address> = BTreeSet::default();
     //         vp_host_env::set(vp_env);
-    //         assert!(validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers).unwrap());
-    //     }
+    //         assert!(validate_tx(&CTX, signed_tx, vp_owner, keys_changed,
+    // verifiers).unwrap());     }
     // }
 
     // /// Test that a validity predicate update without a valid signature is
@@ -829,7 +832,8 @@ mod tests {
     //     // Spawn the accounts to be able to modify their storage
     //     tx_env.spawn_accounts([&vp_owner]);
 
-    //     let _ = storage_api::account::set_public_key_at(tx_host_env::ctx(), &vp_owner, &public_key, 0);
+    //     let _ = storage_api::account::set_public_key_at(tx_host_env::ctx(),
+    // &vp_owner, &public_key, 0);
 
     //     // Initialize VP environment from a transaction
     //     vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -872,12 +876,14 @@ mod tests {
     //     tx_env.store_wasm_code(vp_code);
 
     //     // hardcoded hash of VP_ALWAYS_TRUE_WASM
-    //     tx_env.init_parameters(None, None, Some(vec![vp_hash.to_string()]), None);
+    //     tx_env.init_parameters(None, None, Some(vec![vp_hash.to_string()]),
+    // None);
 
     //     // Spawn the accounts to be able to modify their storage
     //     tx_env.spawn_accounts([&vp_owner]);
 
-    //     let _ = storage_api::account::set_public_key_at(tx_host_env::ctx(), &vp_owner, &public_key, 0);
+    //     let _ = storage_api::account::set_public_key_at(tx_host_env::ctx(),
+    // &vp_owner, &public_key, 0);
 
     //     // Initialize VP environment from a transaction
     //     vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {

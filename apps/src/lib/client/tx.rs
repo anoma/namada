@@ -60,7 +60,9 @@ pub async fn submit_custom<C: namada::ledger::queries::Client + Sync>(
     tx::submit_custom::<C, _>(client, &mut ctx.wallet, args).await
 }
 
-pub async fn submit_update_vp<C: namada::ledger::queries::Client + Sync>(
+pub async fn submit_update_account<
+    C: namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     ctx: &mut Context,
     mut args: args::TxUpdateAccount,
@@ -69,7 +71,7 @@ pub async fn submit_update_vp<C: namada::ledger::queries::Client + Sync>(
         .tx
         .chain_id
         .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
-    tx::submit_update_vp::<C, _>(client, &mut ctx.wallet, args).await
+    tx::submit_update_account::<C, _>(client, &mut ctx.wallet, args).await
 }
 
 pub async fn submit_init_account<C: namada::ledger::queries::Client + Sync>(
@@ -717,9 +719,13 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
 
         let proposal: OfflineProposal =
             serde_json::from_reader(file).expect("JSON was not well-formatted");
-        let public_key = namada::ledger::rpc::get_public_key_at(client, &proposal.address, 0)
-            .await
-            .expect("Public key should exist.");
+        let public_key = namada::ledger::rpc::get_public_key_at(
+            client,
+            &proposal.address,
+            0,
+        )
+        .await
+        .expect("Public key should exist.");
         if !proposal.check_signature(&public_key) {
             eprintln!("Proposal signature mismatch!");
             safe_exit(1)

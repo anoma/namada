@@ -46,7 +46,7 @@ use crate::types::key::*;
 use crate::types::masp::TransferTarget;
 use crate::types::storage::{Epoch, RESERVED_ADDRESS_PREFIX};
 use crate::types::time::DateTimeUtc;
-use crate::types::transaction::account::{InitAccount, UpdateVp};
+use crate::types::transaction::account::{InitAccount, UpdateAccount};
 use crate::types::transaction::{pos, TxType};
 use crate::types::{storage, token};
 use crate::vm;
@@ -1436,7 +1436,7 @@ pub async fn submit_init_account<
         query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
             .await
             .unwrap();
-        
+
     let threshold = match args.threshold {
         Some(threshold) => threshold,
         None => {
@@ -1485,7 +1485,7 @@ pub async fn submit_init_account<
 }
 
 /// Submit a transaction to update a VP
-pub async fn submit_update_vp<
+pub async fn submit_update_account<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
@@ -1569,7 +1569,7 @@ pub async fn submit_update_vp<
         None => None,
     };
 
-    let data = UpdateVp {
+    let data = UpdateAccount {
         addr,
         vp_code_hash: extra_hash,
         public_keys,

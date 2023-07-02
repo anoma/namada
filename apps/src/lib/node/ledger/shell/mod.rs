@@ -909,8 +909,8 @@ where
     //         .join(format!("{}.toml", self.chain_id.as_str()));
     //     let mut wallet = crate::wallet::load_or_new_from_genesis(
     //         wallet_path,
-    //         genesis::genesis_config::open_genesis_config(genesis_path).unwrap(),
-    //     );
+    //         genesis::genesis_config::open_genesis_config(genesis_path).
+    // unwrap(),     );
     //     self.mode.get_validator_address().map(|addr| {
     //         let sk: common::SecretKey = self
     //             .wl_storage

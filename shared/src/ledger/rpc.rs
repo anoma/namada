@@ -758,7 +758,7 @@ pub async fn get_account_info<C: crate::ledger::queries::Client + Sync>(
 pub async fn get_public_key_at<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     owner: &Address,
-    index: u8
+    index: u8,
 ) -> Option<common::PublicKey> {
     let account = unwrap_client_response::<C, Option<Account>>(
         RPC.shell().account(client, owner).await,

@@ -362,7 +362,7 @@ where
 /// Update the max signatures per transaction storage parameter
 pub fn update_max_signature_per_tx<S>(
     storage: &mut S,
-    value: u8
+    value: u8,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,

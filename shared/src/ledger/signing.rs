@@ -44,7 +44,7 @@ use crate::types::key::*;
 use crate::types::masp::{ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::Epoch;
 use crate::types::token::Transfer;
-use crate::types::transaction::account::{InitAccount, UpdateVp};
+use crate::types::transaction::account::{InitAccount, UpdateAccount};
 use crate::types::transaction::decrypted::DecryptedTx;
 use crate::types::transaction::governance::{
     InitProposalData, VoteProposalData,
@@ -78,12 +78,12 @@ pub async fn find_keypair<
                 "Looking-up public key of {} from the ledger...",
                 addr.encode()
             );
-            let public_key = rpc::get_public_key_at(client, addr, 0).await.ok_or(
-                Error::Other(format!(
+            let public_key = rpc::get_public_key_at(client, addr, 0)
+                .await
+                .ok_or(Error::Other(format!(
                     "No public key found for the address {}",
                     addr.encode()
-                )),
-            )?;
+                )))?;
             wallet.find_key_by_pk(&public_key, password).map_err(|err| {
                 Error::Other(format!(
                     "Unable to load the keypair from the wallet for public \
@@ -209,18 +209,27 @@ pub async fn sign_tx<
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<TxBroadcastData, Error> {
     let keypairs = tx_signer::<C, U>(client, wallet, args, default).await?;
-    
+
     let (public_keys_index_map, threshold) = if let Some(owner) = owner {
         let account = rpc::get_account_info(client, owner).await;
-        let (public_keys_index_map, threshold) = if let Some(account) = account {
+        let (public_keys_index_map, threshold) = if let Some(account) = account
+        {
             (account.public_keys_map, account.threshold)
         } else {
-            let pks = args.signing_keys.iter().map(|sk| sk.ref_to()).collect::<Vec<common::PublicKey>>();
+            let pks = args
+                .signing_keys
+                .iter()
+                .map(|sk| sk.ref_to())
+                .collect::<Vec<common::PublicKey>>();
             (AccountPublicKeysMap::from_iter(pks), 1u8)
         };
         (public_keys_index_map, threshold)
     } else {
-        let pks = args.signing_keys.iter().map(|sk| sk.ref_to()).collect::<Vec<common::PublicKey>>();
+        let pks = args
+            .signing_keys
+            .iter()
+            .map(|sk| sk.ref_to())
+            .collect::<Vec<common::PublicKey>>();
         (AccountPublicKeysMap::from_iter(pks), 1u8)
     };
 
@@ -581,9 +590,10 @@ pub async fn to_ledger_vector<
         .unwrap();
     let reveal_pk_hash =
         query_wasm_code_hash(client, TX_REVEAL_PK).await.unwrap();
-    let update_vp_hash = query_wasm_code_hash(client, TX_UPDATE_ACCOUNT_WASM)
-        .await
-        .unwrap();
+    let update_account_hash =
+        query_wasm_code_hash(client, TX_UPDATE_ACCOUNT_WASM)
+            .await
+            .unwrap();
     let transfer_hash = query_wasm_code_hash(client, TX_TRANSFER_WASM)
         .await
         .unwrap();
@@ -808,9 +818,9 @@ pub async fn to_ledger_vector<
 
         tv.output_expert
             .extend(vec![format!("Public key : {}", public_key)]);
-    } else if code_hash == update_vp_hash {
+    } else if code_hash == update_account_hash {
         let transfer =
-            UpdateVp::try_from_slice(&tx.data().ok_or_else(|| {
+            UpdateAccount::try_from_slice(&tx.data().ok_or_else(|| {
                 std::io::Error::from(ErrorKind::InvalidData)
             })?)?;
 

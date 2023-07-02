@@ -79,11 +79,23 @@ pub fn set_public_key_at<S>(
     storage: &mut S,
     owner: &Address,
     public_key: &common::PublicKey,
-    index: u8
+    index: u8,
 ) -> Result<()>
 where
     S: StorageWrite + StorageRead,
 {
     pks_handle(owner).insert(storage, index, public_key.clone())?;
+    Ok(())
+}
+
+/// Clear the public keys account subtorage space
+pub fn clear_public_keys<S>(storage: &mut S, owner: &Address) -> Result<()>
+where
+    S: StorageWrite + StorageRead,
+{
+    let total_pks = pks_handle(owner).len(storage)?;
+    for index in 0..total_pks as u8 {
+        pks_handle(owner).remove(storage, &index)?;
+    }
     Ok(())
 }

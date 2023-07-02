@@ -61,8 +61,10 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_update_vp::<HttpClient>(&client, &mut ctx, args)
-                        .await?;
+                    tx::submit_update_account::<HttpClient>(
+                        &client, &mut ctx, args,
+                    )
+                    .await?;
                 }
                 Sub::TxInitAccount(TxInitAccount(args)) => {
                     wait_until_node_is_synched(&args.tx.ledger_address).await;

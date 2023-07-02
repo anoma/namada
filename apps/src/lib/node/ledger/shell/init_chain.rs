@@ -235,7 +235,12 @@ where
                 .unwrap();
 
             if let Some(pk) = public_key {
-                storage_api::account::set_public_key_at(&mut self.wl_storage, &address, &pk, 0)?;
+                storage_api::account::set_public_key_at(
+                    &mut self.wl_storage,
+                    &address,
+                    &pk,
+                    0,
+                )?;
             }
 
             for (key, value) in storage {
@@ -265,7 +270,12 @@ where
         for genesis::ImplicitAccount { public_key } in genesis.implicit_accounts
         {
             let address: address::Address = (&public_key).into();
-            storage_api::account::set_public_key_at(&mut self.wl_storage, &address, &public_key, 0)?;
+            storage_api::account::set_public_key_at(
+                &mut self.wl_storage,
+                &address,
+                &public_key,
+                0,
+            )?;
         }
 
         // Initialize genesis token accounts
@@ -334,7 +344,12 @@ where
                 .write_bytes(&Key::validity_predicate(addr), vp_code_hash)
                 .expect("Unable to write user VP");
             // Validator account key
-            storage_api::account::set_public_key_at(&mut self.wl_storage, &addr, &validator.account_key, 0)?;
+            storage_api::account::set_public_key_at(
+                &mut self.wl_storage,
+                addr,
+                &validator.account_key,
+                0,
+            )?;
 
             // Balances
             // Account balance (tokens not staked in PoS)

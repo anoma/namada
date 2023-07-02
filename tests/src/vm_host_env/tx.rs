@@ -102,7 +102,7 @@ impl TestTxEnv {
         epoch_duration: Option<EpochDuration>,
         vp_whitelist: Option<Vec<String>>,
         tx_whitelist: Option<Vec<String>>,
-        max_signatures_per_transaction: Option<u8>
+        max_signatures_per_transaction: Option<u8>,
     ) {
         parameters::update_epoch_parameter(
             &mut self.wl_storage,
@@ -122,8 +122,11 @@ impl TestTxEnv {
             vp_whitelist.unwrap_or_default(),
         )
         .unwrap();
-        parameters::update_max_signature_per_tx(&mut self.wl_storage, max_signatures_per_transaction.unwrap_or(15))
-            .unwrap();
+        parameters::update_max_signature_per_tx(
+            &mut self.wl_storage,
+            max_signatures_per_transaction.unwrap_or(15),
+        )
+        .unwrap();
     }
 
     pub fn store_wasm_code(&mut self, code: Vec<u8>) {
@@ -215,9 +218,11 @@ impl TestTxEnv {
         &mut self,
         address: &Address,
         public_key: &key::common::PublicKey,
-        index: u8
+        index: u8,
     ) {
-        key::pks_handle(address).insert(&mut self.wl_storage, index, public_key.clone()).unwrap();
+        key::pks_handle(address)
+            .insert(&mut self.wl_storage, index, public_key.clone())
+            .unwrap();
     }
 
     /// Apply the tx changes to the write log.

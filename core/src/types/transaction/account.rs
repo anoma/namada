@@ -38,7 +38,7 @@ pub struct InitAccount {
     Serialize,
     Deserialize,
 )]
-pub struct UpdateVp {
+pub struct UpdateAccount {
     /// An address of the account
     pub addr: Address,
     /// The new VP code hash
