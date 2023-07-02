@@ -96,6 +96,8 @@ const PREFIX_IMPLICIT: &str = "imp";
 const PREFIX_INTERNAL: &str = "ano";
 /// Fixed-length address strings prefix for IBC addresses.
 const PREFIX_IBC: &str = "ibc";
+/// Fixed-length address strings prefix for Ethereum addresses.
+const PREFIX_ETH: &str = "eth";
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -229,6 +231,11 @@ impl Address {
                     InternalAddress::EthBridgePool => {
                         internal::ETH_BRIDGE_POOL.to_string()
                     }
+                    InternalAddress::Erc20(eth_addr) => {
+                        let eth_addr =
+                            eth_addr.to_canonical().replace("0x", "");
+                        format!("{}::{}", PREFIX_ETH, eth_addr)
+                    }
                     InternalAddress::ReplayProtection => {
                         internal::REPLAY_PROTECTION.to_string()
                     }
@@ -324,6 +331,23 @@ impl Address {
                 _ => Err(Error::new(
                     ErrorKind::InvalidData,
                     "Invalid IBC internal address",
+                )),
+            },
+            Some((PREFIX_ETH, raw)) => match string {
+                _ if raw.len() == HASH_HEX_LEN => {
+                    match EthAddress::from_str(&format!("0x{}", raw)) {
+                        Ok(eth_addr) => Ok(Address::Internal(
+                            InternalAddress::Erc20(eth_addr),
+                        )),
+                        Err(e) => Err(Error::new(
+                            ErrorKind::InvalidData,
+                            e.to_string(),
+                        )),
+                    }
+                }
+                _ => Err(Error::new(
+                    ErrorKind::InvalidData,
+                    "Invalid ERC20 internal address",
                 )),
             },
             _ => Err(Error::new(
@@ -522,6 +546,8 @@ pub enum InternalAddress {
     EthBridge,
     /// The pool of transactions to be relayed to Ethereum
     EthBridgePool,
+    /// ERC20 token for Ethereum bridge
+    Erc20(EthAddress),
     /// Replay protection contains transactions' hash
     ReplayProtection,
     /// Multitoken
@@ -543,6 +569,7 @@ impl Display for InternalAddress {
                 Self::IbcToken(hash) => format!("IbcToken: {}", hash),
                 Self::EthBridge => "EthBridge".to_string(),
                 Self::EthBridgePool => "EthBridgePool".to_string(),
+                Self::Erc20(eth_addr) => format!("Erc20: {}", eth_addr),
                 Self::ReplayProtection => "ReplayProtection".to_string(),
                 Self::Multitoken => "Multitoken".to_string(),
             }
@@ -821,6 +848,7 @@ pub mod testing {
             InternalAddress::IbcToken(_) => {}
             InternalAddress::EthBridge => {}
             InternalAddress::EthBridgePool => {}
+            InternalAddress::Erc20(_) => {}
             InternalAddress::ReplayProtection => {}
             InternalAddress::Multitoken => {} /* Add new addresses in the
                                                * `prop_oneof` below. */
@@ -835,13 +863,13 @@ pub mod testing {
             Just(InternalAddress::SlashFund),
             Just(InternalAddress::EthBridge),
             Just(InternalAddress::EthBridgePool),
+            Just(arb_erc20()),
             Just(InternalAddress::ReplayProtection),
             Just(InternalAddress::Multitoken),
         ]
     }
 
     fn arb_ibc_token() -> impl Strategy<Value = InternalAddress> {
-        // use sha2::{Digest, Sha256};
         ("[a-zA-Z0-9_]{2,128}", any::<u64>()).prop_map(|(id, counter)| {
             let mut hasher = sha2::Sha256::new();
             let s = format!(
@@ -855,5 +883,10 @@ pub mod testing {
                 format!("{:.width$x}", hasher.finalize(), width = HASH_HEX_LEN);
             InternalAddress::IbcToken(hash)
         })
+    }
+
+    fn arb_erc20() -> InternalAddress {
+        use crate::types::ethereum_events::testing::arbitrary_eth_address;
+        InternalAddress::Erc20(arbitrary_eth_address())
     }
 }

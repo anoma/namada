@@ -585,7 +585,8 @@ where
                                 replay_protection_vp.ctx.gas_meter.into_inner();
                             result
                         }
-                        InternalAddress::IbcToken(_) => {
+                        InternalAddress::IbcToken(_)
+                        | InternalAddress::Erc20(_) => {
                             // The address should be a part of a multitoken key
                             gas_meter = ctx.gas_meter.into_inner();
                             Ok(verifiers.contains(&Address::Internal(

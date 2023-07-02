@@ -440,6 +440,7 @@ mod tests {
     use crate::types::ethereum_events;
     use crate::types::ethereum_events::EthAddress;
     use crate::types::storage::TxIndex;
+    use crate::types::token::minted_balance_key;
     use crate::types::transaction::TxType;
     use crate::vm::wasm::VpCache;
     use crate::vm::WasmCacheRwAccess;
@@ -566,10 +567,9 @@ mod tests {
         {
             let keys_changed = BTreeSet::from_iter(vec![
                 arbitrary_key(),
-                wrapped_erc20s::Keys::from(
+                minted_balance_key(&wrapped_erc20s::token(
                     &ethereum_events::testing::DAI_ERC20_ETH_ADDRESS,
-                )
-                .supply(),
+                )),
             ]);
 
             let result = determine_check_type(&nam(), &keys_changed);
@@ -580,10 +580,10 @@ mod tests {
         {
             let keys_changed = BTreeSet::from_iter(vec![
                 arbitrary_key(),
-                wrapped_erc20s::Keys::from(
-                    &ethereum_events::testing::DAI_ERC20_ETH_ADDRESS,
-                )
-                .balance(
+                balance_key(
+                    &wrapped_erc20s::token(
+                        &ethereum_events::testing::DAI_ERC20_ETH_ADDRESS,
+                    ),
                     &Address::decode(ARBITRARY_OWNER_A_ADDRESS)
                         .expect("Couldn't set up test"),
                 ),
@@ -599,17 +599,17 @@ mod tests {
     fn test_rejects_if_multitoken_keys_for_different_assets() {
         {
             let keys_changed = BTreeSet::from_iter(vec![
-                wrapped_erc20s::Keys::from(
-                    &ethereum_events::testing::DAI_ERC20_ETH_ADDRESS,
-                )
-                .balance(
+                balance_key(
+                    &wrapped_erc20s::token(
+                        &ethereum_events::testing::DAI_ERC20_ETH_ADDRESS,
+                    ),
                     &Address::decode(ARBITRARY_OWNER_A_ADDRESS)
                         .expect("Couldn't set up test"),
                 ),
-                wrapped_erc20s::Keys::from(
-                    &ethereum_events::testing::USDC_ERC20_ETH_ADDRESS,
-                )
-                .balance(
+                balance_key(
+                    &wrapped_erc20s::token(
+                        &ethereum_events::testing::USDC_ERC20_ETH_ADDRESS,
+                    ),
                     &Address::decode(ARBITRARY_OWNER_B_ADDRESS)
                         .expect("Couldn't set up test"),
                 ),
@@ -626,8 +626,9 @@ mod tests {
         let asset = &ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
         {
             let keys_changed = BTreeSet::from_iter(vec![
-                wrapped_erc20s::Keys::from(asset).supply(),
-                wrapped_erc20s::Keys::from(asset).balance(
+                minted_balance_key(&wrapped_erc20s::token(asset)),
+                balance_key(
+                    &wrapped_erc20s::token(asset),
                     &Address::decode(ARBITRARY_OWNER_B_ADDRESS)
                         .expect("Couldn't set up test"),
                 ),

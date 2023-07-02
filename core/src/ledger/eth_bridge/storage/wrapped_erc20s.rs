@@ -1,68 +1,15 @@
 //! Functionality for accessing the multitoken subspace
-use std::str::FromStr;
 
 use eyre::eyre;
 
-use crate::types::address::Address;
+use crate::types::address::{Address, InternalAddress};
 use crate::types::ethereum_events::EthAddress;
-use crate::types::storage::{self, DbKeySeg, KeySeg};
+use crate::types::storage::{self, DbKeySeg};
+use crate::types::token::{balance_key, minted_balance_key, MINTED_STORAGE_KEY};
 
-#[allow(missing_docs)]
-pub const MULTITOKEN_KEY_SEGMENT: &str = "ERC20";
-
-/// Get the key prefix corresponding to the storage subspace that holds wrapped
-/// ERC20 tokens
-pub fn prefix() -> storage::Key {
-    super::prefix()
-        .push(&MULTITOKEN_KEY_SEGMENT.to_owned())
-        .expect("should always be able to construct this key")
-}
-
-const BALANCE_KEY_SEGMENT: &str = "balance";
-const SUPPLY_KEY_SEGMENT: &str = "supply";
-
-/// Generator for the keys under which details of an ERC20 token are stored
-pub struct Keys {
-    /// The prefix of keys under which the details for a specific ERC20 token
-    /// are stored
-    prefix: storage::Key,
-}
-
-impl Keys {
-    /// Get the `balance` key for a specific owner - there should be a
-    /// [`crate::types::token::Amount`] stored here
-    pub fn balance(&self, owner: &Address) -> storage::Key {
-        self.prefix
-            .push(&BALANCE_KEY_SEGMENT.to_owned())
-            .expect("should always be able to construct this key")
-            .push(&owner.to_db_key())
-            .expect("should always be able to construct this key")
-    }
-
-    /// Get the `supply` key - there should be a
-    /// [`crate::types::token::Amount`] stored here
-    pub fn supply(&self) -> storage::Key {
-        self.prefix
-            .push(&SUPPLY_KEY_SEGMENT.to_owned())
-            .expect("should always be able to construct this key")
-    }
-}
-
-impl From<&EthAddress> for Keys {
-    fn from(address: &EthAddress) -> Self {
-        Keys {
-            prefix: prefix()
-                .push(&address.to_canonical())
-                .expect("should always be able to construct this key"),
-        }
-    }
-}
-
-/// Construct a sub-prefix from an ERC20 address.
-pub fn sub_prefix(address: &EthAddress) -> storage::Key {
-    storage::Key::from(MULTITOKEN_KEY_SEGMENT.to_owned().to_db_key())
-        .push(&address.to_db_key())
-        .expect("should always be able to construct this key")
+/// Construct a token address from an ERC20 address.
+pub fn token(address: &EthAddress) -> Address {
+    Address::Internal(InternalAddress::Erc20(address.clone()))
 }
 
 /// Represents the type of a key relating to a wrapped ERC20
@@ -88,19 +35,22 @@ pub struct Key {
 
 impl From<&Key> for storage::Key {
     fn from(mt_key: &Key) -> Self {
-        let keys = Keys::from(&mt_key.asset);
+        let token = token(&mt_key.asset);
         match &mt_key.suffix {
-            KeyType::Balance { owner } => keys.balance(owner),
-            KeyType::Supply => keys.supply(),
+            KeyType::Balance { owner } => balance_key(&token, owner),
+            KeyType::Supply => minted_balance_key(&token),
         }
     }
 }
 
-fn has_erc20_segment(key: &storage::Key) -> bool {
-    matches!(
-        key.segments.get(1),
-        Some(segment) if segment == &DbKeySeg::StringSeg(MULTITOKEN_KEY_SEGMENT.to_owned()),
-    )
+/// Returns true if the given key has an ERC20 token
+pub fn has_erc20_segment(key: &storage::Key) -> bool {
+    match key.segments.get(1) {
+        Some(DbKeySeg::AddressSeg(Address::Internal(
+            InternalAddress::Erc20(_addr),
+        ))) => true,
+        _ => false,
+    }
 }
 
 impl TryFrom<(&Address, &storage::Key)> for Key {
@@ -116,52 +66,41 @@ impl TryFrom<(&Address, &storage::Key)> for Key {
             return Err(eyre!("key does not have ERC20 segment"));
         }
 
-        let asset =
-            if let Some(DbKeySeg::StringSeg(segment)) = key.segments.get(2) {
-                EthAddress::from_str(segment)?
-            } else {
-                return Err(eyre!(
-                    "key has an incorrect segment at index #2, expected an \
-                     Ethereum address"
-                ));
-            };
+        let asset = if let Some(DbKeySeg::AddressSeg(Address::Internal(
+            InternalAddress::Erc20(addr),
+        ))) = key.segments.get(1)
+        {
+            addr.clone()
+        } else {
+            return Err(eyre!(
+                "key has an incorrect segment at index #2, expected an \
+                 Ethereum address"
+            ));
+        };
 
-        let segment_3 =
-            if let Some(DbKeySeg::StringSeg(segment)) = key.segments.get(3) {
-                segment.to_owned()
-            } else {
-                return Err(eyre!(
-                    "key has an incorrect segment at index #3, expected a \
-                     string segment"
-                ));
-            };
-
-        match segment_3.as_str() {
-            SUPPLY_KEY_SEGMENT => {
+        match key.segments.get(3) {
+            Some(DbKeySeg::AddressSeg(owner)) => {
+                let balance_key = Key {
+                    asset,
+                    suffix: KeyType::Balance {
+                        owner: owner.clone(),
+                    },
+                };
+                Ok(balance_key)
+            }
+            Some(DbKeySeg::StringSeg(segment))
+                if segment == MINTED_STORAGE_KEY =>
+            {
                 let supply_key = Key {
                     asset,
                     suffix: KeyType::Supply,
                 };
                 Ok(supply_key)
             }
-            BALANCE_KEY_SEGMENT => {
-                let owner = if let Some(DbKeySeg::AddressSeg(address)) =
-                    key.segments.get(4)
-                {
-                    address.to_owned()
-                } else {
-                    return Err(eyre!(
-                        "key has an incorrect segment at index #4, expected \
-                         an address segment"
-                    ));
-                };
-                let balance_key = Key {
-                    asset,
-                    suffix: KeyType::Balance { owner },
-                };
-                Ok(balance_key)
-            }
-            _ => Err(eyre!("key has unrecognized string segment at index #3")),
+            _ => Err(eyre!(
+                "key has an incorrect segment at index #3, expected a string \
+                 segment"
+            )),
         }
     }
 }
@@ -174,97 +113,77 @@ mod test {
     use super::*;
     use crate::ledger::eth_bridge::ADDRESS;
     use crate::types::address::{nam, Address};
-    use crate::types::ethereum_events::testing::{
-        DAI_ERC20_ETH_ADDRESS, DAI_ERC20_ETH_ADDRESS_CHECKSUMMED,
-    };
+    use crate::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use crate::types::storage::DbKeySeg;
+    use crate::types::token::BALANCE_STORAGE_KEY;
 
+    const MULTITOKEN_ADDRESS: Address =
+        Address::Internal(InternalAddress::Multitoken);
     const ARBITRARY_OWNER_ADDRESS: &str =
         "atest1d9khqw36x9zyxwfhgfpygv2pgc65gse4gy6rjs34gfzr2v69gy6y23zpggurjv2yx5m52sesu6r4y4";
 
-    #[test]
-    fn test_prefix() {
-        assert_matches!(
-            &prefix().segments[..],
-            [
-                DbKeySeg::AddressSeg(multitoken_addr),
-                DbKeySeg::StringSeg(multitoken_path),
-            ] if multitoken_addr == &ADDRESS &&
-            multitoken_path == MULTITOKEN_KEY_SEGMENT
-        )
-    }
-
-    #[test]
-    fn test_keys_from_eth_address() {
-        let keys: Keys = (&DAI_ERC20_ETH_ADDRESS).into();
-        assert_matches!(
-            &keys.prefix.segments[..],
-            [
-                DbKeySeg::AddressSeg(multitoken_addr),
-                DbKeySeg::StringSeg(multitoken_path),
-                DbKeySeg::StringSeg(token_id),
-            ] if multitoken_addr == &ADDRESS &&
-            multitoken_path == MULTITOKEN_KEY_SEGMENT &&
-            token_id == &DAI_ERC20_ETH_ADDRESS_CHECKSUMMED.to_ascii_lowercase()
-        )
+    fn dai_erc20_token() -> Address {
+        Address::Internal(InternalAddress::Erc20(DAI_ERC20_ETH_ADDRESS))
     }
 
     #[test]
     fn test_keys_balance() {
-        let keys: Keys = (&DAI_ERC20_ETH_ADDRESS).into();
-        let key =
-            keys.balance(&Address::from_str(ARBITRARY_OWNER_ADDRESS).unwrap());
+        let token = token(&DAI_ERC20_ETH_ADDRESS);
+        let key = balance_key(
+            &token,
+            &Address::from_str(ARBITRARY_OWNER_ADDRESS).unwrap(),
+        );
         assert_matches!(
             &key.segments[..],
             [
                 DbKeySeg::AddressSeg(multitoken_addr),
-                DbKeySeg::StringSeg(multitoken_path),
-                DbKeySeg::StringSeg(token_id),
+                DbKeySeg::AddressSeg(token_addr),
                 DbKeySeg::StringSeg(balance_key_seg),
                 DbKeySeg::AddressSeg(owner_addr),
-            ] if multitoken_addr == &ADDRESS &&
-            multitoken_path == MULTITOKEN_KEY_SEGMENT &&
-            token_id == &DAI_ERC20_ETH_ADDRESS_CHECKSUMMED.to_ascii_lowercase() &&
-            balance_key_seg == BALANCE_KEY_SEGMENT &&
+            ] if multitoken_addr == &MULTITOKEN_ADDRESS &&
+            token_addr == &dai_erc20_token() &&
+            balance_key_seg == BALANCE_STORAGE_KEY &&
             owner_addr == &Address::decode(ARBITRARY_OWNER_ADDRESS).unwrap()
         )
     }
 
     #[test]
     fn test_keys_balance_to_string() {
-        let keys: Keys = (&DAI_ERC20_ETH_ADDRESS).into();
-        let key =
-            keys.balance(&Address::from_str(ARBITRARY_OWNER_ADDRESS).unwrap());
+        let token = token(&DAI_ERC20_ETH_ADDRESS);
+        let key = balance_key(
+            &token,
+            &Address::from_str(ARBITRARY_OWNER_ADDRESS).unwrap(),
+        );
         assert_eq!(
-                "#atest1v9hx7w36g42ysgzzwf5kgem9ypqkgerjv4ehxgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq8f99ew/ERC20/0x6b175474e89094c44da98b954eedeac495271d0f/balance/#atest1d9khqw36x9zyxwfhgfpygv2pgc65gse4gy6rjs34gfzr2v69gy6y23zpggurjv2yx5m52sesu6r4y4",
+                "#atest1v9hx7w36f46kcarfw3hkketwyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq4w0mck/#atest1v46xsw36xe3rzde4xsmngefc8ycrjdrrxs6xgcfe8p3rjdf5v4jkgetpvv6rjdfjxuckgvrxqhdj5x/balance/#atest1d9khqw36x9zyxwfhgfpygv2pgc65gse4gy6rjs34gfzr2v69gy6y23zpggurjv2yx5m52sesu6r4y4",
                 key.to_string()
             )
     }
 
     #[test]
     fn test_keys_supply() {
-        let keys: Keys = (&DAI_ERC20_ETH_ADDRESS).into();
-        let key = keys.supply();
+        let token = token(&DAI_ERC20_ETH_ADDRESS);
+        let key = minted_balance_key(&token);
         assert_matches!(
             &key.segments[..],
             [
                 DbKeySeg::AddressSeg(multitoken_addr),
-                DbKeySeg::StringSeg(multitoken_path),
-                DbKeySeg::StringSeg(token_id),
+                DbKeySeg::AddressSeg(token_addr),
+                DbKeySeg::StringSeg(balance_key_seg),
                 DbKeySeg::StringSeg(supply_key_seg),
-            ] if multitoken_addr == &ADDRESS &&
-            multitoken_path == MULTITOKEN_KEY_SEGMENT &&
-            token_id == &DAI_ERC20_ETH_ADDRESS_CHECKSUMMED.to_ascii_lowercase() &&
-            supply_key_seg == SUPPLY_KEY_SEGMENT
+            ] if multitoken_addr == &MULTITOKEN_ADDRESS &&
+            token_addr == &dai_erc20_token() &&
+            balance_key_seg == BALANCE_STORAGE_KEY &&
+            supply_key_seg == MINTED_STORAGE_KEY
         )
     }
 
     #[test]
     fn test_keys_supply_to_string() {
-        let keys: Keys = (&DAI_ERC20_ETH_ADDRESS).into();
-        let key = keys.supply();
+        let token = token(&DAI_ERC20_ETH_ADDRESS);
+        let key = minted_balance_key(&token);
         assert_eq!(
-                "#atest1v9hx7w36g42ysgzzwf5kgem9ypqkgerjv4ehxgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq8f99ew/ERC20/0x6b175474e89094c44da98b954eedeac495271d0f/supply",
+                "#atest1v9hx7w36f46kcarfw3hkketwyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq4w0mck/#atest1v46xsw36xe3rzde4xsmngefc8ycrjdrrxs6xgcfe8p3rjdf5v4jkgetpvv6rjdfjxuckgvrxqhdj5x/balance/minted",
                 key.to_string(),
             )
     }
@@ -281,13 +200,13 @@ mod test {
             &key.segments[..],
             [
                 DbKeySeg::AddressSeg(multitoken_addr),
-                DbKeySeg::StringSeg(multitoken_path),
-                DbKeySeg::StringSeg(token_id),
+                DbKeySeg::AddressSeg(token_addr),
+                DbKeySeg::StringSeg(balance_key_seg),
                 DbKeySeg::StringSeg(supply_key_seg),
-            ] if multitoken_addr == &ADDRESS &&
-            multitoken_path == MULTITOKEN_KEY_SEGMENT &&
-            token_id == &DAI_ERC20_ETH_ADDRESS_CHECKSUMMED.to_ascii_lowercase() &&
-            supply_key_seg == SUPPLY_KEY_SEGMENT
+            ] if multitoken_addr == &MULTITOKEN_ADDRESS &&
+            token_addr == &dai_erc20_token() &&
+            balance_key_seg == &BALANCE_STORAGE_KEY &&
+            supply_key_seg == MINTED_STORAGE_KEY
         );
 
         // balance key
@@ -302,14 +221,12 @@ mod test {
             &key.segments[..],
             [
                 DbKeySeg::AddressSeg(multitoken_addr),
-                DbKeySeg::StringSeg(multitoken_path),
-                DbKeySeg::StringSeg(token_id),
+                DbKeySeg::AddressSeg(token_addr),
                 DbKeySeg::StringSeg(balance_key_seg),
                 DbKeySeg::AddressSeg(owner_addr),
-            ] if multitoken_addr == &ADDRESS &&
-            multitoken_path == MULTITOKEN_KEY_SEGMENT &&
-            token_id == &DAI_ERC20_ETH_ADDRESS_CHECKSUMMED.to_ascii_lowercase() &&
-            balance_key_seg == BALANCE_KEY_SEGMENT &&
+            ] if multitoken_addr == &MULTITOKEN_ADDRESS &&
+            token_addr == &dai_erc20_token() &&
+            balance_key_seg == BALANCE_STORAGE_KEY &&
             owner_addr == &Address::decode(ARBITRARY_OWNER_ADDRESS).unwrap()
         );
     }
@@ -318,9 +235,10 @@ mod test {
     fn test_try_from_key_for_multitoken_key_supply() {
         // supply key
         let key = storage::Key::from_str(&format!(
-            "#{}/ERC20/{}/supply",
-            ADDRESS,
-            DAI_ERC20_ETH_ADDRESS_CHECKSUMMED.to_ascii_lowercase(),
+            "#{}/#{}/balance/{}",
+            MULTITOKEN_ADDRESS,
+            dai_erc20_token(),
+            MINTED_STORAGE_KEY,
         ))
         .expect("Should be able to construct key for test");
 
@@ -344,9 +262,9 @@ mod test {
     fn test_try_from_key_for_multitoken_key_balance() {
         // supply key
         let key = storage::Key::from_str(&format!(
-            "#{}/ERC20/{}/balance/#{}",
+            "#{}/#{}/balance/#{}",
             ADDRESS,
-            DAI_ERC20_ETH_ADDRESS_CHECKSUMMED.to_ascii_lowercase(),
+            dai_erc20_token(),
             ARBITRARY_OWNER_ADDRESS
         ))
         .expect("Should be able to construct key for test");
@@ -375,9 +293,9 @@ mod test {
     #[test]
     fn test_has_erc20_segment() {
         let key = storage::Key::from_str(&format!(
-            "#{}/ERC20/{}/balance/#{}",
+            "#{}/#{}/balance/#{}",
             ADDRESS,
-            DAI_ERC20_ETH_ADDRESS_CHECKSUMMED.to_ascii_lowercase(),
+            dai_erc20_token(),
             ARBITRARY_OWNER_ADDRESS
         ))
         .expect("Should be able to construct key for test");
@@ -385,16 +303,21 @@ mod test {
         assert!(has_erc20_segment(&key));
 
         let key = storage::Key::from_str(&format!(
-            "#{}/ERC20/{}/supply",
+            "#{}/#{}/balance/{}",
             ADDRESS,
-            DAI_ERC20_ETH_ADDRESS_CHECKSUMMED.to_ascii_lowercase(),
+            dai_erc20_token(),
+            MINTED_STORAGE_KEY,
         ))
         .expect("Should be able to construct key for test");
 
         assert!(has_erc20_segment(&key));
 
-        let key = storage::Key::from_str(&format!("#{}/ERC20", ADDRESS))
-            .expect("Should be able to construct key for test");
+        let key = storage::Key::from_str(&format!(
+            "#{}/#{}",
+            MULTITOKEN_ADDRESS,
+            dai_erc20_token()
+        ))
+        .expect("Should be able to construct key for test");
 
         assert!(has_erc20_segment(&key));
     }

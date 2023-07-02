@@ -14,7 +14,6 @@ use namada::ledger::eth_bridge::{
 use namada::types::address::{wnam, Address};
 use namada::types::ethereum_events::{EthAddress, Uint};
 use namada_apps::config::ethereum_bridge;
-use namada_core::ledger::eth_bridge;
 use namada_core::types::ethereum_events::{EthereumEvent, TransferToNamada};
 use namada_core::types::token;
 
@@ -172,16 +171,13 @@ pub fn attempt_wrapped_erc20_transfer(
 ) -> Result<NamadaCmd> {
     let ledger_address = get_actor_rpc(test, node);
 
-    let eth_bridge_addr = eth_bridge::ADDRESS.to_string();
-    let sub_prefix = wrapped_erc20s::sub_prefix(asset).to_string();
+    let token = wrapped_erc20s::token(asset).to_string();
 
     let amount = amount.to_string();
     let transfer_args = vec![
         "transfer",
         "--token",
-        &eth_bridge_addr,
-        "--sub-prefix",
-        &sub_prefix,
+        &token,
         "--source",
         from,
         "--target",
@@ -207,10 +203,8 @@ pub fn find_wrapped_erc20_balance(
 ) -> Result<token::Amount> {
     let ledger_address = get_actor_rpc(test, node);
 
-    let sub_prefix = wrapped_erc20s::sub_prefix(asset);
-    let prefix =
-        token::multitoken_balance_prefix(&eth_bridge::ADDRESS, &sub_prefix);
-    let balance_key = token::multitoken_balance_key(&prefix, owner);
+    let token = wrapped_erc20s::token(asset);
+    let balance_key = token::balance_key(&token, owner);
     let mut bytes = run!(
         test,
         Bin::Client,

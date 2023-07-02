@@ -20,7 +20,7 @@ use namada::proof_of_stake::{
 use namada::types::address::Address;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
-use namada::types::token::{minted_balance_key, Amount};
+use namada::types::token::Amount;
 use namada::types::transaction::protocol::{
     ethereum_tx_data_variants, ProtocolTxType,
 };
@@ -697,9 +697,9 @@ where
             .expect("PoS inflation rate should exist in storage");
         // Read from PoS storage
         let total_tokens = self
-            .read_storage_key(&minted_balance_key(&staking_token_address(
-                &self.wl_storage,
-            )))
+            .read_storage_key(&token::minted_balance_key(
+                &staking_token_address(&self.wl_storage),
+            ))
             .expect("Total NAM balance should exist in storage");
         let pos_locked_supply =
             read_total_stake(&self.wl_storage, &params, last_epoch)?;
@@ -1616,10 +1616,12 @@ mod test_finalize_block {
             let bertha = crate::wallet::defaults::bertha_address();
             // add bertha's escrowed `asset` to the pool
             {
-                let asset_key = wrapped_erc20s::Keys::from(&asset);
-                let owner_key =
-                    asset_key.balance(&bridge_pool::BRIDGE_POOL_ADDRESS);
-                let supply_key = asset_key.supply();
+                let token = wrapped_erc20s::token(&asset);
+                let owner_key = token::balance_key(
+                    &token,
+                    &bridge_pool::BRIDGE_POOL_ADDRESS,
+                );
+                let supply_key = token::minted_balance_key(&token);
                 let amt: Amount = 999_999_u64.into();
                 shell
                     .wl_storage
