@@ -51,6 +51,7 @@ where
 /// and returns the [`Test`] handle and [`NamadaBgCmd`] for the validator node.
 /// It blocks until the node is ready to receive RPC requests from
 /// `namadac`.
+#[allow(dead_code)]
 pub fn setup_single_node_test() -> Result<(Test, NamadaBgCmd)> {
     let test = setup::single_node_net()?;
     run_single_node_test_from(test)

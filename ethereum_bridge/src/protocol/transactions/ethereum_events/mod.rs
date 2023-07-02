@@ -284,7 +284,9 @@ mod tests {
     use namada_core::types::ethereum_events::{
         EthereumEvent, TransferToNamada,
     };
-    use namada_core::types::token::{balance_key, minted_balance_key, minter_key, Amount};
+    use namada_core::types::token::{
+        balance_key, minted_balance_key, minter_key, Amount,
+    };
 
     use super::*;
     use crate::protocol::transactions::utils::GetVoters;

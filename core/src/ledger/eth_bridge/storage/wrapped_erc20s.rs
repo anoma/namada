@@ -5,7 +5,9 @@ use eyre::eyre;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::ethereum_events::EthAddress;
 use crate::types::storage::{self, DbKeySeg};
-use crate::types::token::{balance_key, minted_balance_key, MINTED_STORAGE_KEY};
+use crate::types::token::{
+    balance_key, minted_balance_key, MINTED_STORAGE_KEY,
+};
 
 /// Construct a token address from an ERC20 address.
 pub fn token(address: &EthAddress) -> Address {
