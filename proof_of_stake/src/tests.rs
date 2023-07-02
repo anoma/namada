@@ -809,8 +809,18 @@ fn test_become_validator_aux(
     let num_consensus_before =
         get_num_consensus_validators(&s, current_epoch + params.pipeline_len)
             .unwrap();
+    let num_validators_over_thresh = validators
+        .iter()
+        .filter(|validator| {
+            validator.tokens >= params.validator_stake_threshold
+        })
+        .count();
+
     assert_eq!(
-        min(validators.len() as u64, params.max_validator_slots),
+        min(
+            num_validators_over_thresh as u64,
+            params.max_validator_slots
+        ),
         num_consensus_before
     );
     assert!(!is_validator(&s, &new_validator).unwrap());
