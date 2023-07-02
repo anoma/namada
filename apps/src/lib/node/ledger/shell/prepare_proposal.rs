@@ -327,7 +327,6 @@ mod test_prepare_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction_data".as_bytes().to_owned()));
-        wrapper.encrypt(&Default::default());
         let wrapper = wrapper.to_bytes();
         #[allow(clippy::redundant_clone)]
         let req = RequestPrepareProposal {
@@ -370,9 +369,8 @@ mod test_prepare_proposal {
             tx.set_data(Data::new(
                 format!("transaction data: {}", i).as_bytes().to_owned(),
             ));
-            tx.encrypt(&Default::default());
             tx.add_section(Section::Signature(Signature::new(
-                vec![tx.header_hash(), tx.sections[0].get_hash()],
+                tx.sechashes(),
                 &keypair,
             )));
 
@@ -437,9 +435,8 @@ mod test_prepare_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.encrypt(&Default::default());
         wrapper.add_section(Section::Signature(Signature::new(
-            vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
+            wrapper.sechashes(),
             &keypair,
         )));
 
@@ -489,9 +486,8 @@ mod test_prepare_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.encrypt(&Default::default());
         wrapper.add_section(Section::Signature(Signature::new(
-            vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
+            wrapper.sechashes(),
             &keypair,
         )));
 
@@ -530,9 +526,8 @@ mod test_prepare_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.encrypt(&Default::default());
         wrapper.add_section(Section::Signature(Signature::new(
-            vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
+            wrapper.sechashes(),
             &keypair,
         )));
         let inner_unsigned_hash =
@@ -585,9 +580,8 @@ mod test_prepare_proposal {
         wrapper.set_code(tx_code.clone());
         let tx_data = Data::new("transaction data".as_bytes().to_owned());
         wrapper.set_data(tx_data.clone());
-        wrapper.encrypt(&Default::default());
         wrapper.add_section(Section::Signature(Signature::new(
-            vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
+            wrapper.sechashes(),
             &keypair,
         )));
 
@@ -607,12 +601,8 @@ mod test_prepare_proposal {
         new_wrapper.header.timestamp = wrapper.header.timestamp;
         new_wrapper.set_code(tx_code);
         new_wrapper.set_data(tx_data);
-        new_wrapper.encrypt(&Default::default());
         new_wrapper.add_section(Section::Signature(Signature::new(
-            vec![
-                new_wrapper.header_hash(),
-                new_wrapper.sections[0].get_hash(),
-            ],
+            wrapper.sechashes(),
             &keypair,
         )));
 
@@ -653,9 +643,8 @@ mod test_prepare_proposal {
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper_tx
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.encrypt(&Default::default());
         wrapper_tx.add_section(Section::Signature(Signature::new(
-            vec![wrapper_tx.header_hash(), wrapper_tx.sections[0].get_hash()],
+            wrapper_tx.sechashes(),
             &keypair,
         )));
 

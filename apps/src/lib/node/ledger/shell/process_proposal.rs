@@ -549,7 +549,6 @@ mod test_process_proposal {
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        outer_tx.encrypt(&Default::default());
         let tx = outer_tx.to_bytes();
         #[allow(clippy::redundant_clone)]
         let request = ProcessProposal {
@@ -594,9 +593,8 @@ mod test_process_proposal {
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        outer_tx.encrypt(&Default::default());
         outer_tx.add_section(Section::Signature(Signature::new(
-            vec![outer_tx.header_hash(), outer_tx.sections[0].get_hash()],
+            outer_tx.sechashes(),
             &keypair,
         )));
         let mut new_tx = outer_tx.clone();
@@ -658,9 +656,8 @@ mod test_process_proposal {
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        outer_tx.encrypt(&Default::default());
         outer_tx.add_section(Section::Signature(Signature::new(
-            vec![outer_tx.header_hash(), outer_tx.sections[0].get_hash()],
+            outer_tx.sechashes(),
             &keypair,
         )));
 
@@ -725,9 +722,8 @@ mod test_process_proposal {
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        outer_tx.encrypt(&Default::default());
         outer_tx.add_section(Section::Signature(Signature::new(
-            vec![outer_tx.header_hash(), outer_tx.sections[0].get_hash()],
+            outer_tx.sechashes(),
             &keypair,
         )));
 
@@ -778,7 +774,6 @@ mod test_process_proposal {
             outer_tx.set_data(Data::new(
                 format!("transaction data: {}", i).as_bytes().to_owned(),
             ));
-            outer_tx.encrypt(&Default::default());
             shell.enqueue_tx(outer_tx.clone());
 
             outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
@@ -835,7 +830,6 @@ mod test_process_proposal {
         tx.header.chain_id = shell.chain_id.clone();
         tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        tx.encrypt(&Default::default());
         shell.enqueue_tx(tx.clone());
 
         tx.header.tx_type = TxType::Decrypted(DecryptedTx::Undecryptable);
@@ -885,7 +879,6 @@ mod test_process_proposal {
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         tx.set_code_sechash(Hash([0u8; 32]));
         tx.set_data_sechash(Hash([0u8; 32]));
-        tx.encrypt(&Default::default());
 
         shell.enqueue_tx(tx.clone());
 
@@ -1034,9 +1027,8 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        wrapper.encrypt(&Default::default());
         wrapper.add_section(Section::Signature(Signature::new(
-            vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
+            wrapper.sechashes(),
             &keypair,
         )));
 
@@ -1109,9 +1101,8 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.encrypt(&Default::default());
         wrapper.add_section(Section::Signature(Signature::new(
-            vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
+            wrapper.sechashes(),
             &keypair,
         )));
 
@@ -1167,9 +1158,8 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.encrypt(&Default::default());
         wrapper.add_section(Section::Signature(Signature::new(
-            vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
+            wrapper.sechashes(),
             &keypair,
         )));
         let inner_unsigned_hash =
@@ -1258,9 +1248,8 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         let mut new_wrapper = wrapper.clone();
-        wrapper.encrypt(&Default::default());
         wrapper.add_section(Section::Signature(Signature::new(
-            vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
+            wrapper.sechashes(),
             &keypair,
         )));
         let inner_unsigned_hash =
@@ -1277,12 +1266,8 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
-        new_wrapper.encrypt(&Default::default());
         new_wrapper.add_section(Section::Signature(Signature::new(
-            vec![
-                new_wrapper.header_hash(),
-                new_wrapper.sections[0].get_hash(),
-            ],
+            new_wrapper.sechashes(),
             &keypair,
         )));
 
@@ -1333,9 +1318,8 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         let mut protocol_tx = wrapper.clone();
-        wrapper.encrypt(&Default::default());
         wrapper.add_section(Section::Signature(Signature::new(
-            vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
+            wrapper.sechashes(),
             &keypair,
         )));
 
@@ -1401,17 +1385,12 @@ mod test_process_proposal {
         wrapper
             .set_data(Data::new("new transaction data".as_bytes().to_owned()));
         let mut decrypted = wrapper.clone();
-        wrapper.encrypt(&Default::default());
 
         decrypted.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
             has_valid_pow: false,
         }));
         decrypted.add_section(Section::Signature(Signature::new(
-            vec![
-                decrypted.header_hash(),
-                decrypted.sections[0].get_hash(),
-                decrypted.sections[1].get_hash(),
-            ],
+            decrypted.sechashes(),
             &keypair,
         )));
         let wrapper_in_queue = TxInQueue {
@@ -1465,9 +1444,8 @@ mod test_process_proposal {
         wrapper.header.expiration = Some(DateTimeUtc::now());
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.encrypt(&Default::default());
         wrapper.add_section(Section::Signature(Signature::new(
-            vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
+            wrapper.sechashes(),
             &keypair,
         )));
 
@@ -1510,17 +1488,12 @@ mod test_process_proposal {
         wrapper
             .set_data(Data::new("new transaction data".as_bytes().to_owned()));
         let mut decrypted = wrapper.clone();
-        wrapper.encrypt(&Default::default());
 
         decrypted.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
             has_valid_pow: false,
         }));
         decrypted.add_section(Section::Signature(Signature::new(
-            vec![
-                decrypted.header_hash(),
-                decrypted.sections[0].get_hash(),
-                decrypted.sections[1].get_hash(),
-            ],
+            decrypted.sechashes(),
             &keypair,
         )));
         let wrapper_in_queue = TxInQueue {

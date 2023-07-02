@@ -1272,7 +1272,6 @@ mod test_utils {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.encrypt(&Default::default());
 
         shell.wl_storage.storage.tx_queue.push(TxInQueue {
             tx: wrapper,
@@ -1341,7 +1340,6 @@ mod test_mempool_validate {
         unsigned_wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         unsigned_wrapper
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
-        unsigned_wrapper.encrypt(&Default::default());
 
         let mut result = shell.mempool_validate(
             unsigned_wrapper.to_bytes().as_ref(),
@@ -1378,12 +1376,8 @@ mod test_mempool_validate {
         invalid_wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         invalid_wrapper
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
-        invalid_wrapper.encrypt(&Default::default());
         invalid_wrapper.add_section(Section::Signature(Signature::new(
-            vec![
-                invalid_wrapper.header_hash(),
-                invalid_wrapper.sections[0].get_hash(),
-            ],
+            invalid_wrapper.sechashes(),
             &keypair,
         )));
 
@@ -1446,9 +1440,8 @@ mod test_mempool_validate {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.encrypt(&Default::default());
         wrapper.add_section(Section::Signature(Signature::new(
-            vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
+            wrapper.sechashes(),
             &keypair,
         )));
 
