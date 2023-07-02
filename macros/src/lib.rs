@@ -214,7 +214,8 @@ fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
                 let id = format!("is_{ident}_key_at_addr");
                 let id = syn::Ident::new(&id, ident.span());
                 quote! {
-                    fn #id(key: &Key, address: &Address) -> bool {
+                    #[allow(missing_docs)]
+                    pub(crate) fn #id(key: &Key, address: &Address) -> bool {
                         matches!(&key.segments[..], [
                             DbKeySeg::AddressSeg(a),
                             DbKeySeg::StringSeg(#ident),
@@ -226,7 +227,8 @@ fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
                 let id = format!("get_{ident}_key_at_addr");
                 let id = syn::Ident::new(&id, ident.span());
                 quote! {
-                    fn #id(address: Address) -> Key {
+                    #[allow(missing_docs)]
+                    pub(crate) fn #id(address: Address) -> Key {
                         Key {
                             segments: vec![
                                 DbKeySeg::AddressSeg(address),
