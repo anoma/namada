@@ -3457,9 +3457,10 @@ mod test_finalize_block {
         let proposal_execution_key = gov_storage::get_proposal_execution_key(0);
         shell
             .wl_storage
-            .write(&proposal_execution_key, ())
+            .write(&proposal_execution_key, 0u64)
             .expect("Test failed.");
-        let tx = Tx::new(TxType::Raw);
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_data(Data::new(0u64.try_to_vec().expect("Test failed")));
         let new_min_confirmations = MinimumConfirmations::from(unsafe {
             NonZeroU64::new_unchecked(42)
         });
