@@ -2248,7 +2248,7 @@ mod test_mempool_validate {
         let keypair = super::test_utils::gen_keypair();
 
         let mut tx = Tx::new(TxType::Raw);
-        tx.header.expiration = Some(DateTimeUtc::now());
+        tx.header.expiration = Some(DateTimeUtc::default());
         tx.header.chain_id = shell.chain_id.clone();
         tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
