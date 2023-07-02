@@ -207,6 +207,40 @@ fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
 
     let struct_def_ident = &struct_def.ident;
 
+    let helper_fns = idents
+        .iter()
+        .fold(vec![], |mut accum, ident| {
+            let is_fn = {
+                let id = format!("is_{ident}_key_at_addr");
+                let id = syn::Ident::new(&id, ident.span());
+                quote! {
+                    fn #id(key: &Key, address: &Address) -> bool {
+                        matches!(&key.segments[..], [
+                            DbKeySeg::AddressSeg(a),
+                            DbKeySeg::StringSeg(#ident),
+                        ] if a == address && #ident == #struct_def_ident::VALUES.#ident)
+                    }
+                }
+            };
+            let get_fn = {
+                let id = format!("get_{ident}_key_at_addr");
+                let id = syn::Ident::new(&id, ident.span());
+                quote! {
+                    fn #id(address: Address) -> Key {
+                        Key {
+                            segments: vec![
+                                DbKeySeg::AddressSeg(address),
+                                DbKeySeg::StringSeg(#struct_def_ident::VALUES.#ident.to_string()),
+                            ],
+                        }
+                    }
+                }
+            };
+            accum.push(is_fn);
+            accum.push(get_fn);
+            accum
+        });
+
     quote! {
         impl #struct_def_ident {
             #[allow(dead_code)]
@@ -222,6 +256,8 @@ fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
                 #values_list
             };
         }
+
+        #(#helper_fns)*
     }
 }
 
