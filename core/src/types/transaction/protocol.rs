@@ -185,45 +185,20 @@ mod protocol_txs {
     }
 
     impl EthereumTxData {
-        /// Retrieve the protocol transaction type associated with
-        /// an instance of [Ethereum transaction data](EthereumTxData).
-        pub fn tx_type(&self) -> ProtocolTxType {
-            match self {
-                EthereumTxData::EthereumEvents(_) => {
-                    ProtocolTxType::EthereumEvents
-                }
-                EthereumTxData::BridgePool(_) => ProtocolTxType::BridgePool,
-                EthereumTxData::ValidatorSetUpdate(_) => {
-                    ProtocolTxType::ValidatorSetUpdate
-                }
-                EthereumTxData::EthEventsVext(_) => {
-                    ProtocolTxType::EthEventsVext
-                }
-                EthereumTxData::BridgePoolVext(_) => {
-                    ProtocolTxType::BridgePoolVext
-                }
-                EthereumTxData::ValSetUpdateVext(_) => {
-                    ProtocolTxType::ValSetUpdateVext
-                }
-            }
-        }
-
         /// Sign transaction Ethereum data and wrap it in a [`Tx`].
         pub fn sign(
             &self,
             signing_key: &common::SecretKey,
             chain_id: ChainId,
         ) -> Tx {
+            let (tx_data, tx_type) = self.serialize();
             let mut outer_tx =
                 Tx::new(TxType::Protocol(Box::new(ProtocolTx {
                     pk: signing_key.ref_to(),
-                    tx: self.tx_type(),
+                    tx: tx_type,
                 })));
             outer_tx.header.chain_id = chain_id;
-            outer_tx.set_data(Data::new(
-                self.try_to_vec()
-                    .expect("Serializing eth protocol tx should not fail"),
-            ));
+            outer_tx.set_data(Data::new(tx_data));
             outer_tx.add_section(Section::Signature(Signature::new(
                 &outer_tx.header_hash(),
                 signing_key,
