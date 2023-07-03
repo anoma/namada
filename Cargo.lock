@@ -3770,6 +3770,7 @@ dependencies = [
  "tower",
  "tower-abci",
  "tracing 0.1.37",
+ "tracing-appender",
  "tracing-log",
  "tracing-subscriber 0.3.17",
  "winapi",
@@ -6199,6 +6200,7 @@ version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a561bf4617eebd33bca6434b988f39ed798e527f51a1e797d0ee4f61c0a38376"
 dependencies = [
+ "itoa",
  "serde 1.0.163",
  "time-core",
  "time-macros",
@@ -6585,6 +6587,17 @@ dependencies = [
  "pin-project-lite",
  "tracing-attributes 0.1.24",
  "tracing-core 0.1.31",
+]
+
+[[package]]
+name = "tracing-appender"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09d48f71a791638519505cefafe162606f706c25592e4bde4d97600c0195312e"
+dependencies = [
+ "crossbeam-channel 0.5.8",
+ "time",
+ "tracing-subscriber 0.3.17",
 ]
 
 [[package]]
