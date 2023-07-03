@@ -7,6 +7,7 @@ use crate::types::address::Address;
 use crate::types::governance::{
     self, Proposal, ProposalError, ProposalVote, VoteType,
 };
+use crate::types::hash::Hash;
 use crate::types::storage::Epoch;
 
 /// The type of a Proposal
@@ -21,7 +22,7 @@ use crate::types::storage::Epoch;
 )]
 pub enum ProposalType {
     /// Default governance proposal with the optional wasm code
-    Default(Option<Vec<u8>>),
+    Default(Option<Hash>),
     /// PGF council proposal
     PGFCouncil,
     /// ETH proposal
@@ -54,7 +55,7 @@ impl PartialEq<VoteType> for ProposalType {
     }
 }
 
-impl TryFrom<governance::ProposalType> for ProposalType {
+impl TryFrom<governance::ProposalType> for (ProposalType, Option<Vec<u8>>) {
     type Error = ProposalError;
 
     fn try_from(value: governance::ProposalType) -> Result<Self, Self::Error> {
@@ -62,15 +63,22 @@ impl TryFrom<governance::ProposalType> for ProposalType {
             governance::ProposalType::Default(path) => {
                 if let Some(p) = path {
                     match std::fs::read(p) {
-                        Ok(code) => Ok(Self::Default(Some(code))),
+                        Ok(code) => Ok((
+                            ProposalType::Default(Some(Hash::default())),
+                            Some(code),
+                        )),
                         Err(_) => Err(Self::Error::InvalidProposalData),
                     }
                 } else {
-                    Ok(Self::Default(None))
+                    Ok((ProposalType::Default(None), None))
                 }
             }
-            governance::ProposalType::PGFCouncil => Ok(Self::PGFCouncil),
-            governance::ProposalType::ETHBridge => Ok(Self::ETHBridge),
+            governance::ProposalType::PGFCouncil => {
+                Ok((ProposalType::PGFCouncil, None))
+            }
+            governance::ProposalType::ETHBridge => {
+                Ok((ProposalType::ETHBridge, None))
+            }
         }
     }
 }
@@ -89,7 +97,7 @@ pub struct InitProposalData {
     /// The proposal id
     pub id: Option<u64>,
     /// The proposal content
-    pub content: Vec<u8>,
+    pub content: Hash,
     /// The proposal author address
     pub author: Address,
     /// The proposal type
@@ -123,18 +131,23 @@ pub struct VoteProposalData {
     pub delegations: Vec<Address>,
 }
 
-impl TryFrom<Proposal> for InitProposalData {
+impl TryFrom<Proposal> for (InitProposalData, Vec<u8>, Option<Vec<u8>>) {
     type Error = ProposalError;
 
     fn try_from(proposal: Proposal) -> Result<Self, Self::Error> {
-        Ok(InitProposalData {
-            id: proposal.id,
-            content: proposal.content.try_to_vec().unwrap(),
-            author: proposal.author,
-            r#type: proposal.r#type.try_into()?,
-            voting_start_epoch: proposal.voting_start_epoch,
-            voting_end_epoch: proposal.voting_end_epoch,
-            grace_epoch: proposal.grace_epoch,
-        })
+        let (r#type, code) = proposal.r#type.try_into()?;
+        Ok((
+            InitProposalData {
+                id: proposal.id,
+                content: Hash::default(),
+                author: proposal.author,
+                r#type,
+                voting_start_epoch: proposal.voting_start_epoch,
+                voting_end_epoch: proposal.voting_end_epoch,
+                grace_epoch: proposal.grace_epoch,
+            },
+            proposal.content.try_to_vec().unwrap(),
+            code,
+        ))
     }
 }

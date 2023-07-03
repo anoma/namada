@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
     "tx_bond.wasm": "tx_bond.fcdaed302f8734412a830b4993bff4619a4c559e014b71deaa5fed77fdef3680.wasm",
     "tx_change_validator_commission.wasm": "tx_change_validator_commission.26e4a245a07a07a9bdb90e87c09a19678489df09a1663b0a7d5672ff1bfa661b.wasm",
     "tx_ibc.wasm": "tx_ibc.2327a35b2cf355e485e8f03e2c475b3c388167edc9ad15fbee630941320920b6.wasm",
@@ -19,3 +20,25 @@
     "vp_user.wasm": "vp_user.6e831fc2fce1ae9b2b13549e3b4397c54ced19222efb697722c96c6fede0f143.wasm",
     "vp_validator.wasm": "vp_validator.a3c3d2e361a530419601abcfad7880adfa8748655304c22014a48208a4d8ac92.wasm"
 }
+=======
+    "tx_bond.wasm": "tx_bond.e89cf7f8bdc9d87c7bb99578e1c9fda455b859e48ffbcaf686a7dfc326a5f2de.wasm",
+    "tx_change_validator_commission.wasm": "tx_change_validator_commission.8a64e8d3cb0b984218ae85ab297ffa4ebe87365b246ae9886cff4b6825137726.wasm",
+    "tx_ibc.wasm": "tx_ibc.d7854eb5fd97adc3fa1e8ef5153cc762d067ab1f04e9212a66ae221fe192cd70.wasm",
+    "tx_init_account.wasm": "tx_init_account.ab5d1a9729c3df995e3f67e727140a4032b7168798e0c04e2ee67dd8d2b7a862.wasm",
+    "tx_init_proposal.wasm": "tx_init_proposal.606e60786a69d62b547d7337ca5069cde7da1d117106bdd772c389eb9ea8e1c0.wasm",
+    "tx_init_validator.wasm": "tx_init_validator.75a942a806f5acec5fb7d6a99e17600cb24e71d21af8c685b3a2193c19ddaf06.wasm",
+    "tx_reveal_pk.wasm": "tx_reveal_pk.dc507392f47486c77e1fc32597d4e847e750c6d793f07e8084063d21a9cb1345.wasm",
+    "tx_transfer.wasm": "tx_transfer.f3002312296acfb44cafb49d0abbaccb78b7ff812a329912ca267ba88af47dce.wasm",
+    "tx_unbond.wasm": "tx_unbond.ea4d10b5de5062acbec94eb6ca5f9682eb849a05ea7e282cb55e21065b2368f3.wasm",
+    "tx_unjail_validator.wasm": "tx_unjail_validator.b284ced13835b8f0cfbfb916db180217ba36ed2d9c98529a198d28adad8be941.wasm",
+    "tx_update_vp.wasm": "tx_update_vp.77cac621c8c83233e036a922ebc76dfa2d1d637cc31d2e5841be59c903c2abf9.wasm",
+    "tx_vote_proposal.wasm": "tx_vote_proposal.c6abeff49f01db7b158648738fa6b77a271e3fef614128321109fb6f5e91dc81.wasm",
+    "tx_withdraw.wasm": "tx_withdraw.f11cc0794ade88de799c71853708f50332004276d18e5070bdf7e049ebf7ab7b.wasm",
+    "vp_implicit.wasm": "vp_implicit.8241509563cdd7bcce4a3d76f3275a0023736bb14b4cc8321124dd5a1b0a6793.wasm",
+    "vp_masp.wasm": "vp_masp.c35fe5a39fd548940967eb05e06ec71c907e6b625eed9c9e8040bf66ce1c07b6.wasm",
+    "vp_testnet_faucet.wasm": "vp_testnet_faucet.4ed0b9b1f0ba18583d2b4ad462d666b073088a43af5963a63cf1b3ba1ed63fd0.wasm",
+    "vp_token.wasm": "vp_token.3d3689aa097a2a1693baa0eb04ae4f0e0a181c58d0fd469d8ef47c56b79d5940.wasm",
+    "vp_user.wasm": "vp_user.d1f26e6ef1103260cf1bab9ae9f87989b69943a899c02581686f7b4bc49522e6.wasm",
+    "vp_validator.wasm": "vp_validator.138b566d1f7d6eb9b53b10987fa3249ab9d36f5c84f2ca2c07b25dd7a1483ffc.wasm"
+}
+>>>>>>> origin/murisi/move-init-proposal-content
