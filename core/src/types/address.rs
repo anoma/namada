@@ -9,7 +9,6 @@ use std::str::FromStr;
 use bech32::{self, FromBase32, ToBase32, Variant};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXUPPER;
-use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -18,10 +17,12 @@ use crate::ibc::signer::Signer;
 use crate::ledger::parameters;
 use crate::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use crate::ledger::storage_api::StorageWrite;
+use crate::types::dec::Dec;
 use crate::types::key::PublicKeyHash;
-use crate::types::{key, token};
 use crate::types::storage::Key;
 use crate::types::token::Denomination;
+use crate::types::uint::I256;
+use crate::types::{key, token};
 
 /// The length of an established [`Address`] encoded with Borsh.
 pub const ESTABLISHED_ADDRESS_BYTES_LEN: usize = 21;
@@ -686,22 +687,25 @@ pub fn init_token_storage<D, H>(
             epochs_per_year,
         )
         .unwrap();
-    for address in masp_reward_keys {
+    for (address, _key) in masp_reward_keys {
         wl_storage
             .write(
                 &token::total_supply_key(address),
-                token::Amount::whole(5), // arbitrary amount
+                token::Amount::native_whole(5), // arbitrary amount
             )
             .unwrap();
-        let default_gain = dec!(0.1);
+        let default_gain = Dec::from_str("0.1").unwrap();
         wl_storage
-            .write(&token::last_inflation(address), 0u64)
+            .write(&token::last_inflation(address), I256::zero())
             .expect("inflation ought to be written");
         wl_storage
-            .write(&token::last_locked_ratio(address), dec!(0))
+            .write(&token::last_locked_ratio(address), Dec::zero())
             .expect("last locked set default");
         wl_storage
-            .write(&token::parameters::max_reward_rate(address), dec!(0.1))
+            .write(
+                &token::parameters::max_reward_rate(address),
+                Dec::from_str("0.1").unwrap(),
+            )
             .expect("max reward rate write");
         wl_storage
             .write(&token::parameters::kp_sp_gain(address), default_gain)
@@ -710,7 +714,7 @@ pub fn init_token_storage<D, H>(
             .write(&token::parameters::kd_sp_gain(address), default_gain)
             .expect("kd sp gain write");
         wl_storage
-            .write(&token::parameters::locked_token_ratio(address), dec!(0.0))
+            .write(&token::parameters::locked_token_ratio(address), Dec::zero())
             .expect("Write locked ratio");
     }
 }

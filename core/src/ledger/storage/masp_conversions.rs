@@ -11,16 +11,19 @@ use masp_primitives::sapling::Node;
 use crate::ledger::inflation::{mint_tokens, RewardsController, ValsToUpdate};
 use crate::ledger::parameters;
 use crate::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
+use crate::ledger::storage_api::token::read_denom;
 use crate::types::address::Address;
-use crate::types::{address, token};
+use crate::types::dec::Dec;
 use crate::types::storage::{Epoch, Key};
 use crate::types::token::MaspDenom;
+use crate::types::uint::I256;
+use crate::types::{address, token};
 
 /// A representation of the conversion state
 #[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
 pub struct ConversionState {
     /// The last amount of the native token distributed
-    pub normed_inflation: Option<u64>,
+    pub normed_inflation: Option<I256>,
     /// The tree currently containing all the conversions
     pub tree: FrozenCommitmentTree<Node>,
     /// Map assets to their latest conversion and position in Merkle tree
@@ -39,13 +42,12 @@ pub struct ConversionState {
 fn calculate_masp_rewards<D, H>(
     wl_storage: &mut super::WlStorage<D, H>,
     addr: &Address,
-) -> crate::ledger::storage_api::Result<(u64, u64)>
+    sub_prefix: Option<Key>
+) -> crate::ledger::storage_api::Result<(I256, I256)>
 where
     D: 'static + super::DB + for<'iter> super::DBIter<'iter>,
     H: 'static + super::StorageHasher,
 {
-    use rust_decimal::Decimal;
-
     let masp_addr = address::masp();
     // Query the storage for information
 
@@ -59,38 +61,64 @@ where
         .read(&token::balance_key(addr, &masp_addr))?
         .unwrap_or_default();
 
+    println!("----------------------------");
+    println!("TIME TO LIVE");
+    println!("total_tokens: {}", total_tokens.to_string_native());
+    println!("total_tokens_in_masp: {}", total_token_in_masp.to_string_native());
+    println!("TIME TO DIE");
+    println!("----------------------------");
+
+    let denomination =
+        read_denom(wl_storage, addr, sub_prefix.as_ref()).unwrap().unwrap();
+
+    let denomination_base =
+        read_denom(wl_storage, &wl_storage.get_native_token().unwrap(), None).unwrap().unwrap();
+
+    // TODO replace 6 with native token call
+    let denomination_offset = 10u64.pow((denomination.0 - denomination_base.0) as u32);
+    let conversion = |amt| amt /  denomination_offset;
+    let total_tokens = conversion(total_tokens) ;
+    let total_token_in_masp = conversion(total_token_in_masp);
+
+    println!("----------------------------");
+    println!("TIME TO LIVE ADJUSTE");
+    println!("ADJUSTED total_tokens: {}", total_tokens.to_string_native());
+    println!("ADJUSTED total_tokens_in_masp: {}", total_token_in_masp.to_string_native());
+    println!("TIME TO DIE ADJUSTED");
+    println!("----------------------------");
+
     let epochs_per_year: u64 = wl_storage
         .read(&parameters::storage::get_epochs_per_year_key())?
         .expect("");
 
     //// Values from the last epoch
-    let last_inflation: u64 = wl_storage
+    let last_inflation: I256 = wl_storage
         .read(&token::last_inflation(addr))
         .expect("failure to read last inflation")
         .expect("");
 
-    let last_locked_ratio: Decimal = wl_storage
+    let last_locked_ratio: Dec = wl_storage
         .read(&token::last_locked_ratio(addr))
         .expect("failure to read last inflation")
         .expect("");
 
     //// Parameters for each token
-    let max_reward_rate: Decimal = wl_storage
+    let max_reward_rate: Dec = wl_storage
         .read(&token::parameters::max_reward_rate(addr))
         .expect("max reward should properly decode")
         .expect("");
 
-    let kp_gain_nom: Decimal = wl_storage
+    let kp_gain_nom: Dec = wl_storage
         .read(&token::parameters::kp_sp_gain(addr))
         .expect("kp_gain_nom reward should properly decode")
         .expect("");
 
-    let kd_gain_nom: Decimal = wl_storage
+    let kd_gain_nom: Dec = wl_storage
         .read(&token::parameters::kd_sp_gain(addr))
         .expect("kd_gain_nom reward should properly decode")
         .expect("");
 
-    let locked_target_ratio: Decimal = wl_storage
+    let locked_target_ratio: Dec = wl_storage
         .read(&token::parameters::locked_token_ratio(addr))?
         .expect("");
 
@@ -116,12 +144,11 @@ where
     // ∴ n = (inflation * 100) / locked tokens
     // Since we must put the notes in a compatible format with the
     // note format, we must make the inflation amount discrete.
-    let total_in = total_token_in_masp.change() as u64;
-    let noterized_inflation = if 0u64 == total_in {
-        0u64
+    let total_in = total_token_in_masp.change();
+    let noterized_inflation = if total_in.is_zero() {
+        I256::zero()
     } else {
-        ((100 * inflation as u128) / (total_token_in_masp.change() as u128))
-            as u64
+        I256::from(100 * inflation) / (total_token_in_masp.change())
     };
 
     tracing::debug!(
@@ -139,11 +166,11 @@ where
         kd_gain_nom,
         epochs_per_year,
     );
-    tracing::debug!("Please give me: {:?}", addr);
-    tracing::debug!("Ratio {:?}", locked_ratio);
-    tracing::debug!("inflation from the pd controller {:?}", inflation);
-    tracing::debug!("total in the masp {:?}", total_in);
-    tracing::debug!("Please give me inflation: {:?}", noterized_inflation);
+    println!("Please give me: {:?}", addr);
+    println!("Ratio {:?}", locked_ratio);
+    println!("inflation from the pd controller {:?}", inflation);
+    println!("total in the masp {:?}", total_in);
+    println!("Please give me inflation: {:?}", noterized_inflation);
 
     // Is it fine to write the inflation rate, this is accurate,
     // but we should make sure the return value's ratio matches
@@ -152,8 +179,8 @@ where
     wl_storage
         .write(
             &token::last_inflation(addr),
-            (noterized_inflation / 100u64)
-                * total_token_in_masp.change() as u64,
+            (noterized_inflation / I256::from(100))
+                * total_token_in_masp.change() as I256,
         )
         .expect("unable to encode new inflation rate (Decimal)");
 
@@ -166,7 +193,12 @@ where
     // function This may be unneeded, as we could describe it as a
     // ratio of x/1
 
-    Ok((noterized_inflation, 100))
+    println!("----------------------------");
+    println!("TIME TO DEBUG");
+    println!("TIME TO DEBUG");
+    println!("----------------------------");
+
+    Ok((noterized_inflation, I256::from(100 * denomination_offset)))
 }
 
 // This is only enabled when "wasm-runtime" is on, because we're using rayon
@@ -194,14 +226,15 @@ where
     let masp_addr = address::masp();
     let key_prefix: storage::Key = masp_addr.to_db_key().into();
 
+    let native_token = wl_storage.get_native_token().unwrap();
     let masp_rewards = address::masp_rewards();
     let mut masp_reward_keys: Vec<_> = masp_rewards.keys().collect();
     // Put the native rewards first because other inflation computations depend
     // on it
-    masp_reward_keys.sort_unstable_by(|x, y| {
-        if (**x == address::nam()) == (**y == address::nam()) {
+    masp_reward_keys.sort_unstable_by(|(x, _key), (y, _)| {
+        if (*x == native_token) == (*y == native_token) {
             Ordering::Equal
-        } else if **x == address::nam() {
+        } else if *x == native_token {
             Ordering::Less
         } else {
             Ordering::Greater
@@ -215,24 +248,24 @@ where
     // have to use. This trick works under the assumption that reward tokens
     // from different epochs are exactly equivalent.
     let reward_asset =
-        encode_asset_type(address::nam(), &None, MaspDenom::Zero, Epoch(0));
+        encode_asset_type(native_token, &None, MaspDenom::Zero, Epoch(0));
     // Conversions from the previous to current asset for each address
     let mut current_convs =
         BTreeMap::<(Address, Option<Key>, MaspDenom), AllowedConversion>::new();
     // Reward all tokens according to above reward rates
-    for ((addr, sub_prefix), reward) in &masp_rewards {
+    for ((addr, sub_prefix), _reward) in &masp_rewards {
+        // TODO please intergate this into the logic
+        let reward = calculate_masp_rewards(wl_storage, addr, sub_prefix.clone())?;
+
         // TODO Fix for multiple inflation
         // Native token inflation values are always with respect to this
-        let ref_inflation = masp_rewards[&address::nam()].1;
+        let ref_inflation = I256::from(1);
         // Get the last rewarded amount of the native token
-        let normed_inflation = wl_storage
+        let normed_inflation = *wl_storage
             .storage
             .conversion_state
             .normed_inflation
             .get_or_insert(ref_inflation);
-
-
-
 
         // Dispense a transparent reward in parallel to the shielded rewards
         let addr_bal: token::Amount = match sub_prefix {
@@ -246,11 +279,6 @@ where
                 ))?
                 .unwrap_or_default(),
         };
-        // The reward for each reward.1 units of the current asset is
-        // reward.0 units of the reward token
-        // Since floor(a) + floor(b) <= floor(a+b), there will always be
-        // enough rewards to reimburse users
-        total_reward += (addr_bal * *reward).0;
 
         for denom in token::MaspDenom::iter() {
             // Provide an allowed conversion from previous timestamp. The
@@ -268,48 +296,65 @@ where
                 denom,
                 wl_storage.storage.block.epoch,
             );
-        // TODO properly fix
+            // TODO properly fix
             if *addr == address::nam() {
-                // The amount that will be given of the new native token for every
-                // amount of the native token given in the previous epoch
+                // The amount that will be given of the new native token for
+                // every amount of the native token given in the
+                // previous epoch
                 let new_normed_inflation =
-                    *normed_inflation + (*normed_inflation * reward.0) / reward.1;
-                // The conversion is computed such that if consecutive conversions
-                // are added together, the intermediate native tokens cancel/
+                    normed_inflation + (normed_inflation * reward.0) / reward.1;
+                // The conversion is computed such that if consecutive
+                // conversions are added together, the
+                // intermediate native tokens cancel/
                 // telescope out
                 current_convs.insert(
-                    addr.clone(),
-                    (MaspAmount::from_pair(old_asset, -(*normed_inflation as i64))
-                     .unwrap()
-                     + MaspAmount::from_pair(new_asset, new_normed_inflation)
-                     .unwrap())
-                        .into(),
+                    (addr.clone(), sub_prefix.clone(), denom),
+                    (MaspAmount::from_pair(old_asset, -(normed_inflation))
+                        .unwrap()
+                        + MaspAmount::from_pair(
+                            new_asset,
+                            new_normed_inflation,
+                        )
+                        .unwrap())
+                    .into(),
                 );
+                println!("==============================================");
+                println!("reward before nam total_reward: {}", total_reward.to_string_native());
+                println!("==============================================");
                 // The reward for each reward.1 units of the current asset is
                 // reward.0 units of the reward token
                 total_reward +=
-                    (addr_bal * (new_normed_inflation, *normed_inflation)).0
-                    - addr_bal;
+                    (addr_bal * (new_normed_inflation, normed_inflation)).0
+                        - addr_bal;
                 // Save the new normed inflation
-                *normed_inflation = new_normed_inflation;
+                _ = wl_storage
+                    .storage
+                    .conversion_state
+                    .normed_inflation
+                    .insert(new_normed_inflation);
             } else {
-                // Express the inflation reward in real terms, that is, with respect
-                // to the native asset in the zeroth epoch
-                let real_reward = (reward.0 * ref_inflation) / *normed_inflation;
-                // The conversion is computed such that if consecutive conversions
-                // are added together, the intermediate tokens cancel/ telescope out
+                // Express the inflation reward in real terms, that is, with
+                // respect to the native asset in the zeroth
+                // epoch
+                let real_reward = (reward.0 * ref_inflation) / normed_inflation;
+                // The conversion is computed such that if consecutive
+                // conversions are added together, the
+                // intermediate tokens cancel/ telescope out
                 current_convs.insert(
-                    addr.clone(),
-                    (MaspAmount::from_pair(old_asset, -(reward.1 as i64)).unwrap()
-                     + MaspAmount::from_pair(new_asset, reward.1).unwrap()
-                     + MaspAmount::from_pair(reward_asset, real_reward)
-                     .unwrap())
-                        .into(),
+                    (addr.clone(), sub_prefix.clone(), denom),
+                    (MaspAmount::from_pair(old_asset, -(reward.1)).unwrap()
+                        + MaspAmount::from_pair(new_asset, reward.1).unwrap()
+                        + MaspAmount::from_pair(reward_asset, real_reward)
+                            .unwrap())
+                    .into(),
                 );
+                println!("==============================================");
+                println!("reward before non nam total_reward: {}", total_reward.to_string_native());
+                println!("==============================================");
                 // The reward for each reward.1 units of the current asset is
                 // reward.0 units of the reward token
                 total_reward += ((addr_bal * (real_reward, reward.1)).0
-                                 * (*normed_inflation, ref_inflation))
+                    * (normed_inflation, ref_inflation))
                     .0;
             }
             // Add a conversion from the previous asset type
@@ -358,6 +403,9 @@ where
 
     // Update the MASP's transparent reward token balance to ensure that it
     // is sufficiently backed to redeem rewards
+    println!("==============================================");
+    println!("current total_reward: {}", total_reward.to_string_native());
+    println!("==============================================");
     mint_tokens(wl_storage, &masp_addr, &address::nam(), total_reward)?;
 
     // Try to distribute Merkle tree construction as evenly as possible

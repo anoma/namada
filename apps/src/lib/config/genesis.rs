@@ -15,6 +15,7 @@ use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
 use namada::types::token::Denomination;
+use namada::types::uint::I256;
 use namada::types::{storage, token};
 
 /// Genesis configuration file format
@@ -38,6 +39,7 @@ pub mod genesis_config {
     use namada::types::key::*;
     use namada::types::time::Rfc3339String;
     use namada::types::token::Denomination;
+    use namada::types::uint::I256;
     use namada::types::{storage, token};
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
@@ -395,8 +397,8 @@ pub mod genesis_config {
         let token_vp_config = wasm.get(token_vp_name).unwrap();
 
         TokenAccount {
-            last_locked_ratio: Decimal::ZERO,
-            last_inflation: 0,
+            last_locked_ratio: Dec::zero(),
+            last_inflation: I256::zero(),
             parameters: config.parameters.as_ref().unwrap().to_owned(),
             address: Address::decode(config.address.as_ref().unwrap()).unwrap(),
             denom: config.denom,
@@ -816,9 +818,9 @@ pub struct TokenAccount {
     /// Token parameters
     pub parameters: token::parameters::Parameters,
     /// Token inflation from the last epoch (read + write for every epoch)
-    pub last_inflation: u64,
+    pub last_inflation: I256,
     /// Token shielded ratio from the last epoch (read + write for every epoch)
-    pub last_locked_ratio: Decimal,
+    pub last_locked_ratio: Dec,
 }
 
 #[derive(
@@ -1038,17 +1040,17 @@ pub fn genesis(num_validators: u64) -> Genesis {
         balances.insert((&validator.account_key).into(), default_key_tokens);
     }
 
-    let token_accounts = address::masp_rewards()
-        .into_keys()
-        .map(|address| TokenAccount {
+    let token_accounts = address::tokens()
+        .into_iter()
+        .map(|(address, (_, denom))| TokenAccount {
             address,
             denom,
             vp_code_path: vp_token_path.into(),
             vp_sha256: Default::default(),
             balances: balances.clone(),
             parameters: token::parameters::Parameters::default(),
-            last_inflation: 0,
-            last_locked_ratio: Decimal::ZERO,
+            last_inflation: I256::zero(),
+            last_locked_ratio: Dec::zero(),
         })
         .collect();
     Genesis {
