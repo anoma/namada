@@ -8,14 +8,14 @@ use derivative::Derivative;
 use namada::core::ledger::testnet_pow;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::EpochDuration;
-use namada::ledger::pos::{GenesisValidator, PosParams};
+use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
 use namada::types::address::Address;
 use namada::types::chain::ProposalBytes;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
+use namada::types::token::Denomination;
 use namada::types::{storage, token};
-use rust_decimal::Decimal;
 
 /// Genesis configuration file format
 pub mod genesis_config {
@@ -31,14 +31,14 @@ pub mod genesis_config {
     use namada::core::ledger::testnet_pow;
     use namada::ledger::governance::parameters::GovParams;
     use namada::ledger::parameters::EpochDuration;
-    use namada::ledger::pos::{GenesisValidator, PosParams};
+    use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
     use namada::types::address::Address;
     use namada::types::chain::ProposalBytes;
     use namada::types::key::dkg_session_keys::DkgPublicKey;
     use namada::types::key::*;
     use namada::types::time::Rfc3339String;
+    use namada::types::token::Denomination;
     use namada::types::{storage, token};
-    use rust_decimal::Decimal;
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
 
@@ -187,9 +187,9 @@ pub mod genesis_config {
         pub non_staked_balance: Option<u64>,
         /// Commission rate charged on rewards for delegators (bounded inside
         /// 0-1)
-        pub commission_rate: Option<Decimal>,
+        pub commission_rate: Option<Dec>,
         /// Maximum change in commission rate permitted per epoch
-        pub max_commission_rate_change: Option<Decimal>,
+        pub max_commission_rate_change: Option<Dec>,
         // Filename of validator VP. (default: default validator VP)
         pub validator_vp: Option<String>,
         // IP:port of the validator. (used in generation only)
@@ -203,11 +203,13 @@ pub mod genesis_config {
     pub struct TokenAccountConfig {
         // Address of token account (default: generate).
         pub address: Option<String>,
+        // The number of decimal places amounts of this token has
+        pub denom: Denomination,
         // Filename of token account VP. (default: token VP)
         pub vp: Option<String>,
         // Initial balances held by accounts defined elsewhere.
         // XXX: u64 doesn't work with toml-rs!
-        pub balances: Option<HashMap<String, u64>>,
+        pub balances: Option<HashMap<String, token::Amount>>,
         // Token parameters
         // XXX: u64 doesn't work with toml-rs!
         pub parameters: Option<token::parameters::Parameters>,
@@ -263,9 +265,9 @@ pub mod genesis_config {
         /// Expected number of epochs per year
         pub epochs_per_year: u64,
         /// PoS gain p
-        pub pos_gain_p: Decimal,
+        pub pos_gain_p: Dec,
         /// PoS gain d
-        pub pos_gain_d: Decimal,
+        pub pos_gain_d: Dec,
         #[cfg(not(feature = "mainnet"))]
         /// Fix wrapper tx fees
         pub wrapper_tx_fees: Option<token::Amount>,
@@ -284,26 +286,26 @@ pub mod genesis_config {
         pub unbonding_len: u64,
         // Votes per token.
         // XXX: u64 doesn't work with toml-rs!
-        pub tm_votes_per_token: Decimal,
+        pub tm_votes_per_token: Dec,
         // Reward for proposing a block.
         // XXX: u64 doesn't work with toml-rs!
-        pub block_proposer_reward: Decimal,
+        pub block_proposer_reward: Dec,
         // Reward for voting on a block.
         // XXX: u64 doesn't work with toml-rs!
-        pub block_vote_reward: Decimal,
+        pub block_vote_reward: Dec,
         // Maximum staking APY
         // XXX: u64 doesn't work with toml-rs!
-        pub max_inflation_rate: Decimal,
+        pub max_inflation_rate: Dec,
         // Target ratio of staked NAM tokens to total NAM tokens
-        pub target_staked_ratio: Decimal,
+        pub target_staked_ratio: Dec,
         // Portion of a validator's stake that should be slashed on a
         // duplicate vote.
         // XXX: u64 doesn't work with toml-rs!
-        pub duplicate_vote_min_slash_rate: Decimal,
+        pub duplicate_vote_min_slash_rate: Dec,
         // Portion of a validator's stake that should be slashed on a
         // light client attack.
         // XXX: u64 doesn't work with toml-rs!
-        pub light_client_attack_min_slash_rate: Decimal,
+        pub light_client_attack_min_slash_rate: Dec,
         /// Number of epochs above and below (separately) the current epoch to
         /// consider when doing cubic slashing
         pub cubic_slashing_window_length: u64,
@@ -326,7 +328,9 @@ pub mod genesis_config {
             pos_data: GenesisValidator {
                 address: Address::decode(config.address.as_ref().unwrap())
                     .unwrap(),
-                tokens: token::Amount::whole(config.tokens.unwrap_or_default()),
+                tokens: token::Amount::native_whole(
+                    config.tokens.unwrap_or_default(),
+                ),
                 consensus_key: config
                     .consensus_public_key
                     .as_ref()
@@ -336,21 +340,13 @@ pub mod genesis_config {
                 commission_rate: config
                     .commission_rate
                     .and_then(|rate| {
-                        if rate >= Decimal::ZERO && rate <= Decimal::ONE {
-                            Some(rate)
-                        } else {
-                            None
-                        }
+                        if rate <= Dec::one() { Some(rate) } else { None }
                     })
                     .expect("Commission rate must be between 0.0 and 1.0"),
                 max_commission_rate_change: config
                     .max_commission_rate_change
                     .and_then(|rate| {
-                        if rate >= Decimal::ZERO && rate <= Decimal::ONE {
-                            Some(rate)
-                        } else {
-                            None
-                        }
+                        if rate <= Dec::one() { Some(rate) } else { None }
                     })
                     .expect(
                         "Max commission rate change must be between 0.0 and \
@@ -375,7 +371,7 @@ pub mod genesis_config {
                 .unwrap()
                 .to_dkg_public_key()
                 .unwrap(),
-            non_staked_balance: token::Amount::whole(
+            non_staked_balance: token::Amount::native_whole(
                 config.non_staked_balance.unwrap_or_default(),
             ),
             validator_vp_code_path: validator_vp_config.filename.to_owned(),
@@ -403,6 +399,7 @@ pub mod genesis_config {
             last_inflation: 0,
             parameters: config.parameters.as_ref().unwrap().to_owned(),
             address: Address::decode(config.address.as_ref().unwrap()).unwrap(),
+            denom: config.denom,
             vp_code_path: token_vp_config.filename.to_owned(),
             vp_sha256: token_vp_config
                 .sha256
@@ -468,7 +465,9 @@ pub mod genesis_config {
                                 }
                             }
                         },
-                        token::Amount::whole(*amount),
+                        token::Amount::from_uint(*amount, config.denom).expect(
+                            "expected a balance that fits into 256 bits",
+                        ),
                     )
                 })
                 .collect(),
@@ -619,8 +618,8 @@ pub mod genesis_config {
             epochs_per_year: parameters.epochs_per_year,
             pos_gain_p: parameters.pos_gain_p,
             pos_gain_d: parameters.pos_gain_d,
-            staked_ratio: Decimal::ZERO,
-            pos_inflation_amount: 0,
+            staked_ratio: Dec::zero(),
+            pos_inflation_amount: token::Amount::zero(),
             wrapper_tx_fees: parameters.wrapper_tx_fees,
         };
 
@@ -804,6 +803,8 @@ pub struct EstablishedAccount {
 pub struct TokenAccount {
     /// Address
     pub address: Address,
+    /// The number of decimal places amounts of this token has
+    pub denom: Denomination,
     /// Validity predicate code WASM
     pub vp_code_path: String,
     /// Expected SHA-256 hash of the validity predicate wasm
@@ -869,13 +870,13 @@ pub struct Parameters {
     /// Expected number of epochs per year (read only)
     pub epochs_per_year: u64,
     /// PoS gain p (read only)
-    pub pos_gain_p: Decimal,
+    pub pos_gain_p: Dec,
     /// PoS gain d (read only)
-    pub pos_gain_d: Decimal,
+    pub pos_gain_d: Dec,
     /// PoS staked ratio (read + write for every epoch)
-    pub staked_ratio: Decimal,
+    pub staked_ratio: Dec,
     /// PoS inflation amount from the last epoch (read + write for every epoch)
-    pub pos_inflation_amount: u64,
+    pub pos_inflation_amount: token::Amount,
     /// Fixed Wrapper tx fees
     #[cfg(not(feature = "mainnet"))]
     pub wrapper_tx_fees: Option<token::Amount>,
@@ -894,7 +895,6 @@ pub fn genesis(
 #[cfg(any(test, feature = "dev"))]
 pub fn genesis(num_validators: u64) -> Genesis {
     use namada::types::address::{self};
-    use rust_decimal_macros::dec;
 
     use crate::wallet;
 
@@ -915,15 +915,16 @@ pub fn genesis(num_validators: u64) -> Genesis {
     let validator = Validator {
         pos_data: GenesisValidator {
             address,
-            tokens: token::Amount::whole(200_000),
+            tokens: token::Amount::native_whole(200_000),
             consensus_key: consensus_keypair.ref_to(),
-            commission_rate: dec!(0.05),
-            max_commission_rate_change: dec!(0.01),
+            commission_rate: Dec::new(5, 2).expect("This can't fail"),
+            max_commission_rate_change: Dec::new(1, 2)
+                .expect("This can't fail"),
         },
         account_key: account_keypair.ref_to(),
         protocol_key: protocol_keypair.ref_to(),
         dkg_public_key: dkg_keypair.public(),
-        non_staked_balance: token::Amount::whole(100_000),
+        non_staked_balance: token::Amount::native_whole(100_000),
         // TODO replace with https://github.com/anoma/namada/issues/25)
         validator_vp_code_path: vp_user_path.into(),
         validator_vp_sha256: Default::default(),
@@ -943,15 +944,16 @@ pub fn genesis(num_validators: u64) -> Genesis {
         let validator = Validator {
             pos_data: GenesisValidator {
                 address,
-                tokens: token::Amount::whole(200_000),
+                tokens: token::Amount::native_whole(200_000),
                 consensus_key: consensus_keypair.ref_to(),
-                commission_rate: dec!(0.05),
-                max_commission_rate_change: dec!(0.01),
+                commission_rate: Dec::new(5, 2).expect("This can't fail"),
+                max_commission_rate_change: Dec::new(1, 2)
+                    .expect("This can't fail"),
             },
             account_key: account_keypair.ref_to(),
             protocol_key: protocol_keypair.ref_to(),
             dkg_public_key: dkg_keypair.public(),
-            non_staked_balance: token::Amount::whole(100_000),
+            non_staked_balance: token::Amount::native_whole(100_000),
             // TODO replace with https://github.com/anoma/namada/issues/25)
             validator_vp_code_path: vp_user_path.into(),
             validator_vp_sha256: Default::default(),
@@ -972,11 +974,11 @@ pub fn genesis(num_validators: u64) -> Genesis {
         implicit_vp_sha256: Default::default(),
         epochs_per_year: 525_600, /* seconds in yr (60*60*24*365) div seconds
                                    * per epoch (60 = min_duration) */
-        pos_gain_p: dec!(0.1),
-        pos_gain_d: dec!(0.1),
-        staked_ratio: dec!(0.0),
-        pos_inflation_amount: 0,
-        wrapper_tx_fees: Some(token::Amount::whole(0)),
+        pos_gain_p: Dec::new(1, 1).expect("This can't fail"),
+        pos_gain_d: Dec::new(1, 1).expect("This can't fail"),
+        staked_ratio: Dec::zero(),
+        pos_inflation_amount: token::Amount::zero(),
+        wrapper_tx_fees: Some(token::Amount::native_whole(0)),
     };
     let albert = EstablishedAccount {
         address: wallet::defaults::albert_address(),
@@ -1009,8 +1011,8 @@ pub fn genesis(num_validators: u64) -> Genesis {
     let implicit_accounts = vec![ImplicitAccount {
         public_key: wallet::defaults::daewon_keypair().ref_to(),
     }];
-    let default_user_tokens = token::Amount::whole(1_000_000);
-    let default_key_tokens = token::Amount::whole(1_000);
+    let default_user_tokens = token::Amount::native_whole(1_000_000);
+    let default_key_tokens = token::Amount::native_whole(1_000);
     let mut balances: HashMap<Address, token::Amount> = HashMap::from_iter([
         // established accounts' balances
         (wallet::defaults::albert_address(), default_user_tokens),
@@ -1040,6 +1042,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         .into_keys()
         .map(|address| TokenAccount {
             address,
+            denom,
             vp_code_path: vp_token_path.into(),
             vp_sha256: Default::default(),
             balances: balances.clone(),

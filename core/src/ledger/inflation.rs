@@ -2,9 +2,7 @@
 //! proof-of-stake, providing liquity to shielded asset pools, and public goods
 //! funding.
 
-use rust_decimal::prelude::ToPrimitive;
-use rust_decimal::Decimal;
-use rust_decimal_macros::dec;
+use namada_core::types::dec::Dec;
 
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::address::Address;
@@ -23,8 +21,8 @@ pub enum RewardsType {
 /// Holds the PD controller values that should be updated in storage
 #[allow(missing_docs)]
 pub struct ValsToUpdate {
-    pub locked_ratio: Decimal,
-    pub inflation: u64,
+    pub locked_ratio: Dec,
+    pub inflation: token::Amount,
 }
 
 /// PD controller used to dynamically adjust the rewards rates
@@ -35,17 +33,17 @@ pub struct RewardsController {
     /// Total token supply
     pub total_tokens: token::Amount,
     /// PD target locked ratio
-    pub locked_ratio_target: Decimal,
+    pub locked_ratio_target: Dec,
     /// PD last locked ratio
-    pub locked_ratio_last: Decimal,
+    pub locked_ratio_last: Dec,
     /// Maximum reward rate
-    pub max_reward_rate: Decimal,
+    pub max_reward_rate: Dec,
     /// Last inflation amount
     pub last_inflation_amount: token::Amount,
     /// Nominal proportional gain
-    pub p_gain_nom: Decimal,
+    pub p_gain_nom: Dec,
     /// Nominal derivative gain
-    pub d_gain_nom: Decimal,
+    pub d_gain_nom: Dec,
     /// Number of epochs per year
     pub epochs_per_year: u64,
 }
@@ -91,9 +89,13 @@ impl RewardsController {
             epochs_per_year,
         } = self;
 
-        let locked: Decimal = u64::from(locked_tokens).into();
-        let total: Decimal = u64::from(total_tokens).into();
-        let epochs_py: Decimal = (epochs_per_year).into();
+        // Token amounts must be expressed in terms of the raw amount (namnam)
+        // to properly run the PD controller
+        let locked =
+            Dec::try_from(locked_tokens.raw_amount()).expect("Should not fail");
+        let total =
+            Dec::try_from(total_tokens.raw_amount()).expect("Should not fail");
+        let epochs_py: Dec = epochs_per_year.into();
 
         let locked_ratio = locked / total;
         let max_inflation = total * max_reward_rate / epochs_py;
@@ -104,16 +106,16 @@ impl RewardsController {
         let delta_error = locked_ratio_last - locked_ratio;
         let control_val = p_gain * error - d_gain * delta_error;
 
-        let last_inflation_amount = Decimal::from(last_inflation_amount);
+        let last_inflation_amount = Dec::from(last_inflation_amount);
         let new_inflation_amount = last_inflation_amount + control_val;
-        let inflation = if new_inflation_amount > max_inflation {
+        let inflation = if last_inflation_amount + control_val > max_inflation {
             max_inflation
-        } else if new_inflation_amount > dec!(0.0) {
+        } else if new_inflation_amount > Dec::zero() {
             new_inflation_amount
         } else {
-            dec!(0.0)
+            Dec::zero()
         };
-        let inflation: u64 = inflation.to_u64().unwrap();
+        let inflation = token::Amount::from(inflation);
 
         ValsToUpdate {
             locked_ratio,

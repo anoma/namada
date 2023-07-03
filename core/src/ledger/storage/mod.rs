@@ -340,20 +340,7 @@ pub trait DBIter<'iter> {
     ///
     /// Read account subspace key value pairs with the given prefix from the DB,
     /// ordered by the storage keys.
-    fn iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter {
-        self.iter_optional_prefix(Some(prefix))
-    }
-
-    /// Iterate over all subspace keys
-    fn iter_all(&'iter self) -> Self::PrefixIter {
-        self.iter_optional_prefix(None)
-    }
-
-    /// Iterate over subspace keys, with optional prefix
-    fn iter_optional_prefix(
-        &'iter self,
-        prefix: Option<&Key>,
-    ) -> Self::PrefixIter;
+    fn iter_prefix(&'iter self, prefix: Option<&Key>) -> Self::PrefixIter;
 
     /// Read results subspace key value pairs from the DB
     fn iter_results(&'iter self) -> Self::PrefixIter;
@@ -600,10 +587,7 @@ where
         &self,
         prefix: &Key,
     ) -> (<D as DBIter<'_>>::PrefixIter, u64) {
-        (
-            self.db.iter_optional_prefix(Some(prefix)),
-            prefix.len() as _,
-        )
+        (self.db.iter_prefix(Some(prefix)), prefix.len() as _)
     }
 
     /// Returns a prefix iterator and the gas cost
@@ -1120,11 +1104,11 @@ mod tests {
     use chrono::{TimeZone, Utc};
     use proptest::prelude::*;
     use proptest::test_runner::Config;
-    use rust_decimal_macros::dec;
 
     use super::testing::*;
     use super::*;
     use crate::ledger::parameters::{self, Parameters};
+    use crate::types::dec::Dec;
     use crate::types::time::{self, Duration};
 
     prop_compose! {
@@ -1204,10 +1188,10 @@ mod tests {
                 tx_whitelist: vec![],
                 implicit_vp_code_hash: Hash::zero(),
                 epochs_per_year: 100,
-                pos_gain_p: dec!(0.1),
-                pos_gain_d: dec!(0.1),
-                staked_ratio: dec!(0.1),
-                pos_inflation_amount: 0,
+                pos_gain_p: Dec::new(1,1).expect("Cannot fail"),
+                pos_gain_d: Dec::new(1,1).expect("Cannot fail"),
+                staked_ratio: Dec::new(1,1).expect("Cannot fail"),
+                pos_inflation_amount: token::Amount::zero(),
                 #[cfg(not(feature = "mainnet"))]
                 faucet_account: None,
                 #[cfg(not(feature = "mainnet"))]

@@ -1,10 +1,9 @@
 //! Proof-of-Stake system parameters
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::types::dec::Dec;
 use namada_core::types::storage::Epoch;
-use rust_decimal::prelude::ToPrimitive;
-use rust_decimal::Decimal;
-use rust_decimal_macros::dec;
+use namada_core::types::uint::Uint;
 use thiserror::Error;
 
 /// Proof-of-Stake system parameters, set at genesis and can only be changed via
@@ -24,22 +23,22 @@ pub struct PosParams {
     /// The voting power per fundamental unit of the staking token (namnam).
     /// Used in validators' voting power calculation to interface with
     /// tendermint.
-    pub tm_votes_per_token: Decimal,
+    pub tm_votes_per_token: Dec,
     /// Amount of tokens rewarded to a validator for proposing a block
-    pub block_proposer_reward: Decimal,
+    pub block_proposer_reward: Dec,
     /// Amount of tokens rewarded to each validator that voted on a block
     /// proposal
-    pub block_vote_reward: Decimal,
+    pub block_vote_reward: Dec,
     /// Maximum staking rewards rate per annum
-    pub max_inflation_rate: Decimal,
+    pub max_inflation_rate: Dec,
     /// Target ratio of staked NAM tokens to total NAM tokens
-    pub target_staked_ratio: Decimal,
+    pub target_staked_ratio: Dec,
     /// Fraction of validator's stake that should be slashed on a duplicate
     /// vote.
-    pub duplicate_vote_min_slash_rate: Decimal,
+    pub duplicate_vote_min_slash_rate: Dec,
     /// Fraction of validator's stake that should be slashed on a light client
     /// attack.
-    pub light_client_attack_min_slash_rate: Decimal,
+    pub light_client_attack_min_slash_rate: Dec,
     /// Number of epochs above and below (separately) the current epoch to
     /// consider when doing cubic slashing
     pub cubic_slashing_window_length: u64,
@@ -53,17 +52,18 @@ impl Default for PosParams {
             unbonding_len: 21,
             // 1 voting power per 1 fundamental token (10^6 per NAM or 1 per
             // namnam)
-            tm_votes_per_token: dec!(1.0),
-            block_proposer_reward: dec!(0.125),
-            block_vote_reward: dec!(0.1),
+            tm_votes_per_token: Dec::one(),
+            block_proposer_reward: Dec::new(125, 3).expect("Test failed"),
+            block_vote_reward: Dec::new(1, 1).expect("Test failed"),
             // PoS inflation of 10%
-            max_inflation_rate: dec!(0.1),
+            max_inflation_rate: Dec::new(1, 1).expect("Test failed"),
             // target staked ratio of 2/3
-            target_staked_ratio: dec!(0.6667),
+            target_staked_ratio: Dec::new(6667, 4).expect("Test failed"),
             // slash 0.1%
-            duplicate_vote_min_slash_rate: dec!(0.001),
+            duplicate_vote_min_slash_rate: Dec::new(1, 3).expect("Test failed"),
             // slash 0.1%
-            light_client_attack_min_slash_rate: dec!(0.001),
+            light_client_attack_min_slash_rate: Dec::new(1, 3)
+                .expect("Test failed"),
             cubic_slashing_window_length: 1,
         }
     }
@@ -76,9 +76,9 @@ pub enum ValidationError {
         "Maximum total voting power is too large: got {0}, expected at most \
          {MAX_TOTAL_VOTING_POWER}"
     )]
-    TotalVotingPowerTooLarge(u64),
+    TotalVotingPowerTooLarge(Uint),
     #[error("Votes per token cannot be greater than 1, got {0}")]
-    VotesPerTokenGreaterThanOne(Decimal),
+    VotesPerTokenGreaterThanOne(Dec),
     #[error("Pipeline length must be >= 2, got {0}")]
     PipelineLenTooShort(u64),
     #[error(
@@ -118,28 +118,26 @@ impl PosParams {
 
         // Check maximum total voting power cannot get larger than what
         // Tendermint allows
-        //
-        // TODO: decide if this is still a check we want to do (in its current
-        // state with our latest voting power conventions, it will fail
-        // always)
-        let max_total_voting_power = Decimal::from(self.max_validator_slots)
-            * self.tm_votes_per_token
-            * Decimal::from(TOKEN_MAX_AMOUNT);
+        let max_total_voting_power = (self.tm_votes_per_token
+            * TOKEN_MAX_AMOUNT
+            * self.max_validator_slots)
+            .to_uint()
+            .expect("Cannot fail");
         match i64::try_from(max_total_voting_power) {
             Ok(max_total_voting_power_i64) => {
                 if max_total_voting_power_i64 > MAX_TOTAL_VOTING_POWER {
                     errors.push(ValidationError::TotalVotingPowerTooLarge(
-                        max_total_voting_power.to_u64().unwrap(),
+                        max_total_voting_power,
                     ))
                 }
             }
             Err(_) => errors.push(ValidationError::TotalVotingPowerTooLarge(
-                max_total_voting_power.to_u64().unwrap(),
+                max_total_voting_power,
             )),
         }
 
         // Check that there is no more than 1 vote per token
-        if self.tm_votes_per_token > dec!(1.0) {
+        if self.tm_votes_per_token > Dec::one() {
             errors.push(ValidationError::VotesPerTokenGreaterThanOne(
                 self.tm_votes_per_token,
             ))
@@ -197,8 +195,8 @@ mod tests {
 /// Testing helpers
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use namada_core::types::dec::Dec;
     use proptest::prelude::*;
-    use rust_decimal::Decimal;
 
     use super::*;
 
@@ -210,13 +208,13 @@ pub mod testing {
             // `unbonding_len` > `pipeline_len`
             unbonding_len in pipeline_len + 1..pipeline_len + 8,
             pipeline_len in Just(pipeline_len),
-            tm_votes_per_token in 1..10_001_u64)
+            tm_votes_per_token in 1..10_001_i128)
             -> PosParams {
             PosParams {
                 max_validator_slots,
                 pipeline_len,
                 unbonding_len,
-                tm_votes_per_token: Decimal::from(tm_votes_per_token) / dec!(10_000),
+                tm_votes_per_token: Dec::new(tm_votes_per_token, 4).expect("Test failed"),
                 // The rest of the parameters that are not being used in the PoS
                 // VP are constant for now
                 ..Default::default()
@@ -224,10 +222,10 @@ pub mod testing {
         }
     }
 
-    /// Get an arbitrary rate - a Decimal value between 0 and 1 inclusive, with
+    /// Get an arbitrary rate - a Dec value between 0 and 1 inclusive, with
     /// some fixed precision
-    pub fn arb_rate() -> impl Strategy<Value = Decimal> {
-        (0..=100_000_u64)
-            .prop_map(|num| Decimal::from(num) / Decimal::from(100_000_u64))
+    pub fn arb_rate() -> impl Strategy<Value = Dec> {
+        (0..=100_000_i128)
+            .prop_map(|num| Dec::new(num, 5).expect("Test failed"))
     }
 }
