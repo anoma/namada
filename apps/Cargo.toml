@@ -108,8 +108,6 @@ ripemd.workspace = true
 rlimit.workspace = true
 rocksdb.workspace = true
 rpassword.workspace = true
-rust_decimal_macros.workspace = true
-rust_decimal.workspace = true
 serde_bytes.workspace = true
 serde_json = {workspace = true, features = ["raw_value"]}
 serde.workspace = true

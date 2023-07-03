@@ -123,9 +123,8 @@ where
     pub fn get_total_voting_power(self, epoch: Option<Epoch>) -> token::Amount {
         self.get_consensus_validators(epoch)
             .iter()
-            .map(|validator| u64::from(validator.bonded_stake))
-            .sum::<u64>()
-            .into()
+            .map(|validator| validator.bonded_stake)
+            .sum::<token::Amount>()
     }
 
     /// Simple helper function for the ledger to get balances

@@ -11,7 +11,9 @@ use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::ibc::IbcEvent;
 use namada_core::types::storage::{BlockHeight, Header, Key};
-use namada_core::types::token::{is_any_token_balance_key, Amount};
+use namada_core::types::token::{
+    is_any_token_balance_key, is_any_token_or_multitoken_balance_key, Amount,
+};
 
 use super::Error;
 use crate::ledger::native_vp::CtxPreStorageRead;
@@ -119,10 +121,12 @@ where
         dest: &Key,
         amount: Amount,
     ) -> Result<(), Self::Error> {
-        let src_owner = is_any_token_balance_key(src);
+        let src_owner = is_any_token_or_multitoken_balance_key(src);
         let mut src_bal = match src_owner {
-            Some(Address::Internal(InternalAddress::IbcMint)) => Amount::max(),
-            Some(Address::Internal(InternalAddress::IbcBurn)) => {
+            Some([_, Address::Internal(InternalAddress::IbcMint)]) => {
+                Amount::max()
+            }
+            Some([_, Address::Internal(InternalAddress::IbcBurn)]) => {
                 unreachable!("Invalid transfer from IBC burn address")
             }
             _ => match self.read(src)? {
@@ -135,7 +139,7 @@ where
         src_bal.spend(&amount);
         let dest_owner = is_any_token_balance_key(dest);
         let mut dest_bal = match dest_owner {
-            Some(Address::Internal(InternalAddress::IbcMint)) => {
+            Some([_, Address::Internal(InternalAddress::IbcMint)]) => {
                 unreachable!("Invalid transfer to IBC mint address")
             }
             _ => match self.read(dest)? {

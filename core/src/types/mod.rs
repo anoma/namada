@@ -2,6 +2,7 @@
 
 pub mod address;
 pub mod chain;
+pub mod dec;
 pub mod governance;
 pub mod hash;
 pub mod ibc;
@@ -12,4 +13,5 @@ pub mod storage;
 pub mod time;
 pub mod token;
 pub mod transaction;
+pub mod uint;
 pub mod validity_predicate;

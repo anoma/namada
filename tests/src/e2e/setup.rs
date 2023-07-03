@@ -21,6 +21,7 @@ use eyre::{eyre, Context};
 use itertools::{Either, Itertools};
 use namada::types::chain::ChainId;
 use namada_apps::client::utils;
+use namada_apps::client::utils::REDUCED_CLI_PRINTING;
 use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
 use namada_apps::{config, wallet};
 use once_cell::sync::Lazy;
@@ -118,7 +119,7 @@ pub fn network(
             eprintln!("Failed setting up colorful error reports {}", err);
         }
     });
-
+    env::set_var(REDUCED_CLI_PRINTING, "true");
     let working_dir = working_dir();
     let test_dir = TestDir::new();
 

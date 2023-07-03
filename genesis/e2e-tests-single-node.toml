@@ -5,7 +5,7 @@
 genesis_time = "2021-09-30T10:00:00Z"
 native_token = "NAM"
 faucet_pow_difficulty = 1
-faucet_withdrawal_limit = "1_000"
+faucet_withdrawal_limit = "1000000000"
 
 [validator.validator-0]
 # Validator's staked NAM at genesis.
@@ -15,11 +15,11 @@ non_staked_balance = 1000000000000
 # VP for the validator account
 validator_vp = "vp_validator"
 # Commission rate for rewards
-commission_rate = 0.05
+commission_rate = "0.05"
 # Maximum change per epoch in the commission rate
-max_commission_rate_change = 0.01
+max_commission_rate_change = "0.01"
 # Public IP:port address.
-# We set the port to be the default+1000, so that if a local node was running at 
+# We set the port to be the default+1000, so that if a local node was running at
 # the same time as the E2E tests, it wouldn't affect them.
 net_address = "127.0.0.1:27656"
 
@@ -27,86 +27,93 @@ net_address = "127.0.0.1:27656"
 
 [token.NAM]
 address = "atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5"
+denom = 6
 vp = "vp_token"
 [token.NAM.balances]
-Albert = 1000000
-"Albert.public_key" = 100
-Bertha = 1000000
-"Bertha.public_key" = 2000
-Christel = 1000000
-"Christel.public_key" = 100
-Daewon = 1000000
-Ester = 1000000
-faucet = 9223372036
-"faucet.public_key" = 100
-"validator-0.public_key" = 100
+Albert = "1000000"
+"Albert.public_key" = "100"
+Bertha = "1000000"
+"Bertha.public_key" = "2000"
+Christel = "1000000"
+"Christel.public_key" = "100"
+Daewon = "1000000"
+Ester = "1000000"
+faucet = "9223372036854"
+"faucet.public_key" = "100"
+"validator-0.public_key" = "100"
 
 [token.BTC]
 address = "atest1v4ehgw36xdzryve5gsc52veeg5cnsv2yx5eygvp38qcrvd29xy6rys6p8yc5xvp4xfpy2v694wgwcp"
+denom = 8
 vp = "vp_token"
 [token.BTC.balances]
-Albert = 1000000
-Bertha = 1000000
-Christel = 1000000
-Daewon = 1000000
-Ester = 1000000
-faucet = 9223372036854
+Albert = "1000000"
+Bertha = "1000000"
+Christel = "1000000"
+Daewon = "1000000"
+Ester = "1000000"
+faucet = "9223372036854"
 
 [token.ETH]
 address = "atest1v4ehgw36xqmr2d3nx3ryvd2xxgmrq33j8qcns33sxezrgv6zxdzrydjrxveygd2yxumrsdpsf9jc2p"
+denom = 18
 vp = "vp_token"
 [token.ETH.balances]
-Albert = 1000000
-Bertha = 1000000
-Christel = 1000000
-Daewon = 1000000
-Ester = 1000000
-faucet = 9223372036854
+Albert = "1000000"
+Bertha = "1000000"
+Christel = "1000000"
+Daewon = "1000000"
+Ester = "1000000"
+faucet = "9223372036854"
 
 [token.DOT]
 address = "atest1v4ehgw36gg6nvs2zgfpyxsfjgc65yv6pxy6nwwfsxgungdzrggeyzv35gveyxsjyxymyz335hur2jn"
+denom = 10
 vp = "vp_token"
-[token.Dot.balances]
-Albert = 1000000
-Bertha = 1000000
-Christel = 1000000
-Daewon = 1000000
-Ester = 1000000
-faucet = 9223372036854
+[token.DOT.balances]
+Albert = "1000000"
+Bertha = "1000000"
+Christel = "1000000"
+Daewon = "1000000"
+Ester = "1000000"
+faucet = "9223372036854"
 
 [token.Schnitzel]
 address = "atest1v4ehgw36xue5xvf5xvuyzvpjx5un2v3k8qeyvd3cxdqns32p89rrxd6xx9zngvpegccnzs699rdnnt"
+denom = 6
 vp = "vp_token"
 [token.Schnitzel.balances]
-Albert = 1000000
-Bertha = 1000000
-Christel = 1000000
-Daewon = 1000000
-Ester = 1000000
-faucet = 9223372036854
+Albert = "1000000"
+Bertha = "1000000"
+Christel = "1000000"
+Daewon = "1000000"
+Ester = "1000000"
+faucet = "9223372036854"
 
 [token.Apfel]
 address = "atest1v4ehgw36gfryydj9g3p5zv3kg9znyd358ycnzsfcggc5gvecgc6ygs2rxv6ry3zpg4zrwdfeumqcz9"
+denom = 6
 vp = "vp_token"
 [token.Apfel.balances]
-Albert = 1000000
-Bertha = 1000000
-Christel = 1000000
-Daewon = 1000000
-Ester = 1000000
-faucet = 9223372036854
+Albert = "1000000"
+Bertha = "1000000"
+Christel = "1000000"
+Daewon = "1000000"
+Ester = "1000000"
+faucet = "9223372036854"
 
 [token.Kartoffel]
 address = "atest1v4ehgw36gep5ysecxq6nyv3jg3zygv3e89qn2vp48pryxsf4xpznvve5gvmy23fs89pryvf5a6ht90"
 public_key = ""
+denom = 6
 vp = "vp_token"
 [token.Kartoffel.balances]
-Albert = 1000000
-Bertha = 1000000
-Christel = 1000000
-Daewon = 1000000
-Ester = 1000000
-faucet = 9223372036854
+Albert = "1000000"
+Bertha = "1000000"
+Christel = "1000000"
+Daewon = "1000000"
+Ester = "1000000"
+faucet = "9223372036854"
 
 # Some established accounts present at genesis.
 [established.faucet]
@@ -173,9 +180,9 @@ implicit_vp = "vp_implicit"
 # Expected number of epochs per year (also sets the min duration of an epoch in seconds)
 epochs_per_year = 31_536_000
 # The P gain factor in the Proof of Stake rewards controller
-pos_gain_p = 0.1
+pos_gain_p = "0.1"
 # The D gain factor in the Proof of Stake rewards controller
-pos_gain_d = 0.1
+pos_gain_d = "0.1"
 
 # Proof of stake parameters.
 [pos_params]
@@ -188,21 +195,21 @@ pipeline_len = 2
 # for a fault in epoch 'n' up through epoch 'n + unbonding_len'.
 unbonding_len = 3
 # Votes per fundamental staking token (namnam)
-tm_votes_per_token = 0.1
+tm_votes_per_token = "0.1"
 # Reward for proposing a block.
-block_proposer_reward = 0.125
+block_proposer_reward = "0.125"
 # Reward for voting on a block.
-block_vote_reward = 0.1
+block_vote_reward = "0.1"
 # Maximum inflation rate per annum (10%)
-max_inflation_rate = 0.1
+max_inflation_rate = "0.1"
 # Targeted ratio of staked tokens to total tokens in the supply
-target_staked_ratio = 0.6667
+target_staked_ratio = "0.6667"
 # Portion of a validator's stake that should be slashed on a duplicate
 # vote.
-duplicate_vote_min_slash_rate = 0.001
+duplicate_vote_min_slash_rate = "0.001"
 # Portion of a validator's stake that should be slashed on a light
 # client attack.
-light_client_attack_min_slash_rate = 0.001
+light_client_attack_min_slash_rate = "0.001"
 # Number of epochs above and below (separately) the current epoch to
 # consider when doing cubic slashing
 cubic_slashing_window_length = 1
