@@ -405,11 +405,31 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--node",
             &validator_one_rpc,
         ],
-        // Submit a token transfer tx (from an implicit account)
+        // Submit a token transfer tx (from an ed25519 implicit account)
         vec![
             "transfer",
             "--source",
             DAEWON,
+            "--target",
+            ALBERT,
+            "--token",
+            NAM,
+            "--amount",
+            "10.1",
+            "--gas-amount",
+            "0",
+            "--gas-limit",
+            "0",
+            "--gas-token",
+            NAM,
+            "--node",
+            &validator_one_rpc,
+        ],
+        // Submit a token transfer tx (from a secp256k1 implicit account)
+        vec![
+            "transfer",
+            "--source",
+            ESTER,
             "--target",
             ALBERT,
             "--token",

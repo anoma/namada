@@ -85,7 +85,7 @@ namada-sdk = [
 multicore = ["masp_proofs/multicore"]
 
 [dependencies]
-namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign-verify"]}
+namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign"]}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
 async-std.workspace = true
 async-trait = {version = "0.1.51", optional = true}
@@ -134,7 +134,7 @@ rand_core = {version = "0.6", default-features = false, optional = true}
 zeroize.workspace = true
 
 [dev-dependencies]
-namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign-verify", "testing", "ibc-mocks"]}
+namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign", "testing", "ibc-mocks"]}
 namada_test_utils = {path = "../test_utils"}
 assert_matches.workspace = true
 async-trait.workspace = true

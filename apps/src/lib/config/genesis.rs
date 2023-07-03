@@ -981,9 +981,14 @@ pub fn genesis(num_validators: u64) -> Genesis {
         public_key: None,
         storage: HashMap::default(),
     };
-    let implicit_accounts = vec![ImplicitAccount {
-        public_key: wallet::defaults::daewon_keypair().ref_to(),
-    }];
+    let implicit_accounts = vec![
+        ImplicitAccount {
+            public_key: wallet::defaults::daewon_keypair().ref_to(),
+        },
+        ImplicitAccount {
+            public_key: wallet::defaults::ester_keypair().ref_to(),
+        },
+    ];
     let default_user_tokens = token::Amount::whole(1_000_000);
     let default_key_tokens = token::Amount::whole(1_000);
     let mut balances: HashMap<Address, token::Amount> = HashMap::from_iter([
