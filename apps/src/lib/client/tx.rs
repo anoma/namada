@@ -28,8 +28,8 @@ use namada::types::storage::{Epoch, Key};
 use namada::types::token;
 use namada::types::transaction::governance::{ProposalType, VoteProposalData};
 use namada::types::transaction::{InitValidator, TxType};
-use rust_decimal::Decimal;
-
+use namada::types::hash::Hash;
+use sha2::{Sha256, Digest};
 use super::rpc;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
