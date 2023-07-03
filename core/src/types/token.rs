@@ -57,6 +57,11 @@ impl Amount {
         self.micro as Change
     }
 
+    /// Get the raw micro amount as a u64 value
+    pub fn raw_amount(&self) -> u64 {
+        self.micro
+    }
+
     /// Spend a given amount.
     /// Panics when given `amount` > `self.micro` amount.
     pub fn spend(&mut self, amount: &Amount) {

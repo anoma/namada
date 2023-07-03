@@ -3856,6 +3856,7 @@ dependencies = [
  "once_cell",
  "proptest",
  "proptest-state-machine",
+ "rand 0.8.5",
  "rust_decimal",
  "rust_decimal_macros",
  "test-log",

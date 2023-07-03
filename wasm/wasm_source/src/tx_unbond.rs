@@ -64,6 +64,12 @@ mod tests {
         key: key::common::SecretKey,
         pos_params: PosParams,
     ) -> TxResult {
+        // Remove the validator stake threshold for simplicity
+        let pos_params = PosParams {
+            validator_stake_threshold: token::Amount::default(),
+            ..pos_params
+        };
+
         dbg!(&initial_stake, &unbond);
         let is_delegation = matches!(
             &unbond.source, Some(source) if *source != unbond.validator);
