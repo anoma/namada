@@ -970,6 +970,7 @@ fn test_slashes_with_unbonding_aux(
         evidence_block_height,
         slash_0_type,
         val_addr,
+        current_epoch.next(),
     )
     .unwrap();
 
@@ -1007,6 +1008,7 @@ fn test_slashes_with_unbonding_aux(
         evidence_block_height,
         slash_1_type,
         val_addr,
+        current_epoch.next(),
     )
     .unwrap();
 
