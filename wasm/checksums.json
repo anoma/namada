@@ -3,7 +3,7 @@
     "tx_change_validator_commission.wasm": "tx_change_validator_commission.bd641efba60253831ba729f06786e7c8e26e20ca61477e6f7371ae0e3bd71643.wasm",
     "tx_ibc.wasm": "tx_ibc.619f7172f1daea9ba0b5c1bea4c2daebbc4fb8c0bfb76a33bc142931da11226c.wasm",
     "tx_init_account.wasm": "tx_init_account.51e1677f5a2dfe956604ed9136a09b58f32db08fdecdcf1243780ad4ade1fc2e.wasm",
-    "tx_init_proposal.wasm": "tx_init_proposal.260b842de0ad056c211cd831440bf8d2cadbae86e7aed0bda31a167fed5d0f67.wasm",
+    "tx_init_proposal.wasm": "tx_init_proposal.1005165e0215e07ee5b287f7909387263ba95223b266efebd57bfeec4292d917.wasm",
     "tx_init_validator.wasm": "tx_init_validator.73e87f7ff25d48a5088e7500f70828933c30899651cc46d036ae13b638414f78.wasm",
     "tx_reveal_pk.wasm": "tx_reveal_pk.883a0e48c94c76f22b99d6f0e8452683f14f73b6acd9ff94e1b9b37055ae6084.wasm",
     "tx_transfer.wasm": "tx_transfer.a2c7ef548e8f9ab3a3f6278ce648f42376f0c839e9851de6d28af56cffb86ae3.wasm",

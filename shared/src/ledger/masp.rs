@@ -1594,7 +1594,6 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 return Err(builder::Error::InsufficientFunds(additional));
             }
         }
-
         // Build and return the constructed transaction
         builder
             .clone()

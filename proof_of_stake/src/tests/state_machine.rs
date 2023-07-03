@@ -325,6 +325,12 @@ impl StateMachineTest for ConcretePosState {
                     .unwrap()
                     .unwrap_or_default();
 
+                println!(
+                    "BEFORE: cur_stake = {}, pipeline_stake = {}",
+                    u64::from(validator_stake_before_unbond_cur),
+                    u64::from(validator_stake_before_unbond_pipeline)
+                );
+
                 // Apply the unbond
                 super::unbond_tokens(
                     &mut state.s,
@@ -623,6 +629,7 @@ impl ConcretePosState {
         )
         .unwrap()
         .unwrap_or_default();
+        println!("AFTER: pipeline stake = {}", u64::from(stake_at_pipeline));
 
         // Post-condition: the validator stake at the pipeline should be
         // decremented at most by the bond amount (because slashing can reduce
@@ -636,6 +643,7 @@ impl ConcretePosState {
                     .checked_sub(amount)
                     .unwrap_or_default()
         );
+        println!("Check bond+unbond post-conds");
 
         self.check_bond_and_unbond_post_conditions(
             submit_epoch,

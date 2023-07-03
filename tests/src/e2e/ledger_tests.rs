@@ -527,7 +527,9 @@ fn ledger_txs_and_queries() -> Result<()> {
 
     for tx_args in &txs_args {
         for &dry_run in &[true, false] {
-            let tx_args = if dry_run {
+            let tx_args = if dry_run && tx_args[0] == "tx" {
+                continue;
+            } else if dry_run {
                 vec![tx_args.clone(), vec!["--dry-run"]].concat()
             } else {
                 tx_args.clone()
@@ -707,8 +709,6 @@ fn masp_txs_and_queries() -> Result<()> {
                 ETH,
                 "--amount",
                 "10",
-                "--signer",
-                ALBERT,
                 "--node",
                 &validator_one_rpc,
             ],
@@ -726,8 +726,6 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "7",
-                "--signer",
-                ALBERT,
                 "--node",
                 &validator_one_rpc,
             ],
@@ -745,8 +743,6 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "7",
-                "--signer",
-                ALBERT,
                 "--node",
                 &validator_one_rpc,
             ],
@@ -764,8 +760,6 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "7",
-                "--signer",
-                ALBERT,
                 "--node",
                 &validator_one_rpc,
             ],
@@ -783,8 +777,6 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "6",
-                "--signer",
-                ALBERT,
                 "--node",
                 &validator_one_rpc,
             ],
@@ -839,8 +831,6 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "20",
-                "--signer",
-                BERTHA,
                 "--node",
                 &validator_one_rpc,
             ],

@@ -3497,7 +3497,7 @@ where
 
         let total_bonded_handle = total_bonded_handle(&validator);
         let mut sum_post_bonds = token::Change::default();
-
+        
         // Start from after the infraction epoch up thru last epoch before
         // processing
         tracing::debug!("Iterating over unbonds after the infraction epoch");
