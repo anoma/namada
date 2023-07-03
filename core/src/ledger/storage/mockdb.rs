@@ -523,10 +523,14 @@ impl<'iter> DBIter<'iter> for MockDB {
             "{}{}",
             db_prefix,
             match prefix {
-                None => "".to_string(),
                 Some(prefix) => {
-                    prefix.to_string()
+                    if prefix == &Key::default() {
+                        prefix.to_string()
+                    } else {
+                        format!("{prefix}/")
+                    }
                 }
+                None => "".to_string(),
             }
         );
         let iter = self.0.borrow().clone().into_iter();

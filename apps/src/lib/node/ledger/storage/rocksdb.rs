@@ -1289,7 +1289,18 @@ fn iter_subspace_prefix<'iter>(
         .get_column_family(SUBSPACE_CF)
         .expect("{SUBSPACE_CF} column family should exist");
     let db_prefix = "".to_owned();
-    iter_prefix(db, subspace_cf, db_prefix, prefix.map(|k| k.to_string()))
+    iter_prefix(
+        db,
+        subspace_cf,
+        db_prefix,
+        prefix.map(|k| {
+            if k == &Key::default() {
+                k.to_string()
+            } else {
+                format!("{k}/")
+            }
+        }),
+    )
 }
 
 fn iter_diffs_prefix(
