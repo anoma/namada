@@ -1,5 +1,36 @@
 # CHANGELOG
 
+## v0.18.0
+
+Namada 0.18.0 is a minor release primarily addressing a major change in the token amount representation, the addition of a new validator set category, and other minor improvements to the ledger stability.
+
+### BUG FIXES
+
+- PoS: Ensure that when a validator is slashed, it gets removed from
+  validator set in the same epoch in Namada state as in CometBFT's state.
+  ([\#1582](https://github.com/anoma/namada/pull/1582))
+- Fix signature verification with secp256k1 in WASM VPs.
+  ([\#1599](https://github.com/anoma/namada/pull/1599))
+- Storage: Fix iterator without a prefix.
+  ([\#1615](https://github.com/anoma/namada/pull/1615))
+
+### FEATURES
+
+- Adds a third validator set, the below threshold set, which contains
+  all validators whose stake is below some parameterizable threshold.
+  ([#1576](https://github.com/anoma/namada/pull/1576))
+- Added `NAMADA_LOG_DIR` env var for logging to file(s) and `NAMADA_LOG_ROLLING`
+  for setting rolling logs frequency. The rolling frequency can be set to
+  never, minutely, hourly or daily. If not set, the default is never.
+  ([\#1578](https://github.com/anoma/namada/pull/1578))
+
+### IMPROVEMENTS
+
+- Update clap to the latest version.
+  ([\#64](https://github.com/anoma/namada/issues/64))
+- Updated wasmer to v2.3.0 and switched from pwasm-utils to wasm-instrument.
+  ([\#1604](https://github.com/anoma/namada/pull/1604))
+
 ## v0.17.5
 
 Namada 0.17.5 is a maintenance release chiefly addressing MASP
