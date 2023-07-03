@@ -549,6 +549,20 @@ impl Mul<(u64, u64)> for Amount {
     }
 }
 
+/// A combination of Euclidean division and fractions:
+/// x*(a,b) = (a*(x//b), x%b).
+impl Mul<(I256, I256)> for Amount {
+    type Output = (Amount, Amount);
+
+    fn mul(mut self, rhs: (I256, I256)) -> Self::Output {
+        let amt = Amount {
+            raw: (self.raw / rhs.1.0) * rhs.0.0,
+        };
+        self.raw %= rhs.1.0;
+        (amt, self)
+    }
+}
+
 impl Div<u64> for Amount {
     type Output = Self;
 

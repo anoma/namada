@@ -791,6 +791,7 @@ pub mod constants {
     // User addresses aliases
     pub const ALBERT: &str = "Albert";
     pub const ALBERT_KEY: &str = "Albert-key";
+    pub const FAUCET: &str = "faucet";
     pub const BERTHA: &str = "Bertha";
     pub const BERTHA_KEY: &str = "Bertha-key";
     pub const CHRISTEL: &str = "Christel";

@@ -990,15 +990,16 @@ impl From<MerkleTreeError> for Error {
 /// Helpers for testing components that depend on storage
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use std::str::FromStr;
+
     use borsh::BorshSerialize;
-    use rust_decimal::Decimal;
-    use rust_decimal_macros::dec;
 
     use super::mockdb::MockDB;
     use super::*;
     use crate::ledger::storage::traits::Sha256Hasher;
     use crate::ledger::storage_api::StorageWrite;
     use crate::types::address;
+    use crate::types::dec::Dec;
     use crate::types::token::parameters;
 
     /// `WlStorage` with a mock DB for testing
@@ -1064,14 +1065,14 @@ pub mod testing {
         ) {
             let masp_rewards = address::masp_rewards();
             let masp_addr = address::masp();
-            for addr in masp_rewards.keys() {
+            for (addr, _key) in masp_rewards.keys() {
                 parameters::Parameters::init_storage(
                     &parameters::Parameters::default(),
                     addr,
                     self,
                 );
-                let initial_inflation: u64 = 1;
-                let initial_locked_ratio: Decimal = dec!(0.1);
+                let initial_inflation: u128 = 1;
+                let initial_locked_ratio: Dec = Dec::from_str("0.1").unwrap();
 
                 self.write(&token::last_inflation(addr), initial_inflation)
                     .expect("Should not fail to put a test inflation source");

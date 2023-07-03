@@ -2,10 +2,9 @@
 //! proof-of-stake, providing liquity to shielded asset pools, and public goods
 //! funding.
 
-use namada_core::types::dec::Dec;
-
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::address::Address;
+use crate::types::dec::Dec;
 use crate::types::token;
 
 /// The domains of inflation
@@ -54,12 +53,12 @@ impl RewardsController {
     pub fn new(
         locked_tokens: token::Amount,
         total_tokens: token::Amount,
-        locked_ratio_target: Decimal,
-        locked_ratio_last: Decimal,
-        max_reward_rate: Decimal,
+        locked_ratio_target: Dec,
+        locked_ratio_last: Dec,
+        max_reward_rate: Dec,
         last_inflation_amount: token::Amount,
-        p_gain_nom: Decimal,
-        d_gain_nom: Decimal,
+        p_gain_nom: Dec,
+        d_gain_nom: Dec,
         epochs_per_year: u64,
     ) -> Self {
         Self {

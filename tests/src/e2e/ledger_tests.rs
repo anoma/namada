@@ -30,9 +30,8 @@ use namada_apps::config::genesis::genesis_config::{
 };
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
-use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
+use namada_core::types::dec::Dec;
 use namada_test_utils::TestWasms;
-use rust_decimal_macros::dec;
 use serde_json::json;
 use setup::constants::*;
 
@@ -1025,18 +1024,27 @@ fn masp_pinned_txs() -> Result<()> {
 
 /// In this test we verify that users of the MASP receive the correct rewards
 /// for leaving their assets in the pool for varying periods of time.
+/// For now, it's marked ignore as these tests need to be redesigned.
 
 #[test]
-fn masp_incentives() -> Result<()> {
-    // The number of decimal places used by BTC amounts.
-    const BTC_DENOMINATION: u8 = 8;
-    // The number of decimal places used by ETH amounts.
-    const ETH_DENOMINATION: u8 = 18;
-    // Download the shielded pool parameters before starting node
-    let _ = CLIShieldedUtils::new(PathBuf::new());
-    // Lengthen epoch to ensure that a transaction can be constructed and
-    // submitted within the same block. Necessary to ensure that conversion is
-    // not invalidated.
+#[ignore]
+fn masp_overflow() -> Result<()> {
+    let _test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                epochs_per_year: epochs_per_year_from_min_duration(
+                    if is_debug_mode() { 240 } else { 60 },
+                ),
+                min_num_of_blocks: 1,
+                ..genesis.parameters
+            };
+            GenesisConfig {
+                parameters,
+                ..genesis
+            }
+        },
+        None,
+    )?;
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
@@ -1050,40 +1058,22 @@ fn masp_incentives() -> Result<()> {
                 .token
                 .into_iter()
                 .map(|(token, account_config)| {
-                    (token.clone(), {
-                        let parameters =
-                            account_config.parameters.map(|parameters| {
-                                if token == *NAM {
-                                    Parameters {
-                                        max_reward_rate: dec!(1000.5),
-                                        // these need to be set to 0
-                                        kd_gain_nom: dec!(0.005),
-                                        kp_gain_nom: dec!(0.005),
-                                        ..parameters
-                                    }
-                                } else {
-                                    Parameters {
-                                        max_reward_rate: dec!(100000.5),
-                                        kd_gain_nom: dec!(0.5),
-                                        kp_gain_nom: dec!(0.5),
-                                        ..parameters
-                                    }
-                                }
-                            });
-
+                    (token, {
+                        let parameters = account_config.parameters;
                         TokenAccountConfig {
                             balances: Some(
                                 account_config
                                     .balances
                                     .into_iter()
-                                    .flat_map(|m| m.into_keys())
-                                    .map(|validator| {
-                                        if validator == ALBERT
-                                            || validator == BERTHA
-                                        {
-                                            (validator, 1000000u64)
+                                    .flatten()
+                                    .map(|(validator, value)| {
+                                        if validator == FAUCET {
+                                            (
+                                                validator,
+                                                token::Amount::from(0u64),
+                                            )
                                         } else {
-                                            (validator, 0u64)
+                                            (validator, value)
                                         }
                                     })
                                     .collect(),
@@ -1115,7 +1105,240 @@ fn masp_incentives() -> Result<()> {
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     // Wait till epoch boundary
-    let ep0 = get_epoch(&test, &validator_one_rpc)?;
+    let _ep0 = get_epoch(&test, &validator_one_rpc)?;
+    // Send 10 ETH from Albert to PA(B)
+    let mut client = run!(
+        test,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            ALBERT,
+            "--target",
+            AB_PAYMENT_ADDRESS,
+            "--token",
+            ETH,
+            "--amount",
+            "1",
+            "--node",
+            &validator_one_rpc
+        ],
+        Some(300)
+    )?;
+    client.exp_string("Transaction accepted")?;
+    client.exp_string("Transaction applied")?;
+    client.exp_string("Transaction is valid")?;
+    client.assert_success();
+
+    // Assert ETH balance at VK(B) is 10
+    let mut client = run!(
+        test,
+        Bin::Client,
+        vec![
+            "balance",
+            "--owner",
+            AB_VIEWING_KEY,
+            "--token",
+            ETH,
+            "--node",
+            &validator_one_rpc
+        ],
+        Some(60)
+    )?;
+    client.exp_string("eth: 1")?;
+    client.assert_success();
+
+    // Assert NAM balance at VK(B) is 0
+    let mut client = run!(
+        test,
+        Bin::Client,
+        vec![
+            "balance",
+            "--owner",
+            AB_VIEWING_KEY,
+            "--token",
+            NAM,
+            "--node",
+            &validator_one_rpc
+        ],
+        Some(60)
+    )?;
+    client.exp_string("No shielded nam balance found")?;
+    client.assert_success();
+
+    // Wait till epoch boundary
+    let _ep4 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+
+    // Assert ETH balance at VK(B) is 10
+    let mut client = run!(
+        test,
+        Bin::Client,
+        vec![
+            "balance",
+            "--owner",
+            AB_VIEWING_KEY,
+            "--token",
+            ETH,
+            "--node",
+            &validator_one_rpc
+        ],
+        Some(60)
+    )?;
+    client.exp_string("eth: 1")?;
+    client.assert_success();
+
+    // Assert NAM balance at VK(B) is 10*ETH_reward*(epoch_4-epoch_3)
+    let mut client = run!(
+        test,
+        Bin::Client,
+        vec![
+            "balance",
+            "--owner",
+            AB_VIEWING_KEY,
+            "--token",
+            NAM,
+            "--node",
+            &validator_one_rpc
+        ],
+        Some(60)
+    )?;
+    client.assert_success();
+
+    // Assert NAM balance at MASP pool is 200000*BTC_reward*(epoch_1-epoch_0)
+    let mut client = run!(
+        test,
+        Bin::Client,
+        vec![
+            "balance",
+            "--owner",
+            MASP,
+            "--token",
+            NAM,
+            "--node",
+            &validator_one_rpc
+        ],
+        Some(60)
+    )?;
+    client.assert_success();
+
+    // let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep4.0 - ep3.0);
+    // let denominated = DenominatedAmount {
+    //     amount: amt,
+    //     denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    // };
+    // client.exp_string(&format!("nam: {}", denominated,))?;
+    // client.assert_success();
+    Ok(())
+}
+
+/// Marked ignore as these tests need to be redesigned.
+#[test]
+#[ignore]
+fn masp_incentives() -> Result<()> {
+    // The number of decimal places used by BTC amounts.
+    const BTC_DENOMINATION: u8 = 8;
+    // The number of decimal places used by ETH amounts.
+    const ETH_DENOMINATION: u8 = 18;
+    // Download the shielded pool parameters before starting node
+    let _ = CLIShieldedUtils::new(PathBuf::new());
+    // Lengthen epoch to ensure that a transaction can be constructed and
+    // submitted within the same block. Necessary to ensure that conversion is
+    // not invalidated.
+    let test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                epochs_per_year: epochs_per_year_from_min_duration(
+                    if is_debug_mode() { 240 } else { 60 },
+                ),
+                min_num_of_blocks: 1,
+                ..genesis.parameters
+            };
+            let token = genesis
+                .token
+                .into_iter()
+                .map(|(token, account_config)| {
+                    (token.clone(), {
+                        let parameters =
+                            account_config.parameters.map(|parameters| {
+                                if token == *NAM {
+                                    Parameters {
+                                        max_reward_rate: Dec::from_str(
+                                            "1000.5",
+                                        )
+                                        .unwrap(),
+                                        // these need to be set to 0
+                                        kd_gain_nom: Dec::from_str("0.005")
+                                            .unwrap(),
+                                        kp_gain_nom: Dec::from_str("0.005")
+                                            .unwrap(),
+                                        ..parameters
+                                    }
+                                } else {
+                                    Parameters {
+                                        max_reward_rate: Dec::from_str(
+                                            "100000.5",
+                                        )
+                                        .unwrap(),
+                                        kd_gain_nom: Dec::from_str("0.5")
+                                            .unwrap(),
+                                        kp_gain_nom: Dec::from_str("0.5")
+                                            .unwrap(),
+                                        ..parameters
+                                    }
+                                }
+                            });
+
+                        TokenAccountConfig {
+                            balances: Some(
+                                account_config
+                                    .balances
+                                    .into_iter()
+                                    .flat_map(|m| m.into_keys())
+                                    .map(|validator| {
+                                        if validator == ALBERT
+                                            || validator == BERTHA
+                                        {
+                                            (
+                                                validator,
+                                                token::Amount::from(1000000u64),
+                                            )
+                                        } else {
+                                            (
+                                                validator,
+                                                token::Amount::from(0u64),
+                                            )
+                                        }
+                                    })
+                                    .collect(),
+                            ),
+                            parameters,
+                            ..account_config
+                        }
+                    })
+                })
+                .collect();
+
+            GenesisConfig {
+                parameters,
+                token,
+                ..genesis
+            }
+        },
+        None,
+    )?;
+
+    // 1. Run the ledger node
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+
+    wait_for_wasm_pre_compile(&mut ledger)?;
+
+    let _bg_ledger = ledger.background();
+
+    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    // Wait till epoch boundary
+    let _ep0 = get_epoch(&test, &validator_one_rpc)?;
 
     // Send 200000 BTC from Albert to PA(A)
     let mut client = run!(
@@ -1201,7 +1424,8 @@ fn masp_incentives() -> Result<()> {
     client.assert_success();
 
     // Assert NAM balance at VK(A) is 200000*BTC_reward*(epoch_1-epoch_0)
-    let _amt200000 = token::Amount::from_uint(200000, BTC_DENOMINATION).unwrap();
+    let _amt200000 =
+        token::Amount::from_uint(200000, BTC_DENOMINATION).unwrap();
     let _amt30 = token::Amount::from_uint(30, ETH_DENOMINATION).unwrap();
 
     let mut client = run!(

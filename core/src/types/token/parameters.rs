@@ -1,14 +1,15 @@
 //! Custom parameters for each token type. These are used for
 //! determining the shielded pool incentives.
 
+use std::str::FromStr;
+
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use rust_decimal::Decimal;
-use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
 
 use crate::ledger::storage::{self as ledger_storage};
 use crate::ledger::storage_api::StorageWrite;
 use crate::types::address::Address;
+use crate::types::dec::Dec;
 use crate::types::storage::{Key, KeySeg};
 
 /// Token parameters for each kind of asset held on chain
@@ -28,13 +29,13 @@ use crate::types::storage::{Key, KeySeg};
 )]
 pub struct Parameters {
     /// Maximum reward rate
-    pub max_reward_rate: Decimal,
+    pub max_reward_rate: Dec,
     /// Shielded Pool nominal derivative gain
-    pub kd_gain_nom: Decimal,
+    pub kd_gain_nom: Dec,
     /// Shielded Pool nominal proportional gain for the given token
-    pub kp_gain_nom: Decimal,
+    pub kp_gain_nom: Dec,
     /// Locked ratio for the given token
-    pub locked_ratio_target_key: Decimal,
+    pub locked_ratio_target_key: Dec,
 }
 
 /// The key for the nominal proportional gain of a shielded pool for a given
@@ -120,10 +121,10 @@ impl Parameters {
 impl Default for Parameters {
     fn default() -> Self {
         Self {
-            max_reward_rate: dec!(0.1),
-            kp_gain_nom: dec!(0.1),
-            kd_gain_nom: dec!(0.1),
-            locked_ratio_target_key: dec!(0.6667),
+            max_reward_rate: Dec::from_str("0.1").unwrap(),
+            kp_gain_nom: Dec::from_str("0.1").unwrap(),
+            kd_gain_nom: Dec::from_str("0.1").unwrap(),
+            locked_ratio_target_key: Dec::from_str("0.6667").unwrap(),
         }
     }
 }

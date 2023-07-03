@@ -2285,21 +2285,16 @@ where
                 },
                 address,
             ) = validator.unwrap();
-            let cur_stake = token::Amount::from(cur_stake);
-
-            tracing::debug!(
-                "Below-capacity validator address {address}, stake {}",
-                cur_stake.to_string_native()
-            );
 
             let prev_validator_stake = validator_deltas_handle(&address)
                 .get_sum(storage, current_epoch, params)
                 .unwrap()
                 .map(token::Amount::from_change)
                 .unwrap_or_default();
+            let prev_native = prev_validator_stake.to_string_native();
             tracing::debug!(
                 "Below-capacity validator address {address}, stake \
-                 {prev_validator_stake}"
+                 {prev_native}"
             );
 
             let prev_tm_voting_power = into_tm_voting_power(
