@@ -23,7 +23,7 @@ use crate::ledger::rpc::validate_amount;
 use crate::ledger::signing::TxSigningKey;
 use crate::ledger::tx::process_tx;
 use crate::ledger::wallet::{Wallet, WalletUtils};
-use crate::proto::Tx;
+use crate::proto::{Code, Data, Tx};
 use crate::types::address::Address;
 use crate::types::control_flow::time::{Duration, Instant};
 use crate::types::control_flow::{
@@ -35,6 +35,7 @@ use crate::types::eth_bridge_pool::{
 };
 use crate::types::keccak::KeccakHash;
 use crate::types::token::{Amount, DenominatedAmount};
+use crate::types::transaction::TxType;
 use crate::types::voting_power::FractionalVotingPower;
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
@@ -45,7 +46,6 @@ pub async fn add_to_eth_bridge_pool<C, U>(
     args: args::EthereumBridgePool,
 ) where
     C: Client + Sync,
-    C::Error: std::fmt::Debug + std::fmt::Display,
     U: WalletUtils,
 {
     let args::EthereumBridgePool {
@@ -56,7 +56,7 @@ pub async fn add_to_eth_bridge_pool<C, U>(
         amount,
         gas_amount,
         gas_payer,
-        code_path,
+        code_path: wasm_code,
     } = args;
     let sub_prefix = Some(wrapped_erc20s::sub_prefix(&asset));
     let DenominatedAmount { amount, .. } =
@@ -75,8 +75,15 @@ pub async fn add_to_eth_bridge_pool<C, U>(
             payer: gas_payer,
         },
     };
-    let data = transfer.try_to_vec().unwrap();
-    let transfer_tx = Tx::new(code_path, Some(data), chain_id, None);
+    let mut transfer_tx = Tx::new(TxType::Raw);
+    transfer_tx.header.chain_id = chain_id;
+    transfer_tx.header.expiration = args.tx.expiration;
+    transfer_tx.set_data(Data::new(
+        transfer
+            .try_to_vec()
+            .expect("Serializing tx should not fail"),
+    ));
+    transfer_tx.set_code(Code::new(wasm_code));
     // this should not initialize any new addresses, so we ignore the result.
     process_tx(
         client,
@@ -103,7 +110,6 @@ struct BridgePoolResponse {
 pub async fn query_bridge_pool<C>(client: &C)
 where
     C: Client + Sync,
-    C::Error: std::fmt::Debug,
 {
     let response: Vec<PendingTransfer> = RPC
         .shell()
@@ -133,7 +139,6 @@ pub async fn query_signed_bridge_pool<C>(
 ) -> Halt<HashMap<String, PendingTransfer>>
 where
     C: Client + Sync,
-    C::Error: std::fmt::Debug,
 {
     let response: Vec<PendingTransfer> = RPC
         .shell()
@@ -164,7 +169,6 @@ where
 pub async fn query_relay_progress<C>(client: &C)
 where
     C: Client + Sync,
-    C::Error: std::fmt::Debug,
 {
     let resp = RPC
         .shell()
@@ -184,7 +188,6 @@ async fn construct_bridge_pool_proof<C>(
 ) -> Halt<Vec<u8>>
 where
     C: Client + Sync,
-    C::Error: std::fmt::Debug,
 {
     let in_progress = RPC
         .shell()
@@ -265,7 +268,6 @@ pub async fn construct_proof<C>(
 ) -> Halt<()>
 where
     C: Client + Sync,
-    C::Error: std::fmt::Debug,
 {
     let bp_proof_bytes = construct_bridge_pool_proof(
         client,
@@ -300,7 +302,6 @@ pub async fn relay_bridge_pool_proof<C, E>(
 ) -> Halt<()>
 where
     C: Client + Sync,
-    C::Error: std::fmt::Debug + std::fmt::Display,
     E: Middleware,
     E::Error: std::fmt::Debug + std::fmt::Display,
 {
@@ -462,7 +463,6 @@ mod recommendations {
     ) -> Halt<()>
     where
         C: Client + Sync,
-        C::Error: std::fmt::Debug,
     {
         // get transfers that can already been relayed but are awaiting a quorum
         // of backing votes.

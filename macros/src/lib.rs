@@ -42,7 +42,7 @@ pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
                     tx_data_len as _,
                 )
             };
-            let tx_data = slice.to_vec();
+            let tx_data = Tx::try_from_slice(slice).unwrap();
 
             // The context on WASM side is only provided by the VM once its
             // being executed (in here it's implicit). But because we want to
@@ -112,7 +112,7 @@ pub fn validity_predicate(
                     tx_data_len as _,
                 )
             };
-            let tx_data = slice.to_vec();
+            let tx_data = Tx::try_from_slice(slice).unwrap();
 
             let slice = unsafe {
                 core::slice::from_raw_parts(
@@ -207,6 +207,42 @@ fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
 
     let struct_def_ident = &struct_def.ident;
 
+    let helper_fns = idents
+        .iter()
+        .fold(vec![], |mut accum, ident| {
+            let is_fn = {
+                let id = format!("is_{ident}_key_at_addr");
+                let id = syn::Ident::new(&id, ident.span());
+                quote! {
+                    #[allow(missing_docs)]
+                    pub(crate) fn #id(key: &Key, address: &Address) -> bool {
+                        matches!(&key.segments[..], [
+                            DbKeySeg::AddressSeg(a),
+                            DbKeySeg::StringSeg(#ident),
+                        ] if a == address && #ident == #struct_def_ident::VALUES.#ident)
+                    }
+                }
+            };
+            let get_fn = {
+                let id = format!("get_{ident}_key_at_addr");
+                let id = syn::Ident::new(&id, ident.span());
+                quote! {
+                    #[allow(missing_docs)]
+                    pub(crate) fn #id(address: Address) -> Key {
+                        Key {
+                            segments: vec![
+                                DbKeySeg::AddressSeg(address),
+                                DbKeySeg::StringSeg(#struct_def_ident::VALUES.#ident.to_string()),
+                            ],
+                        }
+                    }
+                }
+            };
+            accum.push(is_fn);
+            accum.push(get_fn);
+            accum
+        });
+
     quote! {
         impl #struct_def_ident {
             #[allow(dead_code)]
@@ -222,6 +258,8 @@ fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
                 #values_list
             };
         }
+
+        #(#helper_fns)*
     }
 }
 
@@ -241,7 +279,7 @@ where
 
 #[cfg(test)]
 mod test_proc_macros {
-    use syn::ItemImpl;
+    use syn::File;
 
     use super::*;
 
@@ -289,7 +327,7 @@ mod test_proc_macros {
                 the: &'static str,
             }
         };
-        let test_impl: ItemImpl =
+        let test_impl: File =
             syn::parse2(derive_storage_keys_inner(test_struct))
                 .expect("Test failed");
 
@@ -307,8 +345,72 @@ mod test_proc_macros {
                     word: "word"
                 };
             }
+            #[allow(missing_docs)]
+            pub(crate) fn is_bird_key_at_addr(key: &Key, address: &Address) -> bool {
+                matches!(&key.segments[..], [
+                    DbKeySeg::AddressSeg(a),
+                    DbKeySeg::StringSeg(bird),
+                ] if a == address && bird == Keys::VALUES.bird)
+            }
+            #[allow(missing_docs)]
+            pub(crate) fn get_bird_key_at_addr(address: Address) -> Key {
+                Key {
+                    segments: vec![
+                        DbKeySeg::AddressSeg(address),
+                        DbKeySeg::StringSeg(Keys::VALUES.bird.to_string()),
+                    ],
+                }
+            }
+            #[allow(missing_docs)]
+            pub(crate) fn is_is_key_at_addr(key: &Key, address: &Address) -> bool {
+                matches!(&key.segments[..], [
+                    DbKeySeg::AddressSeg(a),
+                    DbKeySeg::StringSeg(is),
+                ] if a == address && is == Keys::VALUES.is)
+            }
+            #[allow(missing_docs)]
+            pub(crate) fn get_is_key_at_addr(address: Address) -> Key {
+                Key {
+                    segments: vec![
+                        DbKeySeg::AddressSeg(address),
+                        DbKeySeg::StringSeg(Keys::VALUES.is.to_string()),
+                    ],
+                }
+            }
+            #[allow(missing_docs)]
+            pub(crate) fn is_the_key_at_addr(key: &Key, address: &Address) -> bool {
+                matches!(&key.segments[..], [
+                    DbKeySeg::AddressSeg(a),
+                    DbKeySeg::StringSeg(the),
+                ] if a == address && the == Keys::VALUES.the)
+            }
+            #[allow(missing_docs)]
+            pub(crate) fn get_the_key_at_addr(address: Address) -> Key {
+                Key {
+                    segments: vec![
+                        DbKeySeg::AddressSeg(address),
+                        DbKeySeg::StringSeg(Keys::VALUES.the.to_string()),
+                    ],
+                }
+            }
+            #[allow(missing_docs)]
+            pub(crate) fn is_word_key_at_addr(key: &Key, address: &Address) -> bool {
+                matches!(&key.segments[..], [
+                    DbKeySeg::AddressSeg(a),
+                    DbKeySeg::StringSeg(word),
+                ] if a == address && word == Keys::VALUES.word)
+            }
+            #[allow(missing_docs)]
+            pub(crate) fn get_word_key_at_addr(address: Address) -> Key {
+                Key {
+                    segments: vec![
+                        DbKeySeg::AddressSeg(address),
+                        DbKeySeg::StringSeg(Keys::VALUES.word.to_string()),
+                    ],
+                }
+            }
         };
-        let expected_impl: ItemImpl =
+        let expected_impl: File =
             syn::parse2(expected_impl).expect("Test failed");
 
         assert_eq!(test_impl, expected_impl);
@@ -354,7 +456,7 @@ mod test_proc_macros {
                 param2: &'static str,
             }
         };
-        let test_impl: ItemImpl =
+        let test_impl: File =
             syn::parse2(derive_storage_keys_inner(test_struct))
                 .expect("Test failed");
 
@@ -370,8 +472,40 @@ mod test_proc_macros {
                     param2: "param2"
                 };
             }
+            #[allow(missing_docs)]
+            pub(crate) fn is_param1_key_at_addr(key: &Key, address: &Address) -> bool {
+                matches!(&key.segments[..], [
+                    DbKeySeg::AddressSeg(a),
+                    DbKeySeg::StringSeg(param1),
+                ] if a == address && param1 == Keys::VALUES.param1)
+            }
+            #[allow(missing_docs)]
+            pub(crate) fn get_param1_key_at_addr(address: Address) -> Key {
+                Key {
+                    segments: vec![
+                        DbKeySeg::AddressSeg(address),
+                        DbKeySeg::StringSeg(Keys::VALUES.param1.to_string()),
+                    ],
+                }
+            }
+            #[allow(missing_docs)]
+            pub(crate) fn is_param2_key_at_addr(key: &Key, address: &Address) -> bool {
+                matches!(&key.segments[..], [
+                    DbKeySeg::AddressSeg(a),
+                    DbKeySeg::StringSeg(param2),
+                ] if a == address && param2 == Keys::VALUES.param2)
+            }
+            #[allow(missing_docs)]
+            pub(crate) fn get_param2_key_at_addr(address: Address) -> Key {
+                Key {
+                    segments: vec![
+                        DbKeySeg::AddressSeg(address),
+                        DbKeySeg::StringSeg(Keys::VALUES.param2.to_string()),
+                    ],
+                }
+            }
         };
-        let expected_impl: ItemImpl =
+        let expected_impl: File =
             syn::parse2(expected_impl).expect("Test failed");
 
         assert_eq!(test_impl, expected_impl);

@@ -9,7 +9,7 @@ use std::str::FromStr;
 
 use arse_merkle_tree::InternalKey;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use data_encoding::BASE32HEX_NOPAD;
+use data_encoding::{BASE32HEX_NOPAD, HEXUPPER};
 use ics23::CommitmentProof;
 use index_set::vec::VecIndexSet;
 use serde::{Deserialize, Serialize};
@@ -234,6 +234,12 @@ impl FromStr for BlockHeight {
 )]
 pub struct BlockHash(pub [u8; BLOCK_HASH_LENGTH]);
 
+impl Display for BlockHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", HEXUPPER.encode(&self.0))
+    }
+}
+
 impl From<Hash> for BlockHash {
     fn from(hash: Hash) -> Self {
         BlockHash(hash.0)
@@ -297,7 +303,7 @@ impl core::fmt::Debug for BlockHash {
 
 /// The data from Tendermint header
 /// relevant for Namada storage
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, Default)]
 pub struct Header {
     /// Merkle root hash of block
     pub hash: Hash,
@@ -779,36 +785,6 @@ impl KeySeg for BlockHeight {
     }
 }
 
-impl KeySeg for Epoch {
-    fn parse(string: String) -> Result<Self> {
-        string
-            .split_once('=')
-            .and_then(|(prefix, epoch)| (prefix == "E").then_some(epoch))
-            .ok_or_else(|| {
-                Error::ParseKeySeg(format!(
-                    "Invalid epoch prefix on key: {string}"
-                ))
-            })
-            .and_then(|epoch| {
-                epoch.parse::<u64>().map_err(|e| {
-                    Error::ParseKeySeg(format!(
-                        "Unexpected epoch value {epoch}, {e}"
-                    ))
-                })
-            })
-            .map(Epoch)
-    }
-
-    fn raw(&self) -> String {
-        let &Epoch(epoch) = self;
-        format!("E={epoch}")
-    }
-
-    fn to_db_key(&self) -> DbKeySeg {
-        DbKeySeg::StringSeg(self.raw())
-    }
-}
-
 impl KeySeg for Address {
     fn parse(mut seg: String) -> Result<Self> {
         match seg.chars().next() {
@@ -921,6 +897,24 @@ impl_int_key_seg!(u32, i32, 4);
 impl_int_key_seg!(u64, i64, 8);
 impl_int_key_seg!(u128, i128, 16);
 
+impl KeySeg for Epoch {
+    fn parse(string: String) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let raw = u64::parse(string)?;
+        Ok(Epoch(raw))
+    }
+
+    fn raw(&self) -> String {
+        self.to_string()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        self.0.to_db_key()
+    }
+}
+
 impl KeySeg for common::PublicKey {
     fn parse(string: String) -> Result<Self>
     where
@@ -992,6 +986,16 @@ impl Epoch {
         let start_ix: u64 = self.into();
         let end_ix: u64 = start_ix + len;
         (start_ix..end_ix).map(Epoch::from)
+    }
+
+    /// Iterate a range of epochs, inclusive of the start and end.
+    pub fn iter_bounds_inclusive(
+        start: Self,
+        end: Self,
+    ) -> impl Iterator<Item = Epoch> + Clone {
+        let start_ix = start.0;
+        let end_ix = end.0;
+        (start_ix..=end_ix).map(Epoch::from)
     }
 
     /// Checked epoch subtraction. Computes self - rhs, returning None if

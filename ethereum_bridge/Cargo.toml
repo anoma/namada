@@ -19,7 +19,6 @@ abciplus = [
 ]
 
 testing = [
-    "rand",
     "namada_core/testing",
 ]
 
@@ -27,23 +26,22 @@ testing = [
 namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign-verify", "ferveo-tpke", "ethers-derive"]}
 namada_macros = {path = "../macros"}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
-borsh = "0.9.0"
-ethers = "2.0.0"
-eyre = "0.6.8"
-itertools = "0.10.0"
-serde = {version = "1.0.125", features = ["derive"]}
-serde_json = "1.0.62"
-rand = {version = "0.8", default-features = false, optional = true}
-rust_decimal = { version = "1.26.1", features = ["borsh"] }
-rust_decimal_macros = "1.26.1"
-tendermint = {version = "0.23.6", optional = true}
-tendermint-rpc = {version = "0.23.6", features = ["http-client"], optional = true}
-tendermint-proto = {version = "0.23.6", optional = true}
+borsh.workspace = true
+ethers.workspace = true
+eyre.workspace = true
+itertools.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rand.workspace = true
+rust_decimal.workspace = true
+rust_decimal_macros.workspace = true
+tendermint = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7", optional = true}
+tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7", features = ["http-client"], optional = true}
+tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7", optional = true}
 tracing = "0.1.30"
 
 [dev-dependencies]
-assert_matches = "1.5.0"
-data-encoding = "2.3.2"
-ethabi = "18.0.0"
-rand = {version = "0.8", default-features = false}
-toml = "0.5.8"
+assert_matches.workspace = true
+data-encoding.workspace = true
+ethabi.workspace = true
+toml.workspace = true

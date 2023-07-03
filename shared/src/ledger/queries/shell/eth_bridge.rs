@@ -200,7 +200,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     Ok(read_ethereum_bridge_pool_at_height(
-        ctx.wl_storage.storage.last_height,
+        ctx.wl_storage.storage.get_last_block_height(),
         ctx,
     ))
 }

@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ledger::eth_bridge::ADDRESS;
+use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::{EthereumEvent, Uint};
 use namada_core::types::hash::Hash;
 use namada_core::types::keccak::KeccakHash;

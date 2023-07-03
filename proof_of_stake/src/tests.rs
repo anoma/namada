@@ -7,7 +7,7 @@ use std::ops::Range;
 
 use namada_core::ledger::storage::testing::TestWlStorage;
 use namada_core::ledger::storage_api::collections::lazy_map;
-use namada_core::ledger::storage_api::token::credit_tokens;
+use namada_core::ledger::storage_api::token::{credit_tokens, read_balance};
 use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::address::testing::{
     address_from_simple_seed, arb_established_address,
@@ -19,7 +19,7 @@ use namada_core::types::key::testing::{
     arb_common_keypair, common_sk_from_simple_seed,
 };
 use namada_core::types::key::RefTo;
-use namada_core::types::storage::Epoch;
+use namada_core::types::storage::{BlockHeight, Epoch};
 use namada_core::types::{address, key, token};
 use proptest::prelude::*;
 use proptest::test_runner::Config;
@@ -30,22 +30,24 @@ use test_log::test;
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::PosParams;
 use crate::types::{
-    into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,
-    ConsensusValidator, GenesisValidator, Position, ReverseOrdTokenAmount,
-    UnbondDetails, ValidatorSetUpdate, ValidatorState, WeightedValidator,
+    decimal_mult_amount, into_tm_voting_power, BondDetails, BondId,
+    BondsAndUnbondsDetails, ConsensusValidator, GenesisValidator, Position,
+    ReverseOrdTokenAmount, SlashType, UnbondDetails, ValidatorSetUpdate,
+    ValidatorState, WeightedValidator,
 };
 use crate::{
     become_validator, below_capacity_validator_set_handle, bond_handle,
     bond_tokens, bonds_and_unbonds, consensus_validator_set_handle,
     copy_validator_sets_and_positions, find_validator_by_raw_hash,
-    init_genesis, insert_validator_into_validator_set,
+    get_num_consensus_validators, init_genesis,
+    insert_validator_into_validator_set, is_validator, process_slashes,
     read_below_capacity_validator_set_addresses_with_stake,
-    read_consensus_validator_set_addresses_with_stake,
-    read_num_consensus_validators, read_total_stake,
-    read_validator_delta_value, read_validator_stake, staking_token_address,
-    total_deltas_handle, unbond_handle, unbond_tokens, update_validator_deltas,
-    update_validator_set, validator_consensus_key_handle,
-    validator_set_update_tendermint, validator_state_handle, withdraw_tokens,
+    read_consensus_validator_set_addresses_with_stake, read_total_stake,
+    read_validator_delta_value, read_validator_stake, slash,
+    staking_token_address, total_deltas_handle, unbond_handle, unbond_tokens,
+    unjail_validator, update_validator_deltas, update_validator_set,
+    validator_consensus_key_handle, validator_set_update_tendermint,
+    validator_slashes_handle, validator_state_handle, withdraw_tokens,
     write_validator_address_raw_hash, BecomeValidator,
 };
 
@@ -102,6 +104,34 @@ proptest! {
         test_become_validator_aux(pos_params, new_validator,
             new_validator_consensus_key, genesis_validators)
     }
+}
+
+proptest! {
+    // Generate arb valid input for `test_slashes_with_unbonding_aux`
+    #![proptest_config(Config {
+        cases: 5,
+        .. Config::default()
+    })]
+    #[test]
+    fn test_slashes_with_unbonding(
+        (params, genesis_validators, unbond_delay)
+            in test_slashes_with_unbonding_params()
+    ) {
+        test_slashes_with_unbonding_aux(
+            params, genesis_validators, unbond_delay)
+    }
+}
+
+fn test_slashes_with_unbonding_params()
+-> impl Strategy<Value = (PosParams, Vec<GenesisValidator>, u64)> {
+    let params = arb_pos_params(Some(5));
+    params.prop_flat_map(|params| {
+        let unbond_delay = 0..(params.slash_processing_epoch_offset() * 2);
+        // Must have at least 4 validators so we can slash one and the cubic
+        // slash rate will be less than 100%
+        let validators = arb_genesis_validators(4..10);
+        (Just(params), validators, unbond_delay)
+    })
 }
 
 /// Test genesis initialization
@@ -346,7 +376,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         &s,
         &params,
         &validator.address,
-        pipeline_epoch - 1,
+        pipeline_epoch.prev(),
     )
     .unwrap()
     .unwrap_or_default();
@@ -362,7 +392,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     let delegation = bond_handle(&delegator, &validator.address);
     assert_eq!(
         delegation
-            .get_sum(&s, pipeline_epoch - 1, &params)
+            .get_sum(&s, pipeline_epoch.prev(), &params)
             .unwrap()
             .unwrap_or_default(),
         token::Change::default()
@@ -478,7 +508,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         &s,
         &params,
         &validator.address,
-        pipeline_epoch - 1,
+        pipeline_epoch.prev(),
     )
     .unwrap();
 
@@ -498,7 +528,9 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     assert_eq!(val_delta, Some(-amount_self_unbond.change()));
     assert_eq!(
         unbond
-            .at(&(pipeline_epoch + params.unbonding_len))
+            .at(&(pipeline_epoch
+                + params.unbonding_len
+                + params.cubic_slashing_window_length))
             .get(&s, &Epoch::default())
             .unwrap(),
         if unbonded_genesis_self_bond {
@@ -509,7 +541,9 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     );
     assert_eq!(
         unbond
-            .at(&(pipeline_epoch + params.unbonding_len))
+            .at(&(pipeline_epoch
+                + params.unbonding_len
+                + params.cubic_slashing_window_length))
             .get(&s, &(self_bond_epoch + params.pipeline_len))
             .unwrap(),
         Some(amount_self_bond)
@@ -568,7 +602,8 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
                     start: start_epoch,
                     withdraw: self_unbond_epoch
                         + params.pipeline_len
-                        + params.unbonding_len,
+                        + params.unbonding_len
+                        + params.cubic_slashing_window_length,
                     amount: amount_self_unbond - amount_self_bond,
                     slashed_amount: None
                 }
@@ -580,7 +615,8 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
                 start: self_bond_epoch + params.pipeline_len,
                 withdraw: self_unbond_epoch
                     + params.pipeline_len
-                    + params.unbonding_len,
+                    + params.unbonding_len
+                    + params.cubic_slashing_window_length,
                 amount: amount_self_bond,
                 slashed_amount: None
             }
@@ -606,7 +642,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         &s,
         &params,
         &validator.address,
-        pipeline_epoch - 1,
+        pipeline_epoch.prev(),
     )
     .unwrap();
     let val_stake_post =
@@ -627,7 +663,9 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     );
     assert_eq!(
         unbond
-            .at(&(pipeline_epoch + params.unbonding_len))
+            .at(&(pipeline_epoch
+                + params.unbonding_len
+                + params.cubic_slashing_window_length))
             .get(&s, &(delegation_epoch + params.pipeline_len))
             .unwrap(),
         Some(amount_undel)
@@ -645,7 +683,9 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         )
     );
 
-    let withdrawable_offset = params.unbonding_len + params.pipeline_len;
+    let withdrawable_offset = params.unbonding_len
+        + params.pipeline_len
+        + params.cubic_slashing_window_length;
 
     // Advance to withdrawable epoch
     for _ in 0..withdrawable_offset {
@@ -742,11 +782,14 @@ fn test_become_validator_aux(
     // Advance to epoch 1
     current_epoch = advance_epoch(&mut s, &params);
 
-    let num_consensus_before = read_num_consensus_validators(&s).unwrap();
+    let num_consensus_before =
+        get_num_consensus_validators(&s, current_epoch + params.pipeline_len)
+            .unwrap();
     assert_eq!(
         min(validators.len() as u64, params.max_validator_slots),
         num_consensus_before
     );
+    assert!(!is_validator(&s, &new_validator).unwrap());
 
     // Initialize the validator account
     let consensus_key = new_validator_consensus_key.to_public();
@@ -769,8 +812,11 @@ fn test_become_validator_aux(
             .expect("Dec creation failed"),
     })
     .unwrap();
+    assert!(is_validator(&s, &new_validator).unwrap());
 
-    let num_consensus_after = read_num_consensus_validators(&s).unwrap();
+    let num_consensus_after =
+        get_num_consensus_validators(&s, current_epoch + params.pipeline_len)
+            .unwrap();
     assert_eq!(
         if validators.len() as u64 >= params.max_validator_slots {
             num_consensus_before
@@ -852,6 +898,159 @@ fn test_become_validator_aux(
     withdraw_tokens(&mut s, None, &new_validator, current_epoch).unwrap();
 }
 
+fn test_slashes_with_unbonding_aux(
+    mut params: PosParams,
+    validators: Vec<GenesisValidator>,
+    unbond_delay: u64,
+) {
+    // This can be useful for debugging:
+    params.pipeline_len = 2;
+    params.unbonding_len = 4;
+    println!("\nTest inputs: {params:?}, genesis validators: {validators:#?}");
+    let mut s = TestWlStorage::default();
+
+    // Find the validator with the least stake to avoid the cubic slash rate
+    // going to 100%
+    let validator =
+        itertools::Itertools::sorted_by_key(validators.iter(), |v| v.tokens)
+            .next()
+            .unwrap();
+    let val_addr = &validator.address;
+    let val_tokens = validator.tokens;
+    println!(
+        "Validator that will misbehave addr {val_addr}, tokens {val_tokens}"
+    );
+
+    // Genesis
+    // let start_epoch = s.storage.block.epoch;
+    let mut current_epoch = s.storage.block.epoch;
+    init_genesis(
+        &mut s,
+        &params,
+        validators.clone().into_iter(),
+        current_epoch,
+    )
+    .unwrap();
+    s.commit_block().unwrap();
+
+    current_epoch = advance_epoch(&mut s, &params);
+    super::process_slashes(&mut s, current_epoch).unwrap();
+
+    // Discover first slash
+    let slash_0_evidence_epoch = current_epoch;
+    // let slash_0_processing_epoch =
+    //     slash_0_evidence_epoch + params.slash_processing_epoch_offset();
+    let evidence_block_height = BlockHeight(0); // doesn't matter for slashing logic
+    let slash_0_type = SlashType::DuplicateVote;
+    slash(
+        &mut s,
+        &params,
+        current_epoch,
+        slash_0_evidence_epoch,
+        evidence_block_height,
+        slash_0_type,
+        val_addr,
+    )
+    .unwrap();
+
+    // Advance to an epoch in which we can unbond
+    let unfreeze_epoch =
+        slash_0_evidence_epoch + params.slash_processing_epoch_offset();
+    while current_epoch < unfreeze_epoch {
+        current_epoch = advance_epoch(&mut s, &params);
+        super::process_slashes(&mut s, current_epoch).unwrap();
+    }
+
+    // Advance more epochs randomly from the generated delay
+    for _ in 0..unbond_delay {
+        current_epoch = advance_epoch(&mut s, &params);
+    }
+
+    // Unbond half of the tokens
+    let unbond_amount = decimal_mult_amount(dec!(0.5), val_tokens);
+    println!("Going to unbond {unbond_amount}");
+    let unbond_epoch = current_epoch;
+    unbond_tokens(&mut s, None, val_addr, unbond_amount, unbond_epoch).unwrap();
+
+    // Discover second slash
+    let slash_1_evidence_epoch = current_epoch;
+    // Ensure that both slashes happen before `unbond_epoch + pipeline`
+    let _slash_1_processing_epoch =
+        slash_1_evidence_epoch + params.slash_processing_epoch_offset();
+    let evidence_block_height = BlockHeight(0); // doesn't matter for slashing logic
+    let slash_1_type = SlashType::DuplicateVote;
+    slash(
+        &mut s,
+        &params,
+        current_epoch,
+        slash_1_evidence_epoch,
+        evidence_block_height,
+        slash_1_type,
+        val_addr,
+    )
+    .unwrap();
+
+    // Advance to an epoch in which we can withdraw
+    let withdraw_epoch = unbond_epoch + params.withdrawable_epoch_offset();
+    while current_epoch < withdraw_epoch {
+        current_epoch = advance_epoch(&mut s, &params);
+        super::process_slashes(&mut s, current_epoch).unwrap();
+    }
+    let token = staking_token_address(&s);
+    let val_balance_pre = read_balance(&s, &token, val_addr).unwrap();
+
+    let bond_id = BondId {
+        source: val_addr.clone(),
+        validator: val_addr.clone(),
+    };
+    let binding =
+        super::bonds_and_unbonds(&s, None, Some(val_addr.clone())).unwrap();
+    let details = binding.get(&bond_id).unwrap();
+    let exp_withdraw_from_details = details.unbonds[0].amount
+        - details.unbonds[0].slashed_amount.unwrap_or_default();
+
+    withdraw_tokens(&mut s, None, val_addr, current_epoch).unwrap();
+
+    let val_balance_post = read_balance(&s, &token, val_addr).unwrap();
+    let withdrawn_tokens = val_balance_post - val_balance_pre;
+    println!("Withdrew {withdrawn_tokens} tokens");
+
+    assert_eq!(exp_withdraw_from_details, withdrawn_tokens);
+
+    let slash_rate_0 = validator_slashes_handle(val_addr)
+        .get(&s, 0)
+        .unwrap()
+        .unwrap()
+        .rate;
+    let slash_rate_1 = validator_slashes_handle(val_addr)
+        .get(&s, 1)
+        .unwrap()
+        .unwrap()
+        .rate;
+    println!("Slash 0 rate {slash_rate_0}, slash 1 rate {slash_rate_1}");
+
+    let expected_withdrawn_amount = decimal_mult_amount(
+        dec!(1) - slash_rate_1,
+        decimal_mult_amount(dec!(1) - slash_rate_0, unbond_amount),
+    );
+    // Allow some rounding error, 1 NAMNAM per each slash
+    let rounding_error_tolerance = 2;
+    assert!(
+        dbg!(
+            (expected_withdrawn_amount.change() - withdrawn_tokens.change())
+                .abs()
+        ) <= rounding_error_tolerance
+    );
+
+    // TODO: finish once implemented
+    // let slash_0 = decimal_mult_amount(slash_rate_0, val_tokens);
+    // let slash_1 = decimal_mult_amount(slash_rate_1, val_tokens - slash_0);
+    // let expected_slash_pool = slash_0 + slash_1;
+    // let slash_pool_balance =
+    //     read_balance(&s, &token, &SLASH_POOL_ADDRESS).unwrap();
+    // assert_eq!(expected_slash_pool, slash_pool_balance);
+}
+
 #[test]
 fn test_validator_raw_hash() {
     let mut storage = TestWlStorage::default();
@@ -909,8 +1108,15 @@ fn test_validator_sets() {
         )
         .unwrap();
 
-        update_validator_deltas(s, &params, addr, stake.change(), epoch)
-            .unwrap();
+        update_validator_deltas(
+            s,
+            &params,
+            addr,
+            stake.change(),
+            epoch,
+            params.pipeline_len,
+        )
+        .unwrap();
 
         // Set their consensus key (needed for
         // `validator_set_update_tendermint` fn)
@@ -1198,8 +1404,15 @@ fn test_validator_sets() {
     // checks
     update_validator_set(&mut s, &params, &val1, -unbond.change(), epoch)
         .unwrap();
-    update_validator_deltas(&mut s, &params, &val1, -unbond.change(), epoch)
-        .unwrap();
+    update_validator_deltas(
+        &mut s,
+        &params,
+        &val1,
+        -unbond.change(),
+        epoch,
+        params.pipeline_len,
+    )
+    .unwrap();
     // Epoch 6
     let val1_unbond_epoch = pipeline_epoch;
 
@@ -1390,8 +1603,15 @@ fn test_validator_sets() {
     let stake6 = stake6 + bond;
     println!("val6 {val6} new stake {}", stake6.to_string_native());
     update_validator_set(&mut s, &params, &val6, bond.change(), epoch).unwrap();
-    update_validator_deltas(&mut s, &params, &val6, bond.change(), epoch)
-        .unwrap();
+    update_validator_deltas(
+        &mut s,
+        &params,
+        &val6,
+        bond.change(),
+        epoch,
+        params.pipeline_len,
+    )
+    .unwrap();
     let val6_bond_epoch = pipeline_epoch;
 
     let consensus_vals: Vec<_> = consensus_validator_set_handle()
@@ -1546,8 +1766,15 @@ fn test_validator_sets_swap() {
         )
         .unwrap();
 
-        update_validator_deltas(s, &params, addr, stake.change(), epoch)
-            .unwrap();
+        update_validator_deltas(
+            s,
+            &params,
+            addr,
+            stake.change(),
+            epoch,
+            params.pipeline_len,
+        )
+        .unwrap();
 
         // Set their consensus key (needed for
         // `validator_set_update_tendermint` fn)
@@ -1635,13 +1862,27 @@ fn test_validator_sets_swap() {
 
     update_validator_set(&mut s, &params, &val2, bond2.change(), epoch)
         .unwrap();
-    update_validator_deltas(&mut s, &params, &val2, bond2.change(), epoch)
-        .unwrap();
+    update_validator_deltas(
+        &mut s,
+        &params,
+        &val2,
+        bond2.change(),
+        epoch,
+        params.pipeline_len,
+    )
+    .unwrap();
 
     update_validator_set(&mut s, &params, &val3, bond3.change(), epoch)
         .unwrap();
-    update_validator_deltas(&mut s, &params, &val3, bond3.change(), epoch)
-        .unwrap();
+    update_validator_deltas(
+        &mut s,
+        &params,
+        &val3,
+        bond3.change(),
+        epoch,
+        params.pipeline_len,
+    )
+    .unwrap();
 
     // Advance to EPOCH 2
     let epoch = advance_epoch(&mut s, &params);
@@ -1660,13 +1901,27 @@ fn test_validator_sets_swap() {
 
     update_validator_set(&mut s, &params, &val2, bonds.change(), epoch)
         .unwrap();
-    update_validator_deltas(&mut s, &params, &val2, bonds.change(), epoch)
-        .unwrap();
+    update_validator_deltas(
+        &mut s,
+        &params,
+        &val2,
+        bonds.change(),
+        epoch,
+        params.pipeline_len,
+    )
+    .unwrap();
 
     update_validator_set(&mut s, &params, &val3, bonds.change(), epoch)
         .unwrap();
-    update_validator_deltas(&mut s, &params, &val3, bonds.change(), epoch)
-        .unwrap();
+    update_validator_deltas(
+        &mut s,
+        &params,
+        &val3,
+        bonds.change(),
+        epoch,
+        params.pipeline_len,
+    )
+    .unwrap();
 
     // Advance to EPOCH 3
     let epoch = advance_epoch(&mut s, &params);
@@ -1723,6 +1978,8 @@ fn advance_epoch(s: &mut TestWlStorage, params: &PosParams) -> Epoch {
         &below_capacity_validator_set_handle(),
     )
     .unwrap();
+    // process_slashes(s, current_epoch).unwrap();
+    // dbg!(current_epoch);
     current_epoch
 }
 

@@ -258,7 +258,6 @@ pub async fn query_validator_set_update_proof<C>(
     args: args::ValidatorSetProof,
 ) where
     C: Client + Sync,
-    C::Error: std::fmt::Debug,
 {
     let epoch = if let Some(epoch) = args.epoch {
         epoch
@@ -282,7 +281,6 @@ pub async fn query_validator_set_args<C>(
     args: args::ConsensusValidatorSet,
 ) where
     C: Client + Sync,
-    C::Error: std::fmt::Debug,
 {
     let epoch = if let Some(epoch) = args.epoch {
         epoch
@@ -308,7 +306,6 @@ pub async fn relay_validator_set_update<C, E>(
 ) -> Halt<()>
 where
     C: Client + Sync,
-    C::Error: std::fmt::Debug + std::fmt::Display,
     E: Middleware,
     E::Error: std::fmt::Debug + std::fmt::Display,
 {
@@ -383,7 +380,6 @@ async fn relay_validator_set_update_daemon<C, E, F>(
 ) -> Halt<()>
 where
     C: Client + Sync,
-    C::Error: std::fmt::Debug + std::fmt::Display,
     E: Middleware,
     E::Error: std::fmt::Debug + std::fmt::Display,
     F: Future<Output = ()> + Unpin,
@@ -528,7 +524,6 @@ async fn get_governance_contract<C, E>(
 ) -> Result<Governance<E>, Error>
 where
     C: Client + Sync,
-    C::Error: std::fmt::Debug + std::fmt::Display,
     E: Middleware,
 {
     let governance_contract = RPC
@@ -548,7 +543,6 @@ async fn relay_validator_set_update_once<R, F, C, E>(
 ) -> Result<(), Error>
 where
     C: Client + Sync,
-    C::Error: std::fmt::Debug + std::fmt::Display,
     E: Middleware,
     E::Error: std::fmt::Debug + std::fmt::Display,
     R: ShouldRelay,

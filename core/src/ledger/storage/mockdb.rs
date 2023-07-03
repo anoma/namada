@@ -84,6 +84,13 @@ impl DB for MockDB {
                 }
                 None => return Ok(None),
             };
+        let update_epoch_blocks_delay: Option<u32> =
+            match self.0.borrow().get("update_epoch_blocks_delay") {
+                Some(bytes) => {
+                    types::decode(bytes).map_err(Error::CodingError)?
+                }
+                None => return Ok(None),
+            };
         #[cfg(feature = "ferveo-tpke")]
         let tx_queue: TxQueue = match self.0.borrow().get("tx_queue") {
             Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
@@ -111,6 +118,7 @@ impl DB for MockDB {
         let upper_prefix = format!("{}/", height.next_height().raw());
         let mut merkle_tree_stores = MerkleTreeStoresRead::default();
         let mut hash = None;
+        let mut time = None;
         let mut epoch = None;
         let mut pred_epochs = None;
         let mut address_gen = None;
@@ -147,6 +155,11 @@ impl DB for MockDB {
                             types::decode(bytes).map_err(Error::CodingError)?,
                         )
                     }
+                    "time" => {
+                        time = Some(
+                            types::decode(bytes).map_err(Error::CodingError)?,
+                        )
+                    }
                     "epoch" => {
                         epoch = Some(
                             types::decode(bytes).map_err(Error::CodingError)?,
@@ -167,24 +180,30 @@ impl DB for MockDB {
                 None => unknown_key_error(path)?,
             }
         }
-        match (hash, epoch, pred_epochs, address_gen) {
-            (Some(hash), Some(epoch), Some(pred_epochs), Some(address_gen)) => {
-                Ok(Some(BlockStateRead {
-                    merkle_tree_stores,
-                    hash,
-                    height,
-                    epoch,
-                    pred_epochs,
-                    next_epoch_min_start_height,
-                    next_epoch_min_start_time,
-                    address_gen,
-                    results,
-                    #[cfg(feature = "ferveo-tpke")]
-                    tx_queue,
-                    ethereum_height,
-                    eth_events_queue,
-                }))
-            }
+        match (hash, time, epoch, pred_epochs, address_gen) {
+            (
+                Some(hash),
+                Some(time),
+                Some(epoch),
+                Some(pred_epochs),
+                Some(address_gen),
+            ) => Ok(Some(BlockStateRead {
+                merkle_tree_stores,
+                hash,
+                height,
+                time,
+                epoch,
+                pred_epochs,
+                next_epoch_min_start_height,
+                next_epoch_min_start_time,
+                update_epoch_blocks_delay,
+                address_gen,
+                results,
+                #[cfg(feature = "ferveo-tpke")]
+                tx_queue,
+                ethereum_height,
+                eth_events_queue,
+            })),
             _ => Err(Error::Temporary {
                 error: "Essential data couldn't be read from the DB"
                     .to_string(),
@@ -202,11 +221,13 @@ impl DB for MockDB {
             merkle_tree_stores,
             header,
             hash,
+            time,
             height,
             epoch,
             pred_epochs,
             next_epoch_min_start_height,
             next_epoch_min_start_time,
+            update_epoch_blocks_delay,
             address_gen,
             results,
             ethereum_height,
@@ -223,6 +244,10 @@ impl DB for MockDB {
         self.0.borrow_mut().insert(
             "next_epoch_min_start_time".into(),
             types::encode(&next_epoch_min_start_time),
+        );
+        self.0.borrow_mut().insert(
+            "update_epoch_blocks_delay".into(),
+            types::encode(&update_epoch_blocks_delay),
         );
         self.0
             .borrow_mut()
@@ -284,6 +309,15 @@ impl DB for MockDB {
             self.0
                 .borrow_mut()
                 .insert(key.to_string(), types::encode(&hash));
+        }
+        // Block time
+        {
+            let key = prefix_key
+                .push(&"time".to_owned())
+                .map_err(Error::KeyError)?;
+            self.0
+                .borrow_mut()
+                .insert(key.to_string(), types::encode(&time));
         }
         // Block epoch
         {

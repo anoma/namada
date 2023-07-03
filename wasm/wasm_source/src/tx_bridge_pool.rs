@@ -6,13 +6,10 @@ use eth_bridge_pool::{GasFee, PendingTransfer, TransferToEthereum};
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
-    let signed = SignedTxData::try_from_slice(&tx_data[..])
-        .map_err(|e| Error::wrap("Error deserializing SignedTxData", e))?;
-    let transfer = PendingTransfer::try_from_slice(&signed.data.unwrap()[..])
-        .map_err(|e| {
-        Error::wrap("Error deserializing PendingTransfer", e)
-    })?;
+fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
+    let data = signed.data().ok_or_err_msg("Missing data")?;
+    let transfer = PendingTransfer::try_from_slice(&data[..])
+        .map_err(|e| Error::wrap("Error deserializing PendingTransfer", e))?;
     log_string("Received transfer to add to pool.");
     // pay the gas fees
     let GasFee { amount, ref payer } = transfer.gas_fee;
@@ -23,6 +20,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
         &address::nam(),
         None,
         amount.native_denominated(),
+        &None,
         &None,
         &None,
     )?;
@@ -44,6 +42,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
             amount.native_denominated(),
             &None,
             &None,
+            &None,
         )?;
     } else {
         // Otherwise we escrow ERC20 tokens.
@@ -60,6 +59,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
             &eth_bridge::ADDRESS,
             sub_prefix,
             amount,
+            &None,
             &None,
             &None,
         )?;

@@ -10,7 +10,7 @@ use namada_vp_prelude::{storage, token, *};
 #[validity_predicate]
 fn validate_tx(
     ctx: &Ctx,
-    tx_data: Vec<u8>,
+    tx_data: Tx,
     addr: Address,
     keys_changed: BTreeSet<storage::Key>,
     verifiers: BTreeSet<Address>,
@@ -122,6 +122,8 @@ fn token_checks(
 mod tests {
     // Use this as `#[test]` annotation to enable logging
     use namada::core::ledger::storage_api::token;
+    use namada::proto::Data;
+    use namada::types::transaction::TxType;
     use namada_tests::log::test;
     use namada_tests::tx::{self, TestTxEnv};
     use namada_tests::vp::*;
@@ -160,7 +162,8 @@ mod tests {
         });
 
         let vp_env = vp_host_env::take();
-        let tx_data: Vec<u8> = vec![];
+        let mut tx_data = Tx::new(TxType::Raw);
+        tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
         let verifiers = vp_env.get_verifiers();
@@ -216,7 +219,8 @@ mod tests {
         });
 
         let vp_env = vp_host_env::take();
-        let tx_data: Vec<u8> = vec![];
+        let mut tx_data = Tx::new(TxType::Raw);
+        tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
         let verifiers = vp_env.get_verifiers();
@@ -270,7 +274,8 @@ mod tests {
         });
 
         let vp_env = vp_host_env::take();
-        let tx_data: Vec<u8> = vec![];
+        let mut tx_data = Tx::new(TxType::Raw);
+        tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
         let verifiers = vp_env.get_verifiers();

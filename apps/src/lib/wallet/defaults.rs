@@ -1,6 +1,6 @@
 //! Default addresses and keys.
 
-#[cfg(feature = "dev")]
+#[cfg(any(test, feature = "dev"))]
 pub use dev::{
     addresses, albert_address, albert_keypair, bertha_address, bertha_keypair,
     christel_address, christel_keypair, daewon_address, daewon_keypair, keys,
@@ -68,7 +68,7 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
     addresses
 }
 
-#[cfg(feature = "dev")]
+#[cfg(any(test, feature = "dev"))]
 mod dev {
     use std::collections::HashMap;
 

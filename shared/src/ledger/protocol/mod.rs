@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 use std::panic;
 
+use eyre::{eyre, WrapErr};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
@@ -22,7 +23,7 @@ use crate::proto::{self, Tx};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage;
 use crate::types::storage::TxIndex;
-use crate::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
+use crate::types::transaction::protocol::{EthereumTxData, ProtocolTxType};
 use crate::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
 use crate::vm::wasm::{TxCache, VpCache};
 use crate::vm::{self, wasm, WasmCacheAccess};
@@ -30,6 +31,8 @@ use crate::vm::{self, wasm, WasmCacheAccess};
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Missing wasm code error")]
+    MissingCode,
     #[error("Storage error: {0}")]
     StorageError(crate::ledger::storage::Error),
     #[error("Error decoding a transaction from bytes: {0}")]
@@ -107,7 +110,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// but no further validations.
 #[allow(clippy::too_many_arguments)]
 pub fn dispatch_tx<'a, D, H, CA>(
-    tx_type: TxType,
+    tx: Tx,
     tx_length: usize,
     tx_index: TxIndex,
     block_gas_meter: &'a mut BlockGasMeter,
@@ -120,10 +123,9 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    match tx_type {
-        TxType::Raw(_) => Err(Error::TxTypeError),
+    match tx.header().tx_type {
+        TxType::Raw => Err(Error::TxTypeError),
         TxType::Decrypted(DecryptedTx::Decrypted {
-            tx,
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow,
         }) => apply_wasm_tx(
@@ -139,11 +141,10 @@ where
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow,
         ),
-        TxType::Protocol(ProtocolTx { tx, .. }) => {
-            apply_protocol_tx(tx, wl_storage)
+        TxType::Protocol(protocol_tx) => {
+            apply_protocol_tx(protocol_tx.tx, tx.data(), wl_storage)
         }
-        TxType::Wrapper(_)
-        | TxType::Decrypted(DecryptedTx::Undecryptable(_)) => {
+        TxType::Wrapper(_) | TxType::Decrypted(DecryptedTx::Undecryptable) => {
             // do not apply db updates, but charge gas anyway.
             // 1) we can only apply state updates on encrypted txs
             // at the next block height
@@ -255,6 +256,7 @@ where
 /// containing changed keys and the like should be returned in the normal way.
 pub(crate) fn apply_protocol_tx<D, H>(
     tx: ProtocolTxType,
+    data: Option<Vec<u8>>,
     storage: &mut WlStorage<D, H>,
 ) -> Result<TxResult>
 where
@@ -267,21 +269,35 @@ where
         ethereum_events, validator_set_update,
     };
 
-    match tx {
-        ProtocolTxType::EthEventsVext(ext) => {
+    let Some(data) = data else {
+        return Err(Error::ProtocolTxError(
+            eyre!("Protocol tx data must be present")),
+        );
+    };
+    let ethereum_tx_data = EthereumTxData::deserialize(&tx, &data)
+        .wrap_err_with(|| {
+            format!(
+                "Attempt made to apply an unsupported protocol transaction! - \
+                 {tx:?}",
+            )
+        })
+        .map_err(Error::ProtocolTxError)?;
+
+    match ethereum_tx_data {
+        EthereumTxData::EthEventsVext(ext) => {
             let ethereum_events::VextDigest { events, .. } =
                 ethereum_events::VextDigest::singleton(ext);
             transactions::ethereum_events::apply_derived_tx(storage, events)
                 .map_err(Error::ProtocolTxError)
         }
-        ProtocolTxType::BridgePoolVext(ext) => {
+        EthereumTxData::BridgePoolVext(ext) => {
             transactions::bridge_pool_roots::apply_derived_tx(
                 storage,
                 ext.into(),
             )
             .map_err(Error::ProtocolTxError)
         }
-        ProtocolTxType::ValSetUpdateVext(ext) => {
+        EthereumTxData::ValSetUpdateVext(ext) => {
             // NOTE(feature = "abcipp"): with ABCI++, we can write the
             // complete proof to storage in one go. the decided vote extension
             // digest must already have >2/3 of the voting power behind it.
@@ -295,23 +311,15 @@ where
             )
             .map_err(Error::ProtocolTxError)
         }
-        ProtocolTxType::EthereumEvents(_)
-        | ProtocolTxType::BridgePool(_)
-        | ProtocolTxType::ValidatorSetUpdate(_) => {
+        EthereumTxData::EthereumEvents(_)
+        | EthereumTxData::BridgePool(_)
+        | EthereumTxData::ValidatorSetUpdate(_) => {
             // TODO(namada#198): implement this
             tracing::warn!(
                 "Attempt made to apply an unimplemented protocol transaction, \
                  no actions will be taken"
             );
             Ok(TxResult::default())
-        }
-        _ => {
-            tracing::error!(
-                "Attempt made to apply an unsupported protocol transaction! - \
-                 {:#?}",
-                tx
-            );
-            Err(Error::TxTypeError)
         }
     }
 }
@@ -331,15 +339,12 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let empty = vec![];
-    let tx_data = tx.data.as_ref().unwrap_or(&empty);
     wasm::run::tx(
         storage,
         write_log,
         gas_meter,
         tx_index,
-        &tx.code_or_hash,
-        tx_data,
+        tx,
         vp_wasm_cache,
         tx_wasm_cache,
     )
@@ -471,10 +476,6 @@ where
                         &verifiers,
                         vp_wasm_cache.clone(),
                     );
-                    let tx_data = match tx.data.as_ref() {
-                        Some(data) => &data[..],
-                        None => &[],
-                    };
 
                     let accepted: Result<bool> = match internal_addr {
                         InternalAddress::PoS => {
@@ -489,7 +490,7 @@ where
                             let result = match panic::catch_unwind(move || {
                                 pos_ref
                                     .validate_tx(
-                                        tx_data,
+                                        tx,
                                         keys_changed_ref,
                                         verifiers_addr_ref,
                                     )
@@ -511,7 +512,7 @@ where
                         InternalAddress::Ibc => {
                             let ibc = Ibc { ctx };
                             let result = ibc
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::IbcNativeVpError);
                             // Take the gas meter back out of the context
                             gas_meter = ibc.ctx.gas_meter.into_inner();
@@ -520,7 +521,7 @@ where
                         InternalAddress::Parameters => {
                             let parameters = ParametersVp { ctx };
                             let result = parameters
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::ParametersNativeVpError);
                             // Take the gas meter back out of the context
                             gas_meter = parameters.ctx.gas_meter.into_inner();
@@ -536,7 +537,7 @@ where
                         InternalAddress::Governance => {
                             let governance = GovernanceVp { ctx };
                             let result = governance
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::GovernanceNativeVpError);
                             gas_meter = governance.ctx.gas_meter.into_inner();
                             result
@@ -544,7 +545,7 @@ where
                         InternalAddress::SlashFund => {
                             let slash_fund = SlashFundVp { ctx };
                             let result = slash_fund
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::SlashFundNativeVpError);
                             gas_meter = slash_fund.ctx.gas_meter.into_inner();
                             result
@@ -556,7 +557,7 @@ where
                             // validate the transfer
                             let ibc_token = IbcToken { ctx };
                             let result = ibc_token
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::IbcTokenNativeVpError);
                             gas_meter = ibc_token.ctx.gas_meter.into_inner();
                             result
@@ -564,7 +565,7 @@ where
                         InternalAddress::EthBridge => {
                             let bridge = EthBridge { ctx };
                             let result = bridge
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::EthBridgeNativeVpError);
                             gas_meter = bridge.ctx.gas_meter.into_inner();
                             result
@@ -572,7 +573,7 @@ where
                         InternalAddress::EthBridgePool => {
                             let bridge_pool = BridgePoolVp { ctx };
                             let result = bridge_pool
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::BridgePoolNativeVpError);
                             gas_meter = bridge_pool.ctx.gas_meter.into_inner();
                             result
@@ -581,7 +582,7 @@ where
                             let replay_protection_vp =
                                 ReplayProtectionVp { ctx };
                             let result = replay_protection_vp
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::ReplayProtectionNativeVpError);
                             gas_meter =
                                 replay_protection_vp.ctx.gas_meter.into_inner();
@@ -680,6 +681,19 @@ mod tests {
 
     use super::*;
 
+    fn apply_eth_tx<D, H>(
+        tx: EthereumTxData,
+        wl_storage: &mut WlStorage<D, H>,
+    ) -> Result<TxResult>
+    where
+        D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+        H: 'static + StorageHasher + Sync,
+    {
+        let (data, tx) = tx.serialize();
+        let tx_result = apply_protocol_tx(tx, Some(data), wl_storage)?;
+        Ok(tx_result)
+    }
+
     #[test]
     /// Tests that if the same [`ProtocolTxType::EthEventsVext`] is applied
     /// twice within the same block, it doesn't result in voting power being
@@ -709,10 +723,10 @@ mod tests {
         };
         let signing_key = key::testing::keypair_1();
         let signed = vext.sign(&signing_key);
-        let tx = ProtocolTxType::EthEventsVext(signed);
+        let tx = EthereumTxData::EthEventsVext(signed);
 
-        apply_protocol_tx(tx.clone(), &mut wl_storage)?;
-        apply_protocol_tx(tx, &mut wl_storage)?;
+        apply_eth_tx(tx.clone(), &mut wl_storage)?;
+        apply_eth_tx(tx, &mut wl_storage)?;
 
         let eth_msg_keys = vote_tallies::Keys::from(&event);
         let seen_by_bytes = wl_storage.read_bytes(&eth_msg_keys.seen_by())?;
@@ -765,9 +779,9 @@ mod tests {
             sig,
         }
         .sign(&signing_key);
-        let tx = ProtocolTxType::BridgePoolVext(vext);
-        apply_protocol_tx(tx.clone(), &mut wl_storage)?;
-        apply_protocol_tx(tx, &mut wl_storage)?;
+        let tx = EthereumTxData::BridgePoolVext(vext);
+        apply_eth_tx(tx.clone(), &mut wl_storage)?;
+        apply_eth_tx(tx, &mut wl_storage)?;
 
         let bp_root_keys = vote_tallies::Keys::from(
             vote_tallies::BridgePoolRoot(EthereumProof::new((root, nonce))),

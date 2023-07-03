@@ -12,6 +12,7 @@ use namada::ledger::storage::types::encode;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::ledger::storage_api::{token, StorageWrite};
 use namada::proof_of_stake::read_total_stake;
+use namada::proto::{Code, Data};
 use namada::types::address::Address;
 use namada::types::governance::{Council, Tally, TallyResult, VotePower};
 use namada::types::storage::Epoch;
@@ -148,17 +149,13 @@ where
     let proposal_code = shell.read_storage_key_bytes(&proposal_code_key);
     match proposal_code {
         Some(proposal_code) => {
-            let tx = Tx::new(
-                proposal_code,
-                Some(encode(&id)),
-                shell.chain_id.clone(),
-                None,
-            );
-            let tx_type = TxType::Decrypted(DecryptedTx::Decrypted {
-                tx,
+            let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: false,
-            });
+            }));
+            tx.header.chain_id = shell.chain_id.clone();
+            tx.set_data(Data::new(encode(&id)));
+            tx.set_code(Code::new(proposal_code));
             let pending_execution_key =
                 gov_storage::get_proposal_execution_key(id);
             shell
@@ -166,7 +163,7 @@ where
                 .write(&pending_execution_key, ())
                 .expect("Should be able to write to storage.");
             let tx_result = protocol::dispatch_tx(
-                tx_type,
+                tx,
                 0, /*  this is used to compute the fee
                     * based on the code size. We dont
                     * need it here. */

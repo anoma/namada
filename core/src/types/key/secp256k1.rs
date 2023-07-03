@@ -101,7 +101,7 @@ impl BorshSchema for PublicKey {
     }
 }
 
-#[allow(clippy::derive_hash_xor_eq)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 impl Hash for PublicKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.serialize_compressed().hash(state);
@@ -487,7 +487,7 @@ impl Encode<1> for Signature {
     }
 }
 
-#[allow(clippy::derive_hash_xor_eq)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 impl Hash for Signature {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.serialize().hash(state);
@@ -567,6 +567,13 @@ impl super::SigScheme for SigScheme {
         R: CryptoRng + RngCore,
     {
         SecretKey(Box::new(libsecp256k1::SecretKey::random(csprng)))
+    }
+
+    fn from_bytes(sk: [u8; 32]) -> SecretKey {
+        SecretKey(Box::new(
+            libsecp256k1::SecretKey::parse_slice(&sk)
+                .expect("Secret key parsing should not fail."),
+        ))
     }
 
     /// Sign the data with a key

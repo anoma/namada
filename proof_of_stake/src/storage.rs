@@ -9,7 +9,9 @@ use crate::epoched::LAZY_MAP_SUB_KEY;
 pub use crate::types::*; // TODO: not sure why this needs to be public
 
 const PARAMS_STORAGE_KEY: &str = "params";
-const VALIDATOR_STORAGE_PREFIX: &str = "validator";
+const VALIDATOR_ADDRESSES_KEY: &str = "validator_addresses";
+#[allow(missing_docs)]
+pub const VALIDATOR_STORAGE_PREFIX: &str = "validator";
 const VALIDATOR_ADDRESS_RAW_HASH: &str = "address_raw_hash";
 const VALIDATOR_CONSENSUS_KEY_STORAGE_KEY: &str = "consensus_key";
 const VALIDATOR_ETH_COLD_KEY_STORAGE_KEY: &str = "eth_cold_key";
@@ -25,11 +27,14 @@ const VALIDATOR_DELEGATION_REWARDS_PRODUCT_KEY: &str =
 const VALIDATOR_LAST_KNOWN_PRODUCT_EPOCH_KEY: &str =
     "last_known_rewards_product_epoch";
 const SLASHES_PREFIX: &str = "slash";
+const ENQUEUED_SLASHES_KEY: &str = "enqueued_slashes";
+const VALIDATOR_LAST_SLASH_EPOCH: &str = "last_slash_epoch";
 const BOND_STORAGE_KEY: &str = "bond";
 const UNBOND_STORAGE_KEY: &str = "unbond";
+const VALIDATOR_TOTAL_BONDED_STORAGE_KEY: &str = "total_bonded";
+const VALIDATOR_TOTAL_UNBONDED_STORAGE_KEY: &str = "total_unbonded";
 const VALIDATOR_SETS_STORAGE_PREFIX: &str = "validator_sets";
 const CONSENSUS_VALIDATOR_SET_STORAGE_KEY: &str = "consensus";
-const NUM_CONSENSUS_VALIDATORS_STORAGE_KEY: &str = "num_consensus";
 const BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY: &str = "below_capacity";
 const TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
 const VALIDATOR_SET_POSITIONS_KEY: &str = "validator_set_positions";
@@ -306,18 +311,25 @@ pub fn validator_state_key(validator: &Address) -> Key {
 }
 
 /// Is storage key for validator's state?
-pub fn is_validator_state_key(key: &Key) -> Option<&Address> {
+pub fn is_validator_state_key(key: &Key) -> Option<(&Address, Epoch)> {
     match &key.segments[..] {
         [
             DbKeySeg::AddressSeg(addr),
             DbKeySeg::StringSeg(prefix),
             DbKeySeg::AddressSeg(validator),
             DbKeySeg::StringSeg(key),
+            DbKeySeg::StringSeg(lazy_map),
+            DbKeySeg::StringSeg(data),
+            DbKeySeg::StringSeg(epoch),
         ] if addr == &ADDRESS
             && prefix == VALIDATOR_STORAGE_PREFIX
-            && key == VALIDATOR_STATE_STORAGE_KEY =>
+            && key == VALIDATOR_STATE_STORAGE_KEY
+            && lazy_map == LAZY_MAP_SUB_KEY
+            && data == lazy_map::DATA_SUBKEY =>
         {
-            Some(validator)
+            let epoch = Epoch::parse(epoch.clone())
+                .expect("Should be able to parse the epoch");
+            Some((validator, epoch))
         }
         _ => None,
     }
@@ -353,10 +365,25 @@ pub fn is_validator_deltas_key(key: &Key) -> Option<&Address> {
     }
 }
 
+/// Storage prefix for all active validators (consensus, below-capacity, jailed)
+pub fn validator_addresses_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&VALIDATOR_ADDRESSES_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
 /// Storage prefix for slashes.
 pub fn slashes_prefix() -> Key {
     Key::from(ADDRESS.to_db_key())
         .push(&SLASHES_PREFIX.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for all slashes.
+pub fn enqueued_slashes_key() -> Key {
+    // slashes_prefix()
+    Key::from(ADDRESS.to_db_key())
+        .push(&ENQUEUED_SLASHES_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 
@@ -367,7 +394,7 @@ pub fn validator_slashes_key(validator: &Address) -> Key {
         .expect("Cannot obtain a storage key")
 }
 
-/// NEW: Is storage key for validator's slashes
+/// Is storage key for a validator's slashes
 pub fn is_validator_slashes_key(key: &Key) -> Option<Address> {
     if key.segments.len() >= 5 {
         match &key.segments[..] {
@@ -388,6 +415,14 @@ pub fn is_validator_slashes_key(key: &Key) -> Option<Address> {
     } else {
         None
     }
+}
+
+/// Storage key for the last (most recent) epoch in which a slashable offense
+/// was detected for a given validator
+pub fn validator_last_slash_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_LAST_SLASH_EPOCH.to_owned())
+        .expect("Cannot obtain a storage key")
 }
 
 /// Storage key prefix for all bonds.
@@ -442,6 +477,15 @@ pub fn is_bond_key(key: &Key) -> Option<(BondId, Epoch)> {
     } else {
         None
     }
+}
+
+/// Storage key for the total bonds for a given validator.
+pub fn validator_total_bonded_key(validator: &Address) -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&VALIDATOR_TOTAL_BONDED_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&validator.to_db_key())
+        .expect("Cannot obtain a storage key")
 }
 
 /// Storage key prefix for all unbonds.
@@ -502,6 +546,13 @@ pub fn is_unbond_key(key: &Key) -> Option<(BondId, Epoch, Epoch)> {
     }
 }
 
+/// Storage key for validator's total-unbonded amount to track for slashing
+pub fn validator_total_unbonded_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_TOTAL_UNBONDED_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
 /// Storage prefix for validator sets.
 pub fn validator_sets_prefix() -> Key {
     Key::from(ADDRESS.to_db_key())
@@ -513,13 +564,6 @@ pub fn validator_sets_prefix() -> Key {
 pub fn consensus_validator_set_key() -> Key {
     validator_sets_prefix()
         .push(&CONSENSUS_VALIDATOR_SET_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Storage key for the number of consensus validators
-pub fn num_consensus_validators_key() -> Key {
-    validator_sets_prefix()
-        .push(&NUM_CONSENSUS_VALIDATORS_STORAGE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 

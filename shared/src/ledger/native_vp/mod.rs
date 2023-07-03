@@ -45,7 +45,7 @@ pub trait NativeVp {
     /// Run the validity predicate
     fn validate_tx(
         &self,
-        tx_data: &[u8],
+        tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> std::result::Result<bool, Self::Error>;
@@ -476,7 +476,7 @@ where
     fn eval(
         &self,
         vp_code_hash: Hash,
-        input_data: Vec<u8>,
+        input_data: Tx,
     ) -> Result<bool, storage_api::Error> {
         #[cfg(feature = "wasm-runtime")]
         {
@@ -535,19 +535,11 @@ where
         }
     }
 
-    fn verify_tx_signature(
-        &self,
-        pk: &crate::types::key::common::PublicKey,
-        sig: &crate::types::key::common::Signature,
-    ) -> Result<bool, storage_api::Error> {
-        Ok(self.tx.verify_sig(pk, sig).is_ok())
-    }
-
     fn verify_masp(&self, _tx: Vec<u8>) -> Result<bool, storage_api::Error> {
         unimplemented!("no masp native vp")
     }
 
-    fn get_tx_code_hash(&self) -> Result<Hash, storage_api::Error> {
+    fn get_tx_code_hash(&self) -> Result<Option<Hash>, storage_api::Error> {
         vp_host_fns::get_tx_code_hash(&mut self.gas_meter.borrow_mut(), self.tx)
             .into_storage_result()
     }

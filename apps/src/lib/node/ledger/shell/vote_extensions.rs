@@ -9,7 +9,7 @@ use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 use namada::ledger::pos::PosQueries;
 use namada::proto::{SignableEthMessage, Signed};
 use namada::types::keccak::keccak_hash;
-use namada::types::transaction::protocol::ProtocolTxType;
+use namada::types::transaction::protocol::EthereumTxData;
 #[cfg(feature = "abcipp")]
 use namada::types::vote_extensions::VoteExtensionDigest;
 use namada::types::vote_extensions::{
@@ -123,7 +123,7 @@ where
                 .pos_queries()
                 .get_current_decision_height(),
             #[cfg(not(feature = "abcipp"))]
-            block_height: self.wl_storage.storage.last_height,
+            block_height: self.wl_storage.storage.get_last_block_height(),
             ethereum_events: self.new_ethereum_events(),
             validator_addr,
         };
@@ -171,7 +171,7 @@ where
             .expect(VALIDATOR_EXPECT_MSG);
         let signed = Signed::<_, SignableEthMessage>::new(eth_key, to_sign);
         let ext = bridge_pool_roots::Vext {
-            block_height: self.wl_storage.storage.last_height,
+            block_height: self.wl_storage.storage.get_last_block_height(),
             validator_addr,
             sig: signed.sig,
         };
@@ -323,7 +323,7 @@ where
             if let Some(ext) = ext {
                 self.validate_bp_roots_vext(
                     ext,
-                    self.wl_storage.storage.last_height,
+                    self.wl_storage.storage.get_last_block_height(),
                 )
                 .then_some(true)
                 .unwrap_or_else(|| {
@@ -404,8 +404,6 @@ where
         &'shell self,
         txs: &'shell [TxBytes],
     ) -> impl Iterator<Item = TxBytes> + 'shell {
-        use namada::types::transaction::protocol::ProtocolTx;
-
         txs.iter().filter_map(move |tx_bytes| {
             let tx = match Tx::try_from(tx_bytes.as_slice()) {
                 Ok(tx) => tx,
@@ -418,17 +416,10 @@ where
                     return None;
                 }
             };
-            match process_tx(tx).ok()? {
-                TxType::Protocol(ProtocolTx {
-                    tx:
-                        ProtocolTxType::EthEventsVext(_)
-                        | ProtocolTxType::BridgePoolVext(_),
-                    ..
-                }) => Some(tx_bytes.clone()),
-                TxType::Protocol(ProtocolTx {
-                    tx: ProtocolTxType::ValSetUpdateVext(ext),
-                    ..
-                }) => {
+            match (&tx).try_into().ok()? {
+                EthereumTxData::EthEventsVext(_)
+                | EthereumTxData::BridgePoolVext(_) => Some(tx_bytes.clone()),
+                EthereumTxData::ValSetUpdateVext(ext) => {
                     // only include non-stale validator set updates
                     // in block proposals. it might be sitting long
                     // enough in the mempool for it to no longer be
@@ -508,38 +499,20 @@ pub fn deserialize_vote_extensions(
     })
 }
 
-/// Yields an iterator over the [`ProtocolTxType`] transactions
-/// in a [`VoteExtensionDigest`].
-#[cfg(feature = "abcipp")]
-pub fn iter_protocol_txs(
-    digest: VoteExtensionDigest,
-) -> impl Iterator<Item = ProtocolTxType> {
-    [
-        digest.ethereum_events.map(ProtocolTxType::EthereumEvents),
-        digest.bridge_pool_roots.map(ProtocolTxType::BridgePool),
-        digest
-            .validator_set_update
-            .map(ProtocolTxType::ValidatorSetUpdate),
-    ]
-    .into_iter()
-    .flatten()
-}
-
-/// Yields an iterator over the [`ProtocolTxType`] transactions
+/// Yields an iterator over the protocol transactions
 /// in a [`VoteExtension`].
-#[cfg(not(feature = "abcipp"))]
 pub fn iter_protocol_txs(
     ext: VoteExtension,
-) -> impl Iterator<Item = ProtocolTxType> {
+) -> impl Iterator<Item = EthereumTxData> {
     let VoteExtension {
         ethereum_events,
         bridge_pool_root,
         validator_set_update,
     } = ext;
     [
-        ethereum_events.map(ProtocolTxType::EthEventsVext),
-        bridge_pool_root.map(ProtocolTxType::BridgePoolVext),
-        validator_set_update.map(ProtocolTxType::ValSetUpdateVext),
+        ethereum_events.map(EthereumTxData::EthEventsVext),
+        bridge_pool_root.map(EthereumTxData::BridgePoolVext),
+        validator_set_update.map(EthereumTxData::ValSetUpdateVext),
     ]
     .into_iter()
     .flatten()

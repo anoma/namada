@@ -4,10 +4,9 @@ use namada_tx_prelude::transaction::pos::CommissionChange;
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
-    let signed = SignedTxData::try_from_slice(&tx_data[..])
-        .wrap_err("failed to decode SignedTxData")?;
-    let data = signed.data.ok_or_err_msg("Missing data")?;
+fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
+    let signed = tx_data;
+    let data = signed.data().ok_or_err_msg("Missing data")?;
     let CommissionChange {
         validator,
         new_rate,
@@ -22,10 +21,10 @@ mod tests {
 
     use namada::ledger::pos::{PosParams, PosVP};
     use namada::proof_of_stake::validator_commission_rate_handle;
-    use namada::proto::Tx;
-    use namada::types::chain::ChainId;
-    use namada::types::dec::Dec;
+    use namada::proto::{Code, Data, Signature, Tx};
+    use namada::types::dec::{Dec, POS_DECIMAL_PRECISION};
     use namada::types::storage::Epoch;
+    use namada::types::transaction::TxType;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
@@ -42,38 +41,36 @@ mod tests {
 
     proptest! {
         /// In this test we setup the ledger and PoS system with an arbitrary
-        /// initial state with 1 genesis validator and arbitrary PoS parameters. We then
-        /// generate an arbitrary bond that we'd like to apply.
+        /// initial state with 1 genesis validator and arbitrary PoS parameters.
+        /// We then generate an validator commission rate change that we'd like
+        /// to apply.
         ///
-        /// After we apply the bond, we check that all the storage values
+        /// After we apply the tx, we check that all the storage values
         /// in PoS system have been updated as expected and then we also check
         /// that this transaction is accepted by the PoS validity predicate.
         #[test]
         fn test_tx_change_validator_commissions(
-            commission_state_change in arb_commission_info(),
+            (initial_rate, max_change, commission_change) in arb_commission_info(),
             // A key to sign the transaction
             key in arb_common_keypair(),
             pos_params in arb_pos_params(None)) {
-            test_tx_change_validator_commission_aux(commission_state_change.2, commission_state_change.0, commission_state_change.1, key, pos_params).unwrap()
+            test_tx_change_validator_commission_aux(
+                initial_rate, max_change, commission_change, key, pos_params).unwrap()
         }
     }
 
     fn test_tx_change_validator_commission_aux(
-        commission_change: transaction::pos::CommissionChange,
         initial_rate: Dec,
         max_change: Dec,
+        commission_change: transaction::pos::CommissionChange,
         key: key::common::SecretKey,
         pos_params: PosParams,
     ) -> TxResult {
         let consensus_key = key::testing::keypair_1().ref_to();
-        let eth_cold_key = key::testing::keypair_3().ref_to();
-        let eth_hot_key = key::testing::keypair_4().ref_to();
         let genesis_validators = [GenesisValidator {
             address: commission_change.validator.clone(),
             tokens: token::Amount::from_uint(1_000_000, 0).unwrap(),
             consensus_key,
-            eth_cold_key,
-            eth_hot_key,
             commission_rate: initial_rate,
             max_commission_rate_change: max_change,
         }];
@@ -82,9 +79,14 @@ mod tests {
 
         let tx_code = vec![];
         let tx_data = commission_change.try_to_vec().unwrap();
-        let tx = Tx::new(tx_code, Some(tx_data), ChainId::default(), None);
-        let signed_tx = tx.sign(&key);
-        let tx_data = signed_tx.data.unwrap();
+        let mut tx = Tx::new(TxType::Raw);
+        tx.set_data(Data::new(tx_data));
+        tx.set_code(Code::new(tx_code));
+        tx.add_section(Section::Signature(Signature::new(
+            vec![*tx.data_sechash(), *tx.code_sechash()],
+            &key,
+        )));
+        let signed_tx = tx.clone();
 
         // Read the data before the tx is executed
         let commission_rate_handle =
@@ -101,7 +103,7 @@ mod tests {
 
         assert_eq!(commission_rates_pre[0], Some(initial_rate));
 
-        apply_tx(ctx(), tx_data)?;
+        apply_tx(ctx(), signed_tx)?;
 
         // Read the data after the tx is executed
 
@@ -127,12 +129,6 @@ mod tests {
 
         // After pipeline, the commission rates should have changed
         for epoch in pos_params.pipeline_len..=pos_params.unbonding_len {
-            assert_ne!(
-                commission_rates_pre[epoch as usize],
-                commission_rate_handle.get(ctx(), Epoch(epoch), &pos_params)?,
-                "The commission rate after the pipeline offset must have \
-                 changed - checking in epoch: {epoch}"
-            );
             assert_eq!(
                 Some(commission_change.new_rate),
                 commission_rate_handle.get(ctx(), Epoch(epoch), &pos_params)?,
@@ -156,37 +152,72 @@ mod tests {
     }
 
     fn arb_rate(min: Dec, max: Dec) -> impl Strategy<Value = Dec> {
-        let scale = Dec::new(100_000, 0).expect("Test failed");
-        let int_min = (min * scale).to_i256();
-        let int_min = i128::try_from(int_min).unwrap();
-        let int_max = (max * scale).to_i256();
-        let int_max = i128::try_from(int_max).unwrap();
-        (int_min..=int_max).prop_map(move |num| Dec::from(num) / scale)
+        let int_min: i128 = (min * scale()).try_into().unwrap();
+        let int_max: i128 = (max * scale()).try_into().unwrap();
+        (int_min..=int_max).prop_map(|num| {
+            Dec::new(num, POS_DECIMAL_PRECISION).unwrap() / scale()
+        })
     }
 
     fn arb_new_rate(
-        min: Dec,
-        max: Dec,
         rate_pre: Dec,
+        max_change: Dec,
     ) -> impl Strategy<Value = Dec> {
-        arb_rate(min, max).prop_filter(
-            "New rate must not be equal to the previous epoch's rate",
-            move |v| v != &rate_pre,
-        )
+        assert!(max_change > Dec::zero());
+        // Arbitrary non-zero change
+        let arb_change = |ceil: Dec| {
+            // Clamp the `ceil` to `max_change` and convert to an int
+            let ceil = (cmp::min(max_change, ceil) * scale()).abs().as_u128();
+            (1..ceil).prop_map(|c|
+                // Convert back from an int
+                 Dec::new(c as i128, POS_DECIMAL_PRECISION).unwrap() / scale())
+        };
+
+        // Addition
+        let arb_add = || {
+            arb_change(
+                // Addition must not go over 1
+                Dec::one() - rate_pre,
+            )
+            .prop_map(move |c| rate_pre + c)
+        };
+        // Subtraction
+        let arb_sub = || {
+            arb_change(
+                // Sub must not go below 0
+                rate_pre,
+            )
+            .prop_map(move |c| rate_pre - c)
+        };
+
+        // Add or subtract from the previous rate
+        if rate_pre == Dec::zero() {
+            arb_add().boxed()
+        } else if rate_pre == Dec::one() {
+            arb_sub().boxed()
+        } else {
+            prop_oneof![arb_add(), arb_sub()].boxed()
+        }
     }
 
     fn arb_commission_change(
         rate_pre: Dec,
         max_change: Dec,
     ) -> impl Strategy<Value = transaction::pos::CommissionChange> {
-        let min = rate_pre.checked_sub(&max_change).unwrap_or_default();
-        let max = cmp::min(rate_pre + max_change, Dec::one());
-        (arb_established_address(), arb_new_rate(min, max, rate_pre)).prop_map(
-            |(validator, new_rate)| transaction::pos::CommissionChange {
-                validator: Address::Established(validator),
-                new_rate,
+        (
+            arb_established_address(),
+            if max_change.is_zero() {
+                Just(Dec::zero()).boxed()
+            } else {
+                arb_new_rate(rate_pre, max_change).boxed()
             },
         )
+            .prop_map(|(validator, new_rate)| {
+                transaction::pos::CommissionChange {
+                    validator: Address::Established(validator),
+                    new_rate,
+                }
+            })
     }
 
     fn arb_commission_info()
@@ -194,14 +225,19 @@ mod tests {
     {
         let min = Dec::zero();
         let max = Dec::one();
-        (arb_rate(min, max), arb_rate(min, max)).prop_flat_map(
-            |(rate, change)| {
+        let non_zero_min = Dec::one() / scale();
+        (arb_rate(min, max), arb_rate(non_zero_min, max)).prop_flat_map(
+            |(rate, max_change)| {
                 (
                     Just(rate),
-                    Just(change),
-                    arb_commission_change(rate, change),
+                    Just(max_change),
+                    arb_commission_change(rate, max_change),
                 )
             },
         )
+    }
+
+    fn scale() -> Dec {
+        Dec::new(100_000, 0).unwrap()
     }
 }

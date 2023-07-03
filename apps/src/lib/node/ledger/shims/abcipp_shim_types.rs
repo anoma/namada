@@ -189,14 +189,14 @@ pub mod shim {
         use namada::types::hash::Hash;
         use namada::types::storage::{BlockHash, Header};
         use namada::types::time::DateTimeUtc;
-        #[cfg(not(feature = "abcipp"))]
-        use tendermint_proto::abci::Misbehavior as Evidence;
         #[cfg(feature = "abcipp")]
         use tendermint_proto_abcipp::abci::{
             Misbehavior as Evidence, RequestFinalizeBlock,
         };
 
         use super::VoteInfo;
+        #[cfg(not(feature = "abcipp"))]
+        use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
 
         pub struct VerifyHeader;
 
@@ -414,7 +414,9 @@ pub mod shim {
         }
 
         #[cfg(not(feature = "abcipp"))]
-        impl From<FinalizeBlock> for tendermint_proto::abci::ResponseEndBlock {
+        impl From<FinalizeBlock>
+            for crate::facade::tendermint_proto::abci::ResponseEndBlock
+        {
             fn from(resp: FinalizeBlock) -> Self {
                 Self {
                     events: resp

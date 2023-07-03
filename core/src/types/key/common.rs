@@ -323,6 +323,13 @@ impl super::SigScheme for SigScheme {
         );
     }
 
+    fn from_bytes(_seed: [u8; 32]) -> Self::SecretKey {
+        unimplemented!(
+            "Cannot generate common signing scheme. Must convert from \
+             alternative scheme."
+        );
+    }
+
     fn sign(
         keypair: &SecretKey,
         data: impl super::SignableBytes,

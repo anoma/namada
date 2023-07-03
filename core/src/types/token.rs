@@ -7,7 +7,6 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
 use ethabi::ethereum_types::U256;
-use masp_primitives::transaction::Transaction;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -17,6 +16,7 @@ use crate::ledger::storage_api::token::read_denom;
 use crate::ledger::storage_api::{self, StorageRead};
 use crate::types::address::{masp, Address, DecodeError as AddressError};
 use crate::types::dec::Dec;
+use crate::types::hash::Hash;
 use crate::types::storage;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::uint::{self, Uint, I256};
@@ -55,6 +55,13 @@ pub const NATIVE_SCALE: u64 = 1_000_000;
 pub type Change = I256;
 
 impl Amount {
+    /// Convert a [`u64`] to an [`Amount`].
+    pub const fn from_u64(x: u64) -> Self {
+        Self {
+            raw: Uint::from_u64(x),
+        }
+    }
+
     /// Get the amount as a [`Change`]
     pub fn change(&self) -> Change {
         self.raw.try_into().unwrap()
@@ -999,7 +1006,7 @@ pub struct Transfer {
     /// The unused storage location at which to place TxId
     pub key: Option<String>,
     /// Shielded transaction part
-    pub shielded: Option<Transaction>,
+    pub shielded: Option<Hash>,
 }
 
 #[allow(missing_docs)]

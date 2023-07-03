@@ -5,11 +5,9 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, Write};
 use std::iter::Iterator;
+use std::path::PathBuf;
 use std::str::FromStr;
 
-use async_std::fs;
-use async_std::path::PathBuf;
-use async_std::prelude::*;
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
 use itertools::Either;
@@ -33,7 +31,9 @@ use namada::ledger::pos::{
     self, BondId, BondsAndUnbondsDetail, CommissionPair, PosParams, Slash,
 };
 use namada::ledger::queries::RPC;
-use namada::ledger::rpc::{query_epoch, TxResponse};
+use namada::ledger::rpc::{
+    enriched_bonds_and_unbonds, query_epoch, TxResponse,
+};
 use namada::ledger::storage::ConversionState;
 use namada::ledger::wallet::{AddressVpType, Wallet};
 use namada::proof_of_stake::types::WeightedValidator;
@@ -69,8 +69,19 @@ pub async fn query_and_print_epoch<
 /// Query the last committed block
 pub async fn query_block<C: namada::ledger::queries::Client + Sync>(
     client: &C,
-) -> crate::facade::tendermint_rpc::endpoint::block::Response {
-    namada::ledger::rpc::query_block(client).await
+) {
+    let block = namada::ledger::rpc::query_block(client).await;
+    match block {
+        Some(block) => {
+            println!(
+                "Last committed block ID: {}, height: {}, time: {}",
+                block.hash, block.height, block.time
+            );
+        }
+        None => {
+            println!("No block has been committed yet.");
+        }
+    }
 }
 
 /// Query the results of the last committed block
@@ -99,7 +110,7 @@ pub async fn query_transfers<
         || Either::Right(wallet.get_addresses().into_values().collect()),
         Either::Left,
     );
-    let _ = shielded.load();
+    let _ = shielded.load().await;
     // Obtain the effects of all shielded and transparent transactions
     let transfers = shielded
         .query_tx_deltas(
@@ -329,7 +340,8 @@ pub async fn query_transparent_balance<
         }
         (None, Some(owner)) => {
             for token in tokens {
-                let prefix = token.to_db_key().into();
+                let prefix =
+                    token::balance_key(&token, &owner.address().unwrap());
                 let balances =
                     query_storage_prefix::<C, token::Amount>(client, &prefix)
                         .await;
@@ -346,7 +358,7 @@ pub async fn query_transparent_balance<
             }
         }
         (Some(token), None) => {
-            let prefix = token.to_db_key().into();
+            let prefix = token::balance_prefix(&token);
             let balances =
                 query_storage_prefix::<C, token::Amount>(client, &prefix).await;
             if let Some(balances) = balances {
@@ -396,7 +408,7 @@ pub async fn query_pinned_balance<
         .values()
         .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
         .collect();
-    let _ = shielded.load();
+    let _ = shielded.load().await;
     // Print the token balances by payment address
     let pinned_error = Err(PinnedBalanceError::InvalidViewingKey);
     for owner in owners {
@@ -753,14 +765,14 @@ pub async fn query_shielded_balance<
         Some(viewing_key) => vec![viewing_key],
         None => wallet.get_viewing_keys().values().copied().collect(),
     };
-    let _ = shielded.load();
+    let _ = shielded.load().await;
     let fvks: Vec<_> = viewing_keys
         .iter()
         .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
         .collect();
     shielded.fetch(client, &[], &fvks).await;
     // Save the update state so that future fetches can be short-circuited
-    let _ = shielded.save();
+    let _ = shielded.save().await;
     // The epoch is required to identify timestamped tokens
     let epoch = query_and_print_epoch(client).await;
     // Map addresses to token names
@@ -1138,13 +1150,15 @@ pub async fn query_proposal_result<
             if args.offline {
                 match args.proposal_folder {
                     Some(path) => {
-                        let mut dir = fs::read_dir(&path)
+                        let mut dir = tokio::fs::read_dir(&path)
                             .await
                             .expect("Should be able to read the directory.");
                         let mut files = HashSet::new();
                         let mut is_proposal_present = false;
 
-                        while let Some(entry) = dir.next().await {
+                        while let Some(entry) =
+                            dir.next_entry().await.transpose()
+                        {
                             match entry {
                                 Ok(entry) => match entry.file_type().await {
                                     Ok(entry_stat) => {
@@ -1405,7 +1419,7 @@ pub async fn query_bonds<C: namada::ledger::queries::Client + Sync>(
     _wallet: &mut Wallet<CliWalletUtils>,
     args: args::QueryBonds,
 ) -> std::io::Result<()> {
-    let _epoch = query_and_print_epoch(client).await;
+    let epoch = query_and_print_epoch(client).await;
 
     let source = args.owner;
     let validator = args.validator;
@@ -1413,21 +1427,10 @@ pub async fn query_bonds<C: namada::ledger::queries::Client + Sync>(
     let stdout = io::stdout();
     let mut w = stdout.lock();
 
-    let bonds_and_unbonds: pos::types::BondsAndUnbondsDetails =
-        unwrap_client_response::<C, pos::types::BondsAndUnbondsDetails>(
-            RPC.vp()
-                .pos()
-                .bonds_and_unbonds(client, &source, &validator)
-                .await,
-        );
-    let mut bonds_total = token::Amount::default();
-    let mut bonds_total_slashed = token::Amount::default();
-    let mut unbonds_total = token::Amount::default();
-    let mut unbonds_total_slashed = token::Amount::default();
-    let mut total_withdrawable = token::Amount::default();
-    for (bond_id, details) in bonds_and_unbonds {
-        let mut total = token::Amount::default();
-        let mut total_slashed = token::Amount::default();
+    let bonds_and_unbonds =
+        enriched_bonds_and_unbonds(client, epoch, &source, &validator).await;
+
+    for (bond_id, details) in &bonds_and_unbonds.data {
         let bond_type = if bond_id.source == bond_id.validator {
             format!("Self-bonds from {}", bond_id.validator)
         } else {
@@ -1437,41 +1440,32 @@ pub async fn query_bonds<C: namada::ledger::queries::Client + Sync>(
             )
         };
         writeln!(w, "{}:", bond_type)?;
-        for bond in details.bonds {
+        for bond in &details.data.bonds {
             writeln!(
                 w,
                 "  Remaining active bond from epoch {}: Δ {}",
                 bond.start,
                 bond.amount.to_string_native()
             )?;
-            total += bond.amount;
-            total_slashed += bond.slashed_amount.unwrap_or_default();
         }
-        if total_slashed != token::Amount::zero() {
+        if details.bonds_total_slashed != token::Amount::default() {
             writeln!(
                 w,
                 "Active (slashed) bonds total: {}",
-                (total - total_slashed).to_string_native()
+                details.bonds_total_active()
             )?;
         }
-        writeln!(w, "Bonds total: {}", total.to_string_native())?;
+        writeln!(w, "Bonds total: {}", details.bonds_total)?;
         writeln!(w)?;
-        bonds_total += total;
-        bonds_total_slashed += total_slashed;
 
-        let mut withdrawable = token::Amount::zero();
-        if !details.unbonds.is_empty() {
-            let mut total = token::Amount::default();
-            let mut total_slashed = token::Amount::default();
+        if !details.data.unbonds.is_empty() {
             let bond_type = if bond_id.source == bond_id.validator {
                 format!("Unbonded self-bonds from {}", bond_id.validator)
             } else {
                 format!("Unbonded delegations from {}", bond_id.source)
             };
             writeln!(w, "{}:", bond_type)?;
-            for unbond in details.unbonds {
-                total += unbond.amount;
-                total_slashed += unbond.slashed_amount.unwrap_or_default();
+            for unbond in &details.data.unbonds {
                 writeln!(
                     w,
                     "  Withdrawable from epoch {} (active from {}): Δ {}",
@@ -1480,37 +1474,34 @@ pub async fn query_bonds<C: namada::ledger::queries::Client + Sync>(
                     unbond.amount.to_string_native()
                 )?;
             }
-            withdrawable = total - total_slashed;
-            writeln!(w, "Unbonded total: {}", total.to_string_native())?;
-
-            unbonds_total += total;
-            unbonds_total_slashed += total_slashed;
-            total_withdrawable += withdrawable;
+            writeln!(w, "Unbonded total: {}", details.unbonds_total)?;
         }
-        writeln!(w, "Withdrawable total: {}", withdrawable.to_string_native())?;
+        writeln!(w, "Withdrawable total: {}", details.total_withdrawable)?;
         writeln!(w)?;
     }
-    if bonds_total != bonds_total_slashed {
+    if bonds_and_unbonds.bonds_total != bonds_and_unbonds.bonds_total_slashed {
         writeln!(
             w,
             "All bonds total active: {}",
-            (bonds_total - bonds_total_slashed).to_string_native()
+            bonds_and_unbonds.bonds_total_active()
         )?;
     }
-    writeln!(w, "All bonds total: {}", bonds_total.to_string_native())?;
+    writeln!(w, "All bonds total: {}", bonds_and_unbonds.bonds_total)?;
 
-    if unbonds_total != unbonds_total_slashed {
+    if bonds_and_unbonds.unbonds_total
+        != bonds_and_unbonds.unbonds_total_slashed
+    {
         writeln!(
             w,
             "All unbonds total active: {}",
-            (unbonds_total - unbonds_total_slashed).to_string_native()
+            bonds_and_unbonds.unbonds_total_active()
         )?;
     }
-    writeln!(w, "All unbonds total: {}", unbonds_total.to_string_native())?;
+    writeln!(w, "All unbonds total: {}", bonds_and_unbonds.unbonds_total)?;
     writeln!(
         w,
         "All unbonds total withdrawable: {}",
-        total_withdrawable.to_string_native()
+        bonds_and_unbonds.total_withdrawable
     )?;
     Ok(())
 }
@@ -1672,9 +1663,7 @@ pub async fn query_slashes<C: namada::ledger::queries::Client + Sync>(
                     writeln!(
                         w,
                         "Slash epoch {}, type {}, rate {}",
-                        slash.epoch,
-                        slash.r#type,
-                        slash.r#type.get_slash_rate(&params)
+                        slash.epoch, slash.r#type, slash.rate
                     )
                     .unwrap();
                 }
@@ -1728,6 +1717,30 @@ pub async fn query_delegations<C: namada::ledger::queries::Client + Sync>(
         println!("Found delegations to:");
         for delegation in delegations {
             println!("  {delegation}");
+        }
+    }
+}
+
+pub async fn query_find_validator<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
+    args: args::QueryFindValidator,
+) {
+    let args::QueryFindValidator { query: _, tm_addr } = args;
+    if tm_addr.len() != 40 {
+        eprintln!(
+            "Expected 40 characters in Tendermint address, got {}",
+            tm_addr.len()
+        );
+        cli::safe_exit(1);
+    }
+    let tm_addr = tm_addr.to_ascii_uppercase();
+    let validator = unwrap_client_response::<C, _>(
+        RPC.vp().pos().validator_by_tm_addr(client, &tm_addr).await,
+    );
+    match validator {
+        Some(address) => println!("Found validator address \"{address}\"."),
+        None => {
+            println!("No validator with Tendermint address {tm_addr} found.")
         }
     }
 }

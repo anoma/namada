@@ -14,7 +14,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXUPPER;
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -270,6 +270,8 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     fn generate<R>(csprng: &mut R) -> Self::SecretKey
     where
         R: CryptoRng + RngCore;
+    /// Instantiate a secret key from the bytes.
+    fn from_bytes(bytes: [u8; 32]) -> Self::SecretKey;
     /// Sign the data with a key.
     fn sign(
         keypair: &Self::SecretKey,
@@ -297,23 +299,45 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     PartialOrd,
     Ord,
     Hash,
-    Serialize,
-    Deserialize,
 )]
-#[serde(transparent)]
-pub struct PublicKeyHash(pub(crate) String);
+pub struct PublicKeyHash(pub(crate) [u8; address::HASH_LEN]);
 
-const PKH_HASH_LEN: usize = address::HASH_LEN;
+impl serde::Serialize for PublicKeyHash {
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let encoded = self.to_string();
+        serde::Serialize::serialize(&encoded, serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for PublicKeyHash {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+        let encoded: String = serde::Deserialize::deserialize(deserializer)?;
+        Self::from_str(&encoded).map_err(D::Error::custom)
+    }
+}
+
+const PKH_HEX_LEN: usize = address::HASH_HEX_LEN;
+const PKH_LEN: usize = address::HASH_LEN;
 
 impl From<PublicKeyHash> for String {
     fn from(pkh: PublicKeyHash) -> Self {
-        pkh.0
+        pkh.to_string()
     }
 }
 
 impl Display for PublicKeyHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", HEXUPPER.encode(&self.0))
     }
 }
 
@@ -321,32 +345,36 @@ impl FromStr for PublicKeyHash {
     type Err = PkhFromStringError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.len() != PKH_HASH_LEN {
+        if s.len() != PKH_HEX_LEN {
             return Err(Self::Err::UnexpectedLen(s.len()));
         }
-        Ok(Self(s.to_owned()))
+        let raw_bytes = HEXUPPER
+            .decode(s.as_bytes())
+            .map_err(Self::Err::DecodeUpperHex)?;
+        let mut bytes: [u8; PKH_LEN] = Default::default();
+        bytes.copy_from_slice(&raw_bytes);
+        Ok(Self(bytes))
     }
 }
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum PkhFromStringError {
-    #[error("Wrong PKH len. Expected {PKH_HASH_LEN}, got {0}")]
+    #[error("Wrong PKH len. Expected {PKH_HEX_LEN}, got {0}")]
     UnexpectedLen(usize),
+    #[error("Failed decoding upper hex with {0}")]
+    DecodeUpperHex(data_encoding::DecodeError),
 }
 
 impl<PK: PublicKey> From<&PK> for PublicKeyHash {
     fn from(pk: &PK) -> Self {
         let pk_bytes =
             pk.try_to_vec().expect("Public key encoding shouldn't fail");
-        let mut hasher = Sha256::new();
-        hasher.update(pk_bytes);
-        // hex of the first 40 chars of the hash
-        PublicKeyHash(format!(
-            "{:.width$X}",
-            hasher.finalize(),
-            width = PKH_HASH_LEN
-        ))
+        let full_hash = Sha256::digest(&pk_bytes);
+        // take first 20 bytes of the hash
+        let mut hash: [u8; PKH_LEN] = Default::default();
+        hash.copy_from_slice(&full_hash[..PKH_LEN]);
+        PublicKeyHash(hash)
     }
 }
 
@@ -365,16 +393,11 @@ impl PublicKeyTmRawHash for common::PublicKey {
 /// Convert validator's consensus key into address raw hash that is compatible
 /// with Tendermint
 pub fn tm_consensus_key_raw_hash(pk: &common::PublicKey) -> String {
-    match pk {
-        common::PublicKey::Ed25519(pk) => {
-            let pkh = PublicKeyHash::from(pk);
-            pkh.0
-        }
-        common::PublicKey::Secp256k1(pk) => {
-            let pkh = PublicKeyHash::from(pk);
-            pkh.0
-        }
-    }
+    let pkh = match pk {
+        common::PublicKey::Ed25519(pk) => PublicKeyHash::from(pk),
+        common::PublicKey::Secp256k1(pk) => PublicKeyHash::from(pk),
+    };
+    pkh.to_string()
 }
 
 /// Convert Tendermint validator's raw hash bytes to Namada raw hash string
@@ -403,7 +426,19 @@ impl SignableBytes for crate::types::hash::Hash {
     }
 }
 
+impl SignableBytes for &crate::types::hash::Hash {
+    fn signable_hash<H: StorageHasher>(&self) -> [u8; 32] {
+        self.0
+    }
+}
+
 impl SignableBytes for crate::types::keccak::KeccakHash {
+    fn signable_hash<H: StorageHasher>(&self) -> [u8; 32] {
+        self.0
+    }
+}
+
+impl SignableBytes for &crate::types::keccak::KeccakHash {
     fn signable_hash<H: StorageHasher>(&self) -> [u8; 32] {
         self.0
     }

@@ -136,7 +136,6 @@ pub async fn eth_sync_or<C, F, T>(
 ) -> Halt<Either<T, ()>>
 where
     C: Middleware,
-    C::Error: std::fmt::Debug + std::fmt::Display,
     F: FnMut() -> T,
 {
     let is_synchronized = eth_syncing_status(client)
@@ -160,7 +159,6 @@ where
 pub async fn eth_sync_or_exit<C>(client: &C) -> Halt<()>
 where
     C: Middleware,
-    C::Error: std::fmt::Debug + std::fmt::Display,
 {
     eth_sync_or(client, || {
         tracing::error!("The Ethereum node has not finished synchronizing");

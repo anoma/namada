@@ -424,8 +424,7 @@ where
                                 validator: validator.clone(),
                             };
                             let amount =
-                                bond_amount(storage, &params, &bond_id, epoch)?
-                                    .1;
+                                bond_amount(storage, &bond_id, epoch)?.1;
 
                             if !amount.is_zero() {
                                 let entry = delegators

@@ -65,7 +65,7 @@ where
         wl_storage
             .write_bytes(
                 &get_signed_root_key(),
-                (proof, wl_storage.storage.last_height)
+                (proof, wl_storage.storage.get_last_block_height())
                     .try_to_vec()
                     .expect("Serializing a Bridge pool root shouldn't fail."),
             )

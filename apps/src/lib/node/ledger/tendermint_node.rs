@@ -4,18 +4,11 @@ use std::process::Stdio;
 use std::str::FromStr;
 
 use borsh::BorshSerialize;
-use eyre::{eyre, Context};
 use namada::types::chain::ChainId;
-use namada::types::key::{
-    common, ed25519, secp256k1, tm_consensus_key_raw_hash, ParseSecretKeyError,
-    RefTo, SecretKey,
-};
+use namada::types::key::*;
 use namada::types::storage::BlockHeight;
 use namada::types::time::DateTimeUtc;
-use semver::{Version, VersionReq};
 use serde_json::json;
-#[cfg(feature = "abciplus")]
-use tendermint::Moniker;
 #[cfg(feature = "abcipp")]
 use tendermint_abcipp::Moniker;
 use thiserror::Error;
@@ -25,73 +18,33 @@ use tokio::process::Command;
 
 use crate::cli::namada_version;
 use crate::config;
+#[cfg(feature = "abciplus")]
+use crate::facade::tendermint::Moniker;
 use crate::facade::tendermint::{block, Genesis};
-use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_config::{
-    Error as TendermintError, TendermintConfig, TxIndexConfig, TxIndexer,
+    Error as TendermintError, TendermintConfig,
 };
 
 /// Env. var to output Tendermint log to stdout
-pub const ENV_VAR_TM_STDOUT: &str = "NAMADA_TM_STDOUT";
-
-#[cfg(feature = "abciplus")]
-pub const VERSION_REQUIREMENTS: &str = ">= 0.37.0-alpha.2, <0.38.0";
-#[cfg(not(feature = "abciplus"))]
-// TODO: update from our v0.36-based fork to v0.38 for full ABCI++
-pub const VERSION_REQUIREMENTS: &str = "= 0.1.1-abcipp";
-
-/// Return the Tendermint version requirements for this build of Namada
-fn version_requirements() -> VersionReq {
-    VersionReq::parse(VERSION_REQUIREMENTS)
-        .expect("Unable to parse Tendermint version requirements!")
-}
-
-/// Return the [`Version`] of the Tendermint binary specified at
-/// `tendermint_path`
-async fn get_version(tendermint_path: &str) -> eyre::Result<Version> {
-    let version = run_version_command(tendermint_path).await?;
-    parse_version(&version)
-}
-
-/// Runs `tendermint version` and returns the output as a string
-async fn run_version_command(tendermint_path: &str) -> eyre::Result<String> {
-    let output = Command::new(tendermint_path)
-        .arg("version")
-        .output()
-        .await?;
-    let output = String::from_utf8(output.stdout)?;
-    Ok(output)
-}
-
-/// Parses the raw output of `tendermint version` (e.g. "v0.37.0-alpha.2\n")
-/// into a [`Version`]
-fn parse_version(version_cmd_output: &str) -> eyre::Result<Version> {
-    let version_str = version_cmd_output.trim_end().trim_start_matches('v');
-    Version::parse(version_str).wrap_err_with(|| {
-        eyre!(
-            "Couldn't parse semantic version from Tendermint version string: \
-             {version_str}"
-        )
-    })
-}
+pub const ENV_VAR_TM_STDOUT: &str = "NAMADA_CMT_STDOUT";
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Failed to initialize Tendermint: {0}")]
+    #[error("Failed to initialize CometBFT: {0}")]
     Init(std::io::Error),
-    #[error("Failed to load Tendermint config file: {0}")]
+    #[error("Failed to load CometBFT config file: {0}")]
     LoadConfig(TendermintError),
-    #[error("Failed to open Tendermint config for writing: {0}")]
+    #[error("Failed to open CometBFT config for writing: {0}")]
     OpenWriteConfig(std::io::Error),
-    #[error("Failed to serialize Tendermint config TOML to string: {0}")]
+    #[error("Failed to serialize CometBFT config TOML to string: {0}")]
     ConfigSerializeToml(toml::ser::Error),
-    #[error("Failed to write Tendermint config: {0}")]
+    #[error("Failed to write CometBFT config: {0}")]
     WriteConfig(std::io::Error),
-    #[error("Failed to start up Tendermint node: {0}")]
+    #[error("Failed to start up CometBFT node: {0}")]
     StartUp(std::io::Error),
     #[error("{0}")]
     Runtime(String),
-    #[error("Failed to rollback tendermint state: {0}")]
+    #[error("Failed to rollback CometBFT state: {0}")]
     RollBack(String),
     #[error("Failed to convert to String: {0:?}")]
     TendermintPath(std::ffi::OsString),
@@ -99,17 +52,17 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Check if the TENDERMINT env var has been set and use that as the
-/// location of the tendermint binary. Otherwise, assume it is on path
+/// Check if the COMET env var has been set and use that as the
+/// location of the COMET binary. Otherwise, assume it is on path
 ///
 /// Returns an error if the env var is defined but not a valid Unicode.
 fn from_env_or_default() -> Result<String> {
-    match std::env::var("TENDERMINT") {
+    match std::env::var("COMETBFT") {
         Ok(path) => {
-            tracing::info!("Using tendermint path from env variable: {}", path);
+            tracing::info!("Using CometBFT path from env variable: {}", path);
             Ok(path)
         }
-        Err(std::env::VarError::NotPresent) => Ok(String::from("tendermint")),
+        Err(std::env::VarError::NotPresent) => Ok(String::from("cometbft")),
         Err(std::env::VarError::NotUnicode(msg)) => {
             Err(Error::TendermintPath(msg))
         }
@@ -121,43 +74,15 @@ pub async fn run(
     home_dir: PathBuf,
     chain_id: ChainId,
     genesis_time: DateTimeUtc,
-    ledger_address: String,
-    config: config::Tendermint,
+    proxy_app_address: String,
+    config: config::Ledger,
     abort_recv: tokio::sync::oneshot::Receiver<
         tokio::sync::oneshot::Sender<()>,
     >,
 ) -> Result<()> {
-    let tendermint_path = from_env_or_default()?;
-
-    let version_reqs = version_requirements();
-    match get_version(&tendermint_path).await {
-        Ok(version) => {
-            if version_reqs.matches(&version) {
-                tracing::info!(
-                    %tendermint_path,
-                    %version,
-                    %version_reqs,
-                    "Running with supported Tendermint version",
-                );
-            } else {
-                tracing::warn!(
-                    %tendermint_path,
-                    %version,
-                    %version_reqs,
-                    "Running with a Tendermint version which may not be supported - run at your own risk!",
-                );
-            }
-        }
-        Err(error) => tracing::warn!(
-            %tendermint_path,
-            %version_reqs,
-            %error,
-            "Couldn't check if Tendermint version is supported - run at your own risk!",
-        ),
-    };
-
     let home_dir_string = home_dir.to_string_lossy().to_string();
-    let mode = config.tendermint_mode.to_str().to_owned();
+    let tendermint_path = from_env_or_default()?;
+    let mode = config.shell.tendermint_mode.to_str().to_owned();
 
     #[cfg(feature = "dev")]
     // This has to be checked before we run tendermint init
@@ -189,13 +114,13 @@ pub async fn run(
     #[cfg(not(feature = "abcipp"))]
     write_tm_genesis(&home_dir, chain_id, genesis_time).await;
 
-    update_tendermint_config(&home_dir, config).await?;
+    update_tendermint_config(&home_dir, config.cometbft).await?;
 
     let mut tendermint_node = Command::new(&tendermint_path);
     tendermint_node.args([
         "start",
         "--proxy_app",
-        &ledger_address,
+        &proxy_app_address,
         "--home",
         &home_dir_string,
     ]);
@@ -212,7 +137,7 @@ pub async fn run(
         .kill_on_drop(true)
         .spawn()
         .map_err(Error::StartUp)?;
-    tracing::info!("Tendermint node started");
+    tracing::info!("CometBFT node started");
 
     tokio::select! {
         status = tendermint_node.wait() => {
@@ -422,21 +347,15 @@ pub fn write_validator_state(home_dir: impl AsRef<Path>) {
 
 async fn update_tendermint_config(
     home_dir: impl AsRef<Path>,
-    tendermint_config: config::Tendermint,
+    config: TendermintConfig,
 ) -> Result<()> {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("config.toml");
-    let mut config =
-        TendermintConfig::load_toml_file(&path).map_err(Error::LoadConfig)?;
+    let mut config = config.clone();
+
     config.moniker =
         Moniker::from_str(&format!("{}-{}", config.moniker, namada_version()))
             .expect("Invalid moniker");
-    config.p2p.laddr =
-        TendermintAddress::from_str(&tendermint_config.p2p_address.to_string())
-            .unwrap();
-    config.p2p.persistent_peers = tendermint_config.p2p_persistent_peers;
-    config.p2p.pex = tendermint_config.p2p_pex;
-    config.p2p.allow_duplicate_ip = tendermint_config.p2p_allow_duplicate_ip;
 
     // In "dev", only produce blocks when there are txs or when the AppHash
     // changes
@@ -447,35 +366,9 @@ async fn update_tendermint_config(
     // again in the future.
     config.mempool.keep_invalid_txs_in_cache = false;
 
-    config.rpc.laddr =
-        TendermintAddress::from_str(&tendermint_config.rpc_address.to_string())
-            .unwrap();
     // Bumped from the default `1_000_000`, because some WASMs can be
     // quite large
     config.rpc.max_body_bytes = 2_000_000;
-
-    config.instrumentation.prometheus =
-        tendermint_config.instrumentation_prometheus;
-    config.instrumentation.prometheus_listen_addr = tendermint_config
-        .instrumentation_prometheus_listen_addr
-        .to_string();
-    config.instrumentation.namespace =
-        tendermint_config.instrumentation_namespace;
-
-    #[cfg(feature = "abciplus")]
-    {
-        config.consensus.timeout_commit =
-            tendermint_config.consensus_timeout_commit;
-    }
-
-    let indexer = if tendermint_config.tx_index {
-        TxIndexer::Kv
-    } else {
-        TxIndexer::Null
-    };
-    #[cfg(feature = "abcipp")]
-    let indexer = [indexer];
-    config.tx_index = TxIndexConfig { indexer };
 
     let mut file = OpenOptions::new()
         .write(true)
@@ -483,7 +376,6 @@ async fn update_tendermint_config(
         .open(path)
         .await
         .map_err(Error::OpenWriteConfig)?;
-
     let config_str =
         toml::to_string(&config).map_err(Error::ConfigSerializeToml)?;
     file.write_all(config_str.as_bytes())
@@ -547,45 +439,8 @@ async fn write_tm_genesis(
             )
         });
     let data = serde_json::to_vec_pretty(&genesis)
-        .expect("Couldn't encode the Tendermint genesis file");
+        .expect("Couldn't encode the CometBFT genesis file");
     file.write_all(&data[..])
         .await
-        .expect("Couldn't write the Tendermint genesis file");
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    /// This is really just a smoke test to make sure the
-    /// [`VERSION_REQUIREMENTS`] constant is always parseable to a
-    /// [`VersionReq`]
-    fn test_version_requirements() {
-        _ = version_requirements();
-    }
-
-    #[test]
-    fn test_parse_version() {
-        let version_str = "v0.37.0-alpha.2\n";
-        let version = parse_version(version_str).unwrap();
-        assert_eq!(version.major, 0);
-        assert_eq!(version.minor, 37);
-        assert_eq!(version.patch, 0);
-
-        let version_str = "v0.1.1-abcipp\n";
-        let version = parse_version(version_str).unwrap();
-        assert_eq!(version.major, 0);
-        assert_eq!(version.minor, 1);
-        assert_eq!(version.patch, 1);
-
-        let version_str = "v0.38.1\n";
-        let version = parse_version(version_str).unwrap();
-        assert_eq!(version.major, 0);
-        assert_eq!(version.minor, 38);
-        assert_eq!(version.patch, 1);
-
-        let version_str = "unparseable";
-        assert!(parse_version(version_str).is_err());
-    }
+        .expect("Couldn't write the CometBFT genesis file");
 }

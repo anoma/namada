@@ -1,18 +1,20 @@
+use std::fmt::{Debug, Display};
+
 use namada_core::ledger::storage::WlStorage;
-use tendermint::block::Height;
-use tendermint_rpc::endpoint::{
-    abci_info, block, block_results, blockchain, commit, consensus_params,
-    consensus_state, health, net_info, status,
-};
-use tendermint_rpc::query::Query;
-use tendermint_rpc::Order;
 use thiserror::Error;
 
 use crate::ledger::events::log::EventLog;
 use crate::ledger::storage::{DBIter, StorageHasher, DB};
 use crate::ledger::storage_api;
+use crate::tendermint::block::Height;
 use crate::tendermint::merkle::proof::Proof;
+use crate::tendermint_rpc::endpoint::{
+    abci_info, block, block_results, blockchain, commit, consensus_params,
+    consensus_state, health, net_info, status,
+};
 use crate::tendermint_rpc::error::Error as RpcError;
+use crate::tendermint_rpc::query::Query;
+use crate::tendermint_rpc::Order;
 use crate::types::storage::BlockHeight;
 #[cfg(feature = "wasm-runtime")]
 use crate::vm::wasm::{TxCache, VpCache};
@@ -83,7 +85,7 @@ pub trait Router {
 pub trait Client {
     /// `std::io::Error` can happen in decoding with
     /// `BorshDeserialize::try_from_slice`
-    type Error: From<std::io::Error>;
+    type Error: From<std::io::Error> + Display + Debug;
 
     /// Send a simple query request at the given path. For more options, use the
     /// `request` method.
@@ -114,7 +116,7 @@ pub trait Client {
     /// from `CheckTx`.
     async fn broadcast_tx_sync(
         &self,
-        tx: tendermint::abci::Transaction,
+        tx: crate::tendermint::abci::Transaction,
     ) -> Result<tendermint_rpc::endpoint::broadcast::tx_sync::Response, RpcError>
     {
         self.perform(
@@ -183,7 +185,7 @@ pub trait Client {
     /// `/abci_query`: query the ABCI application
     async fn abci_query<V>(
         &self,
-        path: Option<tendermint::abci::Path>,
+        path: Option<crate::tendermint::abci::Path>,
         data: V,
         height: Option<Height>,
         prove: bool,
@@ -318,7 +320,7 @@ impl<C: tendermint_rpc::Client + std::marker::Sync> Client for C {
         let data = data.unwrap_or_default();
         let height = height
             .map(|height| {
-                tendermint::block::Height::try_from(height.0)
+                crate::tendermint::block::Height::try_from(height.0)
                     .map_err(|_err| Error::InvalidHeight(height))
             })
             .transpose()?;
@@ -331,7 +333,7 @@ impl<C: tendermint_rpc::Client + std::marker::Sync> Client for C {
                 prove,
             )
             .await?;
-        use tendermint::abci::Code;
+        use crate::tendermint::abci::Code;
         match response.code {
             Code::Ok => Ok(EncodedResponseQuery {
                 data: response.value,
@@ -415,7 +417,7 @@ impl RequestQuery {
         let height = match height {
             0 => {
                 // `0` means last committed height
-                storage.storage.last_height
+                storage.storage.get_last_block_height()
             }
             _ => BlockHeight(height.try_into().map_err(|_| {
                 format!("Query height cannot be negative, got: {}", height)

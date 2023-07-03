@@ -5,14 +5,19 @@
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
-    let signed = SignedTxData::try_from_slice(&tx_data[..])
-        .wrap_err("failed to decode SignedTxData")?;
-    let data = signed.data.ok_or_err_msg("Missing data")?;
+fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
+    let signed = tx_data;
+    let data = signed.data().ok_or_err_msg("Missing data")?;
     let update_vp = transaction::UpdateVp::try_from_slice(&data[..])
         .wrap_err("failed to decode UpdateVp")?;
 
     debug_log!("update VP for: {:#?}", update_vp.addr);
-
-    ctx.update_validity_predicate(&update_vp.addr, update_vp.vp_code_hash)
+    let vp_code_hash = signed
+        .get_section(&update_vp.vp_code_hash)
+        .ok_or_err_msg("vp code section not found")?
+        .extra_data_sec()
+        .ok_or_err_msg("vp code section must be tagged as extra")?
+        .code
+        .hash();
+    ctx.update_validity_predicate(&update_vp.addr, vp_code_hash)
 }

@@ -7,19 +7,20 @@ nightly := $(shell cat ../../rust-nightly-version)
 # Wasms can be added via the Cargo.toml `[features]` list.
 wasms := tx_bond
 wasms += tx_bridge_pool
+wasms += tx_change_validator_commission
 wasms += tx_ibc
 wasms += tx_init_account
-wasms += tx_init_validator
 wasms += tx_init_proposal
+wasms += tx_init_validator
 wasms += tx_reveal_pk
-wasms += tx_vote_proposal
 wasms += tx_transfer
 wasms += tx_unbond
+wasms += tx_unjail_validator
 wasms += tx_update_vp
+wasms += tx_vote_proposal
 wasms += tx_withdraw
-wasms += tx_change_validator_commission
-wasms += vp_masp
 wasms += vp_implicit
+wasms += vp_masp
 wasms += vp_testnet_faucet
 wasms += vp_token
 wasms += vp_user
@@ -70,7 +71,7 @@ $(patsubst %,check_%,$(wasms)): check_%:
 
 # `cargo test` one of the wasms, e.g. `make test_tx_transfer`
 $(patsubst %,test_%,$(wasms)): test_%:
-	$(cargo) test --features $* \
+	$(cargo) +$(nightly) test --features $* \
 		-- \
 		-Z unstable-options --report-time
 

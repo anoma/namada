@@ -9,7 +9,7 @@ mod test_bridge_pool_vp {
         ADDRESS,
     };
     use namada::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
-    use namada::proto::Tx;
+    use namada::proto::{Code, Data, Section, Signature, Tx};
     use namada::types::address::{nam, wnam};
     use namada::types::chain::ChainId;
     use namada::types::eth_bridge_pool::{
@@ -18,6 +18,7 @@ mod test_bridge_pool_vp {
     use namada::types::ethereum_events::EthAddress;
     use namada::types::key::{common, ed25519, SecretKey};
     use namada::types::token::Amount;
+    use namada::types::transaction::TxType;
     use namada_apps::wallet::defaults::{albert_address, bertha_address};
     use namada_apps::wasm_loader;
 
@@ -119,6 +120,25 @@ mod test_bridge_pool_vp {
         assert!(result);
     }
 
+    fn create_tx(transfer: PendingTransfer, keypair: &common::SecretKey) -> Tx {
+        let data = transfer.try_to_vec().expect("Test failed");
+        let wasm_code =
+            wasm_loader::read_wasm_or_exit(wasm_dir(), ADD_TRANSFER_WASM);
+        let mut tx = Tx::new(TxType::Raw);
+        tx.header.chain_id = ChainId::default();
+        tx.set_data(Data::new(data));
+        tx.set_code(Code::new(wasm_code));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            keypair,
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            keypair,
+        )));
+        tx
+    }
+
     #[test]
     fn validate_erc20_tx() {
         let transfer = PendingTransfer {
@@ -133,12 +153,7 @@ mod test_bridge_pool_vp {
                 payer: bertha_address(),
             },
         };
-        let data = transfer.try_to_vec().expect("Test failed");
-        let code =
-            wasm_loader::read_wasm_or_exit(wasm_dir(), ADD_TRANSFER_WASM);
-        let tx = Tx::new(code, Some(data), ChainId::default(), None)
-            .sign(&bertha_keypair());
-        validate_tx(tx);
+        validate_tx(create_tx(transfer, &bertha_keypair()));
     }
 
     #[test]
@@ -155,12 +170,7 @@ mod test_bridge_pool_vp {
                 payer: bertha_address(),
             },
         };
-        let data = transfer.try_to_vec().expect("Test failed");
-        let code =
-            wasm_loader::read_wasm_or_exit(wasm_dir(), ADD_TRANSFER_WASM);
-        let tx = Tx::new(code, Some(data), ChainId::default(), None)
-            .sign(&bertha_keypair());
-        validate_tx(tx);
+        validate_tx(create_tx(transfer, &bertha_keypair()));
     }
 
     #[test]
@@ -177,11 +187,6 @@ mod test_bridge_pool_vp {
                 payer: albert_address(),
             },
         };
-        let data = transfer.try_to_vec().expect("Test failed");
-        let code =
-            wasm_loader::read_wasm_or_exit(wasm_dir(), ADD_TRANSFER_WASM);
-        let tx = Tx::new(code, Some(data), ChainId::default(), None)
-            .sign(&bertha_keypair());
-        validate_tx(tx);
+        validate_tx(create_tx(transfer, &bertha_keypair()));
     }
 }

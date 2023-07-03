@@ -1,13 +1,19 @@
 [package]
-authors = ["Heliax AG <hello@heliax.dev>"]
-edition = "2021"
-license = "GPL-3.0"
 name = "namada_core"
+description = "Namada core"
 resolver = "2"
-version = "0.16.0"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
 
 [features]
-default = []
+default = ["abciplus", "ferveo-tpke"]
 mainnet = []
 ferveo-tpke = [
   "ferveo",
@@ -50,69 +56,64 @@ testing = [
 
 [dependencies]
 namada_macros = {path = "../macros"}
-ark-bls12-381 = {version = "0.3"}
+ark-bls12-381.workspace = true
 ark-ec = {version = "0.3", optional = true}
-ark-serialize = {version = "0.3"}
-# We switch off "blake2b" because it cannot be compiled to wasm
-# branch = "bat/arse-merkle-tree"
-arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "e086b235ed6e68929bf73f617dd61cd17b000a56", default-features = false, features = ["std", "borsh"]}
-bech32 = "0.8.0"
-bellman = "0.11.2"
-borsh = "0.9.0"
-chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
-data-encoding = "2.3.2"
-derivative = "2.2.0"
-ed25519-consensus = "1.2.0"
-ethabi = "18.0.0"
+ark-serialize.workspace = true
+arse-merkle-tree.workspace = true
+bech32.workspace = true
+borsh.workspace = true
+chrono.workspace = true
+data-encoding.workspace = true
+derivative.workspace = true
+ed25519-consensus.workspace = true
+ethabi.worskpace = true
 ethbridge-structs = { git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.18.0" }
-eyre = "0.6.8"
+eyre.workspace = true
 ferveo = {optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 # TODO using the same version of tendermint-rs as we do here.
-ibc = {version = "0.36.0", default-features = false, features = ["serde"], optional = true}
-ibc-proto = {version = "0.26.0", default-features = false, optional = true}
-ibc-abcipp = {package = "ibc", git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "db14744bfba6239cc5f58345ff90f8b7d42637d6", default-features = false, features = ["serde"], optional = true}
-ibc-proto-abcipp = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-proto-rs", rev = "dd8ba23110a144ffe2074a0b889676468266435a", default-features = false, optional = true}
-ics23 = "0.9.0"
+ibc = { git = "https://github.com/heliaxdev/cosmos-ibc-rs.git", rev = "634f4ede136d045dd6f1ff8f4984dd0006aa15f0", default-features = false, features = ["serde"], optional = true}
+ibc-proto = {git = "https://github.com/heliaxdev/ibc-proto-rs.git", rev = "bb16e17a4d9260d5f20516a8eda43fa52377fad2", default-features = false, optional = true}
+ics23.workspace = true
 impl-num-traits = "0.1.2"
-index-set = {git = "https://github.com/heliaxdev/index-set", tag = "v0.7.1", features = ["serialize-borsh", "serialize-serde"]}
-itertools = "0.10.0"
-libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "ea4fcc68d9412b94042c1c2f0ea0212394e1be37" }
-num256 = "0.3.5"
+index-set.workspace = true
+itertools.workspace = true
+libsecp256k1.workspace = true
+masp_primitives.workspace = true
+num256.workspace = true
 num-integer = "0.1.45"
-num-rational = "0.4.1"
-num-traits = "0.2.15"
-proptest = {git = "https://github.com/heliaxdev/proptest", rev = "8f1b4abe7ebd35c0781bf9a00a4ee59833ffa2a1", optional = true}
-prost = "0.11.6"
-prost-types = "0.11.6"
+num-rational.workspace = true
+num-traits.workspace = true
+proptest = {version = "1.2.0", optional = true}
+prost.workspace = true
+prost-types.workspace = true
 rand = {version = "0.8", optional = true}
 rand_core = {version = "0.6", optional = true}
 rayon = {version = "=1.5.3", optional = true}
-serde = {version = "1.0.125", features = ["derive"]}
-serde_json = "1.0.62"
-sha2 = "0.9.3"
-tendermint = {version = "0.23.6", optional = true}
-tendermint-proto = {version = "0.23.6", optional = true}
-thiserror = "1.0.38"
+rust_decimal.workspace = true
+rust_decimal_macros.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tendermint = { git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7", optional = true}
+tendermint-proto = { git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7", optional = true}
+thiserror.workspace = true
 tiny-keccak = {version = "2.0.2", features = ["keccak"]}
-tracing = "0.1.30"
+tracing.workspace = true
 uint = "0.9.5"
-zeroize = {version = "1.5.5", features = ["zeroize_derive"]}
+zeroize.workspace = true
 
 [dev-dependencies]
-assert_matches = "1.5.0"
-libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9"}
-pretty_assertions = "0.7.2"
-# A fork with state machine testing
-proptest = {git = "https://github.com/heliaxdev/proptest", rev = "8f1b4abe7ebd35c0781bf9a00a4ee59833ffa2a1"}
-rand = {version = "0.8"}
-rand_core = {version = "0.6"}
-test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
-tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
+assert_matches.workspace = true
+libsecp256k1 = {workspace = true, features = ["hmac"]}
+pretty_assertions.workspace = true
+proptest.workspace = true
+rand.workspace = true
+rand_core.workspace = true
+test-log.workspace = true
 toml = {version = "=0.5.9"}
-
+tracing-subscriber.workspace = true
 
 [build-dependencies]
-tonic-build = "0.8.4"
+tonic-build.workspace = true

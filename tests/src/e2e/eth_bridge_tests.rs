@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use color_eyre::eyre::{eyre, Result};
+use expectrl::ControlCode;
 use namada::eth_bridge::oracle;
 use namada::eth_bridge::storage::vote_tallies;
 use namada::ledger::eth_bridge::{
@@ -79,7 +80,7 @@ fn run_ledger_with_ethereum_events_endpoint() -> Result<()> {
     )?;
     ledger.exp_string("Namada ledger node started")?;
 
-    ledger.send_control('c')?;
+    ledger.send_control(ControlCode::EndOfText)?;
     ledger.exp_string(
         "Stopping listening for Borsh-serialized Ethereum events",
     )?;

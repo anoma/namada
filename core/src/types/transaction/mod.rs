@@ -32,6 +32,8 @@ use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
 use crate::types::key::*;
 use crate::types::storage;
+#[cfg(feature = "ferveo-tpke")]
+use crate::types::transaction::protocol::ProtocolTx;
 
 /// Get the hash of a transaction
 pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
@@ -203,399 +205,297 @@ pub struct InitValidator {
     pub validator_vp_code_hash: Hash,
 }
 
-/// Module that includes helper functions for classifying
-/// different types of transactions that the ledger
-/// must support as well as conversion functions
-/// between them.
-#[cfg(feature = "ferveo-tpke")]
-pub mod tx_types {
-    use std::convert::TryFrom;
+/// Struct that classifies that kind of Tx
+/// based on the contents of its data.
+#[derive(
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Serialize,
+    Deserialize,
+)]
+pub enum TxType {
+    /// An ordinary tx
+    Raw,
+    /// A Tx that contains an encrypted raw tx
+    Wrapper(Box<WrapperTx>),
+    /// An attempted decryption of a wrapper tx
+    Decrypted(DecryptedTx),
+    /// Txs issued by validators as part of internal protocols
+    #[cfg(feature = "ferveo-tpke")]
+    Protocol(Box<ProtocolTx>),
+}
 
-    use thiserror;
-
-    use super::*;
-    use crate::proto::{SignedTxData, Tx};
-    use crate::types::chain::ChainId;
-    use crate::types::transaction::protocol::ProtocolTx;
-
-    /// Errors relating to decrypting a wrapper tx and its
-    /// encrypted payload from a Tx type
-    #[allow(missing_docs)]
-    #[derive(thiserror::Error, Debug, PartialEq)]
-    pub enum TxError {
-        #[error("{0}")]
-        Unsigned(String),
-        #[error("{0}")]
-        SigError(String),
-        #[error("Failed to deserialize Tx: {0}")]
-        Deserialization(String),
-    }
-
-    /// Struct that classifies that kind of Tx
-    /// based on the contents of its data.
-    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
-    pub enum TxType {
-        /// An ordinary tx
-        Raw(Tx),
-        /// A Tx that contains an encrypted raw tx
-        Wrapper(WrapperTx),
-        /// An attempted decryption of a wrapper tx
-        Decrypted(DecryptedTx),
-        /// Txs issued by validators as part of internal protocols
-        Protocol(ProtocolTx),
-    }
-
-    impl From<TxType> for Tx {
-        fn from(ty: TxType) -> Self {
-            Tx::new(
-                vec![],
-                Some(ty.try_to_vec().unwrap()),
-                ChainId(String::new()), /* No need to provide a valid
-                                         * ChainId or expiration when
-                                         * casting back from
-                                         * TxType */
-                None,
-            )
-        }
-    }
-
-    /// We deserialize the Tx data; it should be a TxType which
-    /// tells us how to handle it. Otherwise, we return an error.
-    /// The exception is when the Tx data field is empty. We
-    /// allow this and type it as a Raw TxType.
-    impl TryFrom<Tx> for TxType {
-        type Error = std::io::Error;
-
-        fn try_from(tx: Tx) -> std::io::Result<TxType> {
-            if let Some(ref data) = tx.data {
-                BorshDeserialize::deserialize(&mut data.as_ref())
-            } else {
-                // We allow Txs with empty data fields, which we
-                // will assume to be of Raw TxType
-                Ok(TxType::Raw(tx))
-            }
-        }
-    }
-
-    /// Determines the type of the input Tx
-    ///
-    /// If it is a raw Tx, signed or not, the Tx is
-    /// returned unchanged inside an enum variant stating its type.
-    ///
-    /// If it is a decrypted tx, signing it adds no security so we
-    /// extract the signed data without checking the signature (if it
-    /// is signed) or return as is. Either way, it is returned in
-    /// an enum variant stating its type.
-    ///
-    /// If it is a WrapperTx, we extract the signed data of
-    /// the Tx and verify it is of the appropriate form. This means
-    /// 1. The signed Tx data deserializes to a WrapperTx type
-    /// 2. The wrapper tx is indeed signed
-    /// 3. The signature is valid
-    ///
-    /// We modify the data of the WrapperTx to contain only the signed
-    /// data if valid and return it wrapped in a enum variant
-    /// indicating it is a wrapper. Otherwise, an error is
-    /// returned indicating the signature was not valid
-    pub fn process_tx(tx: Tx) -> Result<TxType, TxError> {
-        if let Some(Ok(SignedTxData {
-            data: Some(data),
-            ref sig,
-        })) = tx
-            .data
-            .as_ref()
-            .map(|data| SignedTxData::try_from_slice(&data[..]))
-        {
-            let signed_hash = Tx {
-                code_or_hash: tx.code_or_hash,
-                data: Some(data.clone()),
-                timestamp: tx.timestamp,
-                chain_id: tx.chain_id.clone(),
-                expiration: tx.expiration,
-            }
-            .hash();
-            match TxType::try_from(Tx {
-                code_or_hash: vec![],
-                data: Some(data),
-                timestamp: tx.timestamp,
-                chain_id: tx.chain_id,
-                expiration: tx.expiration,
-            })
-            .map_err(|err| TxError::Deserialization(err.to_string()))?
-            {
-                // verify signature and extract signed data
-                TxType::Wrapper(wrapper) => {
-                    wrapper.validate_sig(signed_hash, sig)?;
-                    Ok(TxType::Wrapper(wrapper))
-                }
-                // verify signature and extract signed data
-                TxType::Protocol(protocol) => {
-                    protocol.validate_sig(signed_hash, sig)?;
-                    Ok(TxType::Protocol(protocol))
-                }
-                // we extract the signed data, but don't check the signature
-                decrypted @ TxType::Decrypted(_) => Ok(decrypted),
-                // return as is
-                raw @ TxType::Raw(_) => Ok(raw),
-            }
-        } else {
-            match TxType::try_from(tx)
-                .map_err(|err| TxError::Deserialization(err.to_string()))?
-            {
-                // we only accept signed wrappers
-                TxType::Wrapper(_) => Err(TxError::Unsigned(
-                    "Wrapper transactions must be signed".into(),
-                )),
-                TxType::Protocol(_) => Err(TxError::Unsigned(
-                    "Protocol transactions must be signed".into(),
-                )),
-                // return as is
-                val => Ok(val),
-            }
-        }
-    }
-
-    #[cfg(test)]
-    mod test_process_tx {
-        use super::*;
-        use crate::types::address::nam;
-        use crate::types::storage::Epoch;
-        use crate::types::time::DateTimeUtc;
-        use crate::types::token::Amount;
-
-        fn gen_keypair() -> common::SecretKey {
-            use rand::prelude::ThreadRng;
-            use rand::thread_rng;
-
-            let mut rng: ThreadRng = thread_rng();
-            ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
-        }
-
-        /// Test that process_tx correctly identifies a raw tx with no
-        /// data and returns an identical copy
-        #[test]
-        fn test_process_tx_raw_tx_no_data() {
-            let tx = Tx::new(
-                "wasm code".as_bytes().to_owned(),
-                None,
-                ChainId::default(),
-                None,
-            );
-
-            match process_tx(tx.clone()).expect("Test failed") {
-                TxType::Raw(raw) => assert_eq!(tx, raw),
-                _ => panic!("Test failed: Expected Raw Tx"),
-            }
-        }
-
-        /// Test that process_tx correctly identifies tx containing
-        /// a raw tx with some data and returns an identical copy
-        /// of the inner data
-        #[test]
-        fn test_process_tx_raw_tx_some_data() {
-            let inner = Tx::new(
-                "code".as_bytes().to_owned(),
-                Some("transaction data".as_bytes().to_owned()),
-                ChainId::default(),
-                None,
-            );
-            let tx = Tx::new(
-                "wasm code".as_bytes().to_owned(),
-                Some(
-                    TxType::Raw(inner.clone())
-                        .try_to_vec()
-                        .expect("Test failed"),
-                ),
-                inner.chain_id.clone(),
-                None,
-            );
-
-            match process_tx(tx).expect("Test failed") {
-                TxType::Raw(raw) => assert_eq!(inner, raw),
-                _ => panic!("Test failed: Expected Raw Tx"),
-            }
-        }
-
-        /// Test that process_tx correctly identifies a raw tx with some
-        /// signed data and returns an identical copy of the inner data
-        #[test]
-        fn test_process_tx_raw_tx_some_signed_data() {
-            let inner = Tx::new(
-                "code".as_bytes().to_owned(),
-                Some("transaction data".as_bytes().to_owned()),
-                ChainId::default(),
-                None,
-            );
-            let tx = Tx::new(
-                "wasm code".as_bytes().to_owned(),
-                Some(
-                    TxType::Raw(inner.clone())
-                        .try_to_vec()
-                        .expect("Test failed"),
-                ),
-                inner.chain_id.clone(),
-                None,
-            )
-            .sign(&gen_keypair());
-
-            match process_tx(tx).expect("Test failed") {
-                TxType::Raw(raw) => assert_eq!(inner, raw),
-                _ => panic!("Test failed: Expected Raw Tx"),
-            }
-        }
-
-        /// Test that process_tx correctly identifies a wrapper tx with some
-        /// data and extracts the signed data.
-        #[test]
-        fn test_process_tx_wrapper_tx() {
-            let keypair = gen_keypair();
-            let tx = Tx::new(
-                "wasm code".as_bytes().to_owned(),
-                Some("transaction data".as_bytes().to_owned()),
-                ChainId::default(),
-                None,
-            );
-            // the signed tx
-            let wrapper = WrapperTx::new(
-                Fee {
-                    amount: Amount::from_uint(10, 0).expect("Test failed"),
-                    token: nam(),
-                },
-                &keypair,
-                Epoch(0),
-                Default::default(),
-                tx.clone(),
-                Default::default(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
-            )
-            .sign(&keypair, tx.chain_id.clone(), Some(DateTimeUtc::now()))
-            .expect("Test failed");
-
-            match process_tx(wrapper).expect("Test failed") {
-                TxType::Wrapper(wrapper) => {
-                    let decrypted =
-                        wrapper.decrypt(<EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator())
-                            .expect("Test failed");
-                    assert_eq!(tx, decrypted);
-                }
-                _ => panic!("Test failed: Expected Wrapper Tx"),
-            }
-        }
-
-        /// Test that process_tx correctly returns an error on a wrapper tx
-        /// with some unsigned data
-        #[test]
-        fn test_process_tx_wrapper_tx_unsigned() {
-            let keypair = gen_keypair();
-            let tx = Tx::new(
-                "wasm code".as_bytes().to_owned(),
-                Some("transaction data".as_bytes().to_owned()),
-                ChainId::default(),
-                None,
-            );
-            // the signed tx
-            let wrapper = WrapperTx::new(
-                Fee {
-                    amount: Amount::from_uint(10, 0).expect("Test failed"),
-                    token: nam(),
-                },
-                &keypair,
-                Epoch(0),
-                Default::default(),
-                tx,
-                Default::default(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
-            );
-
-            let tx = Tx::new(
-                vec![],
-                Some(
-                    TxType::Wrapper(wrapper).try_to_vec().expect("Test failed"),
-                ),
-                ChainId::default(),
-                None,
-            );
-            let result = process_tx(tx).expect_err("Test failed");
-            assert_matches!(result, TxError::Unsigned(_));
-        }
-    }
-
-    /// Test that process_tx correctly identifies a DecryptedTx
-    /// with some unsigned data and returns an identical copy
-    #[test]
-    fn test_process_tx_decrypted_unsigned() {
-        let payload = Tx::new(
-            "transaction data".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
-            ChainId::default(),
-            None,
-        );
-        let decrypted = DecryptedTx::Decrypted {
-            tx: payload.clone(),
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: false,
-        };
-        let tx = Tx::from(TxType::Decrypted(decrypted));
-        match process_tx(tx).expect("Test failed") {
-            TxType::Decrypted(DecryptedTx::Decrypted {
-                tx: processed,
-                #[cfg(not(feature = "mainnet"))]
-                    has_valid_pow: _,
-            }) => {
-                assert_eq!(payload, processed);
-            }
-            _ => panic!("Test failed"),
-        }
-    }
-
-    /// Test that process_tx correctly identifies a DecryptedTx
-    /// with some signed data and extracts it without checking
-    /// signature
-    #[test]
-    fn test_process_tx_decrypted_signed() {
-        let payload = Tx::new(
-            "transaction data".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
-            ChainId::default(),
-            None,
-        );
-        let decrypted = DecryptedTx::Decrypted {
-            tx: payload.clone(),
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: false,
-        };
-        // Invalid signed data
-        let ed_sig =
-            ed25519::Signature::try_from_slice([0u8; 64].as_ref()).unwrap();
-        let signed = SignedTxData {
-            data: Some(
-                TxType::Decrypted(decrypted)
-                    .try_to_vec()
-                    .expect("Test failed"),
-            ),
-            sig: common::Signature::try_from_sig(&ed_sig).unwrap(),
-        };
-        // create the tx with signed decrypted data
-        let tx = Tx::new(
-            vec![],
-            Some(signed.try_to_vec().expect("Test failed")),
-            ChainId::default(),
-            None,
-        );
-        match process_tx(tx).expect("Test failed") {
-            TxType::Decrypted(DecryptedTx::Decrypted {
-                tx: processed,
-                #[cfg(not(feature = "mainnet"))]
-                    has_valid_pow: _,
-            }) => {
-                assert_eq!(payload, processed);
-            }
-            _ => panic!("Test failed"),
-        }
+impl TxType {
+    /// Produce a SHA-256 hash of this header
+    pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
+        hasher.update(self.try_to_vec().expect("unable to serialize header"));
+        hasher
     }
 }
 
-#[cfg(feature = "ferveo-tpke")]
-pub use tx_types::*;
+#[cfg(test)]
+mod test_process_tx {
+    use super::*;
+    use crate::proto::{Code, Data, Section, Signature, Tx, TxError};
+    use crate::types::address::nam;
+    use crate::types::storage::Epoch;
+
+    fn gen_keypair() -> common::SecretKey {
+        use rand::prelude::ThreadRng;
+        use rand::thread_rng;
+
+        let mut rng: ThreadRng = thread_rng();
+        ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
+    }
+
+    /// Test that process_tx correctly identifies a raw tx with no
+    /// data and returns an identical copy
+    #[test]
+    fn test_process_tx_raw_tx_no_data() {
+        let mut outer_tx = Tx::new(TxType::Raw);
+        let code_sec = outer_tx
+            .set_code(Code::new("wasm code".as_bytes().to_owned()))
+            .clone();
+        outer_tx.validate_header().expect("Test failed");
+        match outer_tx.header().tx_type {
+            TxType::Raw => assert_eq!(
+                Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into()),
+                outer_tx.header.code_hash,
+            ),
+            _ => panic!("Test failed: Expected Raw Tx"),
+        }
+    }
+
+    /// Test that process_tx correctly identifies tx containing
+    /// a raw tx with some data and returns an identical copy
+    /// of the inner data
+    #[test]
+    fn test_process_tx_raw_tx_some_data() {
+        let mut tx = Tx::new(TxType::Raw);
+        let code_sec = tx
+            .set_code(Code::new("wasm code".as_bytes().to_owned()))
+            .clone();
+        let data_sec = tx
+            .set_data(Data::new("transaction data".as_bytes().to_owned()))
+            .clone();
+
+        tx.validate_header().expect("Test failed");
+        match tx.header().tx_type {
+            TxType::Raw => {
+                assert_eq!(
+                    Hash(
+                        code_sec
+                            .hash(&mut Sha256::new())
+                            .finalize_reset()
+                            .into()
+                    ),
+                    tx.header().code_hash,
+                );
+                assert_eq!(
+                    Hash(
+                        data_sec
+                            .hash(&mut Sha256::new())
+                            .finalize_reset()
+                            .into()
+                    ),
+                    tx.header().data_hash,
+                );
+            }
+            _ => panic!("Test failed: Expected Raw Tx"),
+        }
+    }
+
+    /// Test that process_tx correctly identifies a raw tx with some
+    /// signed data and returns an identical copy of the inner data
+    #[test]
+    fn test_process_tx_raw_tx_some_signed_data() {
+        let mut tx = Tx::new(TxType::Raw);
+        let code_sec = tx
+            .set_code(Code::new("wasm code".as_bytes().to_owned()))
+            .clone();
+        let data_sec = tx
+            .set_data(Data::new("transaction data".as_bytes().to_owned()))
+            .clone();
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            &gen_keypair(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            &gen_keypair(),
+        )));
+
+        tx.validate_header().expect("Test failed");
+        match tx.header().tx_type {
+            TxType::Raw => {
+                assert_eq!(
+                    Hash(
+                        code_sec
+                            .hash(&mut Sha256::new())
+                            .finalize_reset()
+                            .into()
+                    ),
+                    tx.header().code_hash,
+                );
+                assert_eq!(
+                    Hash(
+                        data_sec
+                            .hash(&mut Sha256::new())
+                            .finalize_reset()
+                            .into()
+                    ),
+                    tx.header().data_hash,
+                );
+            }
+            _ => panic!("Test failed: Expected Raw Tx"),
+        }
+    }
+
+    /// Test that process_tx correctly identifies a wrapper tx with some
+    /// data and extracts the signed data.
+    #[test]
+    fn test_process_tx_wrapper_tx() {
+        let keypair = gen_keypair();
+        // the signed tx
+        let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+            Fee {
+                amount: Amount::from_uint(10, 0).expect("Test failed"),
+                token: nam(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        ))));
+        tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
+        tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        tx.add_section(Section::Signature(Signature::new(
+            &tx.header_hash(),
+            &keypair,
+        )));
+        tx.encrypt(&Default::default());
+
+        tx.validate_header().expect("Test failed");
+        match tx.header().tx_type {
+            TxType::Wrapper(_) => {
+                tx.decrypt(<EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator())
+                    .expect("Test failed");
+                // assert_eq!(tx, decrypted);
+            }
+            _ => panic!("Test failed: Expected Wrapper Tx"),
+        }
+    }
+
+    /// Test that process_tx correctly returns an error on a wrapper tx
+    /// with some unsigned data
+    #[test]
+    fn test_process_tx_wrapper_tx_unsigned() {
+        let keypair = gen_keypair();
+        // the signed tx
+        let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+            Fee {
+                amount: Amount::from_uint(10, 0).expect("Test failed"),
+                token: nam(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        ))));
+        tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
+        tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        tx.encrypt(&Default::default());
+        let result = tx.validate_header().expect_err("Test failed");
+        assert_matches!(result, TxError::SigError(_));
+    }
+}
+
+/// Test that process_tx correctly identifies a DecryptedTx
+/// with some unsigned data and returns an identical copy
+#[test]
+fn test_process_tx_decrypted_unsigned() {
+    use crate::proto::{Code, Data, Tx};
+    let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
+        #[cfg(not(feature = "mainnet"))]
+        has_valid_pow: false,
+    }));
+    let code_sec = tx
+        .set_code(Code::new("transaction data".as_bytes().to_owned()))
+        .clone();
+    let data_sec = tx
+        .set_data(Data::new("transaction data".as_bytes().to_owned()))
+        .clone();
+    tx.validate_header().expect("Test failed");
+    match tx.header().tx_type {
+        TxType::Decrypted(DecryptedTx::Decrypted {
+            #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: _,
+        }) => {
+            assert_eq!(
+                tx.header().code_hash,
+                Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into()),
+            );
+            assert_eq!(
+                tx.header().data_hash,
+                Hash(data_sec.hash(&mut Sha256::new()).finalize_reset().into()),
+            );
+        }
+        _ => panic!("Test failed"),
+    }
+}
+
+/// Test that process_tx correctly identifies a DecryptedTx
+/// with some signed data and extracts it without checking
+/// signature
+#[test]
+fn test_process_tx_decrypted_signed() {
+    use crate::proto::{Code, Data, Section, Signature, Tx};
+    fn gen_keypair() -> common::SecretKey {
+        use rand::prelude::ThreadRng;
+        use rand::thread_rng;
+
+        let mut rng: ThreadRng = thread_rng();
+        ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
+    }
+
+    use crate::types::key::Signature as S;
+    let mut decrypted = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
+        #[cfg(not(feature = "mainnet"))]
+        has_valid_pow: false,
+    }));
+    // Invalid signed data
+    let ed_sig =
+        ed25519::Signature::try_from_slice([0u8; 64].as_ref()).unwrap();
+    let mut sig_sec = Signature::new(&decrypted.header_hash(), &gen_keypair());
+    sig_sec.signature = common::Signature::try_from_sig(&ed_sig).unwrap();
+    decrypted.add_section(Section::Signature(sig_sec));
+    // create the tx with signed decrypted data
+    let code_sec = decrypted
+        .set_code(Code::new("transaction data".as_bytes().to_owned()))
+        .clone();
+    let data_sec = decrypted
+        .set_data(Data::new("transaction data".as_bytes().to_owned()))
+        .clone();
+    decrypted.validate_header().expect("Test failed");
+    match decrypted.header().tx_type {
+        TxType::Decrypted(DecryptedTx::Decrypted {
+            #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: _,
+        }) => {
+            assert_eq!(
+                decrypted.header.code_hash,
+                Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into()),
+            );
+            assert_eq!(
+                decrypted.header.data_hash,
+                Hash(data_sec.hash(&mut Sha256::new()).finalize_reset().into()),
+            );
+        }
+        _ => panic!("Test failed"),
+    }
+}
