@@ -904,7 +904,6 @@ pub mod cmds {
                     // The `run` command is the default if no sub-command given
                     .or(Some(Self::Run(LedgerRun(args::LedgerRun {
                         start_time: None,
-                        tx_index: false,
                     }))))
             })
         }
@@ -2183,7 +2182,7 @@ pub mod args {
     use super::context::*;
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
-    use crate::config::{self, Action, ActionAtHeight, TendermintMode};
+    use crate::config::{self, Action, ActionAtHeight};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
@@ -2332,7 +2331,6 @@ pub mod args {
     pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     pub const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
     pub const SUSPEND_ACTION: ArgFlag = flag("suspend");
-    pub const TENDERMINT_TX_INDEX: ArgFlag = flag("tx-index");
     pub const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     pub const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
     pub const TM_ADDRESS: Arg<String> = arg("tm-address");
@@ -2367,7 +2365,6 @@ pub mod args {
         pub chain_id: Option<ChainId>,
         pub base_dir: PathBuf,
         pub wasm_dir: Option<PathBuf>,
-        pub mode: Option<TendermintMode>,
     }
 
     impl Global {
@@ -2376,12 +2373,10 @@ pub mod args {
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let base_dir = BASE_DIR.parse(matches);
             let wasm_dir = WASM_DIR.parse(matches);
-            let mode = MODE.parse(matches).map(TendermintMode::from);
             Global {
                 chain_id,
                 base_dir,
                 wasm_dir,
-                mode,
             }
         }
 
@@ -2405,27 +2400,18 @@ pub mod args {
                      `NAMADA_WASM_DIR` environment variable, but the argument \
                      takes precedence, if specified.",
                 ))
-                .arg(MODE.def().about(
-                    "The mode in which to run Namada. Options are \n\t * \
-                     Validator (default)\n\t * Full\n\t * Seed",
-                ))
         }
     }
 
     #[derive(Clone, Debug)]
     pub struct LedgerRun {
         pub start_time: Option<DateTimeUtc>,
-        pub tx_index: bool,
     }
 
     impl Args for LedgerRun {
         fn parse(matches: &ArgMatches) -> Self {
             let start_time = NAMADA_START_TIME.parse(matches);
-            let tx_index = TENDERMINT_TX_INDEX.parse(matches);
-            Self {
-                start_time,
-                tx_index,
-            }
+            Self { start_time }
         }
 
         fn def(app: App) -> App {
@@ -2437,11 +2423,6 @@ pub mod args {
                  equivalent:\n2023-01-20T12:12:12Z\n2023-01-20 \
                  12:12:12Z\n2023-  01-20T12:  12:12Z",
             ))
-            .arg(
-                TENDERMINT_TX_INDEX
-                    .def()
-                    .about("Enable Tendermint tx indexing."),
-            )
         }
     }
 

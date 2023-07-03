@@ -1994,7 +1994,7 @@ pub mod testing {
         CA: WasmCacheAccess,
     {
         TxVmEnv::new(
-            NativeMemory::default(),
+            NativeMemory,
             storage,
             write_log,
             iterators,
@@ -2034,7 +2034,7 @@ pub mod testing {
         CA: WasmCacheAccess,
     {
         VpVmEnv::new(
-            NativeMemory::default(),
+            NativeMemory,
             address,
             storage,
             write_log,

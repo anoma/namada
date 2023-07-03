@@ -1,11 +1,16 @@
 [package]
-authors = ["Heliax AG <hello@heliax.dev>"]
-description = "Namada tests"
-edition = "2021"
-license = "GPL-3.0"
 name = "namada_tests"
+description = "Namada integration and E2E tests"
 resolver = "2"
-version = "0.17.2"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
 
 [features]
 default = ["abciplus", "wasm-runtime"]
@@ -13,12 +18,6 @@ mainnet = [
   "namada/mainnet",
 ]
 abciplus = [
-  "ibc-relayer",
-  "ibc-relayer-types",
-  "tendermint",
-  "tendermint-config",
-  "tendermint-proto",
-  "tendermint-rpc",
   "namada/abciplus",
   "namada/ibc-mocks",
   "namada_vp_prelude/abciplus",
@@ -28,51 +27,48 @@ abciplus = [
 wasm-runtime = ["namada/wasm-runtime"]
 
 [dependencies]
-namada = {path = "../shared", default-features = false, features = ["testing", "namada-sdk"]}
-namada_core = {path = "../core", default-features = false, features = ["testing"]}
+namada = {path = "../shared", features = ["testing"]}
+namada_core = {path = "../core", features = ["testing"]}
 namada_test_utils = {path = "../test_utils"}
-namada_vp_prelude = {path = "../vp_prelude", default-features = false}
-namada_tx_prelude = {path = "../tx_prelude", default-features = false}
-chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
-concat-idents = "1.1.2"
-ibc-relayer = {version = "0.22.0", default-features = false, optional = true}
-ibc-relayer-types = {version = "0.22.0", default-features = false, optional = true}
-prost = "0.11.6"
-regex = "1.7.0"
-serde_json = {version = "1.0.65"}
-sha2 = "0.9.3"
-test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
-tempfile = "3.2.0"
-tendermint = {version = "0.23.6", optional = true}
-tendermint-config = {version = "0.23.6", optional = true}
-tendermint-proto = {version = "0.23.6", optional = true}
-tendermint-rpc = {version = "0.23.6", features = ["http-client"], optional = true}
-tokio = {version = "1.8.2", features = ["full"]}
-tracing = "0.1.30"
-tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
-derivative = "2.2.0"
-rust_decimal = "=1.26.1"
-rust_decimal_macros = "=1.26.1"
+namada_vp_prelude = {path = "../vp_prelude"}
+namada_tx_prelude = {path = "../tx_prelude"}
+chrono.workspace = true
+concat-idents.workspace = true
+derivative.workspace = true
+hyper = {version = "0.14.20", features = ["full"]}
+ibc-relayer-types.workspace = true
+ibc-relayer.workspace = true
+prost.workspace = true
+regex.workspace = true
+rust_decimal_macros.workspace = true
+rust_decimal.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
+test-log.workspace = true
+tokio = {workspace = true, features = ["full"]}
+tracing-subscriber.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
-namada_apps = {path = "../apps", default-features = false, features = ["testing"]}
-assert_cmd = "1.0.7"
-borsh = "0.9.1"
-color-eyre = "0.5.11"
-data-encoding = "2.3.2"
+namada_apps = {path = "../apps", features = ["testing"]}
+assert_cmd.workspace = true
+borsh.workspace = true
+color-eyre.workspace = true
+data-encoding.workspace = true
 # NOTE: enable "print" feature to see output from builds ran by e2e tests
-escargot = {version = "0.5.7"} # , features = ["print"]}
-expectrl = {version = "=0.7.0"}
-eyre = "0.6.5"
-file-serve = "0.2.0"
-fs_extra = "1.2.0"
-hyper = { version = "0.14.20", features = ["full"] }
-itertools = "0.10.0"
-pretty_assertions = "0.7.2"
-proptest = "1.2.0"
-proptest-state-machine = "0.1.0"
-rand = "0.8"
-toml = "0.5.9"
+escargot = {workspace = true} # , features = ["print"]}
+expectrl.workspace = true
+eyre.workspace = true
+file-serve.workspace = true
+fs_extra.workspace = true
+itertools.workspace = true
+once_cell.workspace = true
+pretty_assertions.workspace = true
+proptest.workspace = true
+proptest-state-machine.workspace = true
+rand.workspace = true
+toml.workspace = true
 
 # This is used to enable logging from tests
 [package.metadata.cargo-udeps.ignore]

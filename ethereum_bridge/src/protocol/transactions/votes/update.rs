@@ -561,6 +561,7 @@ mod tests {
             seen,
             seen_by,
         };
+        #[allow(clippy::redundant_clone)]
         let post = pre.clone();
         let changed_keys = keys_changed(&keys, &pre, &post);
 

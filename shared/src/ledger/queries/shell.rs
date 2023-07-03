@@ -10,15 +10,17 @@ use namada_core::types::hash::Hash;
 use namada_core::types::storage::{BlockResults, KeySeg};
 
 use self::eth_bridge::{EthBridge, ETH_BRIDGE};
+use crate::ibc::core::ics04_channel::packet::Sequence;
+use crate::ibc::core::ics24_host::identifier::{ChannelId, ClientId, PortId};
 use crate::ledger::events::log::dumb_queries;
-use crate::ledger::events::Event;
+use crate::ledger::events::{Event, EventType};
 use crate::ledger::queries::types::{RequestCtx, RequestQuery};
 use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
 use crate::tendermint::merkle::proof::Proof;
-use crate::types::storage::{self, Epoch, PrefixValue};
+use crate::types::storage::{self, BlockHeight, Epoch, PrefixValue};
 #[cfg(any(test, feature = "async-client"))]
 use crate::types::transaction::TxResult;
 
@@ -67,6 +69,12 @@ router! {SHELL,
 
     // was the transaction applied?
     ( "applied" / [tx_hash: Hash] ) -> Option<Event> = applied,
+
+    // IBC UpdateClient event
+    ( "ibc_client_update" / [client_id: ClientId] / [consensus_height: BlockHeight] ) -> Option<Event> = ibc_client_update,
+
+    // IBC packet event
+    ( "ibc_packet" / [event_type: EventType] / [source_port: PortId] / [source_channel: ChannelId] / [destination_port: PortId] / [destination_channel: ChannelId] / [sequence: Sequence]) -> Option<Event> = ibc_packet,
 }
 
 // Handlers:
@@ -355,6 +363,56 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let matcher = dumb_queries::QueryMatcher::applied(tx_hash);
+    Ok(ctx
+        .event_log
+        .iter_with_matcher(matcher)
+        .by_ref()
+        .next()
+        .cloned())
+}
+
+fn ibc_client_update<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    client_id: ClientId,
+    consensus_height: BlockHeight,
+) -> storage_api::Result<Option<Event>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let matcher = dumb_queries::QueryMatcher::ibc_update_client(
+        client_id,
+        consensus_height,
+    );
+    Ok(ctx
+        .event_log
+        .iter_with_matcher(matcher)
+        .by_ref()
+        .next()
+        .cloned())
+}
+
+fn ibc_packet<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    event_type: EventType,
+    source_port: PortId,
+    source_channel: ChannelId,
+    destination_port: PortId,
+    destination_channel: ChannelId,
+    sequence: Sequence,
+) -> storage_api::Result<Option<Event>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let matcher = dumb_queries::QueryMatcher::ibc_packet(
+        event_type,
+        source_port,
+        source_channel,
+        destination_port,
+        destination_channel,
+        sequence,
+    );
     Ok(ctx
         .event_log
         .iter_with_matcher(matcher)

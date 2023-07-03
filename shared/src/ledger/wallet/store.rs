@@ -754,7 +754,7 @@ impl<'de> Deserialize<'de> for AddressVpType {
 mod test_wallet {
     use base58::{self, FromBase58};
     use bip39::{Language, Mnemonic};
-    use hex;
+    use data_encoding::HEXLOWER;
 
     use super::super::derivation_path::DerivationPath;
     use super::*;
@@ -839,7 +839,8 @@ mod test_wallet {
     ) {
         let sk = gen_sk_from_seed_and_derivation_path(
             scheme,
-            hex::decode(seed)
+            HEXLOWER
+                .decode(seed.as_bytes())
                 .expect("Seed parsing cannot fail.")
                 .as_slice(),
             DerivationPath::from_path_str(scheme, derivation_path)
@@ -849,7 +850,7 @@ mod test_wallet {
             // this is an extended private key encoded in base58
             let xprv =
                 priv_key.from_base58().expect("XPRV parsing cannot fail.");
-            hex::encode(&xprv[46..78])
+            HEXLOWER.encode(&xprv[46..78])
         } else {
             priv_key.to_string()
         };

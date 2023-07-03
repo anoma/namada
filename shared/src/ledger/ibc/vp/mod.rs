@@ -210,7 +210,7 @@ impl From<ActionError> for Error {
 }
 
 /// A dummy header used for testing
-#[cfg(any(feature = "test", feature = "testing"))]
+#[cfg(any(test, feature = "testing"))]
 pub fn get_dummy_header() -> crate::types::storage::Header {
     use crate::tendermint::time::Time as TmTime;
     crate::types::storage::Header {
@@ -221,7 +221,7 @@ pub fn get_dummy_header() -> crate::types::storage::Header {
 }
 
 /// A dummy validator used for testing
-#[cfg(any(feature = "test", feature = "testing"))]
+#[cfg(any(test, feature = "testing"))]
 pub fn get_dummy_genesis_validator()
 -> namada_proof_of_stake::types::GenesisValidator {
     use rust_decimal::prelude::Decimal;

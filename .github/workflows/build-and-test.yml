@@ -37,7 +37,7 @@ jobs:
       matrix:
         os: [ubuntu-20.04]
         wasm_cache_version: ["v2"]
-        mold_version: [1.7.0]
+        mold_version: [1.11.0]
 
     steps:
       - name: Checkout repo
@@ -79,7 +79,8 @@ jobs:
       matrix:
         os: [ubuntu-20.04]
         wasm_cache_version: ["v2"]
-        mold_version: [1.7.0]
+        nightly_version: [nightly-2023-06-01]
+        mold_version: [1.11.0]
 
     steps:
       - name: Checkout repo
@@ -103,6 +104,11 @@ jobs:
           path: ./wasm
         env:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+      - name: Setup rust nightly
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          toolchain: ${{ matrix.nightly_version }}
+          profile: default
       - name: Test Wasm
         run: make test-wasm
       - name: Check wasm up-to-date
@@ -146,8 +152,8 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-20.04]
-        nightly_version: [nightly-2022-11-03]
-        mold_version: [1.7.0]
+        nightly_version: [nightly-2023-06-01]
+        mold_version: [1.11.0]
         make:
           - name: ABCI
             suffix: ''
@@ -235,6 +241,8 @@ jobs:
           name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
           path: ./wasm
       - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Check crates build with default features
+        run: make check-crates
       - name: Run unit test
         run: make test-unit-coverage${{ matrix.make.suffix }}
         env:
@@ -259,7 +267,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-20.04]
-        mold_version: [1.7.0]
+        mold_version: [1.11.0]
         make:
           - name: ABCI Release build
             suffix: ''
@@ -338,7 +346,7 @@ jobs:
       - name: Build
         run: make build-release${{ matrix.make.suffix }}
         env:
-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+          RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Upload target binaries
         uses: actions/upload-artifact@v3
         with:
@@ -366,12 +374,12 @@ jobs:
 
   namada-e2e:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 80
+    # timeout-minutes: 80
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-20.04]
-        nightly_version: [nightly-2022-11-03]
+        nightly_version: [nightly-2023-06-01]
         mold_version: [1.7.0]
         make:
           - name: e2e
@@ -380,14 +388,21 @@ jobs:
             cache_key: namada
             cache_version: v2
             tendermint_artifact: tendermint-unreleased-v0.1.4-abciplus
-            wait_for: namada-release (ubuntu-20.04, 1.7.0, ABCI Release build, namada-e2e-release, v2)
+            wait_for: namada-release (ubuntu-20.04, 1.11.0, ABCI Release build, namada-e2e-release, v2)
           - name: e2e
             suffix: ''
             index: 1
             cache_key: namada
             cache_version: v2
             tendermint_artifact: tendermint-unreleased-v0.1.4-abciplus
-            wait_for: namada-release (ubuntu-20.04, 1.7.0, ABCI Release build, namada-e2e-release, v2)
+            wait_for: namada-release (ubuntu-20.04, 1.11.0, ABCI Release build, namada-e2e-release, v2)
+          - name: e2e
+            suffix: ''
+            index: 2
+            cache_key: namada
+            cache_version: v2
+            tendermint_artifact: tendermint-unreleased-v0.1.4-abciplus
+            wait_for: namada-release (ubuntu-20.04, 1.11.0, ABCI Release build, namada-e2e-release, v2)
 
     env:
       CARGO_INCREMENTAL: 0
@@ -463,14 +478,6 @@ jobs:
         run: |
           wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
           mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
-      - name: Download tendermint binaries
-        uses: dawidd6/action-download-artifact@v2
-        with:
-          github_token: ${{secrets.GITHUB_TOKEN}}
-          workflow: build-tendermint.yml
-          workflow_conclusion: success
-          name: ${{ matrix.make.tendermint_artifact }}
-          path: /usr/local/bin
       - name: Build 
         run: make build
         env:
@@ -497,6 +504,14 @@ jobs:
         with:
           name: binaries${{ matrix.make.suffix }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: ./target/release/
+      - name: Download tendermint & cometbft
+        run: |
+          curl -o cometbft.tar.gz -LO https://github.com/cometbft/cometbft/releases/download/v0.37.2/cometbft_0.37.2_linux_amd64.tar.gz
+          tar -xvzf cometbft.tar.gz
+          mv cometbft /usr/local/bin
+          curl -o tendermint.tar.gz -LO https://github.com/heliaxdev/tendermint/releases/download/v0.1.4-abciplus/tendermint_0.1.4-abciplus_linux_amd64.tar.gz
+          tar -xvzf tendermint.tar.gz
+          mv tendermint /usr/local/bin
       - name: Change permissions
         run: |
           chmod +x target/release/namada
@@ -504,6 +519,7 @@ jobs:
           chmod +x target/release/namadan
           chmod +x target/release/namadac
           chmod +x /usr/local/bin/tendermint
+          chmod +x /usr/local/bin/cometbft
       - name: Run e2e test
         run: |
           mkdir -p /home/runner/work/masp-params

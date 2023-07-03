@@ -1,8 +1,6 @@
 //! The parameters used for the chain's genesis
 
 use std::collections::HashMap;
-#[cfg(not(feature = "dev"))]
-use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
@@ -17,8 +15,6 @@ use namada::ledger::pos::{GenesisValidator, PosParams};
 #[cfg(feature = "dev")]
 use namada::types::address::wnam;
 use namada::types::address::Address;
-#[cfg(not(feature = "dev"))]
-use namada::types::chain::ChainId;
 use namada::types::chain::ProposalBytes;
 #[cfg(feature = "dev")]
 use namada::types::ethereum_events::EthAddress;
@@ -901,14 +897,17 @@ pub struct Parameters {
     pub wrapper_tx_fees: Option<token::Amount>,
 }
 
-#[cfg(not(feature = "dev"))]
-pub fn genesis(base_dir: impl AsRef<Path>, chain_id: &ChainId) -> Genesis {
+#[cfg(not(any(test, feature = "dev")))]
+pub fn genesis(
+    base_dir: impl AsRef<std::path::Path>,
+    chain_id: &namada::types::chain::ChainId,
+) -> Genesis {
     let path = base_dir
         .as_ref()
         .join(format!("{}.toml", chain_id.as_str()));
     genesis_config::read_genesis_config(path)
 }
-#[cfg(feature = "dev")]
+#[cfg(any(test, feature = "dev"))]
 pub fn genesis(num_validators: u64) -> Genesis {
     use namada::types::address::{
         self, apfel, btc, dot, eth, kartoffel, nam, schnitzel,

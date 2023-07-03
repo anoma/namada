@@ -89,8 +89,7 @@ where
 pub async fn query_epoch<C: crate::ledger::queries::Client + Sync>(
     client: &C,
 ) -> Epoch {
-    let epoch = unwrap_client_response::<C, _>(RPC.shell().epoch(client).await);
-    epoch
+    unwrap_client_response::<C, _>(RPC.shell().epoch(client).await)
 }
 
 /// Query the last committed block, if any.

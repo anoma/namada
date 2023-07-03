@@ -109,12 +109,7 @@ impl VextDigest {
     }
 
     /// Decompresses a set of signed [`Vext`] instances.
-    pub fn decompress(self, last_height: BlockHeight) -> Vec<Signed<Vext>> {
-        {
-            #[allow(clippy::drop_copy)]
-            drop(last_height);
-        }
-
+    pub fn decompress(self, _: BlockHeight) -> Vec<Signed<Vext>> {
         let VextDigest { signatures, events } = self;
 
         let mut extensions = vec![];

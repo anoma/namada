@@ -5,11 +5,9 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, Write};
 use std::iter::Iterator;
+use std::path::PathBuf;
 use std::str::FromStr;
 
-use async_std::fs;
-use async_std::path::PathBuf;
-use async_std::prelude::*;
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
 use itertools::Either;
@@ -106,7 +104,7 @@ pub async fn query_transfers<
         || Either::Right(wallet.get_addresses().into_values().collect()),
         Either::Left,
     );
-    let _ = shielded.load();
+    let _ = shielded.load().await;
     // Obtain the effects of all shielded and transparent transactions
     let transfers = shielded
         .query_tx_deltas(
@@ -368,7 +366,7 @@ pub async fn query_pinned_balance<
         .values()
         .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
         .collect();
-    let _ = shielded.load();
+    let _ = shielded.load().await;
     // Print the token balances by payment address
     for owner in owners {
         let mut balance = Err(PinnedBalanceError::InvalidViewingKey);
@@ -693,14 +691,14 @@ pub async fn query_shielded_balance<
         Some(viewing_key) => vec![viewing_key],
         None => wallet.get_viewing_keys().values().copied().collect(),
     };
-    let _ = shielded.load();
+    let _ = shielded.load().await;
     let fvks: Vec<_> = viewing_keys
         .iter()
         .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
         .collect();
     shielded.fetch(client, &[], &fvks).await;
     // Save the update state so that future fetches can be short-circuited
-    let _ = shielded.save();
+    let _ = shielded.save().await;
     // The epoch is required to identify timestamped tokens
     let epoch = query_and_print_epoch(client).await;
     // Map addresses to token names
@@ -990,13 +988,15 @@ pub async fn query_proposal_result<
             if args.offline {
                 match args.proposal_folder {
                     Some(path) => {
-                        let mut dir = fs::read_dir(&path)
+                        let mut dir = tokio::fs::read_dir(&path)
                             .await
                             .expect("Should be able to read the directory.");
                         let mut files = HashSet::new();
                         let mut is_proposal_present = false;
 
-                        while let Some(entry) = dir.next().await {
+                        while let Some(entry) =
+                            dir.next_entry().await.transpose()
+                        {
                             match entry {
                                 Ok(entry) => match entry.file_type().await {
                                     Ok(entry_stat) => {
