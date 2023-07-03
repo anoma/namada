@@ -1206,8 +1206,8 @@ pub async fn submit_transfer<
     U: ShieldedUtils<C = C>,
 >(
     client: &C,
-    wallet: &mut Wallet<V>,
-    shielded: &mut ShieldedContext<U>,
+    mut wallet: Wallet<V>,
+    mut shielded: ShieldedContext<U>,
     args: args::TxTransfer,
 ) -> Result<(), Error> {
     let source = args.source.effective_address();
@@ -1271,7 +1271,7 @@ pub async fn submit_transfer<
     // If our chosen signer is the MASP sentinel key, then our shielded inputs
     // will need to cover the gas fees.
     let chosen_signer =
-        tx_signer::<C, V>(client, wallet, &args.tx, default_signer.clone())
+        tx_signer::<C, V>(client, &mut wallet, &args.tx, default_signer.clone())
             .await?
             .ref_to();
     let shielded_gas = masp_tx_key().ref_to() == chosen_signer;
@@ -1325,7 +1325,7 @@ pub async fn submit_transfer<
             // Get the decoded asset types used in the transaction to give
             // offline wallet users more information
             let asset_types =
-                used_asset_types(shielded, client, &shielded_parts.0)
+                used_asset_types(&mut shielded, client, &shielded_parts.0)
                     .await
                     .unwrap_or_default();
             // Add the MASP Transaction's Builder to the Tx
@@ -1366,7 +1366,7 @@ pub async fn submit_transfer<
         // Dry-run/broadcast/submit the transaction
         let result = process_tx::<C, V>(
             client,
-            wallet,
+            &mut wallet,
             &args.tx,
             tx,
             default_signer.clone(),

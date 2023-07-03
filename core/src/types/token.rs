@@ -32,7 +32,7 @@ use crate::types::storage::{DbKeySeg, Key, KeySeg};
     Hash,
 )]
 pub struct Amount {
-    micro: u64,
+    pub micro: u64,
 }
 
 /// Maximum decimal places in a token [`Amount`] and [`Change`].

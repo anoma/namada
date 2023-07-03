@@ -1,6 +1,6 @@
 //! Provides functionality for managing keys and addresses for a user
 pub mod alias;
-mod derivation_path;
+pub mod derivation_path;
 mod keys;
 pub mod pre_genesis;
 pub mod store;
@@ -14,7 +14,7 @@ use bip39::{Language, Mnemonic, MnemonicType, Seed};
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::zip32::ExtendedFullViewingKey;
 pub use pre_genesis::gen_key_to_store;
-use rand_core::RngCore;
+use rand_core::{OsRng, RngCore};
 pub use store::{gen_sk_rng, AddressVpType, Store};
 use thiserror::Error;
 use zeroize::Zeroizing;
@@ -27,6 +27,8 @@ use crate::types::key::*;
 use crate::types::masp::{
     ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
 };
+
+use super::masp::find_valid_diversifier;
 
 /// Errors of key generation / recovery
 #[derive(Error, Debug)]
@@ -123,7 +125,7 @@ impl<U: WalletUtils> Wallet<U> {
         }
     }
 
-    fn gen_and_store_key(
+    pub fn gen_and_store_key(
         &mut self,
         scheme: SchemeType,
         alias: Option<String>,
@@ -140,10 +142,30 @@ impl<U: WalletUtils> Wallet<U> {
                 password,
             )
             .map(|(alias, key)| {
-                // Cache the newly added key
+                // cache the newly added key
                 self.decrypted_key_cache.insert(alias.clone(), key.clone());
                 (alias.into(), key)
             })
+    }
+
+    /// Generate a shielded payment address from the given key.
+    pub fn gen_payment_addr(
+        &mut self,
+        alias: String,
+        pin: bool,
+        force_alias: bool,
+        viewing_key: ExtendedViewingKey,
+    ) -> (String, PaymentAddress) {
+        let viewing_key = ExtendedFullViewingKey::from(viewing_key).fvk.vk;
+        let (div, _g_d) = find_valid_diversifier(&mut OsRng);
+        let payment_addr = viewing_key
+            .to_payment_address(div)
+            .expect("a PaymentAddress");
+        let payment_addr = PaymentAddress::from(payment_addr).pinned(pin);
+        let alias = self
+            .insert_payment_addr(alias, payment_addr, force_alias)
+            .unwrap();
+        (alias, payment_addr)
     }
 
     /// Restore a keypair from the user mnemonic code (read from stdin) using
