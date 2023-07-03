@@ -17,9 +17,9 @@ non_staked_balance = 100000
 # VP for the validator account
 validator_vp = "vp_validator"
 # Commission rate for rewards
-commission_rate = 0.05
+commission_rate = "0.05"
 # Maximum change per epoch in the commission rate
-max_commission_rate_change = 0.01
+max_commission_rate_change = "0.01"
 # Public IP:port address
 net_address = "127.0.0.1:26656"
 
@@ -27,6 +27,7 @@ net_address = "127.0.0.1:26656"
 
 [token.NAM]
 address = "atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5"
+denom = 8
 vp = "vp_token"
 [token.NAM.balances]
 # In token balances, we can use:
@@ -35,7 +36,7 @@ a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6m
 atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
 atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
 # 2. An alias of any account
-bertha = 1000000
+Bertha = "1000000"
 # 3. A public key of a validator or an established account from which the 
 #    address of the implicit account is derived)
 "bertha.public_key" = 100
@@ -43,6 +44,7 @@ bertha = 1000000
 
 [token.BTC]
 address = "atest1v4ehgw36xdzryve5gsc52veeg5cnsv2yx5eygvp38qcrvd29xy6rys6p8yc5xvp4xfpy2v694wgwcp"
+denom = 8
 vp = "vp_token"
 [token.BTC.balances]
 atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3xvr4 = 1000000
@@ -52,6 +54,7 @@ a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6m
 
 [token.ETH]
 address = "atest1v4ehgw36xqmr2d3nx3ryvd2xxgmrq33j8qcns33sxezrgv6zxdzrydjrxveygd2yxumrsdpsf9jc2p"
+denom = 18
 vp = "vp_token"
 [token.ETH.balances]
 atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3xvr4 = 1000000
@@ -61,6 +64,7 @@ a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6m
 
 [token.DOT]
 address = "atest1v4ehgw36gg6nvs2zgfpyxsfjgc65yv6pxy6nwwfsxgungdzrggeyzv35gveyxsjyxymyz335hur2jn"
+denom = 10
 vp = "vp_token"
 [token.DOT.balances]
 atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3xvr4 = 1000000
@@ -70,6 +74,7 @@ a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6m
 
 [token.schnitzel]
 address = "atest1v4ehgw36xue5xvf5xvuyzvpjx5un2v3k8qeyvd3cxdqns32p89rrxd6xx9zngvpegccnzs699rdnnt"
+denom = 6
 vp = "vp_token"
 [token.schnitzel.balances]
 atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3xvr4 = 1000000
@@ -79,6 +84,7 @@ a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6m
 
 [token.apfel]
 address = "atest1v4ehgw36gfryydj9g3p5zv3kg9znyd358ycnzsfcggc5gvecgc6ygs2rxv6ry3zpg4zrwdfeumqcz9"
+denom = 6
 vp = "vp_token"
 [token.apfel.balances]
 atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3xvr4 = 1000000
@@ -88,6 +94,7 @@ a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6m
 
 [token.kartoffel]
 address = "atest1v4ehgw36gep5ysecxq6nyv3jg3zygv3e89qn2vp48pryxsf4xpznvve5gvmy23fs89pryvf5a6ht90"
+denom = 6
 public_key = ""
 vp = "vp_token"
 [token.kartoffel.balances]
@@ -160,21 +167,21 @@ pipeline_len = 2
 # for a fault in epoch 'n' up through epoch 'n + unbonding_len'.
 unbonding_len = 21
 # Votes per fundamental staking token (namnam)
-tm_votes_per_token = 1
+tm_votes_per_token = "1"
 # Reward for proposing a block.
-block_proposer_reward = 0.125
+block_proposer_reward = "0.125"
 # Reward for voting on a block.
-block_vote_reward = 0.1
+block_vote_reward = "0.1"
 # Maximum inflation rate per annum (10%)
-max_inflation_rate = 0.1
+max_inflation_rate = "0.1"
 # Targeted ratio of staked tokens to total tokens in the supply
-target_staked_ratio = 0.6667
+target_staked_ratio = "0.6667"
 # Portion of a validator's stake that should be slashed on a duplicate
 # vote.
-duplicate_vote_min_slash_rate = 0.001
+duplicate_vote_min_slash_rate = "0.001"
 # Portion of a validator's stake that should be slashed on a light
 # client attack.
-light_client_attack_min_slash_rate = 0.001
+light_client_attack_min_slash_rate = "0.001"
 # Number of epochs above and below (separately) the current epoch to
 # consider when doing cubic slashing
 cubic_slashing_window_length = 1

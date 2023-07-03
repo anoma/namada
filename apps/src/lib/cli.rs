@@ -1772,12 +1772,13 @@ pub mod args {
     pub use namada::ledger::args::*;
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
+    use namada::types::dec::Dec;
     use namada::types::key::*;
     use namada::types::masp::MaspValue;
     use namada::types::storage::{self, BlockHeight, Epoch};
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
-    use rust_decimal::Decimal;
+    use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
 
     use super::context::*;
     use super::utils::*;
@@ -1807,7 +1808,7 @@ pub mod args {
     pub const ALIAS: Arg<String> = arg("alias");
     pub const ALIAS_FORCE: ArgFlag = flag("alias-force");
     pub const ALLOW_DUPLICATE_IP: ArgFlag = flag("allow-duplicate-ip");
-    pub const AMOUNT: Arg<token::Amount> = arg("amount");
+    pub const AMOUNT: Arg<token::DenominatedAmount> = arg("amount");
     pub const ARCHIVE_DIR: ArgOpt<PathBuf> = arg_opt("archive-dir");
     pub const BALANCE_OWNER: ArgOpt<WalletBalanceOwner> = arg_opt("owner");
     pub const BASE_DIR: ArgDefault<PathBuf> = arg_default(
@@ -1826,7 +1827,7 @@ pub mod args {
     pub const CHANNEL_ID: Arg<ChannelId> = arg("channel-id");
     pub const CODE_PATH: Arg<PathBuf> = arg("code-path");
     pub const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
-    pub const COMMISSION_RATE: Arg<Decimal> = arg("commission-rate");
+    pub const COMMISSION_RATE: Arg<Dec> = arg("commission-rate");
     pub const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<Timeout> = arg_default(
         "consensus-timeout-commit",
         DefaultFn(|| Timeout::from_str("1s").unwrap()),
@@ -1841,10 +1842,20 @@ pub mod args {
     pub const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
     pub const FORCE: ArgFlag = flag("force");
     pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
-    pub const GAS_AMOUNT: ArgDefault<token::Amount> =
-        arg_default("gas-amount", DefaultFn(|| token::Amount::from(0)));
-    pub const GAS_LIMIT: ArgDefault<token::Amount> =
-        arg_default("gas-limit", DefaultFn(|| token::Amount::from(0)));
+    pub const GAS_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
+        "gas-amount",
+        DefaultFn(|| token::DenominatedAmount {
+            amount: token::Amount::default(),
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        }),
+    );
+    pub const GAS_LIMIT: ArgDefault<token::DenominatedAmount> = arg_default(
+        "gas-limit",
+        DefaultFn(|| token::DenominatedAmount {
+            amount: token::Amount::default(),
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        }),
+    );
     pub const GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".parse().unwrap()));
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
@@ -1867,7 +1878,7 @@ pub mod args {
     pub const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("node");
     pub const LOCALHOST: ArgFlag = flag("localhost");
     pub const MASP_VALUE: Arg<MaspValue> = arg("value");
-    pub const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =
+    pub const MAX_COMMISSION_RATE_CHANGE: Arg<Dec> =
         arg("max-commission-rate-change");
     pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
@@ -2170,7 +2181,7 @@ pub mod args {
             let target = TRANSFER_TARGET.parse(matches);
             let token = TOKEN.parse(matches);
             let sub_prefix = SUB_PREFIX.parse(matches);
-            let amount = AMOUNT.parse(matches);
+            let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
             Self {
                 tx,
@@ -2237,7 +2248,7 @@ pub mod args {
                 receiver,
                 token,
                 sub_prefix,
-                amount,
+                amount: amount.amount,
                 port_id,
                 channel_id,
                 timeout_height,
@@ -2468,6 +2479,14 @@ pub mod args {
             let tx = Tx::parse(matches);
             let validator = VALIDATOR.parse(matches);
             let amount = AMOUNT.parse(matches);
+            let amount = amount
+                .canonical()
+                .increase_precision(NATIVE_MAX_DECIMAL_PLACES.into())
+                .unwrap_or_else(|e| {
+                    println!("Could not parse bond amount: {:?}", e);
+                    safe_exit(1);
+                })
+                .amount;
             let source = SOURCE_OPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_BOND_WASM);
             Self {
@@ -2508,6 +2527,14 @@ pub mod args {
             let tx = Tx::parse(matches);
             let validator = VALIDATOR.parse(matches);
             let amount = AMOUNT.parse(matches);
+            let amount = amount
+                .canonical()
+                .increase_precision(NATIVE_MAX_DECIMAL_PLACES.into())
+                .unwrap_or_else(|e| {
+                    println!("Could not parse bond amount: {:?}", e);
+                    safe_exit(1);
+                })
+                .amount;
             let source = SOURCE_OPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_UNBOND_WASM);
             Self {
@@ -2968,6 +2995,7 @@ pub mod args {
                 query: self.query.to_sdk(ctx),
                 owner: self.owner.map(|x| ctx.get_cached(&x)),
                 token: self.token.map(|x| ctx.get(&x)),
+                sub_prefix: self.sub_prefix,
             }
         }
     }
@@ -2977,10 +3005,12 @@ pub mod args {
             let query = Query::parse(matches);
             let owner = BALANCE_OWNER.parse(matches);
             let token = TOKEN_OPT.parse(matches);
+            let sub_prefix = SUB_PREFIX.parse(matches);
             Self {
                 query,
                 owner,
                 token,
+                sub_prefix,
             }
         }
 
@@ -2992,6 +3022,11 @@ pub mod args {
                 .arg(TOKEN_OPT.def().help(
                     "The token address that queried transfers must involve.",
                 ))
+                .arg(
+                    SUB_PREFIX
+                        .def()
+                        .help("The token's sub prefix whose balance to query."),
+                )
         }
     }
 
@@ -3390,9 +3425,10 @@ pub mod args {
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
             let wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
-            let fee_amount = GAS_AMOUNT.parse(matches);
+            let fee_amount =
+                InputAmount::Unvalidated(GAS_AMOUNT.parse(matches));
             let fee_token = GAS_TOKEN.parse(matches);
-            let gas_limit = GAS_LIMIT.parse(matches).into();
+            let gas_limit = GAS_LIMIT.parse(matches).amount.into();
             let expiration = EXPIRATION_OPT.parse(matches);
             let signing_key = SIGNING_KEY_OPT.parse(matches);
             let signer = SIGNER.parse(matches);
@@ -3971,8 +4007,8 @@ pub mod args {
     #[derive(Clone, Debug)]
     pub struct InitGenesisValidator {
         pub alias: String,
-        pub commission_rate: Decimal,
-        pub max_commission_rate_change: Decimal,
+        pub commission_rate: Dec,
+        pub max_commission_rate_change: Dec,
         pub net_address: SocketAddr,
         pub unsafe_dont_encrypt: bool,
         pub key_scheme: SchemeType,

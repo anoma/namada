@@ -413,7 +413,7 @@ impl RocksDB {
         let batch = Mutex::new(batch);
 
         tracing::info!("Restoring previous hight subspace diffs");
-        self.iter_optional_prefix(None).par_bridge().try_for_each(
+        self.iter_prefix(None).par_bridge().try_for_each(
             |(key, _value, _gas)| -> Result<()> {
                 // Restore previous height diff if present, otherwise delete the
                 // subspace key
@@ -1266,7 +1266,7 @@ impl DB for RocksDB {
 impl<'iter> DBIter<'iter> for RocksDB {
     type PrefixIter = PersistentPrefixIterator<'iter>;
 
-    fn iter_optional_prefix(
+    fn iter_prefix(
         &'iter self,
         prefix: Option<&Key>,
     ) -> PersistentPrefixIterator<'iter> {
@@ -1312,7 +1312,8 @@ fn iter_subspace_prefix<'iter>(
         .get_column_family(SUBSPACE_CF)
         .expect("{SUBSPACE_CF} column family should exist");
     let db_prefix = "".to_owned();
-    iter_prefix(db, subspace_cf, db_prefix, prefix.map(|k| k.to_string()))
+    let prefix = prefix.map(|k| k.to_string()).unwrap_or_default();
+    iter_prefix(db, subspace_cf, db_prefix, Some(prefix))
 }
 
 fn iter_diffs_prefix(
@@ -1631,19 +1632,19 @@ mod test {
         db.exec_batch(batch.0).unwrap();
 
         let itered_keys: Vec<Key> = db
-            .iter_optional_prefix(Some(&prefix_0))
+            .iter_prefix(Some(&prefix_0))
             .map(|(key, _val, _)| Key::parse(key).unwrap())
             .collect();
         itertools::assert_equal(keys_0, itered_keys);
 
         let itered_keys: Vec<Key> = db
-            .iter_optional_prefix(Some(&prefix_1))
+            .iter_prefix(Some(&prefix_1))
             .map(|(key, _val, _)| Key::parse(key).unwrap())
             .collect();
         itertools::assert_equal(keys_1, itered_keys);
 
         let itered_keys: Vec<Key> = db
-            .iter_optional_prefix(None)
+            .iter_prefix(None)
             .map(|(key, _val, _)| Key::parse(key).unwrap())
             .collect();
         itertools::assert_equal(all_keys, itered_keys);

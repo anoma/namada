@@ -83,8 +83,8 @@ libc = "0.2.97"
 libloading = "0.7.2"
 libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
 # branch = "murisi/namada-integration"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "cfea8c95d3f73077ca3e25380fd27e5b46e828fd" }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "cfea8c95d3f73077ca3e25380fd27e5b46e828fd", default-features = false, features = ["local-prover"] }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "9320c6b69b5d2e97134866871e960f0a31703813" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "9320c6b69b5d2e97134866871e960f0a31703813", default-features = false, features = ["local-prover"] }
 num_cpus = "1.13.0"
 num-derive = "0.3.3"
 num-rational = "0.4.1"

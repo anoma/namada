@@ -502,7 +502,7 @@ mod tests {
             validator: &Address,
             amount: token::Amount,
         ) -> bool {
-            let raw_amount: u64 = amount.into();
+            let raw_amount: u128 = amount.try_into().unwrap();
             let mut total_bonds: u64 = 0;
             for action in self.all_valid_actions().into_iter() {
                 match action {
@@ -513,8 +513,8 @@ mod tests {
                     } => {
                         if owner == &bond_owner && validator == &bond_validator
                         {
-                            let raw_amount: u64 = amount.into();
-                            total_bonds += raw_amount;
+                            let raw_amount: u128 = amount.try_into().unwrap();
+                            total_bonds += raw_amount as u64;
                         }
                     }
                     ValidPosAction::Unbond {
@@ -524,15 +524,15 @@ mod tests {
                     } => {
                         if owner == &bond_owner && validator == &bond_validator
                         {
-                            let raw_amount: u64 = amount.into();
-                            total_bonds -= raw_amount;
+                            let raw_amount: u128 = amount.try_into().unwrap();
+                            total_bonds -= raw_amount as u64;
                         }
                     }
                     _ => {}
                 }
             }
 
-            total_bonds >= raw_amount
+            total_bonds as u128 >= raw_amount
         }
 
         /// Find if the given owner and validator has unbonds that are ready to
@@ -576,9 +576,10 @@ pub mod testing {
     use namada::types::key::RefTo;
     use namada::types::storage::Epoch;
     use namada::types::{address, key, token};
+    use namada_core::types::dec::Dec;
+    use namada_core::types::token::{Amount, Change};
     use namada_tx_prelude::{Address, StorageRead, StorageWrite};
     use proptest::prelude::*;
-    use rust_decimal::Decimal;
 
     use crate::tx::{self, tx_host_env};
 
@@ -599,8 +600,8 @@ pub mod testing {
         InitValidator {
             address: Address,
             consensus_key: PublicKey,
-            commission_rate: Decimal,
-            max_commission_rate_change: Decimal,
+            commission_rate: Dec,
+            max_commission_rate_change: Dec,
         },
         Bond {
             amount: token::Amount,
@@ -640,14 +641,14 @@ pub mod testing {
         Bond {
             owner: Address,
             validator: Address,
-            delta: i128,
+            delta: Change,
             offset: DynEpochOffset,
         },
         /// Add tokens unbonded from a bond at unbonding offset
         Unbond {
             owner: Address,
             validator: Address,
-            delta: i128,
+            delta: Change,
         },
         /// Withdraw tokens from an unbond at the current epoch
         WithdrawUnbond {
@@ -655,12 +656,12 @@ pub mod testing {
             validator: Address,
         },
         TotalDeltas {
-            delta: i128,
+            delta: Change,
             offset: Either<DynEpochOffset, Epoch>,
         },
         ValidatorSet {
             validator: Address,
-            token_delta: i128,
+            token_delta: Change,
             offset: DynEpochOffset,
         },
         ValidatorConsensusKey {
@@ -670,7 +671,7 @@ pub mod testing {
         },
         ValidatorDeltas {
             validator: Address,
-            delta: i128,
+            delta: Change,
             offset: DynEpochOffset,
         },
         ValidatorState {
@@ -678,7 +679,7 @@ pub mod testing {
             state: ValidatorState,
         },
         StakingTokenPosBalance {
-            delta: i128,
+            delta: Change,
         },
         ValidatorAddressRawHash {
             address: Address,
@@ -687,11 +688,11 @@ pub mod testing {
         },
         ValidatorCommissionRate {
             address: Address,
-            rate: Decimal,
+            rate: Dec,
         },
         ValidatorMaxCommissionRateChange {
             address: Address,
-            change: Decimal,
+            change: Dec,
         },
     }
 
@@ -749,7 +750,7 @@ pub mod testing {
                 arb_validator,
             )
                 .prop_map(|(amount, owner, validator)| ValidPosAction::Bond {
-                    amount: amount.into(),
+                    amount: Amount::from_uint(amount, 0).unwrap(),
                     owner,
                     validator,
                 });
@@ -779,12 +780,15 @@ pub mod testing {
                 // them
                 let arb_unbond = arb_current_bond.prop_flat_map(
                     |(bond_id, current_bond_amount)| {
-                        let current_bond_amount: u64 =
-                            current_bond_amount.into();
+                        let current_bond_amount =
+                            <Amount as TryInto<u128>>::try_into(
+                                current_bond_amount,
+                            )
+                            .unwrap() as u64;
                         // Unbond an arbitrary amount up to what's available
                         (0..current_bond_amount).prop_map(move |amount| {
                             ValidPosAction::Unbond {
-                                amount: amount.into(),
+                                amount: Amount::from_uint(amount, 0).unwrap(),
                                 owner: bond_id.source.clone(),
                                 validator: bond_id.validator.clone(),
                             }
@@ -883,7 +887,7 @@ pub mod testing {
                         },
                         PosStorageChange::ValidatorSet {
                             validator: address.clone(),
-                            token_delta: 0,
+                            token_delta: 0.into(),
                             offset,
                         },
                         PosStorageChange::ValidatorConsensusKey {
@@ -896,7 +900,7 @@ pub mod testing {
                         },
                         PosStorageChange::ValidatorDeltas {
                             validator: address.clone(),
-                            delta: 0,
+                            delta: 0.into(),
                             offset,
                         },
                         PosStorageChange::ValidatorCommissionRate {
@@ -1302,13 +1306,11 @@ pub mod testing {
                 );
                 let mut balance: token::Amount =
                     tx::ctx().read(&balance_key).unwrap().unwrap_or_default();
-                if delta < 0 {
-                    let to_spend: u64 = (-delta).try_into().unwrap();
-                    let to_spend: token::Amount = to_spend.into();
+                if !delta.non_negative() {
+                    let to_spend = token::Amount::from_change(delta);
                     balance.spend(&to_spend);
                 } else {
-                    let to_recv: u64 = delta.try_into().unwrap();
-                    let to_recv: token::Amount = to_recv.into();
+                    let to_recv = token::Amount::from_change(delta);
                     balance.receive(&to_recv);
                 }
                 tx::ctx().write(&balance_key, balance).unwrap();
@@ -1363,7 +1365,7 @@ pub mod testing {
 
     pub fn apply_validator_set_change(
         _validator: Address,
-        _token_delta: i128,
+        _token_delta: Change,
         _offset: DynEpochOffset,
         _current_epoch: Epoch,
         _params: &PosParams,
@@ -1542,7 +1544,7 @@ pub mod testing {
                         PosStorageChange::Bond {
                             owner,
                             validator,
-                            delta,
+                            delta: delta.into(),
                             offset,
                         },
                     ]

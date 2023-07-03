@@ -982,7 +982,7 @@ where
             &self.wl_storage,
         )
         .expect("Must be able to read wrapper tx fees parameter");
-        fees.unwrap_or(token::Amount::whole(MIN_FEE))
+        fees.unwrap_or_else(|| token::Amount::native_whole(MIN_FEE))
     }
 
     #[cfg(not(feature = "mainnet"))]
@@ -1260,12 +1260,12 @@ mod test_utils {
         // enqueue a wrapper tx
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: native_token,
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1333,7 +1333,7 @@ mod test_mempool_validate {
                 },
                 &keypair,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             ))));
@@ -1370,7 +1370,7 @@ mod test_mempool_validate {
                 },
                 &keypair,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             ))));
@@ -1387,7 +1387,7 @@ mod test_mempool_validate {
         // we mount a malleability attack to try and remove the fee
         let mut new_wrapper =
             invalid_wrapper.header().wrapper().expect("Test failed");
-        new_wrapper.fee.amount = 0.into();
+        new_wrapper.fee.amount = Default::default();
         invalid_wrapper.update_header(TxType::Wrapper(Box::new(new_wrapper)));
 
         let mut result = shell.mempool_validate(
@@ -1430,12 +1430,13 @@ mod test_mempool_validate {
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 100.into(),
+                amount: token::Amount::from_uint(100, 0)
+                    .expect("This can't fail"),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));

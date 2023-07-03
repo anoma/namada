@@ -238,7 +238,7 @@ pub fn init_storage() -> (Address, Address) {
     // initialize an account
     let account = tx::ctx().init_account(code_hash).unwrap();
     let key = token::balance_key(&token, &account);
-    let init_bal = Amount::whole(100);
+    let init_bal = Amount::native_whole(100);
     let bytes = init_bal.try_to_vec().expect("encoding failed");
     tx_host_env::with(|env| {
         env.wl_storage.storage.write(&key, &bytes).unwrap();
