@@ -453,25 +453,7 @@ pub async fn submit_transfer(
         let (mut tx, addr, pk, tx_epoch, isf) =
             tx::build_transfer(client, &mut ctx.wallet, &mut ctx.shielded, arg)
             .await?;
-        // Build a transaction to reveal the signer of this transaction
-        if let Some(Address::Implicit(_)) = addr {
-            let reveal_pk = tx::build_reveal_pk(
-                client,
-                &mut ctx.wallet,
-                args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
-            ).await?;
-            if let Some((mut rtx, _, pk)) = reveal_pk {
-                // Sign the reveal public key transaction with the fee payer
-                signing::sign_tx(&mut ctx.wallet, &mut rtx, &args.tx, &pk)
-                    .await?;
-                // Submit the reveal public key transaction first
-                tx::process_tx(client, &mut ctx.wallet, &args.tx, rtx).await?;
-                // Update the stateful PoW challenge of the outer transaction
-                #[cfg(not(feature = "mainnet"))]
-                signing::update_pow_challenge(client, &args.tx, &mut tx, &pk, isf)
-                    .await;
-            }
-        }
+        submit_reveal_aux(client, &mut ctx, &args.tx, addr, pk.clone(), &mut tx).await?;
         signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk)
             .await?;
         let result = tx::process_tx(client, &mut ctx.wallet, &args.tx, tx)
@@ -510,25 +492,7 @@ pub async fn submit_ibc_transfer<C: namada::ledger::queries::Client + Sync>(
 ) -> Result<(), tx::Error> {
     let (mut tx, addr, pk) =
         tx::build_ibc_transfer(client, &mut ctx.wallet, args.clone()).await?;
-    // Build a transaction to reveal the signer of this transaction
-    if let Some(Address::Implicit(_)) = addr {
-        let reveal_pk = tx::build_reveal_pk(
-            client,
-            &mut ctx.wallet,
-            args::RevealPk { tx: args.tx.clone(), public_key: pk.clone() },
-        ).await?;
-        if let Some((mut rtx, _, pk)) = reveal_pk {
-            // Sign the reveal public key transaction with the fee payer
-            signing::sign_tx(&mut ctx.wallet, &mut rtx, &args.tx, &pk)
-                .await?;
-            // Submit the reveal public key transaction first
-            tx::process_tx(client, &mut ctx.wallet, &args.tx, rtx).await?;
-            // Update the stateful PoW challenge of the outer transaction
-            #[cfg(not(feature = "mainnet"))]
-            signing::update_pow_challenge(client, &args.tx, &mut tx, &pk, false)
-                .await;
-        }
-    }
+    submit_reveal_aux(client, &mut ctx, &args.tx, addr, pk.clone(), &mut tx).await?;
     signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
     tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     Ok(())
