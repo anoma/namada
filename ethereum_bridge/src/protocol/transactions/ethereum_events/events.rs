@@ -18,7 +18,7 @@ use namada_core::ledger::parameters::read_epoch_duration_parameter;
 use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::storage::{DBIter, WlStorage, DB};
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
-use namada_core::types::address::{nam, Address};
+use namada_core::types::address::Address;
 use namada_core::types::eth_bridge_pool::PendingTransfer;
 use namada_core::types::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum, TransferToNamada,
@@ -304,8 +304,10 @@ where
         })
         .filter(is_pending_transfer_key)
         .collect();
-    let pool_balance_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
-    let relayer_rewards_key = balance_key(&nam(), relayer);
+    let pool_balance_key =
+        balance_key(&wl_storage.storage.native_token, &BRIDGE_POOL_ADDRESS);
+    let relayer_rewards_key =
+        balance_key(&wl_storage.storage.native_token, relayer);
     // Remove the completed transfers from the bridge pool
     for (event, is_valid) in
         transfers.iter().zip(valid_transfers.iter().copied())
@@ -431,8 +433,10 @@ where
 {
     let mut changed_keys = BTreeSet::default();
 
-    let payer_balance_key = balance_key(&nam(), &transfer.gas_fee.payer);
-    let pool_balance_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
+    let payer_balance_key =
+        balance_key(&wl_storage.storage.native_token, &transfer.gas_fee.payer);
+    let pool_balance_key =
+        balance_key(&wl_storage.storage.native_token, &BRIDGE_POOL_ADDRESS);
     update::amount(wl_storage, &payer_balance_key, |balance| {
         balance.receive(&transfer.gas_fee.amount);
     })?;
@@ -465,8 +469,12 @@ where
         }
     };
     let (source, target) = if transfer.transfer.asset == native_erc20_addr {
-        let escrow_balance_key = balance_key(&nam(), &BRIDGE_ADDRESS);
-        let sender_balance_key = balance_key(&nam(), &transfer.transfer.sender);
+        let escrow_balance_key =
+            balance_key(&wl_storage.storage.native_token, &BRIDGE_ADDRESS);
+        let sender_balance_key = balance_key(
+            &wl_storage.storage.native_token,
+            &transfer.transfer.sender,
+        );
         (escrow_balance_key, sender_balance_key)
     } else {
         let sub_prefix = wrapped_erc20s::sub_prefix(&transfer.transfer.asset);
@@ -539,8 +547,8 @@ mod tests {
     use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
     use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::ledger::storage::types::encode;
-    use namada_core::types::address::gen_established_address;
     use namada_core::types::address::testing::gen_implicit_address;
+    use namada_core::types::address::{gen_established_address, nam};
     use namada_core::types::eth_bridge_pool::GasFee;
     use namada_core::types::ethereum_events::testing::{
         arbitrary_eth_address, arbitrary_keccak_hash, arbitrary_nonce,

@@ -13,11 +13,12 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
     log_string("Received transfer to add to pool.");
     // pay the gas fees
     let GasFee { amount, ref payer } = transfer.gas_fee;
+    let nam_addr = ctx.get_native_token().unwrap();
     token::transfer(
         ctx,
         payer,
         &bridge_pool::BRIDGE_POOL_ADDRESS,
-        &address::nam(),
+        &nam_addr,
         None,
         amount.native_denominated(),
         &None,
@@ -37,7 +38,7 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
             ctx,
             sender,
             &eth_bridge::ADDRESS,
-            &address::nam(),
+            &nam_addr,
             None,
             amount.native_denominated(),
             &None,
