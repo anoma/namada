@@ -162,6 +162,7 @@ pub mod cmds {
                 .subcommand(TxVoteProposal::def().display_order(1))
                 // PoS transactions
                 .subcommand(TxInitValidator::def().display_order(2))
+                .subcommand(TxUnjailValidator::def().display_order(2))
                 .subcommand(Bond::def().display_order(2))
                 .subcommand(Unbond::def().display_order(2))
                 .subcommand(Withdraw::def().display_order(2))
@@ -194,6 +195,8 @@ pub mod cmds {
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
             let tx_init_validator =
                 Self::parse_with_ctx(matches, TxInitValidator);
+            let tx_unjail_validator =
+                Self::parse_with_ctx(matches, TxUnjailValidator);
             let tx_reveal_pk = Self::parse_with_ctx(matches, TxRevealPk);
             let tx_init_proposal =
                 Self::parse_with_ctx(matches, TxInitProposal);
@@ -233,6 +236,7 @@ pub mod cmds {
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
                 .or(tx_init_validator)
+                .or(tx_unjail_validator)
                 .or(bond)
                 .or(unbond)
                 .or(withdraw)
@@ -294,6 +298,7 @@ pub mod cmds {
         TxUpdateVp(TxUpdateVp),
         TxInitAccount(TxInitAccount),
         TxInitValidator(TxInitValidator),
+        TxUnjailValidator(TxUnjailValidator),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
         TxRevealPk(TxRevealPk),
@@ -1208,6 +1213,27 @@ pub mod cmds {
                      account.",
                 )
                 .add_args::<args::TxInitValidator<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TxUnjailValidator(pub args::TxUnjailValidator<args::CliTypes>);
+
+    impl SubCmd for TxUnjailValidator {
+        const CMD: &'static str = "unjail-validator";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxUnjailValidator(args::TxUnjailValidator::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Send a signed transaction to unjail a jailed validator.",
+                )
+                .add_args::<args::TxUnjailValidator<args::CliTypes>>()
         }
     }
 
