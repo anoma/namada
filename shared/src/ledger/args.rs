@@ -388,7 +388,7 @@ pub struct TxUnjailValidator<C: NamadaTypes = SdkTypes> {
     /// Validator address (should be self)
     pub validator: C::Address,
     /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    pub tx_code_path: PathBuf,
 }
 
 /// Query PoS commission rate

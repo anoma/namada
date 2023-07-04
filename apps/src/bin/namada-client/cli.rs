@@ -234,6 +234,20 @@ pub async fn main() -> Result<()> {
                     sdk_tx::process_tx(&client, &mut ctx.wallet, &tx_args, tx)
                         .await?;
                 }
+                Sub::TxUnjailValidator(TxUnjailValidator(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_unjail_validator::<HttpClient>(
+                        &client, ctx, args,
+                    )
+                    .await?;
+                }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(

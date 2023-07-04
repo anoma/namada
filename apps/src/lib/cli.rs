@@ -27,6 +27,7 @@ const WALLET_CMD: &str = "wallet";
 const RELAYER_CMD: &str = "relayer";
 
 pub mod cmds {
+
     use super::utils::*;
     use super::{
         args, ArgMatches, CLIENT_CMD, NODE_CMD, RELAYER_CMD, WALLET_CMD,
@@ -216,6 +217,7 @@ pub mod cmds {
                 .subcommand(TxVoteProposal::def().display_order(1))
                 // PoS transactions
                 .subcommand(TxInitValidator::def().display_order(2))
+                .subcommand(TxUnjailValidator::def().display_order(2))
                 .subcommand(Bond::def().display_order(2))
                 .subcommand(Unbond::def().display_order(2))
                 .subcommand(Withdraw::def().display_order(2))
@@ -252,6 +254,8 @@ pub mod cmds {
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
             let tx_init_validator =
                 Self::parse_with_ctx(matches, TxInitValidator);
+            let tx_unjail_validator =
+                Self::parse_with_ctx(matches, TxUnjailValidator);
             let tx_reveal_pk = Self::parse_with_ctx(matches, TxRevealPk);
             let tx_init_proposal =
                 Self::parse_with_ctx(matches, TxInitProposal);
@@ -298,6 +302,7 @@ pub mod cmds {
                 .or(tx_vote_proposal)
                 .or(tx_init_validator)
                 .or(tx_commission_rate_change)
+                .or(tx_unjail_validator)
                 .or(bond)
                 .or(unbond)
                 .or(withdraw)
@@ -363,6 +368,7 @@ pub mod cmds {
         TxInitAccount(TxInitAccount),
         TxInitValidator(TxInitValidator),
         TxCommissionRateChange(TxCommissionRateChange),
+        TxUnjailValidator(TxUnjailValidator),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
         TxRevealPk(TxRevealPk),
@@ -1284,6 +1290,27 @@ pub mod cmds {
                      account.",
                 )
                 .add_args::<args::TxInitValidator<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TxUnjailValidator(pub args::TxUnjailValidator<args::CliTypes>);
+
+    impl SubCmd for TxUnjailValidator {
+        const CMD: &'static str = "unjail-validator";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxUnjailValidator(args::TxUnjailValidator::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Send a signed transaction to unjail a jailed validator.",
+                )
+                .add_args::<args::TxUnjailValidator<args::CliTypes>>()
         }
     }
 
@@ -4126,16 +4153,10 @@ pub mod args {
 
     impl CliToSdk<TxUnjailValidator<SdkTypes>> for TxUnjailValidator<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> TxUnjailValidator<SdkTypes> {
-            TxUnjailValidator {
+            TxUnjailValidator::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
-                tx_code_path: self
-                    .tx_code_path
-                    .as_path()
-                    .to_str()
-                    .unwrap()
-                    .to_string()
-                    .into_bytes(),
+                tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
     }
