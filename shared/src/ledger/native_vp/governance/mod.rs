@@ -683,7 +683,7 @@ where
 }
 
 #[allow(clippy::upper_case_acronyms)]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum KeyType {
     #[allow(non_camel_case_types)]
     COUNTER,

@@ -31,6 +31,7 @@ use namada::ledger::pos::namada_proof_of_stake::types::{
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, TempWlStorage, WlStorage, DB,
+    EPOCH_SWITCH_BLOCKS_DELAY,
 };
 use namada::ledger::storage_api::{self, StorageRead, StorageWrite};
 use namada::ledger::{ibc, pos, protocol, replay_protection};
@@ -591,9 +592,28 @@ where
                             continue;
                         }
                     };
+                // Check if we're gonna switch to a new epoch after a delay
+                let validator_set_update_epoch = if let Some(delay) =
+                    self.wl_storage.storage.update_epoch_blocks_delay
+                {
+                    if delay == EPOCH_SWITCH_BLOCKS_DELAY {
+                        // If we're about to update validator sets for the
+                        // upcoming epoch, we can still remove the validator
+                        current_epoch.next()
+                    } else {
+                        // If we're waiting to switch to a new epoch, it's too
+                        // late to update validator sets
+                        // on the next epoch, so we need to
+                        // wait for the one after.
+                        current_epoch.next().next()
+                    }
+                } else {
+                    current_epoch.next()
+                };
                 tracing::info!(
                     "Slashing {} for {} in epoch {}, block height {} (current \
-                     epoch = {})",
+                     epoch = {}, validator set update epoch = \
+                     {validator_set_update_epoch})",
                     validator,
                     slash_type,
                     evidence_epoch,
@@ -608,6 +628,7 @@ where
                     evidence_height,
                     slash_type,
                     &validator,
+                    validator_set_update_epoch,
                 ) {
                     tracing::error!("Error in slashing: {}", err);
                 }
@@ -961,7 +982,7 @@ where
             &self.wl_storage,
         )
         .expect("Must be able to read wrapper tx fees parameter");
-        fees.unwrap_or(token::Amount::whole(MIN_FEE))
+        fees.unwrap_or_else(|| token::Amount::native_whole(MIN_FEE))
     }
 
     #[cfg(not(feature = "mainnet"))]
@@ -1239,12 +1260,12 @@ mod test_utils {
         // enqueue a wrapper tx
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: native_token,
             },
             keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1312,7 +1333,7 @@ mod test_mempool_validate {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             ))));
@@ -1349,7 +1370,7 @@ mod test_mempool_validate {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             ))));
@@ -1366,7 +1387,7 @@ mod test_mempool_validate {
         // we mount a malleability attack to try and remove the fee
         let mut new_wrapper =
             invalid_wrapper.header().wrapper().expect("Test failed");
-        new_wrapper.fee.amount = 0.into();
+        new_wrapper.fee.amount = Default::default();
         invalid_wrapper.update_header(TxType::Wrapper(Box::new(new_wrapper)));
 
         let mut result = shell.mempool_validate(
@@ -1409,12 +1430,13 @@ mod test_mempool_validate {
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 100.into(),
+                amount: token::Amount::from_uint(100, 0)
+                    .expect("This can't fail"),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));

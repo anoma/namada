@@ -22,7 +22,7 @@ use crate::types::storage::{self, DbKeySeg, Key, KeySeg};
 const CLIENTS_COUNTER: &str = "clients/counter";
 const CONNECTIONS_COUNTER: &str = "connections/counter";
 const CHANNELS_COUNTER: &str = "channelEnds/counter";
-const DENOM: &str = "denom";
+const DENOM: &str = "ibc_denom";
 /// Key segment for a multitoken related to IBC
 pub const MULTITOKEN_STORAGE_KEY: &str = "ibc";
 
@@ -82,7 +82,7 @@ pub fn ibc_prefix(key: &Key) -> Option<IbcPrefix> {
                 "receipts" => IbcPrefix::Receipt,
                 "acks" => IbcPrefix::Ack,
                 "event" => IbcPrefix::Event,
-                "denom" => IbcPrefix::Denom,
+                "ibc_denom" => IbcPrefix::Denom,
                 _ => IbcPrefix::Unknown,
             })
         }

@@ -15,22 +15,25 @@ pub mod wasm;
 use thiserror::Error;
 
 const UNTRUSTED_WASM_FEATURES: WasmFeatures = WasmFeatures {
-    reference_types: false,
-    multi_value: false,
-    bulk_memory: false,
-    module_linking: false,
-    simd: false,
-    threads: false,
-    tail_call: false,
-    deterministic_only: true,
-    multi_memory: false,
-    exceptions: false,
-    memory64: false,
     mutable_global: false,
     saturating_float_to_int: false,
     sign_extension: true,
+    reference_types: false,
+    multi_value: false,
+    bulk_memory: false,
+    simd: false,
     relaxed_simd: false,
+    threads: false,
+    tail_call: false,
+    floats: false,
+    multi_memory: false,
+    exceptions: false,
+    memory64: false,
     extended_const: false,
+    component_model: false,
+    function_references: false,
+    memory_control: false,
+    gc: false,
 };
 
 #[allow(missing_docs)]
@@ -232,9 +235,9 @@ impl<'a, T: 'a> MutHostSlice<'a, &[T]> {
 pub fn validate_untrusted_wasm(
     wasm_code: impl AsRef<[u8]>,
 ) -> Result<(), WasmValidationError> {
-    let mut validator = Validator::new();
-    validator.wasm_features(UNTRUSTED_WASM_FEATURES);
-    validator
+    let mut validator = Validator::new_with_features(UNTRUSTED_WASM_FEATURES);
+    let _types = validator
         .validate_all(wasm_code.as_ref())
-        .map_err(WasmValidationError::ForbiddenWasmFeatures)
+        .map_err(WasmValidationError::ForbiddenWasmFeatures)?;
+    Ok(())
 }

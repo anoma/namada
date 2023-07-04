@@ -22,8 +22,7 @@ pub async fn find_pk<
     wallet: &mut Wallet<U>,
     addr: &Address,
 ) -> Result<common::PublicKey, tx::Error> {
-    namada::ledger::signing::find_pk(client, wallet, addr, None)
-        .await
+    namada::ledger::signing::find_pk(client, wallet, addr, None).await
 }
 
 /// Given CLI arguments and some defaults, determine the rightful transaction
@@ -60,13 +59,7 @@ pub async fn sign_tx<
     args: &args::Tx,
     default: &common::PublicKey,
 ) -> Result<(), tx::Error> {
-    namada::ledger::signing::sign_tx(
-        wallet,
-        tx,
-        args,
-        default,
-    )
-    .await
+    namada::ledger::signing::sign_tx(wallet, tx, args, default).await
 }
 
 /// Create a wrapper tx from a normal tx. Get the hash of the

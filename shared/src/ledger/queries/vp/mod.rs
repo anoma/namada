@@ -3,11 +3,16 @@
 // Re-export to show in rustdoc!
 pub use pos::Pos;
 use pos::POS;
+pub use token::Token;
+use token::TOKEN;
+
 pub mod pos;
+mod token;
 
 // Validity predicate queries
 router! {VP,
     ( "pos" ) = (sub POS),
+    ( "token" ) = (sub TOKEN),
 }
 
 /// Client-only methods for the router type are composed from router functions.
