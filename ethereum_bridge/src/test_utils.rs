@@ -80,7 +80,7 @@ pub fn init_default_storage(
         wl_storage,
         HashMap::from_iter([(
             address::testing::established_address_1(),
-            100_u64.into(),
+            token::Amount::native_whole(100),
         )]),
     )
 }

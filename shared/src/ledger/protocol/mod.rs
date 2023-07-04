@@ -703,8 +703,8 @@ mod tests {
         let validator_b = address::testing::established_address_3();
         let (mut wl_storage, _) = test_utils::setup_storage_with_validators(
             HashMap::from_iter(vec![
-                (validator_a.clone(), 100_u64.into()),
-                (validator_b, 100_u64.into()),
+                (validator_a.clone(), Amount::native_whole(100)),
+                (validator_b, Amount::native_whole(100)),
             ]),
         );
         let event = EthereumEvent::TransfersToNamada {
@@ -755,8 +755,8 @@ mod tests {
         let validator_b = address::testing::established_address_3();
         let (mut wl_storage, keys) = test_utils::setup_storage_with_validators(
             HashMap::from_iter(vec![
-                (validator_a.clone(), 100_u64.into()),
-                (validator_b, 100_u64.into()),
+                (validator_a.clone(), Amount::native_whole(100)),
+                (validator_b, Amount::native_whole(100)),
             ]),
         );
         bridge_pool_vp::init_storage(&mut wl_storage);
