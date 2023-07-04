@@ -324,8 +324,6 @@ pub struct QueryTransfers<C: NamadaTypes = SdkTypes> {
     pub owner: Option<C::BalanceOwner>,
     /// Address of a token
     pub token: Option<C::Address>,
-    /// sub-prefix if querying a multi-token
-    pub sub_prefix: Option<String>,
 }
 
 /// Query PoS bond(s)

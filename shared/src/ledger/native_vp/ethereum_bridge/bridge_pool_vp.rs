@@ -98,24 +98,14 @@ where
         if keys_changed.contains(&owner_key)
             && keys_changed.contains(&escrow_key)
         {
-            match check_balance_changes(
-                &self.ctx,
-                (&self.ctx.storage.native_token, &escrow_key)
-                    .try_into()
-                    .expect("This should not fail"),
-                (&self.ctx.storage.native_token, &owner_key)
-                    .try_into()
-                    .expect("This should not fail"),
-            ) {
-                Ok(Some((sender, _, amount)))
-                    if check_delta(&sender, &amount, transfer) => {}
-                other => {
+            match check_balance_changes(&self.ctx, &owner_key, &escrow_key)? {
+                Some(amount) if amount == transfer.transfer.amount => Ok(true),
+                _ => {
                     tracing::debug!(
                         "The assets of the transfer were not properly \
-                         escrowed into the Ethereum bridge pool: {:?}",
-                        other
+                         escrowed into the Ethereum bridge pool"
                     );
-                    return Ok(false);
+                    Ok(false)
                 }
             }
         } else {
@@ -123,14 +113,8 @@ where
                 "The assets of the transfer were not properly escrowed into \
                  the Ethereum bridge pool."
             );
-            return Ok(false);
+            Ok(false)
         }
-
-        tracing::info!(
-            "The Ethereum bridge pool VP accepted the transfer {:?}.",
-            transfer
-        );
-        Ok(true)
     }
 
     /// Check that the correct amount of Nam was sent
@@ -233,15 +217,6 @@ where
             },
         )
     }
-}
-
-/// Check if a delta matches the delta given by a transfer
-fn check_delta(
-    sender: &Address,
-    amount: &Amount,
-    transfer: &PendingTransfer,
-) -> bool {
-    *sender == transfer.transfer.sender && *amount == transfer.transfer.amount
 }
 
 /// Helper struct for handling the different escrow

@@ -354,14 +354,7 @@ where
         } in accounts
         {
             // associate a token with its denomination.
-            write_denom(
-                &mut self.wl_storage,
-                &address,
-                // TODO: Should we support multi-tokens at genesis?
-                None,
-                denom,
-            )
-            .unwrap();
+            write_denom(&mut self.wl_storage, &address, denom).unwrap();
             let vp_code_hash =
                 read_wasm_hash(&self.wl_storage, vp_code_path.clone())
                     .unwrap()

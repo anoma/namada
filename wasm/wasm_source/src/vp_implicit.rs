@@ -30,8 +30,7 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
         if let Some(address) = key::is_pk_key(key) {
             Self::Pk(address)
-        } else if let Some((_, address)) = token::is_any_token_balance_key(key)
-        {
+        } else if let Some([_, owner]) = token::is_any_token_balance_key(key) {
             Self::Token { owner }
         } else if proof_of_stake::is_pos_key(key) {
             Self::PoS

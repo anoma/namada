@@ -26,8 +26,8 @@ enum KeyType<'a> {
 
 impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
-        if let Some([_, address]) = token::is_any_token_balance_key(key) {
-            Self::Token(address)
+        if let Some([_, owner]) = token::is_any_token_balance_key(key) {
+            Self::Token { owner }
         } else if proof_of_stake::is_pos_key(key) {
             Self::PoS
         } else if gov_storage::is_vote_key(key) {
