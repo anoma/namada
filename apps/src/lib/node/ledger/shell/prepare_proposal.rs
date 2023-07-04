@@ -283,6 +283,7 @@ mod test_prepare_proposal {
     use namada::ledger::replay_protection;
     use namada::proof_of_stake::Epoch;
     use namada::proto::{Code, Data, Header, Section, Signature};
+    use namada::types::key::RefTo;
     use namada::types::transaction::{Fee, WrapperTx};
 
     use super::*;
@@ -318,7 +319,7 @@ mod test_prepare_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -359,7 +360,7 @@ mod test_prepare_proposal {
                     amount: Default::default(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
-                &keypair,
+                keypair.ref_to(),
                 Epoch(0),
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
@@ -428,7 +429,7 @@ mod test_prepare_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -480,7 +481,7 @@ mod test_prepare_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -521,7 +522,7 @@ mod test_prepare_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -574,7 +575,7 @@ mod test_prepare_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -597,7 +598,7 @@ mod test_prepare_proposal {
                     amount: 0.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
-                &keypair_2,
+                keypair_2.ref_to(),
                 Epoch(0),
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
@@ -642,7 +643,7 @@ mod test_prepare_proposal {
                     amount: 0.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
-                &keypair,
+                keypair.ref_to(),
                 Epoch(0),
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]

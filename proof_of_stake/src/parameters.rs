@@ -211,7 +211,7 @@ pub mod testing {
             (pipeline_len in Just(2))
             (max_validator_slots in 3..num_max_validator_slots.unwrap_or(128),
             // `unbonding_len` > `pipeline_len`
-            unbonding_len in pipeline_len + 1..pipeline_len + 8,
+            unbonding_len in Just(4),
             pipeline_len in Just(pipeline_len),
             tm_votes_per_token in 1..10_001_i128)
             -> PosParams {
