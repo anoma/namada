@@ -7,7 +7,7 @@ use namada_core::ledger::storage_api::collections::lazy_map;
 use namada_core::ledger::storage_api::OptionExt;
 use namada_proof_of_stake::types::{
     BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails, CommissionPair,
-    Slash, WeightedValidator,
+    Slash, ValidatorState, WeightedValidator,
 };
 use namada_proof_of_stake::{
     self, below_capacity_validator_set_handle, bond_amount, bond_handle,
@@ -16,6 +16,7 @@ use namada_proof_of_stake::{
     read_pos_params, read_total_stake,
     read_validator_max_commission_rate_change, read_validator_stake,
     unbond_handle, validator_commission_rate_handle, validator_slashes_handle,
+    validator_state_handle,
 };
 
 use crate::ledger::queries::types::RequestCtx;
@@ -43,6 +44,9 @@ router! {POS,
 
         ( "commission" / [validator: Address] / [epoch: opt Epoch] )
             -> Option<CommissionPair> = validator_commission,
+
+        ( "state" / [validator: Address] / [epoch: opt Epoch] )
+            -> Option<ValidatorState> = validator_state,
     },
 
     ( "validator_set" ) = {
@@ -201,6 +205,26 @@ where
         }
         _ => Ok(None),
     }
+}
+
+/// Get the validator state
+fn validator_state<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    validator: Address,
+    epoch: Option<Epoch>,
+) -> storage_api::Result<Option<ValidatorState>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
+    let params = read_pos_params(ctx.wl_storage)?;
+    let state = validator_state_handle(&validator).get(
+        ctx.wl_storage,
+        epoch,
+        &params,
+    )?;
+    Ok(state)
 }
 
 /// Get the total stake of a validator at the given epoch or current when

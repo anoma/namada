@@ -36,7 +36,7 @@ use namada::ledger::rpc::{
 };
 use namada::ledger::storage::ConversionState;
 use namada::ledger::wallet::{AddressVpType, Wallet};
-use namada::proof_of_stake::types::WeightedValidator;
+use namada::proof_of_stake::types::{ValidatorState, WeightedValidator};
 use namada::types::address::{masp, Address};
 use namada::types::control_flow::ProceedOrElse;
 use namada::types::governance::{
@@ -1580,12 +1580,11 @@ pub async fn query_bonded_stake<C: namada::ledger::queries::Client + Sync>(
                         .below_capacity_validator_set(client, &Some(epoch))
                         .await,
                 );
-            
-            let sorted_consensus = consensus.into_iter().
-            sorted_by_key(|v| 
+
+            let sorted_consensus = consensus.into_iter().sorted_by_key(|v| {
                 -(i128::try_from(v.bonded_stake.change()))
-            .expect("Failed to sort consensus validators")
-            );
+                    .expect("Failed to sort consensus validators")
+            });
 
             // Iterate all validators
             let stdout = io::stdout();
@@ -1602,11 +1601,11 @@ pub async fn query_bonded_stake<C: namada::ledger::queries::Client + Sync>(
                 .unwrap();
             }
             if !below_capacity.is_empty() {
-                let sorted_below_capacity = below_capacity.into_iter().
-                sorted_by_key(|v| 
-                    -(i128::try_from(v.bonded_stake.change()))
-                .expect("Failed to sort consensus validators")
-                );
+                let sorted_below_capacity =
+                    below_capacity.into_iter().sorted_by_key(|v| {
+                        -(i128::try_from(v.bonded_stake.change()))
+                            .expect("Failed to sort consensus validators")
+                    });
                 writeln!(w, "Below capacity validators:").unwrap();
                 for val in sorted_below_capacity {
                     writeln!(
@@ -1643,6 +1642,60 @@ pub async fn query_commission_rate<
             .validator_commission(client, validator, &epoch)
             .await,
     )
+}
+
+/// Query and return validator's state
+pub async fn query_validator_state<
+    C: namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    validator: &Address,
+    epoch: Option<Epoch>,
+) -> Option<ValidatorState> {
+    unwrap_client_response::<C, Option<ValidatorState>>(
+        RPC.vp()
+            .pos()
+            .validator_state(client, validator, &epoch)
+            .await,
+    )
+}
+
+/// Query a validator's state information
+pub async fn query_and_print_validator_state<
+    C: namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    _wallet: &mut Wallet<CliWalletUtils>,
+    args: args::QueryValidatorState,
+) {
+    let validator = args.validator;
+    let state: Option<ValidatorState> =
+        query_validator_state(client, &validator, args.epoch).await;
+
+    match state {
+        Some(state) => match state {
+            ValidatorState::Consensus => {
+                println!("Validator {validator} is in the consensus set")
+            }
+            ValidatorState::BelowCapacity => {
+                println!("Validator {validator} is in the below-capacity set")
+            }
+            ValidatorState::BelowThreshold => {
+                println!("Validator {validator} is in the below-threshold set")
+            }
+            ValidatorState::Inactive => {
+                println!("Validator {validator} is inactive")
+            }
+            ValidatorState::Jailed => {
+                println!("Validator {validator} is jailed")
+            }
+        },
+        None => println!(
+            "Validator {validator} is either not a validator, or an epoch \
+             before the current epoch has been queried (and the validator \
+             state information is no longer stored)"
+        ),
+    }
 }
 
 /// Query PoS validator's commission rate information
