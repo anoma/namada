@@ -12,7 +12,9 @@ use namada_core::ledger::storage::LastBlock;
 use namada_core::ledger::testnet_pow;
 use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
-use namada_core::types::token::{Amount, Denomination, MaspDenom};
+use namada_core::types::token::{
+    Amount, DenominatedAmount, Denomination, MaspDenom, TokenAddress,
+};
 use namada_proof_of_stake::types::{BondsAndUnbondsDetails, CommissionPair};
 use serde::Serialize;
 
@@ -114,53 +116,13 @@ pub async fn query_block<C: crate::ledger::queries::Client + Sync>(
     unwrap_client_response::<C, _>(RPC.shell().last_block(client).await)
 }
 
-/// Display a contextual error message.
-///
-/// Used in conjunction with [`unwrap_client_response_ctx`].
-enum ErrWithCtx {}
-
-/// Display a generic error message.
-///
-/// Used in conjunction with [`unwrap_client_response_ctx`].
-enum ErrNoCtx {}
-
-trait PanicError<SPECIALIZED> {
-    fn panic_error(self) -> !;
-}
-
-impl<E> PanicError<ErrWithCtx> for E
-where
-    E: std::fmt::Display,
-{
-    fn panic_error(self) -> ! {
-        let err_msg = self;
-        panic!("Error in the query: {err_msg}");
-    }
-}
-
-impl<E> PanicError<ErrNoCtx> for E {
-    fn panic_error(self) -> ! {
+/// A helper to unwrap client's response. Will shut down process on error.
+fn unwrap_client_response<C: crate::ledger::queries::Client, T>(
+    response: Result<T, C::Error>,
+) -> T {
+    response.unwrap_or_else(|_err| {
         panic!("Error in the query");
-    }
-}
-
-/// A helper to unwrap client's response. Will shut down process on error.
-#[inline]
-fn unwrap_client_response<C, T>(response: Result<T, C::Error>) -> T
-where
-    C: crate::ledger::queries::Client,
-{
-    unwrap_client_response_ctx::<ErrNoCtx, C, T>(response)
-}
-
-/// A helper to unwrap client's response. Will shut down process on error.
-#[inline]
-fn unwrap_client_response_ctx<E, C, T>(response: Result<T, C::Error>) -> T
-where
-    C: crate::ledger::queries::Client,
-    C::Error: PanicError<E>,
-{
-    response.unwrap_or_else(|err| err.panic_error())
+    })
 }
 
 /// Query the results of the last committed block
@@ -484,16 +446,12 @@ pub async fn query_tx_events<C: crate::ledger::queries::Client + Sync>(
 }
 
 /// Dry run a transaction
-pub async fn dry_run_tx<C>(
+pub async fn dry_run_tx<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     tx_bytes: Vec<u8>,
-) -> namada_core::types::transaction::TxResult
-where
-    C: crate::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
-{
+) -> namada_core::types::transaction::TxResult {
     let (data, height, prove) = (Some(tx_bytes), None, false);
-    let result = unwrap_client_response_ctx::<ErrWithCtx, C, _>(
+    let result = unwrap_client_response::<C, _>(
         RPC.shell().dry_run_tx(client, data, height, prove).await,
     )
     .data;
@@ -1095,4 +1053,29 @@ where
     })?
     // error querying rpc
     .try_halt(|_| ())
+}
+
+/// Look up the denomination of a token in order to format it
+/// correctly as a string.
+pub async fn format_denominated_amount<
+    C: crate::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    token: &TokenAddress,
+    amount: token::Amount,
+) -> String {
+    let denom = unwrap_client_response::<C, Option<Denomination>>(
+        RPC.vp()
+            .token()
+            .denomination(client, &token.address, &token.sub_prefix)
+            .await,
+    )
+    .unwrap_or_else(|| {
+        println!(
+            "No denomination found for token: {token}, defaulting to zero \
+             decimal places"
+        );
+        0.into()
+    });
+    DenominatedAmount { amount, denom }.to_string()
 }

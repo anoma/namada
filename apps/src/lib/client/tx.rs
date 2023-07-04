@@ -29,6 +29,7 @@ use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
 };
 use namada::types::transaction::{InitValidator, TxType};
+use sha2::{Digest as Sha2Digest, Sha256};
 use tokio::io;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 

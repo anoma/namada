@@ -3391,6 +3391,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "impl-num-traits"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "951641f13f873bff03d4bf19ae8bec531935ac0ac2cc775f84d7edfdcfed3f17"
+dependencies = [
+ "integer-sqrt",
+ "num-traits 0.2.15",
+ "uint",
+]
+
+[[package]]
 name = "impl-rlp"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3482,6 +3493,15 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
  "web-sys",
+]
+
+[[package]]
+name = "integer-sqrt"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "276ec31bcb4a9ee45f58bec6f9ec700ae4cf4f4f8f2fa7e06cb406bd5ffdd770"
+dependencies = [
+ "num-traits 0.2.15",
 ]
 
 [[package]]
@@ -3825,7 +3845,7 @@ dependencies = [
 [[package]]
 name = "masp_note_encryption"
 version = "0.2.0"
-source = "git+https://github.com/anoma/masp?rev=cfea8c95d3f73077ca3e25380fd27e5b46e828fd#cfea8c95d3f73077ca3e25380fd27e5b46e828fd"
+source = "git+https://github.com/anoma/masp?rev=252a6059565b125c1444e9e7d0b7c8da0fba8f8f#252a6059565b125c1444e9e7d0b7c8da0fba8f8f"
 dependencies = [
  "borsh",
  "chacha20 0.9.1",
@@ -3838,7 +3858,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "0.9.0"
-source = "git+https://github.com/anoma/masp?rev=cfea8c95d3f73077ca3e25380fd27e5b46e828fd#cfea8c95d3f73077ca3e25380fd27e5b46e828fd"
+source = "git+https://github.com/anoma/masp?rev=252a6059565b125c1444e9e7d0b7c8da0fba8f8f#252a6059565b125c1444e9e7d0b7c8da0fba8f8f"
 dependencies = [
  "aes 0.7.5",
  "bip0039",
@@ -3868,7 +3888,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "0.9.0"
-source = "git+https://github.com/anoma/masp?rev=cfea8c95d3f73077ca3e25380fd27e5b46e828fd#cfea8c95d3f73077ca3e25380fd27e5b46e828fd"
+source = "git+https://github.com/anoma/masp?rev=252a6059565b125c1444e9e7d0b7c8da0fba8f8f#252a6059565b125c1444e9e7d0b7c8da0fba8f8f"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -4142,8 +4162,6 @@ dependencies = [
  "rand_core 0.6.4",
  "rayon",
  "ripemd",
- "rust_decimal",
- "rust_decimal_macros",
  "serde 1.0.147",
  "serde_json",
  "sha2 0.9.9",
@@ -4158,6 +4176,7 @@ dependencies = [
  "toml",
  "tracing 0.1.37",
  "tracing-subscriber 0.3.16",
+ "wasm-timer",
  "wasmer",
  "wasmer-cache",
  "wasmer-compiler-singlepass",
@@ -4280,11 +4299,13 @@ dependencies = [
  "ibc",
  "ibc-proto",
  "ics23",
+ "impl-num-traits",
  "index-set",
  "itertools",
  "libsecp256k1 0.7.0",
  "masp_primitives",
  "namada_macros",
+ "num-integer",
  "num-rational 0.4.1",
  "num-traits 0.2.15",
  "num256",
@@ -4306,9 +4327,11 @@ dependencies = [
  "test-log",
  "thiserror",
  "tiny-keccak",
+ "toml",
  "tonic-build",
  "tracing 0.1.37",
  "tracing-subscriber 0.3.16",
+ "uint",
  "zeroize",
 ]
 
@@ -4442,7 +4465,6 @@ dependencies = [
  "namada_macros",
  "namada_proof_of_stake",
  "namada_vm_env",
- "rust_decimal",
  "sha2 0.9.9",
  "thiserror",
 ]
@@ -7640,9 +7662,9 @@ checksum = "9e79c4d996edb816c91e4308506774452e55e95c3c9de07b6729e17e15a5ef81"
 
 [[package]]
 name = "uint"
-version = "0.9.4"
+version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a45526d29728d135c2900b0d30573fe3ee79fceb12ef534c7bb30e810a91b601"
+checksum = "76f64bba2c53b04fcab63c01a7d7427eadc821e3bc48c34dc9ba29c501164b52"
 dependencies = [
  "byteorder",
  "crunchy",

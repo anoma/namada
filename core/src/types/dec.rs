@@ -43,26 +43,11 @@ pub type Result<T> = std::result::Result<T, Error>;
     Eq,
     PartialOrd,
     Ord,
-    Debug,
     Hash,
 )]
 #[serde(try_from = "String")]
 #[serde(into = "String")]
 pub struct Dec(pub I256);
-
-impl std::ops::Deref for Dec {
-    type Target = I256;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl std::ops::DerefMut for Dec {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
 
 impl Dec {
     /// Division with truncation (TODO: better description)
@@ -88,6 +73,11 @@ impl Dec {
     /// The representation of 0
     pub fn zero() -> Self {
         Self(I256::zero())
+    }
+
+    /// Check if value is zero
+    pub fn is_zero(&self) -> bool {
+        *self == Self::zero()
     }
 
     /// The representation of 1
@@ -130,6 +120,11 @@ impl Dec {
         } else {
             *other - *self
         }
+    }
+
+    /// Get the absolute value of self as integer
+    pub fn abs(&self) -> Uint {
+        self.0.abs()
     }
 
     /// Convert the Dec type into a I256 with truncation
@@ -255,9 +250,34 @@ impl From<u64> for Dec {
     }
 }
 
+impl From<usize> for Dec {
+    fn from(num: usize) -> Self {
+        Self::from(num as u64)
+    }
+}
+
 impl From<i128> for Dec {
     fn from(num: i128) -> Self {
         Self(I256::from(num) * Uint::exp10(POS_DECIMAL_PRECISION as usize))
+    }
+}
+
+impl TryFrom<u128> for Dec {
+    type Error = Box<dyn 'static + std::error::Error>;
+
+    fn try_from(num: u128) -> std::result::Result<Self, Self::Error> {
+        Ok(Self(
+            I256::try_from(Uint::from(num))?
+                * Uint::exp10(POS_DECIMAL_PRECISION as usize),
+        ))
+    }
+}
+
+impl TryFrom<Dec> for i128 {
+    type Error = std::io::Error;
+
+    fn try_from(value: Dec) -> std::result::Result<Self, Self::Error> {
+        value.0.try_into()
     }
 }
 
@@ -303,14 +323,6 @@ impl Sub<Dec> for Dec {
         Self(self.0 - rhs.0)
     }
 }
-
-// impl Mul<Uint> for Dec {
-//     type Output = Uint;
-
-//     fn mul(self, rhs: Uint) -> Self::Output {
-//         self.0 * rhs / Uint::exp10(POS_DECIMAL_PRECISION as usize)
-//     }
-// }
 
 impl Mul<u64> for Dec {
     type Output = Dec;
@@ -407,6 +419,12 @@ impl Display for Dec {
         } else {
             f.write_str(stripped_string)
         }
+    }
+}
+
+impl Debug for Dec {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.to_string())
     }
 }
 

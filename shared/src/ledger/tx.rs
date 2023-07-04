@@ -638,9 +638,7 @@ where
     if rpc::is_validator(client, &validator).await {
         if args.rate < Dec::zero() || args.rate > Dec::one() {
             eprintln!("Invalid new commission rate, received {}", args.rate);
-            if !args.tx.force {
-                return Err(Error::InvalidCommissionRate(args.rate));
-            }
+            return Err(Error::InvalidCommissionRate(args.rate));
         }
 
         let pipeline_epoch_minus_one = epoch + params.pipeline_len - 1;
@@ -863,7 +861,9 @@ where
                 "The total bonds of the source {} is lower than the amount to \
                  be unbonded. Amount to unbond is {} and the total bonds is \
                  {}.",
-                bond_source, args.amount, bond_amount
+                bond_source,
+                args.amount.to_string_native(),
+                bond_amount.to_string_native()
             );
             if !args.tx.force {
                 return Err(Error::LowerBondThanUnbond(
@@ -1183,7 +1183,7 @@ async fn add_asset_type<
     C: crate::ledger::queries::Client + Sync,
     U: ShieldedUtils<C = C>,
 >(
-    asset_types: &mut HashSet<(Address, Epoch)>,
+    asset_types: &mut HashSet<(Address, Option<Key>, MaspDenom, Epoch)>,
     shielded: &mut ShieldedContext<U>,
     client: &C,
     asset_type: AssetType,
@@ -1211,7 +1211,7 @@ async fn used_asset_types<
     shielded: &mut ShieldedContext<U>,
     client: &C,
     builder: &Builder<P, R, K, N>,
-) -> Result<HashSet<(Address, Epoch)>, RpcError> {
+) -> Result<HashSet<(Address, Option<Key>, MaspDenom, Epoch)>, RpcError> {
     let mut asset_types = HashSet::new();
     // Collect all the asset types used in the Sapling inputs
     for input in builder.sapling_inputs() {
@@ -1284,6 +1284,31 @@ where
         }
         None => (None, token::balance_key(&token, &source)),
     };
+
+    // validate the amount given
+    let validated_amount = validate_amount(
+        client,
+        args.amount,
+        &token,
+        &sub_prefix,
+        args.tx.force,
+    )
+    .await
+    .expect("expected to validate amount");
+    let validate_fee = validate_amount(
+        client,
+        args.tx.fee_amount,
+        &args.tx.fee_token,
+        // TODO: Currently multi-tokens cannot be used to pay fees
+        &None,
+        args.tx.force,
+    )
+    .await
+    .expect("expected to be able to validate fee");
+
+    args.amount = InputAmount::Validated(validated_amount);
+    args.tx.fee_amount = InputAmount::Validated(validate_fee);
+
     check_balance_too_low_err::<C>(
         &token,
         &source,
@@ -1316,8 +1341,8 @@ where
         } else {
             (
                 TxSigningKey::WalletAddress(args.source.effective_address()),
-                args.amount,
-                token,
+                validated_amount.amount,
+                token.clone(),
             )
         };
     // If our chosen signer is the MASP sentinel key, then our shielded inputs
@@ -1345,7 +1370,7 @@ where
     for _ in 0..2 {
         // Construct the shielded part of the transaction, if any
         let stx_result = shielded
-            .gen_shielded_transfer(client, args.clone(), shielded_gas)
+            .gen_shielded_transfer(client, &args, shielded_gas)
             .await;
 
         let shielded_parts = match stx_result {
@@ -1353,9 +1378,9 @@ where
             Err(builder::Error::InsufficientFunds(_)) => {
                 Err(Error::NegativeBalanceAfterTransfer(
                     source.clone(),
-                    args.amount,
+                    validated_amount.amount.to_string_native(),
                     token.clone(),
-                    args.tx.fee_amount,
+                    validate_fee.amount.to_string_native(),
                     args.tx.fee_token.clone(),
                 ))
             }
@@ -1401,7 +1426,7 @@ where
             target: target.clone(),
             token: token.clone(),
             sub_prefix: sub_prefix.clone(),
-            amount,
+            amount: validated_amount,
             key: key.clone(),
             // Link the Transfer to the MASP Transaction by hash code
             shielded: masp_hash,

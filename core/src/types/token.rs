@@ -544,6 +544,15 @@ impl Mul<u64> for Amount {
     }
 }
 
+impl Mul<Amount> for u64 {
+    type Output = Amount;
+
+    fn mul(self, mut rhs: Amount) -> Self::Output {
+        rhs.raw *= self;
+        rhs
+    }
+}
+
 impl Mul<Uint> for Amount {
     type Output = Amount;
 
@@ -691,6 +700,8 @@ impl From<Amount> for Uint {
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    Serialize,
+    Deserialize,
 )]
 #[repr(u8)]
 #[allow(missing_docs)]

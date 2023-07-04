@@ -43,7 +43,7 @@ rust_decimal = {version = "=1.26.1", optional = true}
 wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
 # branch = "murisi/namada-integration"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "ea4fcc68d9412b94042c1c2f0ea0212394e1be37", optional = true }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "252a6059565b125c1444e9e7d0b7c8da0fba8f8f", optional = true }
 ripemd = "0.1"
 
 [dev-dependencies]

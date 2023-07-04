@@ -13,8 +13,7 @@ use data_encoding::HEXLOWER;
 use itertools::Either;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
-use masp_primitives::primitives::ViewingKey;
-use masp_primitives::sapling::Node;
+use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::core::types::transaction::governance::ProposalType;
 use namada::ledger::args::InputAmount;
@@ -32,12 +31,14 @@ use namada::ledger::pos::{
 };
 use namada::ledger::queries::RPC;
 use namada::ledger::rpc::{
-    enriched_bonds_and_unbonds, query_epoch, TxResponse,
+    enriched_bonds_and_unbonds, format_denominated_amount, query_epoch,
+    TxResponse,
 };
 use namada::ledger::storage::ConversionState;
 use namada::ledger::wallet::{AddressVpType, Wallet};
 use namada::proof_of_stake::types::WeightedValidator;
 use namada::types::address::{masp, Address};
+use namada::types::control_flow::ProceedOrElse;
 use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalVote, VotePower, VoteType,
 };
@@ -45,15 +46,28 @@ use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
-use namada::types::token::{
-    Change, DenominatedAmount, Denomination, MaspDenom, TokenAddress,
-};
+use namada::types::token::{Change, Denomination, MaspDenom, TokenAddress};
 use namada::types::{storage, token};
+use tokio::time::Instant;
 
 use crate::cli::{self, args};
 use crate::facade::tendermint::merkle::proof::Proof;
 use crate::facade::tendermint_rpc::error::Error as TError;
 use crate::wallet::CliWalletUtils;
+
+/// Query the status of a given transaction.
+///
+/// If a response is not delivered until `deadline`, we exit the cli with an
+/// error.
+pub async fn query_tx_status<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
+    status: namada::ledger::rpc::TxEventQuery<'_>,
+    deadline: Instant,
+) -> Event {
+    namada::ledger::rpc::query_tx_status(client, status, deadline)
+        .await
+        .proceed()
+}
 
 /// Query and print the epoch of the last committed block
 pub async fn query_and_print_epoch<
@@ -1448,14 +1462,14 @@ pub async fn query_bonds<C: namada::ledger::queries::Client + Sync>(
                 bond.amount.to_string_native()
             )?;
         }
-        if details.bonds_total_slashed != token::Amount::default() {
+        if details.bonds_total != token::Amount::zero() {
             writeln!(
                 w,
                 "Active (slashed) bonds total: {}",
-                details.bonds_total_active()
+                details.bonds_total_active().to_string_native()
             )?;
         }
-        writeln!(w, "Bonds total: {}", details.bonds_total)?;
+        writeln!(w, "Bonds total: {}", details.bonds_total.to_string_native())?;
         writeln!(w)?;
 
         if !details.data.unbonds.is_empty() {
@@ -1474,19 +1488,31 @@ pub async fn query_bonds<C: namada::ledger::queries::Client + Sync>(
                     unbond.amount.to_string_native()
                 )?;
             }
-            writeln!(w, "Unbonded total: {}", details.unbonds_total)?;
+            writeln!(
+                w,
+                "Unbonded total: {}",
+                details.unbonds_total.to_string_native()
+            )?;
         }
-        writeln!(w, "Withdrawable total: {}", details.total_withdrawable)?;
+        writeln!(
+            w,
+            "Withdrawable total: {}",
+            details.total_withdrawable.to_string_native()
+        )?;
         writeln!(w)?;
     }
     if bonds_and_unbonds.bonds_total != bonds_and_unbonds.bonds_total_slashed {
         writeln!(
             w,
             "All bonds total active: {}",
-            bonds_and_unbonds.bonds_total_active()
+            bonds_and_unbonds.bonds_total_active().to_string_native()
         )?;
     }
-    writeln!(w, "All bonds total: {}", bonds_and_unbonds.bonds_total)?;
+    writeln!(
+        w,
+        "All bonds total: {}",
+        bonds_and_unbonds.bonds_total.to_string_native()
+    )?;
 
     if bonds_and_unbonds.unbonds_total
         != bonds_and_unbonds.unbonds_total_slashed
@@ -1494,14 +1520,18 @@ pub async fn query_bonds<C: namada::ledger::queries::Client + Sync>(
         writeln!(
             w,
             "All unbonds total active: {}",
-            bonds_and_unbonds.unbonds_total_active()
+            bonds_and_unbonds.unbonds_total_active().to_string_native()
         )?;
     }
-    writeln!(w, "All unbonds total: {}", bonds_and_unbonds.unbonds_total)?;
+    writeln!(
+        w,
+        "All unbonds total: {}",
+        bonds_and_unbonds.unbonds_total.to_string_native()
+    )?;
     writeln!(
         w,
         "All unbonds total withdrawable: {}",
-        bonds_and_unbonds.total_withdrawable
+        bonds_and_unbonds.total_withdrawable.to_string_native()
     )?;
     Ok(())
 }
@@ -2276,31 +2306,6 @@ fn unwrap_client_response<C: namada::ledger::queries::Client, T>(
         eprintln!("Error in the query");
         cli::safe_exit(1)
     })
-}
-
-/// Look up the denomination of a token in order to format it
-/// correctly as a string.
-pub(super) async fn format_denominated_amount<
-    C: namada::ledger::queries::Client + Sync,
->(
-    client: &C,
-    token: &TokenAddress,
-    amount: token::Amount,
-) -> String {
-    let denom = unwrap_client_response::<C, Option<Denomination>>(
-        RPC.vp()
-            .token()
-            .denomination(client, &token.address, &token.sub_prefix)
-            .await,
-    )
-    .unwrap_or_else(|| {
-        println!(
-            "No denomination found for token: {token}, defaulting to zero \
-             decimal places"
-        );
-        0.into()
-    });
-    DenominatedAmount { amount, denom }.to_string()
 }
 
 /// Get the correct representation of the amount given the token type.

@@ -109,7 +109,7 @@ fn validate_tx(
         .map(|hash| {
             signed
                 .get_section(hash)
-                .and_then(|x| x.as_ref().masp_tx())
+                .and_then(Section::masp_tx)
                 .ok_or_err_msg("unable to find shielded section")
         })
         .transpose()?;
@@ -237,7 +237,7 @@ fn validate_tx(
                     .try_to_vec()
                     .expect("target address encoding");
 
-                let hash = Ripemd160::digest(sha256(&target_enc).as_slice());
+                let hash = Ripemd160::digest(sha256(&target_enc).0.as_slice());
 
                 if <[u8; 20]>::from(hash) != out.address.0 {
                     debug_log!(

@@ -67,12 +67,20 @@ mod tests {
         pos_params: PosParams,
     ) -> TxResult {
         let consensus_key = key::testing::keypair_1().ref_to();
+        let eth_hot_key = key::common::PublicKey::Secp256k1(
+            key::testing::gen_keypair::<key::secp256k1::SigScheme>().ref_to(),
+        );
+        let eth_cold_key = key::common::PublicKey::Secp256k1(
+            key::testing::gen_keypair::<key::secp256k1::SigScheme>().ref_to(),
+        );
         let genesis_validators = [GenesisValidator {
             address: commission_change.validator.clone(),
             tokens: token::Amount::from_uint(1_000_000, 0).unwrap(),
             consensus_key,
             commission_rate: initial_rate,
             max_commission_rate_change: max_change,
+            eth_hot_key,
+            eth_cold_key,
         }];
 
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
@@ -83,7 +91,11 @@ mod tests {
         tx.set_data(Data::new(tx_data));
         tx.set_code(Code::new(tx_code));
         tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.data_sechash(), *tx.code_sechash()],
+            tx.data_sechash(),
+            &key,
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
             &key,
         )));
         let signed_tx = tx.clone();

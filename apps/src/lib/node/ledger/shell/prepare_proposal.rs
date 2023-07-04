@@ -571,7 +571,7 @@ mod test_prepare_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1017,7 +1017,7 @@ mod test_prepare_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1069,7 +1069,7 @@ mod test_prepare_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1163,7 +1163,7 @@ mod test_prepare_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1186,7 +1186,7 @@ mod test_prepare_proposal {
                 },
                 &keypair_2,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             ))));
@@ -1228,7 +1228,7 @@ mod test_prepare_proposal {
                 },
                 &keypair,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             ))));

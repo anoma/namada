@@ -20,6 +20,7 @@ use namada_core::types::key::testing::{
 };
 use namada_core::types::key::RefTo;
 use namada_core::types::storage::{BlockHeight, Epoch};
+use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_core::types::{address, key, token};
 use proptest::prelude::*;
 use proptest::test_runner::Config;
@@ -30,10 +31,10 @@ use test_log::test;
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::PosParams;
 use crate::types::{
-    decimal_mult_amount, into_tm_voting_power, BondDetails, BondId,
-    BondsAndUnbondsDetails, ConsensusValidator, GenesisValidator, Position,
-    ReverseOrdTokenAmount, SlashType, UnbondDetails, ValidatorSetUpdate,
-    ValidatorState, WeightedValidator,
+    into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,
+    ConsensusValidator, GenesisValidator, Position, ReverseOrdTokenAmount,
+    SlashType, UnbondDetails, ValidatorSetUpdate, ValidatorState,
+    WeightedValidator,
 };
 use crate::{
     become_validator, below_capacity_validator_set_handle, bond_handle,
@@ -42,6 +43,7 @@ use crate::{
     get_num_consensus_validators, init_genesis,
     insert_validator_into_validator_set, is_validator, process_slashes,
     read_below_capacity_validator_set_addresses_with_stake,
+    read_below_threshold_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake, read_total_stake,
     read_validator_delta_value, read_validator_stake, slash,
     staking_token_address, total_deltas_handle, unbond_handle, unbond_tokens,
@@ -60,9 +62,8 @@ proptest! {
     #[test]
     fn test_init_genesis(
 
-    pos_params in arb_pos_params(Some(5)),
+    (pos_params, genesis_validators) in arb_params_and_genesis_validators(Some(5), 1..10),
     start_epoch in (0_u64..1000).prop_map(Epoch),
-    genesis_validators in arb_genesis_validators(1..10),
 
     ) {
         test_init_genesis_aux(pos_params, start_epoch, genesis_validators)
@@ -78,8 +79,7 @@ proptest! {
     #[test]
     fn test_bonds(
 
-    pos_params in arb_pos_params(Some(5)),
-    genesis_validators in arb_genesis_validators(1..3),
+    (pos_params, genesis_validators) in arb_params_and_genesis_validators(Some(5), 1..3),
 
     ) {
         test_bonds_aux(pos_params, genesis_validators)
@@ -95,10 +95,9 @@ proptest! {
     #[test]
     fn test_become_validator(
 
-    pos_params in arb_pos_params(Some(5)),
+    (pos_params, genesis_validators) in arb_params_and_genesis_validators(Some(5), 1..3),
     new_validator in arb_established_address().prop_map(Address::Established),
     new_validator_consensus_key in arb_common_keypair(),
-    genesis_validators in arb_genesis_validators(1..3),
 
     ) {
         test_become_validator_aux(pos_params, new_validator,
@@ -122,6 +121,20 @@ proptest! {
     }
 }
 
+fn arb_params_and_genesis_validators(
+    num_max_validator_slots: Option<u64>,
+    val_size: Range<usize>,
+) -> impl Strategy<Value = (PosParams, Vec<GenesisValidator>)> {
+    let params = arb_pos_params(num_max_validator_slots);
+    params.prop_flat_map(move |params| {
+        let validators = arb_genesis_validators(
+            val_size.clone(),
+            Some(params.validator_stake_threshold),
+        );
+        (Just(params), validators)
+    })
+}
+
 fn test_slashes_with_unbonding_params()
 -> impl Strategy<Value = (PosParams, Vec<GenesisValidator>, u64)> {
     let params = arb_pos_params(Some(5));
@@ -129,7 +142,7 @@ fn test_slashes_with_unbonding_params()
         let unbond_delay = 0..(params.slash_processing_epoch_offset() * 2);
         // Must have at least 4 validators so we can slash one and the cubic
         // slash rate will be less than 100%
-        let validators = arb_genesis_validators(4..10);
+        let validators = arb_genesis_validators(4..10, None);
         (Just(params), validators, unbond_delay)
     })
 }
@@ -177,7 +190,9 @@ fn test_init_genesis_aux(
         let state = validator_state_handle(&validator.address)
             .get(&s, start_epoch, &params)
             .unwrap();
-        if (i as u64) < params.max_validator_slots {
+        if (i as u64) < params.max_validator_slots
+            && validator.tokens >= params.validator_stake_threshold
+        {
             // should be in consensus set
             let handle = consensus_validator_set_handle().at(&start_epoch);
             assert!(handle.at(&validator.tokens).iter(&s).unwrap().any(
@@ -187,10 +202,9 @@ fn test_init_genesis_aux(
                 }
             ));
             assert_eq!(state, Some(ValidatorState::Consensus));
-        } else {
-            // TODO: one more set once we have `below_threshold`
-
-            // should be in below-capacity set
+        } else if validator.tokens >= params.validator_stake_threshold {
+            // Should be in below-capacity set if its tokens are greater than
+            // `validator_stake_threshold`
             let handle = below_capacity_validator_set_handle().at(&start_epoch);
             assert!(handle.at(&validator.tokens.into()).iter(&s).unwrap().any(
                 |result| {
@@ -199,6 +213,17 @@ fn test_init_genesis_aux(
                 }
             ));
             assert_eq!(state, Some(ValidatorState::BelowCapacity));
+        } else {
+            // Should be in below-threshold
+            let bt_addresses =
+                read_below_threshold_validator_set_addresses(&s, start_epoch)
+                    .unwrap();
+            assert!(
+                bt_addresses
+                    .into_iter()
+                    .any(|addr| { addr == validator.address })
+            );
+            assert_eq!(state, Some(ValidatorState::BelowThreshold));
         }
     }
 }
@@ -817,14 +842,9 @@ fn test_become_validator_aux(
     let num_consensus_after =
         get_num_consensus_validators(&s, current_epoch + params.pipeline_len)
             .unwrap();
-    assert_eq!(
-        if validators.len() as u64 >= params.max_validator_slots {
-            num_consensus_before
-        } else {
-            num_consensus_before + 1
-        },
-        num_consensus_after
-    );
+    // The new validator is initialized with no stake and thus is in the
+    // below-threshold set
+    assert_eq!(num_consensus_before, num_consensus_after);
 
     // Advance to epoch 2
     current_epoch = advance_epoch(&mut s, &params);
@@ -918,7 +938,8 @@ fn test_slashes_with_unbonding_aux(
     let val_addr = &validator.address;
     let val_tokens = validator.tokens;
     println!(
-        "Validator that will misbehave addr {val_addr}, tokens {val_tokens}"
+        "Validator that will misbehave addr {val_addr}, tokens {}",
+        val_tokens.to_string_native()
     );
 
     // Genesis
@@ -950,6 +971,7 @@ fn test_slashes_with_unbonding_aux(
         evidence_block_height,
         slash_0_type,
         val_addr,
+        current_epoch.next(),
     )
     .unwrap();
 
@@ -967,8 +989,8 @@ fn test_slashes_with_unbonding_aux(
     }
 
     // Unbond half of the tokens
-    let unbond_amount = decimal_mult_amount(dec!(0.5), val_tokens);
-    println!("Going to unbond {unbond_amount}");
+    let unbond_amount = Dec::new(5, 1).unwrap() * val_tokens;
+    println!("Going to unbond {}", unbond_amount.to_string_native());
     let unbond_epoch = current_epoch;
     unbond_tokens(&mut s, None, val_addr, unbond_amount, unbond_epoch).unwrap();
 
@@ -987,6 +1009,7 @@ fn test_slashes_with_unbonding_aux(
         evidence_block_height,
         slash_1_type,
         val_addr,
+        current_epoch.next(),
     )
     .unwrap();
 
@@ -1013,7 +1036,7 @@ fn test_slashes_with_unbonding_aux(
 
     let val_balance_post = read_balance(&s, &token, val_addr).unwrap();
     let withdrawn_tokens = val_balance_post - val_balance_pre;
-    println!("Withdrew {withdrawn_tokens} tokens");
+    println!("Withdrew {} tokens", withdrawn_tokens.to_string_native());
 
     assert_eq!(exp_withdraw_from_details, withdrawn_tokens);
 
@@ -1029,17 +1052,17 @@ fn test_slashes_with_unbonding_aux(
         .rate;
     println!("Slash 0 rate {slash_rate_0}, slash 1 rate {slash_rate_1}");
 
-    let expected_withdrawn_amount = decimal_mult_amount(
-        dec!(1) - slash_rate_1,
-        decimal_mult_amount(dec!(1) - slash_rate_0, unbond_amount),
+    let expected_withdrawn_amount = Dec::from(
+        (Dec::one() - slash_rate_1)
+            * (Dec::one() - slash_rate_0)
+            * unbond_amount,
     );
     // Allow some rounding error, 1 NAMNAM per each slash
-    let rounding_error_tolerance = 2;
+    let rounding_error_tolerance =
+        Dec::new(2, NATIVE_MAX_DECIMAL_PLACES).unwrap();
     assert!(
-        dbg!(
-            (expected_withdrawn_amount.change() - withdrawn_tokens.change())
-                .abs()
-        ) <= rounding_error_tolerance
+        dbg!(expected_withdrawn_amount.abs_diff(&Dec::from(withdrawn_tokens)))
+            <= rounding_error_tolerance
     );
 
     // TODO: finish once implemented
@@ -1141,7 +1164,7 @@ fn test_validator_sets() {
         (gen_validator(), token::Amount::native_whole(1));
     let ((val7, pk7), stake7) =
         (gen_validator(), token::Amount::native_whole(1));
-    println!("val1: {val1}, {pk1}, {}", stake1.to_string_native());
+    println!("\nval1: {val1}, {pk1}, {}", stake1.to_string_native());
     println!("val2: {val2}, {pk2}, {}", stake2.to_string_native());
     println!("val3: {val3}, {pk3}, {}", stake3.to_string_native());
     println!("val4: {val4}, {pk4}, {}", stake4.to_string_native());
@@ -1395,7 +1418,9 @@ fn test_validator_sets() {
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk2));
 
     // Unbond some stake from val1, it should be be swapped with the greatest
-    // below-capacity validator val2 into the below-capacity set
+    // below-capacity validator val2 into the below-capacity set. The stake of
+    // val1 will go below 1 NAM, which is the validator_stake_threshold, so it
+    // will enter the below-threshold validator set.
     let unbond = token::Amount::from_uint(500_000, 0).unwrap();
     let stake1 = stake1 - unbond;
     println!("val1 {val1} new stake {}", stake1.to_string_native());
@@ -1415,6 +1440,88 @@ fn test_validator_sets() {
     .unwrap();
     // Epoch 6
     let val1_unbond_epoch = pipeline_epoch;
+
+    let consensus_vals: Vec<_> = consensus_validator_set_handle()
+        .at(&pipeline_epoch)
+        .iter(&s)
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+
+    assert_eq!(consensus_vals.len(), 3);
+    assert!(matches!(
+        &consensus_vals[0],
+        (lazy_map::NestedSubKey::Data {
+                key: stake,
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val4 && stake == &stake4 && *position == Position(0)
+    ));
+    assert!(matches!(
+        &consensus_vals[1],
+        (lazy_map::NestedSubKey::Data {
+                key: stake,
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val3 && stake == &stake3 && *position == Position(0)
+    ));
+    assert!(matches!(
+        &consensus_vals[2],
+        (lazy_map::NestedSubKey::Data {
+                key: stake,
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val5 && stake == &stake5 && *position == Position(0)
+    ));
+
+    let below_capacity_vals: Vec<_> = below_capacity_validator_set_handle()
+        .at(&pipeline_epoch)
+        .iter(&s)
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+
+    assert_eq!(below_capacity_vals.len(), 2);
+    assert!(matches!(
+        &below_capacity_vals[0],
+        (lazy_map::NestedSubKey::Data {
+                key: ReverseOrdTokenAmount(stake),
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val2 && stake == &stake2 && *position == Position(1)
+    ));
+    assert!(matches!(
+        &below_capacity_vals[1],
+        (lazy_map::NestedSubKey::Data {
+                key: ReverseOrdTokenAmount(stake),
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val6 && stake == &stake6 && *position == Position(2)
+    ));
+
+    let below_threshold_vals =
+        read_below_threshold_validator_set_addresses(&s, pipeline_epoch)
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>();
+
+    assert_eq!(below_threshold_vals.len(), 1);
+    assert_eq!(&below_threshold_vals[0], &val1);
+
+    // Advance to EPOCH 5
+    let epoch = advance_epoch(&mut s, &params);
+    let pipeline_epoch = epoch + params.pipeline_len;
+
+    // Check tendermint validator set updates
+    assert_eq!(val6_epoch, epoch, "val6 is in the validator sets now");
+    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
+    assert!(tm_updates.is_empty());
+
+    // Insert another validator with stake 1 - it should be added to below
+    // capacity set
+    insert_validator(&mut s, &val7, &pk7, stake7, epoch);
+    // Epoch 7
+    let val7_epoch = pipeline_epoch;
 
     let consensus_vals: Vec<_> = consensus_validator_set_handle()
         .at(&pipeline_epoch)
@@ -1482,103 +1589,17 @@ fn test_validator_sets() {
             },
             address
         )
-        if address == &val1 && stake == &stake1 && *position == Position(0)
-    ));
-
-    // Advance to EPOCH 5
-    let epoch = advance_epoch(&mut s, &params);
-    let pipeline_epoch = epoch + params.pipeline_len;
-
-    // Check tendermint validator set updates
-    assert_eq!(val6_epoch, epoch, "val6 is in the validator sets now");
-    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
-    assert!(tm_updates.is_empty());
-
-    // Insert another validator with stake 1 - it should be added to below
-    // capacity set after val1
-    insert_validator(&mut s, &val7, &pk7, stake7, epoch);
-    // Epoch 7
-    let val7_epoch = pipeline_epoch;
-
-    let consensus_vals: Vec<_> = consensus_validator_set_handle()
-        .at(&pipeline_epoch)
-        .iter(&s)
-        .unwrap()
-        .map(Result::unwrap)
-        .collect();
-
-    assert_eq!(consensus_vals.len(), 3);
-    assert!(matches!(
-        &consensus_vals[0],
-        (lazy_map::NestedSubKey::Data {
-                key: stake,
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val4 && stake == &stake4 && *position == Position(0)
-    ));
-    assert!(matches!(
-        &consensus_vals[1],
-        (lazy_map::NestedSubKey::Data {
-                key: stake,
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val3 && stake == &stake3 && *position == Position(0)
-    ));
-    assert!(matches!(
-        &consensus_vals[2],
-        (lazy_map::NestedSubKey::Data {
-                key: stake,
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val5 && stake == &stake5 && *position == Position(0)
-    ));
-
-    let below_capacity_vals: Vec<_> = below_capacity_validator_set_handle()
-        .at(&pipeline_epoch)
-        .iter(&s)
-        .unwrap()
-        .map(Result::unwrap)
-        .collect();
-
-    assert_eq!(below_capacity_vals.len(), 4);
-    assert!(matches!(
-        &below_capacity_vals[0],
-        (lazy_map::NestedSubKey::Data {
-                key: ReverseOrdTokenAmount(stake),
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val2 && stake == &stake2 && *position == Position(1)
-    ));
-    assert!(matches!(
-        &below_capacity_vals[1],
-        (lazy_map::NestedSubKey::Data {
-                key: ReverseOrdTokenAmount(stake),
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val6 && stake == &stake6 && *position == Position(2)
-    ));
-    assert!(matches!(
-        &below_capacity_vals[2],
-        (
-            lazy_map::NestedSubKey::Data {
-                key: ReverseOrdTokenAmount(stake),
-                nested_sub_key: lazy_map::SubKey::Data(position),
-            },
-            address
-        )
         if address == &val7 && stake == &stake7 && *position == Position(3)
     ));
-    assert!(matches!(
-        &below_capacity_vals[3],
-        (
-            lazy_map::NestedSubKey::Data {
-                key: ReverseOrdTokenAmount(stake),
-                nested_sub_key: lazy_map::SubKey::Data(position),
-            },
-            address
-        )
-        if address == &val1 && stake == &stake1 && *position == Position(0)
-    ));
+
+    let below_threshold_vals =
+        read_below_threshold_validator_set_addresses(&s, pipeline_epoch)
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>();
+
+    assert_eq!(below_threshold_vals.len(), 1);
+    assert_eq!(&below_threshold_vals[0], &val1);
 
     // Advance to EPOCH 6
     let epoch = advance_epoch(&mut s, &params);
@@ -1654,7 +1675,7 @@ fn test_validator_sets() {
         .map(Result::unwrap)
         .collect();
 
-    assert_eq!(below_capacity_vals.len(), 4);
+    assert_eq!(below_capacity_vals.len(), 3);
     dbg!(&below_capacity_vals);
     assert!(matches!(
         &below_capacity_vals[0],
@@ -1683,17 +1704,15 @@ fn test_validator_sets() {
         )
         if address == &val4 && stake == &stake4 && *position == Position(4)
     ));
-    assert!(matches!(
-        &below_capacity_vals[3],
-        (
-            lazy_map::NestedSubKey::Data {
-                key: ReverseOrdTokenAmount(stake),
-                nested_sub_key: lazy_map::SubKey::Data(position),
-            },
-            address
-        )
-        if address == &val1 && stake == &stake1 && *position == Position(0)
-    ));
+
+    let below_threshold_vals =
+        read_below_threshold_validator_set_addresses(&s, pipeline_epoch)
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>();
+
+    assert_eq!(below_threshold_vals.len(), 1);
+    assert_eq!(&below_threshold_vals[0], &val1);
 
     // Advance to EPOCH 7
     let epoch = advance_epoch(&mut s, &params);
@@ -1733,6 +1752,9 @@ fn test_validator_sets_swap() {
     // Only 2 consensus validator slots
     let params = PosParams {
         max_validator_slots: 2,
+        // Set the stake threshold to 0 so no validators are in the
+        // below-threshold set
+        validator_stake_threshold: token::Amount::default(),
         // Set 0.1 votes per token
         tm_votes_per_token: Dec::new(1, 1).expect("Dec creation failed"),
         ..Default::default()
@@ -1985,46 +2007,70 @@ fn advance_epoch(s: &mut TestWlStorage, params: &PosParams) -> Epoch {
 
 fn arb_genesis_validators(
     size: Range<usize>,
+    threshold: Option<token::Amount>,
 ) -> impl Strategy<Value = Vec<GenesisValidator>> {
     let tokens: Vec<_> = (0..size.end)
-        .map(|_| {
-            (1..=10_u64).prop_map(|val| {
-                token::Amount::from_uint(val, 0).expect("This cannot fail")
-            })
+        .map(|ix| {
+            if ix == 0 {
+                // If there's a threshold, make sure that at least one validator
+                // has at least a stake greater or equal to the threshold to
+                // avoid having an empty consensus set.
+                threshold
+                    .map(|token| token.raw_amount().as_u64())
+                    .unwrap_or(1)..=10_000_000_u64
+            } else {
+                1..=10_000_000_u64
+            }
+            .prop_map(token::Amount::from)
         })
         .collect();
-    (size, tokens).prop_map(|(size, token_amounts)| {
-        // use unique seeds to generate validators' address and consensus key
-        let seeds = (0_u64..).take(size);
-        seeds
-            .zip(token_amounts)
-            .map(|(seed, tokens)| {
-                let address = address_from_simple_seed(seed);
-                let consensus_sk = common_sk_from_simple_seed(seed);
-                let consensus_key = consensus_sk.to_public();
+    (size, tokens)
+        .prop_map(|(size, token_amounts)| {
+            // use unique seeds to generate validators' address and consensus
+            // key
+            let seeds = (0_u64..).take(size);
+            seeds
+                .zip(token_amounts)
+                .map(|(seed, tokens)| {
+                    let address = address_from_simple_seed(seed);
+                    let consensus_sk = common_sk_from_simple_seed(seed);
+                    let consensus_key = consensus_sk.to_public();
 
-                let eth_hot_key = key::common::PublicKey::Secp256k1(
-                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                    let eth_hot_key = key::common::PublicKey::Secp256k1(
+                        key::testing::gen_keypair::<key::secp256k1::SigScheme>(
+                        )
                         .ref_to(),
-                );
-                let eth_cold_key = key::common::PublicKey::Secp256k1(
-                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                    );
+                    let eth_cold_key = key::common::PublicKey::Secp256k1(
+                        key::testing::gen_keypair::<key::secp256k1::SigScheme>(
+                        )
                         .ref_to(),
-                );
+                    );
 
-                let commission_rate = Dec::new(5, 2).expect("Test failed");
-                let max_commission_rate_change =
-                    Dec::new(1, 3).expect("Test failed");
-                GenesisValidator {
-                    address,
-                    tokens,
-                    consensus_key,
-                    eth_hot_key,
-                    eth_cold_key,
-                    commission_rate,
-                    max_commission_rate_change,
+                    let commission_rate = Dec::new(5, 2).expect("Test failed");
+                    let max_commission_rate_change =
+                        Dec::new(1, 2).expect("Test failed");
+                    GenesisValidator {
+                        address,
+                        tokens,
+                        consensus_key,
+                        eth_hot_key,
+                        eth_cold_key,
+                        commission_rate,
+                        max_commission_rate_change,
+                    }
+                })
+                .collect()
+        })
+        .prop_filter(
+            "Must have at least one genesis validator with stake above the \
+             provided threshold, if any.",
+            move |gen_vals: &Vec<GenesisValidator>| {
+                if let Some(thresh) = threshold {
+                    gen_vals.iter().any(|val| val.tokens >= thresh)
+                } else {
+                    true
                 }
-            })
-            .collect()
-    })
+            },
+        )
 }

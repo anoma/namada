@@ -242,6 +242,7 @@ mod test_process_tx {
     use crate::proto::{Code, Data, Section, Signature, Tx, TxError};
     use crate::types::address::nam;
     use crate::types::storage::Epoch;
+    use crate::types::token::Amount;
 
     fn gen_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
@@ -367,7 +368,7 @@ mod test_process_tx {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -403,7 +404,7 @@ mod test_process_tx {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));

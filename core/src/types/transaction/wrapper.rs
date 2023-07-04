@@ -376,7 +376,7 @@ pub mod wrapper_tx {
                     },
                     &keypair,
                     Epoch(0),
-                    0.into(),
+                    Default::default(),
                     #[cfg(not(feature = "mainnet"))]
                     None,
                 ))));
@@ -409,7 +409,7 @@ pub mod wrapper_tx {
                     },
                     &keypair,
                     Epoch(0),
-                    0.into(),
+                    Default::default(),
                     #[cfg(not(feature = "mainnet"))]
                     None,
                 ))));
@@ -444,7 +444,7 @@ pub mod wrapper_tx {
                 },
                 &keypair,
                 Epoch(0),
-                Amount::zero(),
+                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             ))));

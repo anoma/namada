@@ -27,8 +27,7 @@ use crate::parameters::PosParams;
 
 // TODO: replace `POS_MAX_DECIMAL_PLACES` with
 // core::types::token::NATIVE_MAX_DECIMAL_PLACES??
-
-// const U64_MAX: u64 = u64::MAX;
+const U64_MAX: u64 = u64::MAX;
 
 // TODO: add this to the spec
 /// Stored positions of validators in validator sets
@@ -384,6 +383,9 @@ pub enum ValidatorState {
     /// A validator who does not have enough stake to be considered in the
     /// `Consensus` validator set but still may have active bonds and unbonds
     BelowCapacity,
+    /// A validator who has stake less than the `validator_stake_threshold`
+    /// parameter
+    BelowThreshold,
     /// A validator who is deactivated via a tx when a validator no longer
     /// wants to be one (not implemented yet)
     Inactive,
@@ -414,7 +416,7 @@ pub struct Slash {
     /// A type of slashable event.
     pub r#type: SlashType,
     /// The cubic slashing rate for this validator
-    pub rate: Decimal,
+    pub rate: Dec,
 }
 
 /// Slashes applied to validator, to punish byzantine behavior by removing
@@ -529,43 +531,6 @@ impl Display for SlashType {
         }
     }
 }
-
-// /// Multiply a value of type Dec with one of type u64 and then return the
-// /// truncated u64
-// pub fn decimal_mult_u128(dec: Dec, int: u128) -> u128 {
-//     let prod = dec * Dec::from(int);
-//     // truncate the number to the floor
-//     prod.to_u128().expect("Product is out of bounds")
-// }
-//
-// /// Multiply a value of type Dec with one of type i128 and then return the
-// /// truncated i128
-// pub fn decimal_mult_i128(dec: Dec, int: i128) -> i128 {
-//     let prod = dec * Dec::from(int);
-//     // truncate the number to the floor
-//     prod.to_i128().expect("Product is out of bounds")
-// }
-
-// /// Multiply a value of type Dec with one of type Uint and then convert it
-// /// to an Amount type
-// pub fn mult_change_to_amount(
-//     dec: Dec,
-//     change: token::Change,
-// ) -> token::Amount {
-//     // this function is used for slashing calculations. We want to err
-//     // on the side of slashing more, not less.
-//     let dec =
-//         dec.round_dp_with_strategy(6, RoundingStrategy::ToPositiveInfinity);
-//     Amount::from_Dec(dec, NATIVE_MAX_Dec_PLACES).unwrap() * change.abs()
-// }
-
-// /// Multiply a value of type Dec with one of type Amount and then return the
-// /// truncated Amount
-// pub fn mult_amount(dec: Dec, amount: token::Amount) -> token::Amount {
-//     let dec =
-//         dec.round_dp_with_strategy(6, RoundingStrategy::ToPositiveInfinity);
-//     Amount::from_Dec(dec, NATIVE_MAX_Dec_PLACES).unwrap() * amount
-// }
 
 /// Calculate voting power in the tendermint context (which is stored as i64)
 /// from the number of tokens

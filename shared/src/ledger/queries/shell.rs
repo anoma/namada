@@ -21,7 +21,7 @@ use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
 use crate::tendermint::merkle::proof::Proof;
-use crate::types::storage::{self, BlockHeight, Epoch, PrefixValue};
+use crate::types::storage::{self, Epoch, PrefixValue};
 #[cfg(any(test, feature = "async-client"))]
 use crate::types::transaction::TxResult;
 

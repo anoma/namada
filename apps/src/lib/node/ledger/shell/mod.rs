@@ -35,6 +35,7 @@ use namada::ledger::protocol::ShellParams;
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, TempWlStorage, WlStorage, DB,
+    EPOCH_SWITCH_BLOCKS_DELAY,
 };
 use namada::ledger::storage_api::{self, StorageRead, StorageWrite};
 use namada::ledger::{pos, protocol, replay_protection};
@@ -477,7 +478,7 @@ where
                         "{}",
                         wallet_path.as_path().to_str().unwrap()
                     );
-                    let wallet = crate::wallet::load_or_new_from_genesis(
+                    let mut wallet = crate::wallet::load_or_new_from_genesis(
                         wallet_path,
                         genesis::genesis_config::open_genesis_config(
                             genesis_path,
@@ -485,7 +486,7 @@ where
                         .unwrap(),
                     );
                     wallet
-                        .into_validator_data()
+                        .take_validator_data()
                         .map(|data| ShellMode::Validator {
                             data: data.clone(),
                             broadcast_sender,
@@ -740,9 +741,28 @@ where
                             continue;
                         }
                     };
+                // Check if we're gonna switch to a new epoch after a delay
+                let validator_set_update_epoch = if let Some(delay) =
+                    self.wl_storage.storage.update_epoch_blocks_delay
+                {
+                    if delay == EPOCH_SWITCH_BLOCKS_DELAY {
+                        // If we're about to update validator sets for the
+                        // upcoming epoch, we can still remove the validator
+                        current_epoch.next()
+                    } else {
+                        // If we're waiting to switch to a new epoch, it's too
+                        // late to update validator sets
+                        // on the next epoch, so we need to
+                        // wait for the one after.
+                        current_epoch.next().next()
+                    }
+                } else {
+                    current_epoch.next()
+                };
                 tracing::info!(
                     "Slashing {} for {} in epoch {}, block height {} (current \
-                     epoch = {})",
+                     epoch = {}, validator set update epoch = \
+                     {validator_set_update_epoch})",
                     validator,
                     slash_type,
                     evidence_epoch,
@@ -757,6 +777,7 @@ where
                     evidence_height,
                     slash_type,
                     &validator,
+                    validator_set_update_epoch,
                 ) {
                     tracing::error!("Error in slashing: {}", err);
                 }

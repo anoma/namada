@@ -3,8 +3,9 @@
 #[cfg(any(test, feature = "dev"))]
 pub use dev::{
     addresses, albert_address, albert_keypair, bertha_address, bertha_keypair,
-    christel_address, christel_keypair, daewon_address, daewon_keypair, keys,
-    validator_address, validator_keypair, validator_keys,
+    christel_address, christel_keypair, daewon_address, daewon_keypair,
+    ester_address, ester_keypair, keys, validator_address, validator_keypair,
+    validator_keys,
 };
 use namada::ledger::wallet::alias::Alias;
 use namada::ledger::{eth_bridge, governance, pos};
@@ -119,6 +120,7 @@ mod dev {
             ("bertha".into(), bertha_keypair()),
             ("christel".into(), christel_keypair()),
             ("daewon".into(), daewon_keypair()),
+            ("ester".into(), ester_keypair()),
             ("validator".into(), validator_keypair()),
         ]
     }
@@ -149,6 +151,7 @@ mod dev {
             ("bertha".into(), bertha_address()),
             ("christel".into(), christel_address()),
             ("daewon".into(), daewon_address()),
+            ("ester".into(), ester_address()),
         ];
         let token_addresses = tokens()
             .into_iter()
@@ -176,6 +179,11 @@ mod dev {
     pub fn daewon_address() -> Address {
         // "atest1d9khqw36xprrzdpk89rrws69g4z5vd6pgv65gvjrgeqnv3pcg4zns335xymry335gcerqs3etd0xfa"
         (&daewon_keypair().ref_to()).into()
+    }
+
+    /// An implicit user address for testing & development
+    pub fn ester_address() -> Address {
+        (&ester_keypair().ref_to()).into()
     }
 
     /// An established validator address for testing & development
@@ -229,6 +237,18 @@ mod dev {
         ];
         let ed_sk = ed25519::SecretKey::try_from_slice(&bytes).unwrap();
         ed_sk.try_to_sk().unwrap()
+    }
+
+    pub fn ester_keypair() -> common::SecretKey {
+        // generated from
+        // [`namada::types::key::secp256k1::gen_keypair`]
+        let bytes = [
+            54, 144, 147, 226, 3, 93, 132, 247, 42, 126, 90, 23, 200, 155, 122,
+            147, 139, 93, 8, 204, 135, 178, 40, 152, 5, 227, 175, 204, 102,
+            239, 154, 66,
+        ];
+        let sk = secp256k1::SecretKey::try_from_slice(&bytes).unwrap();
+        sk.try_to_sk().unwrap()
     }
 
     pub fn validator_keypair() -> common::SecretKey {

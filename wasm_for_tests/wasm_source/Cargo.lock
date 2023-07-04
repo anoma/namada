@@ -2827,7 +2827,7 @@ dependencies = [
  "ibc-proto",
  "ics23",
  "num-traits",
- "parking_lot",
+ "parking_lot 0.12.1",
  "primitive-types",
  "prost",
  "safe-regex",
@@ -2990,6 +2990,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "impl-num-traits"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "951641f13f873bff03d4bf19ae8bec531935ac0ac2cc775f84d7edfdcfed3f17"
+dependencies = [
+ "integer-sqrt",
+ "num-traits",
+ "uint",
+]
+
+[[package]]
 name = "impl-rlp"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3091,6 +3102,15 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
  "web-sys",
+]
+
+[[package]]
+name = "integer-sqrt"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "276ec31bcb4a9ee45f58bec6f9ec700ae4cf4f4f8f2fa7e06cb406bd5ffdd770"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -3332,7 +3352,7 @@ dependencies = [
 [[package]]
 name = "masp_note_encryption"
 version = "0.2.0"
-source = "git+https://github.com/anoma/masp?rev=cfea8c95d3f73077ca3e25380fd27e5b46e828fd#cfea8c95d3f73077ca3e25380fd27e5b46e828fd"
+source = "git+https://github.com/anoma/masp?rev=252a6059565b125c1444e9e7d0b7c8da0fba8f8f#252a6059565b125c1444e9e7d0b7c8da0fba8f8f"
 dependencies = [
  "borsh",
  "chacha20 0.9.1",
@@ -3345,7 +3365,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "0.9.0"
-source = "git+https://github.com/anoma/masp?rev=cfea8c95d3f73077ca3e25380fd27e5b46e828fd#cfea8c95d3f73077ca3e25380fd27e5b46e828fd"
+source = "git+https://github.com/anoma/masp?rev=252a6059565b125c1444e9e7d0b7c8da0fba8f8f#252a6059565b125c1444e9e7d0b7c8da0fba8f8f"
 dependencies = [
  "aes 0.7.5",
  "bip0039",
@@ -3375,7 +3395,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "0.9.0"
-source = "git+https://github.com/anoma/masp?rev=cfea8c95d3f73077ca3e25380fd27e5b46e828fd#cfea8c95d3f73077ca3e25380fd27e5b46e828fd"
+source = "git+https://github.com/anoma/masp?rev=252a6059565b125c1444e9e7d0b7c8da0fba8f8f#252a6059565b125c1444e9e7d0b7c8da0fba8f8f"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -3544,7 +3564,7 @@ dependencies = [
  "crossbeam-utils 0.8.15",
  "num_cpus",
  "once_cell",
- "parking_lot",
+ "parking_lot 0.12.1",
  "quanta",
  "rustc_version 0.4.0",
  "scheduled-thread-pool",
@@ -3605,8 +3625,6 @@ dependencies = [
  "rand_core 0.6.4",
  "rayon",
  "ripemd",
- "rust_decimal",
- "rust_decimal_macros",
  "serde",
  "serde_json",
  "sha2 0.9.9",
@@ -3619,6 +3637,7 @@ dependencies = [
  "tokio",
  "toml 0.5.11",
  "tracing",
+ "wasm-timer",
  "wasmer",
  "wasmer-cache",
  "wasmer-compiler-singlepass",
@@ -3651,11 +3670,13 @@ dependencies = [
  "ibc",
  "ibc-proto",
  "ics23",
+ "impl-num-traits",
  "index-set",
  "itertools",
  "libsecp256k1 0.7.0",
  "masp_primitives",
  "namada_macros",
+ "num-integer",
  "num-rational 0.4.1",
  "num-traits",
  "num256",
@@ -3677,6 +3698,7 @@ dependencies = [
  "tiny-keccak",
  "tonic-build",
  "tracing",
+ "uint",
  "zeroize",
 ]
 
@@ -3774,7 +3796,6 @@ dependencies = [
  "namada_macros",
  "namada_proof_of_stake",
  "namada_vm_env",
- "rust_decimal",
  "sha2 0.9.9",
  "thiserror",
 ]
@@ -4133,12 +4154,37 @@ checksum = "e1ad0aff30c1da14b1254fcb2af73e1fa9a28670e584a626f53a369d0e157304"
 
 [[package]]
 name = "parking_lot"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d17b78036a60663b797adeaee46f5c9dfebb86948d1255007a1d6be0271ff99"
+dependencies = [
+ "instant",
+ "lock_api",
+ "parking_lot_core 0.8.6",
+]
+
+[[package]]
+name = "parking_lot"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3742b2c103b9f06bc9fff0a37ff4912935851bee6d36f3c02bcc755bcfec228f"
 dependencies = [
  "lock_api",
- "parking_lot_core",
+ "parking_lot_core 0.9.7",
+]
+
+[[package]]
+name = "parking_lot_core"
+version = "0.8.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "60a2cfe6f0ad2bfc16aefa463b497d5c7a5ecd44a23efa72aa342d90177356dc"
+dependencies = [
+ "cfg-if 1.0.0",
+ "instant",
+ "libc",
+ "redox_syscall 0.2.16",
+ "smallvec",
+ "winapi",
 ]
 
 [[package]]
@@ -5209,7 +5255,7 @@ version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3cbc66816425a074528352f5789333ecff06ca41b36b0b0efdfbb29edc391a19"
 dependencies = [
- "parking_lot",
+ "parking_lot 0.12.1",
 ]
 
 [[package]]
@@ -6070,7 +6116,7 @@ dependencies = [
  "libc",
  "mio",
  "num_cpus",
- "parking_lot",
+ "parking_lot 0.12.1",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2",
@@ -6608,6 +6654,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d05d0b6fcd0aeb98adf16e7975331b3c17222aa815148f5b976370ce589d80ef"
 dependencies = [
  "leb128",
+]
+
+[[package]]
+name = "wasm-timer"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be0ecb0db480561e9a7642b5d3e4187c128914e58aa84330b9493e3eb68c5e7f"
+dependencies = [
+ "futures",
+ "js-sys",
+ "parking_lot 0.11.2",
+ "pin-utils",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
@@ -7199,11 +7260,6 @@ dependencies = [
  "quote",
  "syn 2.0.16",
 ]
-
-[[patch.unused]]
-name = "funty"
-version = "1.2.0"
-source = "git+https://github.com/bitvecto-rs/funty/?rev=7ef0d890fbcd8b3def1635ac1a877fc298488446#7ef0d890fbcd8b3def1635ac1a877fc298488446"
 
 [[patch.unused]]
 name = "ibc"

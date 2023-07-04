@@ -144,8 +144,9 @@ pub fn init_storage_with_validators(
     }
 
     let mut all_keys = HashMap::new();
-    let validators =
-        consensus_validators.into_iter().map(|(address, tokens)| {
+    let validators: Vec<_> = consensus_validators
+        .into_iter()
+        .map(|(address, tokens)| {
             let keys = TestValidatorKeys::generate();
             let consensus_key = keys.consensus.ref_to();
             let eth_cold_key = keys.eth_gov.ref_to();
@@ -160,12 +161,13 @@ pub fn init_storage_with_validators(
                 commission_rate: Dec::new(5, 2).unwrap(),
                 max_commission_rate_change: Dec::new(1, 2).unwrap(),
             }
-        });
+        })
+        .collect();
 
     namada_proof_of_stake::init_genesis(
         wl_storage,
         &PosParams::default(),
-        validators,
+        validators.into_iter(),
         0.into(),
     )
     .expect("Test failed");
