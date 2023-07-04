@@ -691,9 +691,10 @@ pub async fn submit_unjail_validator<
         }
     }
 
-    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
     let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path).await.unwrap();
+        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
+            .await
+            .unwrap();
 
     let data = args
         .validator
