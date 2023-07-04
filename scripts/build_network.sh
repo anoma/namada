@@ -61,7 +61,7 @@ check_toml_file() {
     section_prefix="validator.validator"
     # Search for the section name in the TOML file
     section_count=$(awk -F'[][]' -v prefix="$section_prefix" '/^\[.*\]$/ && $2 ~ "^" prefix { count++ } END { print count }' "$toml_file")
-    if [ ! "$section_count" -eq 0 ]; then
+    if [ ! "$(expr "$section_count" : '^[0-9]*$')" -eq 0 ]; then
         echo "At least one validator ($section_count, in fact) has been found in the toml file. Please delete all occurrences of the section '[$section_prefix]' in the TOML file and try again."
         exit 1
     fi
