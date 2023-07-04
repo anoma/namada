@@ -3173,13 +3173,7 @@ pub mod args {
             TxUnjailValidator {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
-                tx_code_path: self
-                    .tx_code_path
-                    .as_path()
-                    .to_str()
-                    .unwrap()
-                    .to_string()
-                    .into_bytes(),
+                tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
     }
