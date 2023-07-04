@@ -4158,6 +4158,7 @@ dependencies = [
  "toml",
  "tracing 0.1.37",
  "tracing-subscriber 0.3.16",
+ "wasm-timer",
  "wasmer",
  "wasmer-cache",
  "wasmer-compiler-singlepass",
