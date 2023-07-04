@@ -148,6 +148,15 @@ pub async fn main() -> Result<()> {
                     tx::submit_withdraw::<HttpClient>(&client, ctx, args)
                         .await?;
                 }
+                Sub::TxUnjailValidator(TxUnjailValidator(args)) => {
+                    wait_until_node_is_synched(&args.tx.ledger_address).await;
+                    let client =
+                        HttpClient::new(args.tx.ledger_address.clone())
+                            .unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_unjail_validator::<HttpClient>(&client, ctx, args)
+                        .await?;
+                },
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(args)) => {
                     wait_until_node_is_synched(&args.ledger_address).await;
