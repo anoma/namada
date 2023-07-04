@@ -23,7 +23,7 @@ impl From<token::Amount> for ReverseOrdTokenAmount {
 
 /// Invert the token amount
 fn invert(amount: token::Amount) -> token::Amount {
-    token::MAX_AMOUNT - amount
+    token::Amount::max_signed() - amount
 }
 
 impl KeySeg for ReverseOrdTokenAmount {
@@ -46,15 +46,16 @@ impl KeySeg for ReverseOrdTokenAmount {
 
 impl std::fmt::Display for ReverseOrdTokenAmount {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
+        f.write_str(&self.0.to_string_native())
     }
 }
 
 impl std::str::FromStr for ReverseOrdTokenAmount {
-    type Err = <token::Amount as std::str::FromStr>::Err;
+    type Err = token::AmountParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let amount = token::Amount::from_str(s)?;
+        let amount =
+            token::Amount::from_str(s, token::NATIVE_MAX_DECIMAL_PLACES)?;
         Ok(Self(amount))
     }
 }

@@ -13,7 +13,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let slashed =
         ctx.withdraw_tokens(withdraw.source.as_ref(), &withdraw.validator)?;
     if slashed != token::Amount::default() {
-        debug_log!("New withdrawal slashed for {}", slashed);
+        debug_log!("New withdrawal slashed for {}", slashed.to_string_native());
     }
     Ok(())
 }
@@ -23,6 +23,7 @@ mod tests {
     use namada::ledger::pos::{GenesisValidator, PosParams, PosVP};
     use namada::proof_of_stake::unbond_handle;
     use namada::proto::{Code, Data, Signature, Tx};
+    use namada::types::dec::Dec;
     use namada::types::storage::Epoch;
     use namada::types::transaction::TxType;
     use namada_tests::log::test;
@@ -69,11 +70,17 @@ mod tests {
         key: key::common::SecretKey,
         pos_params: PosParams,
     ) -> TxResult {
+        // Remove the validator stake threshold for simplicity
+        let pos_params = PosParams {
+            validator_stake_threshold: token::Amount::default(),
+            ..pos_params
+        };
+
         let is_delegation = matches!(
             &withdraw.source, Some(source) if *source != withdraw.validator);
         let consensus_key = key::testing::keypair_1().ref_to();
-        let commission_rate = rust_decimal::Decimal::new(5, 2);
-        let max_commission_rate_change = rust_decimal::Decimal::new(1, 2);
+        let commission_rate = Dec::new(5, 2).expect("Cannot fail");
+        let max_commission_rate_change = Dec::new(1, 2).expect("Cannot fail");
 
         let genesis_validators = [GenesisValidator {
             address: withdraw.validator.clone(),
@@ -232,7 +239,7 @@ mod tests {
                 // stake
                 let unbonded_amount =
                     token::testing::arb_amount_non_zero_ceiled(
-                        initial_stake.into(),
+                        u128::try_from(initial_stake).unwrap() as u64,
                     );
                 // Use the generated initial stake too too
                 (Just(initial_stake), unbonded_amount)

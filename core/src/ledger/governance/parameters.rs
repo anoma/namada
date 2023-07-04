@@ -79,7 +79,7 @@ impl GovParams {
         } = self;
 
         let min_proposal_fund_key = gov_storage::get_min_proposal_fund_key();
-        let amount = Amount::whole(*min_proposal_fund);
+        let amount = Amount::native_whole(*min_proposal_fund);
         storage.write(&min_proposal_fund_key, amount)?;
 
         let max_proposal_code_size_key =

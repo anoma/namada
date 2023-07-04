@@ -36,9 +36,10 @@ use namada_core::ledger::storage_api::collections::lazy_map::{
 use namada_core::ledger::storage_api::collections::{LazyCollection, LazySet};
 use namada_core::ledger::storage_api::token::credit_tokens;
 use namada_core::ledger::storage_api::{
-    self, OptionExt, ResultExt, StorageRead, StorageWrite,
+    self, ResultExt, StorageRead, StorageWrite,
 };
 use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::dec::Dec;
 use namada_core::types::key::{
     common, tm_consensus_key_raw_hash, PublicKeyTmRawHash,
 };
@@ -47,28 +48,29 @@ use namada_core::types::token;
 use once_cell::unsync::Lazy;
 use parameters::PosParams;
 use rewards::PosRewardsCalculator;
-use rust_decimal::Decimal;
-use rust_decimal_macros::dec;
 use storage::{
     bonds_for_source_prefix, bonds_prefix, consensus_keys_key,
-    decimal_mult_amount, get_validator_address_from_bond, into_tm_voting_power,
-    is_bond_key, is_unbond_key, is_validator_slashes_key,
-    last_block_proposer_key, params_key, slashes_prefix,
-    unbonds_for_source_prefix, unbonds_prefix, validator_address_raw_hash_key,
-    validator_last_slash_key, validator_max_commission_rate_change_key,
+    get_validator_address_from_bond, into_tm_voting_power, is_bond_key,
+    is_unbond_key, is_validator_slashes_key, last_block_proposer_key,
+    params_key, slashes_prefix, unbonds_for_source_prefix, unbonds_prefix,
+    validator_address_raw_hash_key, validator_max_commission_rate_change_key,
     BondDetails, BondsAndUnbondsDetail, BondsAndUnbondsDetails,
-    ReverseOrdTokenAmount, RewardsAccumulator, SlashedAmount, UnbondDetails,
-    ValidatorUnbondRecords,
+    ReverseOrdTokenAmount, RewardsAccumulator, UnbondDetails,
 };
 use thiserror::Error;
 use types::{
-    decimal_mult_i128, BelowCapacityValidatorSet, BelowCapacityValidatorSets,
-    BondId, Bonds, CommissionRates, ConsensusValidator, ConsensusValidatorSet,
-    ConsensusValidatorSets, EpochedSlashes, GenesisValidator, Position,
-    RewardsProducts, Slash, SlashType, Slashes, TotalDeltas, Unbonds,
-    ValidatorAddresses, ValidatorConsensusKeys, ValidatorDeltas,
-    ValidatorPositionAddresses, ValidatorSetPositions, ValidatorSetUpdate,
-    ValidatorState, ValidatorStates, VoteInfo, WeightedValidator,
+    BelowCapacityValidatorSet, BelowCapacityValidatorSets, BondId, Bonds,
+    CommissionRates, ConsensusValidator, ConsensusValidatorSet,
+    ConsensusValidatorSets, GenesisValidator, Position, RewardsProducts, Slash,
+    SlashType, Slashes, TotalDeltas, Unbonds, ValidatorConsensusKeys,
+    ValidatorDeltas, ValidatorPositionAddresses, ValidatorSetPositions,
+    ValidatorSetUpdate, ValidatorState, ValidatorStates, VoteInfo,
+    WeightedValidator,
+};
+
+use crate::storage::{
+    validator_last_slash_key, EpochedSlashes, SlashedAmount,
+    ValidatorAddresses, ValidatorUnbondRecords,
 };
 
 /// Address of the PoS account implemented as a native VP
@@ -130,7 +132,7 @@ pub enum UnbondError {
     #[error(
         "Trying to withdraw more tokens ({0}) than the amount bonded ({0})"
     )]
-    UnbondAmountGreaterThanBond(token::Amount, token::Amount),
+    UnbondAmountGreaterThanBond(String, String),
     #[error("No bonds found for the validator {0}")]
     ValidatorHasNoBonds(Address),
     #[error("Voting power not found for the validator {0}")]
@@ -169,9 +171,9 @@ pub enum SlashError {
 #[derive(Error, Debug)]
 pub enum CommissionRateChangeError {
     #[error("Unexpected negative commission rate {0} for validator {1}")]
-    NegativeRate(Decimal, Address),
+    NegativeRate(Dec, Address),
     #[error("Rate change of {0} is too large for validator {1}")]
-    RateChangeTooLarge(Decimal, Address),
+    RateChangeTooLarge(Dec, Address),
     #[error(
         "There is no maximum rate change written in storage for validator {0}"
     )]
@@ -527,7 +529,7 @@ where
 pub fn read_validator_max_commission_rate_change<S>(
     storage: &S,
     validator: &Address,
-) -> storage_api::Result<Option<Decimal>>
+) -> storage_api::Result<Option<Dec>>
 where
     S: StorageRead,
 {
@@ -539,7 +541,7 @@ where
 pub fn write_validator_max_commission_rate_change<S>(
     storage: &mut S,
     validator: &Address,
-    change: Decimal,
+    change: Dec,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -693,6 +695,28 @@ where
         .iter(storage)?
         .map(|res| res.map(|(_sub_key, address)| address))
         .collect()
+}
+
+/// Read all addresses from the below-threshold set
+pub fn read_below_threshold_validator_set_addresses<S>(
+    storage: &S,
+    epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<HashSet<Address>>
+where
+    S: StorageRead,
+{
+    let params = read_pos_params(storage)?;
+    Ok(validator_addresses_handle()
+        .at(&epoch)
+        .iter(storage)?
+        .map(Result::unwrap)
+        .filter(|address| {
+            matches!(
+                validator_state_handle(address).get(storage, epoch, &params),
+                Ok(Some(ValidatorState::BelowThreshold))
+            )
+        })
+        .collect())
 }
 
 /// Read all addresses from consensus validator set with their stake.
@@ -862,7 +886,10 @@ where
     S: StorageRead + StorageWrite,
 {
     let amount = amount.change();
-    tracing::debug!("Bonding token amount {amount} at epoch {current_epoch}.");
+    tracing::debug!(
+        "Bonding token amount {} at epoch {current_epoch}",
+        amount.to_string_native()
+    );
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
     if let Some(source) = source {
@@ -898,8 +925,12 @@ where
         let delta = bond_handle
             .get_delta_val(storage, ep, &params)?
             .unwrap_or_default();
-        if delta != 0 {
-            tracing::debug!("bond ∆ at epoch {}: {}", ep, delta);
+        if !delta.is_zero() {
+            tracing::debug!(
+                "bond ∆ at epoch {}: {}",
+                ep,
+                delta.to_string_native()
+            );
         }
     }
 
@@ -924,8 +955,12 @@ where
         let delta = bond_handle
             .get_delta_val(storage, ep, &params)?
             .unwrap_or_default();
-        if delta != 0 {
-            tracing::debug!("bond ∆ at epoch {}: {}", ep, delta);
+        if !delta.is_zero() {
+            tracing::debug!(
+                "bond ∆ at epoch {}: {}",
+                ep,
+                delta.to_string_native()
+            );
         }
     }
 
@@ -987,13 +1022,20 @@ where
     S: StorageRead + StorageWrite,
 {
     let target_epoch = current_epoch + offset;
-    let consensus_set = &consensus_validator_set_handle().at(&target_epoch);
-    let below_cap_set =
-        &below_capacity_validator_set_handle().at(&target_epoch);
+    let consensus_set = consensus_validator_set_handle().at(&target_epoch);
+    let below_cap_set = below_capacity_validator_set_handle().at(&target_epoch);
 
     let num_consensus_validators =
         get_num_consensus_validators(storage, target_epoch)?;
-    if num_consensus_validators < params.max_validator_slots {
+
+    if stake < params.validator_stake_threshold {
+        validator_state_handle(address).set(
+            storage,
+            ValidatorState::BelowThreshold,
+            current_epoch,
+            offset,
+        )?;
+    } else if num_consensus_validators < params.max_validator_slots {
         insert_validator_into_set(
             &consensus_set.at(&stake),
             storage,
@@ -1010,7 +1052,7 @@ where
         // Check to see if the current genesis validator should replace one
         // already in the consensus set
         let min_consensus_amount =
-            get_min_consensus_validator_amount(consensus_set, storage)?;
+            get_min_consensus_validator_amount(&consensus_set, storage)?;
         if stake > min_consensus_amount {
             // Swap this genesis validator in and demote the last min consensus
             // validator
@@ -1071,8 +1113,8 @@ where
     Ok(())
 }
 
-/// Update validator set when a validator receives a new bond and when
-/// its bond is unbonded (self-bond or delegation).
+/// Update validator set at the pipeline epoch when a validator receives a new
+/// bond and when its bond is unbonded (self-bond or delegation).
 fn update_validator_set<S>(
     storage: &mut S,
     params: &PosParams,
@@ -1083,164 +1125,266 @@ fn update_validator_set<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    if token_change == 0_i128 {
+    if token_change.is_zero() {
         return Ok(());
     }
-    let epoch = current_epoch + params.pipeline_len;
+    let pipeline_epoch = current_epoch + params.pipeline_len;
     tracing::debug!(
-        "Update epoch for validator set: {epoch}, validator: {validator}"
+        "Update epoch for validator set: {pipeline_epoch}, validator: \
+         {validator}"
     );
     let consensus_validator_set = consensus_validator_set_handle();
     let below_capacity_validator_set = below_capacity_validator_set_handle();
 
-    // Validator sets at the pipeline offset. If these are empty, then we need
-    // to copy over the most recent filled validator set into this epoch first
-    let consensus_val_handle = consensus_validator_set.at(&epoch);
-    let below_capacity_val_handle = below_capacity_validator_set.at(&epoch);
+    // Validator sets at the pipeline offset
+    let consensus_val_handle = consensus_validator_set.at(&pipeline_epoch);
+    let below_capacity_val_handle =
+        below_capacity_validator_set.at(&pipeline_epoch);
 
-    let tokens_pre = read_validator_stake(storage, params, validator, epoch)?
-        .unwrap_or_default();
+    let tokens_pre =
+        read_validator_stake(storage, params, validator, pipeline_epoch)?
+            .unwrap_or_default();
 
     // tracing::debug!("VALIDATOR STAKE BEFORE UPDATE: {}", tokens_pre);
 
     let tokens_post = tokens_pre.change() + token_change;
-    // TODO: handle overflow or negative vals perhaps with TryFrom
     let tokens_post = token::Amount::from_change(tokens_post);
 
-    // TODO: The position is only set when the validator is in consensus or
+    // If token amounts both before and after the action are below the threshold
+    // stake, do nothing
+    if tokens_pre < params.validator_stake_threshold
+        && tokens_post < params.validator_stake_threshold
+    {
+        return Ok(());
+    }
+
+    // The position is only set when the validator is in consensus or
     // below_capacity set (not in below_threshold set)
-    let position =
-        read_validator_set_position(storage, validator, epoch, params)?
-            .ok_or_err_msg(
-                "Validator must have a stored validator set position",
-            )?;
-    let consensus_vals_pre = consensus_val_handle.at(&tokens_pre);
+    let position = read_validator_set_position(
+        storage,
+        validator,
+        pipeline_epoch,
+        params,
+    )?;
+    if let Some(position) = position {
+        let consensus_vals_pre = consensus_val_handle.at(&tokens_pre);
 
-    let in_consensus = if consensus_vals_pre.contains(storage, &position)? {
-        let val_address = consensus_vals_pre.get(storage, &position)?;
-        debug_assert!(val_address.is_some());
-        val_address == Some(validator.clone())
-    } else {
-        false
-    };
-
-    if in_consensus {
-        // It's initially consensus
-        tracing::debug!("Target validator is consensus");
-
-        consensus_vals_pre.remove(storage, &position)?;
-
-        let max_below_capacity_validator_amount =
-            get_max_below_capacity_validator_amount(
-                &below_capacity_val_handle,
-                storage,
-            )?
-            .unwrap_or_default();
-
-        if tokens_post < max_below_capacity_validator_amount {
-            tracing::debug!("Need to swap validators");
-            // Place the validator into the below-capacity set and promote the
-            // lowest position max below-capacity validator.
-
-            // Remove the max below-capacity validator first
-            let below_capacity_vals_max = below_capacity_val_handle
-                .at(&max_below_capacity_validator_amount.into());
-            let lowest_position =
-                find_first_position(&below_capacity_vals_max, storage)?
-                    .unwrap();
-            let removed_max_below_capacity = below_capacity_vals_max
-                .remove(storage, &lowest_position)?
-                .expect("Must have been removed");
-
-            // Insert the previous max below-capacity validator into the
-            // consensus set
-            insert_validator_into_set(
-                &consensus_val_handle.at(&max_below_capacity_validator_amount),
-                storage,
-                &epoch,
-                &removed_max_below_capacity,
-            )?;
-            validator_state_handle(&removed_max_below_capacity).set(
-                storage,
-                ValidatorState::Consensus,
-                current_epoch,
-                params.pipeline_len,
-            )?;
-
-            // Insert the current validator into the below-capacity set
-            insert_validator_into_set(
-                &below_capacity_val_handle.at(&tokens_post.into()),
-                storage,
-                &epoch,
-                validator,
-            )?;
-            validator_state_handle(validator).set(
-                storage,
-                ValidatorState::BelowCapacity,
-                current_epoch,
-                params.pipeline_len,
-            )?;
+        let in_consensus = if consensus_vals_pre.contains(storage, &position)? {
+            let val_address = consensus_vals_pre.get(storage, &position)?;
+            debug_assert!(val_address.is_some());
+            val_address == Some(validator.clone())
         } else {
-            tracing::debug!("Validator remains in consensus set");
-            // The current validator should remain in the consensus set - place
-            // it into a new position
-            insert_validator_into_set(
-                &consensus_val_handle.at(&tokens_post),
-                storage,
-                &epoch,
-                validator,
-            )?;
+            false
+        };
+
+        if in_consensus {
+            // It's initially consensus
+            tracing::debug!("Target validator is consensus");
+
+            // First remove the consensus validator
+            consensus_vals_pre.remove(storage, &position)?;
+
+            let max_below_capacity_validator_amount =
+                get_max_below_capacity_validator_amount(
+                    &below_capacity_val_handle,
+                    storage,
+                )?
+                .unwrap_or_default();
+
+            if tokens_post < params.validator_stake_threshold {
+                tracing::debug!(
+                    "Demoting this validator to the below-threshold set"
+                );
+                // Set the validator state as below-threshold
+                validator_state_handle(validator).set(
+                    storage,
+                    ValidatorState::BelowThreshold,
+                    current_epoch,
+                    params.pipeline_len,
+                )?;
+
+                // Remove the validator's position from storage
+                validator_set_positions_handle()
+                    .at(&pipeline_epoch)
+                    .remove(storage, validator)?;
+
+                // Promote the next below-cap validator if there is one
+                if let Some(max_bc_amount) =
+                    get_max_below_capacity_validator_amount(
+                        &below_capacity_val_handle,
+                        storage,
+                    )?
+                {
+                    // Remove the max below-capacity validator first
+                    let below_capacity_vals_max =
+                        below_capacity_val_handle.at(&max_bc_amount.into());
+                    let lowest_position =
+                        find_first_position(&below_capacity_vals_max, storage)?
+                            .unwrap();
+                    let removed_max_below_capacity = below_capacity_vals_max
+                        .remove(storage, &lowest_position)?
+                        .expect("Must have been removed");
+
+                    // Insert the previous max below-capacity validator into the
+                    // consensus set
+                    insert_validator_into_set(
+                        &consensus_val_handle.at(&max_bc_amount),
+                        storage,
+                        &pipeline_epoch,
+                        &removed_max_below_capacity,
+                    )?;
+                    validator_state_handle(&removed_max_below_capacity).set(
+                        storage,
+                        ValidatorState::Consensus,
+                        current_epoch,
+                        params.pipeline_len,
+                    )?;
+                }
+            } else if tokens_post < max_below_capacity_validator_amount {
+                tracing::debug!(
+                    "Demoting this validator to the below-capacity set and \
+                     promoting another to the consensus set"
+                );
+                // Place the validator into the below-capacity set and promote
+                // the lowest position max below-capacity
+                // validator.
+
+                // Remove the max below-capacity validator first
+                let below_capacity_vals_max = below_capacity_val_handle
+                    .at(&max_below_capacity_validator_amount.into());
+                let lowest_position =
+                    find_first_position(&below_capacity_vals_max, storage)?
+                        .unwrap();
+                let removed_max_below_capacity = below_capacity_vals_max
+                    .remove(storage, &lowest_position)?
+                    .expect("Must have been removed");
+
+                // Insert the previous max below-capacity validator into the
+                // consensus set
+                insert_validator_into_set(
+                    &consensus_val_handle
+                        .at(&max_below_capacity_validator_amount),
+                    storage,
+                    &pipeline_epoch,
+                    &removed_max_below_capacity,
+                )?;
+                validator_state_handle(&removed_max_below_capacity).set(
+                    storage,
+                    ValidatorState::Consensus,
+                    current_epoch,
+                    params.pipeline_len,
+                )?;
+
+                // Insert the current validator into the below-capacity set
+                insert_validator_into_set(
+                    &below_capacity_val_handle.at(&tokens_post.into()),
+                    storage,
+                    &pipeline_epoch,
+                    validator,
+                )?;
+                validator_state_handle(validator).set(
+                    storage,
+                    ValidatorState::BelowCapacity,
+                    current_epoch,
+                    params.pipeline_len,
+                )?;
+            } else {
+                tracing::debug!("Validator remains in consensus set");
+                // The current validator should remain in the consensus set -
+                // place it into a new position
+                insert_validator_into_set(
+                    &consensus_val_handle.at(&tokens_post),
+                    storage,
+                    &pipeline_epoch,
+                    validator,
+                )?;
+            }
+        } else {
+            // It's initially below-capacity
+            tracing::debug!("Target validator is below-capacity");
+
+            let below_capacity_vals_pre =
+                below_capacity_val_handle.at(&tokens_pre.into());
+            let removed = below_capacity_vals_pre.remove(storage, &position)?;
+            debug_assert!(removed.is_some());
+            debug_assert_eq!(&removed.unwrap(), validator);
+
+            let min_consensus_validator_amount =
+                get_min_consensus_validator_amount(
+                    &consensus_val_handle,
+                    storage,
+                )?;
+
+            if tokens_post > min_consensus_validator_amount {
+                // Place the validator into the consensus set and demote the
+                // last position min consensus validator to the
+                // below-capacity set
+                tracing::debug!(
+                    "Inserting validator into the consensus set and demoting \
+                     a consensus validator to the below-capacity set"
+                );
+
+                insert_into_consensus_and_demote_to_below_cap(
+                    storage,
+                    params,
+                    validator,
+                    tokens_post,
+                    min_consensus_validator_amount,
+                    current_epoch,
+                    &consensus_val_handle,
+                    &below_capacity_val_handle,
+                )?;
+            } else if tokens_post >= params.validator_stake_threshold {
+                tracing::debug!("Validator remains in below-capacity set");
+                // The current validator should remain in the below-capacity set
+                insert_validator_into_set(
+                    &below_capacity_val_handle.at(&tokens_post.into()),
+                    storage,
+                    &pipeline_epoch,
+                    validator,
+                )?;
+                validator_state_handle(validator).set(
+                    storage,
+                    ValidatorState::BelowCapacity,
+                    current_epoch,
+                    params.pipeline_len,
+                )?;
+            } else {
+                // The current validator is demoted to the below-threshold set
+                tracing::debug!(
+                    "Demoting this validator to the below-threshold set"
+                );
+
+                validator_state_handle(validator).set(
+                    storage,
+                    ValidatorState::BelowThreshold,
+                    current_epoch,
+                    params.pipeline_len,
+                )?;
+
+                // Remove the validator's position from storage
+                validator_set_positions_handle()
+                    .at(&pipeline_epoch)
+                    .remove(storage, validator)?;
+            }
         }
     } else {
-        // TODO: handle the new third set - below threshold
+        // If there is no position at pipeline offset, then the validator must
+        // be in the below-threshold set
+        debug_assert!(tokens_pre < params.validator_stake_threshold);
+        tracing::debug!("Target validator is below-threshold");
 
-        // It's initially below-capacity
-        let below_capacity_vals_pre =
-            below_capacity_val_handle.at(&tokens_pre.into());
-        let removed = below_capacity_vals_pre.remove(storage, &position)?;
-        debug_assert!(removed.is_some());
-        debug_assert_eq!(&removed.unwrap(), validator);
+        // Move the validator into the appropriate set
+        let num_consensus_validators =
+            get_num_consensus_validators(storage, pipeline_epoch)?;
+        if num_consensus_validators < params.max_validator_slots {
+            // Just insert into the consensus set
+            tracing::debug!("Inserting validator into the consensus set");
 
-        let min_consensus_validator_amount =
-            get_min_consensus_validator_amount(&consensus_val_handle, storage)?;
-
-        if tokens_post > min_consensus_validator_amount {
-            // Place the validator into the consensus set and demote the last
-            // position min consensus validator to the below-capacity set
-
-            // Remove the min consensus validator first
-            let consensus_vals_min =
-                consensus_val_handle.at(&min_consensus_validator_amount);
-            let last_position_of_min_consensus_vals =
-                find_last_position(&consensus_vals_min, storage)?.expect(
-                    "There must be always be at least 1 consensus validator",
-                );
-            let removed_min_consensus = consensus_vals_min
-                .remove(storage, &last_position_of_min_consensus_vals)?
-                .expect(
-                    "There must be always be at least 1 consensus validator",
-                );
-
-            // Insert the min consensus validator into the below-capacity set
-            insert_validator_into_set(
-                &below_capacity_val_handle
-                    .at(&min_consensus_validator_amount.into()),
-                storage,
-                &epoch,
-                &removed_min_consensus,
-            )?;
-            validator_state_handle(&removed_min_consensus).set(
-                storage,
-                ValidatorState::BelowCapacity,
-                current_epoch,
-                params.pipeline_len,
-            )?;
-
-            // Insert the current validator into the consensus set
             insert_validator_into_set(
                 &consensus_val_handle.at(&tokens_post),
                 storage,
-                &epoch,
+                &pipeline_epoch,
                 validator,
             )?;
             validator_state_handle(validator).set(
@@ -1250,21 +1394,107 @@ where
                 params.pipeline_len,
             )?;
         } else {
-            // The current validator should remain in the below-capacity set
-            insert_validator_into_set(
-                &below_capacity_val_handle.at(&tokens_post.into()),
-                storage,
-                &epoch,
-                validator,
-            )?;
-            validator_state_handle(validator).set(
-                storage,
-                ValidatorState::BelowCapacity,
-                current_epoch,
-                params.pipeline_len,
-            )?;
+            let min_consensus_validator_amount =
+                get_min_consensus_validator_amount(
+                    &consensus_val_handle,
+                    storage,
+                )?;
+            if tokens_post > min_consensus_validator_amount {
+                // Insert this validator into consensus and demote one into the
+                // below-capacity
+                tracing::debug!(
+                    "Inserting validator into the consensus set and demoting \
+                     a consensus validator to the below-capacity set"
+                );
+
+                insert_into_consensus_and_demote_to_below_cap(
+                    storage,
+                    params,
+                    validator,
+                    tokens_post,
+                    min_consensus_validator_amount,
+                    current_epoch,
+                    &consensus_val_handle,
+                    &below_capacity_val_handle,
+                )?;
+            } else {
+                // Insert this validator into below-capacity
+                tracing::debug!(
+                    "Inserting validator into the below-capacity set"
+                );
+
+                insert_validator_into_set(
+                    &below_capacity_val_handle.at(&tokens_post.into()),
+                    storage,
+                    &pipeline_epoch,
+                    validator,
+                )?;
+                validator_state_handle(validator).set(
+                    storage,
+                    ValidatorState::BelowCapacity,
+                    current_epoch,
+                    params.pipeline_len,
+                )?;
+            }
         }
     }
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn insert_into_consensus_and_demote_to_below_cap<S>(
+    storage: &mut S,
+    params: &PosParams,
+    validator: &Address,
+    tokens_post: token::Amount,
+    min_consensus_amount: token::Amount,
+    current_epoch: Epoch,
+    consensus_set: &ConsensusValidatorSet,
+    below_capacity_set: &BelowCapacityValidatorSet,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    // First, remove the last position min consensus validator
+    let consensus_vals_min = consensus_set.at(&min_consensus_amount);
+    let last_position_of_min_consensus_vals =
+        find_last_position(&consensus_vals_min, storage)?
+            .expect("There must be always be at least 1 consensus validator");
+    let removed_min_consensus = consensus_vals_min
+        .remove(storage, &last_position_of_min_consensus_vals)?
+        .expect("There must be always be at least 1 consensus validator");
+
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+
+    // Insert the min consensus validator into the below-capacity
+    // set
+    insert_validator_into_set(
+        &below_capacity_set.at(&min_consensus_amount.into()),
+        storage,
+        &pipeline_epoch,
+        &removed_min_consensus,
+    )?;
+    validator_state_handle(&removed_min_consensus).set(
+        storage,
+        ValidatorState::BelowCapacity,
+        current_epoch,
+        params.pipeline_len,
+    )?;
+
+    // Insert the current validator into the consensus set
+    insert_validator_into_set(
+        &consensus_set.at(&tokens_post),
+        storage,
+        &pipeline_epoch,
+        validator,
+    )?;
+    validator_state_handle(validator).set(
+        storage,
+        ValidatorState::Consensus,
+        current_epoch,
+        params.pipeline_len,
+    )?;
     Ok(())
 }
 
@@ -1379,13 +1609,14 @@ fn read_validator_set_position<S>(
     storage: &S,
     validator: &Address,
     epoch: Epoch,
-    params: &PosParams,
+    _params: &PosParams,
 ) -> storage_api::Result<Option<Position>>
 where
     S: StorageRead,
 {
     let handle = validator_set_positions_handle();
-    handle.get_position(storage, &epoch, validator, params)
+    // handle.get_position(storage, &epoch, validator, params)
+    handle.get_data_handler().at(&epoch).get(storage, validator)
 }
 
 /// Find the first (lowest) position in a validator set if it is not empty
@@ -1523,7 +1754,10 @@ where
     S: StorageRead + StorageWrite,
 {
     let amount = amount.change();
-    tracing::debug!("Unbonding token amount {amount} at epoch {current_epoch}");
+    tracing::debug!(
+        "Unbonding token amount {} at epoch {current_epoch}",
+        amount.to_string_native()
+    );
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
@@ -1565,8 +1799,12 @@ where
         let delta = bonds_handle
             .get_delta_val(storage, ep, &params)?
             .unwrap_or_default();
-        if delta != 0 {
-            tracing::debug!("bond ∆ at epoch {}: {}", ep, delta);
+        if !delta.is_zero() {
+            tracing::debug!(
+                "bond ∆ at epoch {}: {}",
+                ep,
+                delta.to_string_native()
+            );
         }
     }
 
@@ -1576,8 +1814,9 @@ where
         .unwrap_or_default();
     if amount > remaining_at_pipeline {
         return Err(UnbondError::UnbondAmountGreaterThanBond(
-            token::Amount::from_change(amount),
-            token::Amount::from_change(remaining_at_pipeline),
+            token::Amount::from_change(amount).to_string_native(),
+            token::Amount::from_change(remaining_at_pipeline)
+                .to_string_native(),
         )
         .into());
     }
@@ -1666,13 +1905,17 @@ where
         let delta = bonds_handle
             .get_delta_val(storage, ep, &params)?
             .unwrap_or_default();
-        if delta != 0 {
-            tracing::debug!("bond ∆ at epoch {}: {}", ep, delta);
+        if !delta.is_zero() {
+            tracing::debug!(
+                "bond ∆ at epoch {}: {}",
+                ep,
+                delta.to_string_native()
+            );
         }
     }
     tracing::debug!(
         "Token change including slashes on unbond = {}",
-        -amount_after_slashing
+        (-amount_after_slashing).to_string_native()
     );
 
     // Update the validator set at the pipeline offset. Since unbonding from a
@@ -1720,7 +1963,7 @@ where
 fn get_slashed_amount(
     params: &PosParams,
     amount: token::Amount,
-    slashes: &BTreeMap<Epoch, Decimal>,
+    slashes: &BTreeMap<Epoch, Dec>,
 ) -> storage_api::Result<token::Change> {
     // println!("FN `get_slashed_amount`");
 
@@ -1751,7 +1994,7 @@ fn get_slashed_amount(
             computed_amounts.remove(item.0);
         }
         computed_amounts.push(SlashedAmount {
-            amount: decimal_mult_amount(*slash_rate, updated_amount),
+            amount: *slash_rate * updated_amount,
             epoch: *infraction_epoch,
         });
     }
@@ -1800,8 +2043,8 @@ pub fn become_validator<S>(
     address: &Address,
     consensus_key: &common::PublicKey,
     current_epoch: Epoch,
-    commission_rate: Decimal,
-    max_commission_rate_change: Decimal,
+    commission_rate: Dec,
+    max_commission_rate_change: Dec,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -1842,16 +2085,15 @@ where
         params.pipeline_len,
     )?;
 
-    let stake = token::Amount::default();
-
-    insert_validator_into_validator_set(
+    // The validator's stake at initialization is 0, so its state is immediately
+    // below-threshold
+    validator_state_handle(address).set(
         storage,
-        params,
-        address,
-        stake,
+        ValidatorState::BelowThreshold,
         current_epoch,
         params.pipeline_len,
     )?;
+
     Ok(())
 }
 
@@ -1894,7 +2136,8 @@ where
         ) = unbond?;
 
         tracing::debug!(
-            "Unbond delta ({start_epoch}..{withdraw_epoch}), amount {amount}",
+            "Unbond delta ({start_epoch}..{withdraw_epoch}), amount {}",
+            amount.to_string_native()
         );
 
         // TODO: adding slash rates in same epoch, applying cumulatively in dif
@@ -1919,13 +2162,14 @@ where
         let amount_after_slashing =
             get_slashed_amount(&params, amount, &slashes_for_this_unbond)?;
 
-        // total_slashed +=
-        //     amount - token::Amount::from_change(amount_after_slashing);
-        withdrawable_amount +=
-            token::Amount::from_change(amount_after_slashing);
+        // total_slashed += amount - token::Amount::from(amount_after_slashing);
+        withdrawable_amount += token::Amount::from(amount_after_slashing);
         unbonds_to_remove.push((withdraw_epoch, start_epoch));
     }
-    tracing::debug!("Withdrawing total {withdrawable_amount}");
+    tracing::debug!(
+        "Withdrawing total {}",
+        withdrawable_amount.to_string_native()
+    );
 
     // Remove the unbond data from storage
     for (withdraw_epoch, start_epoch) in unbonds_to_remove {
@@ -1964,19 +2208,19 @@ where
 pub fn change_validator_commission_rate<S>(
     storage: &mut S,
     validator: &Address,
-    new_rate: Decimal,
+    new_rate: Dec,
     current_epoch: Epoch,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    if new_rate < Decimal::ZERO {
-        return Err(CommissionRateChangeError::NegativeRate(
-            new_rate,
-            validator.clone(),
-        )
-        .into());
-    }
+    // if new_rate < Uint::zero() {
+    //     return Err(CommissionRateChangeError::NegativeRate(
+    //         new_rate,
+    //         validator.clone(),
+    //     )
+    //     .into());
+    // }
 
     let max_change =
         read_validator_max_commission_rate_change(storage, validator)?;
@@ -2000,8 +2244,16 @@ where
     let rate_before_pipeline = commission_handle
         .get(storage, pipeline_epoch.prev(), &params)?
         .expect("Could not find a rate in given epoch");
-    let change_from_prev = new_rate - rate_before_pipeline;
-    if change_from_prev.abs() > max_change.unwrap() {
+
+    // TODO: change this back if we use `Dec` type with a signed integer
+    // let change_from_prev = new_rate - rate_before_pipeline;
+    // if change_from_prev.abs() > max_change.unwrap() {
+    let change_from_prev = if new_rate > rate_before_pipeline {
+        new_rate - rate_before_pipeline
+    } else {
+        rate_before_pipeline - new_rate
+    };
+    if change_from_prev > max_change.unwrap() {
         return Err(CommissionRateChangeError::RateChangeTooLarge(
             change_from_prev,
             validator.clone(),
@@ -2033,8 +2285,8 @@ where
             tracing::error!(
                 "PoS system transfer error, the source doesn't have \
                  sufficient balance. It has {}, but {} is required",
-                src_balance,
-                amount
+                src_balance.to_string_native(),
+                amount.to_string_native(),
             );
         }
         src_balance.spend(&amount);
@@ -2103,10 +2355,10 @@ where
     // TODO: review this logic carefully, apply rewards
     let slashes = find_validator_slashes(storage, &bond_id.validator)?;
     let slash_rates = slashes.into_iter().fold(
-        BTreeMap::<Epoch, Decimal>::new(),
+        BTreeMap::<Epoch, Dec>::new(),
         |mut map, slash| {
             let tot_rate = map.entry(slash.epoch).or_default();
-            *tot_rate = cmp::min(Decimal::ONE, *tot_rate + slash.rate);
+            *tot_rate = cmp::min(Dec::one(), *tot_rate + slash.rate);
             map
         },
     );
@@ -2121,17 +2373,17 @@ where
             continue;
         }
 
-        total += token::Amount::from_change(delta);
-        total_active += token::Amount::from_change(delta);
+        total += token::Amount::from(delta);
+        total_active += token::Amount::from(delta);
 
         for (slash_epoch, rate) in &slash_rates {
             if *slash_epoch < bond_epoch {
                 continue;
             }
             // TODO: think about truncation
-            let current_slashed = decimal_mult_i128(*rate, delta);
+            let current_slashed = *rate * delta;
             total_active
-                .checked_sub(token::Amount::from_change(current_slashed))
+                .checked_sub(token::Amount::from(current_slashed))
                 .unwrap_or_default();
         }
     }
@@ -2155,53 +2407,56 @@ where
     // give Tendermint updates for the next epoch
     let next_epoch: Epoch = current_epoch.next();
 
-    let cur_consensus_validators =
+    let new_consensus_validator_handle =
         consensus_validator_set_handle().at(&next_epoch);
-    let prev_consensus_validators =
+    let prev_consensus_validator_handle =
         consensus_validator_set_handle().at(&current_epoch);
 
-    let consensus_validators = cur_consensus_validators
+    let new_consensus_validators = new_consensus_validator_handle
         .iter(storage)?
         .filter_map(|validator| {
             let (
                 NestedSubKey::Data {
-                    key: cur_stake,
+                    key: new_stake,
                     nested_sub_key: _,
                 },
                 address,
             ) = validator.unwrap();
 
             tracing::debug!(
-                "Consensus validator address {address}, stake {cur_stake}"
+                "Consensus validator address {address}, stake {}",
+                new_stake.to_string_native()
             );
 
             // Check if the validator was consensus in the previous epoch with
-            // the same stake
+            // the same stake. If so, no updated is needed.
             // Look up previous state and prev and current voting powers
-            if !prev_consensus_validators.is_empty(storage).unwrap() {
+            if !prev_consensus_validator_handle.is_empty(storage).unwrap() {
                 let prev_state = validator_state_handle(&address)
                     .get(storage, current_epoch, params)
                     .unwrap();
                 let prev_tm_voting_power = Lazy::new(|| {
-                    let prev_validator_stake =
-                        validator_deltas_handle(&address)
-                            .get_sum(storage, current_epoch, params)
-                            .unwrap()
-                            .map(token::Amount::from_change)
-                            .unwrap_or_default();
+                    let prev_validator_stake = read_validator_stake(
+                        storage,
+                        params,
+                        &address,
+                        current_epoch,
+                    )
+                    .unwrap()
+                    .unwrap_or_default();
                     into_tm_voting_power(
                         params.tm_votes_per_token,
                         prev_validator_stake,
                     )
                 });
-                let cur_tm_voting_power = Lazy::new(|| {
-                    into_tm_voting_power(params.tm_votes_per_token, cur_stake)
+                let new_tm_voting_power = Lazy::new(|| {
+                    into_tm_voting_power(params.tm_votes_per_token, new_stake)
                 });
 
                 // If it was in `Consensus` before and voting power has not
                 // changed, skip the update
                 if matches!(prev_state, Some(ValidatorState::Consensus))
-                    && *prev_tm_voting_power == *cur_tm_voting_power
+                    && *prev_tm_voting_power == *new_tm_voting_power
                 {
                     tracing::debug!(
                         "skipping validator update, {address} is in consensus \
@@ -2209,16 +2464,19 @@ where
                     );
                     return None;
                 }
-
-                // If both previous and current voting powers are 0, skip
-                // update
-                if *prev_tm_voting_power == 0 && *cur_tm_voting_power == 0 {
+                // If both previous and current voting powers are 0, and the
+                // validator_stake_threshold is 0, skip update
+                if params.validator_stake_threshold == token::Amount::default()
+                    && *prev_tm_voting_power == 0
+                    && *new_tm_voting_power == 0
+                {
                     tracing::info!(
                         "skipping validator update, {address} is in consensus \
                          set but without voting power"
                     );
                     return None;
                 }
+                // TODO: maybe debug_assert that the new stake is >= threshold?
             }
             let consensus_key = validator_consensus_key_handle(&address)
                 .get(storage, next_epoch, params)
@@ -2230,69 +2488,60 @@ where
             );
             Some(ValidatorSetUpdate::Consensus(ConsensusValidator {
                 consensus_key,
-                bonded_stake: cur_stake.into(),
+                bonded_stake: new_stake,
             }))
         });
-    let cur_below_capacity_validators =
-        below_capacity_validator_set_handle().at(&next_epoch);
-    let prev_below_capacity_vals =
-        below_capacity_validator_set_handle().at(&current_epoch);
 
-    let below_capacity_validators = cur_below_capacity_validators
-        .iter(storage)
-        .unwrap()
+    let prev_consensus_validators = prev_consensus_validator_handle
+        .iter(storage)?
         .filter_map(|validator| {
             let (
                 NestedSubKey::Data {
-                    key: cur_stake,
+                    key: _prev_stake,
                     nested_sub_key: _,
                 },
                 address,
             ) = validator.unwrap();
-            let cur_stake = token::Amount::from(cur_stake);
 
-            tracing::debug!(
-                "Below-capacity validator address {address}, stake {cur_stake}"
-            );
+            let new_state = validator_state_handle(&address)
+                .get(storage, next_epoch, params)
+                .unwrap();
 
-            let prev_validator_stake = validator_deltas_handle(&address)
-                .get_sum(storage, current_epoch, params)
+            let prev_tm_voting_power = Lazy::new(|| {
+                let prev_validator_stake = read_validator_stake(
+                    storage,
+                    params,
+                    &address,
+                    current_epoch,
+                )
                 .unwrap()
-                .map(token::Amount::from_change)
                 .unwrap_or_default();
-            let prev_tm_voting_power = into_tm_voting_power(
-                params.tm_votes_per_token,
-                prev_validator_stake,
-            );
+                into_tm_voting_power(
+                    params.tm_votes_per_token,
+                    prev_validator_stake,
+                )
+            });
 
-            // If the validator previously had no voting power, it wasn't in
-            // tendermint set and we have to skip it.
-            if prev_tm_voting_power == 0 {
-                tracing::debug!(
-                    "skipping validator update {address}, it's inactive and \
-                     previously had no voting power"
+            // If the validator is still in the Consensus set, we accounted for
+            // it in the `new_consensus_validators` iterator above
+            if matches!(new_state, Some(ValidatorState::Consensus)) {
+                return None;
+            } else if params.validator_stake_threshold
+                == token::Amount::default()
+                && *prev_tm_voting_power == 0
+            {
+                // If the new state is not Consensus but its prev voting power
+                // was 0 and the stake threshold is 0, we can also skip the
+                // update
+                tracing::info!(
+                    "skipping validator update, {address} is in consensus set \
+                     but without voting power"
                 );
                 return None;
             }
 
-            if !prev_below_capacity_vals.is_empty(storage).unwrap() {
-                // Look up the previous state
-                let prev_state = validator_state_handle(&address)
-                    .get(storage, current_epoch, params)
-                    .unwrap();
-                // If the `prev_state.is_none()`, it's a new validator that
-                // is `BelowCapacity`, so no update is needed. If it
-                // previously was `BelowCapacity` there's no update needed
-                // either.
-                if !matches!(prev_state, Some(ValidatorState::Consensus)) {
-                    tracing::debug!(
-                        "skipping validator update, {address} is not and \
-                         wasn't previously in consensus set"
-                    );
-                    return None;
-                }
-            }
-
+            // The remaining validators were previously Consensus but no longer
+            // are, so they must be deactivated
             let consensus_key = validator_consensus_key_handle(&address)
                 .get(storage, next_epoch, params)
                 .unwrap()
@@ -2303,8 +2552,9 @@ where
             );
             Some(ValidatorSetUpdate::Deactivated(consensus_key))
         });
-    Ok(consensus_validators
-        .chain(below_capacity_validators)
+
+    Ok(new_consensus_validators
+        .chain(prev_consensus_validators)
         .map(f)
         .collect())
 }
@@ -2516,7 +2766,7 @@ where
                     }
                     let change: token::Change =
                         BorshDeserialize::try_from_slice(&val_bytes).ok()?;
-                    if change == 0 {
+                    if change.is_zero() {
                         return None;
                     }
                     return Some((bond_id, start, change));
@@ -2689,14 +2939,14 @@ fn make_bond_details(
         .cloned()
         .unwrap_or_default();
     let amount = token::Amount::from_change(change);
-    let mut slash_rates_by_epoch = BTreeMap::<Epoch, Decimal>::new();
+    let mut slash_rates_by_epoch = BTreeMap::<Epoch, Dec>::new();
 
     let validator_slashes =
         applied_slashes.entry(validator.clone()).or_default();
     for slash in slashes {
         if slash.epoch >= start {
             let cur_rate = slash_rates_by_epoch.entry(slash.epoch).or_default();
-            *cur_rate = cmp::min(Decimal::ONE, *cur_rate + slash.rate);
+            *cur_rate = cmp::min(Dec::one(), *cur_rate + slash.rate);
 
             if !prev_applied_slashes.iter().any(|s| s == slash) {
                 validator_slashes.push(slash.clone());
@@ -2733,7 +2983,7 @@ fn make_unbond_details(
         .get(validator)
         .cloned()
         .unwrap_or_default();
-    let mut slash_rates_by_epoch = BTreeMap::<Epoch, Decimal>::new();
+    let mut slash_rates_by_epoch = BTreeMap::<Epoch, Dec>::new();
 
     let validator_slashes =
         applied_slashes.entry(validator.clone()).or_default();
@@ -2748,7 +2998,7 @@ fn make_unbond_details(
                     .unwrap_or_default()
         {
             let cur_rate = slash_rates_by_epoch.entry(slash.epoch).or_default();
-            *cur_rate = cmp::min(Decimal::ONE, *cur_rate + slash.rate);
+            *cur_rate = cmp::min(Dec::one(), *cur_rate + slash.rate);
 
             if !prev_applied_slashes.iter().any(|s| s == slash) {
                 validator_slashes.push(slash.clone());
@@ -2833,7 +3083,7 @@ where
             debug_assert_eq!(
                 into_tm_voting_power(
                     params.tm_votes_per_token,
-                    stake_from_deltas
+                    stake_from_deltas,
                 ),
                 i64::try_from(validator_vp).unwrap_or_default(),
             );
@@ -2848,8 +3098,8 @@ where
     let rewards_calculator = PosRewardsCalculator {
         proposer_reward: params.block_proposer_reward,
         signer_reward: params.block_vote_reward,
-        signing_stake: u64::from(total_signing_stake),
-        total_stake: u64::from(total_consensus_stake),
+        signing_stake: total_signing_stake,
+        total_stake: total_consensus_stake,
     };
     let coeffs = rewards_calculator
         .get_reward_coeffs()
@@ -2866,10 +3116,9 @@ where
 
     // Compute the fractional block rewards for each consensus validator and
     // update the reward accumulators
-    let consensus_stake_unscaled: Decimal =
-        total_consensus_stake.as_dec_unscaled();
-    let signing_stake_unscaled: Decimal = total_signing_stake.as_dec_unscaled();
-    let mut values: HashMap<Address, Decimal> = HashMap::new();
+    let consensus_stake_unscaled: Dec = total_consensus_stake.into();
+    let signing_stake_unscaled: Dec = total_signing_stake.into();
+    let mut values: HashMap<Address, Dec> = HashMap::new();
     for validator in consensus_validators.iter(storage)? {
         let (
             NestedSubKey::Data {
@@ -2887,8 +3136,8 @@ where
             continue;
         }
 
-        let mut rewards_frac = Decimal::default();
-        let stake_unscaled: Decimal = stake.as_dec_unscaled();
+        let mut rewards_frac = Dec::zero();
+        let stake_unscaled: Dec = stake.into();
         // println!(
         //     "NAMADA VALIDATOR STAKE (LOGGING BLOCK REWARDS) OF EPOCH {} =
         // {}",     epoch, stake
@@ -2927,25 +3176,28 @@ pub fn compute_cubic_slash_rate<S>(
     storage: &S,
     params: &PosParams,
     infraction_epoch: Epoch,
-) -> storage_api::Result<Decimal>
+) -> storage_api::Result<Dec>
 where
     S: StorageRead,
 {
     // println!("COMPUTING CUBIC SLASH RATE");
-    let mut sum_vp_fraction = Decimal::ZERO;
+    let mut sum_vp_fraction = Dec::zero();
     let (start_epoch, end_epoch) =
         params.cubic_slash_epoch_window(infraction_epoch);
 
     for epoch in Epoch::iter_bounds_inclusive(start_epoch, end_epoch) {
         let consensus_stake =
-            Decimal::from(get_total_consensus_stake(storage, epoch)?);
-        // println!("Consensus stake in epoch {}: {}", epoch, consensus_stake);
-
+            Dec::from(get_total_consensus_stake(storage, epoch)?);
+        tracing::debug!(
+            "Consensus stake in epoch {}: {}",
+            epoch,
+            consensus_stake
+        );
         let processing_epoch = epoch + params.slash_processing_epoch_offset();
         let slashes = enqueued_slashes_handle().at(&processing_epoch);
-        let infracting_stake = slashes
-            .iter(storage)?
-            .map(|res| {
+        let infracting_stake = slashes.iter(storage)?.fold(
+            Ok(Dec::zero()),
+            |acc: storage_api::Result<Dec>, res| {
                 let (
                     NestedSubKey::Data {
                         key: validator,
@@ -2959,21 +3211,26 @@ where
                         .unwrap_or_default();
                 // println!("Val {} stake: {}", &validator, validator_stake);
 
-                Ok(Decimal::from(validator_stake))
+                if let Ok(inner) = acc {
+                    Ok(inner + Dec::from(validator_stake))
+                } else {
+                    acc
+                }
                 // TODO: does something more complex need to be done
                 // here in the event some of these slashes correspond to
                 // the same validator?
-            })
-            .sum::<storage_api::Result<Decimal>>()?;
+            },
+        )?;
         sum_vp_fraction += infracting_stake / consensus_stake;
     }
     // println!("sum_vp_fraction: {}", sum_vp_fraction);
-    Ok(dec!(9) * sum_vp_fraction * sum_vp_fraction)
+    Ok(Dec::new(9, 0).unwrap() * sum_vp_fraction * sum_vp_fraction)
 }
 
 /// Record a slash for a misbehavior that has been received from Tendermint and
 /// then jail the validator, removing it from the validator set. The slash rate
 /// will be computed at a later epoch.
+#[allow(clippy::too_many_arguments)]
 pub fn slash<S>(
     storage: &mut S,
     params: &PosParams,
@@ -2982,6 +3239,7 @@ pub fn slash<S>(
     evidence_block_height: impl Into<u64>,
     slash_type: SlashType,
     validator: &Address,
+    validator_set_update_epoch: Epoch,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -2991,7 +3249,7 @@ where
         epoch: evidence_epoch,
         block_height: evidence_block_height,
         r#type: slash_type,
-        rate: Decimal::ZERO, // Let the rate be 0 initially before processing
+        rate: Dec::zero(), // Let the rate be 0 initially before processing
     };
     // Need `+1` because we process at the beginning of a new epoch
     let processing_epoch =
@@ -3017,7 +3275,7 @@ where
     // Remove the validator from the set starting at the next epoch and up thru
     // the pipeline epoch.
     for epoch in
-        Epoch::iter_bounds_inclusive(current_epoch.next(), pipeline_epoch)
+        Epoch::iter_bounds_inclusive(validator_set_update_epoch, pipeline_epoch)
     {
         let prev_state = validator_state_handle(validator)
             .get(storage, epoch, params)?
@@ -3035,6 +3293,9 @@ where
                     .at(&epoch)
                     .at(&token::Amount::from_change(amount_pre))
                     .remove(storage, &val_position)?;
+                validator_set_positions_handle()
+                    .at(&epoch)
+                    .remove(storage, validator)?;
 
                 // For the pipeline epoch only:
                 // promote the next max inactive validator to the active
@@ -3091,6 +3352,12 @@ where
                     .at(&epoch)
                     .at(&token::Amount::from_change(amount_pre).into())
                     .remove(storage, &val_position)?;
+                validator_set_positions_handle()
+                    .at(&epoch)
+                    .remove(storage, validator)?;
+            }
+            ValidatorState::BelowThreshold => {
+                println!("Below-threshold");
             }
             ValidatorState::Inactive => {
                 println!("INACTIVE");
@@ -3172,7 +3439,7 @@ where
         debug_assert_eq!(enqueued_slash.epoch, infraction_epoch);
 
         let slash_rate = cmp::min(
-            Decimal::ONE,
+            Dec::one(),
             cmp::max(
                 enqueued_slash.r#type.get_slash_rate(&params),
                 cubic_slash_rate,
@@ -3213,10 +3480,10 @@ where
             "Validator {} stake at infraction epoch {} = {}",
             &validator,
             infraction_epoch,
-            validator_stake_at_infraction
+            validator_stake_at_infraction.to_string_native()
         );
 
-        let mut total_rate = Decimal::ZERO;
+        let mut total_rate = Dec::zero();
 
         for enqueued_slash in &enqueued_slashes {
             // Add this slash to the list of validator's slashes in storage
@@ -3225,7 +3492,7 @@ where
 
             total_rate += enqueued_slash.rate;
         }
-        total_rate = cmp::min(Decimal::ONE, total_rate);
+        total_rate = cmp::min(Dec::one(), total_rate);
 
         // Find the total amount deducted from the deltas due to unbonds that
         // became active after the infraction epoch, accounting for slashes
@@ -3248,7 +3515,7 @@ where
                 let (start, unbond_amount) = unbond?;
                 tracing::debug!(
                     "UnbondRecord: amount = {}, start_epoch {}",
-                    &unbond_amount,
+                    unbond_amount.to_string_native(),
                     &start
                 );
                 if start <= infraction_epoch {
@@ -3283,7 +3550,7 @@ where
                 tracing::debug!(
                     "Total unbonded (epoch {}) w slashing = {}",
                     epoch,
-                    total_unbonded
+                    total_unbonded.to_string_native()
                 );
             }
 
@@ -3300,7 +3567,7 @@ where
             tracing::debug!(
                 "Epoch {}\nLast slash = {}",
                 current_epoch + offset,
-                last_slash
+                last_slash.to_string_native()
             );
             let mut recent_unbonds = token::Change::default();
             let unbonds =
@@ -3310,7 +3577,7 @@ where
                 let (start, unbond_amount) = unbond?;
                 tracing::debug!(
                     "UnbondRecord: amount = {}, start_epoch {}",
-                    &unbond_amount,
+                    unbond_amount.to_string_native(),
                     &start
                 );
                 if start <= infraction_epoch {
@@ -3345,18 +3612,14 @@ where
                 tracing::debug!(
                     "Total unbonded (offset {}) w slashing = {}",
                     offset,
-                    total_unbonded
+                    total_unbonded.to_string_native()
                 );
             }
 
-            let this_slash = decimal_mult_amount(
-                total_rate,
-                validator_stake_at_infraction - total_unbonded,
-            )
-            .change();
+            let this_slash = total_rate
+                * (validator_stake_at_infraction - total_unbonded).change();
             let diff_slashed_amount = last_slash - this_slash;
             last_slash = this_slash;
-
             // println!("This slash = {}", this_slash);
             // println!("Diff slashed amount = {}", diff_slashed_amount);
             // total_slashed -= diff_slashed_amount;
@@ -3397,7 +3660,7 @@ where
 
             tracing::debug!(
                 "Deltas change = {} at offset {} for validator {}",
-                delta,
+                delta.to_string_native(),
                 offset,
                 &validator
             );
@@ -3553,11 +3816,11 @@ fn find_slashes_in_range<S>(
     start: Epoch,
     end: Option<Epoch>,
     validator: &Address,
-) -> storage_api::Result<BTreeMap<Epoch, Decimal>>
+) -> storage_api::Result<BTreeMap<Epoch, Dec>>
 where
     S: StorageRead,
 {
-    let mut slashes = BTreeMap::<Epoch, Decimal>::new();
+    let mut slashes = BTreeMap::<Epoch, Dec>::new();
     for slash in validator_slashes_handle(validator).iter(storage)? {
         let slash = slash?;
         if start <= slash.epoch
@@ -3568,7 +3831,7 @@ where
             //     &slash.epoch, &slash.rate
             // );
             let cur_rate = slashes.entry(slash.epoch).or_default();
-            *cur_rate = cmp::min(*cur_rate + slash.rate, Decimal::ONE);
+            *cur_rate = cmp::min(*cur_rate + slash.rate, Dec::one());
         }
     }
     Ok(slashes)
