@@ -3170,7 +3170,7 @@ pub mod args {
 
     impl CliToSdk<TxUnjailValidator<SdkTypes>> for TxUnjailValidator<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> TxUnjailValidator<SdkTypes> {
-            TxUnjailValidator {
+            TxUnjailValidator::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
                 tx_code_path: self.tx_code_path.to_path_buf(),
