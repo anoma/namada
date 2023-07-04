@@ -97,11 +97,14 @@ where
             .filter(|k| {
                 matches!(
                     token::is_any_token_balance_key(k),
-                    Some(Address::Internal(
-                        InternalAddress::IbcEscrow
-                            | InternalAddress::IbcBurn
-                            | InternalAddress::IbcMint
-                    ))
+                    Some([
+                        _,
+                        Address::Internal(
+                            InternalAddress::IbcEscrow
+                                | InternalAddress::IbcBurn
+                                | InternalAddress::IbcMint
+                        )
+                    ])
                 )
             })
             .cloned()
@@ -126,7 +129,7 @@ where
                     changes.insert(sub_prefix, change + this_change);
                 }
             }
-            if changes.iter().all(|(_, c)| *c == 0) {
+            if changes.iter().all(|(_, c)| c.is_zero()) {
                 return Ok(true);
             } else {
                 return Err(Error::TokenTransfer(
@@ -292,7 +295,7 @@ where
             )?
             .unwrap_or_default();
             // the previous balance of the mint address should be the maximum
-            Amount::max().change() - post.change()
+            Amount::max_signed().change() - post.change()
         };
 
         if change == amount.change() {
@@ -343,7 +346,7 @@ where
             )?
             .unwrap_or_default();
             // the previous balance of the mint address should be the maximum
-            Amount::max().change() - post.change()
+            Amount::max_signed().change() - post.change()
         };
 
         if change == amount.change() {

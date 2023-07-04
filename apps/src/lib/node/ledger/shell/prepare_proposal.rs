@@ -320,7 +320,7 @@ mod test_prepare_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -356,12 +356,12 @@ mod test_prepare_proposal {
         for i in 0..2 {
             let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount: 0.into(),
+                    amount: Default::default(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             ))));
@@ -430,7 +430,7 @@ mod test_prepare_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -482,7 +482,7 @@ mod test_prepare_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -523,7 +523,7 @@ mod test_prepare_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -576,7 +576,7 @@ mod test_prepare_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -599,7 +599,7 @@ mod test_prepare_proposal {
                 },
                 &keypair_2,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             ))));
@@ -641,7 +641,7 @@ mod test_prepare_proposal {
                 },
                 &keypair,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             ))));
