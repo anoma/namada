@@ -198,6 +198,7 @@ mod test_apply_bp_roots_to_storage {
     use namada_core::types::ethereum_events::Uint;
     use namada_core::types::keccak::{keccak_hash, KeccakHash};
     use namada_core::types::storage::Key;
+    use namada_core::types::token::Amount;
     use namada_core::types::vote_extensions::bridge_pool_roots;
 
     use super::*;
@@ -227,9 +228,9 @@ mod test_apply_bp_roots_to_storage {
         let validator_c = address::testing::established_address_4();
         let (mut wl_storage, keys) = test_utils::setup_storage_with_validators(
             HashMap::from_iter(vec![
-                (validator_a.clone(), 100_u64.into()),
-                (validator_b.clone(), 100_u64.into()),
-                (validator_c.clone(), 40_u64.into()),
+                (validator_a.clone(), Amount::native_whole(100)),
+                (validator_b.clone(), Amount::native_whole(100)),
+                (validator_c.clone(), Amount::native_whole(40)),
             ]),
         );
         bridge_pool_vp::init_storage(&mut wl_storage);

@@ -400,9 +400,10 @@ mod tests {
     /// that it is recorded in storage
     fn test_apply_derived_tx_new_event_mint_immediately() {
         let sole_validator = address::testing::established_address_2();
-        let (mut wl_storage, _) = test_utils::setup_storage_with_validators(
-            HashMap::from_iter(vec![(sole_validator.clone(), 100_u64.into())]),
-        );
+        let (mut wl_storage, _) =
+            test_utils::setup_storage_with_validators(HashMap::from_iter(
+                vec![(sole_validator.clone(), Amount::native_whole(100))],
+            ));
         test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
         let receiver = address::testing::established_address_1();
 
@@ -462,8 +463,8 @@ mod tests {
         let validator_b = address::testing::established_address_3();
         let (mut wl_storage, _) = test_utils::setup_storage_with_validators(
             HashMap::from_iter(vec![
-                (validator_a.clone(), 100_u64.into()),
-                (validator_b, 100_u64.into()),
+                (validator_a.clone(), Amount::native_whole(100)),
+                (validator_b, Amount::native_whole(100)),
             ]),
         );
         test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
@@ -516,8 +517,8 @@ mod tests {
         let validator_b = address::testing::established_address_3();
         let (mut wl_storage, _) = test_utils::setup_storage_with_validators(
             HashMap::from_iter(vec![
-                (validator_a.clone(), 100_u64.into()),
-                (validator_b, 100_u64.into()),
+                (validator_a.clone(), Amount::native_whole(100)),
+                (validator_b, Amount::native_whole(100)),
             ]),
         );
 
@@ -638,8 +639,8 @@ mod tests {
         let validator_b = address::testing::established_address_3();
         let (mut wl_storage, _) = test_utils::setup_storage_with_validators(
             HashMap::from_iter(vec![
-                (validator_a.clone(), 100_u64.into()),
-                (validator_b, 100_u64.into()),
+                (validator_a.clone(), Amount::native_whole(100)),
+                (validator_b, Amount::native_whole(100)),
             ]),
         );
         test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
@@ -767,8 +768,8 @@ mod tests {
         let validator_b = address::testing::established_address_3();
         let (mut wl_storage, _) = test_utils::setup_storage_with_validators(
             HashMap::from_iter(vec![
-                (validator_a.clone(), 100_u64.into()),
-                (validator_b.clone(), 100_u64.into()),
+                (validator_a.clone(), Amount::native_whole(100)),
+                (validator_b.clone(), Amount::native_whole(100)),
             ]),
         );
         test_utils::bootstrap_ethereum_bridge(&mut wl_storage);

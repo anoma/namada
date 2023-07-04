@@ -321,13 +321,13 @@ mod tests {
     fn test_voting_across_epoch_boundaries() {
         // the validators that will vote in the tally
         let validator_1 = address::testing::established_address_1();
-        let validator_1_stake: token::Amount = 100u64.into();
+        let validator_1_stake = token::Amount::native_whole(100);
 
         let validator_2 = address::testing::established_address_2();
-        let validator_2_stake: token::Amount = 100u64.into();
+        let validator_2_stake = token::Amount::native_whole(100);
 
         let validator_3 = address::testing::established_address_3();
-        let validator_3_stake: token::Amount = 100u64.into();
+        let validator_3_stake = token::Amount::native_whole(100);
 
         // start epoch 0 with validator 1
         let (mut wl_storage, _) = test_utils::setup_storage_with_validators(

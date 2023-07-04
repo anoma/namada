@@ -199,6 +199,7 @@ where
 #[cfg(test)]
 mod test_valset_upd_state_changes {
     use namada_core::types::address;
+    use namada_core::types::token::Amount;
     use namada_core::types::vote_extensions::validator_set_update::VotingPowersMap;
     use namada_core::types::voting_power::FractionalVotingPower;
     use namada_proof_of_stake::pos_queries::PosQueries;
@@ -306,8 +307,14 @@ mod test_valset_upd_state_changes {
         let (mut wl_storage, keys) =
             test_utils::setup_storage_with_validators(HashMap::from_iter([
                 // the first validator has exactly 2/3 of the total stake
-                (address::testing::established_address_1(), 50_000_u64.into()),
-                (address::testing::established_address_2(), 25_000_u64.into()),
+                (
+                    address::testing::established_address_1(),
+                    Amount::native_whole(50_000),
+                ),
+                (
+                    address::testing::established_address_2(),
+                    Amount::native_whole(25_000),
+                ),
             ]));
 
         let last_height = wl_storage.storage.get_last_block_height();
