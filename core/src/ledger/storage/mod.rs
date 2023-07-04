@@ -756,7 +756,16 @@ where
                         match old.0.cmp(&new.0) {
                             Ordering::Equal => {
                                 // the value was updated
-                                tree.update(&new_key, new.1.clone())?;
+                                tree.update(
+                                    &new_key,
+                                    if is_pending_transfer_key(&new_key) {
+                                        target_height.try_to_vec().expect(
+                                            "Serialization should never fail",
+                                        )
+                                    } else {
+                                        new.1.clone()
+                                    },
+                                )?;
                                 old_diff = old_diff_iter.next();
                                 new_diff = new_diff_iter.next();
                             }
@@ -767,7 +776,16 @@ where
                             }
                             Ordering::Greater => {
                                 // the value was inserted
-                                tree.update(&new_key, new.1.clone())?;
+                                tree.update(
+                                    &new_key,
+                                    if is_pending_transfer_key(&new_key) {
+                                        target_height.try_to_vec().expect(
+                                            "Serialization should never fail",
+                                        )
+                                    } else {
+                                        new.1.clone()
+                                    },
+                                )?;
                                 new_diff = new_diff_iter.next();
                             }
                         }
@@ -783,7 +801,16 @@ where
                         // the value was inserted
                         let key = Key::parse(new.0.clone())
                             .expect("the key should be parsable");
-                        tree.update(&key, new.1.clone())?;
+                        tree.update(
+                            &key,
+                            if is_pending_transfer_key(&key) {
+                                target_height
+                                    .try_to_vec()
+                                    .expect("Serialization should never fail")
+                            } else {
+                                new.1.clone()
+                            },
+                        )?;
                         new_diff = new_diff_iter.next();
                     }
                     (None, None) => break,

@@ -43,11 +43,12 @@ pub async fn add_to_eth_bridge_pool<C, U>(
     client: &C,
     wallet: &mut Wallet<U>,
     chain_id: ChainId,
-    args: args::EthereumBridgePool,
+    mut args: args::EthereumBridgePool,
 ) where
     C: Client + Sync,
     U: WalletUtils,
 {
+    args.tx.chain_id = args.tx.chain_id.or_else(|| Some(chain_id.clone()));
     let args::EthereumBridgePool {
         ref tx,
         asset,

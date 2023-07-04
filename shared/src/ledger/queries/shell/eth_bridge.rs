@@ -237,17 +237,13 @@ where
 {
     // get the backing store of the merkle tree corresponding
     // at the specified height.
-    let stores = ctx
+    let merkle_tree = ctx
         .wl_storage
         .storage
-        .db
-        .read_merkle_tree_stores(height)
-        .expect("We should always be able to read the database")
-        .expect(
-            "Every signed root should correspond to an existing block height",
-        )
-        .1;
-    let store = match stores.get_store(StoreType::BridgePool) {
+        .get_merkle_tree(height)
+        .expect("We should always be able to read the database");
+    let stores = merkle_tree.stores();
+    let store = match stores.store(&StoreType::BridgePool) {
         StoreRef::BridgePool(store) => store,
         _ => unreachable!(),
     };
@@ -255,10 +251,14 @@ where
     let transfers: Vec<PendingTransfer> = store
         .keys()
         .map(|hash| {
-            ctx.wl_storage
-                .read(&get_key_from_hash(hash))
+            let value = ctx
+                .wl_storage
+                .storage
+                .read_with_height(&get_key_from_hash(hash), height)
                 .unwrap()
-                .unwrap()
+                .0
+                .unwrap();
+            PendingTransfer::try_from_slice(&value).unwrap()
         })
         .collect();
     transfers
