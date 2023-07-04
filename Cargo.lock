@@ -3893,6 +3893,7 @@ dependencies = [
  "ibc-relayer",
  "ibc-relayer-types",
  "itertools",
+ "lazy_static",
  "namada",
  "namada_apps",
  "namada_core",

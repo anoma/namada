@@ -2,9 +2,6 @@ use std::path::PathBuf;
 
 use color_eyre::eyre::Result;
 use namada_apps::client::tx::CLIShieldedUtils;
-use namada_apps::config::genesis::genesis_config::{
-    GenesisConfig, ParametersConfig,
-};
 
 use super::setup;
 

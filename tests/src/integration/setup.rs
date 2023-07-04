@@ -1,17 +1,17 @@
 use std::cell::RefCell;
-use std::env;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::str::FromStr;
 
+use lazy_static::lazy_static;
+use regex::Regex;
 use color_eyre::eyre::{eyre, Result, Report};
-use namada::ledger::events::log::EventLog;
 use namada::ledger::queries::router::test_rpc::TEST_RPC;
 use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router,
 };
-use namada::tendermint_rpc::{Error, SimpleRequest};
-use namada::vm::{wasm, WasmCacheRoAccess, WasmCacheRwAccess};
+use namada::ledger::events::log::dumb_queries;
+use namada::tendermint_rpc::SimpleRequest;
 use namada_apps::cli::args;
 use namada_apps::config;
 use namada_apps::config::genesis::genesis_config;
@@ -24,14 +24,13 @@ use namada_apps::node::ledger::shell::Shell;
 use namada_apps::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 use namada_core::ledger::storage::mockdb::MockDB;
 use namada_core::ledger::storage::{
-    LastBlock, Sha256Hasher, WlStorage, EPOCH_SWITCH_BLOCKS_DELAY,
+    LastBlock, Sha256Hasher, EPOCH_SWITCH_BLOCKS_DELAY,
 };
 use namada_core::types::address::Address;
 use namada_core::types::chain::{ChainId, ChainIdPrefix};
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::{BlockHash, BlockHeight, Epoch, Header};
 use namada_core::types::time::DateTimeUtc;
-use tempfile::TempDir;
 use tokio::sync::mpsc::UnboundedReceiver;
 use toml::value::Table;
 use namada::tendermint_rpc::endpoint::abci_info;
@@ -40,7 +39,7 @@ use namada_apps::facade::tendermint_rpc::endpoint::{block, block_results, blockc
 use namada_apps::facade::tendermint_rpc::error::Error as RpcError;
 
 use crate::e2e::setup::{
-    copy_wasm_to_chain_dir, get_all_wasms_hashes, TestDir, ENV_VAR_KEEP_TEMP,
+    copy_wasm_to_chain_dir, get_all_wasms_hashes, TestDir,
     SINGLE_NODE_NET_GENESIS,
 };
 
@@ -60,6 +59,56 @@ impl Deref for MockNode {
 impl DerefMut for MockNode {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.shell.get_mut()
+    }
+}
+
+/// Parse a Tendermint query.
+fn parse_tm_query(
+    query: namada::tendermint_rpc::query::Query,
+) -> dumb_queries::QueryMatcher {
+    const QUERY_PARSING_REGEX_STR: &str =
+        r"^tm\.event='NewBlock' AND (accepted|applied)\.hash='([^']+)'$";
+
+    lazy_static! {
+        /// Compiled regular expression used to parse Tendermint queries.
+        static ref QUERY_PARSING_REGEX: Regex = Regex::new(QUERY_PARSING_REGEX_STR).unwrap();
+    }
+
+    let query = query.to_string();
+    let captures = QUERY_PARSING_REGEX.captures(&query).unwrap();
+
+    match captures.get(0).unwrap().as_str() {
+        "accepted" => {
+            dumb_queries::QueryMatcher::accepted(captures.get(1).unwrap().as_str().try_into().unwrap())
+        }
+        "applied" => {
+            dumb_queries::QueryMatcher::applied(captures.get(1).unwrap().as_str().try_into().unwrap())
+        }
+        _ => unreachable!("We only query accepted or applied txs"),
+    }
+}
+
+/// A Namada event log index and event type encoded as
+/// a Tendermint block height.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+struct EncodedEvent(u64);
+
+impl EncodedEvent {
+    /// Return the corresponding Tendermint block height value.
+    ///
+    /// Note that the returned height does not point to any valid
+    /// Tendermint block height, we just care about the return type
+    /// of this value.
+    fn to_height(self) -> namada::tendermint::block::Height {
+        let s = self.0.to_string();
+        // there is no constructor on `Height` that accepts a
+        // u64 argument...
+        s.parse().unwrap()
+    }
+
+    /// Get the encoded event log index.
+    const fn log_index(self) -> usize {
+        self.0 as usize
     }
 }
 
@@ -226,15 +275,61 @@ impl Client for MockNode{
     async fn block_search(
         &self,
         query: namada::tendermint_rpc::query::Query,
-        page: u32,
-        per_page: u8,
-        order: namada::tendermint_rpc::Order,
+        _page: u32,
+        _per_page: u8,
+        _order: namada::tendermint_rpc::Order,
     ) -> Result<tendermint_rpc::endpoint::block_search::Response, RpcError>
     {
-        self.perform(tendermint_rpc::endpoint::block_search::Request::new(
-            query, page, per_page, order,
-        ))
-            .await
+        let matcher = parse_tm_query(query);
+
+        // we store an index into the event log as a block
+        // height in the response of the query... VERY NAISSSE
+        let matching_events = self
+            .shell
+            .borrow()
+            .event_log()
+            .iter()
+            .enumerate()
+            .flat_map(|(index, event)| {
+                if matcher.matches(event) {
+                    Some(EncodedEvent(index as u64))
+                } else {
+                    None
+                }
+            });
+        let blocks = matching_events
+            .map(|encoded_event| namada::tendermint_rpc::endpoint::block::Response {
+                block_id: Default::default(),
+                block: namada::tendermint::block::Block {
+                    header: namada::tendermint::block::header::Header {
+                        version: namada::tendermint::block::header::Version {
+                            block: 0,
+                            app: 0,
+                        },
+                        chain_id: "namada".try_into().unwrap(),
+                        height: encoded_event.to_height(),
+                        time: namada::tendermint::time::Time::unix_epoch(),
+                        last_block_id: None,
+                        data_hash: None,
+                        validators_hash: namada::tendermint::hash::Hash::None,
+                        next_validators_hash: namada::tendermint::hash::Hash::None,
+                        consensus_hash: namada::tendermint::hash::Hash::None,
+                        app_hash: vec![].try_into().unwrap(),
+                        last_results_hash: None,
+                        evidence_hash: None,
+                        proposer_address: namada::tendermint::account::Id::new([0; 20]),
+                    },
+                    data: Default::default(),
+                    evidence: Default::default(),
+                    last_commit: None,
+                },
+            })
+            .collect();
+
+        Ok(namada::tendermint_rpc::endpoint::block::Response {
+            blocks,
+            total_count: blocks.len() as u32,
+        })
     }
 
     /// `/block_results`: get ABCI results for a block at a particular height.
@@ -245,10 +340,44 @@ impl Client for MockNode{
         where
             H: Into<namada::tendermint::block::Height> + Send,
     {
-        self.perform(tendermint_rpc::endpoint::block_results::Request::new(
-            height.into(),
-        ))
-            .await
+        let height = height.into();
+        let encoded_event = EncodedEvent(height.value());
+
+        let events = self
+            .shell
+            .borrow()
+            .event_log()
+            .iter()
+            .enumerate()
+            .flat_map(|(index, event)| {
+                if index == encoded_event.log_index() {
+                    Some(event)
+                } else {
+                    None
+                }
+            })
+            .map(|event| namada::tendermint::abci::responses::Event {
+                type_str: event.event_type.to_string(),
+                attributes: event
+                    .attributes
+                    .into_iter()
+                    .map(|(k, v)| namada::tendermint::abci::tag::Tag {
+                        key: k.parse().unwrap(),
+                        value: v.parse().unrap(),
+                    })
+                    .collect(),
+            })
+            .collect();
+        let has_events = !events.is_empty();
+
+        Ok(tendermint_rpc::endpoint::block_results::Response {
+            height,
+            txs_results: None,
+            begin_block_events: None,
+            end_block_events: has_events.then(events),
+            validator_updates: vec![],
+            consensus_param_updates: None,
+        })
     }
 
     /// `/tx_search`: search for transactions with their results.
@@ -456,7 +585,7 @@ fn create_node(base_dir: &Path, genesis: &GenesisConfig) -> Result<MockNode> {
     // instantiate and initialize the ledger node.
     let (sender, recv) = tokio::sync::mpsc::unbounded_channel();
     let mut node = MockNode {
-        shell: Shell::new(
+        shell: RefCell::new(Shell::new(
             config::Ledger::new(
                 base_dir,
                 chain_id.clone(),
@@ -468,7 +597,7 @@ fn create_node(base_dir: &Path, genesis: &GenesisConfig) -> Result<MockNode> {
             50 * 1024 * 1024, // 50 kiB
             50 * 1024 * 1024, // 50 kiB
             Address::from_str("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
-        ),
+        )),
         _broadcast_recv: recv,
     };
     let init_req = namada_apps::facade::tower_abci::request::InitChain {
@@ -482,7 +611,9 @@ fn create_node(base_dir: &Path, genesis: &GenesisConfig) -> Result<MockNode> {
         app_state_bytes: vec![],
         initial_height: 0,
     };
-    node.shell
+    node
+        .shell
+        .borrow_mut()
         .init_chain(init_req, 1)
         .map_err(|e| eyre!("Failed to initialize ledger: {:?}", e))?;
     Ok(node)
