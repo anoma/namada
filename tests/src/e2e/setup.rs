@@ -93,6 +93,7 @@ where
     let net_address_port_0 = net_address_0.port();
     for ix in 0..num {
         let mut validator = other_validators.clone();
+        validator.tokens = Some(other_validators.tokens.unwrap() / 5);
         let mut net_address = net_address_0;
         // 6 ports for each validator
         let first_port = net_address_port_0 + port_offset(ix);

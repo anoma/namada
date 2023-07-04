@@ -4230,12 +4230,33 @@ fn double_signing_gets_slashed() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
     validator_0.exp_string("Namada ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
-    let _bg_validator_0 = validator_0.background();
+    let bg_validator_0 = validator_0.background();
+
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
     validator_1.exp_string("Namada ledger node started")?;
     validator_1.exp_string("This node is a validator")?;
     let bg_validator_1 = validator_1.background();
+
+    // let mut validator_2 =
+    //     run_as!(test, Who::Validator(2), Bin::Node, &["ledger"], Some(40))?;
+    // validator_2.exp_string("Namada ledger node started")?;
+    // validator_2.exp_string("This node is a validator")?;
+
+    // let mut validator_3 =
+    //     run_as!(test, Who::Validator(3), Bin::Node, &["ledger"], Some(40))?;
+    // validator_3.exp_string("Namada ledger node started")?;
+    // validator_3.exp_string("This node is a validator")?;
+
+    // wait_for_wasm_pre_compile(&mut validator_0)?;
+    // let bg_validator_0 = validator_0.background();
+    // wait_for_wasm_pre_compile(&mut validator_1)?;
+    // let bg_validator_1 = validator_1.background();
+    // wait_for_wasm_pre_compile(&mut validator_2)?;
+    // let bg_validator_2 = validator_2.background();
+
+    // wait_for_wasm_pre_compile(&mut validator_3)?;
+    // let bg_validator_3 = validator_3.background();
 
     // 2. Copy the first genesis validator base-dir
     let validator_0_base_dir = test.get_base_dir(&Who::Validator(0));
@@ -4369,12 +4390,14 @@ fn double_signing_gets_slashed() -> Result<()> {
     println!("\n{processing_epoch}\n");
 
     // Restart the node that got slashed for double-signing
-    validator_1 =
-        run_as!(test, Who::Validator(1), Bin::Node, ["ledger"], Some(40))?;
+    // validator_1 =
+    //     run_as!(test, Who::Validator(1), Bin::Node, ["ledger"], Some(40))?;
 
     // 6. Wait for processing epoch
+    println!("\nLOOPING\n");
     loop {
         let epoch = epoch_sleep(&test, &validator_one_rpc, 120)?;
+        println!("\nCurrent epoch: {}", epoch);
         if epoch >= processing_epoch {
             break;
         }
