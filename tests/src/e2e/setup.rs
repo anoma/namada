@@ -40,7 +40,7 @@ pub const APPS_PACKAGE: &str = "namada_apps";
 pub const ENV_VAR_DEBUG: &str = "NAMADA_E2E_DEBUG";
 
 /// Env. var for keeping temporary files created by the E2E tests
-const ENV_VAR_KEEP_TEMP: &str = "NAMADA_E2E_KEEP_TEMP";
+pub const ENV_VAR_KEEP_TEMP: &str = "NAMADA_E2E_KEEP_TEMP";
 
 /// Env. var for temporary path
 const ENV_VAR_TEMP_PATH: &str = "NAMADA_E2E_TEMP_PATH";

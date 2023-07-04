@@ -17,7 +17,7 @@ use super::storage_api;
 use crate::types::storage::BlockHeight;
 
 #[macro_use]
-mod router;
+pub mod router;
 mod shell;
 mod types;
 pub mod vp;
@@ -92,7 +92,7 @@ pub fn require_no_data(request: &RequestQuery) -> storage_api::Result<()> {
 
 /// Queries testing helpers
 #[cfg(any(test, feature = "testing"))]
-mod testing {
+pub mod testing {
     use tempfile::TempDir;
     use tendermint_rpc::Response;
 

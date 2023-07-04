@@ -247,7 +247,7 @@ where
     #[allow(dead_code)]
     chain_id: ChainId,
     /// The persistent storage with write log
-    pub(super) wl_storage: WlStorage<D, H>,
+    pub wl_storage: WlStorage<D, H>,
     /// Gas meter for the current block
     gas_meter: BlockGasMeter,
     /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
@@ -262,9 +262,9 @@ where
     #[allow(dead_code)]
     mode: ShellMode,
     /// VP WASM compilation cache
-    vp_wasm_cache: VpCache<WasmCacheRwAccess>,
+    pub vp_wasm_cache: VpCache<WasmCacheRwAccess>,
     /// Tx WASM compilation cache
-    tx_wasm_cache: TxCache<WasmCacheRwAccess>,
+    pub tx_wasm_cache: TxCache<WasmCacheRwAccess>,
     /// Taken from config `storage_read_past_height_limit`. When set, will
     /// limit the how many block heights in the past can the storage be
     /// queried for reading values.
@@ -272,7 +272,7 @@ where
     /// Proposal execution tracking
     pub proposal_data: HashSet<u64>,
     /// Log of events emitted by `FinalizeBlock` ABCI calls.
-    event_log: EventLog,
+    pub event_log: EventLog,
 }
 
 impl<D, H> Shell<D, H>
@@ -995,7 +995,7 @@ where
 /// Helper functions and types for writing unit tests
 /// for the shell
 #[cfg(test)]
-mod test_utils {
+pub mod test_utils {
     use std::ops::{Deref, DerefMut};
     use std::path::PathBuf;
 

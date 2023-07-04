@@ -3878,6 +3878,7 @@ name = "namada_tests"
 version = "0.17.5"
 dependencies = [
  "assert_cmd",
+ "async-trait",
  "borsh",
  "chrono",
  "color-eyre",

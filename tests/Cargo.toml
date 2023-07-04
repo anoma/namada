@@ -31,6 +31,7 @@ namada_core = {path = "../core", features = ["testing"]}
 namada_test_utils = {path = "../test_utils"}
 namada_vp_prelude = {path = "../vp_prelude"}
 namada_tx_prelude = {path = "../tx_prelude"}
+async-trait = {version = "0.1.51"}
 chrono.workspace = true
 concat-idents.workspace = true
 derivative.workspace = true

@@ -11,6 +11,8 @@ mod vm_host_env;
 pub use vm_host_env::{ibc, tx, vp};
 #[cfg(test)]
 mod e2e;
+#[cfg(test)]
+mod integration;
 pub mod native_vp;
 pub mod storage;
 #[cfg(test)]
