@@ -4205,11 +4205,24 @@ fn double_signing_gets_slashed() -> Result<()> {
     use namada_apps::client;
     use namada_apps::config::Config;
 
+    let mut pipeline_len = 0;
+    let mut unbonding_len = 0;
+    let mut cubic_offset = 0;
+
     // Setup 2 genesis validator nodes
     let test = setup::network(
-        |genesis| setup::set_validators(2, genesis, default_port_offset),
+        |genesis| {
+            (pipeline_len, unbonding_len, cubic_offset) = (
+                genesis.pos_params.pipeline_len,
+                genesis.pos_params.unbonding_len,
+                genesis.pos_params.cubic_slashing_window_length,
+            );
+            setup::set_validators(2, genesis, default_port_offset)
+        },
         None,
     )?;
+
+    println!("pipeline_len: {}", pipeline_len);
 
     // 1. Run 2 genesis validator ledger nodes
     let args = ["ledger"];
@@ -4341,7 +4354,37 @@ fn double_signing_gets_slashed() -> Result<()> {
     // 6. Wait for double signing evidence
     let mut validator_1 = bg_validator_1.foreground();
     validator_1.exp_string("Processing evidence")?;
-    validator_1.exp_string("Slashing")?;
+    // validator_1.exp_string("Slashing")?;
+
+    println!("\nPARSING SLASH MESSAGE\n");
+    let (_, res) = validator_1
+        .exp_regex(r"Slashing [a-z0-9]+ for Duplicate vote in epoch [0-9]+")
+        .unwrap();
+    println!("\n{res}\n");
+    let processing_epoch = Epoch::from_str(res.split(' ').last().unwrap())
+        .unwrap()
+        + unbonding_len
+        + cubic_offset
+        + 1u64;
+    println!("\n{processing_epoch}\n");
+
+    // Restart the node that got slashed for double-signing
+    validator_1 =
+        run_as!(test, Who::Validator(1), Bin::Node, ["ledger"], Some(40))?;
+
+    // 6. Wait for processing epoch
+    loop {
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 120)?;
+        if epoch >= processing_epoch {
+            break;
+        }
+    }
+
+    //     let (_, res) = client
+    //     .exp_regex(r"withdrawable starting from epoch [0-9]+")
+    //     .unwrap();
+    // let withdraw_epoch =
+    //     Epoch::from_str(res.split(' ').last().unwrap()).unwrap();
 
     Ok(())
 }
