@@ -356,6 +356,17 @@ pub struct QueryBondedStake<C: NamadaTypes = SdkTypes> {
     pub epoch: Option<Epoch>,
 }
 
+/// Query the state of a validator (its validator set or if it is jailed)
+#[derive(Clone, Debug)]
+pub struct QueryValidatorState<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+    /// Address of a validator
+    pub validator: C::Address,
+    /// Epoch in which to find the validator state
+    pub epoch: Option<Epoch>,
+}
+
 #[derive(Clone, Debug)]
 /// Commission rate change args
 pub struct CommissionRateChange<C: NamadaTypes = SdkTypes> {

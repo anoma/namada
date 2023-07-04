@@ -238,6 +238,7 @@ pub mod cmds {
                 .subcommand(QueryProposal::def().display_order(4))
                 .subcommand(QueryProposalResult::def().display_order(4))
                 .subcommand(QueryProtocolParameters::def().display_order(4))
+                .subcommand(QueryValidatorState::def().display_order(4))
                 // Utils
                 .subcommand(Utils::def().display_order(5))
         }
@@ -282,6 +283,8 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryProposalResult);
             let query_protocol_parameters =
                 Self::parse_with_ctx(matches, QueryProtocolParameters);
+            let query_validator_state =
+                Self::parse_with_ctx(matches, QueryValidatorState);
             let add_to_eth_bridge_pool =
                 Self::parse_with_ctx(matches, AddToEthBridgePool);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
@@ -314,6 +317,7 @@ pub mod cmds {
                 .or(query_proposal)
                 .or(query_proposal_result)
                 .or(query_protocol_parameters)
+                .or(query_validator_state)
                 .or(utils)
         }
     }
@@ -381,6 +385,7 @@ pub mod cmds {
         QueryProposal(QueryProposal),
         QueryProposalResult(QueryProposalResult),
         QueryProtocolParameters(QueryProtocolParameters),
+        QueryValidatorState(QueryValidatorState),
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -1454,6 +1459,27 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct QueryValidatorState(
+        pub args::QueryValidatorState<args::CliTypes>,
+    );
+
+    impl SubCmd for QueryValidatorState {
+        const CMD: &'static str = "validator-state";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryValidatorState(args::QueryValidatorState::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query the state of a PoS validator.")
+                .add_args::<args::QueryValidatorState<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct QueryTransfers(pub args::QueryTransfers<args::CliTypes>);
 
     impl SubCmd for QueryTransfers {
@@ -1488,7 +1514,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query commission rate.")
+                .about("Query a validator's commission rate.")
                 .add_args::<args::QueryCommissionRate<args::CliTypes>>()
         }
     }
@@ -4016,8 +4042,44 @@ pub mod args {
                     "The validator's address whose bonded stake to query.",
                 ))
                 .arg(EPOCH.def().help(
-                    "The epoch at which to query (last committed, if not \
-                     specified).",
+                    "The epoch at which to query (corresponding to the last \
+                     committed block, if not specified).",
+                ))
+        }
+    }
+
+    impl CliToSdk<QueryValidatorState<SdkTypes>> for QueryValidatorState<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryValidatorState<SdkTypes> {
+            QueryValidatorState::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                validator: ctx.get(&self.validator),
+                epoch: self.epoch,
+            }
+        }
+    }
+
+    impl Args for QueryValidatorState<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let validator = VALIDATOR.parse(matches);
+            let epoch = EPOCH.parse(matches);
+            Self {
+                query,
+                validator,
+                epoch,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>()
+                .arg(
+                    VALIDATOR.def().help(
+                        "The validator's address whose state is queried.",
+                    ),
+                )
+                .arg(EPOCH.def().help(
+                    "The epoch at which to query (corresponding to the last \
+                     committed block, if not specified).",
                 ))
         }
     }
@@ -4127,8 +4189,8 @@ pub mod args {
                     "The validator's address whose commission rate to query.",
                 ))
                 .arg(EPOCH.def().help(
-                    "The epoch at which to query (last committed, if not \
-                     specified).",
+                    "The epoch at which to query (corresponding to the last \
+                     committed block, if not specified).",
                 ))
         }
     }
