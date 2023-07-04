@@ -23,13 +23,11 @@ use namada::types::dec::Dec;
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
-use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::storage::{Epoch, Key};
 use namada::types::token;
 use namada::types::transaction::governance::{ProposalType, VoteProposalData};
 use namada::types::transaction::{InitValidator, TxType};
-use sha2::{Digest as Sha2Digest, Sha256};
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
@@ -211,8 +209,6 @@ pub async fn submit_init_validator<
     let extra = tx.add_section(Section::ExtraData(Code::from_hash(
         validator_vp_code_hash,
     )));
-    let extra_hash =
-        Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
     let data = InitValidator {
         account_key,
         consensus_key: consensus_key.ref_to(),
@@ -220,7 +216,7 @@ pub async fn submit_init_validator<
         dkg_key,
         commission_rate,
         max_commission_rate_change,
-        validator_vp_code_hash: extra_hash,
+        validator_vp_code_hash: extra.get_hash(),
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
     tx.header.chain_id = tx_args.chain_id.clone().unwrap();
@@ -609,17 +605,14 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
             let content_sec = tx.add_section(Section::ExtraData(Code::new(
                 init_proposal_content,
             )));
-            let content_sec_hash = Hash(
-                content_sec.hash(&mut Sha256::new()).finalize_reset().into(),
-            );
+            let content_sec_hash = content_sec.get_hash();
             init_proposal_data.content = content_sec_hash;
         }
         // Put any proposal code into an extra section
         if let Some(init_proposal_code) = init_proposal_code {
             let code_sec = tx
                 .add_section(Section::ExtraData(Code::new(init_proposal_code)));
-            let code_sec_hash =
-                Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into());
+            let code_sec_hash = code_sec.get_hash();
             init_proposal_data.r#type =
                 ProposalType::Default(Some(code_sec_hash));
         }

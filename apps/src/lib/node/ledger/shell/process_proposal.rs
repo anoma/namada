@@ -231,7 +231,7 @@ where
             |tx| {
                 let tx_chain_id = tx.header.chain_id.clone();
                 let tx_expiration = tx.header.expiration;
-                if let Err(err) = tx.validate_header() {
+                if let Err(err) = tx.validate_tx() {
                     // This occurs if the wrapper / protocol tx signature is
                     // invalid
                     return Err(TxResult {
@@ -250,7 +250,7 @@ where
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
-        if let Err(err) = tx.validate_header() {
+        if let Err(err) = tx.validate_tx() {
             return TxResult {
                 code: ErrorCodes::InvalidSig.into(),
                 info: err.to_string(),
@@ -594,11 +594,11 @@ mod test_process_proposal {
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        outer_tx.encrypt(&Default::default());
         outer_tx.add_section(Section::Signature(Signature::new(
-            &outer_tx.header_hash(),
+            vec![outer_tx.header_hash(), outer_tx.sections[0].get_hash()],
             &keypair,
         )));
-        outer_tx.encrypt(&Default::default());
         let mut new_tx = outer_tx.clone();
         if let TxType::Wrapper(wrapper) = &mut new_tx.header.tx_type {
             // we mount a malleability attack to try and remove the fee
@@ -658,11 +658,11 @@ mod test_process_proposal {
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        outer_tx.encrypt(&Default::default());
         outer_tx.add_section(Section::Signature(Signature::new(
-            &outer_tx.header_hash(),
+            vec![outer_tx.header_hash(), outer_tx.sections[0].get_hash()],
             &keypair,
         )));
-        outer_tx.encrypt(&Default::default());
 
         let request = ProcessProposal {
             txs: vec![outer_tx.to_bytes()],
@@ -725,11 +725,11 @@ mod test_process_proposal {
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        outer_tx.encrypt(&Default::default());
         outer_tx.add_section(Section::Signature(Signature::new(
-            &outer_tx.header_hash(),
+            vec![outer_tx.header_hash(), outer_tx.sections[0].get_hash()],
             &keypair,
         )));
-        outer_tx.encrypt(&Default::default());
 
         let request = ProcessProposal {
             txs: vec![outer_tx.to_bytes()],
@@ -1034,11 +1034,11 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.encrypt(&Default::default());
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         // Write wrapper hash to storage
         let wrapper_unsigned_hash = wrapper.header_hash();
@@ -1109,11 +1109,11 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper.encrypt(&Default::default());
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         // Run validation
         let request = ProcessProposal {
@@ -1167,11 +1167,11 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper.encrypt(&Default::default());
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
         let inner_unsigned_hash =
             wrapper.clone().update_header(TxType::Raw).header_hash();
 
@@ -1258,11 +1258,11 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         let mut new_wrapper = wrapper.clone();
+        wrapper.encrypt(&Default::default());
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
         let inner_unsigned_hash =
             wrapper.clone().update_header(TxType::Raw).header_hash();
 
@@ -1277,11 +1277,14 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
+        new_wrapper.encrypt(&Default::default());
         new_wrapper.add_section(Section::Signature(Signature::new(
-            &new_wrapper.header_hash(),
+            vec![
+                new_wrapper.header_hash(),
+                new_wrapper.sections[0].get_hash(),
+            ],
             &keypair,
         )));
-        new_wrapper.encrypt(&Default::default());
 
         // Run validation
         let request = ProcessProposal {
@@ -1330,18 +1333,22 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         let mut protocol_tx = wrapper.clone();
+        wrapper.encrypt(&Default::default());
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         protocol_tx.update_header(TxType::Protocol(Box::new(ProtocolTx {
             pk: keypair.ref_to(),
             tx: ProtocolTxType::EthereumStateUpdate,
         })));
         protocol_tx.add_section(Section::Signature(Signature::new(
-            &protocol_tx.header_hash(),
+            vec![
+                protocol_tx.header_hash(),
+                protocol_tx.sections[0].get_hash(),
+                protocol_tx.sections[1].get_hash(),
+            ],
             &keypair,
         )));
 
@@ -1400,7 +1407,11 @@ mod test_process_proposal {
             has_valid_pow: false,
         }));
         decrypted.add_section(Section::Signature(Signature::new(
-            &decrypted.header_hash(),
+            vec![
+                decrypted.header_hash(),
+                decrypted.sections[0].get_hash(),
+                decrypted.sections[1].get_hash(),
+            ],
             &keypair,
         )));
         let wrapper_in_queue = TxInQueue {
@@ -1454,11 +1465,11 @@ mod test_process_proposal {
         wrapper.header.expiration = Some(DateTimeUtc::now());
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper.encrypt(&Default::default());
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         // Run validation
         let request = ProcessProposal {
@@ -1505,7 +1516,11 @@ mod test_process_proposal {
             has_valid_pow: false,
         }));
         decrypted.add_section(Section::Signature(Signature::new(
-            &decrypted.header_hash(),
+            vec![
+                decrypted.header_hash(),
+                decrypted.sections[0].get_hash(),
+                decrypted.sections[1].get_hash(),
+            ],
             &keypair,
         )));
         let wrapper_in_queue = TxInQueue {

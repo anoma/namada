@@ -289,7 +289,7 @@ pub fn get_tx_code_hash(
 ) -> EnvResult<Option<Hash>> {
     let hash = tx
         .get_section(tx.code_sechash())
-        .and_then(Section::code_sec)
+        .and_then(|x| Section::code_sec(x.as_ref()))
         .map(|x| x.code.hash());
     add_gas(gas_meter, MIN_STORAGE_GAS)?;
     Ok(hash)

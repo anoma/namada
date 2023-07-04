@@ -25,7 +25,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         .map(|hash| {
             signed
                 .get_section(hash)
-                .and_then(Section::masp_tx)
+                .and_then(|x| x.as_ref().masp_tx())
                 .ok_or_err_msg("unable to find shielded section")
         })
         .transpose()?;

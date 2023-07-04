@@ -22,7 +22,6 @@ use namada_core::types::token::MaspDenom;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::CommissionPair;
 use prost::EncodeError;
-use sha2::{Digest as Sha2Digest, Sha256};
 use thiserror::Error;
 use tokio::time::Duration;
 
@@ -43,7 +42,6 @@ use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::{Code, Data, MaspBuilder, Section, Signature, Tx};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
-use crate::types::hash::Hash;
 use crate::types::key::*;
 use crate::types::masp::TransferTarget;
 use crate::types::storage::{Epoch, RESERVED_ADDRESS_PREFIX};
@@ -363,11 +361,7 @@ pub async fn submit_reveal_pk_aux<
         find_keypair(client, wallet, &addr, args.password.clone()).await
     }?;
     tx.add_section(Section::Signature(Signature::new(
-        tx.data_sechash(),
-        &keypair,
-    )));
-    tx.add_section(Section::Signature(Signature::new(
-        tx.code_sechash(),
+        vec![*tx.data_sechash(), *tx.code_sechash()],
         &keypair,
     )));
     let epoch = rpc::query_epoch(client).await;
@@ -1366,35 +1360,33 @@ pub async fn submit_transfer<
         tx.header.chain_id = args.tx.chain_id.clone().unwrap();
         tx.header.expiration = args.tx.expiration;
         // Add the MASP Transaction and its Builder to facilitate validation
-        let (masp_hash, shielded_tx_epoch) = if let Some(shielded_parts) =
-            shielded_parts
-        {
-            // Add a MASP Transaction section to the Tx
-            let masp_tx = tx.add_section(Section::MaspTx(shielded_parts.1));
-            // Get the hash of the MASP Transaction section
-            let masp_hash =
-                Hash(masp_tx.hash(&mut Sha256::new()).finalize_reset().into());
-            // Get the decoded asset types used in the transaction to give
-            // offline wallet users more information
-            let asset_types =
-                used_asset_types(shielded, client, &shielded_parts.0)
-                    .await
-                    .unwrap_or_default();
-            // Add the MASP Transaction's Builder to the Tx
-            tx.add_section(Section::MaspBuilder(MaspBuilder {
-                asset_types,
-                // Store how the Info objects map to Descriptors/Outputs
-                metadata: shielded_parts.2,
-                // Store the data that was used to construct the Transaction
-                builder: shielded_parts.0,
-                // Link the Builder to the Transaction by hash code
-                target: masp_hash,
-            }));
-            // The MASP Transaction section hash will be used in Transfer
-            (Some(masp_hash), Some(shielded_parts.3))
-        } else {
-            (None, None)
-        };
+        let (masp_hash, shielded_tx_epoch) =
+            if let Some(shielded_parts) = shielded_parts {
+                // Add a MASP Transaction section to the Tx
+                let masp_tx = tx.add_section(Section::MaspTx(shielded_parts.1));
+                // Get the hash of the MASP Transaction section
+                let masp_hash = masp_tx.get_hash();
+                // Get the decoded asset types used in the transaction to give
+                // offline wallet users more information
+                let asset_types =
+                    used_asset_types(shielded, client, &shielded_parts.0)
+                        .await
+                        .unwrap_or_default();
+                // Add the MASP Transaction's Builder to the Tx
+                tx.add_section(Section::MaspBuilder(MaspBuilder {
+                    asset_types,
+                    // Store how the Info objects map to Descriptors/Outputs
+                    metadata: shielded_parts.2,
+                    // Store the data that was used to construct the Transaction
+                    builder: shielded_parts.0,
+                    // Link the Builder to the Transaction by hash code
+                    target: masp_hash,
+                }));
+                // The MASP Transaction section hash will be used in Transfer
+                (Some(masp_hash), Some(shielded_parts.3))
+            } else {
+                (None, None)
+            };
         // Construct the corresponding transparent Transfer object
         let transfer = token::Transfer {
             source: source.clone(),
@@ -1480,11 +1472,9 @@ pub async fn submit_init_account<
     tx.header.expiration = args.tx.expiration;
     let extra =
         tx.add_section(Section::ExtraData(Code::from_hash(vp_code_hash)));
-    let extra_hash =
-        Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
     let data = InitAccount {
         public_key,
-        vp_code_hash: extra_hash,
+        vp_code_hash: extra.get_hash(),
     };
     let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
     tx.set_data(Data::new(data));
@@ -1574,11 +1564,9 @@ pub async fn submit_update_vp<
     tx.header.expiration = args.tx.expiration;
     let extra =
         tx.add_section(Section::ExtraData(Code::from_hash(vp_code_hash)));
-    let extra_hash =
-        Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
     let data = UpdateVp {
         addr,
-        vp_code_hash: extra_hash,
+        vp_code_hash: extra.get_hash(),
     };
     let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
     tx.set_data(Data::new(data));

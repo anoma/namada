@@ -793,8 +793,8 @@ where
         }
 
         // Tx signature check
-        let tx_type = match tx.validate_header() {
-            Ok(()) => tx.header(),
+        let tx_type = match tx.validate_tx() {
+            Ok(_) => tx.header(),
             Err(msg) => {
                 response.code = ErrorCodes::InvalidSig.into();
                 response.log = msg.to_string();
@@ -1378,11 +1378,14 @@ mod test_mempool_validate {
         invalid_wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         invalid_wrapper
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
+        invalid_wrapper.encrypt(&Default::default());
         invalid_wrapper.add_section(Section::Signature(Signature::new(
-            &invalid_wrapper.header_hash(),
+            vec![
+                invalid_wrapper.header_hash(),
+                invalid_wrapper.sections[0].get_hash(),
+            ],
             &keypair,
         )));
-        invalid_wrapper.encrypt(&Default::default());
 
         // we mount a malleability attack to try and remove the fee
         let mut new_wrapper =
@@ -1443,11 +1446,11 @@ mod test_mempool_validate {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper.encrypt(&Default::default());
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         // Write wrapper hash to storage
         let wrapper_hash = wrapper.header_hash();
@@ -1539,7 +1542,11 @@ mod test_mempool_validate {
         tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         tx.add_section(Section::Signature(Signature::new(
-            &tx.header_hash(),
+            vec![
+                tx.header_hash(),
+                tx.sections[0].get_hash(),
+                tx.sections[1].get_hash(),
+            ],
             &keypair,
         )));
 
@@ -1570,7 +1577,11 @@ mod test_mempool_validate {
         tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         tx.add_section(Section::Signature(Signature::new(
-            &tx.header_hash(),
+            vec![
+                tx.header_hash(),
+                tx.sections[0].get_hash(),
+                tx.sections[1].get_hash(),
+            ],
             &keypair,
         )));
 
