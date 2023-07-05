@@ -14,16 +14,15 @@ use crate::cli::args;
 
 /// Find the public key for the given address and try to load the keypair
 /// for it from the wallet. Panics if the key cannot be found or loaded.
-pub async fn find_keypair<
+pub async fn find_pk<
     C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
     addr: &Address,
-) -> Result<common::SecretKey, tx::Error> {
-    namada::ledger::signing::find_keypair::<C, U>(client, wallet, addr, None)
-        .await
+) -> Result<common::PublicKey, tx::Error> {
+    namada::ledger::signing::find_pk(client, wallet, addr, None).await
 }
 
 /// Given CLI arguments and some defaults, determine the rightful transaction
@@ -38,7 +37,7 @@ pub async fn tx_signer<
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     default: TxSigningKey,
-) -> Result<common::SecretKey, tx::Error> {
+) -> Result<(Option<Address>, common::PublicKey), tx::Error> {
     namada::ledger::signing::tx_signer::<C, U>(client, wallet, args, default)
         .await
 }
@@ -55,23 +54,12 @@ pub async fn sign_tx<
     C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
-    client: &C,
     wallet: &mut Wallet<U>,
-    tx: Tx,
+    tx: &mut Tx,
     args: &args::Tx,
-    default: TxSigningKey,
-    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> Result<TxBroadcastData, tx::Error> {
-    namada::ledger::signing::sign_tx::<C, U>(
-        client,
-        wallet,
-        tx,
-        args,
-        default,
-        #[cfg(not(feature = "mainnet"))]
-        requires_pow,
-    )
-    .await
+    default: &common::PublicKey,
+) -> Result<(), tx::Error> {
+    namada::ledger::signing::sign_tx(wallet, tx, args, default).await
 }
 
 /// Create a wrapper tx from a normal tx. Get the hash of the

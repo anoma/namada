@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
     "tx_bond.wasm": "tx_bond.ab7791424468988ed2b93fe6fa07e2a7f05fd5f229e89408fa45bda40d7931a8.wasm",
     "tx_change_validator_commission.wasm": "tx_change_validator_commission.4999e1a098ec208727d92a1b1c3bf11241f5673dc0632954878f36b67649a71e.wasm",
     "tx_ibc.wasm": "tx_ibc.2f0b7c739a60e6f88b9d46ca060a85db1dea5923e9eee954dc4d1b8dc19130f0.wasm",
@@ -18,4 +19,25 @@
     "vp_token.wasm": "vp_token.9b2245932cc1549e5eebb484a01308422be0a45ab9603a30d22f512e37d351fb.wasm",
     "vp_user.wasm": "vp_user.9c8aba0a8d6b19e10ffcfd15fb4f0034c22cc72d3ee79085a508bae304433c76.wasm",
     "vp_validator.wasm": "vp_validator.dd194db26aa66e0d6a1d387a15d1db150734e775c880578771cc90e11cc3f79f.wasm"
+=======
+    "tx_bond.wasm": "tx_bond.f251728bfa52b95572a261e7a8851342dc7d93fae1b39233ef9d88a299987933.wasm",
+    "tx_change_validator_commission.wasm": "tx_change_validator_commission.3f1b28a01a60907ef00d72842fd278ffdbc051fcc12b0924e8118a5982466428.wasm",
+    "tx_ibc.wasm": "tx_ibc.5232f37d6d7f2c502701e3c6f87ea8931a6140eeb0029d116bf234268118a854.wasm",
+    "tx_init_account.wasm": "tx_init_account.0080210c6be6cbee078c39bdf6cc881e3147c2934b5da6e278a473ad73f04625.wasm",
+    "tx_init_proposal.wasm": "tx_init_proposal.1b69efb513c1f9577f5654ce7d6f9038d4508957a02d3714cd92c5e825e2e200.wasm",
+    "tx_init_validator.wasm": "tx_init_validator.a7c4f587decd76ec4a46f6907bf9acf76960aad1af5e366ff13c866d235254c0.wasm",
+    "tx_reveal_pk.wasm": "tx_reveal_pk.a924f5bf3cded92d6b88c454557ce7a506fb3c6c7b2a4304de499197f29c04b6.wasm",
+    "tx_transfer.wasm": "tx_transfer.a895f7a9518815b37a5eee3f4e61e6187f859789a1dbc4eb43e304dde9eb6003.wasm",
+    "tx_unbond.wasm": "tx_unbond.750f9eb731412d252f311adb2fa9098797e68e2af4f5a3f0a74e7e7337c0a2c6.wasm",
+    "tx_unjail_validator.wasm": "tx_unjail_validator.8e6c97429e135277fa773eef6d43cea44fe690710436381e6078578c34f2094f.wasm",
+    "tx_update_vp.wasm": "tx_update_vp.42221a676be2febaf950af7b8d11c8df2c0abcdf3c422dbfd42d94ecc07bb75d.wasm",
+    "tx_vote_proposal.wasm": "tx_vote_proposal.9139c12a7a04bd036f2a66bada0f8f9aa3e2548d42460e0374a85a14a59a3dc1.wasm",
+    "tx_withdraw.wasm": "tx_withdraw.e183ce965481a44de98fa82097d89c403bd3587fbbc8b9f85ec800fbdff48bc3.wasm",
+    "vp_implicit.wasm": "vp_implicit.7fe0240a6c045fb6cf3c9ee6a1a49515f20a7494141f3d1e1e0c7f6c9b1c4987.wasm",
+    "vp_masp.wasm": "vp_masp.a86343cdc2ffbb85663af98dece6af7bde98888215046e84c0a741a143fc1834.wasm",
+    "vp_testnet_faucet.wasm": "vp_testnet_faucet.404aa07f7f7855e81436e1ecd8388209b143ea9e6a4515c38afdb9e91f97e4b0.wasm",
+    "vp_token.wasm": "vp_token.61de18a356e200447053898d79aa66358a1648386beb6b3ad3072da652c24111.wasm",
+    "vp_user.wasm": "vp_user.ddcd810d1bb90231c36f8571423d6e5d679613c5bd77eedc0b71ccb5a5b8ae24.wasm",
+    "vp_validator.wasm": "vp_validator.1149fedaec883001f850dd45d18278ae5f92cb6f75915c2b6ca5559ac392432c.wasm"
+>>>>>>> murisi/separate-signing
 }

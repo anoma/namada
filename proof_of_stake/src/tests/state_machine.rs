@@ -636,6 +636,7 @@ impl ConcretePosState {
                     .checked_sub(amount)
                     .unwrap_or_default()
         );
+        println!("Check bond+unbond post-conds");
 
         self.check_bond_and_unbond_post_conditions(
             submit_epoch,
