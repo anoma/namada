@@ -1,6 +1,6 @@
 ## Describe your changes
 
-## Indicate on which other PRs this topic is based on
+## Indicate on which other PRs this topic is based on, if any
 
 ## Checklist before merging to `draft`
 - [ ] I have checked that the following e2e test are working locally
