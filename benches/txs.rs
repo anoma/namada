@@ -49,19 +49,16 @@ fn transfer(c: &mut Criterion) {
                     let mut shielded_ctx = BenchShieldedCtx::default();
 
                     let albert_spending_key = shielded_ctx
-                        .ctx
                         .wallet
-                        .find_spending_key(ALBERT_SPENDING_KEY)
+                        .find_spending_key(ALBERT_SPENDING_KEY, None)
                         .unwrap()
                         .to_owned();
                     let albert_payment_addr = shielded_ctx
-                        .ctx
                         .wallet
                         .find_payment_addr(ALBERT_PAYMENT_ADDRESS)
                         .unwrap()
                         .to_owned();
                     let bertha_payment_addr = shielded_ctx
-                        .ctx
                         .wallet
                         .find_payment_addr(BERTHA_PAYMENT_ADDRESS)
                         .unwrap()
@@ -128,6 +125,7 @@ fn bond(c: &mut Criterion) {
             amount: Amount::whole(1000),
             source: Some(defaults::albert_address()),
         },
+        None,
         &defaults::albert_keypair(),
     );
 
@@ -138,6 +136,7 @@ fn bond(c: &mut Criterion) {
             amount: Amount::whole(1000),
             source: None,
         },
+        None,
         &defaults::validator_keypair(),
     );
 
@@ -166,6 +165,7 @@ fn unbond(c: &mut Criterion) {
             amount: Amount::whole(1000),
             source: Some(defaults::albert_address()),
         },
+        None,
         &defaults::albert_keypair(),
     );
 
@@ -176,6 +176,7 @@ fn unbond(c: &mut Criterion) {
             amount: Amount::whole(1000),
             source: None,
         },
+        None,
         &defaults::validator_keypair(),
     );
 
@@ -203,6 +204,7 @@ fn withdraw(c: &mut Criterion) {
             validator: defaults::validator_address(),
             source: Some(defaults::albert_address()),
         },
+        None,
         &defaults::albert_keypair(),
     );
 
@@ -212,6 +214,7 @@ fn withdraw(c: &mut Criterion) {
             validator: defaults::validator_address(),
             source: None,
         },
+        None,
         &defaults::validator_keypair(),
     );
 
@@ -233,6 +236,7 @@ fn withdraw(c: &mut Criterion) {
                                 amount: Amount::whole(1000),
                                 source: Some(defaults::albert_address()),
                             },
+                            None,
                             &defaults::albert_keypair(),
                         ),
                         "self_withdraw" => generate_tx(
@@ -242,6 +246,7 @@ fn withdraw(c: &mut Criterion) {
                                 amount: Amount::whole(1000),
                                 source: None,
                             },
+                            None,
                             &defaults::validator_keypair(),
                         ),
                         _ => panic!("Unexpected bench test"),
@@ -279,12 +284,20 @@ fn reveal_pk(c: &mut Criterion) {
             .try_to_sk()
             .unwrap();
 
-    let tx = Tx::new(
-        wasm_loader::read_wasm_or_exit(WASM_DIR, TX_REVEAL_PK_WASM),
-        Some(new_implicit_account.to_public().try_to_vec().unwrap()),
-        ChainId("bench".to_string()),
-        None,
-    );
+    let mut tx = Tx::new(namada::types::transaction::TxType::Decrypted(
+        namada::types::transaction::DecryptedTx::Decrypted {
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: true,
+        },
+    ));
+    //FIXME: need to chance the chain_id to bench?
+    tx.set_code(namada::proto::Code::new(wasm_loader::read_wasm_or_exit(
+        WASM_DIR,
+        TX_REVEAL_PK_WASM,
+    )));
+    tx.set_data(namada::proto::Data::new(
+        Some(new_implicit_account.to_public()).try_to_vec().unwrap(),
+    ));
 
     c.bench_function("reveal_pk", |b| {
         b.iter_batched_ref(
@@ -306,6 +319,7 @@ fn update_vp(c: &mut Criterion) {
             addr: defaults::albert_address(),
             vp_code_hash,
         },
+        None,
         &defaults::albert_keypair(),
     );
 
@@ -335,6 +349,7 @@ fn init_account(c: &mut Criterion) {
             public_key: new_account.to_public(),
             vp_code_hash,
         },
+        None,
         &defaults::albert_keypair(),
     );
 
@@ -368,6 +383,7 @@ fn init_proposal(c: &mut Criterion) {
                                 voting_end_epoch: 15.into(),
                                 grace_epoch: 18.into(),
                             },
+                            None,
                             &defaults::albert_keypair(),
                         ),
                         "complete_proposal" => {
@@ -405,6 +421,7 @@ fn init_proposal(c: &mut Criterion) {
                                     voting_end_epoch: 15.into(),
                                     grace_epoch: 18.into(),
                                 },
+                                None,
                                 &defaults::albert_keypair(),
                             )
                         }
@@ -432,6 +449,7 @@ fn vote_proposal(c: &mut Criterion) {
             voter: defaults::albert_address(),
             delegations: vec![defaults::validator_address()],
         },
+        None,
         &defaults::albert_keypair(),
     );
 
@@ -443,6 +461,7 @@ fn vote_proposal(c: &mut Criterion) {
             voter: defaults::validator_address(),
             delegations: vec![],
         },
+        None,
         &defaults::validator_keypair(),
     );
 
@@ -497,6 +516,7 @@ fn init_validator(c: &mut Criterion) {
             max_commission_rate_change: Decimal::default(),
             validator_vp_code_hash,
         },
+        None,
         &defaults::albert_keypair(),
     );
 
@@ -516,6 +536,7 @@ fn change_validator_commission(c: &mut Criterion) {
             validator: defaults::validator_address(),
             new_rate: Decimal::new(6, 2),
         },
+        None,
         &defaults::validator_keypair(),
     );
 

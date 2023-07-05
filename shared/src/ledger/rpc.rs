@@ -446,8 +446,8 @@ pub async fn dry_run_tx<C: crate::ledger::queries::Client + Sync>(
 pub enum TxBroadcastData {
     /// Dry run broadcast data
     DryRun(Tx),
-    /// Wrapper broadcast data
-    Wrapper {
+    /// Live broadcast data
+    Live {
         /// Transaction to broadcast
         tx: Tx,
         /// Hash of the wrapper transaction

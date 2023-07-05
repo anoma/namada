@@ -4,6 +4,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::types::address;
 use namada::core::types::token::{Amount, Transfer};
 use namada::ledger::storage::TempWlStorage;
+use namada::proto::Signature;
 use namada::types::chain::ChainId;
 use namada::types::storage::BlockHeight;
 use namada::types::time::DateTimeUtc;
@@ -16,8 +17,10 @@ fn process_tx(c: &mut Criterion) {
     let mut shell = BenchShell::default();
     // Advance chain height to allow the inclusion of wrapper txs by the block
     // space allocator
-    shell.wl_storage.storage.last_height = BlockHeight(2);
-    let tx = generate_tx(
+    shell.wl_storage.storage.last_block.as_mut().unwrap().height =
+        BlockHeight(2);
+
+    let mut tx = generate_tx(
         TX_TRANSFER_WASM,
         Transfer {
             source: defaults::albert_address(),
@@ -28,25 +31,29 @@ fn process_tx(c: &mut Criterion) {
             key: None,
             shielded: None,
         },
+        None,
         &defaults::albert_keypair(),
     );
 
-    let wrapper = WrapperTx::new(
-        Fee {
-            token: address::nam(),
-            amount_per_gas_unit: Amount::whole(200),
-        },
+    tx.update_header(namada::types::transaction::TxType::Wrapper(Box::new(
+        WrapperTx::new(
+            Fee {
+                token: address::nam(),
+                amount_per_gas_unit: Amount::whole(200),
+            },
+            &defaults::albert_keypair(),
+            0.into(),
+            1000.into(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        ),
+    )));
+    tx.add_section(namada::proto::Section::Signature(Signature::new(
+        &tx.header_hash(),
         &defaults::albert_keypair(),
-        0.into(),
-        1000.into(),
-        tx,
-        Default::default(),
-        None,
-        None,
-    )
-    .sign(&defaults::albert_keypair(), ChainId::default(), None)
-    .unwrap()
-    .to_bytes();
+    )));
+    let wrapper = tx.to_bytes();
 
     let datetime = DateTimeUtc::now();
     let gas_table = BTreeMap::default();

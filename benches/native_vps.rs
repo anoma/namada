@@ -69,7 +69,7 @@ fn replay_protection(c: &mut Criterion) {
             // here
             replay_protection
                 .validate_tx(
-                    tx.data.as_ref().unwrap(),
+                    &tx,
                     replay_protection.ctx.keys_changed,
                     replay_protection.ctx.verifiers,
                 )
@@ -102,6 +102,7 @@ fn governance(c: &mut Criterion) {
                     voter: defaults::albert_address(),
                     delegations: vec![defaults::validator_address()],
                 },
+                None,
                 &defaults::albert_keypair(),
             ),
             "validator_vote" => generate_tx(
@@ -112,6 +113,7 @@ fn governance(c: &mut Criterion) {
                     voter: defaults::validator_address(),
                     delegations: vec![],
                 },
+                None,
                 &defaults::validator_keypair(),
             ),
             "minimal_proposal" => generate_tx(
@@ -125,6 +127,7 @@ fn governance(c: &mut Criterion) {
                     voting_end_epoch: 15.into(),
                     grace_epoch: 18.into(),
                 },
+                None,
                 &defaults::albert_keypair(),
             ),
             "complete_proposal" => {
@@ -159,6 +162,7 @@ fn governance(c: &mut Criterion) {
                         voting_end_epoch: 15.into(),
                         grace_epoch: 18.into(),
                     },
+                    None,
                     &defaults::albert_keypair(),
                 )
             }
@@ -189,15 +193,13 @@ fn governance(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    governance
-                        .validate_tx(
-                            signed_tx.data.as_ref().unwrap(),
-                            governance.ctx.keys_changed,
-                            governance.ctx.verifiers,
-                        )
-                        .unwrap()
-                )
+                assert!(governance
+                    .validate_tx(
+                        &signed_tx,
+                        governance.ctx.keys_changed,
+                        governance.ctx.verifiers,
+                    )
+                    .unwrap())
             })
         });
     }
@@ -223,6 +225,7 @@ fn slash_fund(c: &mut Criterion) {
             voting_end_epoch: 15.into(),
             grace_epoch: 18.into(),
         },
+        None,
         &defaults::albert_keypair(),
     );
 
@@ -256,15 +259,13 @@ fn slash_fund(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    slash_fund
-                        .validate_tx(
-                            tx.data.as_ref().unwrap(),
-                            slash_fund.ctx.keys_changed,
-                            slash_fund.ctx.verifiers,
-                        )
-                        .unwrap()
-                )
+                assert!(slash_fund
+                    .validate_tx(
+                        &tx,
+                        slash_fund.ctx.keys_changed,
+                        slash_fund.ctx.verifiers,
+                    )
+                    .unwrap())
             })
         });
     }
@@ -298,13 +299,8 @@ fn ibc(c: &mut Criterion) {
         .expect("Encoding tx data shouldn't fail");
 
     // Avoid serializing the data again with borsh
-    let open_connection = Tx::new(
-        wasm_loader::read_wasm_or_exit(WASM_DIR, TX_IBC_WASM),
-        Some(data),
-        ChainId::default(),
-        None,
-    )
-    .sign(&defaults::albert_keypair());
+    let open_connection =
+        generate_tx(TX_IBC_WASM, data, None, &defaults::albert_keypair());
 
     // Channel handshake
     let msg = MsgChannelOpenInit {
@@ -323,13 +319,8 @@ fn ibc(c: &mut Criterion) {
         .expect("Encoding tx data shouldn't fail");
 
     // Avoid serializing the data again with borsh
-    let open_channel = Tx::new(
-        wasm_loader::read_wasm_or_exit(WASM_DIR, TX_IBC_WASM),
-        Some(data),
-        ChainId::default(),
-        None,
-    )
-    .sign(&defaults::albert_keypair());
+    let open_channel =
+        generate_tx(TX_IBC_WASM, data, None, &defaults::albert_keypair());
 
     // Ibc transfer
     let outgoing_transfer = generate_ibc_transfer_tx();
@@ -364,14 +355,13 @@ fn ibc(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    ibc.validate_tx(
-                        signed_tx.data.as_ref().unwrap(),
+                assert!(ibc
+                    .validate_tx(
+                        &signed_tx,
                         ibc.ctx.keys_changed,
                         ibc.ctx.verifiers,
                     )
-                    .unwrap()
-                )
+                    .unwrap())
             })
         });
     }
@@ -424,14 +414,13 @@ fn ibc_token(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    ibc.validate_tx(
-                        signed_tx.data.as_ref().unwrap(),
+                assert!(ibc
+                    .validate_tx(
+                        &signed_tx,
                         ibc.ctx.keys_changed,
                         ibc.ctx.verifiers,
                     )
-                    .unwrap()
-                )
+                    .unwrap())
             })
         });
     }

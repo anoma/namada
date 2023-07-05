@@ -1,6 +1,8 @@
 //! Helpers for making digital signatures using cryptographic keys from the
 //! wallet.
 
+use namada::core::types::token::Amount;
+use namada::ledger::masp::{ShieldedContext, ShieldedUtils};
 use namada::ledger::rpc::TxBroadcastData;
 use namada::ledger::signing::TxSigningKey;
 use namada::ledger::tx;
@@ -35,14 +37,18 @@ pub async fn find_keypair<
 pub async fn tx_signer<
     C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
+    V: ShieldedUtils<C = C>,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
+    shielded: &mut ShieldedContext<V>,
     args: &args::Tx,
     default: TxSigningKey,
 ) -> Result<common::SecretKey, tx::Error> {
-    namada::ledger::signing::tx_signer::<C, U>(client, wallet, args, default)
-        .await
+    namada::ledger::signing::tx_signer::<C, U, V>(
+        client, wallet, shielded, args, default,
+    )
+    .await
 }
 
 /// Sign a transaction with a given signing key or public key of a given signer.
@@ -58,21 +64,25 @@ pub async fn tx_signer<
 pub async fn sign_tx<
     C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
+    V: ShieldedUtils<C = C>,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
+    shielded: &mut ShieldedContext<V>,
     tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,
     mut updated_balance: Option<Amount>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<(TxBroadcastData, Option<Epoch>), tx::Error> {
-    namada::ledger::signing::sign_tx::<C, U>(
+    namada::ledger::signing::sign_tx::<C, U, V>(
         client,
         wallet,
+        shielded,
         tx,
         args,
         default,
+        updated_balance,
         #[cfg(not(feature = "mainnet"))]
         requires_pow,
     )
@@ -86,9 +96,11 @@ pub async fn sign_wrapper<
     'key,
     C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
+    V: ShieldedUtils<C = C>,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
+    shielded: &mut ShieldedContext<V>,
     args: &args::Tx,
     epoch: Epoch,
     tx: Tx,
@@ -99,6 +111,7 @@ pub async fn sign_wrapper<
     namada::ledger::signing::sign_wrapper(
         client,
         wallet,
+        shielded,
         args,
         epoch,
         tx,

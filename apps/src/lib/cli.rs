@@ -1771,6 +1771,7 @@ pub mod args {
     use namada::types::storage::{self, BlockHeight, Epoch};
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
+    use namada::types::transaction::GasLimit;
     use rust_decimal::Decimal;
 
     use super::context::*;
@@ -1835,13 +1836,13 @@ pub mod args {
     pub const DUMP_TX: ArgFlag = flag("dump-tx");
     pub const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
     pub const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
-    pub const FEE_UNSHIELD_SPENDING_KEY: ArgOpt<ExtendedSpendingKey> =
+    pub const FEE_UNSHIELD_SPENDING_KEY: ArgOpt<WalletTransferSource> =
         arg_opt("fee-spending-key");
     pub const FORCE: ArgFlag = flag("force");
     pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     pub const FEE_AMOUNT: ArgOpt<token::Amount> = arg_opt("fee-amount");
-    pub const GAS_LIMIT: ArgDefault<token::Amount> =
-        arg_default("gas-limit", DefaultFn(|| token::Amount::from(0)));
+    pub const GAS_LIMIT: ArgDefault<GasLimit> =
+        arg_default("gas-limit", DefaultFn(|| GasLimit::from(1_000_000)));
     pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("fee-token", DefaultFn(|| "NAM".into()));
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
@@ -3299,7 +3300,9 @@ pub mod args {
                 wallet_alias_force: self.wallet_alias_force,
                 fee_amount: self.fee_amount,
                 fee_token: ctx.get(&self.fee_token),
-                fee_unshield, self.fee_unshield,
+                fee_unshield: self
+                    .fee_unshield
+                    .map(|ref fee_unshield| ctx.get_cached(fee_unshield)),
                 gas_limit: self.gas_limit,
                 signing_key: self.signing_key.map(|x| ctx.get_cached(&x)),
                 signer: self.signer.map(|x| ctx.get(&x)),
@@ -3353,9 +3356,9 @@ pub mod args {
             .arg(GAS_LIMIT.def().about(
                 "The multiplier of the gas limit resolution defining the \
                  maximum amount of gas needed to run transaction.",
+            ))
             .arg(WALLET_ALIAS_FORCE.def().about(
                 "Override the alias without confirmation if it already exists.",
-            ))
             ))
             .arg(EXPIRATION_OPT.def().about(
                 "The expiration datetime of the transaction, after which the \

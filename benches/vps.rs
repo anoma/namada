@@ -52,6 +52,7 @@ fn vp_user(c: &mut Criterion) {
             key: None,
             shielded: None,
         },
+        None,
         &defaults::albert_keypair(),
     );
 
@@ -66,6 +67,7 @@ fn vp_user(c: &mut Criterion) {
             key: None,
             shielded: None,
         },
+        None,
         &defaults::bertha_keypair(),
     );
 
@@ -79,6 +81,7 @@ fn vp_user(c: &mut Criterion) {
             addr: defaults::albert_address(),
             vp_code_hash: vp_validator_hash,
         },
+        None,
         &defaults::albert_keypair(),
     );
 
@@ -90,6 +93,7 @@ fn vp_user(c: &mut Criterion) {
             voter: defaults::albert_address(),
             delegations: vec![defaults::validator_address()],
         },
+        None,
         &defaults::albert_keypair(),
     );
 
@@ -100,6 +104,7 @@ fn vp_user(c: &mut Criterion) {
             amount: Amount::whole(1000),
             source: Some(defaults::albert_address()),
         },
+        None,
         &defaults::albert_keypair(),
     );
 
@@ -132,23 +137,21 @@ fn vp_user(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    run::vp(
-                        &vp_code_hash,
-                        signed_tx,
-                        &TxIndex(0),
-                        &defaults::albert_address(),
-                        &shell.wl_storage.storage,
-                        &shell.wl_storage.write_log,
-                        &mut VpGasMeter::new(u64::MAX, 0),
-                        &BTreeMap::default(),
-                        &keys_changed,
-                        &verifiers,
-                        shell.vp_wasm_cache.clone(),
-                        false,
-                    )
-                    .unwrap()
-                );
+                assert!(run::vp(
+                    &vp_code_hash,
+                    signed_tx,
+                    &TxIndex(0),
+                    &defaults::albert_address(),
+                    &shell.wl_storage.storage,
+                    &shell.wl_storage.write_log,
+                    &mut VpGasMeter::new(u64::MAX, 0),
+                    &BTreeMap::default(),
+                    &keys_changed,
+                    &verifiers,
+                    shell.vp_wasm_cache.clone(),
+                    false,
+                )
+                .unwrap());
             })
         });
     }
@@ -179,6 +182,7 @@ fn vp_implicit(c: &mut Criterion) {
             key: None,
             shielded: None,
         },
+        None,
         &implicit_account,
     );
 
@@ -193,15 +197,23 @@ fn vp_implicit(c: &mut Criterion) {
             key: None,
             shielded: None,
         },
+        None,
         &defaults::bertha_keypair(),
     );
 
-    let reveal_pk = Tx::new(
+    let mut reveal_pk = Tx::new(namada::types::transaction::TxType::Decrypted(
+        namada::types::transaction::DecryptedTx::Decrypted {
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: true,
+        },
+    ));
+    //FIXME: need to chance the chain_id to bench?
+    reveal_pk.set_code(namada::proto::Code::new(
         wasm_loader::read_wasm_or_exit(WASM_DIR, TX_REVEAL_PK_WASM),
-        Some(implicit_account.to_public().try_to_vec().unwrap()),
-        ChainId("bench".to_string()),
-        None,
-    );
+    ));
+    reveal_pk.set_data(namada::proto::Data::new(
+        Some(implicit_account.to_public()).try_to_vec().unwrap(),
+    ));
 
     let pos = generate_tx(
         TX_BOND_WASM,
@@ -210,6 +222,7 @@ fn vp_implicit(c: &mut Criterion) {
             amount: Amount::whole(1000),
             source: Some(Address::from(&implicit_account.to_public())),
         },
+        None,
         &implicit_account,
     );
 
@@ -222,6 +235,7 @@ fn vp_implicit(c: &mut Criterion) {
             delegations: vec![], /* NOTE: no need to bond tokens because the
                                   * implicit vp doesn't check that */
         },
+        None,
         &implicit_account,
     );
 
@@ -270,23 +284,21 @@ fn vp_implicit(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    run::vp(
-                        &vp_code_hash,
-                        tx,
-                        &TxIndex(0),
-                        &Address::from(&implicit_account.to_public()),
-                        &shell.wl_storage.storage,
-                        &shell.wl_storage.write_log,
-                        &mut VpGasMeter::new(u64::MAX, 0),
-                        &BTreeMap::default(),
-                        &keys_changed,
-                        &verifiers,
-                        shell.vp_wasm_cache.clone(),
-                        false,
-                    )
-                    .unwrap()
+                assert!(run::vp(
+                    &vp_code_hash,
+                    tx,
+                    &TxIndex(0),
+                    &Address::from(&implicit_account.to_public()),
+                    &shell.wl_storage.storage,
+                    &shell.wl_storage.write_log,
+                    &mut VpGasMeter::new(u64::MAX, 0),
+                    &BTreeMap::default(),
+                    &keys_changed,
+                    &verifiers,
+                    shell.vp_wasm_cache.clone(),
+                    false,
                 )
+                .unwrap())
             })
         });
     }
@@ -315,6 +327,7 @@ fn vp_validator(c: &mut Criterion) {
             key: None,
             shielded: None,
         },
+        None,
         &defaults::validator_keypair(),
     );
 
@@ -329,6 +342,7 @@ fn vp_validator(c: &mut Criterion) {
             key: None,
             shielded: None,
         },
+        None,
         &defaults::bertha_keypair(),
     );
 
@@ -338,6 +352,7 @@ fn vp_validator(c: &mut Criterion) {
             addr: defaults::validator_address(),
             vp_code_hash: vp_code_hash.clone(),
         },
+        None,
         &defaults::validator_keypair(),
     );
 
@@ -347,6 +362,7 @@ fn vp_validator(c: &mut Criterion) {
             validator: defaults::validator_address(),
             new_rate: Decimal::new(6, 2),
         },
+        None,
         &defaults::validator_keypair(),
     );
 
@@ -358,6 +374,7 @@ fn vp_validator(c: &mut Criterion) {
             voter: defaults::validator_address(),
             delegations: vec![],
         },
+        None,
         &defaults::validator_keypair(),
     );
 
@@ -368,6 +385,7 @@ fn vp_validator(c: &mut Criterion) {
             amount: Amount::whole(1000),
             source: None,
         },
+        None,
         &defaults::validator_keypair(),
     );
 
@@ -400,23 +418,21 @@ fn vp_validator(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    run::vp(
-                        &vp_code_hash,
-                        signed_tx,
-                        &TxIndex(0),
-                        &defaults::validator_address(),
-                        &shell.wl_storage.storage,
-                        &shell.wl_storage.write_log,
-                        &mut VpGasMeter::new(u64::MAX, 0),
-                        &BTreeMap::default(),
-                        &keys_changed,
-                        &verifiers,
-                        shell.vp_wasm_cache.clone(),
-                        false,
-                    )
-                    .unwrap()
-                );
+                assert!(run::vp(
+                    &vp_code_hash,
+                    signed_tx,
+                    &TxIndex(0),
+                    &defaults::validator_address(),
+                    &shell.wl_storage.storage,
+                    &shell.wl_storage.write_log,
+                    &mut VpGasMeter::new(u64::MAX, 0),
+                    &BTreeMap::default(),
+                    &keys_changed,
+                    &verifiers,
+                    shell.vp_wasm_cache.clone(),
+                    false,
+                )
+                .unwrap());
             })
         });
     }
@@ -441,6 +457,7 @@ fn vp_token(c: &mut Criterion) {
             key: None,
             shielded: None,
         },
+        None,
         &defaults::albert_keypair(),
     );
 
@@ -460,23 +477,21 @@ fn vp_token(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    run::vp(
-                        &vp_code_hash,
-                        signed_tx,
-                        &TxIndex(0),
-                        &defaults::albert_address(),
-                        &shell.wl_storage.storage,
-                        &shell.wl_storage.write_log,
-                        &mut VpGasMeter::new(u64::MAX, 0),
-                        &BTreeMap::default(),
-                        &keys_changed,
-                        &verifiers,
-                        shell.vp_wasm_cache.clone(),
-                        false,
-                    )
-                    .unwrap()
-                );
+                assert!(run::vp(
+                    &vp_code_hash,
+                    signed_tx,
+                    &TxIndex(0),
+                    &defaults::albert_address(),
+                    &shell.wl_storage.storage,
+                    &shell.wl_storage.write_log,
+                    &mut VpGasMeter::new(u64::MAX, 0),
+                    &BTreeMap::default(),
+                    &keys_changed,
+                    &verifiers,
+                    shell.vp_wasm_cache.clone(),
+                    false,
+                )
+                .unwrap());
             })
         });
     }
@@ -496,19 +511,16 @@ fn vp_masp(c: &mut Criterion) {
                 .unwrap();
 
             let albert_spending_key = shielded_ctx
-                .ctx
                 .wallet
-                .find_spending_key(ALBERT_SPENDING_KEY)
+                .find_spending_key(ALBERT_SPENDING_KEY, None)
                 .unwrap()
                 .to_owned();
             let albert_payment_addr = shielded_ctx
-                .ctx
                 .wallet
                 .find_payment_addr(ALBERT_PAYMENT_ADDRESS)
                 .unwrap()
                 .to_owned();
             let bertha_payment_addr = shielded_ctx
-                .ctx
                 .wallet
                 .find_payment_addr(BERTHA_PAYMENT_ADDRESS)
                 .unwrap()
@@ -550,23 +562,21 @@ fn vp_masp(c: &mut Criterion) {
                 .verifiers_and_changed_keys(&BTreeSet::default());
 
             b.iter(|| {
-                assert!(
-                    run::vp(
-                        &vp_code_hash,
-                        &signed_tx,
-                        &TxIndex(0),
-                        &defaults::validator_address(),
-                        &shielded_ctx.shell.wl_storage.storage,
-                        &shielded_ctx.shell.wl_storage.write_log,
-                        &mut VpGasMeter::new(u64::MAX, 0),
-                        &BTreeMap::default(),
-                        &keys_changed,
-                        &verifiers,
-                        shielded_ctx.shell.vp_wasm_cache.clone(),
-                        false,
-                    )
-                    .unwrap()
-                );
+                assert!(run::vp(
+                    &vp_code_hash,
+                    &signed_tx,
+                    &TxIndex(0),
+                    &defaults::validator_address(),
+                    &shielded_ctx.shell.wl_storage.storage,
+                    &shielded_ctx.shell.wl_storage.write_log,
+                    &mut VpGasMeter::new(u64::MAX, 0),
+                    &BTreeMap::default(),
+                    &keys_changed,
+                    &verifiers,
+                    shielded_ctx.shell.vp_wasm_cache.clone(),
+                    false,
+                )
+                .unwrap());
             })
         });
     }

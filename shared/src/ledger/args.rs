@@ -409,12 +409,12 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// Whether to force overwrite the above alias, if it is provided, in the
     /// wallet.
     pub wallet_alias_force: bool,
-    /// The amount being payed to include the transaction
-    pub fee_amount: token::Amount,
+    /// The amount being payed (for gas unit) to include the transaction
+    pub fee_amount: Option<token::Amount>,
     /// The token in which the fee is being paid
     pub fee_token: C::Address,
     /// The optional spending key for fee unshielding
-    pub fee_unshield: Option<ExtendedSpendingKey>,
+    pub fee_unshield: Option<C::TransferSource>,
     /// The max amount of gas used to process tx
     pub gas_limit: GasLimit,
     /// The optional expiration of the transaction

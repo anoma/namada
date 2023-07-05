@@ -383,15 +383,3 @@ where
     }
     Ok(None)
 }
-
-/// Verify the signature of a transaction
-pub fn verify_tx_signature(
-    gas_meter: &mut VpGasMeter,
-    tx: &Tx,
-    pk: &common::PublicKey,
-    sig: &common::Signature,
-) -> EnvResult<bool> {
-    add_gas(gas_meter, VERIFY_TX_SIG_GAS_COST)?;
-
-    Ok(tx.verify_sig(pk, sig).is_ok())
-}

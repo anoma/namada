@@ -17,7 +17,7 @@ use namada::types::masp::*;
 
 use super::args;
 use crate::client::tx::CLIShieldedUtils;
-use crate::config::genesis::genesis_config;
+use crate::config::genesis;
 use crate::config::global::GlobalConfig;
 use crate::config::{self, Config};
 use crate::wallet::CliWalletUtils;
@@ -111,8 +111,9 @@ impl Context {
                 "{}.toml",
                 global_config.default_chain_id.as_str()
             ));
-            let default_genesis =
-                genesis_config::open_genesis_config(genesis_file_path)?;
+            let default_genesis = genesis::genesis_config::open_genesis_config(
+                genesis_file_path,
+            )?;
             crate::wallet::load_or_new_from_genesis(&chain_dir, default_genesis)
         };
         #[cfg(feature = "dev")]

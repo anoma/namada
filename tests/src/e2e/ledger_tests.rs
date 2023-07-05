@@ -19,6 +19,7 @@ use std::time::{Duration, Instant};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
+use namada::ledger::masp::{ShieldedContext, ShieldedUtils};
 use namada::types::address::{btc, eth, masp_rewards, Address};
 use namada::types::governance::ProposalType;
 use namada::types::storage::Epoch;
@@ -555,7 +556,7 @@ fn ledger_txs_and_queries() -> Result<()> {
 /// 3. Test that a tx requesting a disposable signer with a correct unshielding operation is succesful
 fn wrapper_disposable_signer() -> Result<()> {
     // Download the shielded pool parameters before starting node
-    let _ = ShieldedContext::new(PathBuf::new());
+    let _ = CLIShieldedUtils::new(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.
@@ -698,7 +699,7 @@ fn wrapper_disposable_signer() -> Result<()> {
 #[test]
 fn wrapper_fee_unshielding() -> Result<()> {
     // Download the shielded pool parameters before starting node
-    let _ = ShieldedContext::new(PathBuf::new());
+    let _ = CLIShieldedUtils::new(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.

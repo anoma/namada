@@ -357,13 +357,14 @@ mod test_process_tx {
         // the signed tx
         let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 10.into(),
+                amount_per_gas_unit: 10.into(),
                 token: nam(),
             },
             &keypair,
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
+            None,
             None,
         ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
@@ -393,13 +394,14 @@ mod test_process_tx {
         // the signed tx
         let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 10.into(),
+                amount_per_gas_unit: 10.into(),
                 token: nam(),
             },
             &keypair,
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
+            None,
             None,
         ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned()));

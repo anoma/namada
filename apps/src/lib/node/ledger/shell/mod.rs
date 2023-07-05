@@ -23,13 +23,14 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use masp_primitives::transaction::Transaction;
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
 };
-use namada::ledger::protocol::{apply_tx, load_transfer_code_from_storage};
+use namada::ledger::protocol::{apply_tx, get_transfer_hash_from_storage};
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, TempWlStorage, WlStorage, DB,
@@ -46,7 +47,7 @@ use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::transaction::{
     hash_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
-    EllipticCurve, PairingEngine, TxType,
+    EllipticCurve, PairingEngine, TxType, WrapperTx,
 };
 use namada::types::{address, hash, token};
 use namada::vm::wasm::{TxCache, VpCache};
@@ -849,9 +850,22 @@ where
                 return response;
             }
 
+            let fee_unshield = wrapper
+                .unshield_hash
+                .map(|ref hash| tx.get_section(hash))
+                .flatten()
+                .map(|section| {
+                    if let Section::MaspTx(transaction) = section {
+                        Some(transaction.to_owned())
+                    } else {
+                        None
+                    }
+                })
+                .flatten();
             // Validate wrapper fees
             if let Err(e) = self.wrapper_fee_check(
                 &wrapper,
+                fee_unshield,
                 &mut TempWlStorage::new(&self.wl_storage.storage),
                 None,
                 &mut self.vp_wasm_cache.clone(),
@@ -886,7 +900,7 @@ where
         let mut cumulated_gas = 0;
         let mut vp_wasm_cache = self.vp_wasm_cache.read_only();
         let mut tx_wasm_cache = self.tx_wasm_cache.read_only();
-        let raw_tx = match Tx::try_from(tx_bytes) {
+        let mut tx = match Tx::try_from(tx_bytes) {
             Ok(tx) => tx,
             Err(err) => {
                 response.code = 1;
@@ -894,17 +908,14 @@ where
                 return response;
             }
         };
-        let mut tx = match process_tx(raw_tx.clone()) {
-            Ok(tx_type) => tx_type,
-            Err(err) => {
-                response.code = 1;
-                response.log = err.to_string();
-                return response;
-            }
+        if let Err(e) = tx.validate_header() {
+            response.code = 1;
+            response.log = e.to_string();
+            return response;
         };
 
         // Wrapper dry run to allow estimating the gas cost of a transaction
-        let mut tx_gas_meter = match tx {
+        let mut tx_gas_meter = match tx.header().tx_type {
             TxType::Wrapper(ref wrapper) => {
                 let mut tx_gas_meter =
                     TxGasMeter::new(wrapper.gas_limit.to_owned().into());
@@ -933,15 +944,13 @@ where
                 // NOTE: the encryption key for a dry-run should always be an hardcoded, dummy one
                 let privkey =
             <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-                tx = TxType::Decrypted(DecryptedTx::Decrypted {
-            tx: wrapper
-                .decrypt(privkey)
-                .expect("Could not decrypt the inner tx"),
-                    #[cfg(not(feature = "mainnet"))]
-                    // To be able to dry-run testnet faucet withdrawal, pretend 
+
+                tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
+                    // To be able to dry-run testnet faucet withdrawal, pretend
                     // that we got a valid PoW
+                    #[cfg(not(feature = "mainnet"))]
                     has_valid_pow: true,
-        });
+                }));
                 TxGasMeter::new(
                     tx_gas_meter
                         .tx_gas_limit
@@ -958,14 +967,14 @@ where
                         .expect("Missing parameter in storage"),
                 )
             }
-            TxType::Raw(raw) => {
+            TxType::Raw => {
                 // Cast tx to a decrypted for execution
-                tx = TxType::Decrypted(DecryptedTx::Decrypted {
-                    tx: raw,
-
+                tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
+                    // To be able to dry-run testnet faucet withdrawal, pretend
+                    // that we got a valid PoW
                     #[cfg(not(feature = "mainnet"))]
                     has_valid_pow: true,
-                });
+                }));
 
                 // If dry run only the inner tx, use the max block gas as the gas limit
                 TxGasMeter::new(
@@ -1094,6 +1103,7 @@ where
     pub fn wrapper_fee_check<CA>(
         &self,
         wrapper: &WrapperTx,
+        masp_transaction: Option<Transaction>,
         temp_wl_storage: &mut TempWlStorage<D, H>,
         gas_table: Option<Cow<BTreeMap<String, u64>>>,
         vp_wasm_cache: &mut VpCache<CA>,
@@ -1126,28 +1136,31 @@ where
         )
         .expect("Token balance read in the protocol must not fail");
 
-        if wrapper.unshield.is_some() {
+        if wrapper.unshield_hash.is_some() {
+            //FIXME: isn't enough to pass the Transaction? If we already heck the validity of the Hash then I can only check if the argument is Some or None. Same in finalize block
+            let transaction =
+                masp_transaction
+                    .ok_or(Error::TxApply(protocol::Error::FeeUnshieldingError(
+                    namada::types::transaction::WrapperTxErr::InvalidUnshield(
+                        "Missing expected fee unshielding tx".to_string(),
+                    ),
+                )))?;
+
             // Validate data and generate unshielding tx
-            let transfer_code =
-                load_transfer_code_from_storage(temp_wl_storage);
+            let transfer_code_hash =
+                get_transfer_hash_from_storage(temp_wl_storage);
 
             let descriptions_limit = self.wl_storage.read(&parameters::storage::get_fee_unshielding_descriptions_limit_key()).expect("Error reading the storage").expect("Missing fee unshielding descriptions limit param in storage");
 
             let unshield = wrapper
                 .check_and_generate_fee_unshielding(
                     balance,
-                    transfer_code,
+                    transfer_code_hash,
                     descriptions_limit,
+                    transaction,
                 )
                 .map_err(|e| {
-                    Error::TxApply(protocol::Error::FeeUnshieldingError(
-                        e,
-                    ))
-                })?
-                .ok_or_else(|| {
-                    Error::TxApply(protocol::Error::FeeUnshieldingError(namada::types::transaction::WrapperTxErr::InvalidUnshield(
-                        "Missing expected fee unshielding tx".to_string(),
-                    )))
+                    Error::TxApply(protocol::Error::FeeUnshieldingError(e))
                 })?;
 
             let gas_table = gas_table.unwrap_or_else(|| {
@@ -1164,11 +1177,7 @@ where
 
             // Runtime check
             match apply_tx(
-                TxType::Decrypted(DecryptedTx::Decrypted {
-                    tx: unshield,
-                    #[cfg(not(feature = "mainnet"))]
-                    has_valid_pow: false,
-                }),
+                unshield,
                 &vec![],
                 TxIndex::default(),
                 &mut TxGasMeter::new(fee_unshielding_gas_limit),
@@ -1225,10 +1234,10 @@ where
 /// for the shell
 #[cfg(test)]
 mod test_utils {
+    use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
     use data_encoding::HEXUPPER;
     use std::ops::{Deref, DerefMut};
     use std::path::PathBuf;
-    use tendermint_proto::abci::RequestPrepareProposal;
 
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::{update_allowed_conversions, Sha256Hasher};
@@ -1514,13 +1523,15 @@ mod test_utils {
             300_000.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.encrypt(&Default::default());
         let gas_limit =
-            u64::from(&wrapper.gas_limit) - signed_wrapper.len() as u64;
+            u64::from(&wrapper.header().wrapper().unwrap().gas_limit)
+                - wrapper.to_bytes().len() as u64;
 
         shell.wl_storage.storage.tx_queue.push(TxInQueue {
             tx: wrapper,
@@ -1587,6 +1598,7 @@ mod test_mempool_validate {
                 0.into(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
+                None,
             ))));
         unsigned_wrapper.header.chain_id = shell.chain_id.clone();
         unsigned_wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
@@ -1624,6 +1636,7 @@ mod test_mempool_validate {
                 0.into(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
+                None,
             ))));
         invalid_wrapper.header.chain_id = shell.chain_id.clone();
         invalid_wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
@@ -1638,7 +1651,7 @@ mod test_mempool_validate {
         // we mount a malleability attack to try and remove the fee
         let mut new_wrapper =
             invalid_wrapper.header().wrapper().expect("Test failed");
-        new_wrapper.fee.amount = 0.into();
+        new_wrapper.fee.amount_per_gas_unit = 0.into();
         invalid_wrapper.update_header(TxType::Wrapper(Box::new(new_wrapper)));
 
         let mut result = shell.mempool_validate(
@@ -1687,6 +1700,7 @@ mod test_mempool_validate {
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
+            None,
             None,
         ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -1842,14 +1856,7 @@ mod test_mempool_validate {
             .expect("Missing max_block_gas parameter in storage");
         let keypair = super::test_utils::gen_keypair();
 
-        let tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
-            shell.chain_id.clone(),
-            None,
-        );
-
-        let wrapper = WrapperTx::new(
+        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount_per_gas_unit: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -1857,14 +1864,17 @@ mod test_mempool_validate {
             &keypair,
             Epoch(0),
             (block_gas_limit + 1).into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None,
-        )
-        .sign(&keypair, shell.chain_id.clone(), None)
-        .expect("Wrapper signing failed");
+        ))));
+        wrapper.header.chain_id = shell.chain_id.clone();
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper.add_section(Section::Signature(Signature::new(
+            &wrapper.header_hash(),
+            &keypair,
+        )));
 
         let result = shell.mempool_validate(
             wrapper.to_bytes().as_ref(),
@@ -1877,17 +1887,9 @@ mod test_mempool_validate {
     #[test]
     fn test_exceeding_gas_limit_tx() {
         let (shell, _) = test_utils::setup(1);
-
         let keypair = super::test_utils::gen_keypair();
 
-        let tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
-            shell.chain_id.clone(),
-            None,
-        );
-
-        let wrapper = WrapperTx::new(
+        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount_per_gas_unit: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -1895,14 +1897,17 @@ mod test_mempool_validate {
             &keypair,
             Epoch(0),
             0.into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None,
-        )
-        .sign(&keypair, shell.chain_id.clone(), None)
-        .expect("Wrapper signing failed");
+        ))));
+        wrapper.header.chain_id = shell.chain_id.clone();
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper.add_section(Section::Signature(Signature::new(
+            &wrapper.header_hash(),
+            &keypair,
+        )));
 
         let result = shell.mempool_validate(
             wrapper.to_bytes().as_ref(),
@@ -1916,14 +1921,7 @@ mod test_mempool_validate {
     fn test_fee_non_whitelisted_token() {
         let (shell, _) = test_utils::setup(1);
 
-        let tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
-            shell.chain_id.clone(),
-            None,
-        );
-
-        let wrapper = WrapperTx::new(
+        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount_per_gas_unit: 100.into(),
                 token: address::btc(),
@@ -1931,18 +1929,17 @@ mod test_mempool_validate {
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None,
-        )
-        .sign(
+        ))));
+        wrapper.header.chain_id = shell.chain_id.clone();
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper.add_section(Section::Signature(Signature::new(
+            &wrapper.header_hash(),
             &crate::wallet::defaults::albert_keypair(),
-            shell.chain_id.clone(),
-            None,
-        )
-        .expect("Wrapper signing failed");
+        )));
 
         let result = shell.mempool_validate(
             wrapper.to_bytes().as_ref(),
@@ -1956,14 +1953,7 @@ mod test_mempool_validate {
     fn test_fee_wrong_minimum_amount() {
         let (shell, _) = test_utils::setup(1);
 
-        let tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
-            shell.chain_id.clone(),
-            None,
-        );
-
-        let wrapper = WrapperTx::new(
+        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -1971,18 +1961,17 @@ mod test_mempool_validate {
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None,
-        )
-        .sign(
+        ))));
+        wrapper.header.chain_id = shell.chain_id.clone();
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper.add_section(Section::Signature(Signature::new(
+            &wrapper.header_hash(),
             &crate::wallet::defaults::albert_keypair(),
-            shell.chain_id.clone(),
-            None,
-        )
-        .expect("Wrapper signing failed");
+        )));
 
         let result = shell.mempool_validate(
             wrapper.to_bytes().as_ref(),
@@ -1996,14 +1985,7 @@ mod test_mempool_validate {
     fn test_insufficient_balance_for_fee() {
         let (shell, _) = test_utils::setup(1);
 
-        let tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
-            shell.chain_id.clone(),
-            None,
-        );
-
-        let wrapper = WrapperTx::new(
+        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount_per_gas_unit: 1_000_000.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -2011,18 +1993,17 @@ mod test_mempool_validate {
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None,
-        )
-        .sign(
+        ))));
+        wrapper.header.chain_id = shell.chain_id.clone();
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper.add_section(Section::Signature(Signature::new(
+            &wrapper.header_hash(),
             &crate::wallet::defaults::albert_keypair(),
-            shell.chain_id.clone(),
-            None,
-        )
-        .expect("Wrapper signing failed");
+        )));
 
         let result = shell.mempool_validate(
             wrapper.to_bytes().as_ref(),
@@ -2036,14 +2017,7 @@ mod test_mempool_validate {
     fn test_wrapper_fee_overflow() {
         let (shell, _) = test_utils::setup(1);
 
-        let tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
-            shell.chain_id.clone(),
-            None,
-        );
-
-        let wrapper = WrapperTx::new(
+        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount_per_gas_unit: token::Amount::max(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -2051,18 +2025,17 @@ mod test_mempool_validate {
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None,
-        )
-        .sign(
+        ))));
+        wrapper.header.chain_id = shell.chain_id.clone();
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper.add_section(Section::Signature(Signature::new(
+            &wrapper.header_hash(),
             &crate::wallet::defaults::albert_keypair(),
-            shell.chain_id.clone(),
-            None,
-        )
-        .expect("Wrapper signing failed");
+        )));
 
         let result = shell.mempool_validate(
             wrapper.to_bytes().as_ref(),

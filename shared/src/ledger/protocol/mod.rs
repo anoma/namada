@@ -2,8 +2,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::panic;
 
+use masp_primitives::transaction::Transaction;
 use namada_core::ledger::gas::TxGasMeter;
 use namada_core::types::storage::Key;
+use namada_core::proto::Section;
 use namada_core::ledger::storage::TempWlStorage;
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::hash::Hash;
@@ -154,12 +156,16 @@ where
         }
         TxType::Wrapper(ref wrapper) => {
             let mut changed_keys = BTreeSet::default();
+            // FIXME: this is only needed for ABCI?
+            // Propagate invalid masp transactions to try withdraw fees from transparent balance
+            let masp_transaction = wrapper.unshield_hash.map(|ref hash| tx.get_section(hash).map(|section| if let Section::MaspTx(transaction) = section { Some(transaction.to_owned()) } else { None }).flatten()).flatten();
 
             apply_wrapper_tx(
                 write_log,
                 storage,
                 &mut changed_keys,
                 wrapper,
+                masp_transaction,
                 tx_bytes,
                 tx_gas_meter,
                 gas_table,
@@ -181,25 +187,19 @@ where
     }
 }
 
-    /// Load the wasm code for a transfer from storage.
+    /// Load the wasm hash for a transfer from storage.
     ///
     /// # Panics
-    /// If the transaction hash or code are not found in storage
-    pub fn load_transfer_code_from_storage<S>(storage: &S) -> Vec<u8> 
+    /// If the transaction hash is not found in storage
+    pub fn get_transfer_hash_from_storage<S>(storage: &S) -> Hash
 where S: StorageRead{
         let transfer_code_name_key =
             Key::wasm_code_name("tx_transfer.wasm".to_string());
-        let transfer_hash: hash::Hash = 
             storage
             .read(&transfer_code_name_key)
             .expect("Could not read the storage")
-            .expect("Expected tx transfer hash in storage");
+            .expect("Expected tx transfer hash in storage")
 
-        let transfer_code_key = Key::wasm_code(&transfer_hash);
-        storage
-            .read_bytes(&transfer_code_key)
-            .expect("Could not read the storage")
-            .expect("Expected tx transfer code in storage")
     }
 
 /// Performs the required operation on a wrapper transaction:
@@ -211,6 +211,7 @@ fn apply_wrapper_tx<D, H, CA>(
     storage: &Storage<D, H>,
     changed_keys: &mut BTreeSet<storage::Key>,
     wrapper: &WrapperTx,
+    masp_transaction: Option<Transaction>,
     tx_bytes: &[u8],
     gas_meter: &mut TxGasMeter,
     gas_table: &BTreeMap<String, u64>,
@@ -248,6 +249,7 @@ where
     let mut temp_wl_storage = TempWlStorage::new(storage);
     charge_fee(
         wrapper,
+        masp_transaction,
         tx_bytes,
         &gas_table,
         #[cfg(not(feature = "mainnet"))]
@@ -275,6 +277,7 @@ where
 /// - The accumulated fee amount to be credited to the block proposer overflows
 pub fn charge_fee<D, H, CA>(
     wrapper: &WrapperTx,
+    masp_transaction: Option<Transaction>,
     tx_bytes: &[u8],
     gas_table: &BTreeMap<String, u64>,
     #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
@@ -290,7 +293,9 @@ where
     CA: 'static + WasmCacheAccess + Sync,
 {
     // Unshield funds if requested
-    if wrapper.unshield.is_some() {
+    if wrapper.unshield_hash.is_some() {
+        match masp_transaction {
+            Some(transaction ) => {
         // The unshielding tx does not charge gas, instantiate a
         // custom gas meter for this step
         let mut gas_meter =
@@ -313,18 +318,16 @@ where
         // If it fails, do not return early
         // from this function but try to take the funds from the unshielded
         // balance
+            //FIXME: this logic is actually only needed in case of ABCI?
         match wrapper.generate_fee_unshielding(
             transparent_balance,
-            load_transfer_code_from_storage(wl_storage),
+            get_transfer_hash_from_storage(wl_storage),
+                transaction
         ) {
-            Ok(Some(fee_unshielding_tx)) => {
+            Ok(fee_unshielding_tx) => {
                 // NOTE: A clean write log must be provided to this call for a correct vp validation
                 match apply_tx(
-                    TxType::Decrypted(DecryptedTx::Decrypted {
-                        tx: fee_unshielding_tx,
-            #[cfg(not(feature = "mainnet"))]
-                        has_valid_pow: false,
-                    }),
+                        fee_unshielding_tx,
                     tx_bytes,
                     TxIndex::default(),
                     &mut gas_meter,
@@ -358,12 +361,11 @@ where
                     }
                 }
             }
-            Ok(None) => {
-                tracing::error!("Missing expected fee unshielding tx")
-            }
-            Err(e) => tracing::error!("{}", e),
+            Err(e) => tracing::error!("{}", e), 
         }
-    }
+    },
+        None => tracing::error!("Missing expected fee unshielding tx") 
+    }}
 
     // Charge or check fees
     match block_proposer {

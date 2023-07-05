@@ -114,11 +114,11 @@ where
         .ok_or(Error::MissingCode)?;
     let (tx_hash, code) = match tx_code.code {
         Commitment::Hash(code_hash) => (code_hash, None),
-        Commitment::Id(tx_code) => (Hash::sha256(tx_code), Some(tx_code)),
+        Commitment::Id(tx_code) => (Hash::sha256(&tx_code), Some(tx_code)),
     };
 
     let code_or_hash = match code {
-        Some(code) => WasmPayload::Code(code),
+        Some(ref code) => WasmPayload::Code(code),
         None => WasmPayload::Hash(&tx_hash),
     };
 

@@ -1,9 +1,9 @@
 use borsh::BorshDeserialize;
 use criterion::{criterion_group, criterion_main, Criterion};
-use namada::core::proto::SignedTxData;
 use namada::core::types::address;
 use namada::core::types::key::RefTo;
 use namada::core::types::token::{Amount, Transfer};
+use namada::proto::Section;
 use namada_apps::wallet::defaults;
 use namada_benches::{generate_tx, TX_TRANSFER_WASM};
 
@@ -19,16 +19,19 @@ fn tx_signature_validation(c: &mut Criterion) {
             key: None,
             shielded: None,
         },
+        None,
         &defaults::albert_keypair(),
     );
 
-    let SignedTxData { data: _, ref sig } =
-        SignedTxData::try_from_slice(tx.data.as_ref().unwrap()).unwrap();
+    let header_hash = tx.header_hash();
 
     c.bench_function("tx_signature_validation", |b| {
         b.iter(|| {
-            tx.verify_sig(&defaults::albert_keypair().ref_to(), sig)
-                .unwrap()
+            tx.verify_signature(
+                &defaults::albert_keypair().ref_to(),
+                &header_hash,
+            )
+            .unwrap()
         })
     });
 }

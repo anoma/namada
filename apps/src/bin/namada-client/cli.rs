@@ -26,8 +26,7 @@ pub async fn main() -> Result<()> {
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
                     let dry_run = args.tx.dry_run;
-                    tx::submit_custom::<HttpClient>(&client, &mut ctx, args)
-                        .await?;
+                    tx::submit_custom(&client, &mut ctx, args).await?;
                     if !dry_run {
                         namada_apps::wallet::save(&ctx.wallet)
                             .unwrap_or_else(|err| eprintln!("{}", err));
@@ -52,8 +51,7 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_ibc_transfer::<HttpClient>(&client, ctx, args)
-                        .await?;
+                    tx::submit_ibc_transfer(&client, ctx, args).await?;
                 }
                 Sub::TxUpdateVp(TxUpdateVp(args)) => {
                     wait_until_node_is_synched(&args.tx.ledger_address).await;
@@ -61,8 +59,7 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_update_vp::<HttpClient>(&client, &mut ctx, args)
-                        .await?;
+                    tx::submit_update_vp(&client, &mut ctx, args).await?;
                 }
                 Sub::TxInitAccount(TxInitAccount(args)) => {
                     wait_until_node_is_synched(&args.tx.ledger_address).await;
@@ -71,10 +68,7 @@ pub async fn main() -> Result<()> {
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
                     let dry_run = args.tx.dry_run;
-                    tx::submit_init_account::<HttpClient>(
-                        &client, &mut ctx, args,
-                    )
-                    .await?;
+                    tx::submit_init_account(&client, &mut ctx, args).await?;
                     if !dry_run {
                         namada_apps::wallet::save(&ctx.wallet)
                             .unwrap_or_else(|err| eprintln!("{}", err));
@@ -91,8 +85,7 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_init_validator::<HttpClient>(&client, ctx, args)
-                        .await;
+                    tx::submit_init_validator(&client, ctx, args).await;
                 }
                 Sub::TxInitProposal(TxInitProposal(args)) => {
                     wait_until_node_is_synched(&args.tx.ledger_address).await;
@@ -100,8 +93,7 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_init_proposal::<HttpClient>(&client, ctx, args)
-                        .await?;
+                    tx::submit_init_proposal(&client, ctx, args).await?;
                 }
                 Sub::TxVoteProposal(TxVoteProposal(args)) => {
                     wait_until_node_is_synched(&args.tx.ledger_address).await;
@@ -109,8 +101,7 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_vote_proposal::<HttpClient>(&client, ctx, args)
-                        .await?;
+                    tx::submit_vote_proposal(&client, ctx, args).await?;
                 }
                 Sub::TxRevealPk(TxRevealPk(args)) => {
                     wait_until_node_is_synched(&args.tx.ledger_address).await;
@@ -118,8 +109,7 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_reveal_pk::<HttpClient>(&client, &mut ctx, args)
-                        .await?;
+                    tx::submit_reveal_pk(&client, &mut ctx, args).await?;
                 }
                 Sub::Bond(Bond(args)) => {
                     wait_until_node_is_synched(&args.tx.ledger_address).await;
@@ -127,8 +117,7 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_bond::<HttpClient>(&client, &mut ctx, args)
-                        .await?;
+                    tx::submit_bond(&client, &mut ctx, args).await?;
                 }
                 Sub::Unbond(Unbond(args)) => {
                     wait_until_node_is_synched(&args.tx.ledger_address).await;
@@ -136,8 +125,7 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_unbond::<HttpClient>(&client, &mut ctx, args)
-                        .await?;
+                    tx::submit_unbond(&client, &mut ctx, args).await?;
                 }
                 Sub::Withdraw(Withdraw(args)) => {
                     wait_until_node_is_synched(&args.tx.ledger_address).await;
@@ -145,8 +133,7 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_withdraw::<HttpClient>(&client, ctx, args)
-                        .await?;
+                    tx::submit_withdraw(&client, ctx, args).await?;
                 }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(args)) => {

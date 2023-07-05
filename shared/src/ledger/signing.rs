@@ -1,4 +1,5 @@
 //! Functions to sign transactions
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 #[cfg(feature = "std")]
 use std::env;
@@ -7,6 +8,7 @@ use std::fs::File;
 use std::io::ErrorKind;
 #[cfg(feature = "std")]
 use std::io::Write;
+use std::path::PathBuf;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
@@ -17,9 +19,10 @@ use masp_primitives::transaction::components::sapling::fees::{
 };
 use namada_core::types::address::{masp, Address, ImplicitAddress};
 use namada_core::types::token::{self, Amount};
-use namada_core::types::transaction::{pos, MIN_FEE};
+use namada_core::types::transaction::pos;
 use prost::Message;
 use serde::{Deserialize, Serialize};
+use sha2::Digest;
 use zeroize::Zeroizing;
 
 use crate::ibc::applications::transfer::msgs::transfer::{
@@ -50,6 +53,8 @@ use crate::types::transaction::governance::{
 use crate::types::transaction::{
     Fee, InitAccount, InitValidator, TxType, UpdateVp, WrapperTx,
 };
+
+use super::masp::{ShieldedContext, ShieldedUtils};
 
 #[cfg(feature = "std")]
 /// Env. var specifying where to store signing test vectors
@@ -129,9 +134,11 @@ pub enum TxSigningKey {
 pub async fn tx_signer<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
+    V: ShieldedUtils<C = C>,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
+    shielded: &mut ShieldedContext<V>,
     args: &args::Tx,
     default: TxSigningKey,
 ) -> Result<common::SecretKey, Error> {
@@ -159,8 +166,8 @@ pub async fn tx_signer<
             // PK first
             if matches!(signer, Address::Implicit(_)) {
                 let pk: common::PublicKey = signing_key.ref_to();
-                super::tx::reveal_pk_if_needed::<C, U>(
-                    client, wallet, &pk, args,
+                super::tx::reveal_pk_if_needed::<C, U, V>(
+                    client, wallet, shielded, &pk, args,
                 )
                 .await?;
             }
@@ -188,16 +195,19 @@ pub async fn tx_signer<
 pub async fn sign_tx<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
+    V: ShieldedUtils<C = C>,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
+    shielded: &mut ShieldedContext<V>,
     mut tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,
-    mut updated_balance: Option<Amount>,
+    updated_balance: Option<Amount>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<(TxBroadcastData, Option<Epoch>), Error> {
-    let keypair = tx_signer::<C, U>(client, wallet, args, default).await?;
+    let keypair =
+        tx_signer::<C, U, V>(client, wallet, shielded, args, default).await?;
     // Sign over the transacttion data
     tx.add_section(Section::Signature(Signature::new(
         tx.data_sechash(),
@@ -223,10 +233,11 @@ pub async fn sign_tx<
         sign_wrapper(
             client,
             wallet,
+            shielded,
             args,
             epoch,
             tx,
-            &keypair,
+            Cow::Borrowed(&keypair),
             updated_balance,
             #[cfg(not(feature = "mainnet"))]
             requires_pow,
@@ -241,16 +252,18 @@ pub async fn sign_tx<
 /// wrapper and its payload which is needed for monitoring its
 /// progress on chain.
 pub async fn sign_wrapper<
-'key,
+    'key,
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
+    V: ShieldedUtils<C = C>,
 >(
     client: &C,
     #[allow(unused_variables)] wallet: &mut Wallet<U>,
+    shielded: &mut ShieldedContext<V>,
     args: &args::Tx,
     epoch: Epoch,
     mut tx: Tx,
-    mut keypair: Cow<'key, &common::SecretKey>,
+    mut keypair: Cow<'key, common::SecretKey>,
     mut updated_balance: Option<Amount>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (TxBroadcastData, Option<Epoch>) {
@@ -265,57 +278,54 @@ pub async fn sign_wrapper<
         updated_balance = Some(Amount::default());
     }
 
-    let fee_token = ctx.get(&args.fee_token);
     let fee_amount = match args.fee_amount {
-        Some(amount) => amount,
+        Some(amount) => amount, //FIXME: validate that this matches the minimum required?
         None => {
             let gas_cost_key = parameter_storage::get_gas_cost_key();
-            match rpc::query_storage_value::<BTreeMap<Address, Amount>>(
-                &client,
+            match rpc::query_storage_value::<C, BTreeMap<Address, Amount>>(
+                client,
                 &gas_cost_key,
             )
             .await
-            .map(|map| map.get(&fee_token).map(ToOwned::to_owned))
+            .map(|map| map.get(&args.fee_token).map(ToOwned::to_owned))
             .flatten()
             {
                 Some(amount) => amount,
                 None => {
                     if !args.force {
-                        eprintln!(
+                        panic!(
                             "Could not retrieve the gas cost for token {}",
-                            fee_token
+                            args.fee_token
                         );
-                        cli::safe_exit(1)
                     } else {
-                        1.into()
+                        token::Amount::default()
                     }
                 }
             }
         }
     };
     let source = Address::from(&keypair.ref_to());
- let mut updated_balance = match updated_balance {
+    let mut updated_balance = match updated_balance {
         Some(balance) => balance,
         None => {
-            let balance_key = token::balance_key(fee_token, &source);
+            let balance_key = token::balance_key(&args.fee_token, &source);
 
-            rpc::query_storage_value::<iC, token::Amount>(client, &balance_key)
+            rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
                 .await
                 .unwrap_or_default()
         }
     };
-    
+
     let total_fee: Amount =
         u64::checked_mul(fee_amount.into(), u64::from(&args.gas_limit))
             .expect("Fee computation shouldn't overflow")
             .into();
 
-    
     let (unshield, unshielding_epoch) = match total_fee
         .checked_sub(updated_balance)
     {
         Some(diff) => {
-            if let Some(spending_key) = args.fee_unshield {
+            if let Some(spending_key) = args.fee_unshield.clone() {
                 // Unshield funds for fee payment
                 let tx_args = args::Tx {
                     fee_amount: Some(0.into()),
@@ -324,28 +334,46 @@ pub async fn sign_wrapper<
                 };
                 let transfer_args = args::TxTransfer {
                     tx: tx_args,
-                    source: FromContext::new(spending_key.to_string()),
-                    target: FromContext::new(source.to_string()),
-                    token: args.fee_token.to_owned(),
+                    source: spending_key,
+                    target: namada_core::types::masp::TransferTarget::Address(
+                        source.clone(),
+                    ),
+                    token: args.fee_token.clone(),
                     sub_prefix: None,
                     amount: diff,
+                    // These last two fields are not used in the function, mock them
+                    native_token: args.fee_token.clone(),
+                    tx_code_path: PathBuf::new(),
                 };
 
-                match gen_shielded_transfer(ctx, &client, &transfer_args).await
+                match shielded
+                    .gen_shielded_transfer(client, transfer_args)
+                    .await
                 {
-                    Ok(Some((transaction, _data, unshielding_epoch))) => {
-                        let spends = transaction.shielded_spends.len();
-                        let converts = transaction.shielded_converts.len();
-                        let outs = transaction.shielded_outputs.len();
+                    Ok(Some((_, transaction, _data, unshielding_epoch))) => {
+                        let spends = transaction
+                            .sapling_bundle()
+                            .unwrap()
+                            .shielded_spends
+                            .len();
+                        let converts = transaction
+                            .sapling_bundle()
+                            .unwrap()
+                            .shielded_converts
+                            .len();
+                        let outs = transaction
+                            .sapling_bundle()
+                            .unwrap()
+                            .shielded_outputs
+                            .len();
 
                         let mut descriptions =
                             spends.checked_add(converts).unwrap_or_else(|| {
                                 if !args.force && cfg!(feature = "mainnet") {
-                                    eprintln!(
+                                    panic!(
                                         "Overflow in fee unshielding \
                                          descriptions"
                                     );
-                                    cli::safe_exit(1)
                                 } else {
                                     usize::MAX
                                 }
@@ -355,11 +383,10 @@ pub async fn sign_wrapper<
                             .checked_add(outs)
                             .unwrap_or_else(|| {
                                 if !args.force && cfg!(feature = "mainnet") {
-                                    eprintln!(
+                                    panic!(
                                         "Overflow in fee unshielding \
                                          descriptions"
                                     );
-                                    cli::safe_exit(1);
                                 } else {
                                     usize::MAX
                                 }
@@ -367,8 +394,8 @@ pub async fn sign_wrapper<
 
                         let descriptions_limit_key=  parameter_storage::get_fee_unshielding_descriptions_limit_key();
                         let descriptions_limit =
-                            rpc::query_storage_value::<u64>(
-                                &client,
+                            rpc::query_storage_value::<C, u64>(
+                                client,
                                 &descriptions_limit_key,
                             )
                             .await
@@ -376,10 +403,9 @@ pub async fn sign_wrapper<
 
                         if u64::try_from(descriptions).unwrap_or_else(|_| {
                             if !args.force && cfg!(feature = "mainnet") {
-                                eprintln!(
+                                panic!(
                                     "Overflow in fee unshielding descriptions"
                                 );
-                                cli::safe_exit(1);
                             } else {
                                 u64::MAX
                             }
@@ -387,10 +413,9 @@ pub async fn sign_wrapper<
                             && !args.force
                             && cfg!(feature = "mainnet")
                         {
-                            eprintln!(
+                            panic!(
                                 "Fee unshielding descriptions exceed the limit"
                             );
-                            cli::safe_exit(1);
                         }
 
                         updated_balance += diff;
@@ -399,7 +424,7 @@ pub async fn sign_wrapper<
                     Ok(None) => {
                         eprintln!("Missing unshielding transaction");
                         if !args.force && cfg!(feature = "mainnet") {
-                            cli::safe_exit(1);
+                            panic!();
                         }
 
                         (None, None)
@@ -407,7 +432,7 @@ pub async fn sign_wrapper<
                     Err(e) => {
                         eprintln!("Error in fee unshielding generation: {}", e);
                         if !args.force && cfg!(feature = "mainnet") {
-                            cli::safe_exit(1);
+                            panic!();
                         }
 
                         (None, None)
@@ -420,7 +445,7 @@ pub async fn sign_wrapper<
                      {updated_balance}."
                 );
                 if !args.force && cfg!(feature = "mainnet") {
-                    cli::safe_exit(1);
+                    panic!()
                 }
 
                 (None, None)
@@ -451,24 +476,42 @@ pub async fn sign_wrapper<
     };
 
     // This object governs how the payload will be processed
+    let (unshield_section_hash, unshield_section) = match unshield {
+        Some(masp_tx) => {
+            let section = Section::MaspTx(masp_tx);
+            let mut hasher = sha2::Sha256::new();
+            section.hash(&mut hasher);
+            (
+                Some(namada_core::types::hash::Hash(hasher.finalize().into())),
+                Some(section),
+            )
+        }
+        None => (None, None),
+    };
+
     tx.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
         Fee {
-            amount: fee_amount,
-            token: fee_token.clone(),
+            amount_per_gas_unit: fee_amount,
+            token: args.fee_token.clone(),
         },
-        keypair,
+        keypair.as_ref(),
         epoch,
         args.gas_limit.clone(),
         #[cfg(not(feature = "mainnet"))]
         pow_solution,
+        unshield_section_hash,
     ))));
     tx.header.chain_id = args.chain_id.clone().unwrap();
     tx.header.expiration = args.expiration;
     // Then sign over the bound wrapper
     tx.add_section(Section::Signature(Signature::new(
         &tx.header_hash(),
-        keypair,
+        keypair.as_ref(),
     )));
+    if let Some(unshield) = unshield_section {
+        // NOTE: no need to sign this section
+        tx.add_section(unshield);
+    }
 
     #[cfg(feature = "std")]
     // Attempt to decode the construction
@@ -514,20 +557,22 @@ pub async fn sign_wrapper<
     let to_broadcast = if args.dry_run_wrapper {
         TxBroadcastData::DryRun(tx)
     } else {
-    // We use this to determine when the wrapper tx makes it on-chain
-    let wrapper_hash = tx.header_hash().to_string();
-    // We use this to determine when the decrypted inner tx makes it
-    // on-chain
-    let decrypted_hash = tx
-        .clone()
-        .update_header(TxType::Raw)
-        .header_hash()
-        .to_string();
-    TxBroadcastData::Live{
-        tx,
-        wrapper_hash,
-        decrypted_hash,
-    }}
+        // We use this to determine when the wrapper tx makes it on-chain
+        let wrapper_hash = tx.header_hash().to_string();
+        // We use this to determine when the decrypted inner tx makes it
+        // on-chain
+        let decrypted_hash = tx
+            .clone()
+            .update_header(TxType::Raw)
+            .header_hash()
+            .to_string();
+        TxBroadcastData::Live {
+            tx,
+            wrapper_hash,
+            decrypted_hash,
+        }
+    };
+
     (to_broadcast, unshielding_epoch)
 }
 
@@ -1193,15 +1238,19 @@ pub async fn to_ledger_vector<
             format!("Timestamp : {}", tx.header.timestamp.0),
             format!("PK : {}", wrapper.pk),
             format!("Epoch : {}", wrapper.epoch),
-            format!("Gas limit : {}", Amount::from(wrapper.gas_limit)),
+            format!("Gas limit : {}", u64::from(wrapper.gas_limit)),
             format!("Fee token : {}", wrapper.fee.token),
         ]);
         if let Some(token) = tokens.get(&wrapper.fee.token) {
-            tv.output_expert
-                .push(format!("Fee amount : {} {}", token, wrapper.fee.amount));
+            tv.output_expert.push(format!(
+                "Fee amount : {} {}",
+                token, wrapper.fee.amount_per_gas_unit
+            ));
         } else {
-            tv.output_expert
-                .push(format!("Fee amount : {}", wrapper.fee.amount));
+            tv.output_expert.push(format!(
+                "Fee amount : {}",
+                wrapper.fee.amount_per_gas_unit
+            ));
         }
     }
 

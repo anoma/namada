@@ -1214,15 +1214,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let (asset_type, amount) =
             convert_amount(epoch, &args.token, args.amount);
         // The fee to be paid for the transaction
-        let tx_fee;
 
         // If there are shielded inputs
         if let Some(sk) = spending_key {
-            // Transaction fees need to match the amount in the wrapper Transfer
-            // when MASP source is used
-            let (_, fee) =
-                convert_amount(epoch, &args.tx.fee_token, args.tx.fee_amount);
-            tx_fee = fee.clone();
             // Locate unspent notes that can help us meet the transaction amount
             let (_, unspent_notes, used_convs) = self
                 .collect_unspent_notes(
@@ -1251,9 +1245,6 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 }
             }
         } else {
-            // No transfer fees come from the shielded transaction for non-MASP
-            // sources
-            tx_fee = Amount::zero();
             // We add a dummy UTXO to our transaction, but only the source of
             // the parent Transfer object is used to validate fund
             // availability
@@ -1313,12 +1304,11 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         if let Some(sk) = spending_key {
             // Represents the amount of inputs we are short by
             let mut additional = Amount::zero();
-            // The change left over from this transaction
-            let value_balance = builder
+            for (asset_type, amt) in builder
                 .value_balance()
-                .expect("unable to compute value balance")
-                - tx_fee.clone();
-            for (asset_type, amt) in value_balance.components() {
+                .expect("Unable to compute value balance")
+                .components()
+            {
                 if *amt >= 0 {
                     // Send the change in this asset type back to the sender
                     builder
@@ -1348,7 +1338,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             .clone()
             .build(
                 &self.utils.local_tx_prover(),
-                &FeeRule::non_standard(tx_fee),
+                // Fees are always paid outside of MASP
+                &FeeRule::non_standard(Amount::zero()),
             )
             .map(|(tx, metadata)| {
                 Some((builder.map_builder(WalletMap), tx, metadata, epoch))

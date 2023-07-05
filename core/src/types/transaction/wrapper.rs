@@ -14,7 +14,11 @@ pub mod wrapper_tx {
     use sha2::{Digest, Sha256};
     use thiserror::Error;
 
+    use crate::proto::Tx;
+    use crate::proto::{Code, Data, Section};
     use crate::types::address::{masp, Address};
+    use crate::types::chain::ChainId;
+    use crate::types::hash::Hash;
     use crate::types::key::common::SecretKey;
     use crate::types::key::*;
     use crate::types::storage::Epoch;
@@ -172,8 +176,8 @@ pub mod wrapper_tx {
         pub epoch: Epoch,
         /// Max amount of gas that can be used when executing the inner tx
         pub gas_limit: GasLimit,
-        /// The optional, unencrypted, unshielding transaction for fee payment
-        pub unshield: Option<Transaction>,
+        /// The hash of the optional, unencrypted, unshielding transaction for fee payment
+        pub unshield_hash: Option<Hash>, //FIXME: rename to unshield_section_hash
         #[cfg(not(feature = "mainnet"))]
         /// A PoW solution can be used to allow zero-fee testnet transactions
         pub pow_solution: Option<crate::ledger::testnet_pow::Solution>,
@@ -193,14 +197,14 @@ pub mod wrapper_tx {
             #[cfg(not(feature = "mainnet"))] pow_solution: Option<
                 crate::ledger::testnet_pow::Solution,
             >,
-            unshield: Option<Transaction>,
+            unshield_hash: Option<Hash>,
         ) -> WrapperTx {
             Self {
                 fee,
                 pk: keypair.ref_to(),
                 epoch,
                 gas_limit,
-                unshield,
+                unshield_hash,
                 #[cfg(not(feature = "mainnet"))]
                 pow_solution,
             }
@@ -225,103 +229,100 @@ pub mod wrapper_tx {
         pub fn check_and_generate_fee_unshielding(
             &self,
             transparent_balance: Amount,
-            transfer_code: Vec<u8>,
+            transfer_code_hash: Hash,
             descriptions_limit: u64,
-        ) -> Result<Option<Tx>, WrapperTxErr> {
-            // Check that the number of descriptions is within a certain limit
-            // to avoid a possible DoS vector
-            if let Some(ref unshield) = self.unshield {
-                let spends = unshield.shielded_spends.len();
-                let converts = unshield.shielded_converts.len();
-                let outs = unshield.shielded_outputs.len();
-
-                let descriptions = spends
-                    .checked_add(converts)
-                    .ok_or_else(|| {
-                        WrapperTxErr::InvalidUnshield(
-                            "Descriptions overflow".to_string(),
-                        )
-                    })?
-                    .checked_add(outs)
-                    .ok_or_else(|| {
-                        WrapperTxErr::InvalidUnshield(
-                            "Descriptions overflow".to_string(),
-                        )
-                    })?;
-
-                if u64::try_from(descriptions)
-                    .map_err(|e| WrapperTxErr::InvalidUnshield(e.to_string()))?
-                    > descriptions_limit
-                {
-                    return Err(WrapperTxErr::InvalidUnshield(
-                        "Descriptions exceed the maximum amount allowed"
-                            .to_string(),
-                    ));
-                }
-                return self.generate_fee_unshielding(
-                    transparent_balance,
-                    transfer_code,
-                );
-            }
-
-            Ok(None)
-        }
-
-        /// Generates the optional fee unshielding tx for execution.
-        pub fn generate_fee_unshielding(
-            &self,
-            transparent_balance: Amount,
-            transfer_code: Vec<u8>,
-        ) -> Result<Option<Tx>, WrapperTxErr> {
-            if self.unshield.is_some() {
-                let amount = self
-                    .get_tx_fee()?
-                    .checked_sub(transparent_balance)
-                    .ok_or_else(|| {
-                        WrapperTxErr::InvalidUnshield(
+            unshield: Transaction,
+        ) -> Result<Tx, WrapperTxErr> {
+            // Check that the unshield operation is actually needed. Note that unshielding 0 tokens is considered an error
+            let amount = self
+                .get_tx_fee()?
+                .checked_sub(transparent_balance)
+                .and_then(|v| if v.is_zero() { None } else { Some(v) })
+                .ok_or_else(|| {
+                    WrapperTxErr::InvalidUnshield(
                         "The transparent balance of the fee payer is enough \
                          to pay fees, no need for unshielding"
                             .to_string(),
                     )
-                    })?;
+                })?;
 
-                if amount.is_zero() {
-                    return Ok(None);
-                }
+            // Check that the number of descriptions is within a certain limit
+            // to avoid a possible DoS vector
+            let sapling_bundle = unshield.sapling_bundle().ok_or(
+                WrapperTxErr::InvalidUnshield(
+                    "Missing required sapling bundle".to_string(),
+                ),
+            )?;
+            let spends = sapling_bundle.shielded_spends.len();
+            let converts = sapling_bundle.shielded_converts.len();
+            let outs = sapling_bundle.shielded_outputs.len();
 
-                let transfer = Transfer {
-                    source: masp(),
-                    target: self.fee_payer(),
-                    token: self.fee.token.clone(),
-                    sub_prefix: None,
-                    amount,
-                    key: None,
-                    shielded: self.unshield.clone(),
-                };
+            let descriptions = spends
+                .checked_add(converts)
+                .ok_or_else(|| {
+                    WrapperTxErr::InvalidUnshield(
+                        "Descriptions overflow".to_string(),
+                    )
+                })?
+                .checked_add(outs)
+                .ok_or_else(|| {
+                    WrapperTxErr::InvalidUnshield(
+                        "Descriptions overflow".to_string(),
+                    )
+                })?;
 
-                let tx = Tx::new(
-                    transfer_code,
-                    Some(transfer.try_to_vec().map_err(|_| {
-                        WrapperTxErr::InvalidUnshield(
-                            "Error while serializing the unshield transfer \
-                             data"
-                                .to_string(),
-                        )
-                    })?),
-                    // No need to correctly populate these field since we are constructing the tx in protocol
-                    ChainId::default(),
-                    None,
-                );
-
-                // Mock a signature. The masp vp does not check it, it just checks the signature on the Transaction object
-                let mock_sigkey = SecretKey::Ed25519(ed25519::SecretKey(
-                    Box::new([0; 32].into()),
+            if u64::try_from(descriptions)
+                .map_err(|e| WrapperTxErr::InvalidUnshield(e.to_string()))?
+                > descriptions_limit
+            {
+                return Err(WrapperTxErr::InvalidUnshield(
+                    "Descriptions exceed the maximum amount allowed"
+                        .to_string(),
                 ));
-
-                return Ok(Some(tx.sign(&mock_sigkey)));
             }
+            self.generate_fee_unshielding(amount, transfer_code_hash, unshield)
+        }
 
-            Ok(None)
+        /// Generates the fee unshielding tx for execution.
+        pub fn generate_fee_unshielding(
+            &self,
+            unshield_amount: Amount,
+            transfer_code_hash: Hash,
+            unshield: Transaction,
+        ) -> Result<Tx, WrapperTxErr> {
+            let mut tx = Tx::new(crate::types::transaction::TxType::Decrypted(
+                crate::types::transaction::DecryptedTx::Decrypted {
+                    #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow: false,
+                },
+            ));
+            let masp_section = tx.add_section(Section::MaspTx(unshield));
+            let masp_hash = Hash(
+                masp_section
+                    .hash(&mut Sha256::new())
+                    .finalize_reset()
+                    .into(),
+            );
+
+            let transfer = Transfer {
+                source: masp(),
+                target: self.fee_payer(),
+                token: self.fee.token.clone(),
+                sub_prefix: None,
+                amount: unshield_amount,
+                key: None,
+                shielded: Some(masp_hash),
+            };
+            let data = transfer.try_to_vec().map_err(|_| {
+                WrapperTxErr::InvalidUnshield(
+                    "Error while serializing the unshield transfer data"
+                        .to_string(),
+                )
+            })?;
+            tx.set_data(Data::new(data));
+            tx.set_code(Code::from_hash(transfer_code_hash));
+
+            Ok(tx)
         }
 
         /// Get the [`Amount`] of fees to be paid by the given wrapper. Returns an error if the amount overflows
@@ -430,6 +431,7 @@ pub mod wrapper_tx {
                     0.into(),
                     #[cfg(not(feature = "mainnet"))]
                     None,
+                    None,
                 ))));
             wrapper.set_code(Code::new("wasm code".as_bytes().to_owned()));
             wrapper
@@ -462,6 +464,7 @@ pub mod wrapper_tx {
                     Epoch(0),
                     0.into(),
                     #[cfg(not(feature = "mainnet"))]
+                    None,
                     None,
                 ))));
             wrapper.set_code(Code::new("wasm code".as_bytes().to_owned()));
@@ -497,6 +500,7 @@ pub mod wrapper_tx {
                 Epoch(0),
                 0.into(),
                 #[cfg(not(feature = "mainnet"))]
+                None,
                 None,
             ))));
 

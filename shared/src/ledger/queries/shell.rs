@@ -84,16 +84,14 @@ where
 
     use namada_core::ledger::gas::TxGasMeter;
     use namada_core::ledger::parameters;
-    use namada_core::types::transaction::process_tx;
+    use namada_core::types::transaction::DecryptedTx;
 
     use crate::ledger::protocol;
     use crate::ledger::storage::write_log::WriteLog;
     use crate::proto::Tx;
     use crate::types::storage::TxIndex;
     use crate::types::transaction::wrapper::wrapper_tx::PairingEngine;
-    use crate::types::transaction::{
-        AffineCurve, , EllipticCurve, TxType,
-    };
+    use crate::types::transaction::{AffineCurve, EllipticCurve, TxType};
 
     let gas_table: BTreeMap<String, u64> = ctx
         .wl_storage
@@ -101,15 +99,15 @@ where
         .expect("Error while reading storage")
         .expect("Missing gas table in storage");
 
-    let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
-    let mut tx = process_tx(tx.clone()).into_storage_result()?;
+    let mut tx = Tx::try_from(&request.data[..]).into_storage_result()?;
+    tx.validate_header().into_storage_result()?;
 
     let mut write_log = WriteLog::default();
     let mut cumulated_gas = 0;
 
     // Wrapper dry run to allow estimating the gas cost of a transaction
-    let mut tx_gas_meter = match tx {
-        TxType::Wrapper(ref wrapper) => {
+    let mut tx_gas_meter = match tx.header().tx_type {
+        TxType::Wrapper(wrapper) => {
             let mut tx_gas_meter =
                 TxGasMeter::new(wrapper.gas_limit.to_owned().into());
             protocol::apply_tx(
@@ -134,15 +132,12 @@ where
             // NOTE: the encryption key for a dry-run should always be an hardcoded, dummy one
             let privkey =
             <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-            tx = TxType::Decrypted(DecryptedTx::Decrypted {
-            tx: wrapper
-                .decrypt(privkey)
-                .expect("Could not decrypt the inner tx"),
-                    #[cfg(not(feature = "mainnet"))]
+            tx.update_header(TxType::Decrypted(
+                DecryptedTx::Decrypted { #[cfg(not(feature = "mainnet"))]
                     // To be able to dry-run testnet faucet withdrawal, pretend 
                     // that we got a valid PoW
-                    has_valid_pow: true,
-        });
+                has_valid_pow: true },
+            ));
             TxGasMeter::new(
                 tx_gas_meter
                     .tx_gas_limit
@@ -159,14 +154,12 @@ where
                     .expect("Missing parameter in storage"),
             )
         }
-        TxType::Raw(raw) => {
+        TxType::Raw => {
             // Cast tx to a decrypted for execution
-            tx = TxType::Decrypted(DecryptedTx::Decrypted {
-                tx: raw,
-
+            tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: true,
-            });
+            }));
 
             // If dry run only the inner tx, use the max block gas as the gas limit
             TxGasMeter::new(

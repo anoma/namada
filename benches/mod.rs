@@ -14,12 +14,22 @@
 //! For more realistic results these benchmarks should be run on all the
 //! combination of supported OS/architecture.
 
+use masp_primitives::transaction::Transaction;
+use masp_proofs::prover::LocalTxProver;
+use namada::ledger::masp;
+use namada::ledger::masp::{ShieldedContext, ShieldedUtils};
+use namada::ledger::wallet::{Wallet, WalletUtils};
+use namada::tendermint_rpc::{self, HttpClient};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::fs::File;
+use std::fs::OpenOptions;
+use std::io::{Read, Write};
 use std::ops::{Deref, DerefMut};
+use std::path::PathBuf;
 use std::str::FromStr;
 
-use borsh::BorshSerialize;
-use ibc_proto::google::protobuf::Any;
+use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::core::ledger::ibc::storage::port_key;
 use namada::core::types::address::{self, Address};
@@ -32,9 +42,12 @@ use namada::ibc::clients::ics07_tendermint::client_state::{
 };
 use namada::ibc::clients::ics07_tendermint::consensus_state::ConsensusState;
 use namada::ibc::core::ics02_client::client_type::ClientType;
+use namada::ibc::core::ics02_client::client_type::ClientType as NamadaClientType;
+use namada::ibc::core::ics02_client::consensus_state::ConsensusState as TraitConsensusState;
 use namada::ibc::core::ics02_client::trust_threshold::TrustThreshold;
+use namada::ibc::core::ics03_connection::connection::ConnectionEnd;
 use namada::ibc::core::ics03_connection::connection::{
-    ConnectionEnd, Counterparty, State as ConnectionState,
+    Counterparty, State as ConnectionState,
 };
 use namada::ibc::core::ics03_connection::version::Version;
 use namada::ibc::core::ics04_channel::channel::{
@@ -42,13 +55,18 @@ use namada::ibc::core::ics04_channel::channel::{
 };
 use namada::ibc::core::ics04_channel::timeout::TimeoutHeight;
 use namada::ibc::core::ics04_channel::Version as ChannelVersion;
-use namada::ibc::core::ics23_commitment::commitment::{
-    CommitmentPrefix, CommitmentRoot,
-};
+use namada::ibc::core::ics23_commitment::commitment::CommitmentPrefix;
+use namada::ibc::core::ics23_commitment::commitment::CommitmentRoot;
 use namada::ibc::core::ics23_commitment::specs::ProofSpecs;
+use namada::ibc::core::ics24_host::identifier::ChannelId as NamadaChannelId;
+use namada::ibc::core::ics24_host::identifier::ClientId;
+use namada::ibc::core::ics24_host::identifier::ClientId as NamadaClientId;
+use namada::ibc::core::ics24_host::identifier::ConnectionId;
+use namada::ibc::core::ics24_host::identifier::ConnectionId as NamadaConnectionId;
+use namada::ibc::core::ics24_host::identifier::PortChannelId as NamadaPortChannelId;
+use namada::ibc::core::ics24_host::identifier::PortId as NamadaPortId;
 use namada::ibc::core::ics24_host::identifier::{
-    ChainId as IbcChainId, ChannelId, ClientId, ConnectionId, PortChannelId,
-    PortId,
+    ChainId as IbcChainId, ChannelId, PortChannelId, PortId,
 };
 use namada::ibc::core::ics24_host::Path as IbcPath;
 use namada::ibc::signer::Signer;
@@ -56,6 +74,7 @@ use namada::ibc::timestamp::Timestamp as IbcTimestamp;
 use namada::ibc::tx_msg::Msg;
 use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::cosmos::base::v1beta1::Coin;
+use namada::ibc_proto::google::protobuf::Any;
 use namada::ibc_proto::protobuf::Protobuf;
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::ibc::storage::{channel_key, connection_key};
@@ -64,6 +83,7 @@ use namada::ledger::queries::{
 };
 use namada::proof_of_stake;
 use namada::proto::Tx;
+use namada::proto::{Code, Data, Section, Signature};
 use namada::tendermint::Hash;
 use namada::types::address::InternalAddress;
 use namada::types::chain::ChainId;
@@ -85,7 +105,7 @@ use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_apps::facade::tendermint_proto::abci::RequestInitChain;
 use namada_apps::facade::tendermint_proto::google::protobuf::Timestamp;
 use namada_apps::node::ledger::shell::Shell;
-use namada_apps::wallet::defaults;
+use namada_apps::wallet::{defaults, CliWalletUtils};
 use namada_apps::{config, wasm_loader};
 use namada_test_utils::tx_data::TxWriteData;
 use rand_core::OsRng;
@@ -108,6 +128,9 @@ pub const ALBERT_PAYMENT_ADDRESS: &str = "albert_payment";
 pub const ALBERT_SPENDING_KEY: &str = "albert_spending";
 pub const BERTHA_PAYMENT_ADDRESS: &str = "bertha_payment";
 const BERTHA_SPENDING_KEY: &str = "bertha_spending";
+
+const FILE_NAME: &str = "shielded.dat";
+const TMP_FILE_NAME: &str = "shielded.tmp";
 
 pub struct BenchShell {
     pub inner: Shell,
@@ -171,7 +194,7 @@ impl Default for BenchShell {
             source: Some(defaults::albert_address()),
         };
         let signed_tx =
-            generate_tx(TX_BOND_WASM, bond, &defaults::albert_keypair());
+            generate_tx(TX_BOND_WASM, bond, None, &defaults::albert_keypair());
 
         let mut bench_shell = BenchShell {
             inner: shell,
@@ -193,12 +216,13 @@ impl Default for BenchShell {
                 voting_end_epoch: 15.into(),
                 grace_epoch: 18.into(),
             },
+            None,
             &defaults::albert_keypair(),
         );
 
         bench_shell.execute_tx(&signed_tx);
         bench_shell.wl_storage.commit_tx();
-        bench_shell.commit();
+        bench_shell.inner.commit();
 
         // Advance epoch for pos benches
         for _ in 0..=12 {
@@ -217,8 +241,7 @@ impl BenchShell {
             &mut TxGasMeter::new(u64::MAX),
             &BTreeMap::default(),
             &TxIndex(0),
-            &tx.code_or_hash,
-            tx.data.as_ref().unwrap(),
+            tx,
             &mut self.inner.vp_wasm_cache,
             &mut self.inner.tx_wasm_cache,
         )
@@ -248,7 +271,7 @@ impl BenchShell {
     pub fn init_ibc_channel(&mut self) {
         // Set connection open
         let client_id =
-            ClientId::new(ClientType::new("01-tendermint".to_string()), 1)
+            ClientId::new(ClientType::new("tendermint-1".to_string()), 1)
                 .unwrap();
         let connection = ConnectionEnd::new(
             ConnectionState::Open,
@@ -265,14 +288,14 @@ impl BenchShell {
         let addr_key =
             Key::from(Address::Internal(InternalAddress::Ibc).to_db_key());
 
-        let connection_key = connection_key(&ConnectionId::new(1));
+        let connection_key = connection_key(&NamadaConnectionId::new(1));
         self.wl_storage
             .storage
             .write(&connection_key, connection.encode_vec().unwrap())
             .unwrap();
 
         // Set port
-        let port_key = port_key(&PortId::transfer());
+        let port_key = port_key(&NamadaPortId::transfer());
 
         let index_key = addr_key
             .join(&Key::from("capabilities/index".to_string().to_db_key()));
@@ -303,9 +326,9 @@ impl BenchShell {
             vec![ConnectionId::new(1)],
             ChannelVersion::new("ics20-1".to_string()),
         );
-        let channel_key = channel_key(&PortChannelId::new(
-            ChannelId::new(5),
-            PortId::transfer(),
+        let channel_key = channel_key(&NamadaPortChannelId::new(
+            NamadaChannelId::new(5),
+            NamadaPortId::transfer(),
         ));
         self.wl_storage
             .storage
@@ -314,7 +337,7 @@ impl BenchShell {
 
         // Set client state
         let client_id =
-            ClientId::new(ClientType::new("01-tendermint".to_string()), 1)
+            ClientId::new(ClientType::new("tendermint-1".to_string()), 1)
                 .unwrap();
         let client_state_key = addr_key.join(&Key::from(
             IbcPath::ClientState(
@@ -341,13 +364,11 @@ impl BenchShell {
             None,
         )
         .unwrap();
+        let bytes =
+            <ClientState as Protobuf<Any>>::encode_vec(&client_state).unwrap();
         self.wl_storage
             .storage
-            .write(
-                &client_state_key,
-                <ClientState as Protobuf<Any>>::encode_vec(&client_state)
-                    .unwrap(),
-            )
+            .write(&client_state_key, bytes)
             .expect("write failed");
 
         // Set consensus state
@@ -371,50 +392,72 @@ impl BenchShell {
             next_validators_hash: Hash::Sha256([0u8; 32]),
         };
 
+        let bytes =
+            <ConsensusState as Protobuf<Any>>::encode_vec(&consensus_state)
+                .unwrap();
         self.wl_storage
             .storage
-            .write(
-                &consensus_key,
-                <ConsensusState as Protobuf<Any>>::encode_vec(&consensus_state)
-                    .unwrap(),
-            )
+            .write(&consensus_key, bytes)
             .unwrap();
     }
 }
 
 pub fn generate_tx(
+    //FIXME: rename to generate_signed_tx
     wasm_code_path: &str,
-    data: impl BorshSerialize,
+    data: impl BorshSerialize, //FIXME: shouldn't this be ProtoBuf?
+    shielded: Option<Transaction>,
     signer: &SecretKey,
 ) -> Tx {
-    let tx = Tx::new(
-        wasm_loader::read_wasm_or_exit(WASM_DIR, wasm_code_path),
-        Some(data.try_to_vec().unwrap()),
-        ChainId::default(),
-        None,
-    );
+    let mut tx = Tx::new(namada::types::transaction::TxType::Decrypted(
+        namada::types::transaction::DecryptedTx::Decrypted {
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: true,
+        },
+    ));
+    //FIXME: need to chance the chain_id to bench?
+    //FIXME: do I ever need to attach the fee unshielding transaction here?
+    tx.set_code(Code::new(wasm_loader::read_wasm_or_exit(
+        WASM_DIR,
+        wasm_code_path,
+    )));
+    tx.set_data(Data::new(data.try_to_vec().unwrap()));
+    if let Some(transaction) = shielded {
+        tx.add_section(Section::MaspTx(transaction)); //FIXME: need to sign this section?
+    }
+    tx.add_section(Section::Signature(Signature::new(
+        //FIXME: need to sign the header for the decrypted? Of not I can use this function also for reveal_pk
+        &tx.header_hash(),
+        signer,
+    )));
 
-    tx.sign(signer)
+    tx
 }
 
 pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
     let wasm_code = std::fs::read("../wasm_for_tests/tx_write.wasm").unwrap();
 
-    let tx = Tx::new(
-        wasm_code,
-        Some(
-            TxWriteData {
-                key: Key::from("bench_foreing_key".to_string().to_db_key()),
-                value: vec![0; 64],
-            }
-            .try_to_vec()
-            .unwrap(),
-        ),
-        ChainId::default(),
-        None,
-    );
+    let mut tx = Tx::new(namada::types::transaction::TxType::Decrypted(
+        namada::types::transaction::DecryptedTx::Decrypted {
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: true,
+        },
+    ));
+    tx.set_code(Code::new(wasm_code));
+    tx.set_data(Data::new(
+        TxWriteData {
+            key: Key::from("bench_foreign_key".to_string().to_db_key()),
+            value: vec![0; 64],
+        }
+        .try_to_vec()
+        .unwrap(),
+    )); //FIXME: protobuf?
+    tx.add_section(Section::Signature(Signature::new(
+        &tx.header_hash(),
+        signer,
+    )));
 
-    tx.sign(signer)
+    tx
 }
 
 pub fn generate_ibc_transfer_tx() -> Tx {
@@ -445,18 +488,98 @@ pub fn generate_ibc_transfer_tx() -> Tx {
     prost::Message::encode(&any_msg, &mut data).unwrap();
 
     // Don't use execute_tx to avoid serializing the data again with borsh
-    Tx::new(
-        wasm_loader::read_wasm_or_exit(WASM_DIR, TX_IBC_WASM),
-        Some(data),
-        ChainId::default(),
-        None,
-    )
-    .sign(&defaults::albert_keypair())
+    let mut tx = Tx::new(namada::types::transaction::TxType::Decrypted(
+        namada::types::transaction::DecryptedTx::Decrypted {
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: true,
+        },
+    ));
+    tx.set_code(Code::new(wasm_loader::read_wasm_or_exit(
+        WASM_DIR,
+        TX_IBC_WASM,
+    )));
+    tx.set_data(Data::new(data));
+    tx.add_section(Section::Signature(Signature::new(
+        &tx.header_hash(),
+        &defaults::albert_keypair(),
+    )));
+
+    tx
 }
 
 pub struct BenchShieldedCtx {
-    pub ctx: Context,
+    pub shielded: ShieldedContext<BenchShieldedUtils>,
     pub shell: BenchShell,
+    pub wallet: Wallet<CliWalletUtils>,
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Debug, Clone, Default)]
+pub struct BenchShieldedUtils {
+    #[borsh_skip]
+    context_dir: PathBuf,
+}
+
+#[async_trait::async_trait(?Send)]
+impl ShieldedUtils for BenchShieldedUtils {
+    type C = BenchShell;
+
+    //FIXME: make everything work on tempdir?
+    //FIXME: impl this trait on BenchShell?
+    fn local_tx_prover(&self) -> LocalTxProver {
+        if let Ok(params_dir) = std::env::var(masp::ENV_VAR_MASP_PARAMS_DIR) {
+            let params_dir = PathBuf::from(params_dir);
+            let spend_path = params_dir.join(masp::SPEND_NAME);
+            let convert_path = params_dir.join(masp::CONVERT_NAME);
+            let output_path = params_dir.join(masp::OUTPUT_NAME);
+            LocalTxProver::new(&spend_path, &output_path, &convert_path)
+        } else {
+            LocalTxProver::with_default_location()
+                .expect("unable to load MASP Parameters")
+        }
+    }
+
+    /// Try to load the last saved shielded context from the given context
+    /// directory. If this fails, then leave the current context unchanged.
+    async fn load(self) -> std::io::Result<ShieldedContext<Self>> {
+        // Try to load shielded context from file
+        let mut ctx_file = File::open(self.context_dir.join(FILE_NAME))?;
+        let mut bytes = Vec::new();
+        ctx_file.read_to_end(&mut bytes)?;
+        let mut new_ctx = ShieldedContext::deserialize(&mut &bytes[..])?;
+        // Associate the originating context directory with the
+        // shielded context under construction
+        new_ctx.utils = self;
+        Ok(new_ctx)
+    }
+
+    /// Save this shielded context into its associated context directory
+    async fn save(&self, ctx: &ShieldedContext<Self>) -> std::io::Result<()> {
+        // TODO: use mktemp crate?
+        let tmp_path = self.context_dir.join(TMP_FILE_NAME);
+        {
+            // First serialize the shielded context into a temporary file.
+            // Inability to create this file implies a simultaneuous write is in
+            // progress. In this case, immediately fail. This is unproblematic
+            // because the data intended to be stored can always be re-fetched
+            // from the blockchain.
+            let mut ctx_file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(tmp_path.clone())?;
+            let mut bytes = Vec::new();
+            ctx.serialize(&mut bytes)
+                .expect("cannot serialize shielded context");
+            ctx_file.write_all(&bytes[..])?;
+        }
+        // Atomically update the old shielded context file with new data.
+        // Atomicity is required to prevent other client instances from reading
+        // corrupt data.
+        std::fs::rename(tmp_path.clone(), self.context_dir.join(FILE_NAME))?;
+        // Finally, remove our temporary file to allow future saving of shielded
+        // contexts.
+        std::fs::remove_file(tmp_path)?;
+        Ok(())
+    }
 }
 
 #[async_trait::async_trait(?Send)]
@@ -491,6 +614,16 @@ impl Client for BenchShell {
         RPC.handle(ctx, &request)
             .map_err(|_| std::io::Error::from(std::io::ErrorKind::NotFound))
     }
+
+    async fn perform<R>(
+        &self,
+        request: R,
+    ) -> Result<R::Response, tendermint_rpc::Error>
+    where
+        R: tendermint_rpc::SimpleRequest,
+    {
+        tendermint_rpc::Response::from_string("MOCK RESPONSE")
+    }
 }
 
 impl Default for BenchShieldedCtx {
@@ -501,16 +634,21 @@ impl Default for BenchShieldedCtx {
             chain_id: None,
             base_dir: shell.tempdir.as_ref().canonicalize().unwrap(),
             wasm_dir: None,
-            mode: None,
         })
-        .unwrap();
+        .unwrap(); //FIXME: remove?
 
         // Generate spending key for Albert and Bertha
-        ctx.wallet
-            .gen_spending_key(ALBERT_SPENDING_KEY.to_string(), true);
-        ctx.wallet
-            .gen_spending_key(BERTHA_SPENDING_KEY.to_string(), true);
-        ctx.wallet.save().unwrap();
+        ctx.wallet.gen_spending_key(
+            ALBERT_SPENDING_KEY.to_string(),
+            None,
+            true,
+        );
+        ctx.wallet.gen_spending_key(
+            BERTHA_SPENDING_KEY.to_string(),
+            None,
+            true,
+        );
+        namada_apps::wallet::save(&ctx.wallet).unwrap(); //FIXME: need this?
 
         // Generate payment addresses for both Albert and Bertha
         for (alias, viewing_alias) in [
@@ -529,24 +667,30 @@ impl Default for BenchShieldedCtx {
                 ExtendedFullViewingKey::from(ctx.get_cached(&viewing_key))
                     .fvk
                     .vk;
-            let (div, _g_d) = tx::find_valid_diversifier(&mut OsRng);
+            let (div, _g_d) =
+                namada::ledger::masp::find_valid_diversifier(&mut OsRng);
             let payment_addr = viewing_key.to_payment_address(div).unwrap();
             let _ = ctx
                 .wallet
                 .insert_payment_addr(
                     alias,
                     PaymentAddress::from(payment_addr).pinned(false),
+                    true,
                 )
                 .unwrap();
         }
 
-        ctx.wallet.save().unwrap();
+        namada_apps::wallet::save(&ctx.wallet).unwrap();
         namada::ledger::storage::update_allowed_conversions(
             &mut shell.wl_storage,
         )
         .unwrap();
 
-        Self { ctx, shell }
+        Self {
+            shielded: ShieldedContext::default(),
+            shell,
+            wallet: ctx.wallet,
+        }
     }
 }
 
@@ -563,52 +707,64 @@ impl BenchShieldedCtx {
             dump_tx: false,
             force: false,
             broadcast_only: false,
-            ledger_address: TendermintAddress::Tcp {
-                peer_id: None,
-                host: "bench-host".to_string(),
-                port: 1,
-            },
+            ledger_address: (),
+            // ledger_address: TendermintAddress::Tcp { //FIXME: remove?
+            //     peer_id: None,
+            //     host: "bench-host".to_string(),
+            //     port: 1,
+            // },
             initialized_account_alias: None,
             fee_amount: None,
-            fee_token: FromContext::new(address::nam().to_string()),
+            fee_token: address::nam(),
             fee_unshield: None,
             gas_limit: GasLimit::from(u64::MAX),
             expiration: None,
             disposable_signing_key: false,
-            signing_key: Some(FromContext::new(
-                defaults::albert_keypair().to_string(),
-            )),
+            signing_key: Some(defaults::albert_keypair()),
             signer: None,
+            wallet_alias_force: true,
+            chain_id: None,
+            tx_reveal_code_path: TX_REVEAL_PK_WASM.into(),
+            password: None,
         };
 
         let args = TxTransfer {
             tx: mock_args,
-            source: FromContext::new(source.to_string()),
-            target: FromContext::new(target.to_string()),
-            token: FromContext::new(address::nam().to_string()),
+            source: source.clone(),
+            target: target.clone(),
+            token: address::nam(),
             sub_prefix: None,
             amount,
+            native_token: self.shell.wl_storage.storage.native_token.clone(),
+            tx_code_path: TX_TRANSFER_WASM.into(),
         };
 
         let async_runtime = tokio::runtime::Runtime::new().unwrap();
         let spending_key = self
-            .ctx
             .wallet
-            .find_spending_key(ALBERT_SPENDING_KEY)
+            .find_spending_key(ALBERT_SPENDING_KEY, None)
             .unwrap();
-        async_runtime.block_on(self.ctx.shielded.fetch(
+        async_runtime.block_on(self.shielded.fetch(
             &self.shell,
             &[spending_key.into()],
             &[],
         ));
         let shielded = async_runtime
-            .block_on(tx::gen_shielded_transfer(
-                &mut self.ctx,
-                &self.shell,
-                &args,
-            ))
+            .block_on(self.shielded.gen_shielded_transfer(&self.shell, args))
             .unwrap()
-            .map(|x| x.0);
+            .map(|(_, tx, _, _)| tx);
+
+        let mut hasher = Sha256::new();
+        let shielded_section_hash = shielded.clone().map(|transaction| {
+            namada::core::types::hash::Hash(
+                Section::MaspTx(transaction)
+                    .hash(&mut hasher)
+                    .finalize_reset()
+                    .into(),
+            )
+        });
+
+        // FIXME: the tx section for fee unshieldign must not be encrypted!
 
         generate_tx(
             TX_TRANSFER_WASM,
@@ -619,8 +775,9 @@ impl BenchShieldedCtx {
                 sub_prefix: None,
                 amount,
                 key: None,
-                shielded,
+                shielded: shielded_section_hash,
             },
+            shielded,
             &defaults::albert_keypair(),
         )
     }

@@ -10,7 +10,7 @@ use namada::ledger::storage::{DBIter, StorageHasher, TempWlStorage, DB};
 use namada::ledger::storage_api::StorageRead;
 use namada::proof_of_stake::find_validator_by_raw_hash;
 use namada::proof_of_stake::pos_queries::PosQueries;
-use namada::proto::Tx;
+use namada::proto::{Tx, Section};
 use namada::types::address::Address;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::internal::TxInQueue;
@@ -132,7 +132,6 @@ where
     fn build_encrypted_txs(
         &self,
         mut alloc: EncryptedTxBatchAllocator,
-        mut temp_wl_storage: TempWlStorage<D, H>,
         txs: &[TxBytes],
         block_time: &Option<Timestamp>,
         block_proposer: &Address,
@@ -224,22 +223,25 @@ where
         // retrieved from block default to last block datetime which has
         // already been checked by mempool_validate, so it's valid
         if let (Some(block_time), Some(exp)) =
-            (block_time.as_ref(), &tx.expiration)
+            (block_time.as_ref(), &tx.header().expiration)
         {
             if block_time > exp {
                 return Err(());
             }
         }
 
-        if let TxType::Wrapper(wrapper) = process_tx(tx).map_err(|_| ())? {
+        tx.validate_header().map_err(|_| ())?;
+        if let TxType::Wrapper(wrapper) = tx.header().tx_type {
             // Check tx gas limit for tx size
             let mut tx_gas_meter =
                 TxGasMeter::new(wrapper.gas_limit.clone().into());
             tx_gas_meter.add_tx_size_gas(tx_bytes).map_err(|_| ())?;
 
             // Check fees
+            let fee_unshield = wrapper.unshield_hash.map(|ref hash| tx.get_section(hash).map(|section| if let Section::MaspTx(transaction) = section {Some(transaction.to_owned())} else {None} ).flatten()).flatten();
             match self.wrapper_fee_check(
                 &wrapper,
+                fee_unshield,
                 temp_wl_storage,
                 Some(Cow::Borrowed(gas_table)),
                 vp_wasm_cache,
@@ -408,6 +410,7 @@ use data_encoding::HEXUPPER;
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None
         ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
@@ -460,6 +463,7 @@ use data_encoding::HEXUPPER;
                 GAS_LIMIT_MULTIPLIER.into(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
+                None
             ))));
             tx.header.chain_id = shell.chain_id.clone();
             tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
@@ -472,7 +476,8 @@ use data_encoding::HEXUPPER;
             )));
             tx.encrypt(&Default::default());
 
-            shell.enqueue_tx(tx.clone());
+            let gas = u64::from(tx.header().wrapper().expect("Wrong tx type").gas_limit) - tx.to_bytes().len() as u64;
+            shell.enqueue_tx(tx.clone(), gas);
             expected_wrapper.push(tx.clone());
             req.txs.push(tx.to_bytes());
             tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
@@ -521,7 +526,7 @@ use data_encoding::HEXUPPER;
         let keypair = crate::wallet::defaults::daewon_keypair();
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -529,6 +534,7 @@ use data_encoding::HEXUPPER;
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None
         ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
@@ -573,7 +579,7 @@ use data_encoding::HEXUPPER;
         let keypair = crate::wallet::defaults::daewon_keypair();
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -581,6 +587,7 @@ use data_encoding::HEXUPPER;
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None
         ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
@@ -614,7 +621,7 @@ use data_encoding::HEXUPPER;
         let keypair = crate::wallet::defaults::daewon_keypair();
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -622,6 +629,7 @@ use data_encoding::HEXUPPER;
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None
         ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
@@ -667,7 +675,7 @@ use data_encoding::HEXUPPER;
         let keypair_2 = crate::wallet::defaults::daewon_keypair();
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -675,6 +683,7 @@ use data_encoding::HEXUPPER;
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None
         ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         let tx_code = Code::new("wasm_code".as_bytes().to_owned());
@@ -690,7 +699,7 @@ use data_encoding::HEXUPPER;
         let mut new_wrapper =
             Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount: 0.into(),
+                    amount_per_gas_unit: 0.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair_2,
@@ -698,6 +707,7 @@ use data_encoding::HEXUPPER;
                 0.into(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
+                None
             ))));
         new_wrapper.header.chain_id = shell.chain_id.clone();
         new_wrapper.header.timestamp = wrapper.header.timestamp;
@@ -740,6 +750,7 @@ use data_encoding::HEXUPPER;
                 0.into(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
+                None
             ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.header.expiration = Some(tx_time);
@@ -782,13 +793,6 @@ use data_encoding::HEXUPPER;
             .expect("Missing max_block_gas parameter in storage");
         let keypair = gen_keypair();
 
-        let tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
-            shell.chain_id.clone(),
-            None,
-        );
-
         let wrapper = WrapperTx::new(
             Fee {
                 amount_per_gas_unit: 100.into(),
@@ -797,17 +801,18 @@ use data_encoding::HEXUPPER;
             &keypair,
             Epoch(0),
             (block_gas_limit + 1).into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None,
-        )
-        .sign(&keypair, shell.chain_id.clone(), None)
-        .expect("Wrapper signing failed");
+        );
+        let mut wrapper_tx = Tx::new(TxType::Wrapper(Box::new(wrapper)));
+        wrapper_tx.header.chain_id = shell.chain_id.clone();
+        wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(&wrapper_tx.header_hash(), &keypair)));
 
         let req = RequestPrepareProposal {
-            txs: vec![wrapper.to_bytes()],
+            txs: vec![wrapper_tx.to_bytes()],
             max_tx_bytes: 0,
             time: None,
             ..Default::default()
@@ -824,13 +829,6 @@ use data_encoding::HEXUPPER;
         let (shell, _) = test_utils::setup(1);
         let keypair = gen_keypair();
 
-        let tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
-            shell.chain_id.clone(),
-            None,
-        );
-
         let wrapper = WrapperTx::new(
             Fee {
                 amount_per_gas_unit: 100.into(),
@@ -839,17 +837,19 @@ use data_encoding::HEXUPPER;
             &keypair,
             Epoch(0),
             0.into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None,
-        )
-        .sign(&keypair, shell.chain_id.clone(), None)
-        .expect("Wrapper signing failed");
+        );
+
+        let mut wrapper_tx = Tx::new(TxType::Wrapper(Box::new(wrapper)));
+        wrapper_tx.header.chain_id = shell.chain_id.clone();
+        wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(&wrapper_tx.header_hash(), &keypair)));
 
         let req = RequestPrepareProposal {
-            txs: vec![wrapper.to_bytes()],
+            txs: vec![wrapper_tx.to_bytes()],
             max_tx_bytes: 0,
             time: None,
             ..Default::default()
@@ -864,13 +864,6 @@ use data_encoding::HEXUPPER;
     fn test_fee_non_whitelisted_token() {
         let (shell, _) = test_utils::setup(1);
 
-        let tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
-            shell.chain_id.clone(),
-            None,
-        );
-
         let wrapper = WrapperTx::new(
             Fee {
                 amount_per_gas_unit: 100.into(),
@@ -879,21 +872,19 @@ use data_encoding::HEXUPPER;
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None,
-        )
-        .sign(
-            &crate::wallet::defaults::albert_keypair(),
-            shell.chain_id.clone(),
-            None,
-        )
-        .expect("Wrapper signing failed");
+        );
+
+        let mut wrapper_tx = Tx::new(TxType::Wrapper(Box::new(wrapper)));
+        wrapper_tx.header.chain_id = shell.chain_id.clone();
+        wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(&wrapper_tx.header_hash(), &crate::wallet::defaults::albert_keypair())));
 
         let req = RequestPrepareProposal {
-            txs: vec![wrapper.to_bytes()],
+            txs: vec![wrapper_tx.to_bytes()],
             max_tx_bytes: 0,
             time: None,
             ..Default::default()
@@ -908,13 +899,6 @@ use data_encoding::HEXUPPER;
     fn test_fee_wrong_minimum_amount() {
         let (shell, _) = test_utils::setup(1);
 
-        let tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
-            shell.chain_id.clone(),
-            None,
-        );
-
         let wrapper = WrapperTx::new(
             Fee {
                 amount_per_gas_unit: 0.into(),
@@ -923,21 +907,18 @@ use data_encoding::HEXUPPER;
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None,
-        )
-        .sign(
-            &crate::wallet::defaults::albert_keypair(),
-            shell.chain_id.clone(),
-            None,
-        )
-        .expect("Wrapper signing failed");
+        );
+        let mut wrapper_tx = Tx::new(TxType::Wrapper(Box::new(wrapper)));
+        wrapper_tx.header.chain_id = shell.chain_id.clone();
+        wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(&wrapper_tx.header_hash(), &crate::wallet::defaults::albert_keypair())));
 
         let req = RequestPrepareProposal {
-            txs: vec![wrapper.to_bytes()],
+            txs: vec![wrapper_tx.to_bytes()],
             max_tx_bytes: 0,
             time: None,
             ..Default::default()
@@ -952,13 +933,6 @@ use data_encoding::HEXUPPER;
     fn test_insufficient_balance_for_fee() {
         let (shell, _) = test_utils::setup(1);
 
-        let tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
-            shell.chain_id.clone(),
-            None,
-        );
-
         let wrapper = WrapperTx::new(
             Fee {
                 amount_per_gas_unit: 1_000_000.into(),
@@ -967,21 +941,18 @@ use data_encoding::HEXUPPER;
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None,
-        )
-        .sign(
-            &crate::wallet::defaults::albert_keypair(),
-            shell.chain_id.clone(),
-            None,
-        )
-        .expect("Wrapper signing failed");
+        );
+        let mut wrapper_tx = Tx::new(TxType::Wrapper(Box::new(wrapper)));
+        wrapper_tx.header.chain_id = shell.chain_id.clone();
+        wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(&wrapper_tx.header_hash(), &crate::wallet::defaults::albert_keypair())));
 
         let req = RequestPrepareProposal {
-            txs: vec![wrapper.to_bytes()],
+            txs: vec![wrapper_tx.to_bytes()],
             max_tx_bytes: 0,
             time: None,
             ..Default::default()
@@ -996,13 +967,6 @@ use data_encoding::HEXUPPER;
     fn test_wrapper_fee_overflow() {
         let (shell, _) = test_utils::setup(1);
 
-        let tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
-            shell.chain_id.clone(),
-            None,
-        );
-
         let wrapper = WrapperTx::new(
             Fee {
                 amount_per_gas_unit: token::Amount::max(),
@@ -1011,21 +975,18 @@ use data_encoding::HEXUPPER;
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None,
-        )
-        .sign(
-            &crate::wallet::defaults::albert_keypair(),
-            shell.chain_id.clone(),
-            None,
-        )
-        .expect("Wrapper signing failed");
+        );
+        let mut wrapper_tx = Tx::new(TxType::Wrapper(Box::new(wrapper)));
+        wrapper_tx.header.chain_id = shell.chain_id.clone();
+        wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(&wrapper_tx.header_hash(), &crate::wallet::defaults::albert_keypair())));
 
         let req = RequestPrepareProposal {
-            txs: vec![wrapper.to_bytes()],
+            txs: vec![wrapper_tx.to_bytes()],
             max_tx_bytes: 0,
             time: None,
             ..Default::default()

@@ -1,11 +1,16 @@
 [package]
-authors = ["Heliax AG <hello@heliax.dev>"]
-description = "Namada benchmarks"
-edition = "2021"
-license = "GPL-3.0"
 name = "namada_benchmarks"
+description = "Namada benchmarks"
 resolver = "2"
-version = "0.15.0"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
 
 [lib]
 name = "namada_benches"
@@ -37,22 +42,21 @@ harness = false
 path = "host_env.rs"
 
 [dependencies]
-async-trait = "0.1.51"
-borsh = "0.9.0"
-ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
-ibc-relayer = { version = "0.22.0", default-features = false }
-ibc-relayer-types = { version = "0.22.0", default-features = false }
-ibc-proto = { version = "0.26.0", default-features = false }
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
+async-trait.workspace = true
+borsh.workspace = true
+ferveo-common.workspace = true
+masp_primitives.workspace = true
+masp_proofs.workspace = true
 namada = { path = "../shared" }
 namada_apps = { path = "../apps" }
 namada_test_utils = { path = "../test_utils" }
-prost = "0.11.6"
-rand = "0.8"
-rand_core = "0.6"
-rust_decimal = "1.26.1" 
-tokio = "1.8.2"
-tempfile = "3.2.0"
+prost.workspace = true
+rand.workspace = true
+rand_core.workspace = true
+rust_decimal.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tempfile.workspace = true
 
 [dev-dependencies]
 criterion = { version = "0.4", features = ["html_reports"] }
