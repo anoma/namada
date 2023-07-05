@@ -446,6 +446,10 @@ pub mod wrapper_tx {
 
             tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
             tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+            tx.add_section(Section::Signature(Signature::new(
+                tx.sechashes(),
+                &keypair,
+            )));
 
             // we now try to alter the inner tx maliciously
             // malicious transaction
@@ -453,12 +457,6 @@ pub mod wrapper_tx {
             // We change the commitment appropriately
             let malicious = "Give me all the money".as_bytes().to_owned();
             tx.set_data(Data::new(malicious.clone()));
-            tx.encrypt(&Default::default());
-
-            tx.add_section(Section::Signature(Signature::new(
-                vec![tx.header_hash(), tx.sections[0].get_hash()],
-                &keypair,
-            )));
 
             // we check ciphertext validity still passes
             assert!(tx.validate_ciphertext());
