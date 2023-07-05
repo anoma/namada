@@ -15,7 +15,9 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::components::sapling::fees::{
     InputView, OutputView,
 };
-use namada_core::types::address::{masp, masp_tx_key, Address, ImplicitAddress};
+use namada_core::types::address::{
+    masp, masp_tx_key, Address, ImplicitAddress,
+};
 use namada_core::types::storage::Key;
 use namada_core::types::token::{
     self, Amount, DenominatedAmount, MaspDenom, TokenAddress,
@@ -81,23 +83,24 @@ pub async fn find_pk<
                 "Looking-up public key of {} from the ledger...",
                 addr.encode()
             );
-            rpc::get_public_key(client, addr).await.ok_or(
-                Error::Other(format!(
+            rpc::get_public_key(client, addr).await.ok_or(Error::Other(
+                format!(
                     "No public key found for the address {}",
                     addr.encode()
-                )),
-            )
+                ),
+            ))
         }
-        Address::Implicit(ImplicitAddress(pkh)) => {
-            Ok(wallet.find_key_by_pkh(pkh, password).map_err(|err| {
+        Address::Implicit(ImplicitAddress(pkh)) => Ok(wallet
+            .find_key_by_pkh(pkh, password)
+            .map_err(|err| {
                 Error::Other(format!(
                     "Unable to load the keypair from the wallet for the \
                      implicit address {}. Failed with: {}",
                     addr.encode(),
                     err
                 ))
-            })?.ref_to())
-        }
+            })?
+            .ref_to()),
         Address::Internal(_) => other_err(format!(
             "Internal address {} doesn't have any signing keys.",
             addr
@@ -116,18 +119,25 @@ pub fn find_key_by_pk<U: WalletUtils>(
     if *keypair == masp_tx_key().ref_to() {
         // We already know the secret key corresponding to the MASP sentinal key
         Ok(masp_tx_key())
-    } else if args.signing_key.as_ref().map(|x| x.ref_to() == *keypair).unwrap_or(false) {
+    } else if args
+        .signing_key
+        .as_ref()
+        .map(|x| x.ref_to() == *keypair)
+        .unwrap_or(false)
+    {
         // We can lookup the secret key from the CLI arguments in this case
         Ok(args.signing_key.clone().unwrap())
     } else {
         // Otherwise we need to search the wallet for the secret key
-        wallet.find_key_by_pk(&keypair, args.password.clone()).map_err(|err| {
-            Error::Other(format!(
-                "Unable to load the keypair from the wallet for public \
-                 key {}. Failed with: {}",
-                keypair, err
-            ))
-        })
+        wallet
+            .find_key_by_pk(keypair, args.password.clone())
+            .map_err(|err| {
+                Error::Other(format!(
+                    "Unable to load the keypair from the wallet for public \
+                     key {}. Failed with: {}",
+                    keypair, err
+                ))
+            })
     }
 }
 
@@ -173,16 +183,12 @@ pub async fn tx_signer<
     match signer {
         TxSigningKey::WalletAddress(signer) if signer == masp() => {
             Ok((None, masp_tx_key().ref_to()))
-        },
-        TxSigningKey::WalletAddress(signer) => {
-            Ok((Some(signer.clone()), find_pk::<C, U>(
-                client,
-                wallet,
-                &signer,
-                args.password.clone(),
-            )
-            .await?))
         }
+        TxSigningKey::WalletAddress(signer) => Ok((
+            Some(signer.clone()),
+            find_pk::<C, U>(client, wallet, &signer, args.password.clone())
+                .await?,
+        )),
         TxSigningKey::None => other_err(
             "All transactions must be signed; please either specify the key \
              or the address from which to look up the signing key."
@@ -199,9 +205,7 @@ pub async fn tx_signer<
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
-pub async fn sign_tx<
-    U: WalletUtils,
->(
+pub async fn sign_tx<U: WalletUtils>(
     wallet: &mut Wallet<U>,
     tx: &mut Tx,
     args: &args::Tx,
@@ -229,9 +233,7 @@ pub async fn sign_tx<
 #[cfg(not(feature = "mainnet"))]
 /// Solve the PoW challenge if balance is insufficient to pay transaction fees
 /// or if solution is explicitly requested.
-pub async fn solve_pow_challenge<
-        C: crate::ledger::queries::Client + Sync,
-    >(
+pub async fn solve_pow_challenge<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     args: &args::Tx,
     keypair: &common::PublicKey,
@@ -242,8 +244,8 @@ pub async fn solve_pow_challenge<
         client,
         &wrapper_tx_fees_key,
     )
-        .await
-        .unwrap_or_default();
+    .await
+    .unwrap_or_default();
     let fee_token = &args.fee_token;
     let source = Address::from(keypair);
     let balance_key = token::balance_key(fee_token, &source);
@@ -253,28 +255,31 @@ pub async fn solve_pow_challenge<
             .unwrap_or_default();
     let is_bal_sufficient = fee_amount <= balance;
     if !is_bal_sufficient {
-        eprintln!(
+        let token_addr = TokenAddress {
+            address: args.fee_token.clone(),
+            sub_prefix: None,
+        };
+        let err_msg = format!(
             "The wrapper transaction source doesn't have enough balance to \
-             pay fee {fee_amount}, got {balance}."
+             pay fee {}, got {}.",
+            format_denominated_amount(client, &token_addr, fee_amount).await,
+            format_denominated_amount(client, &token_addr, balance).await,
         );
         if !args.force && cfg!(feature = "mainnet") {
-            panic!(
-                "The wrapper transaction source doesn't have enough balance \
-                 to pay fee {fee_amount}, got {balance}."
-            );
+            panic!("{}", err_msg);
         }
     }
-    let fee = Fee { amount: fee_amount, token: fee_token.clone() };
+    let fee = Fee {
+        amount: fee_amount,
+        token: fee_token.clone(),
+    };
     // A PoW solution can be used to allow zero-fee testnet transactions
     // If the address derived from the keypair doesn't have enough balance
     // to pay for the fee, allow to find a PoW solution instead.
     if requires_pow || !is_bal_sufficient {
-        println!(
-            "The transaction requires the completion of a PoW challenge."
-        );
+        println!("The transaction requires the completion of a PoW challenge.");
         // Obtain a PoW challenge for faucet withdrawal
-        let challenge =
-            rpc::get_testnet_pow_challenge(client, source).await;
+        let challenge = rpc::get_testnet_pow_challenge(client, source).await;
 
         // Solve the solution, this blocks until a solution is found
         let solution = challenge.solve();
@@ -286,23 +291,18 @@ pub async fn solve_pow_challenge<
 
 #[cfg(not(feature = "mainnet"))]
 /// Update the PoW challenge inside the given transaction
-pub async fn update_pow_challenge<
-        C: crate::ledger::queries::Client + Sync,
-    >(
+pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     args: &args::Tx,
     tx: &mut Tx,
     keypair: &common::PublicKey,
     requires_pow: bool,
 ) {
-    match &mut tx.header.tx_type {
-        TxType::Wrapper(wrapper) => {
-            let (pow_solution, fee) =
-                solve_pow_challenge(client, args, keypair, requires_pow).await;
-            wrapper.fee = fee;
-            wrapper.pow_solution = pow_solution;
-        },
-        _ => {},
+    if let TxType::Wrapper(wrapper) = &mut tx.header.tx_type {
+        let (pow_solution, fee) =
+            solve_pow_challenge(client, args, keypair, requires_pow).await;
+        wrapper.fee = fee;
+        wrapper.pow_solution = pow_solution;
     }
 }
 

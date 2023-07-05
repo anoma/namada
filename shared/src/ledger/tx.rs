@@ -4,7 +4,6 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
 
 use borsh::BorshSerialize;
-use itertools::Either::*;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::builder;
 use masp_primitives::transaction::builder::Builder;
@@ -38,9 +37,9 @@ use crate::ledger::args::{self, InputAmount};
 use crate::ledger::governance::storage as gov_storage;
 use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
 use crate::ledger::rpc::{self, validate_amount, TxBroadcastData, TxResponse};
-use crate::ledger::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey, wrap_tx, find_pk};
+use crate::ledger::signing::{tx_signer, wrap_tx, TxSigningKey};
 use crate::ledger::wallet::{Wallet, WalletUtils};
-use crate::proto::{Code, Data, MaspBuilder, Section, Signature, Tx};
+use crate::proto::{Code, Data, MaspBuilder, Section, Tx};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::hash::Hash;
@@ -160,7 +159,13 @@ pub enum Error {
          transferred and fees. Amount to transfer is {1} {2} and fees are {3} \
          {4}."
     )]
-    NegativeBalanceAfterTransfer(Address, String, Address, String, Address),
+    NegativeBalanceAfterTransfer(
+        Box<Address>,
+        String,
+        Box<Address>,
+        String,
+        Box<Address>,
+    ),
     /// No Balance found for token
     #[error("{0}")]
     MaspError(builder::Error<std::convert::Infallible>),
@@ -224,9 +229,9 @@ impl ProcessTxResponse {
 /// Prepare a transaction for signing and submission by adding a wrapper header
 /// to it.
 pub async fn prepare_tx<
-        C: crate::ledger::queries::Client + Sync,
+    C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
-    >(
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: &args::Tx,
@@ -234,34 +239,34 @@ pub async fn prepare_tx<
     default_signer: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<(Tx, Option<Address>, common::PublicKey), Error> {
-    let (signer_addr, signer_pk) = tx_signer::<C, U>(
-        client,
-        wallet,
-        args,
-        default_signer.clone(),
-    ).await?;
+    let (signer_addr, signer_pk) =
+        tx_signer::<C, U>(client, wallet, args, default_signer.clone()).await?;
     if args.dry_run {
         Ok((tx, signer_addr, signer_pk))
     } else {
         let epoch = rpc::query_epoch(client).await;
-        Ok((wrap_tx(
-            client,
-            wallet,
-            args,
-            epoch,
-            tx.clone(),
-            &signer_pk,
-            #[cfg(not(feature = "mainnet"))]
-            requires_pow,
-        )
-            .await, signer_addr, signer_pk))
+        Ok((
+            wrap_tx(
+                client,
+                wallet,
+                args,
+                epoch,
+                tx.clone(),
+                &signer_pk,
+                #[cfg(not(feature = "mainnet"))]
+                requires_pow,
+            )
+            .await,
+            signer_addr,
+            signer_pk,
+        ))
     }
 }
 
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
 pub async fn process_tx<
-        C: crate::ledger::queries::Client + Sync,
+    C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -303,14 +308,20 @@ pub async fn process_tx<
         // Either broadcast or submit transaction and collect result into
         // sum type
         if args.broadcast_only {
-            broadcast_tx(client, &to_broadcast).await.map(ProcessTxResponse::Broadcast)
+            broadcast_tx(client, &to_broadcast)
+                .await
+                .map(ProcessTxResponse::Broadcast)
         } else {
             match submit_tx(client, to_broadcast).await {
                 Ok(x) => {
-                    save_initialized_accounts::<U>(wallet, &args, x.initialized_accounts.clone())
-                        .await;
+                    save_initialized_accounts::<U>(
+                        wallet,
+                        args,
+                        x.initialized_accounts.clone(),
+                    )
+                    .await;
                     Ok(ProcessTxResponse::Applied(x))
-                },
+                }
                 Err(x) => Err(x),
             }
         }
@@ -337,7 +348,10 @@ pub async fn build_reveal_pk<
         Ok(None)
     } else {
         // If not, submit it
-        Ok(Some(build_reveal_pk_aux::<C, U>(client, wallet, &public_key, &args).await?))
+        Ok(Some(
+            build_reveal_pk_aux::<C, U>(client, wallet, &public_key, &args)
+                .await?,
+        ))
     }
 }
 
@@ -393,7 +407,7 @@ pub async fn build_reveal_pk_aux<
     prepare_tx::<C, U>(
         client,
         wallet,
-        &args,
+        args,
         tx,
         TxSigningKey::WalletAddress(addr),
         #[cfg(not(feature = "mainnet"))]
@@ -725,6 +739,52 @@ pub async fn build_unjail_validator<
     .await
 }
 
+/// Submit transaction to unjail a jailed validator
+pub async fn submit_unjail_validator<
+    C: crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
+    client: &C,
+    wallet: &mut Wallet<U>,
+    args: args::TxUnjailValidator,
+) -> Result<(), Error> {
+    if !rpc::is_validator(client, &args.validator).await {
+        eprintln!("The given address {} is not a validator.", &args.validator);
+        if !args.tx.force {
+            return Err(Error::InvalidValidatorAddress(args.validator.clone()));
+        }
+    }
+
+    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
+    let tx_code_hash =
+        query_wasm_code_hash(client, tx_code_path).await.unwrap();
+
+    let data = args
+        .validator
+        .clone()
+        .try_to_vec()
+        .map_err(Error::EncodeTxFailure)?;
+
+    let mut tx = Tx::new(TxType::Raw);
+    tx.header.chain_id = args.tx.chain_id.clone().unwrap();
+    tx.header.expiration = args.tx.expiration;
+    tx.set_data(Data::new(data));
+    tx.set_code(Code::from_hash(tx_code_hash));
+
+    let default_signer = args.validator;
+    prepare_tx(
+        client,
+        wallet,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(default_signer),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await?;
+    Ok(())
+}
+
 /// Submit transaction to withdraw an unbond
 pub async fn build_withdraw<
     C: crate::ledger::queries::Client + Sync,
@@ -804,7 +864,15 @@ pub async fn build_unbond<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Unbond,
-) -> Result<(Tx, Option<Address>, common::PublicKey, Option<(Epoch, token::Amount)>), Error> {
+) -> Result<
+    (
+        Tx,
+        Option<Address>,
+        common::PublicKey,
+        Option<(Epoch, token::Amount)>,
+    ),
+    Error,
+> {
     let source = args.source.clone();
     // Check the source's current bond amount
     let bond_source = source.clone().unwrap_or_else(|| args.validator.clone());
@@ -892,7 +960,7 @@ pub async fn query_unbonds<C: crate::ledger::queries::Client + Sync>(
     let source = args.source.clone();
     // Check the source's current bond amount
     let bond_source = source.clone().unwrap_or_else(|| args.validator.clone());
-    
+
     // Query the unbonds post-tx
     let unbonds =
         rpc::query_unbond_with_slashing(client, &bond_source, &args.validator)
@@ -1236,8 +1304,9 @@ pub async fn build_transfer<
     client: &C,
     wallet: &mut Wallet<V>,
     shielded: &mut ShieldedContext<U>,
-    args: args::TxTransfer,
-) -> Result<(Tx, Option<Address>, common::PublicKey, Option<Epoch>, bool), Error> {
+    mut args: args::TxTransfer,
+) -> Result<(Tx, Option<Address>, common::PublicKey, Option<Epoch>, bool), Error>
+{
     let source = args.source.effective_address();
     let target = args.target.effective_address();
     let token = args.token.clone();
@@ -1293,33 +1362,27 @@ pub async fn build_transfer<
         args.tx.force,
         client,
     )
-        .await?;
+    .await?;
 
     let masp_addr = masp();
     // For MASP sources, use a special sentinel key recognized by VPs as default
     // signer. Also, if the transaction is shielded, redact the amount and token
     // types by setting the transparent value to 0 and token type to a constant.
     // This has no side-effect because transaction is to self.
-    let (amount, token) =
-        if source == masp_addr && target == masp_addr {
-            // TODO Refactor me, we shouldn't rely on any specific token here.
-            (
-                token::Amount::default(),
-                args.native_token.clone(),
-            )
-        } else {
-            (
-                validated_amount.amount,
-                token,
-            )
-        };
-    let default_signer = TxSigningKey::WalletAddress(args.source.effective_address());
+    let (_amount, token) = if source == masp_addr && target == masp_addr {
+        // TODO Refactor me, we shouldn't rely on any specific token here.
+        (token::Amount::default(), args.native_token.clone())
+    } else {
+        (validated_amount.amount, token)
+    };
+    let default_signer =
+        TxSigningKey::WalletAddress(args.source.effective_address());
     // If our chosen signer is the MASP sentinel key, then our shielded inputs
     // will need to cover the gas fees.
     let chosen_signer =
         tx_signer::<C, V>(client, wallet, &args.tx, default_signer.clone())
-        .await?
-        .1;
+            .await?
+            .1;
     let shielded_gas = masp_tx_key().ref_to() == chosen_signer;
     // Determine whether to pin this transaction to a storage key
     let key = match &args.target {
@@ -1332,8 +1395,8 @@ pub async fn build_transfer<
 
     let tx_code_hash =
         query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
-        .await
-        .unwrap();
+            .await
+            .unwrap();
 
     // Construct the shielded part of the transaction, if any
     let stx_result = shielded
@@ -1344,11 +1407,11 @@ pub async fn build_transfer<
         Ok(stx) => Ok(stx),
         Err(builder::Error::InsufficientFunds(_)) => {
             Err(Error::NegativeBalanceAfterTransfer(
-                source.clone(),
-                args.amount,
-                token.clone(),
-                args.tx.fee_amount,
-                args.tx.fee_token.clone(),
+                Box::new(source.clone()),
+                validated_amount.amount.to_string_native(),
+                Box::new(token.clone()),
+                validate_fee.amount.to_string_native(),
+                Box::new(args.tx.fee_token.clone()),
             ))
         }
         Err(err) => Err(Error::MaspError(err)),
@@ -1368,8 +1431,7 @@ pub async fn build_transfer<
             Hash(masp_tx.hash(&mut Sha256::new()).finalize_reset().into());
         // Get the decoded asset types used in the transaction to give
         // offline wallet users more information
-        let asset_types =
-            used_asset_types(shielded, client, &shielded_parts.0)
+        let asset_types = used_asset_types(shielded, client, &shielded_parts.0)
             .await
             .unwrap_or_default();
         // Add the MASP Transaction's Builder to the Tx
@@ -1393,7 +1455,7 @@ pub async fn build_transfer<
         target: target.clone(),
         token: token.clone(),
         sub_prefix: sub_prefix.clone(),
-        amount,
+        amount: validated_amount,
         key: key.clone(),
         // Link the Transfer to the MASP Transaction by hash code
         shielded: masp_hash,
@@ -1417,8 +1479,14 @@ pub async fn build_transfer<
         #[cfg(not(feature = "mainnet"))]
         is_source_faucet,
     )
-        .await?;
-    Ok((tx, signer_addr, def_key, shielded_tx_epoch, is_source_faucet))
+    .await?;
+    Ok((
+        tx,
+        signer_addr,
+        def_key,
+        shielded_tx_epoch,
+        is_source_faucet,
+    ))
 }
 
 /// Submit a transaction to initialize an account
