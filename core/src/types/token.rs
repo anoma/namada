@@ -879,6 +879,23 @@ pub fn is_masp_key(key: &Key) -> bool {
                     || key.starts_with(PIN_KEY_PREFIX)))
 }
 
+/// Check if the given storage key is for a minter of a unspecified token.
+/// If it is, returns the token.
+pub fn is_any_minter_key(key: &Key) -> Option<&Address> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::AddressSeg(token),
+            DbKeySeg::StringSeg(minter),
+        ] if *addr == Address::Internal(InternalAddress::Multitoken)
+            && minter == MINTER_STORAGE_KEY =>
+        {
+            Some(token)
+        }
+        _ => None,
+    }
+}
+
 /// Check if the given storage key is for total supply of a unspecified token.
 /// If it is, returns the token.
 pub fn is_any_minted_balance_key(key: &Key) -> Option<&Address> {

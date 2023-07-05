@@ -72,6 +72,7 @@ pub fn run_single_node_test_from(test: Test) -> Result<(Test, NamadaBgCmd)> {
 }
 
 /// Initialize an established account.
+#[allow(dead_code)]
 pub fn init_established_account(
     test: &Test,
     rpc_addr: &str,
