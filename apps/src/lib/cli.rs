@@ -3103,11 +3103,11 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<TxCommissionRateChange<SdkTypes>>
-        for TxCommissionRateChange<CliTypes>
+    impl CliToSdk<CommissionRateChange<SdkTypes>>
+        for CommissionRateChange<CliTypes>
     {
-        fn to_sdk(self, ctx: &mut Context) -> TxCommissionRateChange<SdkTypes> {
-            TxCommissionRateChange::<SdkTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> CommissionRateChange<SdkTypes> {
+            CommissionRateChange::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
                 rate: self.rate,
@@ -3116,7 +3116,7 @@ pub mod args {
         }
     }
 
-    impl Args for TxCommissionRateChange<CliTypes> {
+    impl Args for CommissionRateChange<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let validator = VALIDATOR.parse(matches);

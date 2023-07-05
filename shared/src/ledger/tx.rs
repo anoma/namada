@@ -607,7 +607,7 @@ pub async fn build_validator_commission_change<
 >(
     client: &C,
     wallet: &mut Wallet<U>,
-    args: args::TxCommissionRateChange,
+    args: args::CommissionRateChange,
 ) -> Result<(Tx, Option<Address>, common::PublicKey), Error> {
     let epoch = rpc::query_epoch(client).await;
 
