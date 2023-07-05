@@ -16,7 +16,7 @@ use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
     SchemeType, SigScheme as SigSchemeTrait, SignableBytes, VerifySigError,
 };
-use crate::ledger::storage::Sha256Hasher;
+use crate::types::key::StorageHasher;
 
 const PUBLIC_KEY_LENGTH: usize = 32;
 const SECRET_KEY_LENGTH: usize = 32;
@@ -323,7 +323,6 @@ impl PartialOrd for Signature {
 pub struct SigScheme;
 
 impl super::SigScheme for SigScheme {
-    type Hasher = Sha256Hasher;
     type PublicKey = PublicKey;
     type SecretKey = SecretKey;
     type Signature = Signature;
@@ -342,16 +341,25 @@ impl super::SigScheme for SigScheme {
         SecretKey(Box::new(ed25519_consensus::SigningKey::from(bytes)))
     }
 
-    fn sign(keypair: &SecretKey, data: impl SignableBytes) -> Self::Signature {
-        Signature(keypair.0.sign(&data.signable_hash::<Self::Hasher>()))
+    fn sign_with_hasher<H>(
+        keypair: &SecretKey,
+        data: impl SignableBytes,
+    ) -> Self::Signature
+    where
+        H: 'static + StorageHasher,
+    {
+        Signature(keypair.0.sign(&data.signable_hash::<H>()))
     }
 
-    fn verify_signature(
+    fn verify_signature_with_hasher<H>(
         pk: &Self::PublicKey,
         data: &impl SignableBytes,
         sig: &Self::Signature,
-    ) -> Result<(), VerifySigError> {
-        pk.0.verify(&sig.0, &data.signable_hash::<Self::Hasher>())
+    ) -> Result<(), VerifySigError>
+    where
+        H: 'static + StorageHasher,
+    {
+        pk.0.verify(&sig.0, &data.signable_hash::<H>())
             .map_err(|err| VerifySigError::SigVerifyError(err.to_string()))
     }
 }
