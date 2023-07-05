@@ -70,11 +70,6 @@ use types::{
     WeightedValidator,
 };
 
-use crate::storage::{
-    validator_last_slash_key, EpochedSlashes, SlashedAmount,
-    ValidatorAddresses, ValidatorUnbondRecords,
-};
-
 /// Address of the PoS account implemented as a native VP
 pub const ADDRESS: Address = Address::Internal(InternalAddress::PoS);
 
