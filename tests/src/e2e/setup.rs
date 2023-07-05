@@ -91,9 +91,10 @@ where
         SocketAddr::from_str(validator_0.net_address.as_ref().unwrap())
             .unwrap();
     let net_address_port_0 = net_address_0.port();
-    for ix in 0..num {
+    // starting at 1 because there already is `validator-0` in the template
+    for ix in 1..num {
         let mut validator = other_validators.clone();
-        validator.tokens = Some(other_validators.tokens.unwrap() / 5);
+        validator.tokens = Some(other_validators.tokens.unwrap() * 5);
         let mut net_address = net_address_0;
         // 6 ports for each validator
         let first_port = net_address_port_0 + port_offset(ix);
@@ -699,7 +700,8 @@ where
 
     run_cmd
         .env("NAMADA_LOG", "info")
-        .env("TM_LOG_LEVEL", "info")
+        .env("CMT_LOG_LEVEL", "info")
+        .env("NAMADA_CMT_STDOUT", "true")
         .env("NAMADA_LOG_COLOR", "false")
         .current_dir(working_dir)
         .args(["--base-dir", &base_dir.as_ref().to_string_lossy()]);
