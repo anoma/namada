@@ -7,7 +7,7 @@
 //! respectively.
 
 pub mod context;
-mod utils;
+pub mod utils;
 
 use clap::{AppSettings, ArgGroup, ArgMatches};
 use color_eyre::eyre::Result;

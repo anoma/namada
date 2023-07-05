@@ -339,9 +339,6 @@ impl<P1, R1, N1>
 pub trait ShieldedUtils:
     Sized + BorshDeserialize + BorshSerialize + Default + Clone
 {
-    /// The type of the Tendermint client to make queries with
-    type C: crate::ledger::queries::Client + std::marker::Sync;
-
     /// Get a MASP transaction prover
     fn local_tx_prover(&self) -> LocalTxProver;
 
@@ -519,9 +516,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
 
     /// Fetch the current state of the multi-asset shielded pool into a
     /// ShieldedContext
-    pub async fn fetch(
+    pub async fn fetch<C: Client + Send + Sync>(
         &mut self,
-        client: &U::C,
+        client: &C,
         sks: &[ExtendedSpendingKey],
         fvks: &[ViewingKey],
     ) {
@@ -585,8 +582,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// transactions as a vector. More concretely, the HEAD_TX_KEY location
     /// stores the index of the last accepted transaction and each transaction
     /// is stored at a key derived from its index.
-    pub async fn fetch_shielded_transfers(
-        client: &U::C,
+    pub async fn fetch_shielded_transfers<C: Client + Send + Sync>(
+        client: &C,
         last_txidx: u64,
     ) -> BTreeMap<(BlockHeight, TxIndex), (Epoch, Transfer, Transaction)> {
         // The address of the MASP account
@@ -596,7 +593,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             .push(&HEAD_TX_KEY.to_owned())
             .expect("Cannot obtain a storage key");
         // Query for the index of the last accepted transaction
-        let head_txidx = query_storage_value::<U::C, u64>(client, &head_tx_key)
+        let head_txidx = query_storage_value::<C, u64>(client, &head_tx_key)
             .await
             .unwrap_or(0);
         let mut shielded_txs = BTreeMap::new();
@@ -609,7 +606,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             // Obtain the current transaction
             let (tx_epoch, tx_height, tx_index, current_tx, current_stx) =
                 query_storage_value::<
-                    U::C,
+                    C,
                     (Epoch, BlockHeight, TxIndex, Transfer, Transaction),
                 >(client, &current_tx_key)
                 .await
@@ -771,9 +768,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
 
     /// Query the ledger for the decoding of the given asset type and cache it
     /// if it is found.
-    pub async fn decode_asset_type(
+    pub async fn decode_asset_type<C: Client + Send + Sync>(
         &mut self,
-        client: &U::C,
+        client: &C,
         asset_type: AssetType,
     ) -> Option<(Address, Epoch)> {
         // Try to find the decoding in the cache
@@ -789,9 +786,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
 
     /// Query the ledger for the conversion that is allowed for the given asset
     /// type and cache it.
-    async fn query_allowed_conversion<'a>(
+    async fn query_allowed_conversion<'a, C: Client + Send + Sync>(
         &'a mut self,
-        client: &U::C,
+        client: &C,
         asset_type: AssetType,
         conversions: &'a mut Conversions,
     ) -> Option<&'a mut (AllowedConversion, MerklePath<Node>, i64)> {
@@ -816,9 +813,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// context and express that value in terms of the currently timestamped
     /// asset types. If the key is not in the context, then we do not know the
     /// balance and hence we return None.
-    pub async fn compute_exchanged_balance(
+    pub async fn compute_exchanged_balance<C: Client + Send + Sync>(
         &mut self,
-        client: &U::C,
+        client: &C,
         vk: &ViewingKey,
         target_epoch: Epoch,
     ) -> Option<Amount> {
@@ -881,9 +878,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// note of the conversions that were used. Note that this function does
     /// not assume that allowed conversions from the ledger are expressed in
     /// terms of the latest asset types.
-    pub async fn compute_exchanged_amount(
+    pub async fn compute_exchanged_amount<C: Client + Send + Sync>(
         &mut self,
-        client: &U::C,
+        client: &C,
         mut input: Amount,
         target_epoch: Epoch,
         mut conversions: Conversions,
@@ -961,9 +958,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// of the specified asset type. Return the total value accumulated plus
     /// notes and the corresponding diversifiers/merkle paths that were used to
     /// achieve the total value.
-    pub async fn collect_unspent_notes(
+    pub async fn collect_unspent_notes<C: Client + Send + Sync>(
         &mut self,
-        client: &U::C,
+        client: &C,
         vk: &ViewingKey,
         target: Amount,
         target_epoch: Epoch,
@@ -1030,8 +1027,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// keys to try to decrypt the output notes. If no transaction is pinned at
     /// the given payment address fails with
     /// `PinnedBalanceError::NoTransactionPinned`.
-    pub async fn compute_pinned_balance(
-        client: &U::C,
+    pub async fn compute_pinned_balance<C: Client + Send + Sync>(
+        client: &C,
         owner: PaymentAddress,
         viewing_key: &ViewingKey,
     ) -> Result<(Amount, Epoch), PinnedBalanceError> {
@@ -1053,7 +1050,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             .push(&(PIN_KEY_PREFIX.to_owned() + &owner.hash()))
             .expect("Cannot obtain a storage key");
         // Obtain the transaction pointer at the key
-        let txidx = rpc::query_storage_value::<U::C, u64>(client, &pin_key)
+        let txidx = rpc::query_storage_value::<C, u64>(client, &pin_key)
             .await
             .ok_or(PinnedBalanceError::NoTransactionPinned)?;
         // Construct the key for where the pinned transaction is stored
@@ -1063,7 +1060,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         // Obtain the pointed to transaction
         let (tx_epoch, _tx_height, _tx_index, _tx, shielded) =
             rpc::query_storage_value::<
-                U::C,
+                C,
                 (Epoch, BlockHeight, TxIndex, Transfer, Transaction),
             >(client, &tx_key)
             .await
@@ -1102,9 +1099,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// the epoch of the transaction or even before, so exchange all these
     /// amounts to the epoch of the transaction in order to get the value that
     /// would have been displayed in the epoch of the transaction.
-    pub async fn compute_exchanged_pinned_balance(
+    pub async fn compute_exchanged_pinned_balance<C: Client + Send + Sync>(
         &mut self,
-        client: &U::C,
+        client: &C,
         owner: PaymentAddress,
         viewing_key: &ViewingKey,
     ) -> Result<(Amount, Epoch), PinnedBalanceError> {
@@ -1123,9 +1120,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// Convert an amount whose units are AssetTypes to one whose units are
     /// Addresses that they decode to. All asset types not corresponding to
     /// the given epoch are ignored.
-    pub async fn decode_amount(
+    pub async fn decode_amount<C: Client + Send + Sync>(
         &mut self,
-        client: &U::C,
+        client: &C,
         amt: Amount,
         target_epoch: Epoch,
     ) -> Amount<Address> {
@@ -1146,9 +1143,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
 
     /// Convert an amount whose units are AssetTypes to one whose units are
     /// Addresses that they decode to.
-    pub async fn decode_all_amounts(
+    pub async fn decode_all_amounts<C: Client + Send + Sync>(
         &mut self,
-        client: &U::C,
+        client: &C,
         amt: Amount,
     ) -> Amount<(Address, Epoch)> {
         let mut res = Amount::zero();
@@ -1171,9 +1168,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// understood that transparent account changes are effected only by the
     /// amounts and signatures specified by the containing Transfer object.
     #[cfg(feature = "masp-tx-gen")]
-    pub async fn gen_shielded_transfer(
+    pub async fn gen_shielded_transfer<C: Client + Send + Sync>(
         &mut self,
-        client: &U::C,
+        client: &C,
         args: args::TxTransfer,
         shielded_gas: bool,
     ) -> Result<
@@ -1363,9 +1360,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// transactions. If an owner is specified, then restrict the set to only
     /// transactions crediting/debiting the given owner. If token is specified,
     /// then restrict set to only transactions involving the given token.
-    pub async fn query_tx_deltas(
+    pub async fn query_tx_deltas<C: Client + Send + Sync>(
         &mut self,
-        client: &U::C,
+        client: &C,
         query_owner: &Either<BalanceOwner, Vec<Address>>,
         query_token: &Option<Address>,
         viewing_keys: &HashMap<String, ExtendedViewingKey>,

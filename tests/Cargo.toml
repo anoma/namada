@@ -33,6 +33,7 @@ namada_vp_prelude = {path = "../vp_prelude"}
 namada_tx_prelude = {path = "../tx_prelude"}
 async-trait = {version = "0.1.51"}
 chrono.workspace = true
+clap.workspace = true
 concat-idents.workspace = true
 derivative.workspace = true
 ibc-relayer-types.workspace = true

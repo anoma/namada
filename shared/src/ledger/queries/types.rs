@@ -269,7 +269,7 @@ pub trait Client {
     ///
     /// Returns empty result (200 OK) on success, no response in case of an
     /// error.
-    async fn health(&self) -> Result<(), Error> {
+    async fn health(&self) -> Result<(), RpcError> {
         self.perform(health::Request).await?;
         Ok(())
     }

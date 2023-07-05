@@ -3881,6 +3881,7 @@ dependencies = [
  "async-trait",
  "borsh",
  "chrono",
+ "clap",
  "color-eyre",
  "concat-idents",
  "data-encoding",

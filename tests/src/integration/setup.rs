@@ -1,502 +1,25 @@
-use std::cell::RefCell;
-use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 
-use lazy_static::lazy_static;
-use regex::Regex;
-use color_eyre::eyre::{eyre, Result, Report};
-use namada::ledger::queries::router::test_rpc::TEST_RPC;
-use namada::ledger::queries::{
-    Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router,
-};
-use namada::ledger::events::log::dumb_queries;
-use namada::tendermint_rpc::SimpleRequest;
+use color_eyre::eyre::{eyre, Result};
 use namada_apps::cli::args;
 use namada_apps::config;
 use namada_apps::config::genesis::genesis_config;
 use namada_apps::config::genesis::genesis_config::GenesisConfig;
 use namada_apps::config::TendermintMode;
-use namada_apps::facade::tendermint::{self, Timeout};
+use namada_apps::facade::tendermint::Timeout;
 use namada_apps::facade::tendermint_proto::google::protobuf::Timestamp;
-use namada_apps::facade::tendermint_rpc;
 use namada_apps::node::ledger::shell::Shell;
-use namada_apps::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
-use namada_core::ledger::storage::mockdb::MockDB;
-use namada_core::ledger::storage::{
-    LastBlock, Sha256Hasher, EPOCH_SWITCH_BLOCKS_DELAY,
-};
 use namada_core::types::address::Address;
 use namada_core::types::chain::{ChainId, ChainIdPrefix};
-use namada_core::types::hash::Hash;
-use namada_core::types::storage::{BlockHash, BlockHeight, Epoch, Header};
-use namada_core::types::time::DateTimeUtc;
-use tokio::sync::mpsc::UnboundedReceiver;
 use toml::value::Table;
-use namada::tendermint_rpc::endpoint::abci_info;
-use namada_apps::facade::tendermint_rpc::endpoint::abci_info::AbciInfo;
-use namada_apps::facade::tendermint_rpc::endpoint::{block, block_results, blockchain, commit, consensus_params, consensus_state, net_info, status};
-use namada_apps::facade::tendermint_rpc::error::Error as RpcError;
 
+use super::node::MockNode;
 use crate::e2e::setup::{
     copy_wasm_to_chain_dir, get_all_wasms_hashes, TestDir,
     SINGLE_NODE_NET_GENESIS,
 };
-
-pub struct MockNode {
-    shell: RefCell<Shell<MockDB, Sha256Hasher>>,
-    _broadcast_recv: UnboundedReceiver<Vec<u8>>,
-}
-
-impl Deref for MockNode {
-    type Target = Shell<MockDB, Sha256Hasher>;
-
-    fn deref(&self) -> &Self::Target {
-        &*self.shell.borrow()
-    }
-}
-
-impl DerefMut for MockNode {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.shell.get_mut()
-    }
-}
-
-/// Parse a Tendermint query.
-fn parse_tm_query(
-    query: namada::tendermint_rpc::query::Query,
-) -> dumb_queries::QueryMatcher {
-    const QUERY_PARSING_REGEX_STR: &str =
-        r"^tm\.event='NewBlock' AND (accepted|applied)\.hash='([^']+)'$";
-
-    lazy_static! {
-        /// Compiled regular expression used to parse Tendermint queries.
-        static ref QUERY_PARSING_REGEX: Regex = Regex::new(QUERY_PARSING_REGEX_STR).unwrap();
-    }
-
-    let query = query.to_string();
-    let captures = QUERY_PARSING_REGEX.captures(&query).unwrap();
-
-    match captures.get(0).unwrap().as_str() {
-        "accepted" => {
-            dumb_queries::QueryMatcher::accepted(captures.get(1).unwrap().as_str().try_into().unwrap())
-        }
-        "applied" => {
-            dumb_queries::QueryMatcher::applied(captures.get(1).unwrap().as_str().try_into().unwrap())
-        }
-        _ => unreachable!("We only query accepted or applied txs"),
-    }
-}
-
-/// A Namada event log index and event type encoded as
-/// a Tendermint block height.
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-struct EncodedEvent(u64);
-
-impl EncodedEvent {
-    /// Return the corresponding Tendermint block height value.
-    ///
-    /// Note that the returned height does not point to any valid
-    /// Tendermint block height, we just care about the return type
-    /// of this value.
-    fn to_height(self) -> namada::tendermint::block::Height {
-        let s = self.0.to_string();
-        // there is no constructor on `Height` that accepts a
-        // u64 argument...
-        s.parse().unwrap()
-    }
-
-    /// Get the encoded event log index.
-    const fn log_index(self) -> usize {
-        self.0 as usize
-    }
-}
-
-impl MockNode {
-    pub fn next_epoch(&mut self) -> Epoch {
-        self.wl_storage.storage.next_epoch_min_start_height =
-            self.wl_storage.storage.get_last_block_height() + 1;
-        self.wl_storage.storage.next_epoch_min_start_time = DateTimeUtc::now();
-        let next_epoch_min_start_height =
-            self.wl_storage.storage.next_epoch_min_start_height;
-        if let Some(LastBlock { height, .. }) =
-            self.wl_storage.storage.last_block.as_mut()
-        {
-            *height = next_epoch_min_start_height;
-        }
-        self.finalize_and_commit();
-
-        for _ in 0..EPOCH_SWITCH_BLOCKS_DELAY {
-            self.finalize_and_commit();
-        }
-        self.wl_storage.storage.get_current_epoch().0
-    }
-
-    /// Simultaneously call the `FinalizeBlock` and
-    /// `Commit` handlers.
-    pub fn finalize_and_commit(&mut self) {
-        let mut req = FinalizeBlock {
-            hash: BlockHash([0u8; 32]),
-            header: Header {
-                hash: Hash([0; 32]),
-                time: DateTimeUtc::now(),
-                next_validators_hash: Hash([0; 32]),
-            },
-            byzantine_validators: vec![],
-            txs: vec![],
-            proposer_address: vec![],
-            votes: vec![],
-        };
-        req.header.time = DateTimeUtc::now();
-        self.finalize_block(req).expect("Test failed");
-        self.shell.commit();
-    }
-
-    fn client<'a>(&mut self, args: Vec<&'a str>) {}
-}
-
-#[async_trait::async_trait(?Send)]
-impl Client for MockNode{
-    type Error = Report;
-
-    async fn request(
-        &self,
-        path: String,
-        data: Option<Vec<u8>>,
-        height: Option<BlockHeight>,
-        prove: bool,
-    ) -> std::result::Result<EncodedResponseQuery, Self::Error> {
-        let rpc = TEST_RPC;
-        let data = data.unwrap_or_default();
-        let height = height.unwrap_or_default();
-        // Handle a path by invoking the `RPC.handle` directly with the
-        // borrowed storage
-        let request = RequestQuery {
-            data,
-            path,
-            height,
-            prove,
-        };
-
-        let ctx = RequestCtx {
-            wl_storage: &self.wl_storage,
-            event_log: self.event_log(),
-            vp_wasm_cache: self.vp_wasm_cache.read_only(),
-            tx_wasm_cache: self.tx_wasm_cache.read_only(),
-            storage_read_past_height_limit: None,
-        };
-        let response = rpc.handle(ctx, &request).unwrap();
-        Ok(response)
-    }
-
-    async fn perform<R>(
-        &self,
-        request: R,
-    ) -> std::result::Result<R::Response, RpcError>
-    where
-        R: SimpleRequest,
-    {
-        unreachable!()
-    }
-
-
-    /// `/abci_info`: get information about the ABCI application.
-    async fn abci_info(&self) -> Result<abci_info::AbciInfo, Self::Error> {
-        Ok(AbciInfo{
-            data: "Namada".to_string(),
-            version: "test".to_string(),
-            app_version: 0,
-            last_block_height: self.wl_storage
-                .storage
-                .last_block
-                .map(|b| b.height.0)
-                .unwrap_or_default()
-                .into(),
-            last_block_app_hash: self.wl_storage
-                .storage
-                .last_block
-                .map(|b| b.hash.0)
-                .unwrap_or_default()
-                .to_vec(),
-        })
-    }
-
-    /// `/broadcast_tx_sync`: broadcast a transaction, returning the response
-    /// from `CheckTx`.
-    async fn broadcast_tx_sync(
-        &self,
-        tx: namada::tendermint::abci::Transaction,
-    ) -> Result<tendermint_rpc::endpoint::broadcast::tx_sync::Response, RpcError>
-    {
-        let mut resp = tendermint_rpc::endpoint::broadcast::tx_sync::Response {
-            code: Default::default(),
-            data: Default::default(),
-            log: Default::default(),
-            hash: tendermint::abci::transaction::Hash::new([0; 32]),
-        };
-        let tx_bytes = tx.0;
-        let req = namada_apps::facade::tendermint_proto::abci::RequestProcessProposal{
-            txs: vec![tx_bytes],
-            ..Default::default()
-        };
-        resp.code = (self.shell.borrow_mut().process_proposal(req).status as u32).into();
-        if resp.code.is_ok() {
-            let req = FinalizeBlock {
-                hash: BlockHash([0u8; 32]),
-                header: Header {
-                    hash: Hash([0; 32]),
-                    time: DateTimeUtc::now(),
-                    next_validators_hash: Hash([0; 32]),
-                },
-                byzantine_validators: vec![],
-                txs: vec![tx_bytes],
-                proposer_address: vec![],
-                votes: vec![],
-            };
-            self.shell.borrow_mut().finalize_block(req);
-        }
-        Ok(resp)
-    }
-
-    /// `/block`: get the latest block.
-    async fn latest_block(&self) -> Result<block::Response, RpcError> {
-        unreachable!()
-    }
-
-    /// `/block`: get block at a given height.
-    async fn block<H>(&self, height: H) -> Result<block::Response, RpcError>
-        where
-            H: Into<namada::tendermint::block::Height> + Send,
-    {
-        unreachable!()
-    }
-
-    /// `/block_search`: search for blocks by BeginBlock and EndBlock events.
-    async fn block_search(
-        &self,
-        query: namada::tendermint_rpc::query::Query,
-        _page: u32,
-        _per_page: u8,
-        _order: namada::tendermint_rpc::Order,
-    ) -> Result<tendermint_rpc::endpoint::block_search::Response, RpcError>
-    {
-        let matcher = parse_tm_query(query);
-
-        // we store an index into the event log as a block
-        // height in the response of the query... VERY NAISSSE
-        let matching_events = self
-            .shell
-            .borrow()
-            .event_log()
-            .iter()
-            .enumerate()
-            .flat_map(|(index, event)| {
-                if matcher.matches(event) {
-                    Some(EncodedEvent(index as u64))
-                } else {
-                    None
-                }
-            });
-        let blocks = matching_events
-            .map(|encoded_event| namada::tendermint_rpc::endpoint::block::Response {
-                block_id: Default::default(),
-                block: namada::tendermint::block::Block {
-                    header: namada::tendermint::block::header::Header {
-                        version: namada::tendermint::block::header::Version {
-                            block: 0,
-                            app: 0,
-                        },
-                        chain_id: "namada".try_into().unwrap(),
-                        height: encoded_event.to_height(),
-                        time: namada::tendermint::time::Time::unix_epoch(),
-                        last_block_id: None,
-                        data_hash: None,
-                        validators_hash: namada::tendermint::hash::Hash::None,
-                        next_validators_hash: namada::tendermint::hash::Hash::None,
-                        consensus_hash: namada::tendermint::hash::Hash::None,
-                        app_hash: vec![].try_into().unwrap(),
-                        last_results_hash: None,
-                        evidence_hash: None,
-                        proposer_address: namada::tendermint::account::Id::new([0; 20]),
-                    },
-                    data: Default::default(),
-                    evidence: Default::default(),
-                    last_commit: None,
-                },
-            })
-            .collect();
-
-        Ok(namada::tendermint_rpc::endpoint::block::Response {
-            blocks,
-            total_count: blocks.len() as u32,
-        })
-    }
-
-    /// `/block_results`: get ABCI results for a block at a particular height.
-    async fn block_results<H>(
-        &self,
-        height: H,
-    ) -> Result<tendermint_rpc::endpoint::block_results::Response, RpcError>
-        where
-            H: Into<namada::tendermint::block::Height> + Send,
-    {
-        let height = height.into();
-        let encoded_event = EncodedEvent(height.value());
-
-        let events = self
-            .shell
-            .borrow()
-            .event_log()
-            .iter()
-            .enumerate()
-            .flat_map(|(index, event)| {
-                if index == encoded_event.log_index() {
-                    Some(event)
-                } else {
-                    None
-                }
-            })
-            .map(|event| namada::tendermint::abci::responses::Event {
-                type_str: event.event_type.to_string(),
-                attributes: event
-                    .attributes
-                    .into_iter()
-                    .map(|(k, v)| namada::tendermint::abci::tag::Tag {
-                        key: k.parse().unwrap(),
-                        value: v.parse().unrap(),
-                    })
-                    .collect(),
-            })
-            .collect();
-        let has_events = !events.is_empty();
-
-        Ok(tendermint_rpc::endpoint::block_results::Response {
-            height,
-            txs_results: None,
-            begin_block_events: None,
-            end_block_events: has_events.then(events),
-            validator_updates: vec![],
-            consensus_param_updates: None,
-        })
-    }
-
-    /// `/tx_search`: search for transactions with their results.
-    async fn tx_search(
-        &self,
-        query: namada::tendermint_rpc::query::Query,
-        prove: bool,
-        page: u32,
-        per_page: u8,
-        order: namada::tendermint_rpc::Order,
-    ) -> Result<tendermint_rpc::endpoint::tx_search::Response, RpcError> {
-        self.perform(tendermint_rpc::endpoint::tx_search::Request::new(
-            query, prove, page, per_page, order,
-        ))
-            .await
-    }
-
-    /// `/abci_query`: query the ABCI application
-    async fn abci_query<V>(
-        &self,
-        path: Option<namada::tendermint::abci::Path>,
-        data: V,
-        height: Option<namada::tendermint::block::Height>,
-        prove: bool,
-    ) -> Result<tendermint_rpc::endpoint::abci_query::AbciQuery, RpcError>
-        where
-            V: Into<Vec<u8>> + Send,
-    {
-        Ok(self
-            .perform(tendermint_rpc::endpoint::abci_query::Request::new(
-                path, data, height, prove,
-            ))
-            .await?
-            .response)
-    }
-
-    /// `/block_results`: get ABCI results for the latest block.
-    async fn latest_block_results(
-        &self,
-    ) -> Result<block_results::Response, RpcError> {
-        todo!()
-    }
-
-    /// `/blockchain`: get block headers for `min` <= `height` <= `max`.
-    ///
-    /// Block headers are returned in descending order (highest first).
-    ///
-    /// Returns at most 20 items.
-    async fn blockchain<H>(
-        &self,
-        min: H,
-        max: H,
-    ) -> Result<blockchain::Response, RpcError>
-        where
-            H: Into<namada::tendermint::block::Height> + Send,
-    {
-        todo!()
-    }
-
-    /// `/commit`: get block commit at a given height.
-    async fn commit<H>(&self, height: H) -> Result<commit::Response, RpcError>
-        where
-            H: Into<namada::tendermint::block::Height> + Send,
-    {
-        self.perform(commit::Request::new(height.into())).await
-    }
-
-    /// `/consensus_params`: get current consensus parameters at the specified
-    /// height.
-    async fn consensus_params<H>(
-        &self,
-        height: H,
-    ) -> Result<consensus_params::Response, RpcError>
-        where
-            H: Into<namada::tendermint::block::Height> + Send,
-    {
-        self.perform(consensus_params::Request::new(Some(height.into())))
-            .await
-    }
-
-    /// `/consensus_state`: get current consensus state
-    async fn consensus_state(
-        &self,
-    ) -> Result<consensus_state::Response, RpcError> {
-        self.perform(consensus_state::Request::new()).await
-    }
-
-    /// `/consensus_params`: get the latest consensus parameters.
-    async fn latest_consensus_params(
-        &self,
-    ) -> Result<consensus_params::Response, RpcError> {
-        self.perform(consensus_params::Request::new(None)).await
-    }
-
-    /// `/commit`: get the latest block commit
-    async fn latest_commit(&self) -> Result<commit::Response, RpcError> {
-        self.perform(commit::Request::default()).await
-    }
-
-    /// `/health`: get node health.
-    ///
-    /// Returns empty result (200 OK) on success, no response in case of an
-    /// error.
-    async fn health(&self) -> Result<(), RpcError> {
-        Ok(())
-    }
-
-    /// `/net_info`: obtain information about P2P and other network connections.
-    async fn net_info(&self) -> Result<net_info::Response, RpcError> {
-        unreachable!()
-    }
-
-    /// `/status`: get Tendermint status including node info, pubkey, latest
-    /// block hash, app hash, block height and time.
-    async fn status(&self) -> Result<status::Response, RpcError> {
-       unreachable!()
-    }
-
-}
 
 /// Setup a network with a single genesis validator node.
 pub fn setup() -> Result<MockNode> {
@@ -540,7 +63,7 @@ pub fn initialize_genesis(
         args::InitNetwork {
             genesis_path,
             wasm_checksums_path,
-            chain_id_prefix: ChainIdPrefix::from_str("integration-test".into())
+            chain_id_prefix: ChainIdPrefix::from_str("integration-test")
                 .unwrap(),
             unsafe_dont_encrypt: true,
             consensus_timeout_commit: Timeout::from_str("1s").unwrap(),
@@ -584,8 +107,8 @@ fn create_node(base_dir: &Path, genesis: &GenesisConfig) -> Result<MockNode> {
 
     // instantiate and initialize the ledger node.
     let (sender, recv) = tokio::sync::mpsc::unbounded_channel();
-    let mut node = MockNode {
-        shell: RefCell::new(Shell::new(
+    let node = MockNode {
+        shell: Arc::new(Mutex::new(Shell::new(
             config::Ledger::new(
                 base_dir,
                 chain_id.clone(),
@@ -597,7 +120,7 @@ fn create_node(base_dir: &Path, genesis: &GenesisConfig) -> Result<MockNode> {
             50 * 1024 * 1024, // 50 kiB
             50 * 1024 * 1024, // 50 kiB
             Address::from_str("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
-        )),
+        ))),
         _broadcast_recv: recv,
     };
     let init_req = namada_apps::facade::tower_abci::request::InitChain {
@@ -611,9 +134,9 @@ fn create_node(base_dir: &Path, genesis: &GenesisConfig) -> Result<MockNode> {
         app_state_bytes: vec![],
         initial_height: 0,
     };
-    node
-        .shell
-        .borrow_mut()
+    node.shell
+        .lock()
+        .unwrap()
         .init_chain(init_req, 1)
         .map_err(|e| eyre!("Failed to initialize ledger: {:?}", e))?;
     Ok(node)
