@@ -1,10 +1,16 @@
 [package]
-authors = ["Heliax AG <hello@heliax.dev>"]
-edition = "2021"
-license = "GPL-3.0"
 name = "namada_ethereum_bridge"
+description = "The Namada Ethereum bridge library crate"
 resolver = "2"
-version = "0.18.0"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
 
 [features]
 default = ["abciplus"]
