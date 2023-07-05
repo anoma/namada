@@ -31,7 +31,7 @@ keywords = ["blockchain", "privacy", "crypto", "protocol", "network"]
 license = "GPL-3.0"
 readme = "README.md"
 repository = "https://github.com/anoma/namada"
-version = "0.17.5"
+version = "0.18.0"
 
 [workspace.dependencies]
 ark-bls12-381 = {version = "0.3"}
@@ -53,7 +53,7 @@ byteorder = "1.4.2"
 borsh = "0.9.0"
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
 circular-queue = "0.2.6"
-clap = {git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2", default-features = false, features = ["std", "suggestions", "color", "cargo"]}
+clap = "4.3.4"
 clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
 color-eyre = "0.5.10"
 concat-idents = "1.1.2"
@@ -133,9 +133,10 @@ tower = "0.4"
 # Also, using the same version of tendermint-rs as we do here.
 tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "cf9573dc02eba0faf1f9807244b156630e4c18d1"}
 tracing = "0.1.30"
+tracing-appender = "0.2.2"
 tracing-log = "0.1.2"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
-wasmparser = "0.83.0"
+wasmparser = "0.107.0"
 winapi = "0.3.9"
 zeroize = {version = "1.5.5", features = ["zeroize_derive"]}
 

@@ -29,8 +29,8 @@ wasm-runtime = [
   "namada_core/wasm-runtime",
   "loupe",
   "parity-wasm",
-  "pwasm-utils",
   "rayon",
+  "wasm-instrument",
   "wasmer-cache",
   "wasmer-compiler-singlepass",
   "wasmer-engine-dylib",
@@ -89,7 +89,7 @@ namada-sdk = [
 multicore = ["masp_proofs/multicore"]
 
 [dependencies]
-namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign-verify"]}
+namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign"]}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
 namada_ethereum_bridge = {path = "../ethereum_bridge", default-features = false}
 async-trait = {version = "0.1.51", optional = true}
@@ -117,9 +117,8 @@ parse_duration = "2.1.1"
 paste.workspace = true
 proptest = {version = "1.2.0", optional = true}
 prost.workspace = true
-pwasm-utils = {git = "https://github.com/heliaxdev/wasm-utils", tag = "v0.20.0", features = ["sign_ext"], optional = true}
-rand = {version = "0.8", default-features = false, optional = true}
-rand_core = {version = "0.6", default-features = false, optional = true}
+rand = {optional = true, workspace = true}
+rand_core = {optional = true, workspace = true}
 rayon = {version = "=1.5.3", optional = true}
 ripemd.workspace = true
 serde.workspace = true
@@ -133,12 +132,13 @@ tiny-bip39.workspace = true
 tiny-hderive.workspace = true
 toml.workspace = true
 tracing.workspace = true
-wasmer = {version = "=2.2.0", optional = true}
-wasmer-cache = {version = "=2.2.0", optional = true}
-wasmer-compiler-singlepass = {version = "=2.2.0", optional = true}
-wasmer-engine-dylib = {version = "=2.2.0", optional = true}
-wasmer-engine-universal = {version = "=2.2.0", optional = true}
-wasmer-vm = {version = "2.2.0", optional = true}
+wasm-instrument = {version = "0.4.0", features = ["sign_ext"], optional = true}
+wasmer = {version = "=2.3.0", optional = true}
+wasmer-cache = {version = "=2.3.0", optional = true}
+wasmer-compiler-singlepass = {version = "=2.3.0", optional = true}
+wasmer-engine-dylib = {version = "=2.3.0", optional = true}
+wasmer-engine-universal = {version = "=2.3.0", optional = true}
+wasmer-vm = {version = "2.3.0", optional = true}
 wasmparser.workspace = true
 zeroize.workspace = true
 
@@ -149,7 +149,7 @@ tokio = {workspace = true, features = ["full"]}
 wasmtimer = "0.2.0"
 
 [dev-dependencies]
-namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign-verify", "testing", "ibc-mocks"]}
+namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign", "testing", "ibc-mocks"]}
 namada_test_utils = {path = "../test_utils"}
 assert_matches.workspace = true
 async-trait.workspace = true

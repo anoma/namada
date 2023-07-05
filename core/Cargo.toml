@@ -25,9 +25,9 @@ ferveo-tpke = [
 wasm-runtime = [
   "rayon",
 ]
-# secp256k1 key signing and verification, disabled in WASM build by default as 
-# it bloats the build a lot
-secp256k1-sign-verify = [
+# secp256k1 key signing, disabled in WASM build by default as it bloats the 
+# build a lot
+secp256k1-sign = [
   "libsecp256k1/hmac",
 ]
 
@@ -110,7 +110,7 @@ proptest.workspace = true
 rand.workspace = true
 rand_core.workspace = true
 test-log.workspace = true
-toml = {version = "=0.5.9"}
+toml.workspace = true
 tracing-subscriber.workspace = true
 
 [build-dependencies]

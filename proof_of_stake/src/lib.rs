@@ -3256,8 +3256,11 @@ where
     for epoch in Epoch::iter_bounds_inclusive(start_epoch, end_epoch) {
         let consensus_stake =
             Dec::from(get_total_consensus_stake(storage, epoch)?);
-        // println!("Consensus stake in epoch {}: {}", epoch, consensus_stake);
-
+        tracing::debug!(
+            "Consensus stake in epoch {}: {}",
+            epoch,
+            consensus_stake
+        );
         let processing_epoch = epoch + params.slash_processing_epoch_offset();
         let slashes = enqueued_slashes_handle().at(&processing_epoch);
         let infracting_stake = slashes.iter(storage)?.fold(

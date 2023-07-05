@@ -1097,7 +1097,7 @@ impl ConcretePosState {
                 tracing::debug!(
                     "Below-thresh val {}, stake {}",
                     &validator,
-                    stake.to_string_native()
+                    stake.to_string_native(),
                 );
 
                 let state = crate::validator_state_handle(&validator)
@@ -1195,7 +1195,7 @@ impl ReferenceStateMachine for AbstractPosState {
 
     fn init_state() -> BoxedStrategy<Self::State> {
         println!("\nInitializing abstract state machine");
-        arb_params_and_genesis_validators(Some(5), 5..10)
+        arb_params_and_genesis_validators(Some(8), 8..10)
             .prop_map(|(params, genesis_validators)| {
                 let epoch = Epoch::default();
                 let mut state = Self {
@@ -1372,7 +1372,7 @@ impl ReferenceStateMachine for AbstractPosState {
                         }
                     },
                 ),
-            2 => arb_slash(state),
+            1 => arb_slash(state),
         ];
 
         // Add unjailing, if any eligible

@@ -66,6 +66,7 @@ pub mod wrapper_tx {
         /// amount of the fee
         pub amount: Amount,
         /// address of the token
+        /// TODO: This should support multi-tokens
         pub token: Address,
     }
 

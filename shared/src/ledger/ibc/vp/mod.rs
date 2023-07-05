@@ -18,6 +18,7 @@ use namada_core::ledger::storage::write_log::StorageModification;
 use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
 use namada_core::proto::Tx;
 use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::dec::Dec;
 use namada_core::types::storage::Key;
 use namada_proof_of_stake::read_pos_params;
 use thiserror::Error;

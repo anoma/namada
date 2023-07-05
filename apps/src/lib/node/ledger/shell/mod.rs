@@ -2086,7 +2086,7 @@ mod test_mempool_validate {
         // we mount a malleability attack to try and remove the fee
         let mut new_wrapper =
             invalid_wrapper.header().wrapper().expect("Test failed");
-        new_wrapper.fee.amount = 0.into();
+        new_wrapper.fee.amount = Default::default();
         invalid_wrapper.update_header(TxType::Wrapper(Box::new(new_wrapper)));
 
         let mut result = shell.mempool_validate(

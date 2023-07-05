@@ -496,7 +496,7 @@ mod test {
         // Request dry run tx
         let mut outer_tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]
-            // To be able to dry-run testnet faucet withdrawal, pretend 
+            // To be able to dry-run testnet faucet withdrawal, pretend
             // that we got a valid PoW
             has_valid_pow: true,
         }));

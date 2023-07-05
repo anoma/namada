@@ -1,6 +1,7 @@
 //! A basic fungible token
 
 use std::fmt::{Display, Formatter};
+use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
@@ -526,12 +527,6 @@ impl Add<u64> for Amount {
         Self {
             raw: self.raw + Uint::from(rhs),
         }
-    }
-}
-
-impl std::iter::Sum for Amount {
-    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Amount::zero(), |acc, amt| acc + amt)
     }
 }
 
