@@ -37,7 +37,8 @@ pub mod genesis_config {
     use namada::types::key::dkg_session_keys::DkgPublicKey;
     use namada::types::key::*;
     use namada::types::time::Rfc3339String;
-    use namada::types::token::Denomination;
+    use namada::types::token::{Denomination, NATIVE_MAX_DECIMAL_PLACES};
+    use namada::types::uint::Uint;
     use namada::types::{storage, token};
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
@@ -531,7 +532,9 @@ pub mod genesis_config {
                 .expect("Missing native token address"),
         )
         .expect("Invalid address");
-
+        // If this line does not exist, it reads the faucet withdrawal limit as NAMNAM instead of NAM
+        #[cfg(not(feature = "mainnet"))]
+        let faucet_withdrawal_limit = faucet_withdrawal_limit.map(|a| a * Uint::exp10(NATIVE_MAX_DECIMAL_PLACES as usize));
         let validators: HashMap<String, Validator> = validator
             .iter()
             .map(|(name, cfg)| (name.clone(), load_validator(cfg, &wasm)))
