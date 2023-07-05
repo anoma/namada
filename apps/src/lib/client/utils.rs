@@ -793,32 +793,32 @@ pub fn init_network(
                     &format!("127.0.0.1:{}", first_port),
                 )
                 .unwrap();
-            }
-            else{
-                config.ledger.cometbft.p2p.laddr =
-                    TendermintAddress::from_str(&format!("0.0.0.0:{}", first_port))
-                        .unwrap();
+            } else {
+                config.ledger.cometbft.p2p.laddr = TendermintAddress::from_str(
+                    &format!("0.0.0.0:{}", first_port),
+                )
+                .unwrap();
             }
             if localhost {
                 config.ledger.cometbft.rpc.laddr = TendermintAddress::from_str(
                     &format!("127.0.0.1:{}", first_port + 1),
                 )
                 .unwrap();
-            }
-            else{
+            } else {
                 config.ledger.cometbft.rpc.laddr = TendermintAddress::from_str(
                     &format!("0.0.0.0:{}", first_port + 1),
                 )
                 .unwrap();
             }
             if localhost {
-                config.ledger.cometbft.proxy_app = 
-                    TendermintAddress::from_str(&format!("127.0.0.1:{}", first_port + 2))
+                config.ledger.cometbft.proxy_app = TendermintAddress::from_str(
+                    &format!("127.0.0.1:{}", first_port + 2),
+                )
                 .unwrap();
-            }
-            else{
-                config.ledger.cometbft.proxy_app =
-                    TendermintAddress::from_str(&format!("0.0.0.0:{}", first_port + 2))
+            } else {
+                config.ledger.cometbft.proxy_app = TendermintAddress::from_str(
+                    &format!("0.0.0.0:{}", first_port + 2),
+                )
                 .unwrap();
             }
             config.write(&validator_dir, &chain_id, true).unwrap();
