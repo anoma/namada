@@ -11,7 +11,7 @@ use crate::types::token::{
 
 /// Construct a token address from an ERC20 address.
 pub fn token(address: &EthAddress) -> Address {
-    Address::Internal(InternalAddress::Erc20(address.clone()))
+    Address::Internal(InternalAddress::Erc20(*address))
 }
 
 /// Represents the type of a key relating to a wrapped ERC20
@@ -47,12 +47,12 @@ impl From<&Key> for storage::Key {
 
 /// Returns true if the given key has an ERC20 token
 pub fn has_erc20_segment(key: &storage::Key) -> bool {
-    match key.segments.get(1) {
+    matches!(
+        key.segments.get(1),
         Some(DbKeySeg::AddressSeg(Address::Internal(
             InternalAddress::Erc20(_addr),
-        ))) => true,
-        _ => false,
-    }
+        )))
+    )
 }
 
 impl TryFrom<(&Address, &storage::Key)> for Key {
@@ -72,7 +72,7 @@ impl TryFrom<(&Address, &storage::Key)> for Key {
             InternalAddress::Erc20(addr),
         ))) = key.segments.get(1)
         {
-            addr.clone()
+            *addr
         } else {
             return Err(eyre!(
                 "key has an incorrect segment at index #2, expected an \
@@ -207,7 +207,7 @@ mod test {
                 DbKeySeg::StringSeg(supply_key_seg),
             ] if multitoken_addr == &MULTITOKEN_ADDRESS &&
             token_addr == &dai_erc20_token() &&
-            balance_key_seg == &BALANCE_STORAGE_KEY &&
+            balance_key_seg == BALANCE_STORAGE_KEY &&
             supply_key_seg == MINTED_STORAGE_KEY
         );
 

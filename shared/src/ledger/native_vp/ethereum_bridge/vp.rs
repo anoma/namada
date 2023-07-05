@@ -143,7 +143,7 @@ where
         )? {
             // Multitoken VP checks the balance changes for the ERC20 transfer
             Some(CheckType::Erc20Transfer) => Ok(true),
-            Some(CheckType::Escrow) => return self.check_escrow(verifiers),
+            Some(CheckType::Escrow) => self.check_escrow(verifiers),
             None => Ok(false),
         }
     }
@@ -238,27 +238,25 @@ pub(super) fn check_balance_changes(
     receiver: &Key,
 ) -> Result<Option<Amount>> {
     let sender_balance_pre = reader
-        .read_pre_value::<Amount>(&sender)?
+        .read_pre_value::<Amount>(sender)?
         .unwrap_or_default()
         .change();
-    let sender_balance_post =
-        match reader.read_post_value::<Amount>(&sender)? {
-            Some(value) => value,
-            None => {
-                return Err(eyre!(
-                    "Rejecting transaction as could not read_post balance key \
-                     {}",
-                    sender,
-                ));
-            }
+    let sender_balance_post = match reader.read_post_value::<Amount>(sender)? {
+        Some(value) => value,
+        None => {
+            return Err(eyre!(
+                "Rejecting transaction as could not read_post balance key {}",
+                sender,
+            ));
         }
-        .change();
+    }
+    .change();
     let receiver_balance_pre = reader
-        .read_pre_value::<Amount>(&receiver)?
+        .read_pre_value::<Amount>(receiver)?
         .unwrap_or_default()
         .change();
     let receiver_balance_post = match reader
-        .read_post_value::<Amount>(&receiver)?
+        .read_post_value::<Amount>(receiver)?
     {
         Some(value) => value,
         None => {
