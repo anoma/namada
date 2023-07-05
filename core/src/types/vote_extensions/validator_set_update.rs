@@ -362,6 +362,7 @@ mod tag {
     use super::{
         epoch_to_token, Vext, VotingPowersMapExt, GOVERNANCE_CONTRACT_VERSION,
     };
+    use crate::ledger::storage::KeccakHasher;
     use crate::proto::Signable;
     use crate::types::eth_abi::{AbiEncode, Encode, Token};
     use crate::types::keccak::KeccakHash;
@@ -372,6 +373,7 @@ mod tag {
     pub struct SerializeWithAbiEncode;
 
     impl Signable<Vext> for SerializeWithAbiEncode {
+        type Hasher = KeccakHasher;
         type Output = KeccakHash;
 
         fn as_signable(ext: &Vext) -> Self::Output {
