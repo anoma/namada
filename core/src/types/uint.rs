@@ -2,10 +2,8 @@
 //! An unsigned 256 integer type. Used for, among other things,
 //! the backing type of token amounts.
 use std::cmp::Ordering;
-use std::fmt::{Debug, Display, Formatter};
-use std::ops::{
-    Add, AddAssign, BitAnd, BitXor, Div, Mul, Neg, Rem, Sub, SubAssign,
-};
+use std::fmt;
+use std::ops::{Add, AddAssign, BitAnd, Div, Mul, Neg, Rem, Sub, SubAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use impl_num_traits::impl_uint_num_traits;
@@ -167,6 +165,15 @@ const MINUS_ZERO: Uint = Uint([0u64, 0u64, 0u64, 9223372036854775808]);
     BorshSchema,
 )]
 pub struct I256(pub Uint);
+
+impl fmt::Display for I256 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_negative() {
+            write!(f, "-")?;
+        }
+        write!(f, "{}", self.abs())
+    }
+}
 
 impl I256 {
     /// Check if the amount is not negative (greater

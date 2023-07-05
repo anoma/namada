@@ -183,7 +183,7 @@ pub mod cmds {
             <Self as Cmd>::add_sub(
                 App::new(Self::CMD)
                     .about("Relayer sub-commands.")
-                    .setting(AppSettings::SubcommandRequiredElseHelp),
+                    .subcommand_required(true),
             )
         }
     }
@@ -1842,7 +1842,7 @@ pub mod cmds {
                      pool. This pool holds transfers waiting to be relayed to \
                      Ethereum.",
                 )
-                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand_required(true)
                 .subcommand(ConstructProof::def().display_order(1))
                 .subcommand(RecommendBatch::def().display_order(1))
                 .subcommand(RelayProof::def().display_order(1))
@@ -1867,7 +1867,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Add a new transfer to the Ethereum bridge pool.")
-                .setting(AppSettings::ArgRequiredElseHelp)
+                .arg_required_else_help(true)
                 .add_args::<args::EthereumBridgePool<args::CliTypes>>()
         }
     }
@@ -1890,7 +1890,7 @@ pub mod cmds {
                     "Construct a merkle proof that the given transfers are in \
                      the pool.",
                 )
-                .setting(AppSettings::ArgRequiredElseHelp)
+                .arg_required_else_help(true)
                 .add_args::<args::BridgePoolProof<args::CliTypes>>()
         }
     }
@@ -1913,7 +1913,7 @@ pub mod cmds {
                     "Construct a merkle proof that the given transfers are in \
                      the pool and relay it to Ethereum.",
                 )
-                .setting(AppSettings::ArgRequiredElseHelp)
+                .arg_required_else_help(true)
                 .add_args::<args::RelayBridgePoolProof<args::CliTypes>>()
         }
     }
@@ -1936,7 +1936,7 @@ pub mod cmds {
                     "Get a recommended batch of transfers from the bridge \
                      pool to relay to Ethereum.",
                 )
-                .setting(AppSettings::ArgRequiredElseHelp)
+                .arg_required_else_help(true)
                 .add_args::<args::RecommendBatch<args::CliTypes>>()
         }
     }
@@ -2040,7 +2040,7 @@ pub mod cmds {
                      be consumed by the Namada Ethereum bridge smart \
                      contracts.",
                 )
-                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand_required(true)
                 .subcommand(ConsensusValidatorSet::def().display_order(1))
                 .subcommand(ValidatorSetProof::def().display_order(1))
                 .subcommand(ValidatorSetUpdateRelay::def().display_order(1))
@@ -2620,27 +2620,29 @@ pub mod args {
                 .arg(
                     ERC20
                         .def()
-                        .about("The Ethereum address of the ERC20 token."),
+                        .help("The Ethereum address of the ERC20 token."),
                 )
                 .arg(
                     ETH_ADDRESS
                         .def()
-                        .about("The Ethereum address receiving the tokens."),
+                        .help("The Ethereum address receiving the tokens."),
                 )
                 .arg(
                     ADDRESS
                         .def()
-                        .about("The Namada address sending the tokens."),
+                        .help("The Namada address sending the tokens."),
                 )
-                .arg(AMOUNT.def().about(
-                    "The amount of tokens being sent across the bridge.",
-                ))
-                .arg(FEE_AMOUNT.def().about(
+                .arg(
+                    AMOUNT.def().help(
+                        "The amount of tokens being sent across the bridge.",
+                    ),
+                )
+                .arg(FEE_AMOUNT.def().help(
                     "The amount of NAM you wish to pay to have this transfer \
                      relayed to Ethereum.",
                 ))
                 .arg(
-                    FEE_PAYER.def().about(
+                    FEE_PAYER.def().help(
                         "The Namada address of the account paying the fee.",
                     ),
                 )
@@ -2674,18 +2676,18 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
-                .arg(MAX_ETH_GAS.def().about(
+                .arg(MAX_ETH_GAS.def().help(
                     "The maximum amount Ethereum gas that can be spent during \
                      the relay call.",
                 ))
-                .arg(ETH_GAS.def().about(
+                .arg(ETH_GAS.def().help(
                     "Under ideal conditions, relaying transfers will yield a \
                      net profit. If that is not possible, setting this \
                      optional value will result in a batch transfer that \
                      costs as close to the given value as possible without \
                      exceeding it.",
                 ))
-                .arg(NAM_PER_ETH.def().about(
+                .arg(NAM_PER_ETH.def().help(
                     "The amount of NAM that one ETH is worth, represented as \
                      a decimal number.",
                 ))
@@ -2727,13 +2729,13 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
-                .arg(HASH_LIST.def().about(
+                .arg(HASH_LIST.def().help(
                     "List of Keccak hashes of transfers in the bridge pool.",
                 ))
                 .arg(
                     RELAYER
                         .def()
-                        .about("The rewards address for relaying this proof."),
+                        .help("The rewards address for relaying this proof."),
                 )
         }
     }
@@ -2796,37 +2798,37 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
-                .arg(SAFE_MODE.def().about(
+                .arg(SAFE_MODE.def().help(
                     "Safe mode overrides keyboard interrupt signals, to \
                      ensure Ethereum transfers aren't canceled midway through.",
                 ))
-                .arg(HASH_LIST.def().about(
+                .arg(HASH_LIST.def().help(
                     "List of Keccak hashes of transfers in the bridge pool.",
                 ))
                 .arg(
                     RELAYER
                         .def()
-                        .about("The rewards address for relaying this proof."),
+                        .help("The rewards address for relaying this proof."),
                 )
-                .arg(ETH_ADDRESS_OPT.def().about(
+                .arg(ETH_ADDRESS_OPT.def().help(
                     "The address of the Ethereum wallet to pay the gas fees. \
                      If unset, the default wallet is used.",
                 ))
-                .arg(ETH_GAS.def().about(
+                .arg(ETH_GAS.def().help(
                     "The Ethereum gas that can be spent during the relay call.",
                 ))
                 .arg(
-                    ETH_GAS_PRICE.def().about(
+                    ETH_GAS_PRICE.def().help(
                         "The price of Ethereum gas, during the relay call.",
                     ),
                 )
-                .arg(ETH_RPC_ENDPOINT.def().about("The Ethereum RPC endpoint."))
+                .arg(ETH_RPC_ENDPOINT.def().help("The Ethereum RPC endpoint."))
                 .arg(
-                    ETH_CONFIRMATIONS.def().about(
-                        "The number of block confirmations on Ethereum.",
-                    ),
+                    ETH_CONFIRMATIONS
+                        .def()
+                        .help("The number of block confirmations on Ethereum."),
                 )
-                .arg(ETH_SYNC.def().about(
+                .arg(ETH_SYNC.def().help(
                     "Synchronize with the network, or exit immediately, if \
                      the Ethereum node has fallen behind.",
                 ))
@@ -2852,9 +2854,11 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query<CliTypes>>().arg(EPOCH.def().about(
-                "The epoch of the consensus set of validators to query.",
-            ))
+            app.add_args::<Query<CliTypes>>().arg(
+                EPOCH.def().help(
+                    "The epoch of the consensus set of validators to query.",
+                ),
+            )
         }
     }
 
@@ -2880,7 +2884,7 @@ pub mod args {
             app.add_args::<Query<CliTypes>>().arg(
                 EPOCH
                     .def()
-                    .about("The epoch of the set of validators to be proven."),
+                    .help("The epoch of the set of validators to be proven."),
             )
         }
     }
@@ -2940,46 +2944,46 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
-                .arg(SAFE_MODE.def().about(
+                .arg(SAFE_MODE.def().help(
                     "Safe mode overrides keyboard interrupt signals, to \
                      ensure Ethereum transfers aren't canceled midway through.",
                 ))
-                .arg(DAEMON_MODE.def().about(
+                .arg(DAEMON_MODE.def().help(
                     "Run in daemon mode, which will continuously perform \
                      validator set updates.",
                 ))
-                .arg(DAEMON_MODE_RETRY_DUR.def().about(
+                .arg(DAEMON_MODE_RETRY_DUR.def().help(
                     "The amount of time to sleep between failed daemon mode \
                      relays.",
                 ))
-                .arg(DAEMON_MODE_SUCCESS_DUR.def().about(
+                .arg(DAEMON_MODE_SUCCESS_DUR.def().help(
                     "The amount of time to sleep between successful daemon \
                      mode relays.",
                 ))
-                .arg(ETH_ADDRESS_OPT.def().about(
+                .arg(ETH_ADDRESS_OPT.def().help(
                     "The address of the Ethereum wallet to pay the gas fees. \
                      If unset, the default wallet is used.",
                 ))
                 .arg(
                     EPOCH
                         .def()
-                        .about("The epoch of the set of validators to relay."),
+                        .help("The epoch of the set of validators to relay."),
                 )
-                .arg(ETH_GAS.def().about(
+                .arg(ETH_GAS.def().help(
                     "The Ethereum gas that can be spent during the relay call.",
                 ))
                 .arg(
-                    ETH_GAS_PRICE.def().about(
+                    ETH_GAS_PRICE.def().help(
                         "The price of Ethereum gas, during the relay call.",
                     ),
                 )
-                .arg(ETH_RPC_ENDPOINT.def().about("The Ethereum RPC endpoint."))
+                .arg(ETH_RPC_ENDPOINT.def().help("The Ethereum RPC endpoint."))
                 .arg(
-                    ETH_CONFIRMATIONS.def().about(
-                        "The number of block confirmations on Ethereum.",
-                    ),
+                    ETH_CONFIRMATIONS
+                        .def()
+                        .help("The number of block confirmations on Ethereum."),
                 )
-                .arg(ETH_SYNC.def().about(
+                .arg(ETH_SYNC.def().help(
                     "Synchronize with the network, or exit immediately, if \
                      the Ethereum node has fallen behind.",
                 ))
@@ -3269,12 +3273,12 @@ pub mod args {
                      will be generated if none given. Note that this must be \
                      ed25519.",
                 ))
-                .arg(VALIDATOR_ETH_COLD_KEY.def().about(
+                .arg(VALIDATOR_ETH_COLD_KEY.def().help(
                     "An Eth cold key for the validator account. A new one \
                      will be generated if none given. Note that this must be \
                      secp256k1.",
                 ))
-                .arg(VALIDATOR_ETH_HOT_KEY.def().about(
+                .arg(VALIDATOR_ETH_HOT_KEY.def().help(
                     "An Eth hot key for the validator account. A new one will \
                      be generated if none given. Note that this must be \
                      secp256k1.",
@@ -5050,6 +5054,6 @@ fn namada_relayer_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada relayer command line interface.")
-        .setting(AppSettings::SubcommandRequiredElseHelp);
+        .subcommand_required(true);
     cmds::NamadaRelayer::add_sub(args::Global::def(app))
 }

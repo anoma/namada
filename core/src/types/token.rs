@@ -611,6 +611,12 @@ impl SubAssign for Amount {
     }
 }
 
+impl Sum for Amount {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Amount::default(), |acc, next| acc + next)
+    }
+}
+
 impl KeySeg for Amount {
     fn parse(string: String) -> super::storage::Result<Self>
     where
