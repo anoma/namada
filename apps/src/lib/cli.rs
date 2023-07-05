@@ -1935,7 +1935,8 @@ pub mod args {
     pub const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> =
         arg_opt("validator-code-path");
     pub const VALUE: ArgOpt<String> = arg_opt("value");
-    pub const VERIFICATION_KEY: ArgOpt<WalletPublicKey> = arg_opt("verification-key");
+    pub const VERIFICATION_KEY: ArgOpt<WalletPublicKey> =
+        arg_opt("verification-key");
     pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
@@ -3341,12 +3342,15 @@ pub mod args {
                 fee_token: ctx.get(&self.fee_token),
                 gas_limit: self.gas_limit,
                 signing_key: self.signing_key.map(|x| ctx.get_cached(&x)),
-                verification_key: self.verification_key.map(|x| ctx.get_cached(&x)),
+                verification_key: self
+                    .verification_key
+                    .map(|x| ctx.get_cached(&x)),
                 signer: self.signer.map(|x| ctx.get(&x)),
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
                 expiration: self.expiration,
-                chain_id: self.chain_id
+                chain_id: self
+                    .chain_id
                     .or_else(|| Some(ctx.config.ledger.chain_id.clone())),
             }
         }
@@ -3419,16 +3423,16 @@ pub mod args {
                     .conflicts_with(SIGNING_KEY_OPT.name)
                     .conflicts_with(VERIFICATION_KEY.name),
             )
-                .arg(
-                    VERIFICATION_KEY
-                        .def()
-                        .about(
-                            "Sign the transaction with the key for the given \
-                             public key, public key hash or alias from your \
-                             wallet.",
-                        )
-                        .conflicts_with(SIGNER.name)
-                        .conflicts_with(SIGNING_KEY_OPT.name),
+            .arg(
+                VERIFICATION_KEY
+                    .def()
+                    .help(
+                        "Sign the transaction with the key for the given \
+                         public key, public key hash or alias from your \
+                         wallet.",
+                    )
+                    .conflicts_with(SIGNER.name)
+                    .conflicts_with(SIGNING_KEY_OPT.name),
             )
             .arg(CHAIN_ID_OPT.def().help("The chain ID."))
         }
