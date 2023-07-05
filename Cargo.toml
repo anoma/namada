@@ -109,8 +109,6 @@ ripemd = "0.1"
 rlimit = "0.5.4"
 rocksdb = {version = "0.21.0", features = ['zstd', 'jemalloc'], default-features = false}
 rpassword = "5.0.1"
-rust_decimal = { version = "=1.26.1", features = ["borsh"] }
-rust_decimal_macros = "=1.26.1"
 serde = {version = "1.0.125", features = ["derive"]}
 serde_bytes = "0.11.5"
 serde_json = "1.0.62"

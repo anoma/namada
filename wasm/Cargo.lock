@@ -3686,8 +3686,6 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rayon",
- "rust_decimal",
- "rust_decimal_macros",
  "serde",
  "serde_json",
  "sha2 0.9.9",
@@ -3714,8 +3712,6 @@ dependencies = [
  "namada_macros",
  "namada_proof_of_stake",
  "rand 0.8.5",
- "rust_decimal",
- "rust_decimal_macros",
  "serde",
  "serde_json",
  "tendermint",
@@ -3743,8 +3739,6 @@ dependencies = [
  "namada_core",
  "once_cell",
  "proptest",
- "rust_decimal",
- "rust_decimal_macros",
  "thiserror",
  "tracing",
 ]
@@ -3775,8 +3769,6 @@ dependencies = [
  "namada_vp_prelude",
  "prost",
  "regex",
- "rust_decimal",
- "rust_decimal_macros",
  "serde_json",
  "sha2 0.9.9",
  "tempfile",
@@ -3837,7 +3829,6 @@ dependencies = [
  "once_cell",
  "proptest",
  "ripemd",
- "rust_decimal",
  "tracing",
  "tracing-subscriber",
  "wee_alloc",
@@ -5003,28 +4994,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
-]
-
-[[package]]
-name = "rust_decimal"
-version = "1.26.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee9164faf726e4f3ece4978b25ca877ddc6802fa77f38cdccb32c7f805ecd70c"
-dependencies = [
- "arrayvec",
- "borsh",
- "num-traits",
- "serde",
-]
-
-[[package]]
-name = "rust_decimal_macros"
-version = "1.26.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4903d8db81d2321699ca8318035d6ff805c548868df435813968795a802171b2"
-dependencies = [
- "quote",
- "rust_decimal",
 ]
 
 [[package]]

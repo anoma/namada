@@ -4248,8 +4248,6 @@ dependencies = [
  "rlimit",
  "rocksdb",
  "rpassword",
- "rust_decimal",
- "rust_decimal_macros",
  "serde 1.0.147",
  "serde_bytes",
  "serde_json",
@@ -4316,8 +4314,6 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rayon",
- "rust_decimal",
- "rust_decimal_macros",
  "serde 1.0.147",
  "serde_json",
  "sha2 0.9.9",
@@ -4361,8 +4357,6 @@ dependencies = [
  "namada_macros",
  "namada_proof_of_stake",
  "rand 0.8.5",
- "rust_decimal",
- "rust_decimal_macros",
  "serde 1.0.147",
  "serde_json",
  "tendermint",
@@ -4393,8 +4387,6 @@ dependencies = [
  "once_cell",
  "proptest",
  "proptest-state-machine",
- "rust_decimal",
- "rust_decimal_macros",
  "test-log",
  "thiserror",
  "tracing 0.1.37",
@@ -4443,8 +4435,6 @@ dependencies = [
  "prost",
  "rand 0.8.5",
  "regex",
- "rust_decimal",
- "rust_decimal_macros",
  "serde_json",
  "sha2 0.9.9",
  "tempfile",
@@ -5906,28 +5896,6 @@ name = "rust-ini"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3e52c148ef37f8c375d49d5a73aa70713125b7f19095948a923f80afdeb22ec2"
-
-[[package]]
-name = "rust_decimal"
-version = "1.26.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee9164faf726e4f3ece4978b25ca877ddc6802fa77f38cdccb32c7f805ecd70c"
-dependencies = [
- "arrayvec 0.7.2",
- "borsh",
- "num-traits 0.2.15",
- "serde 1.0.147",
-]
-
-[[package]]
-name = "rust_decimal_macros"
-version = "1.26.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4903d8db81d2321699ca8318035d6ff805c548868df435813968795a802171b2"
-dependencies = [
- "quote",
- "rust_decimal",
-]
 
 [[package]]
 name = "rustc-demangle"

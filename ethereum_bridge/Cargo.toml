@@ -33,8 +33,6 @@ itertools.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 rand.workspace = true
-rust_decimal.workspace = true
-rust_decimal_macros.workspace = true
 tendermint = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7", optional = true}
 tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7", features = ["http-client"], optional = true}
 tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7", optional = true}
