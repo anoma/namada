@@ -9,9 +9,10 @@ use crate::ledger::storage;
 use crate::ledger::vp_env::VpEnv;
 use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
-use crate::types::storage::Key;
+use crate::types::storage::{Key, KeySeg};
 use crate::types::token::{
-    is_any_minted_balance_key, is_any_token_balance_key, minter_key, Amount,
+    is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
+    minter_key, Amount,
 };
 use crate::vm::WasmCacheAccess;
 
@@ -72,13 +73,25 @@ where
                     None => _ = mints.insert(token, diff),
                 }
 
-                // Check if the minter VP is called
-                let minter_key = minter_key(token);
-                let minter = match self.ctx.read_post(&minter_key)? {
-                    Some(m) => m,
+                // Check if the minter is set
+                match self.check_minter(token)? {
+                    Some(minter) if verifiers.contains(&minter) => {}
+                    _ => return Ok(false),
+                }
+            } else if let Some(token) = is_any_minter_key(key) {
+                match self.check_minter(token)? {
+                    Some(_) => {}
                     None => return Ok(false),
-                };
-                if !verifiers.contains(&minter) {
+                }
+            } else {
+                if key.segments.get(0)
+                    == Some(
+                        &Address::Internal(InternalAddress::Multitoken)
+                            .to_db_key(),
+                    )
+                {
+                    // Reject when trying to update an unexpected key under
+                    // `#Multitoken/...`
                     return Ok(false);
                 }
             }
@@ -94,6 +107,43 @@ where
     }
 }
 
+impl<'a, DB, H, CA> MultitokenVp<'a, DB, H, CA>
+where
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + storage::StorageHasher,
+    CA: 'static + WasmCacheAccess,
+{
+    /// Return the minter if the minter is valid and the minter VP exists
+    pub fn check_minter(&self, token: &Address) -> Result<Option<Address>> {
+        // Check if the minter is set
+        let minter_key = minter_key(token);
+        let minter = match self.ctx.read_post(&minter_key)? {
+            Some(m) => m,
+            None => return Ok(None),
+        };
+        match token {
+            Address::Internal(InternalAddress::Erc20(_)) => {
+                if minter == Address::Internal(InternalAddress::EthBridge) {
+                    return Ok(Some(minter));
+                }
+            }
+            Address::Internal(InternalAddress::IbcToken(_)) => {
+                if minter == Address::Internal(InternalAddress::Ibc) {
+                    return Ok(Some(minter));
+                }
+            }
+            _ => {
+                // Check the minter VP exists
+                let vp_key = Key::validity_predicate(&minter);
+                if self.ctx.has_key_post(&vp_key)? {
+                    return Ok(Some(minter));
+                }
+            }
+        }
+        Ok(None)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
@@ -106,9 +156,11 @@ mod tests {
     use crate::core::types::address::testing::{
         established_address_1, established_address_2,
     };
+    use crate::eth_bridge::storage::wrapped_erc20s;
     use crate::ledger::gas::VpGasMeter;
     use crate::proto::{Code, Data, Section, Signature, Tx};
     use crate::types::address::{Address, InternalAddress};
+    use crate::types::ethereum_events::testing::arbitrary_eth_address;
     use crate::types::key::testing::keypair_1;
     use crate::types::storage::TxIndex;
     use crate::types::token::{
@@ -249,16 +301,19 @@ mod tests {
         let mut wl_storage = TestWlStorage::default();
         let mut keys_changed = BTreeSet::new();
 
+        // ERC20 token
+        let token = wrapped_erc20s::token(&arbitrary_eth_address());
+
         // mint 100
         let target = established_address_1();
-        let target_key = balance_key(&nam(), &target);
+        let target_key = balance_key(&token, &target);
         let amount = Amount::whole(100);
         wl_storage
             .write_log
             .write(&target_key, amount.try_to_vec().unwrap())
             .expect("write failed");
         keys_changed.insert(target_key);
-        let minted_key = minted_balance_key(&nam());
+        let minted_key = minted_balance_key(&token);
         let amount = Amount::whole(100);
         wl_storage
             .write_log
@@ -267,8 +322,8 @@ mod tests {
         keys_changed.insert(minted_key);
 
         // minter
-        let minter = Address::Internal(InternalAddress::Ibc);
-        let minter_key = minter_key(&nam());
+        let minter = Address::Internal(InternalAddress::EthBridge);
+        let minter_key = minter_key(&token);
         wl_storage
             .write_log
             .write(&minter_key, minter.try_to_vec().unwrap())
@@ -306,6 +361,13 @@ mod tests {
         let mut wl_storage = TestWlStorage::default();
         let mut keys_changed = BTreeSet::new();
 
+        // set the dummy nam vp
+        let vp_key = Key::validity_predicate(&nam());
+        wl_storage
+            .storage
+            .write(&vp_key, vec![])
+            .expect("write failed");
+
         // mint 100
         let target = established_address_1();
         let target_key = balance_key(&nam(), &target);
@@ -325,7 +387,7 @@ mod tests {
         keys_changed.insert(minted_key);
 
         // minter
-        let minter = Address::Internal(InternalAddress::Ibc);
+        let minter = nam();
         let minter_key = minter_key(&nam());
         wl_storage
             .write_log
@@ -444,6 +506,106 @@ mod tests {
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let verifiers = BTreeSet::new();
         // the minter isn't included in the verifiers
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &wl_storage.storage,
+            &wl_storage.write_log,
+            &tx,
+            &tx_index,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let vp = MultitokenVp { ctx };
+        assert!(
+            !vp.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_invalid_minter() {
+        let mut wl_storage = TestWlStorage::default();
+        let mut keys_changed = BTreeSet::new();
+
+        // ERC20 token
+        let token = wrapped_erc20s::token(&arbitrary_eth_address());
+
+        // mint 100
+        let target = established_address_1();
+        let target_key = balance_key(&token, &target);
+        let amount = Amount::whole(100);
+        wl_storage
+            .write_log
+            .write(&target_key, amount.try_to_vec().unwrap())
+            .expect("write failed");
+        keys_changed.insert(target_key);
+        let minted_key = minted_balance_key(&token);
+        let amount = Amount::whole(100);
+        wl_storage
+            .write_log
+            .write(&minted_key, amount.try_to_vec().unwrap())
+            .expect("write failed");
+        keys_changed.insert(minted_key);
+
+        // invalid minter
+        let minter = established_address_1();
+        let minter_key = minter_key(&token);
+        wl_storage
+            .write_log
+            .write(&minter_key, minter.try_to_vec().unwrap())
+            .expect("write failed");
+        keys_changed.insert(minter_key);
+
+        let tx_index = TxIndex::default();
+        let tx = dummy_tx(&wl_storage);
+        let gas_meter = VpGasMeter::new(0);
+        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
+        let mut verifiers = BTreeSet::new();
+        // for the minter
+        verifiers.insert(minter);
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &wl_storage.storage,
+            &wl_storage.write_log,
+            &tx,
+            &tx_index,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let vp = MultitokenVp { ctx };
+        assert!(
+            !vp.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_invalid_minter_update() {
+        let mut wl_storage = TestWlStorage::default();
+        let mut keys_changed = BTreeSet::new();
+
+        let minter_key = minter_key(&nam());
+        let minter = established_address_1();
+        wl_storage
+            .write_log
+            .write(&minter_key, minter.try_to_vec().unwrap())
+            .expect("write failed");
+
+        keys_changed.insert(minter_key);
+
+        let tx_index = TxIndex::default();
+        let tx = dummy_tx(&wl_storage);
+        let gas_meter = VpGasMeter::new(0);
+        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
+        let mut verifiers = BTreeSet::new();
+        // for the minter
+        verifiers.insert(minter);
         let ctx = Ctx::new(
             &ADDRESS,
             &wl_storage.storage,
