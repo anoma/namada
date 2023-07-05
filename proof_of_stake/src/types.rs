@@ -121,6 +121,10 @@ pub type BelowCapacityValidatorSets = crate::epoched::NestedEpoched<
     crate::epoched::OffsetPipelineLen,
 >;
 
+/// Epoched total consensus validator stake
+pub type TotalConsensusStakes =
+    crate::epoched::Epoched<Amount, crate::epoched::OffsetZero, U64_MAX>;
+
 /// Epoched validator's deltas.
 pub type ValidatorDeltas = crate::epoched::EpochedDelta<
     token::Change,
