@@ -261,7 +261,8 @@ jobs:
         run: sccache --stop-server || true
 
   namada-release:
-    runs-on: ${{ matrix.os }}
+    runs-on: 
+      group: gians-runners
     timeout-minutes: 40
     strategy:
       fail-fast: false
