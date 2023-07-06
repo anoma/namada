@@ -400,6 +400,8 @@ mod tests {
         let validator = address::testing::established_address_3();
         let initial_stake = token::Amount::from_uint(10_098_123, 0).unwrap();
         let consensus_key = key::testing::keypair_2().ref_to();
+        let eth_cold_key = key::testing::keypair_3().ref_to();
+        let eth_hot_key = key::testing::keypair_4().ref_to();
         let commission_rate = Dec::new(5, 2).unwrap();
         let max_commission_rate_change = Dec::new(1, 2).unwrap();
 
@@ -409,6 +411,8 @@ mod tests {
             consensus_key,
             commission_rate,
             max_commission_rate_change,
+            eth_hot_key,
+            eth_cold_key,
         }];
 
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
@@ -481,6 +485,14 @@ mod tests {
             consensus_key,
             commission_rate,
             max_commission_rate_change,
+            eth_hot_key: key::common::PublicKey::Secp256k1(
+                key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                    .ref_to(),
+            ),
+            eth_cold_key: key::common::PublicKey::Secp256k1(
+                key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                    .ref_to(),
+            ),
         }];
 
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));

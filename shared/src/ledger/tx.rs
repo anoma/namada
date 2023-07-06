@@ -2,6 +2,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
+use std::time::Duration;
 
 use borsh::BorshSerialize;
 use masp_primitives::asset_type::AssetType;
@@ -22,7 +23,6 @@ use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::CommissionPair;
 use prost::EncodeError;
 use thiserror::Error;
-use tokio::time::Duration;
 
 use super::rpc::query_wasm_code_hash;
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
@@ -41,6 +41,7 @@ use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::{Code, Data, MaspBuilder, Section, Tx};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
+use crate::types::control_flow::{time, ProceedOrElse};
 use crate::types::key::*;
 use crate::types::masp::TransferTarget;
 use crate::types::storage::{Epoch, RESERVED_ADDRESS_PREFIX};
@@ -85,6 +86,12 @@ const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 /// Errors to do with transaction events.
 #[derive(Error, Debug)]
 pub enum Error {
+    /// Accepted tx timeout
+    #[error("Timed out waiting for tx to be accepted")]
+    AcceptTimeout,
+    /// Applied tx timeout
+    #[error("Timed out waiting for tx to be applied")]
+    AppliedTimeout,
     /// Expect a dry running transaction
     #[error(
         "Expected a dry-run transaction, received a wrapper transaction \
@@ -359,7 +366,11 @@ pub async fn is_reveal_pk_needed<
     client: &C,
     public_key: &common::PublicKey,
     args: &args::Tx,
-) -> Result<bool, Error> {
+) -> Result<bool, Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+{
     let addr: Address = public_key.into();
     // Check if PK revealed
     Ok(args.force || !has_revealed_pk(client, &addr).await)
@@ -464,10 +475,13 @@ pub async fn broadcast_tx<C: crate::ledger::queries::Client + Sync>(
 /// 3. The decrypted payload of the tx has been included on the blockchain.
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn submit_tx<C: crate::ledger::queries::Client + Sync>(
+pub async fn submit_tx<C>(
     client: &C,
     to_broadcast: TxBroadcastData,
-) -> Result<TxResponse, Error> {
+) -> Result<TxResponse, Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+{
     let (_, wrapper_hash, decrypted_hash) = match &to_broadcast {
         TxBroadcastData::Wrapper {
             tx,
@@ -480,8 +494,10 @@ pub async fn submit_tx<C: crate::ledger::queries::Client + Sync>(
     // Broadcast the supplied transaction
     broadcast_tx(client, &to_broadcast).await?;
 
-    let deadline =
-        Duration::from_secs(DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS);
+    let deadline = time::Instant::now()
+        + time::Duration::from_secs(
+            DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS,
+        );
 
     tracing::debug!(
         transaction = ?to_broadcast,
@@ -492,7 +508,9 @@ pub async fn submit_tx<C: crate::ledger::queries::Client + Sync>(
     let parsed = {
         let wrapper_query =
             crate::ledger::rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
-        let event = rpc::query_tx_status(client, wrapper_query, deadline).await;
+        let event = rpc::query_tx_status(client, wrapper_query, deadline)
+            .await
+            .proceed_or(Error::AcceptTimeout)?;
         let parsed = TxResponse::from_event(event);
 
         println!(
@@ -506,8 +524,9 @@ pub async fn submit_tx<C: crate::ledger::queries::Client + Sync>(
             // payload makes its way onto the blockchain
             let decrypted_query =
                 rpc::TxEventQuery::Applied(decrypted_hash.as_str());
-            let event =
-                rpc::query_tx_status(client, decrypted_query, deadline).await;
+            let event = rpc::query_tx_status(client, decrypted_query, deadline)
+                .await
+                .proceed_or(Error::AppliedTimeout)?;
             let parsed = TxResponse::from_event(event);
             println!(
                 "Transaction applied with result: {}",

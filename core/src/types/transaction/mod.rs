@@ -187,6 +187,11 @@ pub struct InitValidator {
     pub account_key: common::PublicKey,
     /// A key to be used for signing blocks and votes on blocks.
     pub consensus_key: common::PublicKey,
+    /// An Eth bridge governance public key
+    pub eth_cold_key: secp256k1::PublicKey,
+    /// An Eth bridge hot signing public key used for validator set updates and
+    /// cross-chain transactions
+    pub eth_hot_key: secp256k1::PublicKey,
     /// Public key used to sign protocol transactions
     pub protocol_key: common::PublicKey,
     /// Serialization of the public session key used in the DKG
@@ -237,6 +242,7 @@ mod test_process_tx {
     use crate::proto::{Code, Data, Section, Signature, Tx, TxError};
     use crate::types::address::nam;
     use crate::types::storage::Epoch;
+    use crate::types::token::Amount;
 
     fn gen_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
@@ -320,7 +326,7 @@ mod test_process_tx {
         // the signed tx
         let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 10.into(),
+                amount: Amount::from_uint(10, 0).expect("Test failed"),
                 token: nam(),
             },
             keypair.ref_to(),
@@ -355,7 +361,7 @@ mod test_process_tx {
         // the signed tx
         let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 10.into(),
+                amount: Amount::from_uint(10, 0).expect("Test failed"),
                 token: nam(),
             },
             keypair.ref_to(),

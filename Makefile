@@ -49,6 +49,9 @@ build-test:
 build-release:
 	NAMADA_DEV=false $(cargo) build $(jobs) --release --package namada_apps --manifest-path Cargo.toml
 
+build-debug:
+	NAMADA_DEV=false $(cargo) build --package namada_apps --manifest-path Cargo.toml
+
 install-release:
 	NAMADA_DEV=false $(cargo) install --path ./apps --locked
 
@@ -150,7 +153,7 @@ test-unit-mainnet:
 test-unit-debug:
 	$(debug-cargo) +$(nightly) test \
 		$(jobs) \
-		$(TEST_FILTER) -- \
+		$(TEST_FILTER) \
 		-- --skip e2e \
 		--nocapture \
 		-Z unstable-options --report-time

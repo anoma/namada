@@ -49,20 +49,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[serde(into = "String")]
 pub struct Dec(pub I256);
 
-impl std::ops::Deref for Dec {
-    type Target = I256;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl std::ops::DerefMut for Dec {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
 impl Dec {
     /// Division with truncation (TODO: better description)
     pub fn trunc_div(&self, rhs: &Self) -> Option<Self> {
@@ -87,6 +73,11 @@ impl Dec {
     /// The representation of 0
     pub fn zero() -> Self {
         Self(I256::zero())
+    }
+
+    /// Check if value is zero
+    pub fn is_zero(&self) -> bool {
+        *self == Self::zero()
     }
 
     /// The representation of 1
@@ -129,6 +120,11 @@ impl Dec {
         } else {
             *other - *self
         }
+    }
+
+    /// Get the absolute value of self as integer
+    pub fn abs(&self) -> Uint {
+        self.0.abs()
     }
 
     /// Convert the Dec type into a I256 with truncation

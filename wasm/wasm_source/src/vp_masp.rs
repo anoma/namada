@@ -237,7 +237,7 @@ fn validate_tx(
                     .try_to_vec()
                     .expect("target address encoding");
 
-                let hash = Ripemd160::digest(sha256(&target_enc).as_slice());
+                let hash = Ripemd160::digest(sha256(&target_enc).0.as_slice());
 
                 if <[u8; 20]>::from(hash) != out.address.0 {
                     debug_log!(

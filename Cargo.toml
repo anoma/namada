@@ -4,6 +4,7 @@ resolver = "2"
 members = [
   "apps",
   "core",
+  "ethereum_bridge",
   "proof_of_stake",
   "shared",
   "test_utils",
@@ -40,7 +41,6 @@ ark-std = "0.3.0"
 arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "e086b235ed6e68929bf73f617dd61cd17b000a56", default-features = false, features = ["std", "borsh"]}
 assert_cmd = "1.0.7"
 assert_matches = "1.5.0"
-async-std = "1.11.0"
 async-trait = {version = "0.1.51"}
 base58 = "0.2.0"
 base64 = "0.13.0"
@@ -64,6 +64,8 @@ derivative = "2.2.0"
 directories = "4.0.1"
 ed25519-consensus = "1.2.0"
 escargot = "0.5.7"
+ethabi = "18.0.0"
+ethers = "2.0.0"
 expectrl = "0.7.0"
 eyre = "0.6.5"
 ferveo = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
@@ -74,8 +76,8 @@ flate2 = "1.0.22"
 fs_extra = "1.2.0"
 futures = "0.3"
 git2 = "0.13.25"
-ibc-relayer = {git = "https://github.com/heliaxdev/hermes.git", rev = "a4ad1355fc0b05908881854aa27221cb2b878ac5", default-features = false}
-ibc-relayer-types = {git = "https://github.com/heliaxdev/hermes.git", rev = "a4ad1355fc0b05908881854aa27221cb2b878ac5", default-features = false}
+ibc-relayer = {git = "https://github.com/heliaxdev/hermes.git", rev = "fea6928dace1af3e38c5b223f933c1d07720811d", default-features = false}
+ibc-relayer-types = {git = "https://github.com/heliaxdev/hermes.git", rev = "fea6928dace1af3e38c5b223f933c1d07720811d", default-features = false }
 ics23 = "0.9.0"
 index-set = {git = "https://github.com/heliaxdev/index-set", tag = "v0.7.1", features = ["serialize-borsh", "serialize-serde"]}
 itertools = "0.10.0"
@@ -83,8 +85,9 @@ libc = "0.2.97"
 libloading = "0.7.2"
 libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
 # branch = "murisi/namada-integration"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "9320c6b69b5d2e97134866871e960f0a31703813" }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "9320c6b69b5d2e97134866871e960f0a31703813", default-features = false, features = ["local-prover"] }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "252a6059565b125c1444e9e7d0b7c8da0fba8f8f" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "252a6059565b125c1444e9e7d0b7c8da0fba8f8f", default-features = false, features = ["local-prover"] }
+num256 = "0.3.5"
 num_cpus = "1.13.0"
 num-derive = "0.3.3"
 num-rational = "0.4.1"
@@ -106,8 +109,6 @@ ripemd = "0.1"
 rlimit = "0.5.4"
 rocksdb = {version = "0.21.0", features = ['zstd', 'jemalloc'], default-features = false}
 rpassword = "5.0.1"
-rust_decimal = { version = "=1.26.1", features = ["borsh"] }
-rust_decimal_macros = "=1.26.1"
 serde = {version = "1.0.125", features = ["derive"]}
 serde_bytes = "0.11.5"
 serde_json = "1.0.62"
@@ -118,7 +119,7 @@ slip10_ed25519 = "0.1.3"
 sysinfo = {version = "=0.21.1", default-features = false}
 tar = "0.4.37"
 tempfile = {version = "3.2.0"}
-tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "02b256829e80f8cfecf3fa0d625c2a76c79cd043"}
+tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7"}
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tiny-bip39 = {git = "https://github.com/anoma/tiny-bip39.git", rev = "bf0f6d8713589b83af7a917366ec31f5275c0e57"}
 tiny-hderive = "0.3.0"
@@ -130,7 +131,7 @@ tonic = "0.8.3"
 tonic-build = "0.8.4"
 tower = "0.4"
 # Also, using the same version of tendermint-rs as we do here.
-tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "367d8d958b83c501ed2c09e9c4595f8bf75a0b01"}
+tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "cf9573dc02eba0faf1f9807244b156630e4c18d1"}
 tracing = "0.1.30"
 tracing-appender = "0.2.2"
 tracing-log = "0.1.2"

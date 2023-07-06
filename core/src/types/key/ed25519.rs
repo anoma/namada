@@ -14,8 +14,9 @@ use zeroize::Zeroize;
 
 use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
-    SchemeType, SigScheme as SigSchemeTrait, VerifySigError,
+    SchemeType, SigScheme as SigSchemeTrait, SignableBytes, VerifySigError,
 };
+use crate::types::key::StorageHasher;
 
 const PUBLIC_KEY_LENGTH: usize = 32;
 const SECRET_KEY_LENGTH: usize = 32;
@@ -340,28 +341,25 @@ impl super::SigScheme for SigScheme {
         SecretKey(Box::new(ed25519_consensus::SigningKey::from(bytes)))
     }
 
-    fn sign(keypair: &SecretKey, data: impl AsRef<[u8]>) -> Self::Signature {
-        Signature(keypair.0.sign(data.as_ref()))
+    fn sign_with_hasher<H>(
+        keypair: &SecretKey,
+        data: impl SignableBytes,
+    ) -> Self::Signature
+    where
+        H: 'static + StorageHasher,
+    {
+        Signature(keypair.0.sign(&data.signable_hash::<H>()))
     }
 
-    fn verify_signature<T: BorshSerialize>(
+    fn verify_signature_with_hasher<H>(
         pk: &Self::PublicKey,
-        data: &T,
+        data: &impl SignableBytes,
         sig: &Self::Signature,
-    ) -> Result<(), VerifySigError> {
-        let bytes = data
-            .try_to_vec()
-            .map_err(VerifySigError::DataEncodingError)?;
-        pk.0.verify(&sig.0, &bytes)
-            .map_err(|err| VerifySigError::SigVerifyError(err.to_string()))
-    }
-
-    fn verify_signature_raw(
-        pk: &Self::PublicKey,
-        data: &[u8],
-        sig: &Self::Signature,
-    ) -> Result<(), VerifySigError> {
-        pk.0.verify(&sig.0, data)
+    ) -> Result<(), VerifySigError>
+    where
+        H: 'static + StorageHasher,
+    {
+        pk.0.verify(&sig.0, &data.signable_hash::<H>())
             .map_err(|err| VerifySigError::SigVerifyError(err.to_string()))
     }
 }

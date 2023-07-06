@@ -11,7 +11,7 @@ use super::storage_api::{self, StorageRead, StorageWrite};
 use crate::ledger::storage_api::collections::LazyMap;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
-use crate::types::storage::{self, DbKeySeg};
+use crate::types::storage::{self, DbKeySeg, Key};
 use crate::types::token;
 
 /// Initialize faucet's storage. This must be called at genesis if faucet

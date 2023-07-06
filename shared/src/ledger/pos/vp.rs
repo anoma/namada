@@ -9,7 +9,6 @@ pub use namada_proof_of_stake::parameters::PosParams;
 // use namada_proof_of_stake::validation::validate;
 use namada_proof_of_stake::read_pos_params;
 pub use namada_proof_of_stake::types;
-// use rust_decimal::Decimal;
 use thiserror::Error;
 
 use super::is_params_key;

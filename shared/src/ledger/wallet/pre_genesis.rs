@@ -33,11 +33,15 @@ pub struct ValidatorWallet {
     pub account_key: common::SecretKey,
     /// Cryptographic keypair for consensus key
     pub consensus_key: common::SecretKey,
+    /// Cryptographic keypair for eth cold key
+    pub eth_cold_key: common::SecretKey,
+    /// Cryptographic keypair for eth hot key
+    pub eth_hot_key: common::SecretKey,
     /// Cryptographic keypair for Tendermint node key
     pub tendermint_node_key: common::SecretKey,
 }
 
-/// Validator pre-genesis wallet store includes all the required keys for
+// Validator pre-genesis wallet store includes all the required keys for
 /// genesis setup.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ValidatorStore {
@@ -45,9 +49,11 @@ pub struct ValidatorStore {
     pub account_key: wallet::StoredKeypair<common::SecretKey>,
     /// Cryptographic keypair for consensus key
     pub consensus_key: wallet::StoredKeypair<common::SecretKey>,
+    /// Cryptographic keypair for eth cold key
+    pub eth_cold_key: wallet::StoredKeypair<common::SecretKey>,
     /// Cryptographic keypair for Tendermint node key
     pub tendermint_node_key: wallet::StoredKeypair<common::SecretKey>,
-    /// Special validator keys
+    /// Special validator keys. Contains the ETH hot key.
     pub validator_keys: wallet::ValidatorKeys,
 }
 

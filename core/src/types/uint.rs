@@ -2,16 +2,30 @@
 //! An unsigned 256 integer type. Used for, among other things,
 //! the backing type of token amounts.
 use std::cmp::Ordering;
-use std::fmt::Debug;
-use std::ops::{Add, AddAssign, BitXor, Div, Mul, Neg, Rem, Sub, SubAssign};
+use std::fmt;
+use std::ops::{Add, AddAssign, BitAnd, Div, Mul, Neg, Rem, Sub, SubAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use impl_num_traits::impl_uint_num_traits;
+use num_integer::Integer;
 use serde::{Deserialize, Serialize};
 use uint::construct_uint;
 
 use crate::types::token;
 use crate::types::token::{Amount, AmountParseError, MaspDenom};
+
+/// The value zero.
+pub const ZERO: Uint = Uint::from_u64(0);
+
+/// The value one.
+pub const ONE: Uint = Uint::from_u64(1);
+
+impl Uint {
+    /// Convert a [`u64`] to a [`Uint`].
+    pub const fn from_u64(x: u64) -> Uint {
+        Uint([x.to_le(), 0, 0, 0])
+    }
+}
 
 construct_uint! {
     /// Namada native type to replace for unsigned 256 bit
@@ -28,6 +42,69 @@ construct_uint! {
 }
 
 impl_uint_num_traits!(Uint, 4);
+
+impl Integer for Uint {
+    fn div_floor(&self, other: &Self) -> Self {
+        self.div(other)
+    }
+
+    fn mod_floor(&self, other: &Self) -> Self {
+        let (_, rem) = self.div_mod(*other);
+        rem
+    }
+
+    fn gcd(&self, other: &Self) -> Self {
+        if self.is_zero() {
+            return *self;
+        }
+        if other.is_zero() {
+            return *other;
+        }
+
+        let shift = (*self | *other).trailing_zeros();
+        let mut u = *self;
+        let mut v = *other;
+        u >>= shift;
+        v >>= shift;
+        u >>= u.trailing_zeros();
+
+        loop {
+            v >>= v.trailing_zeros();
+            if u > v {
+                std::mem::swap(&mut u, &mut v);
+            }
+            v -= u; // here v >= u
+            if v.is_zero() {
+                break;
+            }
+        }
+        u << shift
+    }
+
+    fn lcm(&self, other: &Self) -> Self {
+        (*self * *other).div(self.gcd(other))
+    }
+
+    fn divides(&self, other: &Self) -> bool {
+        other.rem(self).is_zero()
+    }
+
+    fn is_multiple_of(&self, other: &Self) -> bool {
+        self.divides(other)
+    }
+
+    fn is_even(&self) -> bool {
+        self.bitand(Self::one()) != Self::one()
+    }
+
+    fn is_odd(&self) -> bool {
+        !self.is_even()
+    }
+
+    fn div_rem(&self, other: &Self) -> (Self, Self) {
+        self.div_mod(*other)
+    }
+}
 
 /// The maximum 256 bit integer
 pub const MAX_VALUE: Uint = Uint([u64::MAX; 4]);
@@ -48,17 +125,11 @@ impl Uint {
 
     /// Compute the two's complement of a number.
     fn negate(&self) -> Self {
-        Self(
-            self.0
-                .into_iter()
-                .map(|byte| byte.bitxor(u64::MAX))
-                .collect::<Vec<_>>()
-                .try_into()
-                .expect("This cannot fail"),
-        )
-        .overflowing_add(Uint::from(1u64))
-        .0
-        .canonical()
+        let mut output = self.0;
+        for byte in output.iter_mut() {
+            *byte ^= u64::MAX;
+        }
+        Self(output).overflowing_add(Uint::from(1u64)).0.canonical()
     }
 
     /// There are two valid representations of zero: plus and
@@ -94,6 +165,15 @@ const MINUS_ZERO: Uint = Uint([0u64, 0u64, 0u64, 9223372036854775808]);
     BorshSchema,
 )]
 pub struct I256(pub Uint);
+
+impl fmt::Display for I256 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_negative() {
+            write!(f, "-")?;
+        }
+        write!(f, "{}", self.abs())
+    }
+}
 
 impl I256 {
     /// Check if the amount is not negative (greater
