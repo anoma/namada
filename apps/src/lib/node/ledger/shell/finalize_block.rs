@@ -1000,8 +1000,8 @@ mod test_finalize_block {
         EthAddress, TransferToEthereum, Uint as ethUint,
     };
     use namada::types::governance::ProposalVote;
-    use namada::types::keccak::KeccakHash;
     use namada::types::hash::Hash;
+    use namada::types::keccak::KeccakHash;
     use namada::types::key::tm_consensus_key_raw_hash;
     use namada::types::storage::Epoch;
     use namada::types::time::{DateTimeUtc, DurationSecs};

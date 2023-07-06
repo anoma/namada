@@ -24,8 +24,7 @@ where
     C::Error: std::fmt::Display,
     U: WalletUtils,
 {
-    namada::ledger::signing::find_pk(client, wallet, addr, None)
-        .await
+    namada::ledger::signing::find_pk(client, wallet, addr, None).await
 }
 
 /// Given CLI arguments and some defaults, determine the rightful transaction
