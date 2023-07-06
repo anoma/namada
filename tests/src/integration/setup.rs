@@ -1,3 +1,4 @@
+use std::mem::ManuallyDrop;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -17,7 +18,7 @@ use toml::value::Table;
 
 use super::node::MockNode;
 use crate::e2e::setup::{
-    copy_wasm_to_chain_dir, get_all_wasms_hashes, TestDir,
+    copy_wasm_to_chain_dir, get_all_wasms_hashes, TestDir, ENV_VAR_KEEP_TEMP,
     SINGLE_NODE_NET_GENESIS,
 };
 
@@ -31,8 +32,18 @@ pub fn initialize_genesis(
     mut update_genesis: impl FnMut(GenesisConfig) -> GenesisConfig,
 ) -> Result<MockNode> {
     let working_dir = std::fs::canonicalize("..").unwrap();
-    // env::set_var(ENV_VAR_KEEP_TEMP, "true");
-    let test_dir = TestDir::new();
+    let keep_temp = match std::env::var(ENV_VAR_KEEP_TEMP) {
+        Ok(val) => val.to_ascii_lowercase() != "false",
+        _ => false,
+    };
+    let test_dir = {
+        std::env::set_var(ENV_VAR_KEEP_TEMP, "true");
+        let dir = TestDir::new();
+        if !keep_temp {
+            std::env::remove_var(ENV_VAR_KEEP_TEMP)
+        }
+        dir
+    };
 
     // Open the source genesis file
     let mut genesis = genesis_config::open_genesis_config(
@@ -74,16 +85,22 @@ pub fn initialize_genesis(
         },
     );
 
-    create_node(test_dir.path(), &genesis)
+    create_node(test_dir, &genesis, keep_temp)
 }
 
 /// Create a mock ledger node.
-fn create_node(base_dir: &Path, genesis: &GenesisConfig) -> Result<MockNode> {
+fn create_node(
+    base_dir: TestDir,
+    genesis: &GenesisConfig,
+    keep_temp: bool,
+) -> Result<MockNode> {
     // look up the chain id from the genesis file.
     let chain_id = if let toml::Value::String(chain_id) =
         toml::from_str::<Table>(
-            &std::fs::read_to_string(base_dir.join("global-config.toml"))
-                .unwrap(),
+            &std::fs::read_to_string(
+                base_dir.path().join("global-config.toml"),
+            )
+            .unwrap(),
         )
         .unwrap()
         .get("default_chain_id")
@@ -95,12 +112,12 @@ fn create_node(base_dir: &Path, genesis: &GenesisConfig) -> Result<MockNode> {
     };
 
     // the directory holding compiled wasm
-    let wasm_dir = base_dir.join(Path::new(&chain_id)).join("wasm");
+    let wasm_dir = base_dir.path().join(Path::new(&chain_id)).join("wasm");
     // copy compiled wasms into the wasm directory
     let chain_id = ChainId::from_str(&chain_id).unwrap();
     copy_wasm_to_chain_dir(
         &std::fs::canonicalize("..").unwrap(),
-        &base_dir.join(Path::new(&chain_id.to_string())),
+        &base_dir.path().join(Path::new(&chain_id.to_string())),
         &chain_id,
         genesis.validator.keys(),
     );
@@ -110,7 +127,7 @@ fn create_node(base_dir: &Path, genesis: &GenesisConfig) -> Result<MockNode> {
     let node = MockNode {
         shell: Arc::new(Mutex::new(Shell::new(
             config::Ledger::new(
-                base_dir,
+                base_dir.path(),
                 chain_id.clone(),
                 TendermintMode::Validator
             ),
@@ -121,7 +138,10 @@ fn create_node(base_dir: &Path, genesis: &GenesisConfig) -> Result<MockNode> {
             50 * 1024 * 1024, // 50 kiB
             Address::from_str("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
         ))),
+        test_dir: ManuallyDrop::new(base_dir),
+        keep_temp,
         _broadcast_recv: recv,
+        results: Arc::new(Mutex::new(vec![])),
     };
     let init_req = namada_apps::facade::tower_abci::request::InitChain {
         time: Some(Timestamp {
@@ -134,10 +154,13 @@ fn create_node(base_dir: &Path, genesis: &GenesisConfig) -> Result<MockNode> {
         app_state_bytes: vec![],
         initial_height: 0,
     };
-    node.shell
-        .lock()
-        .unwrap()
-        .init_chain(init_req, 1)
-        .map_err(|e| eyre!("Failed to initialize ledger: {:?}", e))?;
+    {
+        let mut locked = node.shell.lock().unwrap();
+        locked
+            .init_chain(init_req, 1)
+            .map_err(|e| eyre!("Failed to initialize ledger: {:?}", e))?;
+        locked.commit();
+    }
+
     Ok(node)
 }

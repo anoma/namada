@@ -1,22 +1,26 @@
+use std::mem::ManuallyDrop;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use color_eyre::eyre::{Report, Result};
 use lazy_static::lazy_static;
 use namada::ledger::events::log::dumb_queries;
-use namada::ledger::queries::router::test_rpc::TEST_RPC;
 use namada::ledger::queries::{
-    Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router,
+    Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
 use namada::tendermint_rpc::endpoint::abci_info;
 use namada::tendermint_rpc::SimpleRequest;
+use namada_apps::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
+use namada_apps::facade::tendermint_proto::abci::RequestProcessProposal;
 use namada_apps::facade::tendermint_rpc::endpoint::abci_info::AbciInfo;
 use namada_apps::facade::tendermint_rpc::error::Error as RpcError;
 use namada_apps::facade::{tendermint, tendermint_rpc};
-use namada_apps::node::ledger::shell::Shell;
+use namada_apps::node::ledger::shell::{ErrorCodes, Shell};
 use namada_apps::node::ledger::shims::abcipp_shim_types::shim::request::{
     FinalizeBlock, ProcessedTx,
 };
-use namada_core::ledger::storage::mockdb::MockDB;
+use namada_apps::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
+use namada_apps::node::ledger::storage;
 use namada_core::ledger::storage::{
     LastBlock, Sha256Hasher, EPOCH_SWITCH_BLOCKS_DELAY,
 };
@@ -24,52 +28,60 @@ use namada_core::types::hash::Hash;
 use namada_core::types::storage::{BlockHash, BlockHeight, Epoch, Header};
 use namada_core::types::time::DateTimeUtc;
 use regex::Regex;
+use rust_decimal::prelude::FromPrimitive;
 use tokio::sync::mpsc::UnboundedReceiver;
 
+use crate::e2e::setup::TestDir;
+
+/// Status of tx
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NodeResults {
+    /// Success
+    Ok,
+    /// Rejected by Process Proposal
+    Rejected(TxResult),
+    /// Failure in application in Finalize Block
+    Failed(ErrorCodes),
+}
+
 pub struct MockNode {
-    pub shell: Arc<Mutex<Shell<MockDB, Sha256Hasher>>>,
+    pub shell: Arc<Mutex<Shell<storage::PersistentDB, Sha256Hasher>>>,
+    pub test_dir: ManuallyDrop<TestDir>,
+    pub keep_temp: bool,
     pub _broadcast_recv: UnboundedReceiver<Vec<u8>>,
+    pub results: Arc<Mutex<Vec<NodeResults>>>,
+}
+
+impl Drop for MockNode {
+    fn drop(&mut self) {
+        unsafe {
+            if !self.keep_temp {
+                ManuallyDrop::take(&mut self.test_dir).clean_up()
+            } else {
+                ManuallyDrop::drop(&mut self.test_dir)
+            }
+        }
+    }
 }
 
 impl MockNode {
     pub fn next_epoch(&mut self) -> Epoch {
-        let next_epoch_height = self
-            .shell
-            .lock()
-            .unwrap()
-            .wl_storage
-            .storage
-            .get_last_block_height()
-            + 1;
-        self.shell
-            .lock()
-            .unwrap()
-            .wl_storage
-            .storage
-            .next_epoch_min_start_height = next_epoch_height;
-        self.shell
-            .lock()
-            .unwrap()
-            .wl_storage
-            .storage
-            .next_epoch_min_start_time = DateTimeUtc::now();
-        let next_epoch_min_start_height = self
-            .shell
-            .lock()
-            .unwrap()
-            .wl_storage
-            .storage
-            .next_epoch_min_start_height;
-        if let Some(LastBlock { height, .. }) = self
-            .shell
-            .lock()
-            .unwrap()
-            .wl_storage
-            .storage
-            .last_block
-            .as_mut()
         {
-            *height = next_epoch_min_start_height;
+            let mut locked = self.shell.lock().unwrap();
+
+            let next_epoch_height =
+                locked.wl_storage.storage.get_last_block_height() + 1;
+            locked.wl_storage.storage.next_epoch_min_start_height =
+                next_epoch_height;
+            locked.wl_storage.storage.next_epoch_min_start_time =
+                DateTimeUtc::now();
+            let next_epoch_min_start_height =
+                locked.wl_storage.storage.next_epoch_min_start_height;
+            if let Some(LastBlock { height, .. }) =
+                locked.wl_storage.storage.last_block.as_mut()
+            {
+                *height = next_epoch_min_start_height;
+            }
         }
         self.finalize_and_commit();
 
@@ -87,7 +99,7 @@ impl MockNode {
 
     /// Simultaneously call the `FinalizeBlock` and
     /// `Commit` handlers.
-    pub fn finalize_and_commit(&mut self) {
+    pub fn finalize_and_commit(&self) {
         let mut req = FinalizeBlock {
             hash: BlockHash([0u8; 32]),
             header: Header {
@@ -101,12 +113,105 @@ impl MockNode {
             votes: vec![],
         };
         req.header.time = DateTimeUtc::now();
-        self.shell
+        let mut locked = self.shell.lock().unwrap();
+        locked.finalize_block(req).expect("Test failed");
+        locked.commit();
+    }
+
+    /// Advance to a block height that allows
+    /// txs
+    fn advance_to_allowed_block(&self) {
+        loop {
+            let not_allowed =
+                { self.shell.lock().unwrap().encrypted_txs_not_allowed() };
+            if not_allowed {
+                self.finalize_and_commit();
+            } else {
+                break;
+            }
+        }
+    }
+
+    /// Send a tx through Process Proposal and Finalize Block
+    /// and register the results.
+    fn submit_tx(&self, tx_bytes: Vec<u8>) {
+        let req = RequestProcessProposal {
+            txs: vec![tx_bytes.clone()],
+            ..Default::default()
+        };
+        // The block space allocator disallows txs in certain blocks.
+        // Advance to block height that allows txs.
+        self.advance_to_allowed_block();
+        let mut locked = self.shell.lock().unwrap();
+        let mut result = locked.process_proposal(req);
+        let mut errors: Vec<_> = result
+            .tx_results
+            .iter()
+            .map(|e| {
+                if e.code == 0 {
+                    NodeResults::Ok
+                } else {
+                    NodeResults::Rejected(e.clone())
+                }
+            })
+            .collect();
+        if result.status != i32::from(ProposalStatus::Accept) {
+            self.results.lock().unwrap().append(&mut errors);
+            return;
+        }
+
+        // process proposal succeeded, now run finalize block
+        let req = FinalizeBlock {
+            hash: BlockHash([0u8; 32]),
+            header: Header {
+                hash: Hash([0; 32]),
+                time: DateTimeUtc::now(),
+                next_validators_hash: Hash([0; 32]),
+            },
+            byzantine_validators: vec![],
+            txs: vec![ProcessedTx {
+                tx: tx_bytes.clone(),
+                result: result.tx_results.remove(0),
+            }],
+            proposer_address: vec![],
+            votes: vec![],
+        };
+
+        // process the results
+        let resp = locked.finalize_block(req).unwrap();
+        let mut error_codes = resp
+            .events
+            .into_iter()
+            .map(|e| {
+                let code = ErrorCodes::from_u32(
+                    e.attributes
+                        .get("code")
+                        .map(|e| u32::from_str(e).unwrap())
+                        .unwrap_or_default(),
+                )
+                .unwrap();
+                if code == ErrorCodes::Ok {
+                    NodeResults::Ok
+                } else {
+                    NodeResults::Failed(code)
+                }
+            })
+            .collect::<Vec<_>>();
+        self.results.lock().unwrap().append(&mut error_codes);
+        locked.commit();
+    }
+
+    /// Check that applying a tx succeeded.
+    pub fn success(&self) -> bool {
+        self.results
             .lock()
             .unwrap()
-            .finalize_block(req)
-            .expect("Test failed");
-        self.shell.lock().unwrap().commit();
+            .iter()
+            .all(|r| *r == NodeResults::Ok)
+    }
+
+    pub fn clear_results(&self) {
+        self.results.lock().unwrap().clear();
     }
 }
 
@@ -121,9 +226,20 @@ impl Client for MockNode {
         height: Option<BlockHeight>,
         prove: bool,
     ) -> std::result::Result<EncodedResponseQuery, Self::Error> {
-        let rpc = TEST_RPC;
+        let rpc = RPC;
         let data = data.unwrap_or_default();
-        let height = height.unwrap_or_default();
+        let latest_height = {
+            self.shell
+                .lock()
+                .unwrap()
+                .wl_storage
+                .storage
+                .last_block
+                .as_ref()
+                .map(|b| b.height)
+                .unwrap_or_default()
+        };
+        let height = height.unwrap_or(latest_height);
         // Handle a path by invoking the `RPC.handle` directly with the
         // borrowed storage
         let request = RequestQuery {
@@ -156,14 +272,12 @@ impl Client for MockNode {
 
     /// `/abci_info`: get information about the ABCI application.
     async fn abci_info(&self) -> Result<abci_info::AbciInfo, RpcError> {
+        let locked = self.shell.lock().unwrap();
         Ok(AbciInfo {
             data: "Namada".to_string(),
             version: "test".to_string(),
             app_version: 0,
-            last_block_height: self
-                .shell
-                .lock()
-                .unwrap()
+            last_block_height: locked
                 .wl_storage
                 .storage
                 .last_block
@@ -171,10 +285,7 @@ impl Client for MockNode {
                 .map(|b| b.height.0 as u32)
                 .unwrap_or_default()
                 .into(),
-            last_block_app_hash: self
-                .shell
-                .lock()
-                .unwrap()
+            last_block_app_hash: locked
                 .wl_storage
                 .storage
                 .last_block
@@ -199,29 +310,20 @@ impl Client for MockNode {
             hash: tendermint::abci::transaction::Hash::new([0; 32]),
         };
         let tx_bytes: Vec<u8> = tx.into();
-        let req = namada_apps::facade::tendermint_proto::abci::RequestProcessProposal{
-            txs: vec![tx_bytes.clone()],
-            ..Default::default()
+        self.submit_tx(tx_bytes);
+        if !self.success() {
+            resp.code = tendermint::abci::Code::Err(1);
+            return Ok(resp);
+        } else {
+            self.clear_results();
+        }
+        let tx_bytes = {
+            let locked = self.shell.lock().unwrap();
+            locked.prepare_proposal(Default::default()).txs.remove(0)
         };
-        let mut result = self.shell.lock().unwrap().process_proposal(req);
-        resp.code = (result.status as u32).into();
-        if resp.code.is_ok() {
-            let req = FinalizeBlock {
-                hash: BlockHash([0u8; 32]),
-                header: Header {
-                    hash: Hash([0; 32]),
-                    time: DateTimeUtc::now(),
-                    next_validators_hash: Hash([0; 32]),
-                },
-                byzantine_validators: vec![],
-                txs: vec![ProcessedTx {
-                    tx: tx_bytes,
-                    result: result.tx_results.remove(0),
-                }],
-                proposer_address: vec![],
-                votes: vec![],
-            };
-            _ = self.shell.lock().unwrap().finalize_block(req);
+        self.submit_tx(tx_bytes);
+        if !self.success() {
+            resp.code = tendermint::abci::Code::Err(1);
         }
         Ok(resp)
     }
@@ -306,11 +408,8 @@ impl Client for MockNode {
     {
         let height = height.into();
         let encoded_event = EncodedEvent(height.value());
-
-        let events: Vec<_> = self
-            .shell
-            .lock()
-            .unwrap()
+        let locked = self.shell.lock().unwrap();
+        let events: Vec<_> = locked
             .event_log()
             .iter()
             .enumerate()

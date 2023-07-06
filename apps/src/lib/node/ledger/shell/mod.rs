@@ -128,7 +128,7 @@ impl From<Error> for TxResult {
 /// The different error codes that the ledger may
 /// send back to a client indicating the status
 /// of their submitted tx
-#[derive(Debug, Copy, Clone, FromPrimitive, ToPrimitive, PartialEq)]
+#[derive(Debug, Copy, Clone, FromPrimitive, ToPrimitive, PartialEq, Eq)]
 pub enum ErrorCodes {
     Ok = 0,
     InvalidDecryptedChainId = 1,
@@ -245,7 +245,7 @@ where
 {
     /// The id of the current chain
     #[allow(dead_code)]
-    chain_id: ChainId,
+    pub chain_id: ChainId,
     /// The persistent storage with write log
     pub wl_storage: WlStorage<D, H>,
     /// Gas meter for the current block
@@ -255,9 +255,9 @@ where
     byzantine_validators: Vec<Evidence>,
     /// Path to the base directory with DB data and configs
     #[allow(dead_code)]
-    base_dir: PathBuf,
+    pub base_dir: PathBuf,
     /// Path to the WASM directory for files used in the genesis block.
-    wasm_dir: PathBuf,
+    pub wasm_dir: PathBuf,
     /// Information about the running shell instance
     #[allow(dead_code)]
     mode: ShellMode,

@@ -1,3 +1,4 @@
+#![feature(internal_output_capture)]
 //! Namada integrations and WASM tests and testing helpers.
 
 #![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]

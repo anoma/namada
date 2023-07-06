@@ -1,8 +1,8 @@
-use borsh::{BorshDeserialize, BorshSerialize};
+use std::sync::Arc;
 use clap::App;
 use eyre::Report;
 use namada_apps::cli;
-use namada_apps::cli::args::CliToSdk;
+use namada_apps::cli::args::{CliToSdk, Global};
 use namada_apps::cli::cmds::{Namada, NamadaClient, NamadaClientWithContext};
 use namada_apps::cli::utils::Cmd;
 use namada_apps::cli::{args, cmds, Context};
@@ -22,40 +22,49 @@ pub fn run(
     who: Bin,
     mut args: Vec<&str>,
 ) -> Result<(), Report> {
-    let app = match who {
+    let cmd = match who {
         Bin::Node => {
             args.insert(0, "namadan");
             let app = App::new("test");
             let app = cmds::NamadaNode::add_sub(args::Global::def(app));
-            cmds::NamadaNode::add_sub(app)
+            let app = cmds::NamadaNode::add_sub(app);
+            let matches = app.clone().get_matches_from(args.clone());
+            cmds::Namada::Node(cmds::NamadaNode::parse(&matches).expect("Could not parse node command"))
         }
         Bin::Client => {
-            args.insert(0, "namadac");
+            args.insert(0, "client");
             let app = App::new("test");
             let app = cmds::NamadaClient::add_sub(args::Global::def(app));
-            cmds::NamadaClient::add_sub(app)
+            let app = cmds::NamadaClient::add_sub(app);
+            let matches = app.clone().get_matches_from(args.clone());
+            cmds::Namada::Client(cmds::NamadaClient::parse(&matches).expect("Could not parse client command"))
         }
         Bin::Wallet => {
-            args.insert(0, "namadaw");
+            args.insert(0, "wallet");
             let app = App::new("test");
             let app = cmds::NamadaWallet::add_sub(args::Global::def(app));
-            cmds::NamadaWallet::add_sub(app)
+            let app = cmds::NamadaWallet::add_sub(app);
+            let matches = app.clone().get_matches_from(args.clone());
+            cmds::Namada::Wallet(cmds::NamadaWallet::parse(&matches).expect("Could not parse wallet command"))
         }
     };
-    let matches = app.get_matches_from(args);
-    let cmd = cmds::Namada::parse(&matches).expect("Could not parse command");
-    let global_args = args::Global::parse(&matches);
     let rt = tokio::runtime::Runtime::new().unwrap();
-
-    rt.block_on(node.handle_command(cmd, global_args))
+    rt.block_on(node.handle_command(cmd))
 }
 
 impl MockNode {
     async fn handle_command(
         &self,
         cmd: cli::cmds::Namada,
-        global: args::Global,
     ) -> Result<(), Report> {
+        let global = {
+            let locked = self.shell.lock().unwrap();
+            Global {
+                chain_id: Some(locked.chain_id.clone()),
+                base_dir: locked.base_dir.clone(),
+                wasm_dir: Some(locked.wasm_dir.clone()),
+            }
+        };
         let mut ctx = Context::new(global)?;
         match cmd {
             cli::cmds::Namada::Node(cmd) => {
@@ -290,8 +299,11 @@ impl MockNode {
                         key_and_address_gen(ctx, args)
                     }
                     cmds::WalletAddress::Restore(cmds::AddressRestore(
-                                                     args,
-                                                 )) => address_or_alias_find(ctx, args),
+                        args,
+                    )) => key_and_address_restore(ctx, args),
+                    cmds::WalletAddress::Find(cmds::AddressOrAliasFind(
+                        args,
+                    )) => address_or_alias_find(ctx, args),
                     cmds::WalletAddress::List(cmds::AddressList) => {
                         address_list(ctx)
                     }
@@ -299,9 +311,6 @@ impl MockNode {
                         address_add(ctx, args)
                     }
                 },
-                        args,
-                    )) => key_and_address_restore(ctx, args),
-                    cmds::WalletAddress::Find(cmds::AddressOrAliasFind(
                 cmds::NamadaWallet::Masp(sub) => match sub {
                     cmds::WalletMasp::GenSpendKey(cmds::MaspGenSpendKey(
                         args,
@@ -374,69 +383,41 @@ impl MockNode {
     }
 }
 
-#[derive(Default, Clone, BorshSerialize, BorshDeserialize)]
-struct MockShieldedUtils;
+/// Test helper that captures stdout of
+/// a process.
+pub struct CapturedOutput<T> {
+    pub output: String,
+    pub result: T
+}
 
-// #[async_trait(?Send)]
-// impl masp::ShieldedUtils for MockShieldedUtils {
-//
-//
-// fn local_tx_prover(&self) -> LocalTxProver {
-// if let Ok(params_dir) = std::env::var(masp::ENV_VAR_MASP_PARAMS_DIR) {
-// let params_dir = std::path::PathBuf::from(params_dir);
-// let spend_path = params_dir.join(masp::SPEND_NAME);
-// let convert_path = params_dir.join(masp::CONVERT_NAME);
-// let output_path = params_dir.join(masp::OUTPUT_NAME);
-// LocalTxProver::new(&spend_path, &output_path, &convert_path)
-// } else {
-// LocalTxProver::with_default_location()
-// .expect("unable to load MASP Parameters")
-// }
-// }
-//
-// Try to load the last saved shielded context from the given context
-// directory. If this fails, then leave the current context unchanged.
-// async fn load(self) -> std::io::Result<masp::ShieldedContext<Self>> {
-// Try to load shielded context from file
-// let mut ctx_file = std::fs::File::open(self.context_dir.join(FILE_NAME))?;
-// let mut bytes = Vec::new();
-// ctx_file.read_to_end(&mut bytes)?;
-// let mut new_ctx = masp::ShieldedContext::deserialize(&mut &bytes[..])?;
-// Associate the originating context directory with the
-// shielded context under construction
-// new_ctx.utils = self;
-// Ok(new_ctx)
-// }
-//
-// Save this shielded context into its associated context directory
-// async fn save(
-// &self,
-// ctx: &masp::ShieldedContext<Self>,
-// ) -> std::io::Result<()> {
-// TODO: use mktemp crate?
-// let tmp_path = self.context_dir.join(TMP_FILE_NAME);
-// {
-// First serialize the shielded context into a temporary file.
-// Inability to create this file implies a simultaneuous write is in
-// progress. In this case, immediately fail. This is unproblematic
-// because the data intended to be stored can always be re-fetched
-// from the blockchain.
-// let mut ctx_file = OpenOptions::new()
-// .write(true)
-// .create_new(true)
-// .open(tmp_path.clone())?;
-// let mut bytes = Vec::new();
-// ctx.serialize(&mut bytes)
-// .expect("cannot serialize shielded context");
-// ctx_file.write_all(&bytes[..])?;
-// }
-// Atomically update the old shielded context file with new data.
-// Atomicity is required to prevent other client instances from reading
-// corrupt data.
-// std::fs::rename(tmp_path.clone(), self.context_dir.join(FILE_NAME))?;
-// Finally, remove our temporary file to allow future saving of shielded
-// contexts.
-// std::fs::remove_file(tmp_path)?;
-// Ok(())
-// }
-// }
+impl<T> CapturedOutput<T> {
+    pub(crate) fn of<F>(func: F) -> Self
+    where
+        F: FnOnce() -> T,
+    {
+
+        std::io::set_output_capture(Some(Default::default()));
+        let mut capture = Self {
+            output: Default::default(),
+            result: func(),
+        };
+        let captured = std::io::set_output_capture(None);
+        let captured = captured.unwrap();
+        let captured = Arc::try_unwrap(captured).unwrap();
+        let captured = captured.into_inner().unwrap();
+        capture.output = String::from_utf8(captured).unwrap();
+        capture
+    }
+
+    /// Check if the captured output contains the regex.
+    pub fn matches(&self, needle: regex::Regex) -> bool {
+        needle.captures(&self.output).is_some()
+    }
+
+    /// Check if the captured output contains the string.
+    pub fn contains(&self, needle: &str) -> bool {
+        let needle = regex::Regex::new(needle).unwrap();
+        self.matches(needle)
+    }
+
+}

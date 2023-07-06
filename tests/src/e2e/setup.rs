@@ -274,6 +274,19 @@ impl TestDir {
     pub fn path(&self) -> &Path {
         self.as_ref()
     }
+
+    /// Manually remove the test directory from the
+    /// file system.
+    pub fn clean_up(self) {
+        if let Either::Right(path) = self.0 {
+            if let Err(e) = std::fs::remove_dir_all(&path) {
+                println!(
+                    "Failed to clean up test dir at {}: {e:?}",
+                    path.to_string_lossy()
+                );
+            }
+        }
+    }
 }
 
 impl Drop for Test {
