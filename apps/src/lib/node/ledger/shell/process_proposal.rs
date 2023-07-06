@@ -2586,7 +2586,7 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
-            vec![wrapper.header_hash()],
+            wrapper.sechashes(),
             &keypair,
         )));
         let wrapper = wrapper.to_bytes();

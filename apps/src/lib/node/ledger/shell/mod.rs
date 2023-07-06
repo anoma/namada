@@ -2069,7 +2069,7 @@ mod abciplus_mempool_tests {
             // tx type declared in the header
             tx.set_data(Data::new(ext.try_to_vec().expect("Test falied")));
             tx.add_section(Section::Signature(Signature::new(
-                vec![tx.header_hash()],
+                tx.sechashes(),
                 &protocol_key,
             )));
             tx

@@ -200,7 +200,7 @@ mod protocol_txs {
             outer_tx.header.chain_id = chain_id;
             outer_tx.set_data(Data::new(tx_data));
             outer_tx.add_section(Section::Signature(Signature::new(
-                vec![outer_tx.header_hash()],
+                outer_tx.sechashes(),
                 signing_key,
             )));
             outer_tx
