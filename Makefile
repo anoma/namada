@@ -152,7 +152,7 @@ test-unit-mainnet:
 
 test-unit-debug:
 	$(debug-cargo) +$(nightly) test \
-		$(jobs)
+		$(jobs) \
 		$(TEST_FILTER) \
 		-- --skip e2e \
 		--nocapture \

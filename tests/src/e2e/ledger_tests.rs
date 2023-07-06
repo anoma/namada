@@ -115,17 +115,14 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
     validator_0.exp_string("Namada ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
-    validator_0.exp_string("Starting RPC HTTP server on")?;
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
     validator_1.exp_string("Namada ledger node started")?;
     validator_1.exp_string("This node is a validator")?;
-    validator_1.exp_string("Starting RPC HTTP server on")?;
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
     non_validator.exp_string("Namada ledger node started")?;
     non_validator.exp_string("This node is not a validator")?;
-    non_validator.exp_string("Starting RPC HTTP server on")?;
 
     wait_for_wasm_pre_compile(&mut validator_0)?;
     let bg_validator_0 = validator_0.background();
@@ -223,7 +220,6 @@ fn test_namada_shuts_down_if_tendermint_dies() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Namada ledger node started")?;
-    ledger.exp_string("Starting RPC HTTP server on")?;
 
     // 2. Kill the tendermint node
     sleep(1);
@@ -463,11 +459,31 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--node",
             &validator_one_rpc,
         ],
-        // Submit a token transfer tx (from an implicit account)
+        // Submit a token transfer tx (from an ed25519 implicit account)
         vec![
             "transfer",
             "--source",
             DAEWON,
+            "--target",
+            ALBERT,
+            "--token",
+            NAM,
+            "--amount",
+            "10.1",
+            "--gas-amount",
+            "0",
+            "--gas-limit",
+            "0",
+            "--gas-token",
+            NAM,
+            "--node",
+            &validator_one_rpc,
+        ],
+        // Submit a token transfer tx (from a secp256k1 implicit account)
+        vec![
+            "transfer",
+            "--source",
+            ESTER,
             "--target",
             ALBERT,
             "--token",
@@ -889,9 +905,6 @@ fn masp_txs_and_queries() -> Result<()> {
         ),
     ];
 
-    // Wait till epoch boundary
-    let _ep0 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
     for (tx_args, tx_result) in &txs_args {
         for &dry_run in &[true, false] {
             let tx_args = if dry_run && tx_args[0] == "transfer" {
@@ -1025,6 +1038,10 @@ fn masp_pinned_txs() -> Result<()> {
     client.exp_string("Transaction is valid")?;
     client.assert_success();
 
+    // Wait till epoch boundary
+    // This makes it more consistent for some reason?
+    let _ep2 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+
     // Assert PPA(C) has the 20 BTC transaction pinned to it
     let mut client = run!(
         test,
@@ -1137,7 +1154,7 @@ fn masp_incentives() -> Result<()> {
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     // Wait till epoch boundary
-    let ep0 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let ep0 = get_epoch(&test, &validator_one_rpc)?;
 
     // Send 20 BTC from Albert to PA(A)
     let mut client = run!(
@@ -2481,17 +2498,17 @@ fn test_bond_queries() -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
+    let (_, res) = client
+        .exp_regex(r"withdrawable starting from epoch [0-9]+")
+        .unwrap();
+    let withdraw_epoch =
+        Epoch::from_str(res.split(' ').last().unwrap()).unwrap();
     client.assert_success();
 
-    // 6. Wait for epoch 7
-    let start = Instant::now();
-    let loop_timeout = Duration::new(20, 0);
+    // 6. Wait for withdraw_epoch
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
-            panic!("Timed out waiting for epoch: {}", 7);
-        }
-        let epoch = get_epoch(&test, &validator_one_rpc)?;
-        if epoch >= Epoch(7) {
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 120)?;
+        if epoch >= withdraw_epoch {
             break;
         }
     }
@@ -2741,7 +2758,7 @@ fn pos_init_validator() -> Result<()> {
         find_bonded_stake(&test, new_validator, &non_validator_rpc)?;
     assert_eq!(
         bonded_stake,
-        token::Amount::from_str("11000.5", NATIVE_MAX_DECIMAL_PLACES).unwrap()
+        token::Amount::native_whole(validator_stake + delegation)
     );
 
     Ok(())
@@ -3071,7 +3088,7 @@ fn proposal_submission() -> Result<()> {
     // 9. Send a yay vote from a validator
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     while epoch.0 <= 13 {
-        sleep(1);
+        sleep(10);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
@@ -3136,7 +3153,7 @@ fn proposal_submission() -> Result<()> {
     // 11. Query the proposal and check the result
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     while epoch.0 <= 25 {
-        sleep(1);
+        sleep(10);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
@@ -3155,7 +3172,7 @@ fn proposal_submission() -> Result<()> {
     // 12. Wait proposal grace and check proposal author funds
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     while epoch.0 < 31 {
-        sleep(1);
+        sleep(10);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
@@ -4249,19 +4266,16 @@ fn test_genesis_validators() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
     validator_0.exp_string("Namada ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
-    validator_0.exp_string("Starting RPC HTTP server on")?;
 
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
     validator_1.exp_string("Namada ledger node started")?;
     validator_1.exp_string("This node is a validator")?;
-    validator_1.exp_string("Starting RPC HTTP server on")?;
 
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
     non_validator.exp_string("Namada ledger node started")?;
     non_validator.exp_string("This node is not a validator")?;
-    non_validator.exp_string("Starting RPC HTTP server on")?;
 
     // Wait for a first block
     validator_0.exp_string("Committed block hash")?;

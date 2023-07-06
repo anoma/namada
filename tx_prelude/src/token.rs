@@ -37,30 +37,31 @@ pub fn transfer(
             }
             None => token::balance_key(token, dest),
         };
-        let src_bal: Option<Amount> = match src {
-            Address::Internal(InternalAddress::IbcMint) => {
-                Some(Amount::max_signed())
-            }
-            Address::Internal(InternalAddress::IbcBurn) => {
-                log_string("invalid transfer from the burn address");
-                unreachable!()
-            }
-            _ => ctx.read(&src_key)?,
-        };
-        let mut src_bal = src_bal.unwrap_or_else(|| {
-            log_string(format!("src {} has no balance", src_key));
-            unreachable!()
-        });
-        src_bal.spend(&amount.amount);
-        let mut dest_bal: Amount = match dest {
-            Address::Internal(InternalAddress::IbcMint) => {
-                log_string("invalid transfer to the mint address");
-                unreachable!()
-            }
-            _ => ctx.read(&dest_key)?.unwrap_or_default(),
-        };
-        dest_bal.receive(&amount.amount);
         if src != dest {
+            let src_bal: Option<Amount> = match src {
+                Address::Internal(InternalAddress::IbcMint) => {
+                    Some(Amount::max_signed())
+                }
+                Address::Internal(InternalAddress::IbcBurn) => {
+                    log_string("invalid transfer from the burn address");
+                    unreachable!()
+                }
+                _ => ctx.read(&src_key)?,
+            };
+            let mut src_bal = src_bal.unwrap_or_else(|| {
+                log_string(format!("src {} has no balance", src_key));
+                unreachable!()
+            });
+            src_bal.spend(&amount.amount);
+            let mut dest_bal: Amount = match dest {
+                Address::Internal(InternalAddress::IbcMint) => {
+                    log_string("invalid transfer to the mint address");
+                    unreachable!()
+                }
+                _ => ctx.read(&dest_key)?.unwrap_or_default(),
+            };
+            dest_bal.receive(&amount.amount);
+
             match src {
                 Address::Internal(InternalAddress::IbcMint) => {
                     ctx.write_temp(&src_key, src_bal)?;

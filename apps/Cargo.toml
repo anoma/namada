@@ -132,6 +132,7 @@ toml.workspace = true
 tonic.workspace = true
 tower-abci.workspace = true
 tower.workspace = true
+tracing-appender.workspace = true
 tracing-log.workspace = true
 tracing-subscriber = { workspace = true, features = ["std", "json", "ansi", "tracing-log"]}
 tracing.workspace = true

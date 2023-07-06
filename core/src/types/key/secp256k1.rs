@@ -580,14 +580,14 @@ impl super::SigScheme for SigScheme {
     where
         H: 'static + StorageHasher,
     {
-        #[cfg(not(any(test, feature = "secp256k1-sign-verify")))]
+        #[cfg(not(any(test, feature = "secp256k1-sign")))]
         {
             // to avoid `unused-variables` warn
             let _ = (keypair, data);
-            panic!("\"secp256k1-sign-verify\" feature must be enabled");
+            panic!("\"secp256k1-sign\" feature must be enabled");
         }
 
-        #[cfg(any(test, feature = "secp256k1-sign-verify"))]
+        #[cfg(any(test, feature = "secp256k1-sign"))]
         {
             let message =
                 libsecp256k1::Message::parse_slice(&data.signable_hash::<H>())
@@ -605,27 +605,17 @@ impl super::SigScheme for SigScheme {
     where
         H: 'static + StorageHasher,
     {
-        #[cfg(not(any(test, feature = "secp256k1-sign-verify")))]
-        {
-            // to avoid `unused-variables` warn
-            let _ = (pk, data, sig);
-            panic!("\"secp256k1-sign-verify\" feature must be enabled");
-        }
-
-        #[cfg(any(test, feature = "secp256k1-sign-verify"))]
-        {
-            let message =
-                libsecp256k1::Message::parse_slice(&data.signable_hash::<H>())
-                    .expect("Message encoding should not fail");
-            let is_valid = libsecp256k1::verify(&message, &sig.0, &pk.0);
-            if is_valid {
-                Ok(())
-            } else {
-                Err(VerifySigError::SigVerifyError(format!(
-                    "Error verifying secp256k1 signature: {}",
-                    libsecp256k1::Error::InvalidSignature
-                )))
-            }
+        let message =
+            libsecp256k1::Message::parse_slice(&data.signable_hash::<H>())
+                .expect("Message encoding should not fail");
+        let is_valid = libsecp256k1::verify(&message, &sig.0, &pk.0);
+        if is_valid {
+            Ok(())
+        } else {
+            Err(VerifySigError::SigVerifyError(format!(
+                "Error verifying secp256k1 signature: {}",
+                libsecp256k1::Error::InvalidSignature
+            )))
         }
     }
 }

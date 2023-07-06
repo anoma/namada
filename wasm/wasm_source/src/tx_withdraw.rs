@@ -70,6 +70,12 @@ mod tests {
         key: key::common::SecretKey,
         pos_params: PosParams,
     ) -> TxResult {
+        // Remove the validator stake threshold for simplicity
+        let pos_params = PosParams {
+            validator_stake_threshold: token::Amount::default(),
+            ..pos_params
+        };
+
         let is_delegation = matches!(
             &withdraw.source, Some(source) if *source != withdraw.validator);
         let consensus_key = key::testing::keypair_1().ref_to();

@@ -330,8 +330,9 @@ where
         })
     }
 
-    /// Extension of [`PosQueries::get_consensus_validators`], which
-    /// additionally returns all Ethereum addresses of some validator.
+    /// Extension of
+    /// [`get_consensus_validators`](namada_proof_of_stake::pos_queries::PosQueriesHook::get_consensus_validators),
+    /// which additionally returns all Ethereum addresses of some validator.
     #[inline]
     pub fn get_consensus_eth_addresses(
         self,

@@ -1,0 +1,1 @@
+Namada 0.18.0 is a minor release primarily addressing a major change in the token amount representation, the addition of a new validator set category, and other minor improvements to the ledger stability.

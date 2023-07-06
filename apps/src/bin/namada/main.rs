@@ -8,7 +8,7 @@ fn main() -> Result<()> {
     color_eyre::install()?;
 
     // init logging
-    logging::init_from_env_or(LevelFilter::INFO)?;
+    let _log_guard = logging::init_from_env_or(LevelFilter::INFO)?;
 
     // run the CLI
     cli::main()
