@@ -1,6 +1,6 @@
 //! Queries router and handlers for PoS validity predicate
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::ledger::storage_api::collections::lazy_map;
@@ -11,9 +11,9 @@ use namada_proof_of_stake::types::{
 };
 use namada_proof_of_stake::{
     self, below_capacity_validator_set_handle, bond_amount, bond_handle,
-    consensus_validator_set_handle, find_all_slashes,
-    find_delegation_validators, find_delegations, read_all_validator_addresses,
-    read_pos_params, read_total_stake,
+    consensus_validator_set_handle, find_all_enqueued_slashes,
+    find_all_slashes, find_delegation_validators, find_delegations,
+    read_all_validator_addresses, read_pos_params, read_total_stake,
     read_validator_max_commission_rate_change, read_validator_stake,
     unbond_handle, validator_commission_rate_handle, validator_slashes_handle,
     validator_state_handle,
@@ -85,6 +85,9 @@ router! {POS,
 
     ( "bonds_and_unbonds" / [source: opt Address] / [validator: opt Address] )
         -> BondsAndUnbondsDetails = bonds_and_unbonds,
+
+    ( "enqueued_slashes" )
+        -> HashMap<Address, BTreeMap<Epoch, Vec<Slash>>> = enqueued_slashes,
 
     ( "all_slashes" ) -> HashMap<Address, Vec<Slash>> = slashes,
 
@@ -520,7 +523,19 @@ where
     find_all_slashes(ctx.wl_storage)
 }
 
-/// All slashes
+/// Enqueued slashes
+fn enqueued_slashes<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+) -> storage_api::Result<HashMap<Address, BTreeMap<Epoch, Vec<Slash>>>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let current_epoch = ctx.wl_storage.storage.last_epoch;
+    find_all_enqueued_slashes(ctx.wl_storage, current_epoch)
+}
+
+/// Native validator address by looking up the Tendermint address
 fn validator_by_tm_addr<D, H>(
     ctx: RequestCtx<'_, D, H>,
     tm_addr: String,
