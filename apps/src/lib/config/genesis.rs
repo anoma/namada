@@ -22,6 +22,7 @@ use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
 use namada::types::token::Denomination;
+use namada::types::uint::Uint;
 use namada::types::{storage, token};
 
 /// Genesis configuration file format
@@ -44,7 +45,7 @@ pub mod genesis_config {
     use namada::types::key::dkg_session_keys::DkgPublicKey;
     use namada::types::key::*;
     use namada::types::time::Rfc3339String;
-    use namada::types::token::{Denomination, NATIVE_MAX_DECIMAL_PLACES};
+    use namada::types::token::Denomination;
     use namada::types::uint::Uint;
     use namada::types::{storage, token};
     use serde::{Deserialize, Serialize};
@@ -124,7 +125,7 @@ pub mod genesis_config {
         pub faucet_pow_difficulty: Option<testnet_pow::Difficulty>,
         #[cfg(not(feature = "mainnet"))]
         /// Testnet faucet withdrawal limit - defaults to 1000 NAM when not set
-        pub faucet_withdrawal_limit: Option<token::Amount>,
+        pub faucet_withdrawal_limit: Option<Uint>,
         // Initial validator set
         pub validator: HashMap<String, ValidatorConfig>,
         // Token accounts present at genesis
@@ -558,9 +559,6 @@ pub mod genesis_config {
                 .expect("Missing native token address"),
         )
         .expect("Invalid address");
-        // If this line does not exist, it reads the faucet withdrawal limit as NAMNAM instead of NAM
-        #[cfg(not(feature = "mainnet"))]
-        let faucet_withdrawal_limit = faucet_withdrawal_limit.map(|a| a * Uint::exp10(NATIVE_MAX_DECIMAL_PLACES as usize));
         let validators: HashMap<String, Validator> = validator
             .iter()
             .map(|(name, cfg)| (name.clone(), load_validator(cfg, &wasm)))
@@ -735,7 +733,7 @@ pub struct Genesis {
     #[cfg(not(feature = "mainnet"))]
     pub faucet_pow_difficulty: Option<testnet_pow::Difficulty>,
     #[cfg(not(feature = "mainnet"))]
-    pub faucet_withdrawal_limit: Option<token::Amount>,
+    pub faucet_withdrawal_limit: Option<Uint>,
     pub validators: Vec<Validator>,
     pub token_accounts: Vec<TokenAccount>,
     pub established_accounts: Vec<EstablishedAccount>,
