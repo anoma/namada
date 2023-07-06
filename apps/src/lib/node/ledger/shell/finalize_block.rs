@@ -257,7 +257,7 @@ where
             ) = match &tx_header.tx_type {
                 TxType::Wrapper(wrapper) => {
                     stats.increment_wrapper_txs();
-                    let mut tx_event = Event::new_tx_event(&tx, height.0);
+                    let tx_event = Event::new_tx_event(&tx, height.0);
                     #[cfg(not(feature = "mainnet"))]
                     let has_valid_pow =
                         self.invalidate_pow_solution_if_valid(wrapper);
@@ -271,7 +271,7 @@ where
                         gas_meter,
                         #[cfg(not(feature = "mainnet"))]
                         has_valid_pow,
-                        Some(tx.clone()), //FIXME: can avoid this clone?
+                        Some(tx.clone()),
                     )
                 }
                 TxType::Decrypted(inner) => {
@@ -1189,7 +1189,7 @@ mod test_finalize_block {
                     },
                     &keypair,
                     Epoch(0),
-                    GAS_LIMIT_MULTIPLIER.into(),
+                    5_000_000.into(),
                     #[cfg(not(feature = "mainnet"))]
                     None,
                     None,
@@ -1786,10 +1786,7 @@ mod test_finalize_block {
                 info: "".into(),
             },
         };
-        let gas_limit =
-            u64::from(&wrapper.header().wrapper().unwrap().gas_limit)
-                - wrapper.to_bytes().len() as u64;
-        shell.enqueue_tx(wrapper, gas_limit);
+        shell.enqueue_tx(wrapper, 0);
 
         let event = &shell
             .finalize_block(FinalizeBlock {
@@ -1844,7 +1841,7 @@ mod test_finalize_block {
             },
             &crate::wallet::defaults::albert_keypair(),
             Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
+            5_000_000.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None,
