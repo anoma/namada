@@ -331,9 +331,8 @@ mod test_process_tx {
         ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        tx.encrypt(&Default::default());
         tx.add_section(Section::Signature(Signature::new(
-            vec![tx.header_hash(), tx.sections[0].get_hash()],
+            tx.sechashes(),
             &keypair,
         )));
 
@@ -367,7 +366,6 @@ mod test_process_tx {
         ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        tx.encrypt(&Default::default());
         let result = tx.validate_tx().expect_err("Test failed");
         assert_matches!(result, TxError::SigError(_));
     }

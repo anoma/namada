@@ -992,9 +992,8 @@ mod test_finalize_block {
             wrapper.set_code(Code::new(
                 format!("transaction data: {}", i).as_bytes().to_owned(),
             ));
-            wrapper.encrypt(&Default::default());
             wrapper.add_section(Section::Signature(Signature::new(
-                vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
+                wrapper.sechashes(),
                 &keypair,
             )));
             if i > 1 {
@@ -1067,7 +1066,6 @@ mod test_finalize_block {
         outer_tx.set_data(Data::new(
             String::from("transaction data").as_bytes().to_owned(),
         ));
-        outer_tx.encrypt(&Default::default());
         shell.enqueue_tx(outer_tx.clone());
 
         outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
@@ -1193,7 +1191,6 @@ mod test_finalize_block {
                     .as_bytes()
                     .to_owned(),
             ));
-            outer_tx.encrypt(&Default::default());
             shell.enqueue_tx(outer_tx.clone());
             outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
                 #[cfg(not(feature = "mainnet"))]
@@ -1230,12 +1227,8 @@ mod test_finalize_block {
                     .as_bytes()
                     .to_owned(),
             ));
-            wrapper_tx.encrypt(&Default::default());
             wrapper_tx.add_section(Section::Signature(Signature::new(
-                vec![
-                    wrapper_tx.header_hash(),
-                    wrapper_tx.sections[0].get_hash(),
-                ],
+                wrapper_tx.sechashes(),
                 &keypair,
             )));
             valid_txs.push(wrapper_tx.clone());
@@ -1778,7 +1771,6 @@ mod test_finalize_block {
             "Encrypted transaction data".as_bytes().to_owned(),
         ));
         let mut decrypted_tx = wrapper_tx.clone();
-        wrapper_tx.encrypt(&Default::default());
 
         decrypted_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]

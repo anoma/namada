@@ -287,8 +287,6 @@ pub async fn process_tx<
     if args.dry_run {
         expect_dry_broadcast(TxBroadcastData::DryRun(tx), client).await
     } else {
-        // Encrypt all sections not relating to the header
-        tx.encrypt(&Default::default());
         // We use this to determine when the wrapper tx makes it on-chain
         let wrapper_hash = tx.header_hash().to_string();
         // We use this to determine when the decrypted inner tx makes it
