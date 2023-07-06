@@ -15,12 +15,12 @@ pub fn transfer(
     dest: &Address,
     token: &Address,
     sub_prefix: Option<storage::Key>,
-    amount: Amount,
+    amount: DenominatedAmount,
     key: &Option<String>,
     shielded_hash: &Option<Hash>,
     shielded: &Option<Transaction>,
 ) -> TxResult {
-    if amount != Amount::default() {
+    if amount.amount != Amount::default() {
         let src_key = match &sub_prefix {
             Some(sub_prefix) => {
                 let prefix =
@@ -37,28 +37,31 @@ pub fn transfer(
             }
             None => token::balance_key(token, dest),
         };
-        let src_bal: Option<Amount> = match src {
-            Address::Internal(InternalAddress::IbcMint) => Some(Amount::max()),
-            Address::Internal(InternalAddress::IbcBurn) => {
-                log_string("invalid transfer from the burn address");
-                unreachable!()
-            }
-            _ => ctx.read(&src_key)?,
-        };
-        let mut src_bal = src_bal.unwrap_or_else(|| {
-            log_string(format!("src {} has no balance", src_key));
-            unreachable!()
-        });
-        src_bal.spend(&amount);
-        let mut dest_bal: Amount = match dest {
-            Address::Internal(InternalAddress::IbcMint) => {
-                log_string("invalid transfer to the mint address");
-                unreachable!()
-            }
-            _ => ctx.read(&dest_key)?.unwrap_or_default(),
-        };
-        dest_bal.receive(&amount);
         if src != dest {
+            let src_bal: Option<Amount> = match src {
+                Address::Internal(InternalAddress::IbcMint) => {
+                    Some(Amount::max_signed())
+                }
+                Address::Internal(InternalAddress::IbcBurn) => {
+                    log_string("invalid transfer from the burn address");
+                    unreachable!()
+                }
+                _ => ctx.read(&src_key)?,
+            };
+            let mut src_bal = src_bal.unwrap_or_else(|| {
+                log_string(format!("src {} has no balance", src_key));
+                unreachable!()
+            });
+            src_bal.spend(&amount.amount);
+            let mut dest_bal: Amount = match dest {
+                Address::Internal(InternalAddress::IbcMint) => {
+                    log_string("invalid transfer to the mint address");
+                    unreachable!()
+                }
+                _ => ctx.read(&dest_key)?.unwrap_or_default(),
+            };
+            dest_bal.receive(&amount.amount);
+
             match src {
                 Address::Internal(InternalAddress::IbcMint) => {
                     ctx.write_temp(&src_key, src_bal)?;
@@ -139,12 +142,12 @@ pub fn transfer_with_keys(
     dest_key: &storage::Key,
     amount: Amount,
 ) -> TxResult {
-    let src_owner = is_any_token_balance_key(src_key);
+    let src_owner = is_any_token_or_multitoken_balance_key(src_key);
     let src_bal: Option<Amount> = match src_owner {
-        Some(Address::Internal(InternalAddress::IbcMint)) => {
-            Some(Amount::max())
+        Some([_, Address::Internal(InternalAddress::IbcMint)]) => {
+            Some(Amount::max_signed())
         }
-        Some(Address::Internal(InternalAddress::IbcBurn)) => {
+        Some([_, Address::Internal(InternalAddress::IbcBurn)]) => {
             log_string("invalid transfer from the burn address");
             unreachable!()
         }
@@ -157,7 +160,7 @@ pub fn transfer_with_keys(
     src_bal.spend(&amount);
     let dest_owner = is_any_token_balance_key(dest_key);
     let mut dest_bal: Amount = match dest_owner {
-        Some(Address::Internal(InternalAddress::IbcMint)) => {
+        Some([_, Address::Internal(InternalAddress::IbcMint)]) => {
             log_string("invalid transfer to the mint address");
             unreachable!()
         }
@@ -165,13 +168,13 @@ pub fn transfer_with_keys(
     };
     dest_bal.receive(&amount);
     match src_owner {
-        Some(Address::Internal(InternalAddress::IbcMint)) => {
+        Some([_, Address::Internal(InternalAddress::IbcMint)]) => {
             ctx.write_temp(src_key, src_bal)?;
         }
         _ => ctx.write(src_key, src_bal)?,
     }
     match dest_owner {
-        Some(Address::Internal(InternalAddress::IbcBurn)) => {
+        Some([_, Address::Internal(InternalAddress::IbcBurn)]) => {
             ctx.write_temp(dest_key, dest_bal)?;
         }
         _ => ctx.write(dest_key, dest_bal)?,

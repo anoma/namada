@@ -877,10 +877,22 @@ mod test_rpc_handlers {
         b0i,
         b0ii,
         b1,
-        b2i(balance: token::Amount),
-        b3(a1: token::Amount, a2: token::Amount, a3: token::Amount),
-        b3i(a1: token::Amount, a2: token::Amount, a3: token::Amount),
-        b3ii(a1: token::Amount, a2: token::Amount, a3: token::Amount),
+        b2i(balance: token::DenominatedAmount),
+        b3(
+            a1: token::DenominatedAmount,
+            a2: token::DenominatedAmount,
+            a3: token::DenominatedAmount
+        ),
+        b3i(
+            a1: token::DenominatedAmount,
+            a2: token::DenominatedAmount,
+            a3: token::DenominatedAmount
+        ),
+        b3ii(
+            a1: token::DenominatedAmount,
+            a2: token::DenominatedAmount,
+            a3: token::DenominatedAmount
+        ),
         x,
         y(untyped_arg: &str),
         z(untyped_arg: &str),
@@ -890,9 +902,9 @@ mod test_rpc_handlers {
     /// support optional args.
     pub fn b3iii<D, H>(
         _ctx: RequestCtx<'_, D, H>,
-        a1: token::Amount,
-        a2: token::Amount,
-        a3: Option<token::Amount>,
+        a1: token::DenominatedAmount,
+        a2: token::DenominatedAmount,
+        a3: Option<token::DenominatedAmount>,
     ) -> storage_api::Result<String>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -909,9 +921,9 @@ mod test_rpc_handlers {
     /// support optional args.
     pub fn b3iiii<D, H>(
         _ctx: RequestCtx<'_, D, H>,
-        a1: token::Amount,
-        a2: token::Amount,
-        a3: Option<token::Amount>,
+        a1: token::DenominatedAmount,
+        a2: token::DenominatedAmount,
+        a3: Option<token::DenominatedAmount>,
         a4: Option<Epoch>,
     ) -> storage_api::Result<String>
     where
@@ -964,14 +976,14 @@ pub mod test_rpc {
             },
             ( "1" ) -> String = b1,
             ( "2" ) = {
-                ( "i" / [balance: token::Amount] ) -> String = b2i,
+                ( "i" / [balance: token::DenominatedAmount] ) -> String = b2i,
             },
-            ( "3" / [a1: token::Amount] / [a2: token::Amount] ) = {
-                ( "i" / [a3: token:: Amount] ) -> String = b3i,
-                ( [a3: token:: Amount] ) -> String = b3,
-                ( [a3: token:: Amount] / "ii" ) -> String = b3ii,
-                ( [a3: opt token::Amount] / "iii" ) -> String = b3iii,
-                ( "iiii" / [a3: opt token::Amount] / "xyz" / [a4: opt Epoch] ) -> String = b3iiii,
+            ( "3" / [a1: token::DenominatedAmount] / [a2: token::DenominatedAmount] ) = {
+                ( "i" / [a3: token::DenominatedAmount] ) -> String = b3i,
+                ( [a3: token::DenominatedAmount] ) -> String = b3,
+                ( [a3: token::DenominatedAmount] / "ii" ) -> String = b3ii,
+                ( [a3: opt token::DenominatedAmount] / "iii" ) -> String = b3iii,
+                ( "iiii" / [a3: opt token::DenominatedAmount] / "xyz" / [a4: opt Epoch] ) -> String = b3iiii,
             },
         },
         ( "c" ) -> String = (with_options c),
@@ -986,6 +998,8 @@ pub mod test_rpc {
 
 #[cfg(test)]
 mod test {
+    use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
+
     use super::test_rpc::TEST_RPC;
     use crate::ledger::queries::testing::TestClient;
     use crate::ledger::queries::{RequestCtx, RequestQuery, Router};
@@ -1027,13 +1041,25 @@ mod test {
         let result = TEST_RPC.b1(&client).await.unwrap();
         assert_eq!(result, "b1");
 
-        let balance = token::Amount::from(123_000_000);
+        let balance = token::DenominatedAmount {
+            amount: token::Amount::native_whole(123_000_000),
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
         let result = TEST_RPC.b2i(&client, &balance).await.unwrap();
         assert_eq!(result, format!("b2i/{balance}"));
 
-        let a1 = token::Amount::from(345);
-        let a2 = token::Amount::from(123_000);
-        let a3 = token::Amount::from(1_000_999);
+        let a1 = token::DenominatedAmount {
+            amount: token::Amount::native_whole(345),
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
+        let a2 = token::DenominatedAmount {
+            amount: token::Amount::native_whole(123_000),
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
+        let a3 = token::DenominatedAmount {
+            amount: token::Amount::native_whole(1_000_999),
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
         let result = TEST_RPC.b3(&client, &a1, &a2, &a3).await.unwrap();
         assert_eq!(result, format!("b3/{a1}/{a2}/{a3}"));
 

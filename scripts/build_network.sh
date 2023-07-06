@@ -61,7 +61,7 @@ check_toml_file() {
     section_prefix="validator.validator"
     # Search for the section name in the TOML file
     section_count=$(awk -F'[][]' -v prefix="$section_prefix" '/^\[.*\]$/ && $2 ~ "^" prefix { count++ } END { print count }' "$toml_file")
-    if [ ! "$section_count" -eq 0 ]; then
+    if [ ! "$(expr "$section_count" : '^[0-9]*$')" -eq 0 ]; then
         echo "At least one validator ($section_count, in fact) has been found in the toml file. Please delete all occurrences of the section '[$section_prefix]' in the TOML file and try again."
         exit 1
     fi
@@ -137,10 +137,10 @@ validate_arguments() {
     check_wasm_files
 
     if [ "$#" -eq 2 ]; then
-        BASE_DIR=$($NAMADA_BIN_DIR/namadac utils default-base-dir)
+        BASE_DIR="$($NAMADA_BIN_DIR/namadac utils default-base-dir)"
         echo "Using default BASE_DIR: $BASE_DIR"
     else [ "$#" -eq 3 ];
-        BASE_DIR=$3
+        BASE_DIR="$3"
     fi
 }
 
@@ -156,7 +156,7 @@ package() {
 
     ALIAS='validator-local-dev'
 
-    $NAMADA_BIN_DIR/namadac --base-dir $BASE_DIR utils init-genesis-validator \
+    $NAMADA_BIN_DIR/namadac --base-dir "$BASE_DIR" utils init-genesis-validator \
         --alias $ALIAS \
         --net-address 127.0.0.1:26656 \
         --commission-rate 0.1 \
@@ -166,13 +166,13 @@ package() {
     # get the directory of this script
     SCRIPT_DIR="$(dirname $0)"
     NAMADA_NETWORK_CONFIG_PATH="${CHAIN_DIR}/network-config-processed.toml"
-    $SCRIPT_DIR/utils/add_validator_shard.py $BASE_DIR/pre-genesis/$ALIAS/validator.toml $NETWORK_CONFIG_PATH >$NAMADA_NETWORK_CONFIG_PATH
+    $SCRIPT_DIR/utils/add_validator_shard.py "$BASE_DIR"/pre-genesis/$ALIAS/validator.toml $NETWORK_CONFIG_PATH >$NAMADA_NETWORK_CONFIG_PATH
 
     python3 wasm/checksums.py
 
     NAMADA_CHAIN_PREFIX='local'
 
-    $NAMADA_BIN_DIR/namadac --base-dir $BASE_DIR utils init-network \
+    $NAMADA_BIN_DIR/namadac --base-dir "$BASE_DIR" utils init-network \
         --chain-prefix "$NAMADA_CHAIN_PREFIX" \
         --genesis-path "$NAMADA_NETWORK_CONFIG_PATH" \
         --wasm-checksums-path wasm/checksums.json \
@@ -189,7 +189,7 @@ package() {
     export NAMADA_NETWORK_CONFIGS_SERVER='http://localhost:8123'
     nohup bash -c "python3 -m http.server --directory ${CHAIN_DIR} 8123 &" &&
         sleep 2 &&
-        $NAMADA_BIN_DIR/namadac --base-dir $BASE_DIR utils join-network \
+        $NAMADA_BIN_DIR/namadac --base-dir "$BASE_DIR" utils join-network \
             --genesis-validator "$ALIAS" \
             --chain-id "${NAMADA_CHAIN_ID}" \
             --dont-prefetch-wasm
@@ -197,7 +197,7 @@ package() {
     cp wasm/*.wasm "$BASE_DIR/${NAMADA_CHAIN_ID}/wasm/"
     cp wasm/checksums.json "$BASE_DIR/${NAMADA_CHAIN_ID}/wasm/"
 
-    tar -cvzf "${NAMADA_CHAIN_ID}.prebuilt.tar.gz" $BASE_DIR
+    tar -cvzf "${NAMADA_CHAIN_ID}.prebuilt.tar.gz" "$BASE_DIR"
     mv "${NAMADA_CHAIN_ID}.prebuilt.tar.gz" $CHAIN_DIR
 
     git checkout --ours -- wasm/checksums.json
@@ -217,6 +217,4 @@ main() {
     package "$@"
 }
 
-
 main "$@"
-

@@ -138,7 +138,7 @@ where
                     if let (Some(block_time), Some(exp)) = (block_time.as_ref(), &tx.header.expiration) {
                         if block_time > exp { return None }
                     }
-                    if tx.validate_header().is_ok() && tx.header().wrapper().is_some() && self.replay_protection_checks(&tx, tx_bytes.as_slice(), &mut temp_wl_storage).is_ok() {
+                    if tx.validate_tx().is_ok() && tx.header().wrapper().is_some() && self.replay_protection_checks(&tx, tx_bytes.as_slice(), &mut temp_wl_storage).is_ok() {
                         return Some(tx_bytes.clone());
                     }
                 }
@@ -283,6 +283,7 @@ mod test_prepare_proposal {
     use namada::ledger::replay_protection;
     use namada::proof_of_stake::Epoch;
     use namada::proto::{Code, Data, Header, Section, Signature};
+    use namada::types::key::RefTo;
     use namada::types::transaction::{Fee, WrapperTx};
 
     use super::*;
@@ -318,16 +319,15 @@ mod test_prepare_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction_data".as_bytes().to_owned()));
-        wrapper.encrypt(&Default::default());
         let wrapper = wrapper.to_bytes();
         #[allow(clippy::redundant_clone)]
         let req = RequestPrepareProposal {
@@ -356,12 +356,12 @@ mod test_prepare_proposal {
         for i in 0..2 {
             let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount: 0.into(),
+                    amount: Default::default(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
-                &keypair,
+                keypair.ref_to(),
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             ))));
@@ -371,10 +371,9 @@ mod test_prepare_proposal {
                 format!("transaction data: {}", i).as_bytes().to_owned(),
             ));
             tx.add_section(Section::Signature(Signature::new(
-                &tx.header_hash(),
+                tx.sechashes(),
                 &keypair,
             )));
-            tx.encrypt(&Default::default());
 
             shell.enqueue_tx(tx.clone());
             expected_wrapper.push(tx.clone());
@@ -428,9 +427,9 @@ mod test_prepare_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -438,10 +437,9 @@ mod test_prepare_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         // Write wrapper hash to storage
         let wrapper_unsigned_hash = wrapper.header_hash();
@@ -480,9 +478,9 @@ mod test_prepare_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -490,10 +488,9 @@ mod test_prepare_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         let req = RequestPrepareProposal {
             txs: vec![wrapper.to_bytes(); 2],
@@ -521,9 +518,9 @@ mod test_prepare_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -531,10 +528,9 @@ mod test_prepare_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
         let inner_unsigned_hash =
             wrapper.clone().update_header(TxType::Raw).header_hash();
 
@@ -574,9 +570,9 @@ mod test_prepare_proposal {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -586,10 +582,9 @@ mod test_prepare_proposal {
         let tx_data = Data::new("transaction data".as_bytes().to_owned());
         wrapper.set_data(tx_data.clone());
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         let mut new_wrapper =
             Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -597,9 +592,9 @@ mod test_prepare_proposal {
                     amount: 0.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
-                &keypair_2,
+                keypair_2.ref_to(),
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             ))));
@@ -608,10 +603,9 @@ mod test_prepare_proposal {
         new_wrapper.set_code(tx_code);
         new_wrapper.set_data(tx_data);
         new_wrapper.add_section(Section::Signature(Signature::new(
-            &new_wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
-        new_wrapper.encrypt(&Default::default());
 
         let req = RequestPrepareProposal {
             txs: vec![wrapper.to_bytes(), new_wrapper.to_bytes()],
@@ -639,9 +633,9 @@ mod test_prepare_proposal {
                     amount: 0.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
-                &keypair,
+                keypair.ref_to(),
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             ))));
@@ -651,10 +645,9 @@ mod test_prepare_proposal {
         wrapper_tx
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper_tx.add_section(Section::Signature(Signature::new(
-            &wrapper_tx.header_hash(),
+            wrapper_tx.sechashes(),
             &keypair,
         )));
-        wrapper_tx.encrypt(&Default::default());
 
         let time = DateTimeUtc::now();
         let block_time =

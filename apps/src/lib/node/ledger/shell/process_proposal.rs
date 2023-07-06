@@ -185,7 +185,7 @@ where
     ///   5. More decrypted txs than expected
     ///   6. A transaction could not be decrypted
     ///   7. Not enough block space was available for some tx
-    ///   8: Replay attack  
+    ///   8: Replay attack
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
@@ -231,7 +231,7 @@ where
             |tx| {
                 let tx_chain_id = tx.header.chain_id.clone();
                 let tx_expiration = tx.header.expiration;
-                if let Err(err) = tx.validate_header() {
+                if let Err(err) = tx.validate_tx() {
                     // This occurs if the wrapper / protocol tx signature is
                     // invalid
                     return Err(TxResult {
@@ -250,7 +250,7 @@ where
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
-        if let Err(err) = tx.validate_header() {
+        if let Err(err) = tx.validate_tx() {
             return TxResult {
                 code: ErrorCodes::InvalidSig.into(),
                 info: err.to_string(),
@@ -537,19 +537,18 @@ mod test_process_proposal {
         let keypair = gen_keypair();
         let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        outer_tx.encrypt(&Default::default());
         let tx = outer_tx.to_bytes();
         #[allow(clippy::redundant_clone)]
         let request = ProcessProposal {
@@ -582,12 +581,12 @@ mod test_process_proposal {
         let keypair = gen_keypair();
         let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 100.into(),
+                amount: Amount::from_uint(100, 0).expect("Test failed"),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -595,14 +594,13 @@ mod test_process_proposal {
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         outer_tx.add_section(Section::Signature(Signature::new(
-            &outer_tx.header_hash(),
+            outer_tx.sechashes(),
             &keypair,
         )));
-        outer_tx.encrypt(&Default::default());
         let mut new_tx = outer_tx.clone();
         if let TxType::Wrapper(wrapper) = &mut new_tx.header.tx_type {
             // we mount a malleability attack to try and remove the fee
-            wrapper.fee.amount = 0.into();
+            wrapper.fee.amount = Default::default();
         } else {
             panic!("Test failed")
         };
@@ -640,18 +638,18 @@ mod test_process_proposal {
             .write_log
             .write(
                 &get_wrapper_tx_fees_key(),
-                token::Amount::whole(MIN_FEE).try_to_vec().unwrap(),
+                token::Amount::native_whole(MIN_FEE).try_to_vec().unwrap(),
             )
             .unwrap();
         let keypair = gen_keypair();
         let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 1.into(),
+                amount: Amount::from_uint(1, 0).expect("Test failed"),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -659,10 +657,9 @@ mod test_process_proposal {
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         outer_tx.add_section(Section::Signature(Signature::new(
-            &outer_tx.header_hash(),
+            outer_tx.sechashes(),
             &keypair,
         )));
-        outer_tx.encrypt(&Default::default());
 
         let request = ProcessProposal {
             txs: vec![outer_tx.to_bytes()],
@@ -700,25 +697,25 @@ mod test_process_proposal {
         shell
             .wl_storage
             .write_log
-            .write(&balance_key, Amount::whole(99).try_to_vec().unwrap())
+            .write(&balance_key, Amount::native_whole(99).try_to_vec().unwrap())
             .unwrap();
         shell
             .wl_storage
             .write_log
             .write(
                 &get_wrapper_tx_fees_key(),
-                token::Amount::whole(MIN_FEE).try_to_vec().unwrap(),
+                token::Amount::native_whole(MIN_FEE).try_to_vec().unwrap(),
             )
             .unwrap();
 
         let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: Amount::whole(1_000_100),
+                amount: Amount::native_whole(1_000_100),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -726,10 +723,9 @@ mod test_process_proposal {
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         outer_tx.add_section(Section::Signature(Signature::new(
-            &outer_tx.header_hash(),
+            outer_tx.sechashes(),
             &keypair,
         )));
-        outer_tx.encrypt(&Default::default());
 
         let request = ProcessProposal {
             txs: vec![outer_tx.to_bytes()],
@@ -767,9 +763,9 @@ mod test_process_proposal {
                         amount: i.into(),
                         token: shell.wl_storage.storage.native_token.clone(),
                     },
-                    &keypair,
+                    keypair.ref_to(),
                     Epoch(0),
-                    0.into(),
+                    Default::default(),
                     #[cfg(not(feature = "mainnet"))]
                     None,
                 ))));
@@ -778,7 +774,6 @@ mod test_process_proposal {
             outer_tx.set_data(Data::new(
                 format!("transaction data: {}", i).as_bytes().to_owned(),
             ));
-            outer_tx.encrypt(&Default::default());
             shell.enqueue_tx(outer_tx.clone());
 
             outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
@@ -823,19 +818,18 @@ mod test_process_proposal {
 
         let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
         tx.header.chain_id = shell.chain_id.clone();
         tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        tx.encrypt(&Default::default());
         shell.enqueue_tx(tx.clone());
 
         tx.header.tx_type = TxType::Decrypted(DecryptedTx::Undecryptable);
@@ -871,12 +865,12 @@ mod test_process_proposal {
 
         let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -885,7 +879,6 @@ mod test_process_proposal {
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         tx.set_code_sechash(Hash([0u8; 32]));
         tx.set_data_sechash(Hash([0u8; 32]));
-        tx.encrypt(&Default::default());
 
         shell.enqueue_tx(tx.clone());
 
@@ -915,12 +908,12 @@ mod test_process_proposal {
         // not valid tx bytes
         let wrapper = WrapperTx {
             fee: Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             pk: keypair.ref_to(),
             epoch: Epoch(0),
-            gas_limit: 0.into(),
+            gas_limit: Default::default(),
             #[cfg(not(feature = "mainnet"))]
             pow_solution: None,
         };
@@ -1022,12 +1015,12 @@ mod test_process_proposal {
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1035,10 +1028,9 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         // Write wrapper hash to storage
         let wrapper_unsigned_hash = wrapper.header_hash();
@@ -1089,17 +1081,20 @@ mod test_process_proposal {
         shell
             .wl_storage
             .storage
-            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
+            .write(
+                &balance_key,
+                Amount::native_whole(1000).try_to_vec().unwrap(),
+            )
             .unwrap();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1107,10 +1102,9 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         // Run validation
         let request = ProcessProposal {
@@ -1152,12 +1146,12 @@ mod test_process_proposal {
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1165,10 +1159,9 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
         let inner_unsigned_hash =
             wrapper.clone().update_header(TxType::Raw).header_hash();
 
@@ -1220,7 +1213,10 @@ mod test_process_proposal {
         shell
             .wl_storage
             .storage
-            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
+            .write(
+                &balance_key,
+                Amount::native_whole(1000).try_to_vec().unwrap(),
+            )
             .unwrap();
 
         // Add unshielded balance for fee payment
@@ -1231,17 +1227,20 @@ mod test_process_proposal {
         shell
             .wl_storage
             .storage
-            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
+            .write(
+                &balance_key,
+                Amount::native_whole(1000).try_to_vec().unwrap(),
+            )
             .unwrap();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1250,29 +1249,27 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         let mut new_wrapper = wrapper.clone();
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
         let inner_unsigned_hash =
             wrapper.clone().update_header(TxType::Raw).header_hash();
 
         new_wrapper.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair_2,
+            keypair_2.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
         new_wrapper.add_section(Section::Signature(Signature::new(
-            &new_wrapper.header_hash(),
+            new_wrapper.sechashes(),
             &keypair,
         )));
-        new_wrapper.encrypt(&Default::default());
 
         // Run validation
         let request = ProcessProposal {
@@ -1307,12 +1304,12 @@ mod test_process_proposal {
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1322,17 +1319,20 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         let mut protocol_tx = wrapper.clone();
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         protocol_tx.update_header(TxType::Protocol(Box::new(ProtocolTx {
             pk: keypair.ref_to(),
             tx: ProtocolTxType::EthereumStateUpdate,
         })));
         protocol_tx.add_section(Section::Signature(Signature::new(
-            &protocol_tx.header_hash(),
+            vec![
+                protocol_tx.header_hash(),
+                protocol_tx.sections[0].get_hash(),
+                protocol_tx.sections[1].get_hash(),
+            ],
             &keypair,
         )));
 
@@ -1371,12 +1371,12 @@ mod test_process_proposal {
         let wrong_chain_id = ChainId("Wrong chain id".to_string());
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: token::Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1385,13 +1385,12 @@ mod test_process_proposal {
         wrapper
             .set_data(Data::new("new transaction data".as_bytes().to_owned()));
         let mut decrypted = wrapper.clone();
-        wrapper.encrypt(&Default::default());
 
         decrypted.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
             has_valid_pow: false,
         }));
         decrypted.add_section(Section::Signature(Signature::new(
-            &decrypted.header_hash(),
+            decrypted.sechashes(),
             &keypair,
         )));
         let wrapper_in_queue = TxInQueue {
@@ -1432,12 +1431,12 @@ mod test_process_proposal {
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: token::Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1446,10 +1445,9 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         // Run validation
         let request = ProcessProposal {
@@ -1475,12 +1473,12 @@ mod test_process_proposal {
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: token::Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1490,13 +1488,12 @@ mod test_process_proposal {
         wrapper
             .set_data(Data::new("new transaction data".as_bytes().to_owned()));
         let mut decrypted = wrapper.clone();
-        wrapper.encrypt(&Default::default());
 
         decrypted.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
             has_valid_pow: false,
         }));
         decrypted.add_section(Section::Signature(Signature::new(
-            &decrypted.header_hash(),
+            decrypted.sechashes(),
             &keypair,
         )));
         let wrapper_in_queue = TxInQueue {

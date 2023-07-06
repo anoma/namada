@@ -20,6 +20,7 @@ mainnet = [
 abciplus = [
   "namada/abciplus",
   "namada/ibc-mocks",
+  "namada_apps/abciplus",
   "namada_vp_prelude/abciplus",
   "namada_tx_prelude/abciplus",
 ]
@@ -41,8 +42,6 @@ ibc-relayer.workspace = true
 lazy_static = "1.4.0"
 prost.workspace = true
 regex.workspace = true
-rust_decimal_macros.workspace = true
-rust_decimal.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 tempfile.workspace = true

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use data_encoding::HEXUPPER;
 use namada::ledger::parameters::storage as params_storage;
-use namada::ledger::pos::types::{decimal_mult_u64, into_tm_voting_power};
+use namada::ledger::pos::types::into_tm_voting_power;
 use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ledger::storage_api::token::credit_tokens;
@@ -18,10 +18,10 @@ use namada::proof_of_stake::{
     write_last_block_proposer_address,
 };
 use namada::types::address::Address;
+use namada::types::dec::Dec;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::types::token::{total_supply_key, Amount};
-use rust_decimal::prelude::Decimal;
 
 use super::governance::execute_governance_proposals;
 use super::*;
@@ -107,8 +107,10 @@ where
         }
 
         // Invariant: This has to be applied after
-        // `copy_validator_sets_and_positions` if we're starting a new epoch
+        // `copy_validator_sets_and_positions` and before `self.update_epoch`.
         self.record_slashes_from_evidence();
+        // Invariant: This has to be applied after
+        // `copy_validator_sets_and_positions` if we're starting a new epoch
         if new_epoch {
             self.process_slashes();
         }
@@ -157,7 +159,7 @@ where
                 continue;
             }
 
-            let tx = if let Ok(()) = tx.validate_header() {
+            let tx = if tx.validate_tx().is_ok() {
                 tx
             } else {
                 tracing::error!(
@@ -268,7 +270,9 @@ where
                                     .storage
                                     .write(
                                         &balance_key,
-                                        Amount::from(0).try_to_vec().unwrap(),
+                                        Amount::native_whole(0)
+                                            .try_to_vec()
+                                            .unwrap(),
                                     )
                                     .unwrap();
                                 tx_event["info"] =
@@ -307,7 +311,7 @@ where
                         DecryptedTx::Decrypted { has_valid_pow: _ } => {
                             if let Some(code_sec) = tx
                                 .get_section(tx.code_sechash())
-                                .and_then(Section::code_sec)
+                                .and_then(|x| Section::code_sec(x.as_ref()))
                             {
                                 stats.increment_tx_type(
                                     code_sec.code.hash().to_string(),
@@ -315,9 +319,15 @@ where
                             }
                         }
                         DecryptedTx::Undecryptable => {
+                            tracing::info!(
+                                "Tx with hash {} was un-decryptable",
+                                wrapper_hash
+                            );
+                            event["info"] = "Transaction is invalid.".into();
                             event["log"] =
                                 "Transaction could not be decrypted.".into();
                             event["code"] = ErrorCodes::Undecryptable.into();
+                            continue;
                         }
                     }
                     (event, Some(wrapper_hash))
@@ -624,19 +634,19 @@ where
         let epochs_per_year: u64 = self
             .read_storage_key(&params_storage::get_epochs_per_year_key())
             .expect("Epochs per year should exist in storage");
-        let pos_p_gain_nom: Decimal = self
+        let pos_p_gain_nom: Dec = self
             .read_storage_key(&params_storage::get_pos_gain_p_key())
             .expect("PoS P-gain factor should exist in storage");
-        let pos_d_gain_nom: Decimal = self
+        let pos_d_gain_nom: Dec = self
             .read_storage_key(&params_storage::get_pos_gain_d_key())
             .expect("PoS D-gain factor should exist in storage");
 
-        let pos_last_staked_ratio: Decimal = self
+        let pos_last_staked_ratio: Dec = self
             .read_storage_key(&params_storage::get_staked_ratio_key())
             .expect("PoS staked ratio should exist in storage");
-        let pos_last_inflation_amount: u64 = self
+        let pos_last_inflation_amount: token::Amount = self
             .read_storage_key(&params_storage::get_pos_inflation_amount_key())
-            .expect("PoS inflation rate should exist in storage");
+            .expect("PoS inflation amount should exist in storage");
         // Read from PoS storage
         let total_tokens = self
             .read_storage_key(&total_supply_key(&staking_token_address(
@@ -650,12 +660,12 @@ where
 
         // TODO: properly fetch these values (arbitrary for now)
         let masp_locked_supply: Amount = Amount::default();
-        let masp_locked_ratio_target = Decimal::new(5, 1);
-        let masp_locked_ratio_last = Decimal::new(5, 1);
-        let masp_max_inflation_rate = Decimal::new(2, 1);
-        let masp_last_inflation_rate = Decimal::new(12, 2);
-        let masp_p_gain = Decimal::new(1, 1);
-        let masp_d_gain = Decimal::new(1, 1);
+        let masp_locked_ratio_target = Dec::new(5, 1).expect("Cannot fail");
+        let masp_locked_ratio_last = Dec::new(5, 1).expect("Cannot fail");
+        let masp_max_inflation_rate = Dec::new(2, 1).expect("Cannot fail");
+        let masp_last_inflation_rate = Dec::new(12, 2).expect("Cannot fail");
+        let masp_p_gain = Dec::new(1, 1).expect("Cannot fail");
+        let masp_d_gain = Dec::new(1, 1).expect("Cannot fail");
 
         // Run rewards PD controller
         let pos_controller = inflation::RewardsController {
@@ -664,9 +674,7 @@ where
             locked_ratio_target: pos_locked_ratio_target,
             locked_ratio_last: pos_last_staked_ratio,
             max_reward_rate: pos_max_inflation_rate,
-            last_inflation_amount: token::Amount::from(
-                pos_last_inflation_amount,
-            ),
+            last_inflation_amount: pos_last_inflation_amount,
             p_gain_nom: pos_p_gain_nom,
             d_gain_nom: pos_d_gain_nom,
             epochs_per_year,
@@ -711,15 +719,14 @@ where
         //
         // TODO: think about changing the reward to Decimal
         let mut reward_tokens_remaining = inflation;
-        let mut new_rewards_products: HashMap<Address, (Decimal, Decimal)> =
+        let mut new_rewards_products: HashMap<Address, (Dec, Dec)> =
             HashMap::new();
         for acc in rewards_accumulator_handle().iter(&self.wl_storage)? {
             let (address, value) = acc?;
 
             // Get reward token amount for this validator
-            let fractional_claim =
-                value / Decimal::from(num_blocks_in_last_epoch);
-            let reward = decimal_mult_u64(fractional_claim, inflation);
+            let fractional_claim = value / num_blocks_in_last_epoch;
+            let reward = fractional_claim * inflation;
 
             // Get validator data at the last epoch
             let stake = read_validator_stake(
@@ -728,25 +735,25 @@ where
                 &address,
                 last_epoch,
             )?
-            .map(Decimal::from)
+            .map(Dec::from)
             .unwrap_or_default();
             let last_rewards_product =
                 validator_rewards_products_handle(&address)
                     .get(&self.wl_storage, &last_epoch)?
-                    .unwrap_or(Decimal::ONE);
+                    .unwrap_or_else(Dec::one);
             let last_delegation_product =
                 delegator_rewards_products_handle(&address)
                     .get(&self.wl_storage, &last_epoch)?
-                    .unwrap_or(Decimal::ONE);
+                    .unwrap_or_else(Dec::one);
             let commission_rate = validator_commission_rate_handle(&address)
                 .get(&self.wl_storage, last_epoch, &params)?
                 .expect("Should be able to find validator commission rate");
 
-            let new_product = last_rewards_product
-                * (Decimal::ONE + Decimal::from(reward) / stake);
+            let new_product =
+                last_rewards_product * (Dec::one() + Dec::from(reward) / stake);
             let new_delegation_product = last_delegation_product
-                * (Decimal::ONE
-                    + (Decimal::ONE - commission_rate) * Decimal::from(reward)
+                * (Dec::one()
+                    + (Dec::one() - commission_rate) * Dec::from(reward)
                         / stake);
             new_rewards_products
                 .insert(address, (new_product, new_delegation_product));
@@ -772,11 +779,11 @@ where
         let staking_token = staking_token_address(&self.wl_storage);
 
         // Mint tokens to the PoS account for the last epoch's inflation
-        let pos_reward_tokens =
-            Amount::from(inflation - reward_tokens_remaining);
+        let pos_reward_tokens = inflation - reward_tokens_remaining;
         tracing::info!(
             "Minting tokens for PoS rewards distribution into the PoS \
-             account. Amount: {pos_reward_tokens}.",
+             account. Amount: {}.",
+            pos_reward_tokens.to_string_native(),
         );
         credit_tokens(
             &mut self.wl_storage,
@@ -785,11 +792,12 @@ where
             pos_reward_tokens,
         )?;
 
-        if reward_tokens_remaining > 0 {
-            let amount = Amount::from(reward_tokens_remaining);
+        if reward_tokens_remaining > token::Amount::zero() {
+            let amount = Amount::from_uint(reward_tokens_remaining, 0).unwrap();
             tracing::info!(
                 "Minting tokens remaining from PoS rewards distribution into \
-                 the Governance account. Amount: {amount}.",
+                 the Governance account. Amount: {}.",
+                amount.to_string_native()
             );
             credit_tokens(
                 &mut self.wl_storage,
@@ -907,8 +915,7 @@ mod test_finalize_block {
         is_validator_slashes_key, slashes_prefix,
     };
     use namada::proof_of_stake::types::{
-        decimal_mult_amount, BondId, SlashType, ValidatorState,
-        WeightedValidator,
+        BondId, SlashType, ValidatorState, WeightedValidator,
     };
     use namada::proof_of_stake::{
         enqueued_slashes_handle, get_num_consensus_validators,
@@ -918,17 +925,19 @@ mod test_finalize_block {
         validator_slashes_handle, validator_state_handle, write_pos_params,
     };
     use namada::proto::{Code, Data, Section, Signature};
+    use namada::types::dec::POS_DECIMAL_PRECISION;
     use namada::types::governance::ProposalVote;
+    use namada::types::hash::Hash;
     use namada::types::key::tm_consensus_key_raw_hash;
     use namada::types::storage::Epoch;
     use namada::types::time::DurationSecs;
-    use namada::types::token::Amount;
+    use namada::types::token::{Amount, NATIVE_MAX_DECIMAL_PLACES};
     use namada::types::transaction::governance::{
         InitProposalData, ProposalType, VoteProposalData,
     };
     use namada::types::transaction::{Fee, WrapperTx, MIN_FEE};
+    use namada::types::uint::Uint;
     use namada_test_utils::TestWasms;
-    use rust_decimal_macros::dec;
     use test_log::test;
 
     use super::*;
@@ -958,7 +967,10 @@ mod test_finalize_block {
         shell
             .wl_storage
             .storage
-            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
+            .write(
+                &balance_key,
+                Amount::native_whole(1000).try_to_vec().unwrap(),
+            )
             .unwrap();
 
         // create some wrapper txs
@@ -969,9 +981,9 @@ mod test_finalize_block {
                         amount: MIN_FEE.into(),
                         token: shell.wl_storage.storage.native_token.clone(),
                     },
-                    &keypair,
+                    keypair.ref_to(),
                     Epoch(0),
-                    0.into(),
+                    Default::default(),
                     #[cfg(not(feature = "mainnet"))]
                     None,
                 ))));
@@ -981,10 +993,9 @@ mod test_finalize_block {
                 format!("transaction data: {}", i).as_bytes().to_owned(),
             ));
             wrapper.add_section(Section::Signature(Signature::new(
-                &wrapper.header_hash(),
+                wrapper.sechashes(),
                 &keypair,
             )));
-            wrapper.encrypt(&Default::default());
             if i > 1 {
                 processed_txs.push(ProcessedTx {
                     tx: wrapper.to_bytes(),
@@ -1041,12 +1052,12 @@ mod test_finalize_block {
         let keypair = gen_keypair();
         let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1055,7 +1066,6 @@ mod test_finalize_block {
         outer_tx.set_data(Data::new(
             String::from("transaction data").as_bytes().to_owned(),
         ));
-        outer_tx.encrypt(&Default::default());
         shell.enqueue_tx(outer_tx.clone());
 
         outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
@@ -1096,12 +1106,12 @@ mod test_finalize_block {
         // not valid tx bytes
         let wrapper = WrapperTx {
             fee: Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             pk: keypair.ref_to(),
             epoch: Epoch(0),
-            gas_limit: 0.into(),
+            gas_limit: Default::default(),
             #[cfg(not(feature = "mainnet"))]
             pow_solution: None,
         };
@@ -1153,7 +1163,10 @@ mod test_finalize_block {
         shell
             .wl_storage
             .storage
-            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
+            .write(
+                &balance_key,
+                Amount::native_whole(1000).try_to_vec().unwrap(),
+            )
             .unwrap();
 
         // create two decrypted txs
@@ -1165,9 +1178,9 @@ mod test_finalize_block {
                         amount: MIN_FEE.into(),
                         token: shell.wl_storage.storage.native_token.clone(),
                     },
-                    &keypair,
+                    keypair.ref_to(),
                     Epoch(0),
-                    0.into(),
+                    Default::default(),
                     #[cfg(not(feature = "mainnet"))]
                     None,
                 ))));
@@ -1178,7 +1191,6 @@ mod test_finalize_block {
                     .as_bytes()
                     .to_owned(),
             ));
-            outer_tx.encrypt(&Default::default());
             shell.enqueue_tx(outer_tx.clone());
             outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
                 #[cfg(not(feature = "mainnet"))]
@@ -1202,9 +1214,9 @@ mod test_finalize_block {
                         amount: MIN_FEE.into(),
                         token: shell.wl_storage.storage.native_token.clone(),
                     },
-                    &keypair,
+                    keypair.ref_to(),
                     Epoch(0),
-                    0.into(),
+                    Default::default(),
                     #[cfg(not(feature = "mainnet"))]
                     None,
                 ))));
@@ -1216,10 +1228,9 @@ mod test_finalize_block {
                     .to_owned(),
             ));
             wrapper_tx.add_section(Section::Signature(Signature::new(
-                &wrapper_tx.header_hash(),
+                wrapper_tx.sechashes(),
                 &keypair,
             )));
-            wrapper_tx.encrypt(&Default::default());
             valid_txs.push(wrapper_tx.clone());
             processed_txs.push(ProcessedTx {
                 tx: wrapper_tx.to_bytes(),
@@ -1302,7 +1313,7 @@ mod test_finalize_block {
 
             let proposal = InitProposalData {
                 id: Some(proposal_id),
-                content: vec![],
+                content: Hash::default(),
                 author: validator.clone(),
                 voting_start_epoch: Epoch::default(),
                 voting_end_epoch: Epoch::default().next(),
@@ -1313,6 +1324,8 @@ mod test_finalize_block {
             storage_api::governance::init_proposal(
                 &mut shell.wl_storage,
                 proposal,
+                vec![],
+                None,
             )
             .unwrap();
 
@@ -1345,7 +1358,7 @@ mod test_finalize_block {
                 .wl_storage
                 .storage
                 .db
-                .iter_optional_prefix(None)
+                .iter_prefix(None)
                 .map(|(key, val, _gas)| (key, val))
                 .collect()
         };
@@ -1380,7 +1393,7 @@ mod test_finalize_block {
         let votes = vec![VoteInfo {
             validator: Some(Validator {
                 address: proposer_address.clone(),
-                power: u64::from(val_stake) as i64,
+                power: u128::try_from(val_stake).expect("Test failed") as i64,
             }),
             signed_last_block: true,
         }];
@@ -1458,28 +1471,36 @@ mod test_finalize_block {
             VoteInfo {
                 validator: Some(Validator {
                     address: pkh1.clone(),
-                    power: u64::from(val1.bonded_stake) as i64,
+                    power: u128::try_from(val1.bonded_stake)
+                        .expect("Test failed")
+                        as i64,
                 }),
                 signed_last_block: true,
             },
             VoteInfo {
                 validator: Some(Validator {
                     address: pkh2.clone(),
-                    power: u64::from(val2.bonded_stake) as i64,
+                    power: u128::try_from(val2.bonded_stake)
+                        .expect("Test failed")
+                        as i64,
                 }),
                 signed_last_block: true,
             },
             VoteInfo {
                 validator: Some(Validator {
                     address: pkh3.clone(),
-                    power: u64::from(val3.bonded_stake) as i64,
+                    power: u128::try_from(val3.bonded_stake)
+                        .expect("Test failed")
+                        as i64,
                 }),
                 signed_last_block: true,
             },
             VoteInfo {
                 validator: Some(Validator {
                     address: pkh4.clone(),
-                    power: u64::from(val4.bonded_stake) as i64,
+                    power: u128::try_from(val4.bonded_stake)
+                        .expect("Test failed")
+                        as i64,
                 }),
                 signed_last_block: true,
             },
@@ -1490,18 +1511,18 @@ mod test_finalize_block {
         let rewards_prod_3 = validator_rewards_products_handle(&val3.address);
         let rewards_prod_4 = validator_rewards_products_handle(&val4.address);
 
-        let is_decimal_equal_enough =
-            |target: Decimal, to_compare: Decimal| -> bool {
-                // also return false if to_compare > target since this should
-                // never happen for the use cases
-                if to_compare < target {
-                    let tolerance = Decimal::new(1, 9);
-                    let res = Decimal::ONE - to_compare / target;
-                    res < tolerance
-                } else {
-                    to_compare == target
-                }
-            };
+        let is_decimal_equal_enough = |target: Dec, to_compare: Dec| -> bool {
+            // also return false if to_compare > target since this should
+            // never happen for the use cases
+            if to_compare < target {
+                let tolerance = Dec::new(1, POS_DECIMAL_PRECISION / 2)
+                    .expect("Dec creation failed");
+                let res = Dec::one() - to_compare / target;
+                res < tolerance
+            } else {
+                to_compare == target
+            }
+        };
 
         // NOTE: Want to manually set the block proposer and the vote
         // information in a FinalizeBlock object. In non-abcipp mode,
@@ -1534,7 +1555,7 @@ mod test_finalize_block {
         // Val1 was the proposer, so its reward should be larger than all
         // others, which should themselves all be equal
         let acc_sum = get_rewards_sum(&shell.wl_storage);
-        assert!(is_decimal_equal_enough(Decimal::ONE, acc_sum));
+        assert!(is_decimal_equal_enough(Dec::one(), acc_sum));
         let acc = get_rewards_acc(&shell.wl_storage);
         assert_eq!(acc.get(&val2.address), acc.get(&val3.address));
         assert_eq!(acc.get(&val2.address), acc.get(&val4.address));
@@ -1553,7 +1574,7 @@ mod test_finalize_block {
         // should be the same as val1 now. Val3 and val4 should be equal as
         // well.
         let acc_sum = get_rewards_sum(&shell.wl_storage);
-        assert!(is_decimal_equal_enough(Decimal::TWO, acc_sum));
+        assert!(is_decimal_equal_enough(Dec::two(), acc_sum));
         let acc = get_rewards_acc(&shell.wl_storage);
         assert_eq!(acc.get(&val1.address), acc.get(&val2.address));
         assert_eq!(acc.get(&val3.address), acc.get(&val4.address));
@@ -1567,28 +1588,36 @@ mod test_finalize_block {
             VoteInfo {
                 validator: Some(Validator {
                     address: pkh1.clone(),
-                    power: u64::from(val1.bonded_stake) as i64,
+                    power: u128::try_from(val1.bonded_stake)
+                        .expect("Test failed")
+                        as i64,
                 }),
                 signed_last_block: true,
             },
             VoteInfo {
                 validator: Some(Validator {
                     address: pkh2,
-                    power: u64::from(val2.bonded_stake) as i64,
+                    power: u128::try_from(val2.bonded_stake)
+                        .expect("Test failed")
+                        as i64,
                 }),
                 signed_last_block: true,
             },
             VoteInfo {
                 validator: Some(Validator {
                     address: pkh3,
-                    power: u64::from(val3.bonded_stake) as i64,
+                    power: u128::try_from(val3.bonded_stake)
+                        .expect("Test failed")
+                        as i64,
                 }),
                 signed_last_block: true,
             },
             VoteInfo {
                 validator: Some(Validator {
                     address: pkh4,
-                    power: u64::from(val4.bonded_stake) as i64,
+                    power: u128::try_from(val4.bonded_stake)
+                        .expect("Test failed")
+                        as i64,
                 }),
                 signed_last_block: false,
             },
@@ -1602,7 +1631,7 @@ mod test_finalize_block {
         assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_4.is_empty(&shell.wl_storage).unwrap());
         let acc_sum = get_rewards_sum(&shell.wl_storage);
-        assert!(is_decimal_equal_enough(dec!(3), acc_sum));
+        assert!(is_decimal_equal_enough(Dec::new(3, 0).unwrap(), acc_sum));
         let acc = get_rewards_acc(&shell.wl_storage);
         assert!(
             acc.get(&val1.address).cloned().unwrap()
@@ -1662,7 +1691,7 @@ mod test_finalize_block {
         assert!(rp3 > rp4);
     }
 
-    fn get_rewards_acc<S>(storage: &S) -> HashMap<Address, Decimal>
+    fn get_rewards_acc<S>(storage: &S) -> HashMap<Address, Dec>
     where
         S: StorageRead,
     {
@@ -1670,18 +1699,18 @@ mod test_finalize_block {
             .iter(storage)
             .unwrap()
             .map(|elem| elem.unwrap())
-            .collect::<HashMap<Address, Decimal>>()
+            .collect::<HashMap<Address, Dec>>()
     }
 
-    fn get_rewards_sum<S>(storage: &S) -> Decimal
+    fn get_rewards_sum<S>(storage: &S) -> Dec
     where
         S: StorageRead,
     {
         let acc = get_rewards_acc(storage);
         if acc.is_empty() {
-            Decimal::ZERO
+            Dec::zero()
         } else {
-            acc.iter().fold(Decimal::default(), |sum, elm| sum + *elm.1)
+            acc.iter().fold(Dec::zero(), |sum, elm| sum + *elm.1)
         }
     }
 
@@ -1730,9 +1759,9 @@ mod test_finalize_block {
                     amount: 0.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
-                &keypair,
+                keypair.ref_to(),
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             ))));
@@ -1742,7 +1771,6 @@ mod test_finalize_block {
             "Encrypted transaction data".as_bytes().to_owned(),
         ));
         let mut decrypted_tx = wrapper_tx.clone();
-        wrapper_tx.encrypt(&Default::default());
 
         decrypted_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]
@@ -2029,8 +2057,8 @@ mod test_finalize_block {
 
         // Each validator has equal weight in this test, and two have been
         // slashed
-        let frac = dec!(2) / dec!(7);
-        let cubic_rate = dec!(9) * frac * frac;
+        let frac = Dec::two() / Dec::new(7, 0).unwrap();
+        let cubic_rate = Dec::new(9, 0).unwrap() * frac * frac;
 
         assert_eq!(slash1.rate, cubic_rate);
         assert_eq!(slash2.rate, cubic_rate);
@@ -2082,10 +2110,10 @@ mod test_finalize_block {
         let total_stake =
             read_total_stake(&shell.wl_storage, &params, pipeline_epoch)?;
 
-        let expected_slashed = decimal_mult_amount(cubic_rate, initial_stake);
+        let expected_slashed = cubic_rate * initial_stake;
         assert_eq!(stake1, initial_stake - expected_slashed);
         assert_eq!(stake2, initial_stake - expected_slashed);
-        assert_eq!(total_stake, total_initial_stake - 2 * expected_slashed);
+        assert_eq!(total_stake, total_initial_stake - 2u64 * expected_slashed);
 
         // Unjail one of the validators
         let current_epoch = shell.wl_storage.storage.block.epoch;
@@ -2219,13 +2247,13 @@ mod test_finalize_block {
 
         // Make an account with balance and delegate some tokens
         let delegator = address::testing::gen_implicit_address();
-        let del_1_amount = token::Amount::whole(67_231);
+        let del_1_amount = token::Amount::native_whole(67_231);
         let staking_token = shell.wl_storage.storage.native_token.clone();
         credit_tokens(
             &mut shell.wl_storage,
             &staking_token,
             &delegator,
-            token::Amount::whole(200_000),
+            token::Amount::native_whole(200_000),
         )
         .unwrap();
         namada_proof_of_stake::bond_tokens(
@@ -2238,7 +2266,7 @@ mod test_finalize_block {
         .unwrap();
 
         // Self-unbond
-        let self_unbond_1_amount = token::Amount::whole(154_654);
+        let self_unbond_1_amount = token::Amount::native_whole(154_654);
         namada_proof_of_stake::unbond_tokens(
             &mut shell.wl_storage,
             None,
@@ -2281,7 +2309,7 @@ mod test_finalize_block {
         );
         let current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
         println!("\nUnbonding in epoch 2");
-        let del_unbond_1_amount = token::Amount::whole(18_000);
+        let del_unbond_1_amount = token::Amount::native_whole(18_000);
         namada_proof_of_stake::unbond_tokens(
             &mut shell.wl_storage,
             Some(&delegator),
@@ -2327,7 +2355,7 @@ mod test_finalize_block {
         let current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
         println!("\nBonding in epoch 3");
 
-        let self_bond_1_amount = token::Amount::whole(9_123);
+        let self_bond_1_amount = token::Amount::native_whole(9_123);
         namada_proof_of_stake::bond_tokens(
             &mut shell.wl_storage,
             None,
@@ -2346,7 +2374,7 @@ mod test_finalize_block {
         let current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
         assert_eq!(current_epoch.0, 4_u64);
 
-        let self_unbond_2_amount = token::Amount::whole(15_000);
+        let self_unbond_2_amount = token::Amount::native_whole(15_000);
         namada_proof_of_stake::unbond_tokens(
             &mut shell.wl_storage,
             None,
@@ -2367,7 +2395,7 @@ mod test_finalize_block {
         println!("Delegating in epoch 5");
 
         // Delegate
-        let del_2_amount = token::Amount::whole(8_144);
+        let del_2_amount = token::Amount::native_whole(8_144);
         namada_proof_of_stake::bond_tokens(
             &mut shell.wl_storage,
             Some(&delegator),
@@ -2432,7 +2460,7 @@ mod test_finalize_block {
             .unwrap();
         assert_eq!(enqueued_slash.epoch, misbehavior_epoch);
         assert_eq!(enqueued_slash.r#type, SlashType::DuplicateVote);
-        assert_eq!(enqueued_slash.rate, Decimal::ZERO);
+        assert_eq!(enqueued_slash.rate, Dec::zero());
         let last_slash =
             namada_proof_of_stake::read_validator_last_slash_epoch(
                 &shell.wl_storage,
@@ -2583,16 +2611,18 @@ mod test_finalize_block {
         )
         .unwrap();
 
-        let vp_frac_3 = Decimal::from(val_stake_3) / Decimal::from(tot_stake_3);
-        let vp_frac_4 = Decimal::from(val_stake_4) / Decimal::from(tot_stake_4);
-        let tot_frac = dec!(2) * vp_frac_3 + vp_frac_4;
-        let cubic_rate =
-            std::cmp::min(Decimal::ONE, dec!(9) * tot_frac * tot_frac);
+        let vp_frac_3 = Dec::from(val_stake_3) / Dec::from(tot_stake_3);
+        let vp_frac_4 = Dec::from(val_stake_4) / Dec::from(tot_stake_4);
+        let tot_frac = Dec::two() * vp_frac_3 + vp_frac_4;
+        let cubic_rate = std::cmp::min(
+            Dec::one(),
+            Dec::new(9, 0).unwrap() * tot_frac * tot_frac,
+        );
         dbg!(&cubic_rate);
 
-        let equal_enough = |rate1: Decimal, rate2: Decimal| -> bool {
-            let tolerance = dec!(0.000000001);
-            (rate1 - rate2).abs() < tolerance
+        let equal_enough = |rate1: Dec, rate2: Dec| -> bool {
+            let tolerance = Dec::new(1, 9).unwrap();
+            rate1.abs_diff(&rate2) < tolerance
         };
 
         // There should be 2 slashes processed for the validator, each with rate
@@ -2621,32 +2651,35 @@ mod test_finalize_block {
         // self_unbond_2_amount` (since this self-bond was enacted then unbonded
         // all after the infraction). Thus, the additional deltas to be
         // deducted is the (infraction stake - this) * rate
-        let slash_rate_3 = std::cmp::min(Decimal::ONE, dec!(2) * cubic_rate);
-        let exp_slashed_during_processing_9 = decimal_mult_amount(
-            slash_rate_3,
-            initial_stake + del_1_amount
+        let slash_rate_3 = std::cmp::min(Dec::one(), Dec::two() * cubic_rate);
+        let exp_slashed_during_processing_9 = slash_rate_3
+            * (initial_stake + del_1_amount
                 - self_unbond_1_amount
                 - del_unbond_1_amount
                 + self_bond_1_amount
-                - self_unbond_2_amount,
-        );
-        assert_eq!(
-            pre_stake_10 - post_stake_10,
-            exp_slashed_during_processing_9
+                - self_unbond_2_amount);
+        assert!(
+            ((pre_stake_10 - post_stake_10).change()
+                - exp_slashed_during_processing_9.change())
+            .abs()
+                < Uint::from(1000)
         );
 
         // Check that we can compute the stake at the pipeline epoch
         // NOTE: may be off. by 1 namnam due to rounding;
-        let exp_pipeline_stake = decimal_mult_amount(
-            Decimal::ONE - slash_rate_3,
-            initial_stake + del_1_amount
-                - self_unbond_1_amount
-                - del_unbond_1_amount
-                + self_bond_1_amount
-                - self_unbond_2_amount,
-        ) + del_2_amount;
+        let exp_pipeline_stake = (Dec::one() - slash_rate_3)
+            * Dec::from(
+                initial_stake + del_1_amount
+                    - self_unbond_1_amount
+                    - del_unbond_1_amount
+                    + self_bond_1_amount
+                    - self_unbond_2_amount,
+            )
+            + Dec::from(del_2_amount);
+
         assert!(
-            (exp_pipeline_stake.change() - post_stake_10.change()).abs() <= 1
+            exp_pipeline_stake.abs_diff(&Dec::from(post_stake_10))
+                <= Dec::new(1, NATIVE_MAX_DECIMAL_PLACES).unwrap()
         );
 
         // Check the balance of the Slash Pool
@@ -2807,13 +2840,12 @@ mod test_finalize_block {
         // TODO: decimal mult issues should be resolved with PR 1282
         assert!(
             (del_details.bonds[0].slashed_amount.unwrap().change()
-                - decimal_mult_amount(
-                    std::cmp::min(Decimal::ONE, dec!(3) * cubic_rate),
-                    del_1_amount - del_unbond_1_amount
-                )
-                .change())
+                - std::cmp::min(
+                    Dec::one(),
+                    Dec::new(3, 0).unwrap() * cubic_rate
+                ) * (del_1_amount.change() - del_unbond_1_amount.change()))
             .abs()
-                <= 2
+                <= Uint::from(2)
         );
         assert_eq!(del_details.bonds[1].start, Epoch(7));
         assert_eq!(del_details.bonds[1].amount, del_2_amount);
@@ -2830,13 +2862,18 @@ mod test_finalize_block {
         // TODO: not sure why this is correct??? (with + self_bond_1_amount -
         // self_unbond_2_amount)
         // TODO: Make sure this is sound and what we expect
-        assert_eq!(
-            self_details.bonds[0].slashed_amount,
-            Some(decimal_mult_amount(
-                std::cmp::min(Decimal::ONE, dec!(3) * cubic_rate),
-                initial_stake - self_unbond_1_amount + self_bond_1_amount
-                    - self_unbond_2_amount
-            ))
+        assert!(
+            (self_details.bonds[0].slashed_amount.unwrap().change()
+                - (std::cmp::min(
+                    Dec::one(),
+                    Dec::new(3, 0).unwrap() * cubic_rate
+                ) * (initial_stake - self_unbond_1_amount
+                    + self_bond_1_amount
+                    - self_unbond_2_amount))
+                    .change())
+                <= Amount::from_uint(1000, NATIVE_MAX_DECIMAL_PLACES)
+                    .unwrap()
+                    .change()
         );
 
         // Check delegation unbonds
@@ -2846,13 +2883,11 @@ mod test_finalize_block {
         assert_eq!(del_details.unbonds[0].amount, del_unbond_1_amount);
         assert!(
             (del_details.unbonds[0].slashed_amount.unwrap().change()
-                - decimal_mult_amount(
-                    std::cmp::min(Decimal::ONE, dec!(2) * cubic_rate),
-                    del_unbond_1_amount
-                )
-                .change())
+                - (std::cmp::min(Dec::one(), Dec::two() * cubic_rate)
+                    * del_unbond_1_amount)
+                    .change())
             .abs()
-                <= 1
+                <= Uint::from(1)
         );
 
         // Check self-unbonds
@@ -2871,10 +2906,10 @@ mod test_finalize_block {
         );
         assert_eq!(
             self_details.unbonds[1].slashed_amount,
-            Some(decimal_mult_amount(
-                std::cmp::min(Decimal::ONE, dec!(3) * cubic_rate),
-                self_unbond_2_amount - self_bond_1_amount
-            ))
+            Some(
+                std::cmp::min(Dec::one(), Dec::new(3, 0).unwrap() * cubic_rate)
+                    * (self_unbond_2_amount - self_bond_1_amount)
+            )
         );
         assert_eq!(self_details.unbonds[2].amount, self_bond_1_amount);
         assert_eq!(self_details.unbonds[2].slashed_amount, None);
@@ -2892,7 +2927,7 @@ mod test_finalize_block {
         .unwrap();
 
         let exp_del_withdraw_slashed_amount =
-            decimal_mult_amount(slash_rate_3, del_unbond_1_amount);
+            slash_rate_3 * del_unbond_1_amount;
         assert_eq!(
             del_withdraw,
             del_unbond_1_amount - exp_del_withdraw_slashed_amount
@@ -2967,7 +3002,7 @@ mod test_finalize_block {
                 VoteInfo {
                     validator: Some(Validator {
                         address: pkh,
-                        power: u64::from(val.bonded_stake) as i64,
+                        power: u128::try_from(val.bonded_stake).unwrap() as i64,
                     }),
                     signed_last_block: true,
                 }

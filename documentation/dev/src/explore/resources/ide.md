@@ -29,7 +29,7 @@ publicus.org-checkbox
 Add these to your settings.json to get rustfmt and clippy with the nightly version that we use:
 
 ```json
-"rust-analyzer.checkOnSave.overrideCommand": [
+"rust-analyzer.check.overrideCommand": [
     "cargo",
     "+{{#include ../../../../../rust-nightly-version}}",
     "clippy",

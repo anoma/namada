@@ -413,7 +413,7 @@ impl RocksDB {
         let batch = Mutex::new(batch);
 
         tracing::info!("Restoring previous hight subspace diffs");
-        self.iter_optional_prefix(None).par_bridge().try_for_each(
+        self.iter_prefix(None).par_bridge().try_for_each(
             |(key, _value, _gas)| -> Result<()> {
                 // Restore previous height diff if present, otherwise delete the
                 // subspace key
@@ -434,6 +434,29 @@ impl RocksDB {
                 Ok(())
             },
         )?;
+
+        // Look for diffs in this block to find what has been deleted
+        let diff_new_key_prefix = Key {
+            segments: vec![
+                last_block.height.to_db_key(),
+                "new".to_string().to_db_key(),
+            ],
+        };
+        {
+            let mut batch_guard = batch.lock().unwrap();
+            let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
+            for (key, val, _) in
+                iter_diffs_prefix(self, last_block.height, true)
+            {
+                let key = Key::parse(key).unwrap();
+                let diff_new_key = diff_new_key_prefix.join(&key);
+                if self.read_subspace_val(&diff_new_key)?.is_none() {
+                    // If there is no new value, it has been deleted in this
+                    // block and we have to restore it
+                    batch_guard.put_cf(subspace_cf, key.to_string(), val)
+                }
+            }
+        }
 
         tracing::info!("Deleting keys prepended with the last height");
         let mut batch = batch.into_inner().unwrap();
@@ -1243,7 +1266,7 @@ impl DB for RocksDB {
 impl<'iter> DBIter<'iter> for RocksDB {
     type PrefixIter = PersistentPrefixIterator<'iter>;
 
-    fn iter_optional_prefix(
+    fn iter_prefix(
         &'iter self,
         prefix: Option<&Key>,
     ) -> PersistentPrefixIterator<'iter> {
@@ -1289,11 +1312,18 @@ fn iter_subspace_prefix<'iter>(
         .get_column_family(SUBSPACE_CF)
         .expect("{SUBSPACE_CF} column family should exist");
     let db_prefix = "".to_owned();
-    let prefix_string = match prefix {
-        Some(prefix) => prefix.to_string(),
-        None => "".to_string(),
-    };
-    iter_prefix(db, subspace_cf, db_prefix, prefix_string)
+    iter_prefix(
+        db,
+        subspace_cf,
+        db_prefix,
+        prefix.map(|k| {
+            if k == &Key::default() {
+                k.to_string()
+            } else {
+                format!("{k}/")
+            }
+        }),
+    )
 }
 
 fn iter_diffs_prefix(
@@ -1307,20 +1337,23 @@ fn iter_diffs_prefix(
     let prefix = if is_old { "old" } else { "new" };
     let db_prefix = format!("{}/{}/", height.0.raw(), prefix);
     // get keys without a prefix
-    iter_prefix(db, diffs_cf, db_prefix.clone(), db_prefix)
+    iter_prefix(db, diffs_cf, db_prefix.clone(), Some(db_prefix))
 }
 
 fn iter_prefix<'a>(
     db: &'a RocksDB,
     cf: &'a ColumnFamily,
     db_prefix: String,
-    prefix: String,
+    prefix: Option<String>,
 ) -> PersistentPrefixIterator<'a> {
-    let read_opts = make_iter_read_opts(Some(prefix.clone()));
+    let read_opts = make_iter_read_opts(prefix.clone());
     let iter = db.0.iterator_cf_opt(
         cf,
         read_opts,
-        IteratorMode::From(prefix.as_bytes(), Direction::Forward),
+        IteratorMode::From(
+            prefix.unwrap_or_default().as_bytes(),
+            Direction::Forward,
+        ),
     );
     PersistentPrefixIterator(PrefixIterator::new(iter, db_prefix))
 }
@@ -1364,8 +1397,8 @@ fn make_iter_read_opts(prefix: Option<String>) -> ReadOptions {
         let mut upper_prefix = prefix.into_bytes();
         if let Some(last) = upper_prefix.pop() {
             upper_prefix.push(last + 1);
+            read_opts.set_iterate_upper_bound(upper_prefix);
         }
-        read_opts.set_iterate_upper_bound(upper_prefix);
     }
 
     read_opts
@@ -1444,6 +1477,7 @@ mod test {
     use namada::types::address::EstablishedAddressGen;
     use namada::types::storage::{BlockHash, Epoch, Epochs};
     use tempfile::tempdir;
+    use test_log::test;
 
     use super::*;
 
@@ -1463,36 +1497,7 @@ mod test {
         )
         .unwrap();
 
-        let merkle_tree = MerkleTree::<Sha256Hasher>::default();
-        let merkle_tree_stores = merkle_tree.stores();
-        let hash = BlockHash::default();
-        let time = DateTimeUtc::now();
-        let epoch = Epoch::default();
-        let pred_epochs = Epochs::default();
-        let height = BlockHeight::default();
-        let next_epoch_min_start_height = BlockHeight::default();
-        let next_epoch_min_start_time = DateTimeUtc::now();
-        let update_epoch_blocks_delay = None;
-        let address_gen = EstablishedAddressGen::new("whatever");
-        let tx_queue = TxQueue::default();
-        let results = BlockResults::default();
-        let block = BlockStateWrite {
-            merkle_tree_stores,
-            header: None,
-            hash: &hash,
-            height,
-            time,
-            epoch,
-            results: &results,
-            pred_epochs: &pred_epochs,
-            next_epoch_min_start_height,
-            next_epoch_min_start_time,
-            update_epoch_blocks_delay,
-            address_gen: &address_gen,
-            tx_queue: &tx_queue,
-        };
-
-        db.write_block(block, &mut batch, true).unwrap();
+        write_block(&mut db, &mut batch, BlockHeight::default()).unwrap();
         db.exec_batch(batch.0).unwrap();
 
         let _state = db
@@ -1599,5 +1604,167 @@ mod test {
         let latest_value =
             db.read_subspace_val(&key).expect("read should succeed");
         assert_eq!(latest_value, None);
+    }
+
+    #[test]
+    fn test_prefix_iter() {
+        let dir = tempdir().unwrap();
+        let mut db = open(dir.path(), None).unwrap();
+
+        let prefix_0 = Key::parse("0").unwrap();
+        let key_0_a = prefix_0.push(&"a".to_string()).unwrap();
+        let key_0_b = prefix_0.push(&"b".to_string()).unwrap();
+        let key_0_c = prefix_0.push(&"c".to_string()).unwrap();
+        let prefix_1 = Key::parse("1").unwrap();
+        let key_1_a = prefix_1.push(&"a".to_string()).unwrap();
+        let key_1_b = prefix_1.push(&"b".to_string()).unwrap();
+        let key_1_c = prefix_1.push(&"c".to_string()).unwrap();
+        let prefix_01 = Key::parse("01").unwrap();
+        let key_01_a = prefix_01.push(&"a".to_string()).unwrap();
+
+        let keys_0 = vec![key_0_a, key_0_b, key_0_c];
+        let keys_1 = vec![key_1_a, key_1_b, key_1_c];
+        let keys_01 = vec![key_01_a];
+        let all_keys = vec![keys_0.clone(), keys_01, keys_1.clone()].concat();
+
+        // Write the keys
+        let mut batch = RocksDB::batch();
+        let height = BlockHeight(1);
+        for key in &all_keys {
+            db.batch_write_subspace_val(&mut batch, height, key, [0_u8])
+                .unwrap();
+        }
+        db.exec_batch(batch.0).unwrap();
+
+        // Prefix "0" shouldn't match prefix "01"
+        let itered_keys: Vec<Key> = db
+            .iter_prefix(Some(&prefix_0))
+            .map(|(key, _val, _)| Key::parse(key).unwrap())
+            .collect();
+        itertools::assert_equal(keys_0, itered_keys);
+
+        let itered_keys: Vec<Key> = db
+            .iter_prefix(Some(&prefix_1))
+            .map(|(key, _val, _)| Key::parse(key).unwrap())
+            .collect();
+        itertools::assert_equal(keys_1, itered_keys);
+
+        let itered_keys: Vec<Key> = db
+            .iter_prefix(None)
+            .map(|(key, _val, _)| Key::parse(key).unwrap())
+            .collect();
+        itertools::assert_equal(all_keys, itered_keys);
+    }
+
+    #[test]
+    fn test_rollback() {
+        let dir = tempdir().unwrap();
+        let mut db = open(dir.path(), None).unwrap();
+
+        // A key that's gonna be added on a second block
+        let add_key = Key::parse("add").unwrap();
+        // A key that's gonna be deleted on a second block
+        let delete_key = Key::parse("delete").unwrap();
+        // A key that's gonna be overwritten on a second block
+        let overwrite_key = Key::parse("overwrite").unwrap();
+
+        // Write first block
+        let mut batch = RocksDB::batch();
+        let height_0 = BlockHeight(100);
+        let to_delete_val = vec![1_u8, 1, 0, 0];
+        let to_overwrite_val = vec![1_u8, 1, 1, 0];
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_0,
+            &delete_key,
+            &to_delete_val,
+        )
+        .unwrap();
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_0,
+            &overwrite_key,
+            &to_overwrite_val,
+        )
+        .unwrap();
+
+        write_block(&mut db, &mut batch, height_0).unwrap();
+        db.exec_batch(batch.0).unwrap();
+
+        // Write second block
+        let mut batch = RocksDB::batch();
+        let height_1 = BlockHeight(101);
+        let add_val = vec![1_u8, 0, 0, 0];
+        let overwrite_val = vec![1_u8, 1, 1, 1];
+        db.batch_write_subspace_val(&mut batch, height_1, &add_key, &add_val)
+            .unwrap();
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_1,
+            &overwrite_key,
+            &overwrite_val,
+        )
+        .unwrap();
+        db.batch_delete_subspace_val(&mut batch, height_1, &delete_key)
+            .unwrap();
+
+        write_block(&mut db, &mut batch, height_1).unwrap();
+        db.exec_batch(batch.0).unwrap();
+
+        // Check that the values are as expected from second block
+        let added = db.read_subspace_val(&add_key).unwrap();
+        assert_eq!(added, Some(add_val));
+        let overwritten = db.read_subspace_val(&overwrite_key).unwrap();
+        assert_eq!(overwritten, Some(overwrite_val));
+        let deleted = db.read_subspace_val(&delete_key).unwrap();
+        assert_eq!(deleted, None);
+
+        // Rollback to the first block height
+        db.rollback(height_0).unwrap();
+
+        // Check that the values are back to the state at the first block
+        let added = db.read_subspace_val(&add_key).unwrap();
+        assert_eq!(added, None);
+        let overwritten = db.read_subspace_val(&overwrite_key).unwrap();
+        assert_eq!(overwritten, Some(to_overwrite_val));
+        let deleted = db.read_subspace_val(&delete_key).unwrap();
+        assert_eq!(deleted, Some(to_delete_val));
+    }
+
+    /// A test helper to write a block
+    fn write_block(
+        db: &mut RocksDB,
+        batch: &mut RocksDBWriteBatch,
+        height: BlockHeight,
+    ) -> Result<()> {
+        let merkle_tree = MerkleTree::<Sha256Hasher>::default();
+        let merkle_tree_stores = merkle_tree.stores();
+        let hash = BlockHash::default();
+        let time = DateTimeUtc::now();
+        let epoch = Epoch::default();
+        let pred_epochs = Epochs::default();
+        let next_epoch_min_start_height = BlockHeight::default();
+        let next_epoch_min_start_time = DateTimeUtc::now();
+        let update_epoch_blocks_delay = None;
+        let address_gen = EstablishedAddressGen::new("whatever");
+        let tx_queue = TxQueue::default();
+        let results = BlockResults::default();
+        let block = BlockStateWrite {
+            merkle_tree_stores,
+            header: None,
+            hash: &hash,
+            height,
+            time,
+            epoch,
+            results: &results,
+            pred_epochs: &pred_epochs,
+            next_epoch_min_start_height,
+            next_epoch_min_start_time,
+            update_epoch_blocks_delay,
+            address_gen: &address_gen,
+            tx_queue: &tx_queue,
+        };
+
+        db.write_block(block, batch, true)
     }
 }

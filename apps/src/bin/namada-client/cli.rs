@@ -92,7 +92,7 @@ pub async fn main() -> Result<()> {
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_init_validator::<HttpClient>(&client, ctx, args)
-                        .await;
+                        .await?;
                 }
                 Sub::TxInitProposal(TxInitProposal(args)) => {
                     wait_until_node_is_synched(&args.tx.ledger_address).await;
@@ -147,6 +147,17 @@ pub async fn main() -> Result<()> {
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_withdraw::<HttpClient>(&client, ctx, args)
                         .await?;
+                }
+                Sub::TxCommissionRateChange(TxCommissionRateChange(args)) => {
+                    wait_until_node_is_synched(&args.tx.ledger_address).await;
+                    let client =
+                        HttpClient::new(args.tx.ledger_address.clone())
+                            .unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_validator_commission_change::<HttpClient>(
+                        &client, ctx, args,
+                    )
+                    .await?;
                 }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(args)) => {
