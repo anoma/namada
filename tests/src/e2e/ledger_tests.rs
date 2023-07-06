@@ -4104,6 +4104,11 @@ fn test_genesis_validators() -> Result<()> {
     wait_for_wasm_pre_compile(&mut validator_1)?;
     wait_for_wasm_pre_compile(&mut non_validator)?;
 
+    // Wait for a first block
+    validator_0.exp_string("Committed block hash")?;
+    validator_1.exp_string("Committed block hash")?;
+    non_validator.exp_string("Committed block hash")?;
+
     let bg_validator_0 = validator_0.background();
     let bg_validator_1 = validator_1.background();
     let _bg_non_validator = non_validator.background();
