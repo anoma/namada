@@ -55,12 +55,10 @@ where
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
 pub async fn sign_tx<C, U>(
-    client: &C,
     wallet: &mut Wallet<U>,
     tx: &mut Tx,
     args: &args::Tx,
     default: &common::PublicKey,
-    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<(), tx::Error>
 where
     C: namada::ledger::queries::Client + Sync,

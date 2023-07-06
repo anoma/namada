@@ -3,7 +3,7 @@
 use color_eyre::eyre::{eyre, Report, Result};
 use namada::ledger::eth_bridge::bridge_pool;
 use namada::ledger::rpc::wait_until_node_is_synched;
-use namada::ledger::{signing, tx};
+use namada::ledger::{signing, tx as sdk_tx};
 use namada::types::control_flow::ProceedOrElse;
 use namada_apps::cli;
 use namada_apps::cli::args::CliToSdk;
@@ -187,11 +187,14 @@ pub async fn main() -> Result<()> {
                     tx::submit_withdraw::<HttpClient>(&client, ctx, args)
                         .await?;
                 }
-                Sub::TxCommissionRateChange(TxCommissionRateChange(args)) => {
-                    wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    let client =
-                        HttpClient::new(args.tx.ledger_address.clone())
-                            .unwrap();
+                Sub::TxCommissionRateChange(TxCommissionRateChange(
+                    mut args,
+                )) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client).await;
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_validator_commission_change::<HttpClient>(
                         &client, ctx, args,
@@ -210,7 +213,7 @@ pub async fn main() -> Result<()> {
                         .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     let tx_args = args.tx.clone();
-                    let (tx, addr, pk) = bridge_pool::build_bridge_pool_tx(
+                    let (mut tx, addr, pk) = bridge_pool::build_bridge_pool_tx(
                         &client,
                         &mut ctx.wallet,
                         args,
@@ -228,7 +231,7 @@ pub async fn main() -> Result<()> {
                     .await?;
                     signing::sign_tx(&mut ctx.wallet, &mut tx, &tx_args, &pk)
                         .await?;
-                    tx::process_tx(&client, &mut ctx.wallet, &tx_args, tx)
+                    sdk_tx::process_tx(&client, &mut ctx.wallet, &tx_args, tx)
                         .await?;
                 }
                 // Ledger queries

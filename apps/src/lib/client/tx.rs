@@ -21,15 +21,11 @@ use namada::types::dec::Dec;
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
-use namada::types::hash::Hash;
 use namada::types::key::{self, *};
 use namada::types::storage::{Epoch, Key};
 use namada::types::token;
 use namada::types::transaction::governance::{ProposalType, VoteProposalData};
 use namada::types::transaction::{InitValidator, TxType};
-use sha2::{Digest as Sha2Digest, Sha256};
-use tokio::io;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
