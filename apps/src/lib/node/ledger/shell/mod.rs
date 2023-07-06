@@ -1931,11 +1931,15 @@ mod test_utils {
 
 #[cfg(all(test, not(feature = "abcipp")))]
 mod abciplus_mempool_tests {
-    use namada::proto::{SignableEthMessage, Signed};
+    use namada::proto::{
+        Data, Section, SignableEthMessage, Signature, Signed, Tx,
+    };
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::key::RefTo;
     use namada::types::storage::BlockHeight;
-    use namada::types::transaction::protocol::EthereumTxData;
+    use namada::types::transaction::protocol::{
+        EthereumTxData, ProtocolTx, ProtocolTxType,
+    };
     use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
 
     use super::*;
@@ -2028,6 +2032,52 @@ mod abciplus_mempool_tests {
             .to_bytes();
         let rsp = shell.mempool_validate(&tx, Default::default());
         assert_eq!(rsp.code, 0);
+    }
+
+    /// Test if Ethereum events validation fails, if the underlying
+    /// protocol transaction type is different from the vote extension
+    /// contained in the transaction's data field.
+    #[test]
+    fn test_mempool_eth_events_vext_data_mismatch() {
+        const LAST_HEIGHT: BlockHeight = BlockHeight(3);
+
+        let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
+
+        let (protocol_key, _, _) = wallet::defaults::validator_keys();
+        let validator_addr = wallet::defaults::validator_address();
+
+        let ethereum_event = EthereumEvent::TransfersToNamada {
+            nonce: 0u64.into(),
+            transfers: vec![],
+            valid_transfers_map: vec![],
+        };
+        let ext = {
+            let ext = ethereum_events::Vext {
+                validator_addr,
+                block_height: LAST_HEIGHT,
+                ethereum_events: vec![ethereum_event],
+            }
+            .sign(&protocol_key);
+            assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+            ext
+        };
+        let tx = {
+            let mut tx = Tx::new(TxType::Protocol(Box::new(ProtocolTx {
+                pk: protocol_key.ref_to(),
+                tx: ProtocolTxType::BridgePoolVext,
+            })));
+            // invalid tx type, it doesn't match the
+            // tx type declared in the header
+            tx.set_data(Data::new(ext.try_to_vec().expect("Test falied")));
+            tx.add_section(Section::Signature(Signature::new(
+                &tx.header_hash(),
+                &protocol_key,
+            )));
+            tx
+        }
+        .to_bytes();
+        let rsp = shell.mempool_validate(&tx, Default::default());
+        assert_eq!(rsp.code, u32::from(ErrorCodes::InvalidVoteExtension));
     }
 }
 
