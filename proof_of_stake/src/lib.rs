@@ -53,9 +53,11 @@ use storage::{
     get_validator_address_from_bond, into_tm_voting_power, is_bond_key,
     is_unbond_key, is_validator_slashes_key, last_block_proposer_key,
     params_key, slashes_prefix, unbonds_for_source_prefix, unbonds_prefix,
-    validator_address_raw_hash_key, validator_max_commission_rate_change_key,
-    BondDetails, BondsAndUnbondsDetail, BondsAndUnbondsDetails,
-    ReverseOrdTokenAmount, RewardsAccumulator, UnbondDetails,
+    validator_address_raw_hash_key, validator_last_slash_key,
+    validator_max_commission_rate_change_key, BondDetails,
+    BondsAndUnbondsDetail, BondsAndUnbondsDetails, EpochedSlashes,
+    ReverseOrdTokenAmount, RewardsAccumulator, SlashedAmount, UnbondDetails,
+    ValidatorAddresses, ValidatorUnbondRecords,
 };
 use thiserror::Error;
 use types::{
@@ -66,11 +68,6 @@ use types::{
     ValidatorDeltas, ValidatorPositionAddresses, ValidatorSetPositions,
     ValidatorSetUpdate, ValidatorState, ValidatorStates, VoteInfo,
     WeightedValidator,
-};
-
-use crate::storage::{
-    validator_last_slash_key, EpochedSlashes, SlashedAmount,
-    ValidatorAddresses, ValidatorUnbondRecords,
 };
 
 /// Address of the PoS account implemented as a native VP
