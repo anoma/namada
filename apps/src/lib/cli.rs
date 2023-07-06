@@ -3585,6 +3585,9 @@ pub mod args {
                     .def()
                     .help("An alias to be associated with the spending key."),
             )
+            .arg(ALIAS_FORCE.def().help(
+                "Override the alias without confirmation if it already exists.",
+            ))
             .arg(UNSAFE_DONT_ENCRYPT.def().help(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
