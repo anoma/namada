@@ -1358,32 +1358,10 @@ mod test_process_proposal {
     /// rejected
     #[test]
     fn test_inner_tx_hash_same_block() {
-        let (mut shell, _) = test_utils::setup(1);
+        let (shell, _) = test_utils::setup(1);
 
         let keypair = crate::wallet::defaults::daewon_keypair();
         let keypair_2 = crate::wallet::defaults::daewon_keypair();
-
-        // Add unshielded balance for fee payment
-        let balance_key = token::balance_key(
-            &shell.wl_storage.storage.native_token,
-            &Address::from(&keypair.ref_to()),
-        );
-        shell
-            .wl_storage
-            .storage
-            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
-            .unwrap();
-
-        // Add unshielded balance for fee payment
-        let balance_key = token::balance_key(
-            &shell.wl_storage.storage.native_token,
-            &Address::from(&keypair_2.ref_to()),
-        );
-        shell
-            .wl_storage
-            .storage
-            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
-            .unwrap();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
@@ -1423,7 +1401,7 @@ mod test_process_proposal {
         ))));
         new_wrapper.add_section(Section::Signature(Signature::new(
             &new_wrapper.header_hash(),
-            &keypair,
+            &keypair_2,
         )));
         new_wrapper.encrypt(&Default::default());
 
@@ -1590,7 +1568,7 @@ mod test_process_proposal {
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount_per_gas_unit: 0.into(),
+                amount_per_gas_unit: 1.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1601,7 +1579,7 @@ mod test_process_proposal {
             None,
         ))));
         wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.header.expiration = Some(DateTimeUtc::now());
+        wrapper.header.expiration = Some(DateTimeUtc::default());
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
@@ -1645,7 +1623,7 @@ mod test_process_proposal {
             None,
         ))));
         wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.header.expiration = Some(DateTimeUtc::now());
+        wrapper.header.expiration = Some(DateTimeUtc::default());
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper
             .set_data(Data::new("new transaction data".as_bytes().to_owned()));
@@ -1692,12 +1670,12 @@ mod test_process_proposal {
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount_per_gas_unit: 0.into(),
+                amount_per_gas_unit: 1.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None,
@@ -1716,10 +1694,9 @@ mod test_process_proposal {
             &keypair,
         )));
 
-        let gas = u64::from(&wrapper.header.wrapper().unwrap().gas_limit);
         let wrapper_in_queue = TxInQueue {
             tx: wrapper,
-            gas,
+            gas: 0,
             has_valid_pow: false,
         };
         shell.wl_storage.storage.tx_queue.push(wrapper_in_queue);
