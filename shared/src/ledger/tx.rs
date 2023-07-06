@@ -20,7 +20,7 @@ use namada_core::types::dec::Dec;
 use namada_core::types::storage::Key;
 use namada_core::types::token::MaspDenom;
 use namada_proof_of_stake::parameters::PosParams;
-use namada_proof_of_stake::types::CommissionPair;
+use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use prost::EncodeError;
 use thiserror::Error;
 
@@ -110,6 +110,18 @@ pub enum Error {
     /// Invalid validator address
     #[error("The address {0} doesn't belong to any known validator account.")]
     InvalidValidatorAddress(Address),
+    /// Not jailed at pipeline epoch
+    #[error(
+        "The validator address {0} is not jailed at epoch when it would be \
+         restored."
+    )]
+    ValidatorNotCurrentlyJailed(Address),
+    /// Validator still frozen and ineligible to be unjailed
+    #[error(
+        "The validator address {0} is currently frozen and ineligible to be \
+         unjailed."
+    )]
+    ValidatorFrozenFromUnjailing(Address),
     /// Rate of epoch change too large for current epoch
     #[error(
         "New rate, {0}, is too large of a change with respect to the \
@@ -631,11 +643,7 @@ pub async fn build_validator_commission_change<
             .await
             .unwrap();
 
-    // TODO: put following two let statements in its own function
-    let params_key = crate::ledger::pos::params_key();
-    let params = rpc::query_storage_value::<C, PosParams>(client, &params_key)
-        .await
-        .expect("Parameter should be defined.");
+    let params: PosParams = rpc::get_pos_params(client).await;
 
     let validator = args.validator.clone();
     if rpc::is_validator(client, &validator).await {
@@ -768,6 +776,49 @@ pub async fn submit_unjail_validator<
         eprintln!("The given address {} is not a validator.", &args.validator);
         if !args.tx.force {
             return Err(Error::InvalidValidatorAddress(args.validator.clone()));
+        }
+    }
+
+    let params: PosParams = rpc::get_pos_params(client).await;
+    let current_epoch = rpc::query_epoch(client).await;
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+
+    let validator_state_at_pipeline =
+        rpc::get_validator_state(client, &args.validator, Some(pipeline_epoch))
+            .await
+            .expect("Validator state should be defined.");
+    if validator_state_at_pipeline != ValidatorState::Jailed {
+        eprintln!(
+            "The given validator address {} is not jailed at the pipeline \
+             epoch when it would be restored to one of the validator sets.",
+            &args.validator
+        );
+        if !args.tx.force {
+            return Err(Error::ValidatorNotCurrentlyJailed(
+                args.validator.clone(),
+            ));
+        }
+    }
+
+    let last_slash_epoch_key =
+        crate::ledger::pos::validator_last_slash_key(&args.validator);
+    let last_slash_epoch =
+        rpc::query_storage_value::<C, Epoch>(client, &last_slash_epoch_key)
+            .await;
+    if let Some(last_slash_epoch) = last_slash_epoch {
+        let eligible_epoch =
+            last_slash_epoch + params.slash_processing_epoch_offset();
+        if current_epoch < eligible_epoch {
+            eprintln!(
+                "The given validator address {} is currently frozen and not \
+                 yet eligible to be unjailed.",
+                &args.validator
+            );
+            if !args.tx.force {
+                return Err(Error::ValidatorNotCurrentlyJailed(
+                    args.validator.clone(),
+                ));
+            }
         }
     }
 

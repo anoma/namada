@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::ledger::storage_api::collections::lazy_map;
 use namada_core::ledger::storage_api::OptionExt;
+use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{
     BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails, CommissionPair,
     Slash, ValidatorState, WeightedValidator,
@@ -59,6 +60,8 @@ router! {POS,
 
         // TODO: add "below_threshold"
     },
+
+    ( "pos_params") -> PosParams = pos_params,
 
     ( "total_stake" / [epoch: opt Epoch] )
         -> token::Amount = total_stake,
@@ -140,6 +143,15 @@ impl<T> Enriched<T> {
 }
 
 // Handlers that implement the functions via `trait StorageRead`:
+
+/// Get the PoS parameters
+fn pos_params<D, H>(ctx: RequestCtx<'_, D, H>) -> storage_api::Result<PosParams>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    read_pos_params(ctx.wl_storage)
+}
 
 /// Find if the given address belongs to a validator account.
 fn is_validator<D, H>(
