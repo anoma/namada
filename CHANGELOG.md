@@ -1,5 +1,33 @@
 # CHANGELOG
 
+## v0.18.1
+
+Namada 0.18.1 is a patch release that addresses transaction format changes and minor ledger storage improvements.
+
+### BUG FIXES
+
+- Fixed bug that allowed transactions to be modified without invalidating
+  transaction hash ([\#1607](https://github.com/anoma/namada/pull/1607))
+- Move the content and code of init proposal transactions
+  into separare section to reduce tx size for hardware wallets
+  ([\#1611](https://github.com/anoma/namada/pull/1611))
+
+### FEATURES
+
+- Storage: Add a function to delete key-vals matching a given prefix.
+  ([\#1632](https://github.com/anoma/namada/pull/1632))
+
+### IMPROVEMENTS
+
+- Separate the transaction building, signing, and submission
+  actions in the SDKs API to enable hardware wallet usage
+  ([\#1498](https://github.com/anoma/namada/pull/1498))
+- Disable encryption when sending transactions
+  ([\#1636](https://github.com/anoma/namada/pull/1636))
+- Storage: Ensure that prefix iterator only returns key-
+  vals in which the prefix key segments are matched fully.
+  ([\#1642](https://github.com/anoma/namada/pull/1642))
+
 ## v0.18.0
 
 Namada 0.18.0 is a minor release primarily addressing a major change in the token amount representation, the addition of a new validator set category, and other minor improvements to the ledger stability.
