@@ -505,74 +505,81 @@ where
                 }
                 match protocol_tx.tx {
                     ProtocolTxType::EthEventsVext => {
-                        let ext =
-                            ethereum_tx_data_variants::EthEventsVext::try_from(
-                                &tx,
-                            )
-                            .unwrap();
-                        self.validate_eth_events_vext_and_get_it_back(
-                            ext,
-                            self.wl_storage.storage.get_last_block_height(),
-                        )
-                        .map(|_| TxResult {
-                            code: ErrorCodes::Ok.into(),
-                            info: "Process Proposal accepted this transaction"
-                                .into(),
-                        })
-                        .unwrap_or_else(|err| {
-                            TxResult {
+                        ethereum_tx_data_variants::EthEventsVext::try_from(&tx)
+                            .map_err(|err| err.to_string())
+                            .and_then(|ext| {
+                                self.validate_eth_events_vext_and_get_it_back(
+                                    ext,
+                                    self.wl_storage
+                                        .storage
+                                        .get_last_block_height(),
+                                )
+                                .map(|_| TxResult {
+                                    code: ErrorCodes::Ok.into(),
+                                    info: "Process Proposal accepted this \
+                                           transaction"
+                                        .into(),
+                                })
+                                .map_err(|err| err.to_string())
+                            })
+                            .unwrap_or_else(|err| TxResult {
                                 code: ErrorCodes::InvalidVoteExtension.into(),
                                 info: format!(
                                     "Process proposal rejected this proposal \
                                      because one of the included Ethereum \
                                      events vote extensions was invalid: {err}"
                                 ),
-                            }
-                        })
+                            })
                     }
                     ProtocolTxType::BridgePoolVext => {
-                        let ext =
-                            ethereum_tx_data_variants::BridgePoolVext::try_from(
-                                &tx,
-                            )
-                            .unwrap();
-                        self.validate_bp_roots_vext_and_get_it_back(
-                            ext,
-                            self.wl_storage.storage.get_last_block_height(),
-                        )
-                        .map(|_| TxResult {
-                            code: ErrorCodes::Ok.into(),
-                            info: "Process Proposal accepted this transaction"
-                                .into(),
-                        })
-                        .unwrap_or_else(|err| {
-                            TxResult {
+                        ethereum_tx_data_variants::BridgePoolVext::try_from(&tx)
+                            .map_err(|err| err.to_string())
+                            .and_then(|ext| {
+                                self.validate_bp_roots_vext_and_get_it_back(
+                                    ext,
+                                    self.wl_storage
+                                        .storage
+                                        .get_last_block_height(),
+                                )
+                                .map(|_| TxResult {
+                                    code: ErrorCodes::Ok.into(),
+                                    info: "Process Proposal accepted this \
+                                           transaction"
+                                        .into(),
+                                })
+                                .map_err(|err| err.to_string())
+                            })
+                            .unwrap_or_else(|err| TxResult {
                                 code: ErrorCodes::InvalidVoteExtension.into(),
                                 info: format!(
                                     "Process proposal rejected this proposal \
                                      because one of the included Bridge pool \
                                      root's vote extensions was invalid: {err}"
                                 ),
-                            }
-                        })
+                            })
                     }
                     ProtocolTxType::ValSetUpdateVext => {
-                        let ext =
-                            ethereum_tx_data_variants::ValSetUpdateVext::try_from(
-                                &tx,
-                            )
-                            .unwrap();
-                        self.validate_valset_upd_vext_and_get_it_back(
-                            ext,
-                            // n.b. only accept validator set updates issued at
-                            // the current epoch (signing off on the validators
-                            // of the next epoch)
-                            self.wl_storage.storage.get_current_epoch().0,
+                        ethereum_tx_data_variants::ValSetUpdateVext::try_from(
+                            &tx,
                         )
-                        .map(|_| TxResult {
-                            code: ErrorCodes::Ok.into(),
-                            info: "Process Proposal accepted this transaction"
-                                .into(),
+                        .map_err(|err| err.to_string())
+                        .and_then(|ext| {
+                            self.validate_valset_upd_vext_and_get_it_back(
+                                ext,
+                                // n.b. only accept validator set updates
+                                // issued at
+                                // the current epoch (signing off on the
+                                // validators
+                                // of the next epoch)
+                                self.wl_storage.storage.get_current_epoch().0,
+                            )
+                            .map(|_| TxResult {
+                                code: ErrorCodes::Ok.into(),
+                                info: "Process Proposal accepted this \
+                                       transaction"
+                                    .into(),
+                            })
+                            .map_err(|err| err.to_string())
                         })
                         .unwrap_or_else(|err| {
                             TxResult {

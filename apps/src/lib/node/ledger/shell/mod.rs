@@ -1083,13 +1083,33 @@ where
             }
         };
 
+        // try to parse a vote extension protocol tx from
+        // the provided tx data
+        macro_rules! try_vote_extension {
+            ($kind:expr, $rsp:expr, $result:expr $(,)?) => {
+                match $result {
+                    Ok(ext) => ext,
+                    Err(err) => {
+                        $rsp.code = ErrorCodes::InvalidVoteExtension.into();
+                        $rsp.log = format!(
+                            "{INVALID_MSG}: Invalid {} vote extension: {err}",
+                            $kind,
+                        );
+                        return $rsp;
+                    }
+                }
+            };
+        }
+
         match tx_type.tx_type {
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
                 #[cfg(not(feature = "abcipp"))]
                 ProtocolTxType::EthEventsVext => {
-                    let ext =
-                        ethereum_tx_data_variants::EthEventsVext::try_from(&tx)
-                            .unwrap();
+                    let ext = try_vote_extension!(
+                        "Ethereum events",
+                        response,
+                        ethereum_tx_data_variants::EthEventsVext::try_from(&tx),
+                    );
                     if let Err(err) = self
                         .validate_eth_events_vext_and_get_it_back(
                             ext,
@@ -1107,11 +1127,13 @@ where
                 }
                 #[cfg(not(feature = "abcipp"))]
                 ProtocolTxType::BridgePoolVext => {
-                    let ext =
+                    let ext = try_vote_extension!(
+                        "Bridge pool roots",
+                        response,
                         ethereum_tx_data_variants::BridgePoolVext::try_from(
-                            &tx,
-                        )
-                        .unwrap();
+                            &tx
+                        ),
+                    );
                     if let Err(err) = self
                         .validate_bp_roots_vext_and_get_it_back(
                             ext,
@@ -1129,11 +1151,13 @@ where
                 }
                 #[cfg(not(feature = "abcipp"))]
                 ProtocolTxType::ValSetUpdateVext => {
-                    let ext =
+                    let ext = try_vote_extension!(
+                        "validator set update",
+                        response,
                         ethereum_tx_data_variants::ValSetUpdateVext::try_from(
-                            &tx,
-                        )
-                        .unwrap();
+                            &tx
+                        ),
+                    );
                     if let Err(err) = self
                         .validate_valset_upd_vext_and_get_it_back(
                             ext,
