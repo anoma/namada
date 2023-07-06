@@ -1220,6 +1220,7 @@ fn masp_overflow() -> Result<()> {
         ],
         Some(60)
     )?;
+    client.assert_success();
 
     // let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep4.0 - ep3.0);
     // let denominated = DenominatedAmount {

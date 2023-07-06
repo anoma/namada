@@ -16,7 +16,7 @@ use crate::types::address::Address;
 use crate::types::dec::Dec;
 use crate::types::storage::{Epoch, Key};
 use crate::types::token::MaspDenom;
-use crate::types::uint::I256;
+use crate::types::uint::{I256, Uint};
 use crate::types::{address, token};
 
 /// A representation of the conversion state
@@ -39,6 +39,7 @@ pub struct ConversionState {
     >,
 }
 
+#[cfg(feature = "wasm-runtime")]
 fn calculate_masp_rewards<D, H>(
     wl_storage: &mut super::WlStorage<D, H>,
     addr: &Address,
@@ -74,7 +75,6 @@ where
     let denomination_base =
         read_denom(wl_storage, &wl_storage.get_native_token().unwrap(), None).unwrap().unwrap();
 
-    // TODO replace 6 with native token call
     let denomination_offset = 10u64.pow((denomination.0 - denomination_base.0) as u32);
     let conversion = |amt| amt /  denomination_offset;
     let total_tokens = conversion(total_tokens) ;
@@ -195,6 +195,8 @@ where
 
     println!("----------------------------");
     println!("TIME TO DEBUG");
+    println!("noterized_inflation: {:?}", noterized_inflation);
+    println!("denomination_offset: {}", denomination_offset);
     println!("TIME TO DEBUG");
     println!("----------------------------");
 
@@ -280,7 +282,50 @@ where
                 .unwrap_or_default(),
         };
 
+        let mut new_normed_inflation = I256::zero();
+        let mut real_reward = I256::zero();
+
+        // TODO properly fix
+        if *addr == address::nam() {
+            // The amount that will be given of the new native token for
+            // every amount of the native token given in the
+            // previous epoch
+            new_normed_inflation =
+                normed_inflation + (normed_inflation * reward.0) / reward.1;
+
+            println!("==============================================");
+            println!("reward before nam total_reward: {}", total_reward.to_string_native());
+            println!("==============================================");
+            // The reward for each reward.1 units of the current asset is
+            // reward.0 units of the reward token
+            total_reward +=
+                (addr_bal * (new_normed_inflation, normed_inflation)).0
+                    - addr_bal;
+            // Save the new normed inflation
+            _ = wl_storage
+                .storage
+                .conversion_state
+                .normed_inflation
+                .insert(new_normed_inflation);
+        } else {
+            // Express the inflation reward in real terms, that is, with
+            // respect to the native asset in the zeroth
+            // epoch
+            real_reward = (reward.0 * ref_inflation) / normed_inflation;
+
+            println!("==============================================");
+            println!("reward before non nam total_reward: {}", total_reward.to_string_native());
+            println!("==============================================");
+            // The reward for each reward.1 units of the current asset is
+            // reward.0 units of the reward token
+            total_reward += ((addr_bal * (real_reward, reward.1)).0
+                * (normed_inflation, ref_inflation))
+                .0;
+        }
+
         for denom in token::MaspDenom::iter() {
+            let total_reward_multiplier = Uint::pow(2.into(), (denom as u64 * 64).into());
+            let total_reward = total_reward * total_reward_multiplier;
             // Provide an allowed conversion from previous timestamp. The
             // negative sign allows each instance of the old asset to be
             // cancelled out/replaced with the new asset
@@ -296,13 +341,13 @@ where
                 denom,
                 wl_storage.storage.block.epoch,
             );
-            // TODO properly fix
+
+            println!("==============================================");
+            println!("final total_reward for denom {:?}: {:?}", denom, total_reward);
+            println!("==============================================");
+
             if *addr == address::nam() {
-                // The amount that will be given of the new native token for
-                // every amount of the native token given in the
-                // previous epoch
-                let new_normed_inflation =
-                    normed_inflation + (normed_inflation * reward.0) / reward.1;
+                let new_normed_inflation = new_normed_inflation % I256::from(u64::MAX);
                 // The conversion is computed such that if consecutive
                 // conversions are added together, the
                 // intermediate native tokens cancel/
@@ -312,31 +357,14 @@ where
                     (MaspAmount::from_pair(old_asset, -(normed_inflation))
                         .unwrap()
                         + MaspAmount::from_pair(
-                            new_asset,
-                            new_normed_inflation,
-                        )
+                        new_asset,
+                        new_normed_inflation,
+                    )
                         .unwrap())
-                    .into(),
+                        .into(),
                 );
-                println!("==============================================");
-                println!("reward before nam total_reward: {}", total_reward.to_string_native());
-                println!("==============================================");
-                // The reward for each reward.1 units of the current asset is
-                // reward.0 units of the reward token
-                total_reward +=
-                    (addr_bal * (new_normed_inflation, normed_inflation)).0
-                        - addr_bal;
-                // Save the new normed inflation
-                _ = wl_storage
-                    .storage
-                    .conversion_state
-                    .normed_inflation
-                    .insert(new_normed_inflation);
             } else {
-                // Express the inflation reward in real terms, that is, with
-                // respect to the native asset in the zeroth
-                // epoch
-                let real_reward = (reward.0 * ref_inflation) / normed_inflation;
+                let real_reward = real_reward % I256::from(u64::MAX);
                 // The conversion is computed such that if consecutive
                 // conversions are added together, the
                 // intermediate tokens cancel/ telescope out
@@ -345,19 +373,18 @@ where
                     (MaspAmount::from_pair(old_asset, -(reward.1)).unwrap()
                         + MaspAmount::from_pair(new_asset, reward.1).unwrap()
                         + MaspAmount::from_pair(reward_asset, real_reward)
-                            .unwrap())
-                    .into(),
+                        .unwrap())
+                        .into(),
                 );
-                println!("==============================================");
-                println!("reward before non nam total_reward: {}", total_reward.to_string_native());
-                println!("==============================================");
-                // The reward for each reward.1 units of the current asset is
-                // reward.0 units of the reward token
-                total_reward += ((addr_bal * (real_reward, reward.1)).0
-                    * (normed_inflation, ref_inflation))
-                    .0;
             }
+
             // Add a conversion from the previous asset type
+            println!("==============================================");
+            println!("inserting conversions now");
+            println!("old_asset: {}", old_asset);
+            println!("denom: {:?}", denom);
+            println!("addr, sub_prefix: {:?}", (addr, sub_prefix));
+            println!("==============================================");
             wl_storage.storage.conversion_state.assets.insert(
                 old_asset,
                 (
