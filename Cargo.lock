@@ -6557,7 +6557,7 @@ dependencies = [
 [[package]]
 name = "tower-abci"
 version = "0.1.0"
-source = "git+https://github.com/heliaxdev/tower-abci.git?rev=367d8d958b83c501ed2c09e9c4595f8bf75a0b01#367d8d958b83c501ed2c09e9c4595f8bf75a0b01"
+source = "git+https://github.com/heliaxdev/tower-abci.git?rev=3acd063da2f251d7f162c141a3e77d3271c655a6#3acd063da2f251d7f162c141a3e77d3271c655a6"
 dependencies = [
  "bytes",
  "futures",

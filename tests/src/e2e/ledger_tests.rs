@@ -4217,7 +4217,7 @@ fn double_signing_gets_slashed() -> Result<()> {
                 genesis.pos_params.unbonding_len,
                 genesis.pos_params.cubic_slashing_window_length,
             );
-            setup::set_validators(2, genesis, default_port_offset)
+            setup::set_validators(4, genesis, default_port_offset)
         },
         None,
     )?;
@@ -4230,7 +4230,7 @@ fn double_signing_gets_slashed() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
     validator_0.exp_string("Namada ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
-    let bg_validator_0 = validator_0.background();
+    let _bg_validator_0 = validator_0.background();
 
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
@@ -4238,25 +4238,17 @@ fn double_signing_gets_slashed() -> Result<()> {
     validator_1.exp_string("This node is a validator")?;
     let bg_validator_1 = validator_1.background();
 
-    // let mut validator_2 =
-    //     run_as!(test, Who::Validator(2), Bin::Node, &["ledger"], Some(40))?;
-    // validator_2.exp_string("Namada ledger node started")?;
-    // validator_2.exp_string("This node is a validator")?;
+    let mut validator_2 =
+        run_as!(test, Who::Validator(2), Bin::Node, &["ledger"], Some(40))?;
+    validator_2.exp_string("Namada ledger node started")?;
+    validator_2.exp_string("This node is a validator")?;
+    let _bg_validator_2 = validator_2.background();
 
-    // let mut validator_3 =
-    //     run_as!(test, Who::Validator(3), Bin::Node, &["ledger"], Some(40))?;
-    // validator_3.exp_string("Namada ledger node started")?;
-    // validator_3.exp_string("This node is a validator")?;
-
-    // wait_for_wasm_pre_compile(&mut validator_0)?;
-    // let bg_validator_0 = validator_0.background();
-    // wait_for_wasm_pre_compile(&mut validator_1)?;
-    // let bg_validator_1 = validator_1.background();
-    // wait_for_wasm_pre_compile(&mut validator_2)?;
-    // let bg_validator_2 = validator_2.background();
-
-    // wait_for_wasm_pre_compile(&mut validator_3)?;
-    // let bg_validator_3 = validator_3.background();
+    let mut validator_3 =
+        run_as!(test, Who::Validator(3), Bin::Node, &["ledger"], Some(40))?;
+    validator_3.exp_string("Namada ledger node started")?;
+    validator_3.exp_string("This node is a validator")?;
+    let _bg_validator_3 = validator_3.background();
 
     // 2. Copy the first genesis validator base-dir
     let validator_0_base_dir = test.get_base_dir(&Who::Validator(0));
@@ -4279,7 +4271,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     let net_address_port_0 = net_address_0.port();
 
     let update_config = |ix: u8, mut config: Config| {
-        let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
+        let first_port = net_address_port_0 + 26 * (ix as u16 + 1);
         let p2p_addr =
             convert_tm_addr_to_socket_addr(&config.ledger.cometbft.p2p.laddr)
                 .ip()
@@ -4336,7 +4328,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     let mut validator_0_copy = setup::run_cmd(
         Bin::Node,
         args,
-        Some(40),
+        Some(180),
         &test.working_dir,
         validator_0_base_dir_copy,
         loc,
@@ -4396,7 +4388,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     // 6. Wait for processing epoch
     println!("\nLOOPING\n");
     loop {
-        let epoch = epoch_sleep(&test, &validator_one_rpc, 120)?;
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 240)?;
         println!("\nCurrent epoch: {}", epoch);
         if epoch >= processing_epoch {
             break;
