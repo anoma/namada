@@ -262,7 +262,7 @@ jobs:
 
   namada-release:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -492,7 +492,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           check-name: ${{ matrix.make.wait_for }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 30
+          wait-interval: 42
           allowed-conclusions: success
       - name: Download wasm artifacts
         uses: actions/download-artifact@v3
