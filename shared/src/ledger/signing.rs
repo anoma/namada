@@ -200,14 +200,9 @@ pub async fn sign_tx<
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<TxBroadcastData, Error> {
     let keypair = tx_signer::<C, U>(client, wallet, args, default).await?;
-    // Sign over the transacttion data
+    // Sign over the transaction data and code
     tx.add_section(Section::Signature(Signature::new(
-        tx.data_sechash(),
-        &keypair,
-    )));
-    // Sign over the transaction code
-    tx.add_section(Section::Signature(Signature::new(
-        tx.code_sechash(),
+        vec![*tx.data_sechash(), *tx.code_sechash()],
         &keypair,
     )));
 
@@ -324,11 +319,6 @@ pub async fn sign_wrapper<
     ))));
     tx.header.chain_id = args.chain_id.clone().unwrap();
     tx.header.expiration = args.expiration;
-    // Then sign over the bound wrapper
-    tx.add_section(Section::Signature(Signature::new(
-        &tx.header_hash(),
-        keypair,
-    )));
 
     #[cfg(feature = "std")]
     // Attempt to decode the construction
@@ -370,6 +360,8 @@ pub async fn sign_wrapper<
     tx.protocol_filter();
     // Encrypt all sections not relating to the header
     tx.encrypt(&Default::default());
+    // Then sign over the bound wrapper committing to all other sections
+    tx.add_section(Section::Signature(Signature::new(tx.sechashes(), keypair)));
     // We use this to determine when the wrapper tx makes it on-chain
     let wrapper_hash = tx.header_hash().to_string();
     // We use this to determine when the decrypted inner tx makes it
@@ -698,7 +690,7 @@ pub async fn to_ledger_vector<
 
         let extra = tx
             .get_section(&init_account.vp_code_hash)
-            .and_then(Section::extra_data_sec)
+            .and_then(|x| Section::extra_data_sec(x.as_ref()))
             .expect("unable to load vp code")
             .code
             .hash();
@@ -728,7 +720,7 @@ pub async fn to_ledger_vector<
 
         let extra = tx
             .get_section(&init_validator.validator_vp_code_hash)
-            .and_then(Section::extra_data_sec)
+            .and_then(|x| Section::extra_data_sec(x.as_ref()))
             .expect("unable to load vp code")
             .code
             .hash();
@@ -861,7 +853,7 @@ pub async fn to_ledger_vector<
 
         let extra = tx
             .get_section(&transfer.vp_code_hash)
-            .and_then(Section::extra_data_sec)
+            .and_then(|x| Section::extra_data_sec(x.as_ref()))
             .expect("unable to load vp code")
             .code
             .hash();
