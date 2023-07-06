@@ -482,7 +482,7 @@ pub mod eth_events {
                 address
             );
 
-            let test_case: U256 = u64::from(amount).into();
+            let test_case: U256 = amount.into();
             assert_eq!(test_case.parse_amount().expect("Test failed"), amount);
 
             let test_case = U256::from(confs);

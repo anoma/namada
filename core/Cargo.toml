@@ -76,11 +76,13 @@ tpke = {package = "group-threshold-cryptography", optional = true, git = "https:
 ibc = { git = "https://github.com/heliaxdev/cosmos-ibc-rs.git", rev = "634f4ede136d045dd6f1ff8f4984dd0006aa15f0", default-features = false, features = ["serde"], optional = true}
 ibc-proto = {git = "https://github.com/heliaxdev/ibc-proto-rs.git", rev = "bb16e17a4d9260d5f20516a8eda43fa52377fad2", default-features = false, optional = true}
 ics23.workspace = true
+impl-num-traits = "0.1.2"
 index-set.workspace = true
 itertools.workspace = true
 libsecp256k1.workspace = true
 masp_primitives.workspace = true
 num256.workspace = true
+num-integer = "0.1.45"
 num-rational.workspace = true
 num-traits.workspace = true
 proptest = {version = "1.2.0", optional = true}
@@ -89,8 +91,6 @@ prost-types.workspace = true
 rand = {version = "0.8", optional = true}
 rand_core = {version = "0.6", optional = true}
 rayon = {version = "=1.5.3", optional = true}
-rust_decimal.workspace = true
-rust_decimal_macros.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
@@ -99,6 +99,7 @@ tendermint-proto = { git = "https://github.com/heliaxdev/tendermint-rs.git", rev
 thiserror.workspace = true
 tiny-keccak = {version = "2.0.2", features = ["keccak"]}
 tracing.workspace = true
+uint = "0.9.5"
 zeroize.workspace = true
 
 [dev-dependencies]
@@ -109,6 +110,7 @@ proptest.workspace = true
 rand.workspace = true
 rand_core.workspace = true
 test-log.workspace = true
+toml = {version = "=0.5.9"}
 tracing-subscriber.workspace = true
 
 [build-dependencies]

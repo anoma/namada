@@ -13,13 +13,14 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
     log_string("Received transfer to add to pool.");
     // pay the gas fees
     let GasFee { amount, ref payer } = transfer.gas_fee;
+    let nam_addr = ctx.get_native_token().unwrap();
     token::transfer(
         ctx,
         payer,
         &bridge_pool::BRIDGE_POOL_ADDRESS,
-        &address::nam(),
+        &nam_addr,
         None,
-        amount,
+        amount.native_denominated(),
         &None,
         &None,
         &None,
@@ -37,22 +38,27 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
             ctx,
             sender,
             &eth_bridge::ADDRESS,
-            &address::nam(),
+            &nam_addr,
             None,
-            amount,
+            amount.native_denominated(),
             &None,
             &None,
             &None,
         )?;
     } else {
         // Otherwise we escrow ERC20 tokens.
-        let sub_prefix = wrapped_erc20s::sub_prefix(&asset);
+        let sub_prefix = Some(wrapped_erc20s::sub_prefix(&asset));
+        let amount = amount.denominated(
+            &eth_bridge::ADDRESS,
+            sub_prefix.as_ref(),
+            ctx,
+        )?;
         token::transfer(
             ctx,
             sender,
             &bridge_pool::BRIDGE_POOL_ADDRESS,
             &eth_bridge::ADDRESS,
-            Some(sub_prefix),
+            sub_prefix,
             amount,
             &None,
             &None,

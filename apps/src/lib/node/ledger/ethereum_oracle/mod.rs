@@ -75,6 +75,13 @@ pub trait RpcClient {
     /// Ethereum event log.
     type Log: IntoEthAbiLog;
 
+    /// Whether we should stop running the Ethereum oracle
+    /// if a call to [`Self::check_events_in_block`] fails.
+    ///
+    /// This is only useful for testing purposes. In general,
+    /// no implementation should override this constant.
+    const EXIT_ON_EVENTS_FAILURE: bool = true;
+
     /// Instantiate a new client, pointing to the
     /// given RPC url.
     fn new_client(rpc_url: &str) -> Self
@@ -340,7 +347,10 @@ async fn run_oracle_aux<C: RpcClient>(mut oracle: Oracle<C>) {
                             )
                         ) => {
                             // the oracle is unresponsive, we don't want the test to end
-                            if cfg!(test) && matches!(&reason, Error::CheckEvents(_, _, _)) {
+                            if !C::EXIT_ON_EVENTS_FAILURE
+                                && matches!(&reason, Error::CheckEvents(_, _, _))
+                            {
+                                tracing::debug!("Allowing the Ethereum oracle to keep running");
                                 return ControlFlow::Continue(());
                             }
                             tracing::error!(

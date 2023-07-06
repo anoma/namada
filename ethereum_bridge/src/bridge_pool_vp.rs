@@ -3,7 +3,6 @@ use namada_core::ledger::eth_bridge::storage::bridge_pool::{
 };
 use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::ledger::storage_api::StorageWrite;
-use namada_core::types::address::nam;
 use namada_core::types::ethereum_events::Uint;
 use namada_core::types::token::{balance_key, Amount};
 
@@ -16,7 +15,8 @@ where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
 {
-    let escrow_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
+    let escrow_key =
+        balance_key(&wl_storage.storage.native_token, &BRIDGE_POOL_ADDRESS);
     wl_storage.write(&escrow_key, Amount::default()).expect(
         "Initializing the escrow balance of the Bridge pool VP shouldn't fail.",
     );

@@ -25,6 +25,7 @@ use super::{
 use crate::hints;
 use crate::types::eth_abi::Encode;
 use crate::types::ethereum_events::EthAddress;
+use crate::types::key::StorageHasher;
 
 /// The provided constant is for a traditional
 /// signature on this curve. For Ethereum, an extra byte is included
@@ -551,10 +552,6 @@ impl TryFrom<&[u8; 65]> for Signature {
 pub struct SigScheme;
 
 impl super::SigScheme for SigScheme {
-    #[cfg(any(test, feature = "secp256k1-sign-verify"))]
-    type Hasher = crate::ledger::storage::KeccakHasher;
-    #[cfg(not(any(test, feature = "secp256k1-sign-verify")))]
-    type Hasher = crate::ledger::storage::DummyHasher;
     type PublicKey = PublicKey;
     type SecretKey = SecretKey;
     type Signature = Signature;
@@ -576,8 +573,13 @@ impl super::SigScheme for SigScheme {
         ))
     }
 
-    /// Sign the data with a key
-    fn sign(keypair: &SecretKey, data: impl SignableBytes) -> Self::Signature {
+    fn sign_with_hasher<H>(
+        keypair: &SecretKey,
+        data: impl SignableBytes,
+    ) -> Self::Signature
+    where
+        H: 'static + StorageHasher,
+    {
         #[cfg(not(any(test, feature = "secp256k1-sign-verify")))]
         {
             // to avoid `unused-variables` warn
@@ -587,20 +589,22 @@ impl super::SigScheme for SigScheme {
 
         #[cfg(any(test, feature = "secp256k1-sign-verify"))]
         {
-            let message = libsecp256k1::Message::parse_slice(
-                &data.signable_hash::<Self::Hasher>(),
-            )
-            .expect("Message encoding should not fail");
+            let message =
+                libsecp256k1::Message::parse_slice(&data.signable_hash::<H>())
+                    .expect("Message encoding should not fail");
             let (sig, recovery_id) = libsecp256k1::sign(&message, &keypair.0);
             Signature(sig, recovery_id)
         }
     }
 
-    fn verify_signature(
+    fn verify_signature_with_hasher<H>(
         pk: &Self::PublicKey,
         data: &impl SignableBytes,
         sig: &Self::Signature,
-    ) -> Result<(), VerifySigError> {
+    ) -> Result<(), VerifySigError>
+    where
+        H: 'static + StorageHasher,
+    {
         #[cfg(not(any(test, feature = "secp256k1-sign-verify")))]
         {
             // to avoid `unused-variables` warn
@@ -610,10 +614,9 @@ impl super::SigScheme for SigScheme {
 
         #[cfg(any(test, feature = "secp256k1-sign-verify"))]
         {
-            let message = libsecp256k1::Message::parse_slice(
-                &data.signable_hash::<Self::Hasher>(),
-            )
-            .expect("Message encoding should not fail");
+            let message =
+                libsecp256k1::Message::parse_slice(&data.signable_hash::<H>())
+                    .expect("Message encoding should not fail");
             let is_valid = libsecp256k1::verify(&message, &sig.0, &pk.0);
             if is_valid {
                 Ok(())

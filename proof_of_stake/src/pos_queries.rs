@@ -2,7 +2,6 @@
 //! data. This includes validator and epoch related data.
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::ferveo_common::TendermintValidator;
 use namada_core::ledger::parameters::storage::get_max_proposal_bytes_key;
 use namada_core::ledger::parameters::EpochDuration;
 use namada_core::ledger::storage::WlStorage;
@@ -12,9 +11,7 @@ use namada_core::tendermint_proto::google::protobuf;
 use namada_core::tendermint_proto::types::EvidenceParams;
 use namada_core::types::address::Address;
 use namada_core::types::chain::ProposalBytes;
-use namada_core::types::key::dkg_session_keys::DkgPublicKey;
 use namada_core::types::storage::{BlockHeight, Epoch};
-use namada_core::types::transaction::EllipticCurve;
 use namada_core::types::{key, token};
 use thiserror::Error;
 
@@ -136,9 +133,8 @@ where
     pub fn get_total_voting_power(self, epoch: Option<Epoch>) -> token::Amount {
         self.get_consensus_validators(epoch)
             .iter()
-            .map(|validator| u64::from(validator.bonded_stake))
-            .sum::<u64>()
-            .into()
+            .map(|validator| validator.bonded_stake)
+            .sum::<token::Amount>()
     }
 
     /// Return evidence parameters.
@@ -171,7 +167,7 @@ where
         self,
         pk: &key::common::PublicKey,
         epoch: Option<Epoch>,
-    ) -> Result<TendermintValidator<EllipticCurve>> {
+    ) -> Result<WeightedValidator> {
         let pk_bytes = pk
             .try_to_vec()
             .expect("Serializing public key should not fail");
@@ -184,29 +180,6 @@ where
                 match self.wl_storage.storage.read(&pk_key) {
                     Ok((Some(bytes), _)) => bytes == pk_bytes,
                     _ => false,
-                }
-            })
-            .map(|validator| {
-                let dkg_key =
-                    key::dkg_session_keys::dkg_pk_key(&validator.address);
-                let bytes = self
-                    .wl_storage
-                    .storage
-                    .read(&dkg_key)
-                    .expect("Validator should have public dkg key")
-                    .0
-                    .expect("Validator should have public dkg key");
-                let dkg_publickey =
-                    &<DkgPublicKey as BorshDeserialize>::deserialize(
-                        &mut bytes.as_ref(),
-                    )
-                    .expect(
-                        "DKG public key in storage should be deserializable",
-                    );
-                TendermintValidator {
-                    power: validator.bonded_stake.into(),
-                    address: validator.address.to_string(),
-                    public_key: dkg_publickey.into(),
                 }
             })
             .ok_or_else(|| Error::NotValidatorKey(pk.to_string(), epoch))

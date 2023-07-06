@@ -7,7 +7,8 @@ use masp_primitives::sapling::Node;
 use namada_core::ledger::storage::LastBlock;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
-use namada_core::types::storage::{BlockResults, KeySeg};
+use namada_core::types::storage::{BlockHeight, BlockResults, Key, KeySeg};
+use namada_core::types::token::MaspDenom;
 
 use self::eth_bridge::{EthBridge, ETH_BRIDGE};
 use crate::ibc::core::ics04_channel::packet::Sequence;
@@ -20,12 +21,14 @@ use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
 use crate::tendermint::merkle::proof::Proof;
-use crate::types::storage::{self, BlockHeight, Epoch, PrefixValue};
+use crate::types::storage::{self, Epoch, PrefixValue};
 #[cfg(any(test, feature = "async-client"))]
 use crate::types::transaction::TxResult;
 
 type Conversion = (
     Address,
+    Option<Key>,
+    MaspDenom,
     Epoch,
     masp_primitives::transaction::components::Amount,
     MerklePath<Node>,
@@ -39,6 +42,9 @@ router! {SHELL,
 
     // Epoch of the last committed block
     ( "epoch" ) -> Epoch = epoch,
+
+    // Epoch of the input block height
+    ( "epoch_at_height" / [height: BlockHeight]) -> Option<Epoch> = epoch_at_height,
 
     // Query the last committed block
     ( "last_block" ) -> Option<LastBlock> = last_block,
@@ -157,7 +163,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     // Conversion values are constructed on request
-    if let Some((addr, epoch, conv, pos)) = ctx
+    if let Some(((addr, sub_prefix, denom), epoch, conv, pos)) = ctx
         .wl_storage
         .storage
         .conversion_state
@@ -166,6 +172,8 @@ where
     {
         Ok((
             addr.clone(),
+            sub_prefix.clone(),
+            *denom,
             *epoch,
             Into::<masp_primitives::transaction::components::Amount>::into(
                 conv.clone(),
@@ -199,6 +207,17 @@ where
 {
     let data = ctx.wl_storage.storage.last_epoch;
     Ok(data)
+}
+
+fn epoch_at_height<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    height: BlockHeight,
+) -> storage_api::Result<Option<Epoch>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    Ok(ctx.wl_storage.storage.block.pred_epochs.get_epoch(height))
 }
 
 fn last_block<D, H>(
@@ -522,7 +541,7 @@ mod test {
         assert!(!has_balance_key);
 
         // Then write some balance ...
-        let balance = token::Amount::from(1000);
+        let balance = token::Amount::native_whole(1000);
         StorageWrite::write(&mut client.wl_storage, &balance_key, balance)?;
         // It has to be committed to be visible in a query
         client.wl_storage.commit_tx();

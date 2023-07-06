@@ -16,9 +16,8 @@ use super::{
     ParseSignatureError, RefTo, SchemeType, SigScheme as SigSchemeTrait,
     VerifySigError,
 };
-use crate::ledger::storage::DummyHasher;
 use crate::types::ethereum_events::EthAddress;
-use crate::types::key::SignableBytes;
+use crate::types::key::{SignableBytes, StorageHasher};
 
 /// Public key
 #[derive(
@@ -305,7 +304,6 @@ impl super::Signature for Signature {
 pub struct SigScheme;
 
 impl super::SigScheme for SigScheme {
-    type Hasher = DummyHasher;
     type PublicKey = PublicKey;
     type SecretKey = SecretKey;
     type Signature = Signature;
@@ -330,31 +328,41 @@ impl super::SigScheme for SigScheme {
         );
     }
 
-    fn sign(
+    fn sign_with_hasher<H>(
         keypair: &SecretKey,
         data: impl super::SignableBytes,
-    ) -> Self::Signature {
+    ) -> Self::Signature
+    where
+        H: 'static + StorageHasher,
+    {
         match keypair {
-            SecretKey::Ed25519(kp) => {
-                Signature::Ed25519(ed25519::SigScheme::sign(kp, data))
-            }
-            SecretKey::Secp256k1(kp) => {
-                Signature::Secp256k1(secp256k1::SigScheme::sign(kp, data))
-            }
+            SecretKey::Ed25519(kp) => Signature::Ed25519(
+                ed25519::SigScheme::sign_with_hasher::<H>(kp, data),
+            ),
+            SecretKey::Secp256k1(kp) => Signature::Secp256k1(
+                secp256k1::SigScheme::sign_with_hasher::<H>(kp, data),
+            ),
         }
     }
 
-    fn verify_signature(
+    fn verify_signature_with_hasher<H>(
         pk: &Self::PublicKey,
         data: &impl SignableBytes,
         sig: &Self::Signature,
-    ) -> Result<(), VerifySigError> {
+    ) -> Result<(), VerifySigError>
+    where
+        H: 'static + StorageHasher,
+    {
         match (pk, sig) {
             (PublicKey::Ed25519(pk), Signature::Ed25519(sig)) => {
-                ed25519::SigScheme::verify_signature(pk, data, sig)
+                ed25519::SigScheme::verify_signature_with_hasher::<H>(
+                    pk, data, sig,
+                )
             }
             (PublicKey::Secp256k1(pk), Signature::Secp256k1(sig)) => {
-                secp256k1::SigScheme::verify_signature(pk, data, sig)
+                secp256k1::SigScheme::verify_signature_with_hasher::<H>(
+                    pk, data, sig,
+                )
             }
             _ => Err(VerifySigError::MismatchedScheme),
         }

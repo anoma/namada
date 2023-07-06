@@ -434,6 +434,7 @@ mod test_prepare_proposal {
     use namada::types::key::common;
     use namada::types::key::RefTo;
     use namada::types::storage::BlockHeight;
+    use namada::types::token::Amount;
     use namada::types::transaction::protocol::EthereumTxData;
     use namada::types::transaction::{Fee, TxType, WrapperTx};
     #[cfg(feature = "abcipp")]
@@ -565,12 +566,12 @@ mod test_prepare_proposal {
         // an unsigned wrapper will cause an error in processing
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -942,12 +943,12 @@ mod test_prepare_proposal {
         for i in 0..2 {
             let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount: 0.into(),
+                    amount: Default::default(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             ))));
@@ -1016,7 +1017,7 @@ mod test_prepare_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1068,7 +1069,7 @@ mod test_prepare_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1104,12 +1105,12 @@ mod test_prepare_proposal {
         let keypair = crate::wallet::defaults::daewon_keypair();
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1162,7 +1163,7 @@ mod test_prepare_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1185,7 +1186,7 @@ mod test_prepare_proposal {
                 },
                 &keypair_2,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             ))));
@@ -1227,7 +1228,7 @@ mod test_prepare_proposal {
                 },
                 &keypair,
                 Epoch(0),
-                0.into(),
+                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             ))));

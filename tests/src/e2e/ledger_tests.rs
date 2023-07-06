@@ -30,6 +30,7 @@ use namada_apps::config::genesis::genesis_config::{
 };
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
+use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use namada_test_utils::TestWasms;
 use serde_json::json;
 use setup::constants::*;
@@ -426,7 +427,10 @@ fn ledger_txs_and_queries() -> Result<()> {
         target: find_address(&test, ALBERT).unwrap(),
         token: find_address(&test, NAM).unwrap(),
         sub_prefix: None,
-        amount: token::Amount::whole(10),
+        amount: token::DenominatedAmount {
+            amount: token::Amount::native_whole(10),
+            denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        },
         key: None,
         shielded: None,
     }
@@ -597,7 +601,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     }
     let christel = find_address(&test, CHRISTEL)?;
     // as setup in `genesis/e2e-tests-single-node.toml`
-    let christel_balance = token::Amount::whole(1000000);
+    let christel_balance = token::Amount::native_whole(1000000);
     let nam = find_address(&test, NAM)?;
     let storage_key = token::balance_key(&nam, &christel).to_string();
     let query_args_and_expected_response = vec![
@@ -895,7 +899,7 @@ fn masp_txs_and_queries() -> Result<()> {
             } else {
                 tx_args.clone()
             };
-            let mut client = run!(test, Bin::Client, tx_args, Some(300))?;
+            let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
 
             if *tx_result == "Transaction is valid" && !dry_run {
                 client.exp_string("Transaction accepted")?;
@@ -925,7 +929,7 @@ fn masp_pinned_txs() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                epochs_per_year: epochs_per_year_from_min_duration(60),
+                epochs_per_year: epochs_per_year_from_min_duration(120),
                 ..genesis.parameters
             };
             GenesisConfig {
@@ -994,6 +998,9 @@ fn masp_pinned_txs() -> Result<()> {
     client.exp_string("has not yet been consumed")?;
     client.assert_success();
 
+    // Wait till epoch boundary
+    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+
     // Send 20 BTC from Albert to PPA(C)
     let mut client = run!(
         test,
@@ -1013,6 +1020,8 @@ fn masp_pinned_txs() -> Result<()> {
         ],
         Some(300)
     )?;
+    client.exp_string("Transaction accepted")?;
+    client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is valid")?;
     client.assert_success();
 
@@ -1084,6 +1093,10 @@ fn masp_pinned_txs() -> Result<()> {
 
 #[test]
 fn masp_incentives() -> Result<()> {
+    // The number of decimal places used by BTC amounts.
+    const BTC_DENOMINATION: u8 = 8;
+    // The number of decimal places used by ETH amounts.
+    const ETH_DENOMINATION: u8 = 18;
     // Download the shielded pool parameters before starting node
     let _ = CLIShieldedUtils::new(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
@@ -1145,6 +1158,8 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
+    client.exp_string("Transaction accepted")?;
+    client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is valid")?;
     client.assert_success();
 
@@ -1161,7 +1176,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("btc: 20")?;
     client.assert_success();
@@ -1179,7 +1194,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("No shielded nam balance found")?;
     client.assert_success();
@@ -1202,13 +1217,13 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("btc: 20")?;
     client.assert_success();
 
-    let amt20 = token::Amount::from_str("20").unwrap();
-    let amt30 = token::Amount::from_str("30").unwrap();
+    let amt20 = token::Amount::from_uint(20, BTC_DENOMINATION).unwrap();
+    let amt10 = token::Amount::from_uint(10, ETH_DENOMINATION).unwrap();
 
     // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_1-epoch_0)
     let mut client = run!(
@@ -1223,12 +1238,14 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt20 * masp_rewards[&btc()]).0 * (ep1.0 - ep0.0)
-    ))?;
+    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep1.0 - ep0.0);
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
     // Assert NAM balance at MASP pool is 20*BTC_reward*(epoch_1-epoch_0)
@@ -1244,12 +1261,14 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt20 * masp_rewards[&btc()]).0 * (ep1.0 - ep0.0)
-    ))?;
+    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep1.0 - ep0.0);
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
     // Wait till epoch boundary
@@ -1268,7 +1287,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("btc: 20")?;
     client.assert_success();
@@ -1286,12 +1305,14 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt20 * masp_rewards[&btc()]).0 * (ep2.0 - ep0.0)
-    ))?;
+    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep2.0 - ep0.0);
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
     // Assert NAM balance at MASP pool is 20*BTC_reward*(epoch_2-epoch_0)
@@ -1307,18 +1328,20 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt20 * masp_rewards[&btc()]).0 * (ep2.0 - ep0.0)
-    ))?;
+    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep2.0 - ep0.0);
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
     // Wait till epoch boundary
     let ep3 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Send 30 ETH from Albert to PA(B)
+    // Send 10 ETH from Albert to PA(B)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1331,16 +1354,18 @@ fn masp_incentives() -> Result<()> {
             "--token",
             ETH,
             "--amount",
-            "30",
+            "10",
             "--node",
             &validator_one_rpc
         ],
         Some(300)
     )?;
+    client.exp_string("Transaction accepted")?;
+    client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is valid")?;
     client.assert_success();
 
-    // Assert ETH balance at VK(B) is 30
+    // Assert ETH balance at VK(B) is 10
     let mut client = run!(
         test,
         Bin::Client,
@@ -1353,9 +1378,9 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string("eth: 30")?;
+    client.exp_string("eth: 10")?;
     client.assert_success();
 
     // Assert NAM balance at VK(B) is 0
@@ -1371,7 +1396,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("No shielded nam balance found")?;
     client.assert_success();
@@ -1379,7 +1404,7 @@ fn masp_incentives() -> Result<()> {
     // Wait till epoch boundary
     let ep4 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Assert ETH balance at VK(B) is 30
+    // Assert ETH balance at VK(B) is 10
     let mut client = run!(
         test,
         Bin::Client,
@@ -1392,12 +1417,12 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string("eth: 30")?;
+    client.exp_string("eth: 10")?;
     client.assert_success();
 
-    // Assert NAM balance at VK(B) is 30*ETH_reward*(epoch_4-epoch_3)
+    // Assert NAM balance at VK(B) is 10*ETH_reward*(epoch_4-epoch_3)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1410,16 +1435,18 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt30 * masp_rewards[&eth()]).0 * (ep4.0 - ep3.0)
-    ))?;
+    let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep4.0 - ep3.0);
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
     // Assert NAM balance at MASP pool is
-    // 20*BTC_reward*(epoch_4-epoch_0)+30*ETH_reward*(epoch_4-epoch_3)
+    // 20*BTC_reward*(epoch_4-epoch_0)+10*ETH_reward*(epoch_4-epoch_3)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1432,19 +1459,21 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        ((amt20 * masp_rewards[&btc()]).0 * (ep4.0 - ep0.0))
-            + ((amt30 * masp_rewards[&eth()]).0 * (ep4.0 - ep3.0))
-    ))?;
+    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep4.0 - ep0.0))
+        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep4.0 - ep3.0));
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated))?;
     client.assert_success();
 
     // Wait till epoch boundary
     let ep5 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Send 30 ETH from SK(B) to Christel
+    // Send 10 ETH from SK(B) to Christel
     let mut client = run!(
         test,
         Bin::Client,
@@ -1457,7 +1486,7 @@ fn masp_incentives() -> Result<()> {
             "--token",
             ETH,
             "--amount",
-            "30",
+            "10",
             "--signer",
             BERTHA,
             "--node",
@@ -1465,6 +1494,8 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
+    client.exp_string("Transaction accepted")?;
+    client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is valid")?;
     client.assert_success();
 
@@ -1481,14 +1512,14 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("No shielded eth balance found")?;
     client.assert_success();
 
     let mut ep = get_epoch(&test, &validator_one_rpc)?;
 
-    // Assert NAM balance at VK(B) is 30*ETH_reward*(ep-epoch_3)
+    // Assert NAM balance at VK(B) is 10*ETH_reward*(ep-epoch_3)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1501,17 +1532,19 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt30 * masp_rewards[&eth()]).0 * (ep.0 - ep3.0)
-    ))?;
+    let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep.0 - ep3.0);
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
     ep = get_epoch(&test, &validator_one_rpc)?;
     // Assert NAM balance at MASP pool is
-    // 20*BTC_reward*(epoch_5-epoch_0)+30*ETH_reward*(epoch_5-epoch_3)
+    // 20*BTC_reward*(epoch_5-epoch_0)+10*ETH_reward*(epoch_5-epoch_3)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1524,13 +1557,15 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        ((amt20 * masp_rewards[&btc()]).0 * (ep.0 - ep0.0))
-            + ((amt30 * masp_rewards[&eth()]).0 * (ep.0 - ep3.0))
-    ))?;
+    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep.0 - ep0.0))
+        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep.0 - ep3.0));
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated))?;
     client.assert_success();
 
     // Wait till epoch boundary
@@ -1557,6 +1592,8 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
+    client.exp_string("Transaction accepted")?;
+    client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is valid")?;
     client.assert_success();
 
@@ -1573,7 +1610,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("No shielded btc balance found")?;
     client.assert_success();
@@ -1591,12 +1628,14 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)
-    ))?;
+    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0);
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
     // Assert NAM balance at MASP pool is
@@ -1613,13 +1652,15 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        ((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0))
-            + ((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0))
-    ))?;
+    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
+        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0));
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
     // Wait till epoch boundary
@@ -1638,15 +1679,17 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)
-    ))?;
+    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0);
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated))?;
     client.assert_success();
 
-    // Assert NAM balance at VK(B) is 30*ETH_reward*(epoch_5-epoch_3)
+    // Assert NAM balance at VK(B) is 10*ETH_reward*(epoch_5-epoch_3)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1659,16 +1702,18 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0)
-    ))?;
+    let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0);
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
     // Assert NAM balance at MASP pool is
-    // 20*BTC_reward*(epoch_6-epoch_0)+30*ETH_reward*(epoch_5-epoch_3)
+    // 20*BTC_reward*(epoch_6-epoch_0)+10*ETH_reward*(epoch_5-epoch_3)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1681,20 +1726,22 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        ((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0))
-            + ((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0))
-    ))?;
+    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
+        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0));
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
     // Wait till epoch boundary to prevent conversion expiry during transaction
     // construction
     let _ep8 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Send 30*ETH_reward*(epoch_5-epoch_3) NAM from SK(B) to Christel
+    // Send 10*ETH_reward*(epoch_5-epoch_3) NAM from SK(B) to Christel
     let mut client = run!(
         test,
         Bin::Client,
@@ -1707,7 +1754,8 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            &((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0)).to_string(),
+            &((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0))
+                .to_string_native(),
             "--signer",
             BERTHA,
             "--node",
@@ -1715,6 +1763,8 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
+    client.exp_string("Transaction accepted")?;
+    client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is valid")?;
     client.assert_success();
 
@@ -1734,7 +1784,8 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            &((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)).to_string(),
+            &((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
+                .to_string_native(),
             "--signer",
             ALBERT,
             "--node",
@@ -1742,6 +1793,8 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
+    client.exp_string("Transaction accepted")?;
+    client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is valid")?;
     client.assert_success();
 
@@ -1758,7 +1811,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("No shielded nam balance found")?;
     client.assert_success();
@@ -1776,7 +1829,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("No shielded nam balance found")?;
     client.assert_success();
@@ -1794,7 +1847,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("nam: 0")?;
     client.assert_success();
@@ -1900,7 +1953,7 @@ fn invalid_transactions() -> Result<()> {
         "--token",
         BERTHA,
         "--amount",
-        "1_000_000.1",
+        "1000000.1",
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -2042,7 +2095,8 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Amount 5100 withdrawable starting from epoch ")?;
+    client
+        .exp_string("Amount 5100.000000 withdrawable starting from epoch ")?;
     client.assert_success();
 
     // 5. Submit an unbond of the delegation
@@ -2064,7 +2118,7 @@ fn pos_bonds() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    let expected = "Amount 3200 withdrawable starting from epoch ";
+    let expected = "Amount 3200.000000 withdrawable starting from epoch ";
     let (_unread, matched) = client.exp_regex(&format!("{expected}.*\n"))?;
     let epoch_raw = matched.trim().split_once(expected).unwrap().1;
     let delegation_withdrawable_epoch = Epoch::from_str(epoch_raw).unwrap();
@@ -2446,11 +2500,11 @@ fn test_bond_queries() -> Result<()> {
     let tx_args = vec!["bonds", "--ledger-address", &validator_one_rpc];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(
-        "All bonds total active: 200088\r
-All bonds total: 200088\r
-All unbonds total active: 412\r
-All unbonds total: 412\r
-All unbonds total withdrawable: 412\r",
+        "All bonds total active: 200088.000000\r
+All bonds total: 200088.000000\r
+All unbonds total active: 412.000000\r
+All unbonds total: 412.000000\r
+All unbonds total withdrawable: 412.000000\r",
     )?;
     client.assert_success();
 
@@ -2687,7 +2741,7 @@ fn pos_init_validator() -> Result<()> {
         find_bonded_stake(&test, new_validator, &non_validator_rpc)?;
     assert_eq!(
         bonded_stake,
-        token::Amount::whole(validator_stake + delegation)
+        token::Amount::from_str("11000.5", NATIVE_MAX_DECIMAL_PLACES).unwrap()
     );
 
     Ok(())

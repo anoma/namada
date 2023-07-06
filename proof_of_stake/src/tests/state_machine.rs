@@ -9,32 +9,32 @@ use namada_core::ledger::storage_api::collections::lazy_map::NestedSubKey;
 use namada_core::ledger::storage_api::token::read_balance;
 use namada_core::ledger::storage_api::{token, StorageRead};
 use namada_core::types::address::{self, Address};
+use namada_core::types::dec::Dec;
 use namada_core::types::key;
 use namada_core::types::key::common::PublicKey;
 use namada_core::types::storage::Epoch;
+use namada_core::types::token::Change;
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 use proptest_state_machine::{
     prop_state_machine, ReferenceStateMachine, StateMachineTest,
 };
-use rust_decimal::Decimal;
-use rust_decimal_macros::dec;
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see
 // `tracing` logs from tests
 use test_log::test;
 
-use super::arb_genesis_validators;
-use crate::parameters::testing::{arb_pos_params, arb_rate};
+use crate::parameters::testing::arb_rate;
 use crate::parameters::PosParams;
+use crate::tests::arb_params_and_genesis_validators;
 use crate::types::{
-    decimal_mult_amount, decimal_mult_i128, BondId, GenesisValidator,
-    ReverseOrdTokenAmount, Slash, SlashType, SlashedAmount, ValidatorState,
-    WeightedValidator,
+    BondId, GenesisValidator, ReverseOrdTokenAmount, Slash, SlashType,
+    SlashedAmount, ValidatorState, WeightedValidator,
 };
 use crate::{
     below_capacity_validator_set_handle, consensus_validator_set_handle,
-    enqueued_slashes_handle, read_pos_params, validator_deltas_handle,
-    validator_slashes_handle, validator_state_handle,
+    enqueued_slashes_handle, read_below_threshold_validator_set_addresses,
+    read_pos_params, validator_deltas_handle, validator_slashes_handle,
+    validator_state_handle,
 };
 
 prop_state_machine! {
@@ -71,6 +71,8 @@ struct AbstractPosState {
     /// Below-capacity validator set. Pipelined.
     below_capacity_set:
         BTreeMap<Epoch, BTreeMap<ReverseOrdTokenAmount, VecDeque<Address>>>,
+    /// Below-threshold validator set. Pipelined.
+    below_threshold_set: BTreeMap<Epoch, HashSet<Address>>,
     /// Validator states. Pipelined.
     validator_states: BTreeMap<Epoch, BTreeMap<Address, ValidatorState>>,
     /// Unbonded bonds. The outer key for Epoch is pipeline + unbonding offset
@@ -106,8 +108,8 @@ enum Transition {
         consensus_key: PublicKey,
         eth_cold_key: PublicKey,
         eth_hot_key: PublicKey,
-        commission_rate: Decimal,
-        max_commission_rate_change: Decimal,
+        commission_rate: Dec,
+        max_commission_rate_change: Dec,
     },
     Bond {
         id: BondId,
@@ -171,7 +173,7 @@ impl StateMachineTest for ConcretePosState {
             &crate::ADDRESS,
         )
         .unwrap();
-        println!("PoS balance: {}", pos_balance);
+        println!("PoS balance: {}", pos_balance.to_string_native());
         match transition {
             Transition::NextEpoch => {
                 println!("\nCONCRETE Next epoch");
@@ -427,6 +429,7 @@ impl StateMachineTest for ConcretePosState {
                     height,
                     slash_type,
                     &address,
+                    current_epoch.next(),
                 )
                 .unwrap();
 
@@ -658,26 +661,31 @@ impl ConcretePosState {
     ) {
         let pipeline = submit_epoch + params.pipeline_len;
         // Read the consensus sets data using iterator
-        let consensus_set = crate::consensus_validator_set_handle()
+        let num_in_consensus = crate::consensus_validator_set_handle()
             .at(&pipeline)
             .iter(&self.s)
             .unwrap()
             .map(|res| res.unwrap())
-            .collect::<Vec<_>>();
-        let below_cap_set = crate::below_capacity_validator_set_handle()
-            .at(&pipeline)
-            .iter(&self.s)
-            .unwrap()
-            .map(|res| res.unwrap())
-            .collect::<Vec<_>>();
-        let num_occurrences = consensus_set
-            .iter()
             .filter(|(_keys, addr)| addr == &id.validator)
-            .count()
-            + below_cap_set
-                .iter()
-                .filter(|(_keys, addr)| addr == &id.validator)
+            .count();
+
+        let num_in_below_cap = crate::below_capacity_validator_set_handle()
+            .at(&pipeline)
+            .iter(&self.s)
+            .unwrap()
+            .map(|res| res.unwrap())
+            .filter(|(_keys, addr)| addr == &id.validator)
+            .count();
+
+        let num_in_below_thresh =
+            read_below_threshold_validator_set_addresses(&self.s, pipeline)
+                .unwrap()
+                .into_iter()
+                .filter(|addr| addr == &id.validator)
                 .count();
+
+        let num_occurrences =
+            num_in_consensus + num_in_below_cap + num_in_below_thresh;
         let validator_is_jailed = crate::validator_state_handle(&id.validator)
             .get(&self.s, pipeline, params)
             .unwrap()
@@ -702,22 +710,31 @@ impl ConcretePosState {
                 &self.s, pipeline,
             )
             .unwrap();
+        let below_thresh_set =
+            crate::read_below_threshold_validator_set_addresses(
+                &self.s, pipeline,
+            )
+            .unwrap();
         let weighted = WeightedValidator {
             bonded_stake: stake_at_pipeline,
             address: id.validator,
         };
         let consensus_val = consensus_set.get(&weighted);
         let below_cap_val = below_cap_set.get(&weighted);
+        let below_thresh_val = below_thresh_set.get(&weighted.address);
 
         // Post-condition: The validator should be updated in exactly once in
         // the validator sets
         let jailed_condition = validator_is_jailed
             && consensus_val.is_none()
-            && below_cap_val.is_none();
-        assert!(
-            (consensus_val.is_some() ^ below_cap_val.is_some())
-                || jailed_condition
-        );
+            && below_cap_val.is_none()
+            && below_thresh_val.is_none();
+
+        let mut num_sets = i32::from(consensus_val.is_some());
+        num_sets += i32::from(below_cap_val.is_some());
+        num_sets += i32::from(below_thresh_val.is_some());
+
+        assert!(num_sets == 1 || jailed_condition);
 
         // Post-condition: The stake of the validators in the consensus set is
         // greater than or equal to below-capacity validators
@@ -733,9 +750,11 @@ impl ConcretePosState {
             {
                 assert!(
                     consensus_stake >= below_cap_stake,
-                    "Consensus validator {consensus_addr} with stake \
-                     {consensus_stake} and below-capacity {below_cap_addr} \
-                     with stake {below_cap_stake} should be swapped."
+                    "Consensus validator {consensus_addr} with stake {} and \
+                     below-capacity {below_cap_addr} with stake {} should be \
+                     swapped.",
+                    consensus_stake.to_string_native(),
+                    below_cap_stake.to_string_native()
                 );
             }
         }
@@ -765,28 +784,35 @@ impl ConcretePosState {
                 .contains(address)
             );
             assert!(
+                !crate::read_below_threshold_validator_set_addresses(
+                    &self.s, epoch
+                )
+                .unwrap()
+                .contains(address)
+            );
+            assert!(
                 !crate::read_all_validator_addresses(&self.s, epoch)
                     .unwrap()
                     .contains(address)
             );
         }
-        let weighted = WeightedValidator {
-            bonded_stake: Default::default(),
-            address: address.clone(),
-        };
         let in_consensus =
-            crate::read_consensus_validator_set_addresses_with_stake(
+            crate::read_consensus_validator_set_addresses(&self.s, pipeline)
+                .unwrap()
+                .contains(address);
+        let in_bc = crate::read_below_capacity_validator_set_addresses(
+            &self.s, pipeline,
+        )
+        .unwrap()
+        .contains(address);
+        let in_below_thresh =
+            crate::read_below_threshold_validator_set_addresses(
                 &self.s, pipeline,
             )
             .unwrap()
-            .contains(&weighted);
-        let in_bc =
-            crate::read_below_capacity_validator_set_addresses_with_stake(
-                &self.s, pipeline,
-            )
-            .unwrap()
-            .contains(&weighted);
-        assert!(in_consensus ^ in_bc);
+            .contains(address);
+
+        assert!(in_below_thresh && !in_consensus && !in_bc);
     }
 
     fn check_misbehavior_post_conditions(
@@ -843,7 +869,7 @@ impl ConcretePosState {
         if let Some(slash) = slash {
             assert_eq!(slash.epoch, infraction_epoch);
             assert_eq!(slash.r#type, slash_type);
-            assert_eq!(slash.rate, Decimal::ZERO);
+            assert_eq!(slash.rate, Dec::zero());
         } else {
             panic!("Could not find the slash enqueued");
         }
@@ -884,24 +910,35 @@ impl ConcretePosState {
                 .unwrap();
             assert_eq!(val_state, Some(ValidatorState::Jailed));
         }
-        let in_consensus = consensus_validator_set_handle()
-            .at(&(current_epoch + params.pipeline_len))
-            .iter(&self.s)
-            .unwrap()
-            .any(|res| {
-                let (_, val_address) = res.unwrap();
-                val_address == validator.clone()
-            });
+        let pipeline_epoch = current_epoch + params.pipeline_len;
 
-        let in_bc = below_capacity_validator_set_handle()
-            .at(&(current_epoch + params.pipeline_len))
+        let num_in_consensus = consensus_validator_set_handle()
+            .at(&pipeline_epoch)
             .iter(&self.s)
             .unwrap()
-            .any(|res| {
-                let (_, val_address) = res.unwrap();
-                val_address == validator.clone()
-            });
-        assert!(in_consensus ^ in_bc);
+            .map(|res| res.unwrap())
+            .filter(|(_keys, addr)| addr == validator)
+            .count();
+
+        let num_in_bc = below_capacity_validator_set_handle()
+            .at(&pipeline_epoch)
+            .iter(&self.s)
+            .unwrap()
+            .map(|res| res.unwrap())
+            .filter(|(_keys, addr)| addr == validator)
+            .count();
+
+        let num_in_bt = read_below_threshold_validator_set_addresses(
+            &self.s,
+            pipeline_epoch,
+        )
+        .unwrap()
+        .into_iter()
+        .filter(|addr| addr == validator)
+        .count();
+
+        let num_occurrences = num_in_consensus + num_in_bc + num_in_bt;
+        assert_eq!(num_occurrences, 1);
 
         let val_state = validator_state_handle(validator)
             .get(&self.s, current_epoch + params.pipeline_len, params)
@@ -909,6 +946,7 @@ impl ConcretePosState {
         assert!(
             val_state == Some(ValidatorState::Consensus)
                 || val_state == Some(ValidatorState::BelowCapacity)
+                || val_state == Some(ValidatorState::BelowThreshold)
         );
     }
 
@@ -940,10 +978,10 @@ impl ConcretePosState {
                 tracing::debug!(
                     "Consensus val {}, stake: {} ({})",
                     &validator,
-                    u64::from(bonded_stake),
-                    deltas_stake
+                    bonded_stake.to_string_native(),
+                    deltas_stake.to_string_native(),
                 );
-                assert!(deltas_stake >= 0);
+                assert!(!deltas_stake.is_negative());
                 assert_eq!(
                     bonded_stake,
                     token::Amount::from_change(deltas_stake)
@@ -993,8 +1031,8 @@ impl ConcretePosState {
                 tracing::debug!(
                     "Below-cap val {}, stake: {} ({})",
                     &validator,
-                    u64::from(bonded_stake),
-                    deltas_stake
+                    bonded_stake.to_string_native(),
+                    deltas_stake.to_string_native(),
                 );
                 assert_eq!(
                     bonded_stake,
@@ -1045,6 +1083,53 @@ impl ConcretePosState {
                 assert!(!vals.contains(&validator));
                 vals.insert(validator);
             }
+
+            for validator in
+                crate::read_below_threshold_validator_set_addresses(
+                    &self.s, epoch,
+                )
+                .unwrap()
+            {
+                let stake = validator_deltas_handle(&validator)
+                    .get_sum(&self.s, epoch, params)
+                    .unwrap()
+                    .unwrap_or_default();
+                tracing::debug!(
+                    "Below-thresh val {}, stake {}",
+                    &validator,
+                    stake.to_string_native()
+                );
+
+                let state = crate::validator_state_handle(&validator)
+                    .get(&self.s, epoch, params)
+                    .unwrap()
+                    .unwrap();
+
+                assert_eq!(state, ValidatorState::BelowThreshold);
+                assert_eq!(
+                    state,
+                    ref_state
+                        .validator_states
+                        .get(&epoch)
+                        .unwrap()
+                        .get(&validator)
+                        .cloned()
+                        .unwrap()
+                );
+                assert_eq!(
+                    stake,
+                    ref_state
+                        .validator_stakes
+                        .get(&epoch)
+                        .unwrap()
+                        .get(&validator)
+                        .cloned()
+                        .unwrap()
+                );
+                assert!(!vals.contains(&validator));
+                vals.insert(validator);
+            }
+
             // Jailed validators not in a set
             let all_validators =
                 crate::read_all_validator_addresses(&self.s, epoch).unwrap();
@@ -1070,7 +1155,11 @@ impl ConcretePosState {
                         .get_sum(&self.s, epoch, params)
                         .unwrap()
                         .unwrap_or_default();
-                    tracing::debug!("Jailed val {}, stake {}", &val, stake);
+                    tracing::debug!(
+                        "Jailed val {}, stake {}",
+                        &val,
+                        stake.to_string_native()
+                    );
 
                     assert_eq!(
                         state,
@@ -1106,7 +1195,7 @@ impl ReferenceStateMachine for AbstractPosState {
 
     fn init_state() -> BoxedStrategy<Self::State> {
         println!("\nInitializing abstract state machine");
-        (arb_pos_params(Some(5)), arb_genesis_validators(5..10))
+        arb_params_and_genesis_validators(Some(5), 5..10)
             .prop_map(|(params, genesis_validators)| {
                 let epoch = Epoch::default();
                 let mut state = Self {
@@ -1124,6 +1213,7 @@ impl ReferenceStateMachine for AbstractPosState {
                     validator_stakes: Default::default(),
                     consensus_set: Default::default(),
                     below_capacity_set: Default::default(),
+                    below_threshold_set: Default::default(),
                     validator_states: Default::default(),
                     validator_slashes: Default::default(),
                     enqueued_slashes: Default::default(),
@@ -1161,7 +1251,19 @@ impl ReferenceStateMachine for AbstractPosState {
                         .iter()
                         .map(|(_stake, validators)| validators.len() as u64)
                         .sum();
-                    let deque = if state.params.max_validator_slots
+
+                    if tokens < state.params.validator_stake_threshold {
+                        state
+                            .below_threshold_set
+                            .entry(epoch)
+                            .or_default()
+                            .insert(address.clone());
+                        state
+                            .validator_states
+                            .entry(epoch)
+                            .or_default()
+                            .insert(address, ValidatorState::BelowThreshold);
+                    } else if state.params.max_validator_slots
                         > consensus_vals_len
                     {
                         state
@@ -1169,7 +1271,10 @@ impl ReferenceStateMachine for AbstractPosState {
                             .entry(epoch)
                             .or_default()
                             .insert(address.clone(), ValidatorState::Consensus);
-                        consensus_set.entry(tokens).or_default()
+                        consensus_set
+                            .entry(tokens)
+                            .or_default()
+                            .push_back(address);
                     } else {
                         state
                             .validator_states
@@ -1184,11 +1289,13 @@ impl ReferenceStateMachine for AbstractPosState {
                         below_cap_set
                             .entry(ReverseOrdTokenAmount(tokens))
                             .or_default()
+                            .push_back(address)
                     };
-                    deque.push_back(address)
                 }
-                // Ensure that below-capacity set is initialized even if empty
+                // Ensure that below-capacity and below-threshold sets are
+                // initialized even if empty
                 state.below_capacity_set.entry(epoch).or_default();
+                state.below_threshold_set.entry(epoch).or_default();
 
                 // Copy validator sets up to pipeline epoch
                 for epoch in epoch.next().iter_range(state.params.pipeline_len)
@@ -1288,11 +1395,13 @@ impl ReferenceStateMachine for AbstractPosState {
             let arb_unbondable = prop::sample::select(unbondable);
             let arb_unbond =
                 arb_unbondable.prop_flat_map(|(id, deltas_sum)| {
+                    let deltas_sum = i128::try_from(deltas_sum).unwrap();
                     // Generate an amount to unbond, up to the sum
                     assert!(deltas_sum > 0);
                     (0..deltas_sum).prop_map(move |to_unbond| {
                         let id = id.clone();
-                        let amount = token::Amount::from_change(to_unbond);
+                        let amount =
+                            token::Amount::from_change(Change::from(to_unbond));
                         Transition::Unbond { id, amount }
                     })
                 });
@@ -1349,44 +1458,29 @@ impl ReferenceStateMachine for AbstractPosState {
                     .validator_stakes
                     .entry(pipeline)
                     .or_default()
-                    .insert(address.clone(), 0_i128);
+                    .insert(address.clone(), 0_i128.into());
 
-                // Insert into validator set at pipeline
-                let consensus_set =
-                    state.consensus_set.entry(pipeline).or_default();
-
-                let consensus_vals_len = consensus_set
-                    .iter()
-                    .map(|(_stake, validators)| validators.len() as u64)
-                    .sum();
-
-                let deque = if state.params.max_validator_slots
-                    > consensus_vals_len
-                {
-                    state
-                        .validator_states
-                        .entry(pipeline)
-                        .or_default()
-                        .insert(address.clone(), ValidatorState::Consensus);
-                    consensus_set.entry(token::Amount::default()).or_default()
-                } else {
-                    state
-                        .validator_states
-                        .entry(pipeline)
-                        .or_default()
-                        .insert(address.clone(), ValidatorState::BelowCapacity);
-                    let below_cap_set =
-                        state.below_capacity_set.entry(pipeline).or_default();
-                    below_cap_set
-                        .entry(ReverseOrdTokenAmount(token::Amount::default()))
-                        .or_default()
-                };
-                deque.push_back(address.clone());
+                // Insert into the below-threshold set at pipeline since the
+                // initial stake is 0
+                state
+                    .below_threshold_set
+                    .entry(pipeline)
+                    .or_default()
+                    .insert(address.clone());
+                state
+                    .validator_states
+                    .entry(pipeline)
+                    .or_default()
+                    .insert(address.clone(), ValidatorState::BelowThreshold);
 
                 state.debug_validators();
             }
             Transition::Bond { id, amount } => {
-                println!("\nABSTRACT Bond {} tokens, id = {}", amount, id);
+                println!(
+                    "\nABSTRACT Bond {} tokens, id = {}",
+                    amount.to_string_native(),
+                    id
+                );
 
                 if *amount != token::Amount::default() {
                     let change = token::Change::from(*amount);
@@ -1407,7 +1501,11 @@ impl ReferenceStateMachine for AbstractPosState {
                 state.debug_validators();
             }
             Transition::Unbond { id, amount } => {
-                println!("\nABSTRACT Unbond {} tokens, id = {}", amount, id);
+                println!(
+                    "\nABSTRACT Unbond {} tokens, id = {}",
+                    amount.to_string_native(),
+                    id
+                );
 
                 if *amount != token::Amount::default() {
                     let change = token::Change::from(*amount);
@@ -1464,7 +1562,7 @@ impl ReferenceStateMachine for AbstractPosState {
                     epoch: *infraction_epoch,
                     block_height: *height,
                     r#type: *slash_type,
-                    rate: Decimal::ZERO,
+                    rate: Dec::zero(),
                 };
 
                 // Enqueue the slash for future processing
@@ -1571,6 +1669,15 @@ impl ReferenceStateMachine for AbstractPosState {
                                 .or_default()
                                 .remove(&stake.into());
                         }
+                    } else if state
+                        .is_in_below_threshold(address, current_epoch + offset)
+                    {
+                        let removed = state
+                            .below_threshold_set
+                            .entry(current_epoch + offset)
+                            .or_default()
+                            .remove(address);
+                        debug_assert!(removed);
                     } else {
                         // Just make sure the validator is already jailed
                         debug_assert_eq!(
@@ -1638,7 +1745,20 @@ impl ReferenceStateMachine for AbstractPosState {
                         sum + validators.len() as u64
                     });
 
-                if num_consensus < state.params.max_validator_slots {
+                if pipeline_stake
+                    < state.params.validator_stake_threshold.change()
+                {
+                    // Place into the below-threshold set
+                    let below_threshold_set_pipeline = state
+                        .below_threshold_set
+                        .entry(pipeline_epoch)
+                        .or_default();
+                    below_threshold_set_pipeline.insert(address.clone());
+                    validator_states_pipeline.insert(
+                        address.clone(),
+                        ValidatorState::BelowThreshold,
+                    );
+                } else if num_consensus < state.params.max_validator_slots {
                     // Place directly into the consensus set
                     debug_assert!(
                         state
@@ -1824,7 +1944,8 @@ impl ReferenceStateMachine for AbstractPosState {
                         .iter()
                         .filter(|(_addr, val_state)| match val_state {
                             ValidatorState::Consensus
-                            | ValidatorState::BelowCapacity => true,
+                            | ValidatorState::BelowCapacity
+                            | ValidatorState::BelowThreshold => true,
                             ValidatorState::Inactive
                             | ValidatorState::Jailed => false,
                         })
@@ -1924,6 +2045,10 @@ impl AbstractPosState {
             epoch,
             self.below_capacity_set.get(&prev_epoch).unwrap().clone(),
         );
+        self.below_threshold_set.insert(
+            epoch,
+            self.below_threshold_set.get(&prev_epoch).unwrap().clone(),
+        );
         self.validator_states.insert(
             epoch,
             self.validator_states.get(&prev_epoch).unwrap().clone(),
@@ -1941,7 +2066,7 @@ impl AbstractPosState {
         let bond = bonds.entry(pipeline_epoch).or_default();
         *bond += change;
         // Remove fully unbonded entries
-        if *bond == 0 {
+        if bond.is_zero() {
             bonds.remove(&pipeline_epoch);
         }
         // Update total_bonded
@@ -1983,27 +2108,37 @@ impl AbstractPosState {
 
         tracing::debug!("Bonds before decrementing");
         for (start, amnt) in bonds.iter() {
-            tracing::debug!("Bond epoch {} - amnt {}", start, amnt);
+            tracing::debug!(
+                "Bond epoch {} - amnt {}",
+                start,
+                amnt.to_string_native()
+            );
         }
 
         for (bond_epoch, bond_amnt) in bonds.iter_mut().rev() {
-            tracing::debug!("remaining {}", remaining);
-            tracing::debug!("Bond epoch {} - amnt {}", bond_epoch, bond_amnt);
+            tracing::debug!("remaining {}", remaining.to_string_native());
+            tracing::debug!(
+                "Bond epoch {} - amnt {}",
+                bond_epoch,
+                bond_amnt.to_string_native()
+            );
             let to_unbond = cmp::min(*bond_amnt, remaining);
-            tracing::debug!("to_unbond (init) = {}", to_unbond);
+            tracing::debug!(
+                "to_unbond (init) = {}",
+                to_unbond.to_string_native()
+            );
             *bond_amnt -= to_unbond;
             *unbonds += token::Amount::from_change(to_unbond);
 
-            let slashes_for_this_bond: BTreeMap<Epoch, Decimal> =
-                validator_slashes
-                    .iter()
-                    .cloned()
-                    .filter(|s| *bond_epoch <= s.epoch)
-                    .fold(BTreeMap::new(), |mut acc, s| {
-                        let cur = acc.entry(s.epoch).or_default();
-                        *cur += s.rate;
-                        acc
-                    });
+            let slashes_for_this_bond: BTreeMap<Epoch, Dec> = validator_slashes
+                .iter()
+                .cloned()
+                .filter(|s| *bond_epoch <= s.epoch)
+                .fold(BTreeMap::new(), |mut acc, s| {
+                    let cur = acc.entry(s.epoch).or_default();
+                    *cur += s.rate;
+                    acc
+                });
             tracing::debug!(
                 "Slashes for this bond{:?}",
                 slashes_for_this_bond.clone()
@@ -2017,21 +2152,25 @@ impl AbstractPosState {
             .change();
             tracing::debug!(
                 "Cur amnt after slashing = {}",
-                &amount_after_slashing
+                &amount_after_slashing.to_string_native()
             );
 
             let amt = unbond_records.entry(*bond_epoch).or_default();
             *amt += token::Amount::from_change(to_unbond);
 
             remaining -= to_unbond;
-            if remaining == 0 {
+            if remaining.is_zero() {
                 break;
             }
         }
 
         tracing::debug!("Bonds after decrementing");
         for (start, amnt) in bonds.iter() {
-            tracing::debug!("Bond epoch {} - amnt {}", start, amnt);
+            tracing::debug!(
+                "Bond epoch {} - amnt {}",
+                start,
+                amnt.to_string_native()
+            );
         }
 
         let pipeline_state = self
@@ -2083,20 +2222,29 @@ impl AbstractPosState {
         let consensus_set = self.consensus_set.entry(pipeline).or_default();
         let below_cap_set =
             self.below_capacity_set.entry(pipeline).or_default();
+        let below_thresh_set =
+            self.below_threshold_set.entry(pipeline).or_default();
+
         let validator_stakes = self.validator_stakes.get(&pipeline).unwrap();
         let validator_states =
             self.validator_states.get_mut(&pipeline).unwrap();
 
-        let state = validator_states.get(validator).unwrap();
+        let state_pre = validator_states.get(validator).unwrap();
 
         let this_val_stake_pre = *validator_stakes.get(validator).unwrap();
         let this_val_stake_post =
             token::Amount::from_change(this_val_stake_pre + change);
-        let this_val_stake_pre = token::Amount::from_change(
-            *validator_stakes.get(validator).unwrap(),
-        );
+        let this_val_stake_pre = token::Amount::from_change(this_val_stake_pre);
 
-        match state {
+        let threshold = self.params.validator_stake_threshold;
+        if this_val_stake_pre < threshold && this_val_stake_post < threshold {
+            // Validator is already below-threshold and will remain there, so do
+            // nothing
+            debug_assert!(below_thresh_set.contains(validator));
+            return;
+        }
+
+        match state_pre {
             ValidatorState::Consensus => {
                 // println!("Validator initially in consensus");
                 // Remove from the prior stake
@@ -2107,6 +2255,37 @@ impl AbstractPosState {
 
                 if vals.is_empty() {
                     consensus_set.remove(&this_val_stake_pre);
+                }
+
+                // If posterior stake is below threshold, place into the
+                // below-threshold set
+                if this_val_stake_post < threshold {
+                    below_thresh_set.insert(validator.clone());
+                    validator_states.insert(
+                        validator.clone(),
+                        ValidatorState::BelowThreshold,
+                    );
+
+                    // Promote the next below-cap validator if there is one
+                    if let Some(mut max_below_cap) = below_cap_set.last_entry()
+                    {
+                        let max_below_cap_stake = *max_below_cap.key();
+                        let vals = max_below_cap.get_mut();
+                        let promoted_val = vals.pop_front().unwrap();
+                        // Remove the key if there's nothing left
+                        if vals.is_empty() {
+                            below_cap_set.remove(&max_below_cap_stake);
+                        }
+
+                        consensus_set
+                            .entry(max_below_cap_stake.0)
+                            .or_default()
+                            .push_back(promoted_val.clone());
+                        validator_states
+                            .insert(promoted_val, ValidatorState::Consensus);
+                    }
+
+                    return;
                 }
 
                 // If unbonding, check the max below-cap validator's state if we
@@ -2164,6 +2343,17 @@ impl AbstractPosState {
                     below_cap_set.remove(&this_val_stake_pre.into());
                 }
 
+                // If posterior stake is below threshold, place into the
+                // below-threshold set
+                if this_val_stake_post < threshold {
+                    below_thresh_set.insert(validator.clone());
+                    validator_states.insert(
+                        validator.clone(),
+                        ValidatorState::BelowThreshold,
+                    );
+                    return;
+                }
+
                 // If bonding, check the min consensus validator's state if we
                 // need to do a swap
                 if change >= token::Change::default() {
@@ -2212,6 +2402,67 @@ impl AbstractPosState {
                     .or_default()
                     .push_back(validator.clone());
             }
+            ValidatorState::BelowThreshold => {
+                // We know that this validator will be promoted into one of the
+                // higher sets, so first remove from the below-threshold set.
+                below_thresh_set.remove(validator);
+
+                let num_consensus =
+                    consensus_set.iter().fold(0, |sum, (_, validators)| {
+                        sum + validators.len() as u64
+                    });
+                if num_consensus < self.params.max_validator_slots {
+                    // Place the validator directly into the consensus set
+                    consensus_set
+                        .entry(this_val_stake_post)
+                        .or_default()
+                        .push_back(validator.clone());
+                    validator_states
+                        .insert(validator.clone(), ValidatorState::Consensus);
+                    return;
+                }
+                // Determine which set to place the validator into
+                if let Some(mut min_consensus) = consensus_set.first_entry() {
+                    // dbg!(&min_consensus);
+                    let min_consensus_stake = *min_consensus.key();
+                    if this_val_stake_post > min_consensus_stake {
+                        // Swap this validator with the max consensus
+                        let vals = min_consensus.get_mut();
+                        let last_val = vals.pop_back().unwrap();
+                        // Remove the key if there's nothing left
+                        if vals.is_empty() {
+                            consensus_set.remove(&min_consensus_stake);
+                        }
+                        // Do the swap in the validator sets
+                        below_cap_set
+                            .entry(min_consensus_stake.into())
+                            .or_default()
+                            .push_back(last_val.clone());
+                        consensus_set
+                            .entry(this_val_stake_post)
+                            .or_default()
+                            .push_back(validator.clone());
+
+                        // Change the validator states
+                        validator_states.insert(
+                            validator.clone(),
+                            ValidatorState::Consensus,
+                        );
+                        validator_states
+                            .insert(last_val, ValidatorState::BelowCapacity);
+                    } else {
+                        // Place the validator into the below-capacity set
+                        below_cap_set
+                            .entry(this_val_stake_post.into())
+                            .or_default()
+                            .push_back(validator.clone());
+                        validator_states.insert(
+                            validator.clone(),
+                            ValidatorState::BelowCapacity,
+                        );
+                    }
+                }
+            }
             ValidatorState::Inactive => {
                 panic!("unexpected state")
             }
@@ -2246,10 +2497,10 @@ impl AbstractPosState {
                 tracing::debug!(
                     "Val {} stake at infraction {}",
                     validator,
-                    stake_at_infraction
+                    stake_at_infraction.to_string_native(),
                 );
 
-                let mut total_rate = Decimal::ZERO;
+                let mut total_rate = Dec::zero();
 
                 for slash in slashes {
                     debug_assert_eq!(slash.epoch, infraction_epoch);
@@ -2271,7 +2522,7 @@ impl AbstractPosState {
 
                     total_rate += rate;
                 }
-                total_rate = cmp::min(total_rate, Decimal::ONE);
+                total_rate = cmp::min(total_rate, Dec::one());
                 tracing::debug!("Total rate: {}", total_rate);
 
                 let mut total_unbonded = token::Amount::default();
@@ -2290,7 +2541,7 @@ impl AbstractPosState {
                     for (start, unbond_amount) in unbond_records {
                         tracing::debug!(
                             "UnbondRecord: amount = {}, start_epoch {}",
-                            &unbond_amount,
+                            &unbond_amount.to_string_native(),
                             &start
                         );
                         if start <= infraction_epoch {
@@ -2311,7 +2562,7 @@ impl AbstractPosState {
                                 })
                                 .cloned()
                                 .fold(
-                                    BTreeMap::<Epoch, Decimal>::new(),
+                                    BTreeMap::<Epoch, Dec>::new(),
                                     |mut acc, s| {
                                         let cur =
                                             acc.entry(s.epoch).or_default();
@@ -2336,7 +2587,7 @@ impl AbstractPosState {
                         tracing::debug!(
                             "Total unbonded (epoch {}) w slashing = {}",
                             epoch,
-                            total_unbonded
+                            total_unbonded.to_string_native()
                         );
                     }
                     sum_post_bonds += self
@@ -2354,7 +2605,7 @@ impl AbstractPosState {
                     tracing::debug!(
                         "Epoch {}\nLast slash = {}",
                         self.epoch + offset,
-                        last_slash
+                        last_slash.to_string_native(),
                     );
                     let mut recent_unbonds = token::Change::default();
                     let unbond_records = self
@@ -2367,7 +2618,7 @@ impl AbstractPosState {
                     for (start, unbond_amount) in unbond_records {
                         tracing::debug!(
                             "UnbondRecord: amount = {}, start_epoch {}",
-                            &unbond_amount,
+                            unbond_amount.to_string_native(),
                             &start
                         );
                         if start <= infraction_epoch {
@@ -2388,7 +2639,7 @@ impl AbstractPosState {
                                 })
                                 .cloned()
                                 .fold(
-                                    BTreeMap::<Epoch, Decimal>::new(),
+                                    BTreeMap::<Epoch, Dec>::new(),
                                     |mut acc, s| {
                                         let cur =
                                             acc.entry(s.epoch).or_default();
@@ -2414,23 +2665,24 @@ impl AbstractPosState {
                         tracing::debug!(
                             "Total unbonded (offset {}) w slashing = {}",
                             offset,
-                            total_unbonded
+                            total_unbonded.to_string_native()
                         );
                     }
                     tracing::debug!(
                         "stake at infraction {}",
-                        stake_at_infraction
+                        stake_at_infraction.to_string_native(),
                     );
-                    tracing::debug!("total unbonded {}", total_unbonded);
-                    let this_slash = decimal_mult_i128(
-                        total_rate,
-                        stake_at_infraction - total_unbonded.change(),
+                    tracing::debug!(
+                        "total unbonded {}",
+                        total_unbonded.to_string_native()
                     );
+                    let this_slash = total_rate
+                        * (stake_at_infraction - total_unbonded.change());
                     let diff_slashed_amount = last_slash - this_slash;
                     tracing::debug!(
                         "Offset {} diff_slashed_amount {}",
                         offset,
-                        diff_slashed_amount
+                        diff_slashed_amount.to_string_native(),
                     );
                     last_slash = this_slash;
                     // total_unbonded = token::Amount::default();
@@ -2453,7 +2705,10 @@ impl AbstractPosState {
                         .unwrap_or_default()
                         - recent_unbonds;
 
-                    tracing::debug!("\nUnslashable bonds = {}", sum_post_bonds);
+                    tracing::debug!(
+                        "\nUnslashable bonds = {}",
+                        sum_post_bonds.to_string_native()
+                    );
                     let validator_stake_at_offset = self
                         .validator_stakes
                         .entry(self.epoch + offset)
@@ -2466,18 +2721,18 @@ impl AbstractPosState {
                     tracing::debug!(
                         "Val stake pre (epoch {}) = {}",
                         self.epoch + offset,
-                        validator_stake_at_offset
+                        validator_stake_at_offset.to_string_native(),
                     );
                     tracing::debug!(
                         "Slashable stake at offset = {}",
-                        slashable_stake_at_offset
+                        slashable_stake_at_offset.to_string_native(),
                     );
                     let change = cmp::max(
                         -slashable_stake_at_offset,
                         diff_slashed_amount,
                     );
 
-                    tracing::debug!("Change = {}", change);
+                    tracing::debug!("Change = {}", change.to_string_native());
                     *validator_stake_at_offset += change;
 
                     for os in (offset + 1)..=self.params.pipeline_len {
@@ -2499,7 +2754,7 @@ impl AbstractPosState {
                         tracing::debug!(
                             "New stake at epoch {} = {}",
                             self.epoch + os,
-                            offset_stake
+                            offset_stake.to_string_native()
                         );
                     }
                 }
@@ -2562,6 +2817,14 @@ impl AbstractPosState {
         None
     }
 
+    fn is_in_below_threshold(&self, validator: &Address, epoch: Epoch) -> bool {
+        self.below_threshold_set
+            .get(&epoch)
+            .unwrap()
+            .iter()
+            .any(|val| val == validator)
+    }
+
     /// Find the sums of the bonds across all epochs
     fn bond_sums(&self) -> BTreeMap<BondId, token::Change> {
         self.bonds.iter().fold(
@@ -2594,7 +2857,7 @@ impl AbstractPosState {
     }
 
     /// Compute the cubic slashing rate for the current epoch
-    fn cubic_slash_rate(&self) -> Decimal {
+    fn cubic_slash_rate(&self) -> Dec {
         let infraction_epoch = self.epoch
             - self.params.unbonding_len
             - 1_u64
@@ -2610,7 +2873,7 @@ impl AbstractPosState {
         let epoch_end = infraction_epoch + window_width;
 
         // Calculate cubic slashing rate with the abstract state
-        let mut vp_frac_sum = Decimal::default();
+        let mut vp_frac_sum = Dec::zero();
         for epoch in Epoch::iter_bounds_inclusive(epoch_start, epoch_end) {
             let consensus_stake =
                 self.consensus_set.get(&epoch).unwrap().iter().fold(
@@ -2622,7 +2885,7 @@ impl AbstractPosState {
             tracing::debug!(
                 "Consensus stake in epoch {}: {}",
                 epoch,
-                consensus_stake
+                consensus_stake.to_string_native()
             );
 
             let processing_epoch = epoch
@@ -2644,18 +2907,21 @@ impl AbstractPosState {
                         "Val {} stake epoch {}: {}",
                         &validator,
                         epoch,
-                        val_stake
+                        val_stake.to_string_native(),
                     );
-                    vp_frac_sum += Decimal::from(slashes.len())
-                        * Decimal::from(val_stake)
-                        / Decimal::from(consensus_stake);
+                    vp_frac_sum += Dec::from(slashes.len())
+                        * Dec::from(val_stake)
+                        / Dec::from(consensus_stake);
                 }
             }
         }
-        let vp_frac_sum = cmp::min(Decimal::ONE, vp_frac_sum);
+        let vp_frac_sum = cmp::min(Dec::one(), vp_frac_sum);
         tracing::debug!("vp_frac_sum: {}", vp_frac_sum);
 
-        cmp::min(dec!(9) * vp_frac_sum * vp_frac_sum, Decimal::ONE)
+        cmp::min(
+            Dec::new(9, 0).unwrap() * vp_frac_sum * vp_frac_sum,
+            Dec::one(),
+        )
     }
 
     fn debug_validators(&self) {
@@ -2687,8 +2953,8 @@ impl AbstractPosState {
                     tracing::debug!(
                         "Consensus val {}, stake {} ({}) - ({:?})",
                         val,
-                        u64::from(*amount),
-                        deltas_stake,
+                        amount.to_string_native(),
+                        deltas_stake.to_string_native(),
                         val_state
                     );
                     debug_assert_eq!(
@@ -2721,8 +2987,8 @@ impl AbstractPosState {
                     tracing::debug!(
                         "Below-cap val {}, stake {} ({}) - ({:?})",
                         val,
-                        u64::from(token::Amount::from(*amount)),
-                        deltas_stake,
+                        token::Amount::from(*amount).to_string_native(),
+                        deltas_stake.to_string_native(),
                         val_state
                     );
                     debug_assert_eq!(
@@ -2732,7 +2998,39 @@ impl AbstractPosState {
                     debug_assert_eq!(*val_state, ValidatorState::BelowCapacity);
                 }
             }
+            if max_bc > min_consensus {
+                println!(
+                    "min_consensus = {}, max_bc = {}",
+                    min_consensus.to_string_native(),
+                    max_bc.to_string_native()
+                );
+            }
             assert!(min_consensus >= max_bc);
+
+            for addr in self.below_threshold_set.get(&epoch).unwrap() {
+                let state = self
+                    .validator_states
+                    .get(&epoch)
+                    .unwrap()
+                    .get(addr)
+                    .unwrap();
+
+                let stake = self
+                    .validator_stakes
+                    .get(&epoch)
+                    .unwrap()
+                    .get(addr)
+                    .cloned()
+                    .unwrap_or_default();
+                tracing::debug!(
+                    "Below-thresh val {}, stake {} - ({:?})",
+                    addr,
+                    stake.to_string_native(),
+                    state
+                );
+
+                assert_eq!(*state, ValidatorState::BelowThreshold);
+            }
 
             for addr in self
                 .validator_states
@@ -2742,9 +3040,10 @@ impl AbstractPosState {
                 .cloned()
                 .collect::<Vec<_>>()
             {
-                if let (None, None) = (
+                if let (None, None, false) = (
                     self.is_in_consensus_w_info(&addr, epoch),
                     self.is_in_below_capacity_w_info(&addr, epoch),
+                    self.is_in_below_threshold(&addr, epoch),
                 ) {
                     assert_eq!(
                         self.validator_states
@@ -2761,7 +3060,11 @@ impl AbstractPosState {
                         .get(&addr)
                         .cloned()
                         .unwrap_or_default();
-                    tracing::debug!("Jailed val {}, stake {}", &addr, &stake);
+                    tracing::debug!(
+                        "Jailed val {}, stake {}",
+                        &addr,
+                        &stake.to_string_native()
+                    );
                 }
             }
         }
@@ -2836,7 +3139,8 @@ fn arb_self_bond(
 
 // Bond up to 10 tokens (10M micro units) to avoid overflows
 pub fn arb_bond_amount() -> impl Strategy<Value = token::Amount> {
-    (1_u64..10_000_000).prop_map(token::Amount::from)
+    (1_u64..10_000_000)
+        .prop_map(|val| token::Amount::from_uint(val, 0).unwrap())
 }
 
 /// Arbitrary validator misbehavior
@@ -2873,7 +3177,7 @@ fn arb_slash(state: &AbstractPosState) -> impl Strategy<Value = Transition> {
 }
 
 fn compute_amount_after_slashing(
-    slashes: &BTreeMap<Epoch, Decimal>,
+    slashes: &BTreeMap<Epoch, Dec>,
     amount: token::Amount,
     unbonding_len: u64,
     cubic_slash_window_len: u64,
@@ -2898,7 +3202,7 @@ fn compute_amount_after_slashing(
             computed_amounts.remove(idx);
         }
         computed_amounts.push(SlashedAmount {
-            amount: decimal_mult_amount(*slash_rate, updated_amount),
+            amount: *slash_rate * updated_amount,
             epoch: *infraction_epoch,
         });
     }

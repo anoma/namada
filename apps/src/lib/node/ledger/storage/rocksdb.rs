@@ -66,44 +66,11 @@ use crate::config::utils::num_of_threads;
 const ENV_VAR_ROCKSDB_COMPACTION_THREADS: &str =
     "NAMADA_ROCKSDB_COMPACTION_THREADS";
 
-/// RocksDB column families.
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-enum ColumnFamilies {
-    /// Subspace column family.
-    ///
-    /// This column family is optimized to store
-    /// update and read-intensive values.
-    Subspace,
-    /// Diffs column family.
-    ///
-    /// This column family is optimized to store
-    /// insertion-intensive values, which are
-    /// never updated.
-    Diffs,
-    /// Block column family.
-    ///
-    /// This column family is optimized to store
-    /// insertion-intensive values, which are
-    /// never updated.
-    Block,
-    /// State column family.
-    ///
-    /// This column family is optimized to store
-    /// update-intensive values.
-    State,
-}
-
-impl ColumnFamilies {
-    /// Return the name of a RocksDB column family.
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            ColumnFamilies::Subspace => "subspace",
-            ColumnFamilies::Diffs => "diffs",
-            ColumnFamilies::Block => "block",
-            ColumnFamilies::State => "state",
-        }
-    }
-}
+/// Column family names
+const SUBSPACE_CF: &str = "subspace";
+const DIFFS_CF: &str = "diffs";
+const STATE_CF: &str = "state";
+const BLOCK_CF: &str = "block";
 
 /// RocksDB handle
 #[derive(Debug)]
@@ -165,10 +132,7 @@ pub fn open(
     subspace_cf_opts.set_level_compaction_dynamic_level_bytes(true);
     subspace_cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
     subspace_cf_opts.set_block_based_table_factory(&table_opts);
-    cfs.push(ColumnFamilyDescriptor::new(
-        ColumnFamilies::Subspace.as_str(),
-        subspace_cf_opts,
-    ));
+    cfs.push(ColumnFamilyDescriptor::new(SUBSPACE_CF, subspace_cf_opts));
 
     // for diffs (insert-intensive)
     let mut diffs_cf_opts = Options::default();
@@ -176,10 +140,7 @@ pub fn open(
     diffs_cf_opts.set_compression_options(0, 0, 0, 1024 * 1024);
     diffs_cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Universal);
     diffs_cf_opts.set_block_based_table_factory(&table_opts);
-    cfs.push(ColumnFamilyDescriptor::new(
-        ColumnFamilies::Diffs.as_str(),
-        diffs_cf_opts,
-    ));
+    cfs.push(ColumnFamilyDescriptor::new(DIFFS_CF, diffs_cf_opts));
 
     // for the ledger state (update-intensive)
     let mut state_cf_opts = Options::default();
@@ -187,10 +148,7 @@ pub fn open(
     state_cf_opts.set_level_compaction_dynamic_level_bytes(true);
     state_cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
     state_cf_opts.set_block_based_table_factory(&table_opts);
-    cfs.push(ColumnFamilyDescriptor::new(
-        ColumnFamilies::State.as_str(),
-        state_cf_opts,
-    ));
+    cfs.push(ColumnFamilyDescriptor::new(STATE_CF, state_cf_opts));
 
     // for blocks (insert-intensive)
     let mut block_cf_opts = Options::default();
@@ -198,10 +156,7 @@ pub fn open(
     block_cf_opts.set_compression_options(0, 0, 0, 1024 * 1024);
     block_cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Universal);
     block_cf_opts.set_block_based_table_factory(&table_opts);
-    cfs.push(ColumnFamilyDescriptor::new(
-        ColumnFamilies::Block.as_str(),
-        block_cf_opts,
-    ));
+    cfs.push(ColumnFamilyDescriptor::new(BLOCK_CF, block_cf_opts));
 
     rocksdb::DB::open_cf_descriptors(&db_opts, path, cfs)
         .map(RocksDB)
@@ -238,7 +193,7 @@ impl RocksDB {
         old_value: Option<&[u8]>,
         new_value: Option<&[u8]>,
     ) -> Result<()> {
-        let cf = self.get_column_family(ColumnFamilies::Diffs.as_str())?;
+        let cf = self.get_column_family(DIFFS_CF)?;
         let key_prefix = Key::from(height.to_db_key());
 
         if let Some(old_value) = old_value {
@@ -275,7 +230,7 @@ impl RocksDB {
         old_value: Option<&[u8]>,
         new_value: Option<&[u8]>,
     ) -> Result<()> {
-        let cf = self.get_column_family(ColumnFamilies::Diffs.as_str())?;
+        let cf = self.get_column_family(DIFFS_CF)?;
         let key_prefix = Key::from(height.to_db_key());
 
         if let Some(old_value) = old_value {
@@ -312,7 +267,7 @@ impl RocksDB {
     ) {
         // Find the last block height
         let state_cf = self
-            .get_column_family(ColumnFamilies::State.as_str())
+            .get_column_family(STATE_CF)
             .expect("State column family should exist");
         let height: BlockHeight = types::decode(
             self.0
@@ -346,21 +301,21 @@ impl RocksDB {
 
             // Diffs
             let cf = self
-                .get_column_family(ColumnFamilies::Diffs.as_str())
+                .get_column_family(DIFFS_CF)
                 .expect("Diffs column family should exist");
             let prefix = height.raw();
             self.dump_it(cf, Some(prefix.clone()), &mut file);
 
             // Block
             let cf = self
-                .get_column_family(ColumnFamilies::Block.as_str())
+                .get_column_family(BLOCK_CF)
                 .expect("Block column family should exist");
             self.dump_it(cf, Some(prefix), &mut file);
         }
 
         // subspace
         let cf = self
-            .get_column_family(ColumnFamilies::Subspace.as_str())
+            .get_column_family(SUBSPACE_CF)
             .expect("Subspace column family should exist");
         self.dump_it(cf, None, &mut file);
 
@@ -429,8 +384,7 @@ impl RocksDB {
         let previous_height =
             BlockHeight::from(u64::from(last_block.height) - 1);
 
-        let state_cf =
-            self.get_column_family(ColumnFamilies::State.as_str())?;
+        let state_cf = self.get_column_family(STATE_CF)?;
         // Revert the non-height-prepended metadata storage keys which get
         // updated with every block. Because of the way we save these
         // three keys in storage we can only perform one rollback before
@@ -457,8 +411,7 @@ impl RocksDB {
         }
 
         // Delete block results for the last block
-        let block_cf =
-            self.get_column_family(ColumnFamilies::Block.as_str())?;
+        let block_cf = self.get_column_family(BLOCK_CF)?;
         tracing::info!("Removing last block results");
         batch.delete_cf(block_cf, format!("results/{}", last_block.height));
 
@@ -466,12 +419,11 @@ impl RocksDB {
         let batch = Mutex::new(batch);
 
         tracing::info!("Restoring previous hight subspace diffs");
-        self.iter_optional_prefix(None).par_bridge().try_for_each(
+        self.iter_prefix(None).par_bridge().try_for_each(
             |(key, _value, _gas)| -> Result<()> {
                 // Restore previous height diff if present, otherwise delete the
                 // subspace key
-                let subspace_cf =
-                    self.get_column_family(ColumnFamilies::Subspace.as_str())?;
+                let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
                 match self.read_subspace_val_with_height(
                     &Key::from(key.to_db_key()),
                     previous_height,
@@ -507,8 +459,7 @@ impl RocksDB {
             }
         };
         // Delete any height-prepended key in subspace diffs
-        let diffs_cf =
-            self.get_column_family(ColumnFamilies::Diffs.as_str())?;
+        let diffs_cf = self.get_column_family(DIFFS_CF)?;
         delete_keys(diffs_cf);
         // Delete any height-prepended key in the block
         delete_keys(block_cf);
@@ -540,8 +491,7 @@ impl DB for RocksDB {
 
     fn read_last_block(&mut self) -> Result<Option<BlockStateRead>> {
         // Block height
-        let state_cf =
-            self.get_column_family(ColumnFamilies::State.as_str())?;
+        let state_cf = self.get_column_family(STATE_CF)?;
         let height: BlockHeight = match self
             .0
             .get_cf(state_cf, "height")
@@ -556,8 +506,7 @@ impl DB for RocksDB {
         };
 
         // Block results
-        let block_cf =
-            self.get_column_family(ColumnFamilies::Block.as_str())?;
+        let block_cf = self.get_column_family(BLOCK_CF)?;
         let results_path = format!("results/{}", height.raw());
         let results: BlockResults = match self
             .0
@@ -783,8 +732,7 @@ impl DB for RocksDB {
         }: BlockStateWrite = state;
 
         // Epoch start height and time
-        let state_cf =
-            self.get_column_family(ColumnFamilies::State.as_str())?;
+        let state_cf = self.get_column_family(STATE_CF)?;
         if let Some(current_value) = self
             .0
             .get_cf(state_cf, "next_epoch_min_start_height")
@@ -861,8 +809,7 @@ impl DB for RocksDB {
             types::encode(&eth_events_queue),
         );
 
-        let block_cf =
-            self.get_column_family(ColumnFamilies::Block.as_str())?;
+        let block_cf = self.get_column_family(BLOCK_CF)?;
         let prefix_key = Key::from(height.to_db_key());
         // Merkle tree
         {
@@ -970,8 +917,7 @@ impl DB for RocksDB {
     }
 
     fn read_block_header(&self, height: BlockHeight) -> Result<Option<Header>> {
-        let block_cf =
-            self.get_column_family(ColumnFamilies::Block.as_str())?;
+        let block_cf = self.get_column_family(BLOCK_CF)?;
         let prefix_key = Key::from(height.to_db_key());
         let key = prefix_key
             .push(&"header".to_owned())
@@ -994,8 +940,7 @@ impl DB for RocksDB {
         height: BlockHeight,
     ) -> Result<Option<(BlockHeight, MerkleTreeStoresRead)>> {
         // Get the latest height at which the tree stores were written
-        let block_cf =
-            self.get_column_family(ColumnFamilies::Block.as_str())?;
+        let block_cf = self.get_column_family(BLOCK_CF)?;
         let height_key = Key::from(height.to_db_key());
         let key = height_key
             .push(&"pred_epochs".to_owned())
@@ -1054,8 +999,7 @@ impl DB for RocksDB {
     }
 
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>> {
-        let subspace_cf =
-            self.get_column_family(ColumnFamilies::Subspace.as_str())?;
+        let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
         self.0
             .get_cf(subspace_cf, key.to_string())
             .map_err(|e| Error::DBError(e.into_string()))
@@ -1068,8 +1012,7 @@ impl DB for RocksDB {
         last_height: BlockHeight,
     ) -> Result<Option<Vec<u8>>> {
         // Check if the value changed at this height
-        let diffs_cf =
-            self.get_column_family(ColumnFamilies::Diffs.as_str())?;
+        let diffs_cf = self.get_column_family(DIFFS_CF)?;
         let key_prefix = Key::from(height.to_db_key());
         let new_val_key = key_prefix
             .push(&"new".to_owned())
@@ -1162,8 +1105,7 @@ impl DB for RocksDB {
         key: &Key,
         value: impl AsRef<[u8]>,
     ) -> Result<i64> {
-        let subspace_cf =
-            self.get_column_family(ColumnFamilies::Subspace.as_str())?;
+        let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
         let value = value.as_ref();
         let size_diff = match self
             .0
@@ -1199,8 +1141,7 @@ impl DB for RocksDB {
         height: BlockHeight,
         key: &Key,
     ) -> Result<i64> {
-        let subspace_cf =
-            self.get_column_family(ColumnFamilies::Subspace.as_str())?;
+        let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
 
         // Check the length of previous value, if any
         let prev_len = match self
@@ -1240,8 +1181,7 @@ impl DB for RocksDB {
         value: impl AsRef<[u8]>,
     ) -> Result<i64> {
         let value = value.as_ref();
-        let subspace_cf =
-            self.get_column_family(ColumnFamilies::Subspace.as_str())?;
+        let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
         let size_diff = match self
             .0
             .get_cf(subspace_cf, key.to_string())
@@ -1283,8 +1223,7 @@ impl DB for RocksDB {
         height: BlockHeight,
         key: &Key,
     ) -> Result<i64> {
-        let subspace_cf =
-            self.get_column_family(ColumnFamilies::Subspace.as_str())?;
+        let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
 
         // Check the length of previous value, if any
         let prev_len = match self
@@ -1319,8 +1258,7 @@ impl DB for RocksDB {
         epoch: Epoch,
         pred_epochs: &Epochs,
     ) -> Result<()> {
-        let block_cf =
-            self.get_column_family(ColumnFamilies::Block.as_str())?;
+        let block_cf = self.get_column_family(BLOCK_CF)?;
         match pred_epochs.get_start_height_of_epoch(epoch) {
             Some(height) => {
                 let prefix_key = Key::from(height.to_db_key())
@@ -1351,7 +1289,7 @@ impl DB for RocksDB {
 impl<'iter> DBIter<'iter> for RocksDB {
     type PrefixIter = PersistentPrefixIterator<'iter>;
 
-    fn iter_optional_prefix(
+    fn iter_prefix(
         &'iter self,
         prefix: Option<&Key>,
     ) -> PersistentPrefixIterator<'iter> {
@@ -1362,12 +1300,9 @@ impl<'iter> DBIter<'iter> for RocksDB {
         let db_prefix = "results/".to_owned();
         let prefix = "results".to_owned();
 
-        let block_cf_key = ColumnFamilies::Block.as_str();
         let block_cf = self
-            .get_column_family(ColumnFamilies::Block.as_str())
-            .unwrap_or_else(|err| {
-                panic!("{block_cf_key} column family should exist: {err}")
-            });
+            .get_column_family(BLOCK_CF)
+            .expect("{BLOCK_CF} column family should exist");
         let read_opts = make_iter_read_opts(Some(prefix.clone()));
         let iter = self.0.iterator_cf_opt(
             block_cf,
@@ -1396,17 +1331,12 @@ fn iter_subspace_prefix<'iter>(
     db: &'iter RocksDB,
     prefix: Option<&Key>,
 ) -> PersistentPrefixIterator<'iter> {
-    let subspace_cf_key = ColumnFamilies::Subspace.as_str();
-    let subspace_cf =
-        db.get_column_family(subspace_cf_key).unwrap_or_else(|err| {
-            panic!("{subspace_cf_key} column family should exist: {err}")
-        });
+    let subspace_cf = db
+        .get_column_family(SUBSPACE_CF)
+        .expect("{SUBSPACE_CF} column family should exist");
     let db_prefix = "".to_owned();
-    let prefix_string = match prefix {
-        Some(prefix) => prefix.to_string(),
-        None => "".to_string(),
-    };
-    iter_prefix(db, subspace_cf, db_prefix, prefix_string)
+    let prefix = prefix.map(|k| k.to_string()).unwrap_or_default();
+    iter_prefix(db, subspace_cf, db_prefix, prefix)
 }
 
 fn iter_diffs_prefix(
@@ -1414,10 +1344,9 @@ fn iter_diffs_prefix(
     height: BlockHeight,
     is_old: bool,
 ) -> PersistentPrefixIterator {
-    let diffs_cf_key = ColumnFamilies::Diffs.as_str();
-    let diffs_cf = db.get_column_family(diffs_cf_key).unwrap_or_else(|err| {
-        panic!("{diffs_cf_key} column family should exist: {err}")
-    });
+    let diffs_cf = db
+        .get_column_family(DIFFS_CF)
+        .expect("{DIFFS_CF} column family should exist");
     let prefix = if is_old { "old" } else { "new" };
     let db_prefix = format!("{}/{}/", height.0.raw(), prefix);
     // get keys without a prefix
@@ -1554,8 +1483,7 @@ mod imp {
 
 #[cfg(test)]
 mod test {
-    use namada::ledger::storage::traits::Sha256Hasher;
-    use namada::ledger::storage::MerkleTree;
+    use namada::ledger::storage::{MerkleTree, Sha256Hasher};
     use namada::types::address::EstablishedAddressGen;
     use namada::types::storage::{BlockHash, Epoch, Epochs};
     use tempfile::tempdir;

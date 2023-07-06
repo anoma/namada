@@ -68,7 +68,8 @@ where
         let total_stake =
             read_total_stake(&shell.wl_storage, &params, proposal_end_epoch)
                 .map_err(|msg| Error::BadProposal(id, msg.to_string()))?;
-        let total_stake = VotePower::from(u64::from(total_stake));
+        let total_stake = VotePower::try_from(total_stake)
+            .expect("Voting power exceeds NAM supply");
         let tally_result = compute_tally(votes, total_stake, &proposal_type)
             .map_err(|msg| Error::BadProposal(id, msg.to_string()))?
             .result;

@@ -18,6 +18,12 @@ wasms_for_tests := wasm_for_tests/wasm_source
 # Paths for all the wasm templates
 wasm_templates := wasm/tx_template wasm/vp_template
 
+ifdef JOBS
+jobs := -j $(JOBS)
+else
+jobs :=
+endif
+
 # TODO upgrade libp2p
 audit-ignores += RUSTSEC-2021-0076
 
@@ -35,13 +41,13 @@ crates += namada_vm_env
 crates += namada_vp_prelude
 
 build:
-	$(cargo) build
+	$(cargo) build $(jobs)
 
 build-test:
-	$(cargo) build --tests
+	$(cargo) build --tests $(jobs)
 
 build-release:
-	NAMADA_DEV=false $(cargo) build --release --package namada_apps --manifest-path Cargo.toml
+	NAMADA_DEV=false $(cargo) build $(jobs) --release --package namada_apps --manifest-path Cargo.toml
 
 build-debug:
 	NAMADA_DEV=false $(cargo) build --package namada_apps --manifest-path Cargo.toml
@@ -72,7 +78,7 @@ check-crates:
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 
 clippy:
-	NAMADA_DEV=false $(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
+	NAMADA_DEV=false $(cargo) +$(nightly) clippy $(jobs) --all-targets -- -D warnings && \
 	make -C $(wasms) clippy && \
 	make -C $(wasms_for_tests) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
@@ -132,6 +138,7 @@ test-e2e:
 test-unit:
 	$(cargo) +$(nightly) test \
 		$(TEST_FILTER) \
+		$(jobs) \
 		-- --skip e2e \
 		-Z unstable-options --report-time
 
@@ -139,11 +146,13 @@ test-unit-mainnet:
 	$(cargo) +$(nightly) test \
 		--features "mainnet" \
 		$(TEST_FILTER) \
+		$(jobs) \
 		-- --skip e2e \
 		-Z unstable-options --report-time
 
 test-unit-debug:
 	$(debug-cargo) +$(nightly) test \
+		$(jobs)
 		$(TEST_FILTER) \
 		-- --skip e2e \
 		--nocapture \

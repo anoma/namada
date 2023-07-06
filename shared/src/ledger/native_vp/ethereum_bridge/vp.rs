@@ -11,7 +11,7 @@ use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::{eth_bridge, storage as ledger_storage};
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::Key;
-use namada_core::types::token::{balance_key, Amount};
+use namada_core::types::token::{balance_key, Amount, Change};
 
 use crate::ledger::native_vp::ethereum_bridge::authorize;
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader, VpEnv};
@@ -346,19 +346,19 @@ pub(super) fn check_balance_changes(
         );
         return Ok(None);
     }
-    if balance_a_delta == 0 {
-        assert_eq!(balance_b_delta, 0);
+    if balance_a_delta.is_zero() {
+        assert_eq!(balance_b_delta, Change::zero());
         tracing::debug!("Rejecting transaction as no balance change");
         return Ok(None);
     }
-    if balance_a_post < 0 {
+    if balance_a_post < Change::zero() {
         tracing::debug!(
             ?balance_a_post,
             "Rejecting transaction as balance is negative"
         );
         return Ok(None);
     }
-    if balance_b_post < 0 {
+    if balance_b_post < Change::zero() {
         tracing::debug!(
             ?balance_b_post,
             "Rejecting transaction as balance is negative"
@@ -366,7 +366,7 @@ pub(super) fn check_balance_changes(
         return Ok(None);
     }
 
-    if balance_a_delta < 0 {
+    if balance_a_delta < Change::zero() {
         if let wrapped_erc20s::KeyType::Balance { owner: sender } = key_a.suffix
         {
             let wrapped_erc20s::KeyType::Balance { owner: receiver } =
@@ -374,16 +374,13 @@ pub(super) fn check_balance_changes(
             Ok(Some((
                 sender,
                 receiver,
-                Amount::from(
-                    u64::try_from(balance_b_delta)
-                        .expect("This should not fail"),
-                ),
+                Amount::from_change(balance_b_delta),
             )))
         } else {
             unreachable!()
         }
     } else {
-        assert!(balance_b_delta < 0);
+        assert!(balance_b_delta < Change::zero());
         if let wrapped_erc20s::KeyType::Balance { owner: sender } = key_b.suffix
         {
             let wrapped_erc20s::KeyType::Balance { owner: receiver } =
@@ -391,10 +388,7 @@ pub(super) fn check_balance_changes(
             Ok(Some((
                 sender,
                 receiver,
-                Amount::from(
-                    u64::try_from(balance_a_delta)
-                        .expect("This should not fail"),
-                ),
+                Amount::from_change(balance_a_delta),
             )))
         } else {
             unreachable!()
@@ -404,8 +398,11 @@ pub(super) fn check_balance_changes(
 
 /// Return the delta between `balance_pre` and `balance_post`, erroring if there
 /// is an underflow
-fn calculate_delta(balance_pre: i128, balance_post: i128) -> Result<i128> {
-    match balance_post.checked_sub(balance_pre) {
+fn calculate_delta(
+    balance_pre: Change,
+    balance_post: Change,
+) -> Result<Change> {
+    match balance_post.checked_sub(&balance_pre) {
         Some(result) => Ok(result),
         None => Err(eyre!(
             "Underflow while calculating delta: {} - {}",

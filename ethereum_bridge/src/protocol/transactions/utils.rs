@@ -147,9 +147,8 @@ pub(super) fn sum_voting_powers(
 ) -> token::Amount {
     validators
         .iter()
-        .map(|validator| u64::from(validator.bonded_stake))
-        .sum::<u64>()
-        .into()
+        .map(|validator| validator.bonded_stake)
+        .sum::<token::Amount>()
 }
 
 #[cfg(test)]
@@ -275,11 +274,11 @@ mod tests {
         assert_eq!(voting_powers.len(), 2);
         assert_matches!(
             voting_powers.get(&(validator_1, BlockHeight(100))),
-            Some(v) if *v == FractionalVotingPower::new(100, 300).unwrap()
+            Some(v) if *v == FractionalVotingPower::new_u64(100, 300).unwrap()
         );
         assert_matches!(
             voting_powers.get(&(validator_2, BlockHeight(100))),
-            Some(v) if *v == FractionalVotingPower::new(200, 300).unwrap()
+            Some(v) if *v == FractionalVotingPower::new_u64(200, 300).unwrap()
         );
     }
 

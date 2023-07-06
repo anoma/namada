@@ -13,17 +13,17 @@ use namada_core::types::address::testing::{
     address_from_simple_seed, arb_established_address,
 };
 use namada_core::types::address::{Address, EstablishedAddressGen};
+use namada_core::types::dec::Dec;
 use namada_core::types::key::common::{PublicKey, SecretKey};
 use namada_core::types::key::testing::{
     arb_common_keypair, common_sk_from_simple_seed,
 };
 use namada_core::types::key::RefTo;
 use namada_core::types::storage::{BlockHeight, Epoch};
+use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_core::types::{address, key, token};
 use proptest::prelude::*;
 use proptest::test_runner::Config;
-use rust_decimal::Decimal;
-use rust_decimal_macros::dec;
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see
 // `tracing` logs from tests
 use test_log::test;
@@ -31,10 +31,10 @@ use test_log::test;
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::PosParams;
 use crate::types::{
-    decimal_mult_amount, into_tm_voting_power, BondDetails, BondId,
-    BondsAndUnbondsDetails, ConsensusValidator, GenesisValidator, Position,
-    ReverseOrdTokenAmount, SlashType, UnbondDetails, ValidatorSetUpdate,
-    ValidatorState, WeightedValidator,
+    into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,
+    ConsensusValidator, GenesisValidator, Position, ReverseOrdTokenAmount,
+    SlashType, UnbondDetails, ValidatorSetUpdate, ValidatorState,
+    WeightedValidator,
 };
 use crate::{
     become_validator, below_capacity_validator_set_handle, bond_handle,
@@ -43,6 +43,7 @@ use crate::{
     get_num_consensus_validators, init_genesis,
     insert_validator_into_validator_set, is_validator, process_slashes,
     read_below_capacity_validator_set_addresses_with_stake,
+    read_below_threshold_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake, read_total_stake,
     read_validator_delta_value, read_validator_stake, slash,
     staking_token_address, total_deltas_handle, unbond_handle, unbond_tokens,
@@ -61,9 +62,8 @@ proptest! {
     #[test]
     fn test_init_genesis(
 
-    pos_params in arb_pos_params(Some(5)),
+    (pos_params, genesis_validators) in arb_params_and_genesis_validators(Some(5), 1..10),
     start_epoch in (0_u64..1000).prop_map(Epoch),
-    genesis_validators in arb_genesis_validators(1..10),
 
     ) {
         test_init_genesis_aux(pos_params, start_epoch, genesis_validators)
@@ -79,8 +79,7 @@ proptest! {
     #[test]
     fn test_bonds(
 
-    pos_params in arb_pos_params(Some(5)),
-    genesis_validators in arb_genesis_validators(1..3),
+    (pos_params, genesis_validators) in arb_params_and_genesis_validators(Some(5), 1..3),
 
     ) {
         test_bonds_aux(pos_params, genesis_validators)
@@ -96,10 +95,9 @@ proptest! {
     #[test]
     fn test_become_validator(
 
-    pos_params in arb_pos_params(Some(5)),
+    (pos_params, genesis_validators) in arb_params_and_genesis_validators(Some(5), 1..3),
     new_validator in arb_established_address().prop_map(Address::Established),
     new_validator_consensus_key in arb_common_keypair(),
-    genesis_validators in arb_genesis_validators(1..3),
 
     ) {
         test_become_validator_aux(pos_params, new_validator,
@@ -123,6 +121,20 @@ proptest! {
     }
 }
 
+fn arb_params_and_genesis_validators(
+    num_max_validator_slots: Option<u64>,
+    val_size: Range<usize>,
+) -> impl Strategy<Value = (PosParams, Vec<GenesisValidator>)> {
+    let params = arb_pos_params(num_max_validator_slots);
+    params.prop_flat_map(move |params| {
+        let validators = arb_genesis_validators(
+            val_size.clone(),
+            Some(params.validator_stake_threshold),
+        );
+        (Just(params), validators)
+    })
+}
+
 fn test_slashes_with_unbonding_params()
 -> impl Strategy<Value = (PosParams, Vec<GenesisValidator>, u64)> {
     let params = arb_pos_params(Some(5));
@@ -130,7 +142,7 @@ fn test_slashes_with_unbonding_params()
         let unbond_delay = 0..(params.slash_processing_epoch_offset() * 2);
         // Must have at least 4 validators so we can slash one and the cubic
         // slash rate will be less than 100%
-        let validators = arb_genesis_validators(4..10);
+        let validators = arb_genesis_validators(4..10, None);
         (Just(params), validators, unbond_delay)
     })
 }
@@ -178,7 +190,9 @@ fn test_init_genesis_aux(
         let state = validator_state_handle(&validator.address)
             .get(&s, start_epoch, &params)
             .unwrap();
-        if (i as u64) < params.max_validator_slots {
+        if (i as u64) < params.max_validator_slots
+            && validator.tokens >= params.validator_stake_threshold
+        {
             // should be in consensus set
             let handle = consensus_validator_set_handle().at(&start_epoch);
             assert!(handle.at(&validator.tokens).iter(&s).unwrap().any(
@@ -188,10 +202,9 @@ fn test_init_genesis_aux(
                 }
             ));
             assert_eq!(state, Some(ValidatorState::Consensus));
-        } else {
-            // TODO: one more set once we have `below_threshold`
-
-            // should be in below-capacity set
+        } else if validator.tokens >= params.validator_stake_threshold {
+            // Should be in below-capacity set if its tokens are greater than
+            // `validator_stake_threshold`
             let handle = below_capacity_validator_set_handle().at(&start_epoch);
             assert!(handle.at(&validator.tokens.into()).iter(&s).unwrap().any(
                 |result| {
@@ -200,6 +213,17 @@ fn test_init_genesis_aux(
                 }
             ));
             assert_eq!(state, Some(ValidatorState::BelowCapacity));
+        } else {
+            // Should be in below-threshold
+            let bt_addresses =
+                read_below_threshold_validator_set_addresses(&s, start_epoch)
+                    .unwrap();
+            assert!(
+                bt_addresses
+                    .into_iter()
+                    .any(|addr| { addr == validator.address })
+            );
+            assert_eq!(state, Some(ValidatorState::BelowThreshold));
         }
     }
 }
@@ -245,7 +269,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         read_total_stake(&s, &params, pipeline_epoch).unwrap();
 
     // Self-bond
-    let amount_self_bond = token::Amount::from(100_500_000);
+    let amount_self_bond = token::Amount::from_uint(100_500_000, 0).unwrap();
     credit_tokens(&mut s, &staking_token, &validator.address, amount_self_bond)
         .unwrap();
     bond_tokens(
@@ -349,7 +373,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
 
     // Get a non-validating account with tokens
     let delegator = address::testing::gen_implicit_address();
-    let amount_del = token::Amount::from(201_000_000);
+    let amount_del = token::Amount::from_uint(201_000_000, 0).unwrap();
     credit_tokens(&mut s, &staking_token, &delegator, amount_del).unwrap();
     let balance_key = token::balance_key(&staking_token, &delegator);
     let balance = s
@@ -485,7 +509,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     // Unbond the self-bond with an amount that will remove all of the self-bond
     // executed after genesis and some of the genesis bond
     let amount_self_unbond: token::Amount =
-        amount_self_bond + (u64::from(validator.tokens) / 2).into();
+        amount_self_bond + (validator.tokens / 2);
     // When the difference is 0, only the non-genesis self-bond is unbonded
     let unbonded_genesis_self_bond =
         amount_self_unbond - amount_self_bond != token::Amount::default();
@@ -629,7 +653,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     );
 
     // Unbond delegation
-    let amount_undel = token::Amount::from(1_000_000);
+    let amount_undel = token::Amount::from_uint(1_000_000, 0).unwrap();
     unbond_tokens(
         &mut s,
         Some(&delegator),
@@ -808,8 +832,9 @@ fn test_become_validator_aux(
         eth_cold_key: &eth_cold_key,
         eth_hot_key: &eth_hot_key,
         current_epoch,
-        commission_rate: Decimal::new(5, 2),
-        max_commission_rate_change: Decimal::new(5, 2),
+        commission_rate: Dec::new(5, 2).expect("Dec creation failed"),
+        max_commission_rate_change: Dec::new(5, 2)
+            .expect("Dec creation failed"),
     })
     .unwrap();
     assert!(is_validator(&s, &new_validator).unwrap());
@@ -817,21 +842,16 @@ fn test_become_validator_aux(
     let num_consensus_after =
         get_num_consensus_validators(&s, current_epoch + params.pipeline_len)
             .unwrap();
-    assert_eq!(
-        if validators.len() as u64 >= params.max_validator_slots {
-            num_consensus_before
-        } else {
-            num_consensus_before + 1
-        },
-        num_consensus_after
-    );
+    // The new validator is initialized with no stake and thus is in the
+    // below-threshold set
+    assert_eq!(num_consensus_before, num_consensus_after);
 
     // Advance to epoch 2
     current_epoch = advance_epoch(&mut s, &params);
 
     // Self-bond to the new validator
     let staking_token = staking_token_address(&s);
-    let amount = token::Amount::from(100_500_000);
+    let amount = token::Amount::from_uint(100_500_000, 0).unwrap();
     credit_tokens(&mut s, &staking_token, &new_validator, amount).unwrap();
     bond_tokens(&mut s, None, &new_validator, amount, current_epoch).unwrap();
 
@@ -918,7 +938,8 @@ fn test_slashes_with_unbonding_aux(
     let val_addr = &validator.address;
     let val_tokens = validator.tokens;
     println!(
-        "Validator that will misbehave addr {val_addr}, tokens {val_tokens}"
+        "Validator that will misbehave addr {val_addr}, tokens {}",
+        val_tokens.to_string_native()
     );
 
     // Genesis
@@ -950,6 +971,7 @@ fn test_slashes_with_unbonding_aux(
         evidence_block_height,
         slash_0_type,
         val_addr,
+        current_epoch.next(),
     )
     .unwrap();
 
@@ -967,8 +989,8 @@ fn test_slashes_with_unbonding_aux(
     }
 
     // Unbond half of the tokens
-    let unbond_amount = decimal_mult_amount(dec!(0.5), val_tokens);
-    println!("Going to unbond {unbond_amount}");
+    let unbond_amount = Dec::new(5, 1).unwrap() * val_tokens;
+    println!("Going to unbond {}", unbond_amount.to_string_native());
     let unbond_epoch = current_epoch;
     unbond_tokens(&mut s, None, val_addr, unbond_amount, unbond_epoch).unwrap();
 
@@ -987,6 +1009,7 @@ fn test_slashes_with_unbonding_aux(
         evidence_block_height,
         slash_1_type,
         val_addr,
+        current_epoch.next(),
     )
     .unwrap();
 
@@ -1013,7 +1036,7 @@ fn test_slashes_with_unbonding_aux(
 
     let val_balance_post = read_balance(&s, &token, val_addr).unwrap();
     let withdrawn_tokens = val_balance_post - val_balance_pre;
-    println!("Withdrew {withdrawn_tokens} tokens");
+    println!("Withdrew {} tokens", withdrawn_tokens.to_string_native());
 
     assert_eq!(exp_withdraw_from_details, withdrawn_tokens);
 
@@ -1029,17 +1052,17 @@ fn test_slashes_with_unbonding_aux(
         .rate;
     println!("Slash 0 rate {slash_rate_0}, slash 1 rate {slash_rate_1}");
 
-    let expected_withdrawn_amount = decimal_mult_amount(
-        dec!(1) - slash_rate_1,
-        decimal_mult_amount(dec!(1) - slash_rate_0, unbond_amount),
+    let expected_withdrawn_amount = Dec::from(
+        (Dec::one() - slash_rate_1)
+            * (Dec::one() - slash_rate_0)
+            * unbond_amount,
     );
     // Allow some rounding error, 1 NAMNAM per each slash
-    let rounding_error_tolerance = 2;
+    let rounding_error_tolerance =
+        Dec::new(2, NATIVE_MAX_DECIMAL_PLACES).unwrap();
     assert!(
-        dbg!(
-            (expected_withdrawn_amount.change() - withdrawn_tokens.change())
-                .abs()
-        ) <= rounding_error_tolerance
+        dbg!(expected_withdrawn_amount.abs_diff(&Dec::from(withdrawn_tokens)))
+            <= rounding_error_tolerance
     );
 
     // TODO: finish once implemented
@@ -1127,20 +1150,27 @@ fn test_validator_sets() {
 
     // Start with two genesis validators with 1 NAM stake
     let epoch = Epoch::default();
-    let ((val1, pk1), stake1) = (gen_validator(), token::Amount::whole(1));
-    let ((val2, pk2), stake2) = (gen_validator(), token::Amount::whole(1));
-    let ((val3, pk3), stake3) = (gen_validator(), token::Amount::whole(10));
-    let ((val4, pk4), stake4) = (gen_validator(), token::Amount::whole(1));
-    let ((val5, pk5), stake5) = (gen_validator(), token::Amount::whole(100));
-    let ((val6, pk6), stake6) = (gen_validator(), token::Amount::whole(1));
-    let ((val7, pk7), stake7) = (gen_validator(), token::Amount::whole(1));
-    println!("val1: {val1}, {pk1}, {stake1}");
-    println!("val2: {val2}, {pk2}, {stake2}");
-    println!("val3: {val3}, {pk3}, {stake3}");
-    println!("val4: {val4}, {pk4}, {stake4}");
-    println!("val5: {val5}, {pk5}, {stake5}");
-    println!("val6: {val6}, {pk6}, {stake6}");
-    println!("val7: {val7}, {pk7}, {stake7}");
+    let ((val1, pk1), stake1) =
+        (gen_validator(), token::Amount::native_whole(1));
+    let ((val2, pk2), stake2) =
+        (gen_validator(), token::Amount::native_whole(1));
+    let ((val3, pk3), stake3) =
+        (gen_validator(), token::Amount::native_whole(10));
+    let ((val4, pk4), stake4) =
+        (gen_validator(), token::Amount::native_whole(1));
+    let ((val5, pk5), stake5) =
+        (gen_validator(), token::Amount::native_whole(100));
+    let ((val6, pk6), stake6) =
+        (gen_validator(), token::Amount::native_whole(1));
+    let ((val7, pk7), stake7) =
+        (gen_validator(), token::Amount::native_whole(1));
+    println!("\nval1: {val1}, {pk1}, {}", stake1.to_string_native());
+    println!("val2: {val2}, {pk2}, {}", stake2.to_string_native());
+    println!("val3: {val3}, {pk3}, {}", stake3.to_string_native());
+    println!("val4: {val4}, {pk4}, {}", stake4.to_string_native());
+    println!("val5: {val5}, {pk5}, {}", stake5.to_string_native());
+    println!("val6: {val6}, {pk6}, {}", stake6.to_string_native());
+    println!("val7: {val7}, {pk7}, {}", stake7.to_string_native());
 
     init_genesis(
         &mut s,
@@ -1158,8 +1188,9 @@ fn test_validator_sets() {
                     key::testing::gen_keypair::<key::secp256k1::SigScheme>()
                         .ref_to(),
                 ),
-                commission_rate: Decimal::new(1, 1),
-                max_commission_rate_change: Decimal::new(1, 1),
+                commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
+                max_commission_rate_change: Dec::new(1, 1)
+                    .expect("Dec creation failed"),
             },
             GenesisValidator {
                 address: val2.clone(),
@@ -1173,8 +1204,9 @@ fn test_validator_sets() {
                     key::testing::gen_keypair::<key::secp256k1::SigScheme>()
                         .ref_to(),
                 ),
-                commission_rate: Decimal::new(1, 1),
-                max_commission_rate_change: Decimal::new(1, 1),
+                commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
+                max_commission_rate_change: Dec::new(1, 1)
+                    .expect("Dec creation failed"),
             },
         ]
         .into_iter(),
@@ -1325,7 +1357,7 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk3,
-            bonded_stake: stake3.into(),
+            bonded_stake: stake3,
         })
     );
 
@@ -1380,16 +1412,18 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk5,
-            bonded_stake: stake5.into(),
+            bonded_stake: stake5,
         })
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk2));
 
     // Unbond some stake from val1, it should be be swapped with the greatest
-    // below-capacity validator val2 into the below-capacity set
-    let unbond = token::Amount::from(500_000);
+    // below-capacity validator val2 into the below-capacity set. The stake of
+    // val1 will go below 1 NAM, which is the validator_stake_threshold, so it
+    // will enter the below-threshold validator set.
+    let unbond = token::Amount::from_uint(500_000, 0).unwrap();
     let stake1 = stake1 - unbond;
-    println!("val1 {val1} new stake {stake1}");
+    println!("val1 {val1} new stake {}", stake1.to_string_native());
     // Because `update_validator_set` and `update_validator_deltas` are
     // effective from pipeline offset, we use pipeline epoch for the rest of the
     // checks
@@ -1447,7 +1481,7 @@ fn test_validator_sets() {
         .map(Result::unwrap)
         .collect();
 
-    assert_eq!(below_capacity_vals.len(), 3);
+    assert_eq!(below_capacity_vals.len(), 2);
     assert!(matches!(
         &below_capacity_vals[0],
         (lazy_map::NestedSubKey::Data {
@@ -1464,17 +1498,15 @@ fn test_validator_sets() {
         }, address)
         if address == &val6 && stake == &stake6 && *position == Position(2)
     ));
-    assert!(matches!(
-        &below_capacity_vals[2],
-        (
-            lazy_map::NestedSubKey::Data {
-                key: ReverseOrdTokenAmount(stake),
-                nested_sub_key: lazy_map::SubKey::Data(position),
-            },
-            address
-        )
-        if address == &val1 && stake == &stake1 && *position == Position(0)
-    ));
+
+    let below_threshold_vals =
+        read_below_threshold_validator_set_addresses(&s, pipeline_epoch)
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>();
+
+    assert_eq!(below_threshold_vals.len(), 1);
+    assert_eq!(&below_threshold_vals[0], &val1);
 
     // Advance to EPOCH 5
     let epoch = advance_epoch(&mut s, &params);
@@ -1486,7 +1518,7 @@ fn test_validator_sets() {
     assert!(tm_updates.is_empty());
 
     // Insert another validator with stake 1 - it should be added to below
-    // capacity set after val1
+    // capacity set
     insert_validator(&mut s, &val7, &pk7, stake7, epoch);
     // Epoch 7
     let val7_epoch = pipeline_epoch;
@@ -1531,7 +1563,7 @@ fn test_validator_sets() {
         .map(Result::unwrap)
         .collect();
 
-    assert_eq!(below_capacity_vals.len(), 4);
+    assert_eq!(below_capacity_vals.len(), 3);
     assert!(matches!(
         &below_capacity_vals[0],
         (lazy_map::NestedSubKey::Data {
@@ -1559,17 +1591,15 @@ fn test_validator_sets() {
         )
         if address == &val7 && stake == &stake7 && *position == Position(3)
     ));
-    assert!(matches!(
-        &below_capacity_vals[3],
-        (
-            lazy_map::NestedSubKey::Data {
-                key: ReverseOrdTokenAmount(stake),
-                nested_sub_key: lazy_map::SubKey::Data(position),
-            },
-            address
-        )
-        if address == &val1 && stake == &stake1 && *position == Position(0)
-    ));
+
+    let below_threshold_vals =
+        read_below_threshold_validator_set_addresses(&s, pipeline_epoch)
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>();
+
+    assert_eq!(below_threshold_vals.len(), 1);
+    assert_eq!(&below_threshold_vals[0], &val1);
 
     // Advance to EPOCH 6
     let epoch = advance_epoch(&mut s, &params);
@@ -1583,16 +1613,16 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk4.clone(),
-            bonded_stake: stake4.into(),
+            bonded_stake: stake4,
         })
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk1));
 
     // Bond some stake to val6, it should be be swapped with the lowest
     // consensus validator val2 into the consensus set
-    let bond = token::Amount::from(500_000);
+    let bond = token::Amount::from_uint(500_000, 0).unwrap();
     let stake6 = stake6 + bond;
-    println!("val6 {val6} new stake {stake6}");
+    println!("val6 {val6} new stake {}", stake6.to_string_native());
     update_validator_set(&mut s, &params, &val6, bond.change(), epoch).unwrap();
     update_validator_deltas(
         &mut s,
@@ -1645,7 +1675,7 @@ fn test_validator_sets() {
         .map(Result::unwrap)
         .collect();
 
-    assert_eq!(below_capacity_vals.len(), 4);
+    assert_eq!(below_capacity_vals.len(), 3);
     dbg!(&below_capacity_vals);
     assert!(matches!(
         &below_capacity_vals[0],
@@ -1674,17 +1704,15 @@ fn test_validator_sets() {
         )
         if address == &val4 && stake == &stake4 && *position == Position(4)
     ));
-    assert!(matches!(
-        &below_capacity_vals[3],
-        (
-            lazy_map::NestedSubKey::Data {
-                key: ReverseOrdTokenAmount(stake),
-                nested_sub_key: lazy_map::SubKey::Data(position),
-            },
-            address
-        )
-        if address == &val1 && stake == &stake1 && *position == Position(0)
-    ));
+
+    let below_threshold_vals =
+        read_below_threshold_validator_set_addresses(&s, pipeline_epoch)
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>();
+
+    assert_eq!(below_threshold_vals.len(), 1);
+    assert_eq!(&below_threshold_vals[0], &val1);
 
     // Advance to EPOCH 7
     let epoch = advance_epoch(&mut s, &params);
@@ -1706,7 +1734,7 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk6,
-            bonded_stake: stake6.into(),
+            bonded_stake: stake6,
         })
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk4));
@@ -1724,8 +1752,11 @@ fn test_validator_sets_swap() {
     // Only 2 consensus validator slots
     let params = PosParams {
         max_validator_slots: 2,
+        // Set the stake threshold to 0 so no validators are in the
+        // below-threshold set
+        validator_stake_threshold: token::Amount::default(),
         // Set 0.1 votes per token
-        tm_votes_per_token: dec!(0.1),
+        tm_votes_per_token: Dec::new(1, 1).expect("Dec creation failed"),
         ..Default::default()
     };
     let addr_seed = "seed";
@@ -1777,14 +1808,17 @@ fn test_validator_sets_swap() {
     // Start with two genesis validators, one with 1 voting power and other 0
     let epoch = Epoch::default();
     // 1M voting power
-    let ((val1, pk1), stake1) = (gen_validator(), token::Amount::whole(10));
+    let ((val1, pk1), stake1) =
+        (gen_validator(), token::Amount::native_whole(10));
     // 0 voting power
-    let ((val2, pk2), stake2) = (gen_validator(), token::Amount::from(5));
+    let ((val2, pk2), stake2) =
+        (gen_validator(), token::Amount::from_uint(5, 0).unwrap());
     // 0 voting power
-    let ((val3, pk3), stake3) = (gen_validator(), token::Amount::from(5));
-    println!("val1: {val1}, {pk1}, {stake1}");
-    println!("val2: {val2}, {pk2}, {stake2}");
-    println!("val3: {val3}, {pk3}, {stake3}");
+    let ((val3, pk3), stake3) =
+        (gen_validator(), token::Amount::from_uint(5, 0).unwrap());
+    println!("val1: {val1}, {pk1}, {}", stake1.to_string_native());
+    println!("val2: {val2}, {pk2}, {}", stake2.to_string_native());
+    println!("val3: {val3}, {pk3}, {}", stake3.to_string_native());
 
     init_genesis(
         &mut s,
@@ -1802,8 +1836,9 @@ fn test_validator_sets_swap() {
                     key::testing::gen_keypair::<key::secp256k1::SigScheme>()
                         .ref_to(),
                 ),
-                commission_rate: Decimal::new(1, 1),
-                max_commission_rate_change: Decimal::new(1, 1),
+                commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
+                max_commission_rate_change: Dec::new(1, 1)
+                    .expect("Dec creation failed"),
             },
             GenesisValidator {
                 address: val2.clone(),
@@ -1817,8 +1852,9 @@ fn test_validator_sets_swap() {
                     key::testing::gen_keypair::<key::secp256k1::SigScheme>()
                         .ref_to(),
                 ),
-                commission_rate: Decimal::new(1, 1),
-                max_commission_rate_change: Decimal::new(1, 1),
+                commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
+                max_commission_rate_change: Dec::new(1, 1)
+                    .expect("Dec creation failed"),
             },
         ]
         .into_iter(),
@@ -1837,9 +1873,9 @@ fn test_validator_sets_swap() {
 
     // Add 2 bonds, one for val2 and greater one for val3
     let bonds_epoch_1 = pipeline_epoch;
-    let bond2 = token::Amount::from(1);
+    let bond2 = token::Amount::from_uint(1, 0).unwrap();
     let stake2 = stake2 + bond2;
-    let bond3 = token::Amount::from(4);
+    let bond3 = token::Amount::from_uint(4, 0).unwrap();
     let stake3 = stake3 + bond3;
 
     assert!(stake2 < stake3);
@@ -1876,7 +1912,7 @@ fn test_validator_sets_swap() {
 
     // Add 2 more bonds, same amount for `val2` and val3`
     let bonds_epoch_2 = pipeline_epoch;
-    let bonds = token::Amount::whole(1);
+    let bonds = token::Amount::native_whole(1);
     let stake2 = stake2 + bonds;
     let stake3 = stake3 + bonds;
     assert!(stake2 < stake3);
@@ -1934,7 +1970,7 @@ fn test_validator_sets_swap() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk3,
-            bonded_stake: stake3.into(),
+            bonded_stake: stake3,
         })
     );
 }
@@ -1971,41 +2007,70 @@ fn advance_epoch(s: &mut TestWlStorage, params: &PosParams) -> Epoch {
 
 fn arb_genesis_validators(
     size: Range<usize>,
+    threshold: Option<token::Amount>,
 ) -> impl Strategy<Value = Vec<GenesisValidator>> {
     let tokens: Vec<_> = (0..size.end)
-        .map(|_| (1..=10_000_000_u64).prop_map(token::Amount::from))
+        .map(|ix| {
+            if ix == 0 {
+                // If there's a threshold, make sure that at least one validator
+                // has at least a stake greater or equal to the threshold to
+                // avoid having an empty consensus set.
+                threshold
+                    .map(|token| token.raw_amount().as_u64())
+                    .unwrap_or(1)..=10_000_000_u64
+            } else {
+                1..=10_000_000_u64
+            }
+            .prop_map(token::Amount::from)
+        })
         .collect();
-    (size, tokens).prop_map(|(size, token_amounts)| {
-        // use unique seeds to generate validators' address and consensus key
-        let seeds = (0_u64..).take(size);
-        seeds
-            .zip(token_amounts)
-            .map(|(seed, tokens)| {
-                let address = address_from_simple_seed(seed);
-                let consensus_sk = common_sk_from_simple_seed(seed);
-                let consensus_key = consensus_sk.to_public();
+    (size, tokens)
+        .prop_map(|(size, token_amounts)| {
+            // use unique seeds to generate validators' address and consensus
+            // key
+            let seeds = (0_u64..).take(size);
+            seeds
+                .zip(token_amounts)
+                .map(|(seed, tokens)| {
+                    let address = address_from_simple_seed(seed);
+                    let consensus_sk = common_sk_from_simple_seed(seed);
+                    let consensus_key = consensus_sk.to_public();
 
-                let eth_hot_key = key::common::PublicKey::Secp256k1(
-                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                    let eth_hot_key = key::common::PublicKey::Secp256k1(
+                        key::testing::gen_keypair::<key::secp256k1::SigScheme>(
+                        )
                         .ref_to(),
-                );
-                let eth_cold_key = key::common::PublicKey::Secp256k1(
-                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                    );
+                    let eth_cold_key = key::common::PublicKey::Secp256k1(
+                        key::testing::gen_keypair::<key::secp256k1::SigScheme>(
+                        )
                         .ref_to(),
-                );
+                    );
 
-                let commission_rate = Decimal::new(5, 2);
-                let max_commission_rate_change = Decimal::new(1, 2);
-                GenesisValidator {
-                    address,
-                    tokens,
-                    consensus_key,
-                    eth_hot_key,
-                    eth_cold_key,
-                    commission_rate,
-                    max_commission_rate_change,
+                    let commission_rate = Dec::new(5, 2).expect("Test failed");
+                    let max_commission_rate_change =
+                        Dec::new(1, 2).expect("Test failed");
+                    GenesisValidator {
+                        address,
+                        tokens,
+                        consensus_key,
+                        eth_hot_key,
+                        eth_cold_key,
+                        commission_rate,
+                        max_commission_rate_change,
+                    }
+                })
+                .collect()
+        })
+        .prop_filter(
+            "Must have at least one genesis validator with stake above the \
+             provided threshold, if any.",
+            move |gen_vals: &Vec<GenesisValidator>| {
+                if let Some(thresh) = threshold {
+                    gen_vals.iter().any(|val| val.tokens >= thresh)
+                } else {
+                    true
                 }
-            })
-            .collect()
-    })
+            },
+        )
 }

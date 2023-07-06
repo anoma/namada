@@ -20,14 +20,16 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use super::generated::types;
+use crate::ledger::storage::{KeccakHasher, Sha256Hasher, StorageHasher};
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint_proto::abci::ResponseDeliverTx;
 use crate::types::address::Address;
 use crate::types::chain::ChainId;
 use crate::types::keccak::{keccak_hash, KeccakHash};
 use crate::types::key::{self, *};
-use crate::types::storage::Epoch;
+use crate::types::storage::{Epoch, Key};
 use crate::types::time::DateTimeUtc;
+use crate::types::token::MaspDenom;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::token::Transfer;
 #[cfg(feature = "ferveo-tpke")]
@@ -82,6 +84,10 @@ pub trait Signable<T> {
     /// A byte vector containing the serialized data.
     type Output: key::SignableBytes;
 
+    /// The hashing algorithm to use to sign serialized
+    /// data with.
+    type Hasher: 'static + StorageHasher;
+
     /// Encodes `data` as a byte vector, with some arbitrary serialization
     /// method.
     ///
@@ -102,6 +108,7 @@ pub struct SerializeWithBorsh;
 pub struct SignableEthMessage;
 
 impl<T: BorshSerialize> Signable<T> for SerializeWithBorsh {
+    type Hasher = Sha256Hasher;
     type Output = Vec<u8>;
 
     fn as_signable(data: &T) -> Vec<u8> {
@@ -111,6 +118,7 @@ impl<T: BorshSerialize> Signable<T> for SerializeWithBorsh {
 }
 
 impl Signable<KeccakHash> for SignableEthMessage {
+    type Hasher = KeccakHasher;
     type Output = KeccakHash;
 
     fn as_signable(hash: &KeccakHash) -> KeccakHash {
@@ -194,7 +202,8 @@ impl<T, S: Signable<T>> Signed<T, S> {
     /// Initialize a new [`Signed`] instance.
     pub fn new(keypair: &common::SecretKey, data: T) -> Self {
         let to_sign = S::as_signable(&data);
-        let sig = common::SigScheme::sign(keypair, to_sign);
+        let sig =
+            common::SigScheme::sign_with_hasher::<S::Hasher>(keypair, to_sign);
         Self::new_from(data, sig)
     }
 
@@ -205,7 +214,11 @@ impl<T, S: Signable<T>> Signed<T, S> {
         pk: &common::PublicKey,
     ) -> std::result::Result<(), VerifySigError> {
         let signed_bytes = S::as_signable(&self.data);
-        common::SigScheme::verify_signature(pk, &signed_bytes, &self.sig)
+        common::SigScheme::verify_signature_with_hasher::<S::Hasher>(
+            pk,
+            &signed_bytes,
+            &self.sig,
+        )
     }
 }
 
@@ -633,7 +646,7 @@ pub struct MaspBuilder {
     pub target: crate::types::hash::Hash,
     /// The decoded set of asset types used by the transaction. Useful for
     /// offline wallets trying to display AssetTypes.
-    pub asset_types: HashSet<(Address, Epoch)>,
+    pub asset_types: HashSet<(Address, Option<Key>, MaspDenom, Epoch)>,
     /// Track how Info objects map to descriptors and outputs
     #[serde(
         serialize_with = "borsh_serde::<SaplingMetadataSerde, _>",

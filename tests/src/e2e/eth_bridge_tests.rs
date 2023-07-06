@@ -134,7 +134,11 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
     assert_eq!(dai_supply, Some(transfer_amount));
 
     // let's transfer them back to Ethereum
-    let amount = transfer_amount.to_string();
+    let amount = token::DenominatedAmount {
+        amount: transfer_amount,
+        denom: 0u8.into(),
+    }
+    .to_string();
     let dai_addr = DAI_ERC20_ETH_ADDRESS.to_string();
     let tx_args = vec![
         "add-erc20-transfer",
@@ -225,7 +229,7 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
             amount: transfer_amount,
             asset: DAI_ERC20_ETH_ADDRESS,
             receiver: EthAddress::from_str(RECEIVER).expect("Test failed"),
-            gas_amount: Amount::whole(10),
+            gas_amount: Amount::native_whole(10),
             sender: berthas_addr.clone(),
             gas_payer: berthas_addr.clone(),
         }],
@@ -323,12 +327,6 @@ async fn test_bridge_pool_e2e() {
         Some(LEDGER_STARTUP_TIMEOUT_SECONDS)
     )
     .unwrap();
-    namadan_ledger
-        .exp_string("Namada ledger node started")
-        .unwrap();
-    namadan_ledger
-        .exp_string("Tendermint node started")
-        .unwrap();
     namadan_ledger.exp_string("Committed block hash").unwrap();
     let bg_ledger = namadan_ledger.background();
 
@@ -446,10 +444,10 @@ async fn test_bridge_pool_e2e() {
     let transfers = EthereumEvent::TransfersToEthereum {
         nonce: 0.into(),
         transfers: vec![TransferToEthereum {
-            amount: Amount::whole(100),
+            amount: Amount::native_whole(100),
             asset: EthAddress::from_str(&wnam_address).expect("Test failed"),
             receiver: EthAddress::from_str(RECEIVER).expect("Test failed"),
-            gas_amount: Amount::whole(10),
+            gas_amount: Amount::native_whole(10),
             sender: berthas_addr.clone(),
             gas_payer: berthas_addr.clone(),
         }],
@@ -519,11 +517,10 @@ async fn test_wnam_transfer() -> Result<()> {
             let native_token = genesis.token.get_mut("NAM").unwrap();
             native_token_address =
                 Some(native_token.address.as_ref().unwrap().clone());
-            native_token
-                .balances
-                .as_mut()
-                .unwrap()
-                .insert(BRIDGE_ADDRESS.to_string(), BRIDGE_INITIAL_NAM_BALANCE);
+            native_token.balances.as_mut().unwrap().insert(
+                BRIDGE_ADDRESS.to_string(),
+                BRIDGE_INITIAL_NAM_BALANCE.into(),
+            );
             genesis
         },
         None,
@@ -762,7 +759,10 @@ async fn test_wdai_transfer_implicit_unauthorized() -> Result<()> {
         &albert_addr.to_string(),
         &bertha_addr.to_string(),
         &bertha_addr.to_string(),
-        &token::Amount::from(10_000),
+        &token::DenominatedAmount {
+            amount: token::Amount::from(10_000),
+            denom: 0u8.into(),
+        },
     )?;
     cmd.exp_string("Transaction is valid.")?;
     cmd.exp_string("Transaction is invalid.")?;
@@ -829,7 +829,10 @@ async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
         &albert_established_addr.to_string(),
         &bertha_addr.to_string(),
         &bertha_addr.to_string(),
-        &token::Amount::from(10_000),
+        &token::DenominatedAmount {
+            amount: token::Amount::from(10_000),
+            denom: 0u8.into(),
+        },
     )?;
     cmd.exp_string("Transaction is valid.")?;
     cmd.exp_string("Transaction is invalid.")?;
@@ -876,7 +879,10 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
     // attempt a transfer from Albert to Bertha that should succeed, as it's
     // signed with Albert's key
     let bertha_addr = find_address(&test, BERTHA)?;
-    let second_transfer_amount = token::Amount::from(10_000);
+    let second_transfer_amount = &token::DenominatedAmount {
+        amount: token::Amount::from(10_000),
+        denom: 0u8.into(),
+    };
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
         &Who::Validator(0),
@@ -884,7 +890,7 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
         &albert_addr.to_string(),
         &bertha_addr.to_string(),
         &albert_addr.to_string(),
-        &second_transfer_amount,
+        second_transfer_amount,
     )?;
     cmd.exp_string("Transaction is valid.")?;
     cmd.exp_string("Transaction is valid.")?;
@@ -898,7 +904,7 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
     )?;
     assert_eq!(
         albert_wdai_balance,
-        initial_transfer_amount - second_transfer_amount
+        initial_transfer_amount - second_transfer_amount.amount
     );
 
     let bertha_wdai_balance = find_wrapped_erc20_balance(
@@ -907,7 +913,7 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
         &DAI_ERC20_ETH_ADDRESS,
         &bertha_addr,
     )?;
-    assert_eq!(bertha_wdai_balance, second_transfer_amount);
+    assert_eq!(bertha_wdai_balance, second_transfer_amount.amount);
 
     Ok(())
 }
@@ -951,7 +957,10 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
 
     // attempt a transfer from Albert to Bertha that should succeed, as it's
     // signed with Albert's key
-    let second_transfer_amount = token::Amount::from(10_000);
+    let second_transfer_amount = &token::DenominatedAmount {
+        amount: token::Amount::from(10_000),
+        denom: 0u8.into(),
+    };
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
         &Who::Validator(0),
@@ -959,7 +968,7 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
         &albert_addr.to_string(),
         &bertha_established_addr.to_string(),
         &albert_addr.to_string(),
-        &second_transfer_amount,
+        second_transfer_amount,
     )?;
     cmd.exp_string("Transaction is valid.")?;
     cmd.exp_string("Transaction is valid.")?;
@@ -973,7 +982,7 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
     )?;
     assert_eq!(
         albert_wdai_balance,
-        initial_transfer_amount - second_transfer_amount
+        initial_transfer_amount - second_transfer_amount.amount
     );
 
     let bertha_established_wdai_balance = find_wrapped_erc20_balance(
@@ -982,7 +991,10 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
         &DAI_ERC20_ETH_ADDRESS,
         &bertha_established_addr,
     )?;
-    assert_eq!(bertha_established_wdai_balance, second_transfer_amount);
+    assert_eq!(
+        bertha_established_wdai_balance,
+        second_transfer_amount.amount
+    );
 
     Ok(())
 }
@@ -1026,7 +1038,10 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
 
     // attempt a transfer from Albert to Bertha that should succeed, as it's
     // signed with Albert's key
-    let second_transfer_amount = token::Amount::from(10_000);
+    let second_transfer_amount = &token::DenominatedAmount {
+        amount: token::Amount::from(10_000),
+        denom: 0u8.into(),
+    };
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
         &Who::Validator(0),
@@ -1034,7 +1049,7 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
         &albert_established_addr.to_string(),
         &bertha_addr.to_string(),
         &albert_established_addr.to_string(),
-        &second_transfer_amount,
+        second_transfer_amount,
     )?;
     cmd.exp_string("Transaction is valid.")?;
     cmd.exp_string("Transaction is valid.")?;
@@ -1048,7 +1063,7 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
     )?;
     assert_eq!(
         albert_established_wdai_balance,
-        initial_transfer_amount - second_transfer_amount
+        initial_transfer_amount - second_transfer_amount.amount
     );
 
     let bertha_wdai_balance = find_wrapped_erc20_balance(
@@ -1057,7 +1072,7 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
         &DAI_ERC20_ETH_ADDRESS,
         &bertha_addr,
     )?;
-    assert_eq!(bertha_wdai_balance, second_transfer_amount);
+    assert_eq!(bertha_wdai_balance, second_transfer_amount.amount);
 
     // TODO: invalid transfer
 
@@ -1113,7 +1128,10 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
 
     // attempt a transfer from Albert to Bertha that should succeed, as it's
     // signed with Albert's key
-    let second_transfer_amount = token::Amount::from(10_000);
+    let second_transfer_amount = &token::DenominatedAmount {
+        amount: token::Amount::from(10_000),
+        denom: 0u8.into(),
+    };
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
         &Who::Validator(0),
@@ -1121,7 +1139,7 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
         &albert_established_addr.to_string(),
         &bertha_established_addr.to_string(),
         &albert_established_addr.to_string(),
-        &second_transfer_amount,
+        second_transfer_amount,
     )?;
     cmd.exp_string("Transaction is valid.")?;
     cmd.exp_string("Transaction is valid.")?;
@@ -1135,7 +1153,7 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
     )?;
     assert_eq!(
         albert_established_wdai_balance,
-        initial_transfer_amount - second_transfer_amount
+        initial_transfer_amount - second_transfer_amount.amount
     );
 
     let bertha_established_wdai_balance = find_wrapped_erc20_balance(
@@ -1144,238 +1162,12 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
         &DAI_ERC20_ETH_ADDRESS,
         &bertha_established_addr,
     )?;
-    assert_eq!(bertha_established_wdai_balance, second_transfer_amount);
+    assert_eq!(
+        bertha_established_wdai_balance,
+        second_transfer_amount.amount
+    );
 
     // TODO: invalid transfer
 
     Ok(())
-}
-
-/// Test that manually submitting a validator set update protocol
-/// transaction works.
-#[tokio::test]
-async fn test_submit_validator_set_udpate() -> Result<()> {
-    let (test, bg_ledger) = setup_single_validator_test()?;
-
-    let ledger_addr = get_actor_rpc(&test, &Who::Validator(0));
-    let rpc_addr = format!("http://{ledger_addr}");
-
-    // wait for epoch E > 1 to be installed
-    let instant = Instant::now() + Duration::from_secs(180);
-    Sleep {
-        strategy: Constant(Duration::from_millis(500)),
-    }
-    .timeout(instant, || async {
-        match rpc_client_do(&rpc_addr, &(), |rpc, client, ()| async move {
-            rpc.shell().epoch(&client).await.ok()
-        })
-        .await
-        {
-            Some(epoch) if epoch.0 > 0 => ControlFlow::Break(()),
-            _ => ControlFlow::Continue(()),
-        }
-    })
-    .await?;
-
-    // check that we have a complete proof for E=1
-    let valset_upd_keys = vote_tallies::Keys::from(&Epoch(1));
-    let seen_key = valset_upd_keys.seen();
-    Sleep {
-        strategy: Constant(Duration::from_millis(500)),
-    }
-    .timeout(instant, || async {
-        rpc_client_do(
-            &rpc_addr,
-            &seen_key,
-            |rpc, client, seen_key| async move {
-                rpc.shell()
-                    .storage_value(&client, None, None, false, seen_key)
-                    .await
-                    .map_or_else(
-                        |_| {
-                            unreachable!(
-                                "By the end of epoch 0, a proof should be \
-                                 available"
-                            )
-                        },
-                        |rsp| {
-                            let seen = bool::try_from_slice(&rsp.data).unwrap();
-                            assert!(
-                                seen,
-                                "No valset upd complete proof in storage"
-                            );
-                            ControlFlow::Break(())
-                        },
-                    )
-            },
-        )
-        .await
-    })
-    .await?;
-
-    // shut down ledger
-    let mut ledger = bg_ledger.foreground();
-    ledger.send_control(ControlCode::EndOfText)?;
-    ledger.exp_string("Namada ledger node has shut down.")?;
-    ledger.exp_eof()?;
-    drop(ledger);
-
-    // delete the valset upd proof for E=1 from storage
-    for key in &valset_upd_keys {
-        let key = key.to_string();
-        let delete_args =
-            vec!["ledger", "db-delete-value", "--storage-key", &key];
-        let mut delete_cmd =
-            run_as!(test, Who::Validator(0), Bin::Node, delete_args, Some(30))?;
-        delete_cmd
-            .exp_string("Value successfully deleted from the database.")?;
-        drop(delete_cmd);
-    }
-
-    // restart the ledger
-    let (test, _bg_ledger) = run_single_node_test_from(test)?;
-
-    // check that no complete proof is available for E=1 anymore
-    Sleep {
-        strategy: Constant(Duration::from_millis(500)),
-    }
-    .timeout(instant, || async {
-        rpc_client_do(
-            &rpc_addr,
-            &seen_key,
-            |rpc, client, seen_key| async move {
-                rpc.shell()
-                    .storage_value(&client, None, None, false, seen_key)
-                    .await
-                    .map_or_else(
-                        |_| unreachable!("The RPC does not error out"),
-                        |rsp| {
-                            assert_eq!(
-                                rsp.info,
-                                format!("No value found for key: {seen_key}")
-                            );
-                            ControlFlow::Break(())
-                        },
-                    )
-            },
-        )
-        .await
-    })
-    .await?;
-
-    // submit valset upd vote extension protocol tx for E=1
-    let tx_args = vec![
-        "validator-set-update",
-        "--ledger-address",
-        &ledger_addr,
-        "--epoch",
-        "1",
-    ];
-    let mut namadac_tx =
-        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(30))?;
-    namadac_tx.exp_string("Transaction added to mempool")?;
-    drop(namadac_tx);
-
-    // check that a complete proof is once more available for E=1
-    Sleep {
-        strategy: Constant(Duration::from_millis(500)),
-    }
-    .timeout(instant, || async {
-        rpc_client_do(
-            &rpc_addr,
-            &seen_key,
-            |rpc, client, seen_key| async move {
-                rpc.shell()
-                    .storage_value(&client, None, None, false, seen_key)
-                    .await
-                    .map_or_else(
-                        |_| ControlFlow::Continue(()),
-                        |rsp| {
-                            if rsp.info.starts_with("No value found for key") {
-                                return ControlFlow::Continue(());
-                            }
-                            let seen = bool::try_from_slice(&rsp.data).unwrap();
-                            assert!(
-                                seen,
-                                "No valset upd complete proof in storage"
-                            );
-                            ControlFlow::Break(())
-                        },
-                    )
-            },
-        )
-        .await
-    })
-    .await?;
-
-    Ok(())
-}
-
-/// Test that a regular transaction cannot modify arbitrary keys of the Ethereum
-/// bridge VP.
-#[test]
-fn test_unauthorized_tx_cannot_write_storage() {
-    const LEDGER_STARTUP_TIMEOUT_SECONDS: u64 = 30;
-    const CLIENT_COMMAND_TIMEOUT_SECONDS: u64 = 30;
-    const SOLE_VALIDATOR: Who = Who::Validator(0);
-
-    let test = setup::single_node_net().unwrap();
-
-    let mut ledger = run_as!(
-        test,
-        SOLE_VALIDATOR,
-        Bin::Node,
-        &["ledger"],
-        Some(LEDGER_STARTUP_TIMEOUT_SECONDS)
-    )
-    .unwrap();
-    ledger.exp_string("Namada ledger node started").unwrap();
-    ledger.exp_string("Tendermint node started").unwrap();
-    ledger.exp_string("Committed block hash").unwrap();
-    let _bg_ledger = ledger.background();
-
-    let tx_data_path = test.test_dir.path().join("arbitrary_storage_key.txt");
-    std::fs::write(
-        &tx_data_path,
-        TxWriteData {
-            key: storage::Key::from_str(&storage_key("arbitrary")).unwrap(),
-            value: b"arbitrary value".to_vec(),
-        }
-        .try_to_vec()
-        .unwrap(),
-    )
-    .unwrap();
-
-    let tx_code_path = TestWasms::TxWriteStorageKey.path();
-
-    let tx_data_path = tx_data_path.to_string_lossy().to_string();
-    let tx_code_path = tx_code_path.to_string_lossy().to_string();
-    let ledger_addr = get_actor_rpc(&test, &SOLE_VALIDATOR);
-    let tx_args = vec![
-        "tx",
-        "--signer",
-        ALBERT,
-        "--code-path",
-        &tx_code_path,
-        "--data-path",
-        &tx_data_path,
-        "--node",
-        &ledger_addr,
-    ];
-
-    let mut client_tx = run!(
-        test,
-        Bin::Client,
-        tx_args,
-        Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
-    )
-    .unwrap();
-
-    client_tx.exp_string("Transaction accepted").unwrap();
-    client_tx.exp_string("Transaction applied").unwrap();
-    client_tx.exp_string("Transaction is invalid").unwrap();
-    client_tx
-        .exp_string(&format!("Rejected: {BRIDGE_ADDRESS}"))
-        .unwrap();
-    client_tx.assert_success();
 }

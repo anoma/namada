@@ -26,7 +26,7 @@ fn test_multitoken_transfer_implicit_to_implicit() -> Result<()> {
     println!("Fake multitoken VP established at {}", multitoken_vp_addr);
 
     let albert_addr = e2e::helpers::find_address(&test, ALBERT)?;
-    let albert_starting_red_balance = token::Amount::from(100_000_000);
+    let albert_starting_red_balance = token::Amount::native_whole(100_000_000);
     helpers::mint_red_tokens(
         &test,
         &rpc_addr,
@@ -35,7 +35,7 @@ fn test_multitoken_transfer_implicit_to_implicit() -> Result<()> {
         &albert_starting_red_balance,
     )?;
 
-    let transfer_amount = token::Amount::from(10_000_000);
+    let transfer_amount = token::Amount::native_whole(10_000_000);
 
     // make a transfer from Albert to Bertha, signed by Christel - this should
     // be rejected
@@ -70,7 +70,7 @@ fn test_multitoken_transfer_implicit_to_implicit() -> Result<()> {
         ALBERT,
         BERTHA,
         ALBERT,
-        &token::Amount::from(10_000_000),
+        &token::Amount::native_whole(10_000_000),
     )?;
     authorized_transfer.exp_string("Transaction applied with result")?;
     authorized_transfer.exp_string("Transaction is valid")?;
@@ -110,7 +110,8 @@ fn test_multitoken_transfer_established_to_implicit() -> Result<()> {
         established_alias,
     )?;
 
-    let established_starting_red_balance = token::Amount::from(100_000_000);
+    let established_starting_red_balance =
+        token::Amount::native_whole(100_000_000);
     // mint some red tokens for the established account
     let established_addr =
         e2e::helpers::find_address(&test, established_alias)?;
@@ -122,7 +123,7 @@ fn test_multitoken_transfer_established_to_implicit() -> Result<()> {
         &established_starting_red_balance,
     )?;
 
-    let transfer_amount = token::Amount::from(10_000_000);
+    let transfer_amount = token::Amount::native_whole(10_000_000);
     // attempt an unauthorized transfer to Albert from the established account
     let mut unauthorized_transfer = helpers::attempt_red_tokens_transfer(
         &test,
@@ -197,7 +198,7 @@ fn test_multitoken_transfer_implicit_to_established() -> Result<()> {
     )?;
 
     let albert_addr = e2e::helpers::find_address(&test, ALBERT)?;
-    let albert_starting_red_balance = token::Amount::from(100_000_000);
+    let albert_starting_red_balance = token::Amount::native_whole(100_000_000);
     helpers::mint_red_tokens(
         &test,
         &rpc_addr,
@@ -206,7 +207,7 @@ fn test_multitoken_transfer_implicit_to_established() -> Result<()> {
         &albert_starting_red_balance,
     )?;
 
-    let transfer_amount = token::Amount::from(10_000_000);
+    let transfer_amount = token::Amount::native_whole(10_000_000);
 
     // attempt an unauthorized transfer from Albert to the established account
     let mut unauthorized_transfer = helpers::attempt_red_tokens_transfer(
@@ -280,7 +281,8 @@ fn test_multitoken_transfer_established_to_established() -> Result<()> {
         established_alias,
     )?;
 
-    let established_starting_red_balance = token::Amount::from(100_000_000);
+    let established_starting_red_balance =
+        token::Amount::native_whole(100_000_000);
     // mint some red tokens for the established account
     let established_addr =
         e2e::helpers::find_address(&test, established_alias)?;
@@ -302,7 +304,8 @@ fn test_multitoken_transfer_established_to_established() -> Result<()> {
         receiver_alias,
     )?;
 
-    let established_starting_red_balance = token::Amount::from(100_000_000);
+    let established_starting_red_balance =
+        token::Amount::native_whole(100_000_000);
     // mint some red tokens for the established account
     let established_addr =
         e2e::helpers::find_address(&test, established_alias)?;
@@ -314,7 +317,7 @@ fn test_multitoken_transfer_established_to_established() -> Result<()> {
         &established_starting_red_balance,
     )?;
 
-    let transfer_amount = token::Amount::from(10_000_000);
+    let transfer_amount = token::Amount::native_whole(10_000_000);
 
     // attempt an unauthorized transfer
     let mut unauthorized_transfer = helpers::attempt_red_tokens_transfer(

@@ -334,24 +334,20 @@ mod internal {
     use std::future::Future;
     pub use std::time::Duration;
 
-    pub use wasm_timer::Instant;
-    use wasm_timer::{Delay, TryFutureExt};
+    pub use wasmtimer::std::Instant;
+    use wasmtimer::tokio::{sleep, timeout_at};
 
     #[inline]
     pub(super) async fn internal_timeout_at<F: Future>(
         deadline: Instant,
         future: F,
     ) -> Result<F::Output, ()> {
-        let run_future = async move {
-            let value = future.await;
-            Result::<_, std::io::Error>::Ok(value)
-        };
-        run_future.timeout_at(deadline).await.map_err(|_| ())
+        timeout_at(deadline, future).await.map_err(|_| ())
     }
 
     #[inline]
     pub(super) async fn internal_sleep(dur: Duration) {
-        _ = Delay::new(dur).await;
+        _ = sleep(dur).await;
     }
 }
 

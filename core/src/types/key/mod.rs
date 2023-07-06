@@ -20,7 +20,7 @@ use thiserror::Error;
 
 use super::address::Address;
 use super::storage::{self, DbKeySeg, Key, KeySeg};
-use crate::ledger::storage::StorageHasher;
+use crate::ledger::storage::{Sha256Hasher, StorageHasher};
 use crate::types::address;
 
 const PK_STORAGE_KEY: &str = "public_key";
@@ -261,29 +261,54 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     type PublicKey: 'static + PublicKey;
     /// Represents the secret key for this scheme
     type SecretKey: 'static + SecretKey;
-    /// Represents the data hasher for this scheme
-    type Hasher: 'static + StorageHasher;
     /// The scheme type of this implementation
     const TYPE: SchemeType;
+
     /// Generate a keypair.
     #[cfg(feature = "rand")]
     fn generate<R>(csprng: &mut R) -> Self::SecretKey
     where
         R: CryptoRng + RngCore;
+
     /// Instantiate a secret key from the bytes.
     fn from_bytes(bytes: [u8; 32]) -> Self::SecretKey;
+
     /// Sign the data with a key.
+    fn sign_with_hasher<H>(
+        keypair: &Self::SecretKey,
+        data: impl SignableBytes,
+    ) -> Self::Signature
+    where
+        H: 'static + StorageHasher;
+
+    /// Check that the public key matches the signature on the given data.
+    fn verify_signature_with_hasher<H>(
+        pk: &Self::PublicKey,
+        data: &impl SignableBytes,
+        sig: &Self::Signature,
+    ) -> Result<(), VerifySigError>
+    where
+        H: 'static + StorageHasher;
+
+    /// Sign the data with a key, using a SHA256 hasher.
+    #[inline]
     fn sign(
         keypair: &Self::SecretKey,
         data: impl SignableBytes,
-    ) -> Self::Signature;
+    ) -> Self::Signature {
+        Self::sign_with_hasher::<Sha256Hasher>(keypair, data)
+    }
 
-    /// Check that the public key matches the signature on the given data.
+    /// Check that the public key matches the signature on the given data,
+    /// using a SHA256 hasher.
+    #[inline]
     fn verify_signature(
         pk: &Self::PublicKey,
         data: &impl SignableBytes,
         sig: &Self::Signature,
-    ) -> Result<(), VerifySigError>;
+    ) -> Result<(), VerifySigError> {
+        Self::verify_signature_with_hasher::<Sha256Hasher>(pk, data, sig)
+    }
 }
 
 /// Public key hash derived from `common::Key` borsh encoded bytes (hex string

@@ -1526,12 +1526,12 @@ mod test_process_proposal {
         let keypair = gen_keypair();
         let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1574,12 +1574,12 @@ mod test_process_proposal {
         let keypair = gen_keypair();
         let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 100.into(),
+                amount: Amount::from_uint(100, 0).expect("Test failed"),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1594,7 +1594,7 @@ mod test_process_proposal {
         let mut new_tx = outer_tx.clone();
         if let TxType::Wrapper(wrapper) = &mut new_tx.header.tx_type {
             // we mount a malleability attack to try and remove the fee
-            wrapper.fee.amount = 0.into();
+            wrapper.fee.amount = Default::default();
         } else {
             panic!("Test failed")
         };
@@ -1637,18 +1637,18 @@ mod test_process_proposal {
             .storage
             .write(
                 &get_wrapper_tx_fees_key(),
-                token::Amount::whole(MIN_FEE).try_to_vec().unwrap(),
+                token::Amount::native_whole(MIN_FEE).try_to_vec().unwrap(),
             )
             .unwrap();
         let keypair = gen_keypair();
         let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 1.into(),
+                amount: Amount::from_uint(1, 0).expect("Test failed"),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1700,25 +1700,25 @@ mod test_process_proposal {
         shell
             .wl_storage
             .write_log
-            .write(&balance_key, Amount::whole(99).try_to_vec().unwrap())
+            .write(&balance_key, Amount::native_whole(99).try_to_vec().unwrap())
             .unwrap();
         shell
             .wl_storage
             .write_log
             .write(
                 &get_wrapper_tx_fees_key(),
-                token::Amount::whole(MIN_FEE).try_to_vec().unwrap(),
+                token::Amount::native_whole(MIN_FEE).try_to_vec().unwrap(),
             )
             .unwrap();
 
         let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: Amount::whole(1_000_100),
+                amount: Amount::native_whole(1_000_100),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1767,12 +1767,12 @@ mod test_process_proposal {
             let mut outer_tx =
                 Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
                     Fee {
-                        amount: i.into(),
+                        amount: Amount::native_whole(i as u64),
                         token: shell.wl_storage.storage.native_token.clone(),
                     },
                     &keypair,
                     Epoch(0),
-                    0.into(),
+                    Default::default(),
                     #[cfg(not(feature = "mainnet"))]
                     None,
                 ))));
@@ -1846,12 +1846,12 @@ mod test_process_proposal {
 
         let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1899,12 +1899,12 @@ mod test_process_proposal {
 
         let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -1945,12 +1945,12 @@ mod test_process_proposal {
         // not valid tx bytes
         let wrapper = WrapperTx {
             fee: Fee {
-                amount: 0.into(),
+                amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             pk: keypair.ref_to(),
             epoch: Epoch(0),
-            gas_limit: 0.into(),
+            gas_limit: Default::default(),
             #[cfg(not(feature = "mainnet"))]
             pow_solution: None,
         };
@@ -2058,12 +2058,12 @@ mod test_process_proposal {
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -2125,17 +2125,20 @@ mod test_process_proposal {
         shell
             .wl_storage
             .storage
-            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
+            .write(
+                &balance_key,
+                Amount::native_whole(1000).try_to_vec().unwrap(),
+            )
             .unwrap();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -2188,12 +2191,12 @@ mod test_process_proposal {
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -2256,7 +2259,10 @@ mod test_process_proposal {
         shell
             .wl_storage
             .storage
-            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
+            .write(
+                &balance_key,
+                Amount::native_whole(1000).try_to_vec().unwrap(),
+            )
             .unwrap();
 
         // Add unshielded balance for fee payment
@@ -2267,17 +2273,20 @@ mod test_process_proposal {
         shell
             .wl_storage
             .storage
-            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
+            .write(
+                &balance_key,
+                Amount::native_whole(1000).try_to_vec().unwrap(),
+            )
             .unwrap();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -2295,12 +2304,12 @@ mod test_process_proposal {
 
         new_wrapper.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair_2,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -2343,12 +2352,12 @@ mod test_process_proposal {
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -2406,12 +2415,12 @@ mod test_process_proposal {
         let wrong_chain_id = ChainId("Wrong chain id".to_string());
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: token::Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -2467,12 +2476,12 @@ mod test_process_proposal {
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: token::Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -2510,12 +2519,12 @@ mod test_process_proposal {
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount: token::Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -2572,7 +2581,7 @@ mod test_process_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));

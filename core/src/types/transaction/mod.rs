@@ -21,13 +21,13 @@ pub use decrypted::*;
 #[cfg(feature = "ferveo-tpke")]
 pub use encrypted::EncryptionKey;
 pub use protocol::UpdateDkgSessionKey;
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 pub use wrapper::*;
 
 use crate::ledger::gas::VpsGas;
 use crate::types::address::Address;
+use crate::types::dec::Dec;
 use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
 use crate::types::key::*;
@@ -197,10 +197,10 @@ pub struct InitValidator {
     /// Serialization of the public session key used in the DKG
     pub dkg_key: crate::types::key::dkg_session_keys::DkgPublicKey,
     /// The initial commission rate charged for delegation rewards
-    pub commission_rate: Decimal,
+    pub commission_rate: Dec,
     /// The maximum change allowed per epoch to the commission rate. This is
     /// immutable once set here.
-    pub max_commission_rate_change: Decimal,
+    pub max_commission_rate_change: Dec,
     /// The VP code for validator account
     pub validator_vp_code_hash: Hash,
 }
@@ -242,6 +242,7 @@ mod test_process_tx {
     use crate::proto::{Code, Data, Section, Signature, Tx, TxError};
     use crate::types::address::nam;
     use crate::types::storage::Epoch;
+    use crate::types::token::Amount;
 
     fn gen_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
@@ -362,12 +363,12 @@ mod test_process_tx {
         // the signed tx
         let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 10.into(),
+                amount: Amount::from_uint(10, 0).expect("Test failed"),
                 token: nam(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
@@ -398,12 +399,12 @@ mod test_process_tx {
         // the signed tx
         let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 10.into(),
+                amount: Amount::from_uint(10, 0).expect("Test failed"),
                 token: nam(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));

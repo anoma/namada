@@ -12,10 +12,13 @@ use namada_core::ledger::storage::LastBlock;
 use namada_core::ledger::testnet_pow;
 use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
-use namada_core::types::token::Amount;
+use namada_core::types::token::{
+    Amount, DenominatedAmount, Denomination, MaspDenom, TokenAddress,
+};
 use namada_proof_of_stake::types::{BondsAndUnbondsDetails, CommissionPair};
 use serde::Serialize;
 
+use crate::ledger::args::InputAmount;
 use crate::ledger::events::Event;
 use crate::ledger::governance::parameters::GovParams;
 use crate::ledger::governance::storage as gov_storage;
@@ -90,6 +93,18 @@ pub async fn query_epoch<C: crate::ledger::queries::Client + Sync>(
     client: &C,
 ) -> Epoch {
     unwrap_client_response::<C, _>(RPC.shell().epoch(client).await)
+}
+
+/// Query the epoch of the given block height, if it exists.
+/// Will return none if the input block height is greater than
+/// the latest committed block height.
+pub async fn query_epoch_at_height<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    height: BlockHeight,
+) -> Option<Epoch> {
+    unwrap_client_response::<C, _>(
+        RPC.shell().epoch_at_height(client, &height).await,
+    )
 }
 
 /// Query the last committed block, if any.
@@ -226,6 +241,8 @@ pub async fn query_conversion<C: crate::ledger::queries::Client + Sync>(
     asset_type: AssetType,
 ) -> Option<(
     Address,
+    Option<Key>,
+    MaspDenom,
     Epoch,
     masp_primitives::transaction::components::Amount,
     MerklePath<Node>,
@@ -645,7 +662,8 @@ pub async fn get_proposal_votes<C: crate::ledger::queries::Client + Sync>(
                 let amount: VotePower =
                     get_validator_stake(client, epoch, &voter_address)
                         .await
-                        .into();
+                        .try_into()
+                        .expect("Amount of bonds");
                 yay_validators.insert(voter_address, (amount, vote));
             } else if !validators.contains(&voter_address) {
                 let validator_address =
@@ -780,15 +798,18 @@ pub async fn query_and_print_unbonds<
         }
     }
     if total_withdrawable != token::Amount::default() {
-        println!("Total withdrawable now: {total_withdrawable}.");
+        println!(
+            "Total withdrawable now: {}.",
+            total_withdrawable.to_string_native()
+        );
     }
     if !not_yet_withdrawable.is_empty() {
         println!("Current epoch: {current_epoch}.")
     }
     for (withdraw_epoch, amount) in not_yet_withdrawable {
         println!(
-            "Amount {amount} withdrawable starting from epoch \
-             {withdraw_epoch}."
+            "Amount {} withdrawable starting from epoch {withdraw_epoch}.",
+            amount.to_string_native()
         );
     }
 }
@@ -863,7 +884,8 @@ pub async fn get_governance_parameters<
         .expect("Parameter should be definied.");
 
     GovParams {
-        min_proposal_fund: u64::from(min_proposal_fund),
+        min_proposal_fund: u128::try_from(min_proposal_fund)
+            .expect("Amount out of bounds") as u64,
         max_proposal_code_size,
         min_proposal_period,
         max_proposal_period,
@@ -927,6 +949,59 @@ pub async fn enriched_bonds_and_unbonds<
     )
 }
 
+/// Get the correct representation of the amount given the token type.
+pub async fn validate_amount<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    amount: InputAmount,
+    token: &Address,
+    sub_prefix: &Option<Key>,
+    force: bool,
+) -> Option<token::DenominatedAmount> {
+    let input_amount = match amount {
+        InputAmount::Unvalidated(amt) => amt.canonical(),
+        InputAmount::Validated(amt) => return Some(amt),
+    };
+    let denom = unwrap_client_response::<C, Option<Denomination>>(
+        RPC.vp()
+            .token()
+            .denomination(client, token, sub_prefix)
+            .await,
+    )
+    .or_else(|| {
+        if force {
+            println!(
+                "No denomination found for token: {token}, but --force was \
+                 passed. Defaulting to the provided denomination."
+            );
+            Some(input_amount.denom)
+        } else {
+            println!(
+                "No denomination found for token: {token}, the input \
+                 arguments could not be parsed."
+            );
+            None
+        }
+    })?;
+    if denom < input_amount.denom && !force {
+        println!(
+            "The input amount contained a higher precision than allowed by \
+             {token}."
+        );
+        None
+    } else {
+        match input_amount.increase_precision(denom) {
+            Ok(res) => Some(res),
+            Err(_) => {
+                println!(
+                    "The amount provided requires more the 256 bits to \
+                     represent."
+                );
+                None
+            }
+        }
+    }
+}
+
 /// Wait for a first block and node to be synced.
 pub async fn wait_until_node_is_synched<C>(client: &C) -> Halt<()>
 where
@@ -978,4 +1053,29 @@ where
     })?
     // error querying rpc
     .try_halt(|_| ())
+}
+
+/// Look up the denomination of a token in order to format it
+/// correctly as a string.
+pub async fn format_denominated_amount<
+    C: crate::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    token: &TokenAddress,
+    amount: token::Amount,
+) -> String {
+    let denom = unwrap_client_response::<C, Option<Denomination>>(
+        RPC.vp()
+            .token()
+            .denomination(client, &token.address, &token.sub_prefix)
+            .await,
+    )
+    .unwrap_or_else(|| {
+        println!(
+            "No denomination found for token: {token}, defaulting to zero \
+             decimal places"
+        );
+        0.into()
+    });
+    DenominatedAmount { amount, denom }.to_string()
 }

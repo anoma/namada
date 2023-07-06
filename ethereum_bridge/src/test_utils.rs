@@ -9,6 +9,7 @@ use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
 use namada_core::ledger::storage::testing::{TestStorage, TestWlStorage};
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::address::{self, wnam, Address};
+use namada_core::types::dec::Dec;
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::key::{self, protocol_pk_key, RefTo};
@@ -16,7 +17,6 @@ use namada_core::types::storage::{BlockHeight, Key};
 use namada_core::types::token;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::GenesisValidator;
-use rust_decimal_macros::dec;
 
 use crate::parameters::{
     ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
@@ -80,7 +80,7 @@ pub fn init_default_storage(
         wl_storage,
         HashMap::from_iter([(
             address::testing::established_address_1(),
-            100_u64.into(),
+            token::Amount::native_whole(100),
         )]),
     )
 }
@@ -144,8 +144,9 @@ pub fn init_storage_with_validators(
     }
 
     let mut all_keys = HashMap::new();
-    let validators =
-        consensus_validators.into_iter().map(|(address, tokens)| {
+    let validators: Vec<_> = consensus_validators
+        .into_iter()
+        .map(|(address, tokens)| {
             let keys = TestValidatorKeys::generate();
             let consensus_key = keys.consensus.ref_to();
             let eth_cold_key = keys.eth_gov.ref_to();
@@ -157,15 +158,16 @@ pub fn init_storage_with_validators(
                 consensus_key,
                 eth_cold_key,
                 eth_hot_key,
-                commission_rate: dec!(0.05),
-                max_commission_rate_change: dec!(0.01),
+                commission_rate: Dec::new(5, 2).unwrap(),
+                max_commission_rate_change: Dec::new(1, 2).unwrap(),
             }
-        });
+        })
+        .collect();
 
     namada_proof_of_stake::init_genesis(
         wl_storage,
         &PosParams::default(),
-        validators,
+        validators.into_iter(),
         0.into(),
     )
     .expect("Test failed");

@@ -12,15 +12,15 @@ use namada::ledger::pos::{
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::ledger::storage_api::token::{
-    credit_tokens, read_balance, read_total_supply,
+    credit_tokens, read_balance, read_total_supply, write_denom,
 };
 use namada::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
 use namada::ledger::{ibc, pos};
+use namada::types::dec::Dec;
 use namada::types::hash::Hash as CodeHash;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::token;
-use rust_decimal::Decimal;
 
 use super::*;
 use crate::facade::tendermint_proto::abci;
@@ -312,7 +312,7 @@ where
                 let difficulty = faucet_pow_difficulty.unwrap_or_default();
                 // withdrawal limit defaults to 1000 NAM when not set
                 let withdrawal_limit = faucet_withdrawal_limit
-                    .unwrap_or_else(|| token::Amount::whole(1_000));
+                    .unwrap_or_else(|| token::Amount::native_whole(1_000));
                 testnet_pow::init_faucet_storage(
                     &mut self.wl_storage,
                     &address,
@@ -347,11 +347,21 @@ where
         // Initialize genesis token accounts
         for genesis::TokenAccount {
             address,
+            denom,
             vp_code_path,
             vp_sha256,
             balances,
         } in accounts
         {
+            // associate a token with its denomination.
+            write_denom(
+                &mut self.wl_storage,
+                &address,
+                // TODO: Should we support multi-tokens at genesis?
+                None,
+                denom,
+            )
+            .unwrap();
             let vp_code_hash =
                 read_wasm_hash(&self.wl_storage, vp_code_path.clone())
                     .unwrap()
@@ -478,13 +488,19 @@ where
             read_balance(&self.wl_storage, staking_token, &address::POS)
                 .unwrap();
 
-        tracing::info!("Genesis total native tokens: {total_nam}.");
-        tracing::info!("Total staked tokens: {total_staked_nam}.");
+        tracing::info!(
+            "Genesis total native tokens: {}.",
+            total_nam.to_string_native()
+        );
+        tracing::info!(
+            "Total staked tokens: {}.",
+            total_staked_nam.to_string_native()
+        );
 
         // Set the ratio of staked to total NAM tokens in the parameters storage
         parameters::update_staked_ratio_parameter(
             &mut self.wl_storage,
-            &(Decimal::from(total_staked_nam) / Decimal::from(total_nam)),
+            &(Dec::from(total_staked_nam) / Dec::from(total_nam)),
         )
         .expect("unable to set staked ratio of NAM in storage");
 
@@ -567,7 +583,7 @@ mod test {
                 .wl_storage
                 .storage
                 .db
-                .iter_optional_prefix(None)
+                .iter_prefix(None)
                 .map(|(key, val, _gas)| (key, val))
                 .collect()
         };

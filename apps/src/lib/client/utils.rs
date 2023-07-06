@@ -13,11 +13,11 @@ use flate2::Compression;
 use namada::ledger::wallet::Wallet;
 use namada::types::address;
 use namada::types::chain::ChainId;
+use namada::types::dec::Dec;
 use namada::types::key::*;
 use prost::bytes::Bytes;
 use rand::prelude::ThreadRng;
 use rand::thread_rng;
-use rust_decimal::Decimal;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
@@ -46,6 +46,41 @@ const DEFAULT_NETWORK_CONFIGS_SERVER: &str =
 
 /// We do pre-genesis validator set up in this directory
 pub const PRE_GENESIS_DIR: &str = "pre-genesis";
+
+/// Environment variable set to reduce the amount of printing the CLI
+/// tools perform. Extra prints, while good for UI, clog up test tooling.
+pub const REDUCED_CLI_PRINTING: &str = "REDUCED_CLI_PRINTING";
+
+macro_rules! cli_print {
+    ($($arg:tt)*) => {{
+        if std::env::var(REDUCED_CLI_PRINTING)
+        .map(|v| if v.to_lowercase().trim() == "true" {
+            false
+        } else {
+            true
+        }).unwrap_or(true) {
+            let mut stdout = std::io::stdout().lock();
+            _ = stdout.write_all(format!("{}", std::format_args!($($arg)*)).as_bytes());
+            _ = stdout.flush();
+        }
+    }};
+}
+
+#[allow(unused)]
+macro_rules! cli_println {
+    ($($arg:tt)*) => {{
+        if std::env::var(REDUCED_CLI_PRINTING)
+        .map(|v| if v.to_lowercase().trim() == "true" {
+            false
+        } else {
+            true
+        }).unwrap_or(true) {
+            let mut stdout = std::io::stdout().lock();
+            _ = stdout.write_all(format!("{}\n", std::format_args!($($arg)*)).as_bytes());
+            _ = stdout.flush();
+        }
+    }};
+}
 
 /// Configure Namada to join an existing network. The chain must be released in
 /// the <https://github.com/heliaxdev/anoma-network-config> repository.
@@ -973,16 +1008,11 @@ pub fn init_genesis_validator(
     }: args::InitGenesisValidator,
 ) {
     // Validate the commission rate data
-    if commission_rate > Decimal::ONE || commission_rate < Decimal::ZERO {
-        eprintln!(
-            "The validator commission rate must not exceed 1.0 or 100%, and \
-             it must be 0 or positive"
-        );
+    if commission_rate > Dec::one() {
+        eprintln!("The validator commission rate must not exceed 1.0 or 100%");
         cli::safe_exit(1)
     }
-    if max_commission_rate_change > Decimal::ONE
-        || max_commission_rate_change < Decimal::ZERO
-    {
+    if max_commission_rate_change > Dec::one() {
         eprintln!(
             "The validator maximum change in commission rate per epoch must \
              not exceed 1.0 or 100%"
@@ -1151,6 +1181,30 @@ pub fn validator_pre_genesis_file(pre_genesis_path: &Path) -> PathBuf {
 /// The default validator pre-genesis directory
 pub fn validator_pre_genesis_dir(base_dir: &Path, alias: &str) -> PathBuf {
     base_dir.join(PRE_GENESIS_DIR).join(alias)
+}
+
+/// Add a spinning wheel to a message for long running commands.
+/// Can be turned off for E2E tests by setting the `REDUCED_CLI_PRINTING`
+/// environment variable.
+pub fn with_spinny_wheel<F, Out>(msg: &str, func: F) -> Out
+where
+    F: FnOnce() -> Out + Send + 'static,
+    Out: Send + 'static,
+{
+    let task = std::thread::spawn(func);
+    let spinny_wheel = "|/-\\";
+    print!("{}", msg);
+    _ = std::io::stdout().flush();
+    for c in spinny_wheel.chars().cycle() {
+        cli_print!("{}", c);
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        cli_print!("{}", (8u8 as char));
+        if task.is_finished() {
+            break;
+        }
+    }
+    println!();
+    task.join().unwrap()
 }
 
 fn is_valid_validator_for_current_chain(

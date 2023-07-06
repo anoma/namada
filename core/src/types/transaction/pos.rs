@@ -1,10 +1,10 @@
 //! Types used for PoS system transactions
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
+use crate::types::dec::Dec;
 use crate::types::token;
 
 /// A bond is a validator's self-bond or a delegation from non-validator to a
@@ -72,5 +72,5 @@ pub struct CommissionChange {
     /// Validator address
     pub validator: Address,
     /// The new commission rate
-    pub new_rate: Decimal,
+    pub new_rate: Dec,
 }

@@ -168,10 +168,8 @@ pub trait VotingPowersMapExt {
     fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>, Vec<Token>) {
         let sorted = self.get_sorted();
 
-        let total_voting_power: u64 = sorted
-            .iter()
-            .map(|&(_, &voting_power)| u64::from(voting_power))
-            .sum();
+        let total_voting_power: token::Amount =
+            sorted.iter().map(|&(_, &voting_power)| voting_power).sum();
 
         // split the vec into three portions
         sorted.into_iter().fold(
@@ -180,7 +178,7 @@ pub trait VotingPowersMapExt {
                 let voting_power: EthBridgeVotingPower =
                     FractionalVotingPower::new(
                         voting_power.into(),
-                        total_voting_power,
+                        total_voting_power.into(),
                     )
                     .expect(
                         "Voting power in map can't be larger than the total \
@@ -364,6 +362,7 @@ mod tag {
     use super::{
         epoch_to_token, Vext, VotingPowersMapExt, GOVERNANCE_CONTRACT_VERSION,
     };
+    use crate::ledger::storage::KeccakHasher;
     use crate::proto::Signable;
     use crate::types::eth_abi::{AbiEncode, Encode, Token};
     use crate::types::keccak::KeccakHash;
@@ -374,6 +373,7 @@ mod tag {
     pub struct SerializeWithAbiEncode;
 
     impl Signable<Vext> for SerializeWithAbiEncode {
+        type Hasher = KeccakHasher;
         type Output = KeccakHash;
 
         fn as_signable(ext: &Vext) -> Self::Output {

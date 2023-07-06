@@ -480,7 +480,9 @@ where
                     ChannelError::Other {
                         description: format!(
                             "Sending a coin failed: from {}, to {}, amount {}",
-                            src, dest, amount
+                            src,
+                            dest,
+                            amount.to_string_native()
                         ),
                     },
                 ))
@@ -517,7 +519,9 @@ where
                     ChannelError::Other {
                         description: format!(
                             "Sending a coin failed: from {}, to {}, amount {}",
-                            src, dest, amount
+                            src,
+                            dest,
+                            amount.to_string_native()
                         ),
                     },
                 ))
@@ -554,7 +558,9 @@ where
                     ChannelError::Other {
                         description: format!(
                             "Sending a coin failed: from {}, to {}, amount {}",
-                            src, dest, amount
+                            src,
+                            dest,
+                            amount.to_string_native()
                         ),
                     },
                 ))

@@ -17,6 +17,8 @@ use crate::ibc::signer::Signer;
 use crate::types::ethereum_events::EthAddress;
 use crate::types::key;
 use crate::types::key::PublicKeyHash;
+use crate::types::storage::Key;
+use crate::types::token::Denomination;
 
 /// The length of an established [`Address`] encoded with Borsh.
 pub const ESTABLISHED_ADDRESS_BYTES_LEN: usize = 21;
@@ -650,17 +652,33 @@ pub const fn wnam() -> EthAddress {
 }
 
 /// Temporary helper for testing, a hash map of tokens addresses with their
+/// informal currency codes and number of decimal places.
+pub fn tokens() -> HashMap<Address, (&'static str, Denomination)> {
+    vec![
+        (nam(), ("NAM", 6.into())),
+        (btc(), ("BTC", 8.into())),
+        (eth(), ("ETH", 18.into())),
+        (dot(), ("DOT", 10.into())),
+        (schnitzel(), ("Schnitzel", 6.into())),
+        (apfel(), ("Apfel", 6.into())),
+        (kartoffel(), ("Kartoffel", 6.into())),
+    ]
+    .into_iter()
+    .collect()
+}
+
+/// Temporary helper for testing, a hash map of tokens addresses with their
 /// MASP XAN incentive schedules. If the reward is (a, b) then a rewarded tokens
 /// are dispensed for every b possessed tokens.
-pub fn masp_rewards() -> HashMap<Address, (u64, u64)> {
+pub fn masp_rewards() -> HashMap<(Address, Option<Key>), (u64, u64)> {
     vec![
-        (nam(), (0, 100)),
-        (btc(), (1, 100)),
-        (eth(), (2, 100)),
-        (dot(), (3, 100)),
-        (schnitzel(), (4, 100)),
-        (apfel(), (5, 100)),
-        (kartoffel(), (6, 100)),
+        ((nam(), None), (0, 100)),
+        ((btc(), None), (1, 100)),
+        ((eth(), None), (2, 100)),
+        ((dot(), None), (3, 100)),
+        ((schnitzel(), None), (4, 100)),
+        ((apfel(), None), (5, 100)),
+        ((kartoffel(), None), (6, 100)),
     ]
     .into_iter()
     .collect()

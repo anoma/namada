@@ -545,21 +545,10 @@ impl DB for MockDB {
 impl<'iter> DBIter<'iter> for MockDB {
     type PrefixIter = MockPrefixIterator;
 
-    fn iter_optional_prefix(
-        &'iter self,
-        prefix: Option<&Key>,
-    ) -> MockPrefixIterator {
+    fn iter_prefix(&'iter self, prefix: Option<&Key>) -> MockPrefixIterator {
         let db_prefix = "subspace/".to_owned();
-        let prefix = format!(
-            "{}{}",
-            db_prefix,
-            match prefix {
-                None => "".to_string(),
-                Some(prefix) => {
-                    prefix.to_string()
-                }
-            }
-        );
+        let prefix_str = prefix.map(|k| k.to_string()).unwrap_or_default();
+        let prefix = format!("{}{}", db_prefix, prefix_str);
         let iter = self.0.borrow().clone().into_iter();
         MockPrefixIterator::new(MockIterator { prefix, iter }, db_prefix)
     }

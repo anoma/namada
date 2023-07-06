@@ -22,6 +22,7 @@ use namada::types::token;
 use namada_apps::config::genesis::genesis_config;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::config::{Config, TendermintMode};
+use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 
 use super::setup::{
     self, sleep, NamadaBgCmd, NamadaCmd, Test, ENV_VAR_DEBUG,
@@ -31,6 +32,7 @@ use crate::e2e::setup::{Bin, Who, APPS_PACKAGE};
 use crate::{run, run_as};
 
 /// Instantiate a new [`HttpClient`] to perform RPC requests with.
+#[allow(dead_code)]
 pub async fn rpc_client_do<'fut, 'usr, U, A, F, R>(
     ledger_address: &str,
     user_data: U,
@@ -120,6 +122,7 @@ pub fn find_address(test: &Test, alias: impl AsRef<str>) -> Result<Address> {
 }
 
 /// Find the balance of specific token for an account.
+#[allow(dead_code)]
 pub fn find_balance(
     test: &Test,
     node: &Who,
@@ -254,12 +257,13 @@ pub fn find_bonded_stake(
         .rsplit_once(' ')
         .unwrap()
         .1;
-    token::Amount::from_str(bonded_stake_str).map_err(|e| {
-        eyre!(format!(
-            "Bonded stake: {} parsed from {}, Error: {}\n\nOutput: {}",
-            bonded_stake_str, matched, e, unread
-        ))
-    })
+    token::Amount::from_str(bonded_stake_str, NATIVE_MAX_DECIMAL_PLACES)
+        .map_err(|e| {
+            eyre!(format!(
+                "Bonded stake: {} parsed from {}, Error: {}\n\nOutput: {}",
+                bonded_stake_str, matched, e, unread
+            ))
+        })
 }
 
 /// Get the last committed epoch.

@@ -360,7 +360,7 @@ mod tests {
             HashSet::from([(
                 address::testing::established_address_1(),
                 BlockHeight(10),
-                FractionalVotingPower::new(3, 4)?, // this is > 2/3
+                FractionalVotingPower::new_u64(3, 4)?, // this is > 2/3
             )]),
         )?;
 

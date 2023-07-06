@@ -153,7 +153,8 @@ pub async fn send_transfer_to_namada_event(
         receiver, amount, ..
     } = transfer;
     ledger.exp_string(&format!(
-        "Minted wrapped ERC20s - (receiver - {receiver}, amount - {amount})",
+        "Minted wrapped ERC20s - (receiver - {receiver}, amount - {})",
+        amount.to_string_native()
     ))?;
     ledger.exp_string("Committed block hash")?;
     Ok(ledger.background())
@@ -168,7 +169,7 @@ pub fn attempt_wrapped_erc20_transfer(
     from: &str,
     to: &str,
     signer: &str,
-    amount: &token::Amount,
+    amount: &token::DenominatedAmount,
 ) -> Result<NamadaCmd> {
     let ledger_address = get_actor_rpc(test, node);
 

@@ -310,7 +310,7 @@ mod test_bp_vote_extensions {
         let validators_handle = consensus_validator_set_handle();
         validators_handle
             .at(&1.into())
-            .at(&token::Amount::whole(100))
+            .at(&token::Amount::native_whole(100))
             .insert(
                 &mut shell.wl_storage,
                 ValidatorPosition(1),
