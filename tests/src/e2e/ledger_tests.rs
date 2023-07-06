@@ -645,6 +645,8 @@ fn masp_txs_and_queries() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
+    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+
     let txs_args = vec![
         // 2. Attempt to spend 10 BTC at SK(A) to PA(B)
         (
