@@ -163,7 +163,7 @@ where
                 continue;
             }
 
-            let tx = if let Ok(()) = tx.validate_header() {
+            let tx = if tx.validate_tx().is_ok() {
                 tx
             } else {
                 tracing::error!(
@@ -315,7 +315,7 @@ where
                         DecryptedTx::Decrypted { has_valid_pow: _ } => {
                             if let Some(code_sec) = tx
                                 .get_section(tx.code_sechash())
-                                .and_then(Section::code_sec)
+                                .and_then(|x| Section::code_sec(x.as_ref()))
                             {
                                 stats.increment_tx_type(
                                     code_sec.code.hash().to_string(),
@@ -1001,6 +1001,7 @@ mod test_finalize_block {
     };
     use namada::types::governance::ProposalVote;
     use namada::types::keccak::KeccakHash;
+    use namada::types::hash::Hash;
     use namada::types::key::tm_consensus_key_raw_hash;
     use namada::types::storage::Epoch;
     use namada::types::time::{DateTimeUtc, DurationSecs};
@@ -1057,7 +1058,7 @@ mod test_finalize_block {
                         amount: MIN_FEE_AMOUNT,
                         token: shell.wl_storage.storage.native_token.clone(),
                     },
-                    &keypair,
+                    keypair.ref_to(),
                     Epoch(0),
                     Default::default(),
                     #[cfg(not(feature = "mainnet"))]
@@ -1069,10 +1070,9 @@ mod test_finalize_block {
                 format!("transaction data: {}", i).as_bytes().to_owned(),
             ));
             wrapper.add_section(Section::Signature(Signature::new(
-                &wrapper.header_hash(),
+                wrapper.sechashes(),
                 &keypair,
             )));
-            wrapper.encrypt(&Default::default());
             if i > 1 {
                 processed_txs.push(ProcessedTx {
                     tx: wrapper.to_bytes(),
@@ -1132,7 +1132,7 @@ mod test_finalize_block {
                 amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1143,7 +1143,6 @@ mod test_finalize_block {
         outer_tx.set_data(Data::new(
             String::from("transaction data").as_bytes().to_owned(),
         ));
-        outer_tx.encrypt(&Default::default());
         shell.enqueue_tx(outer_tx.clone());
 
         outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
@@ -1256,7 +1255,7 @@ mod test_finalize_block {
                         amount: MIN_FEE_AMOUNT,
                         token: shell.wl_storage.storage.native_token.clone(),
                     },
-                    &keypair,
+                    keypair.ref_to(),
                     Epoch(0),
                     Default::default(),
                     #[cfg(not(feature = "mainnet"))]
@@ -1269,7 +1268,6 @@ mod test_finalize_block {
                     .as_bytes()
                     .to_owned(),
             ));
-            outer_tx.encrypt(&Default::default());
             shell.enqueue_tx(outer_tx.clone());
             outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
                 #[cfg(not(feature = "mainnet"))]
@@ -1293,7 +1291,7 @@ mod test_finalize_block {
                         amount: MIN_FEE_AMOUNT,
                         token: shell.wl_storage.storage.native_token.clone(),
                     },
-                    &keypair,
+                    keypair.ref_to(),
                     Epoch(0),
                     Default::default(),
                     #[cfg(not(feature = "mainnet"))]
@@ -1307,10 +1305,9 @@ mod test_finalize_block {
                     .to_owned(),
             ));
             wrapper_tx.add_section(Section::Signature(Signature::new(
-                &wrapper_tx.header_hash(),
+                wrapper_tx.sechashes(),
                 &keypair,
             )));
-            wrapper_tx.encrypt(&Default::default());
             valid_txs.push(wrapper_tx.clone());
             processed_txs.push(ProcessedTx {
                 tx: wrapper_tx.to_bytes(),
@@ -1744,7 +1741,7 @@ mod test_finalize_block {
 
             let proposal = InitProposalData {
                 id: Some(proposal_id),
-                content: vec![],
+                content: Hash::default(),
                 author: validator.clone(),
                 voting_start_epoch: Epoch::default(),
                 voting_end_epoch: Epoch::default().next(),
@@ -1755,6 +1752,8 @@ mod test_finalize_block {
             storage_api::governance::init_proposal(
                 &mut shell.wl_storage,
                 proposal,
+                vec![],
+                None,
             )
             .unwrap();
 
@@ -2191,7 +2190,7 @@ mod test_finalize_block {
                     amount: Amount::zero(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
-                &keypair,
+                keypair.ref_to(),
                 Epoch(0),
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
@@ -2203,7 +2202,6 @@ mod test_finalize_block {
             "Encrypted transaction data".as_bytes().to_owned(),
         ));
         let mut decrypted_tx = wrapper_tx.clone();
-        wrapper_tx.encrypt(&Default::default());
 
         decrypted_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]

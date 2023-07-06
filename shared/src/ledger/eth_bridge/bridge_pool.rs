@@ -20,7 +20,7 @@ use crate::eth_bridge::structs::RelayProof;
 use crate::ledger::args;
 use crate::ledger::queries::{Client, RPC};
 use crate::ledger::rpc::validate_amount;
-use crate::ledger::signing::TxSigningKey;
+use crate::ledger::signing::{sign_tx, TxSigningKey};
 use crate::ledger::tx::process_tx;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::{Code, Data, Tx};
@@ -86,17 +86,9 @@ pub async fn add_to_eth_bridge_pool<C, U>(
     ));
     transfer_tx.set_code(Code::new(wasm_code));
     // this should not initialize any new addresses, so we ignore the result.
-    process_tx(
-        client,
-        wallet,
-        tx,
-        transfer_tx,
-        TxSigningKey::None,
-        #[cfg(not(feature = "mainnet"))]
-        false,
-    )
-    .await
-    .unwrap();
+
+    sign_tx(wallet, &mut transfer_tx, tx, &pk).await?;
+    process_tx(client, wallet, tx, transfer_tx).await.unwrap();
 }
 
 /// A json serializable representation of the Ethereum

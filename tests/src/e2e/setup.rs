@@ -741,8 +741,8 @@ where
 
     run_cmd
         .env("NAMADA_LOG", log_level)
-        .env("NAMADA_TM_STDOUT", "true")
-        .env("TM_LOG_LEVEL", "info")
+        .env("NAMADA_CMT_STDOUT", "false")
+        .env("CMT_LOG_LEVEL", "info")
         .env("NAMADA_LOG_COLOR", "false")
         .current_dir(working_dir)
         .args(["--base-dir", &base_dir.as_ref().to_string_lossy()]);

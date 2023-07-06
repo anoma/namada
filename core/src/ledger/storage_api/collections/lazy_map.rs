@@ -392,6 +392,19 @@ where
         V::open(self.get_data_key(key))
     }
 
+    /// Remove all map entries at a given key prefix
+    pub fn remove_all<S>(&self, storage: &mut S, key: &K) -> Result<bool>
+    where
+        S: StorageRead + StorageWrite,
+    {
+        let is_data = self.contains(storage, key)?;
+
+        let data_prefix = self.get_data_key(key);
+        storage.delete_prefix(&data_prefix)?;
+
+        Ok(is_data)
+    }
+
     /// An iterator visiting all key-value elements, where the values are from
     /// the inner-most collection. The iterator element type is `Result<_>`,
     /// because iterator's call to `next` may fail with e.g. out of gas or
@@ -854,5 +867,36 @@ mod test {
         assert!(nested_map.is_empty(&storage)?);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_nested_map_key_prefix_removal() {
+        let mut storage = TestWlStorage::default();
+        let key = storage::Key::parse("testing").unwrap();
+
+        // A nested map from u32 -> String -> u32
+        let nested_map = NestedMap::<u32, LazyMap<String, u32>>::open(key);
+        nested_map
+            .at(&0)
+            .insert(&mut storage, "dingus".to_string(), 5)
+            .unwrap();
+        nested_map
+            .at(&0)
+            .insert(&mut storage, "zingus".to_string(), 3)
+            .unwrap();
+        nested_map
+            .at(&1)
+            .insert(&mut storage, "dingus".to_string(), 4)
+            .unwrap();
+
+        assert_eq!(nested_map.iter(&storage).unwrap().count(), 3);
+
+        nested_map.remove_all(&mut storage, &0).unwrap();
+        assert!(!nested_map.contains(&storage, &0).unwrap());
+        assert_eq!(nested_map.iter(&storage).unwrap().count(), 1);
+
+        nested_map.remove_all(&mut storage, &1).unwrap();
+        assert!(!nested_map.contains(&storage, &1).unwrap());
+        assert!(nested_map.is_empty(&storage).unwrap());
     }
 }

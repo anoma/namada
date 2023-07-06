@@ -109,7 +109,7 @@ fn validate_tx(
         .map(|hash| {
             signed
                 .get_section(hash)
-                .and_then(Section::masp_tx)
+                .and_then(|x| x.as_ref().masp_tx())
                 .ok_or_err_msg("unable to find shielded section")
         })
         .transpose()?;

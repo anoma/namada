@@ -180,11 +180,7 @@ mod tests {
         tx.set_code(Code::new(tx_code));
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
-            &key,
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
+            vec![*tx.data_sechash(), *tx.code_sechash()],
             &key,
         )));
         let signed_tx = tx.clone();

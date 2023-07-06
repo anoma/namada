@@ -451,7 +451,7 @@ where
             |tx| {
                 let tx_chain_id = tx.header.chain_id.clone();
                 let tx_expiration = tx.header.expiration;
-                if let Err(err) = tx.validate_header() {
+                if let Err(err) = tx.validate_tx() {
                     // This occurs if the wrapper / protocol tx signature is
                     // invalid
                     return Err(TxResult {
@@ -470,6 +470,12 @@ where
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
+        if let Err(err) = tx.validate_tx() {
+            return TxResult {
+                code: ErrorCodes::InvalidSig.into(),
+                info: err.to_string(),
+            };
+        }
         match tx.header().tx_type {
             // If it is a raw transaction, we do no further validation
             TxType::Raw => TxResult {
@@ -1536,7 +1542,7 @@ mod test_process_proposal {
                 amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1545,7 +1551,6 @@ mod test_process_proposal {
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        outer_tx.encrypt(&Default::default());
         let tx = outer_tx.to_bytes();
 
         let response = {
@@ -1584,7 +1589,7 @@ mod test_process_proposal {
                 amount: Amount::from_uint(100, 0).expect("Test failed"),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1594,10 +1599,9 @@ mod test_process_proposal {
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         outer_tx.add_section(Section::Signature(Signature::new(
-            &outer_tx.header_hash(),
+            outer_tx.sechashes(),
             &keypair,
         )));
-        outer_tx.encrypt(&Default::default());
         let mut new_tx = outer_tx.clone();
         if let TxType::Wrapper(wrapper) = &mut new_tx.header.tx_type {
             // we mount a malleability attack to try and remove the fee
@@ -1653,7 +1657,7 @@ mod test_process_proposal {
                 amount: Amount::from_uint(1, 0).expect("Test failed"),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1663,10 +1667,9 @@ mod test_process_proposal {
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         outer_tx.add_section(Section::Signature(Signature::new(
-            &outer_tx.header_hash(),
+            outer_tx.sechashes(),
             &keypair,
         )));
-        outer_tx.encrypt(&Default::default());
 
         let response = {
             let request = ProcessProposal {
@@ -1723,7 +1726,7 @@ mod test_process_proposal {
                 amount: Amount::native_whole(1_000_100),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1733,10 +1736,9 @@ mod test_process_proposal {
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         outer_tx.add_section(Section::Signature(Signature::new(
-            &outer_tx.header_hash(),
+            outer_tx.sechashes(),
             &keypair,
         )));
-        outer_tx.encrypt(&Default::default());
 
         let response = {
             let request = ProcessProposal {
@@ -1777,7 +1779,7 @@ mod test_process_proposal {
                         amount: Amount::native_whole(i as u64),
                         token: shell.wl_storage.storage.native_token.clone(),
                     },
-                    &keypair,
+                    keypair.ref_to(),
                     Epoch(0),
                     Default::default(),
                     #[cfg(not(feature = "mainnet"))]
@@ -1788,7 +1790,6 @@ mod test_process_proposal {
             outer_tx.set_data(Data::new(
                 format!("transaction data: {}", i).as_bytes().to_owned(),
             ));
-            outer_tx.encrypt(&Default::default());
             shell.enqueue_tx(outer_tx.clone());
 
             outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
@@ -1856,7 +1857,7 @@ mod test_process_proposal {
                 amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1865,7 +1866,6 @@ mod test_process_proposal {
         tx.header.chain_id = shell.chain_id.clone();
         tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        tx.encrypt(&Default::default());
         shell.enqueue_tx(tx.clone());
 
         tx.header.tx_type = TxType::Decrypted(DecryptedTx::Undecryptable);
@@ -1909,7 +1909,7 @@ mod test_process_proposal {
                 amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1920,7 +1920,6 @@ mod test_process_proposal {
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         tx.set_code_sechash(Hash([0u8; 32]));
         tx.set_data_sechash(Hash([0u8; 32]));
-        tx.encrypt(&Default::default());
 
         shell.enqueue_tx(tx.clone());
         tx.header.tx_type = TxType::Decrypted(DecryptedTx::Undecryptable);
@@ -2068,7 +2067,7 @@ mod test_process_proposal {
                 amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -2078,10 +2077,9 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         // Write wrapper hash to storage
         let wrapper_unsigned_hash = wrapper.header_hash();
@@ -2143,7 +2141,7 @@ mod test_process_proposal {
                 amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -2153,10 +2151,9 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         // Run validation
         let request = ProcessProposal {
@@ -2201,7 +2198,7 @@ mod test_process_proposal {
                 amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -2211,10 +2208,9 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
         let inner_unsigned_hash =
             wrapper.clone().update_header(TxType::Raw).header_hash();
 
@@ -2291,7 +2287,7 @@ mod test_process_proposal {
                 amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -2302,10 +2298,9 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         let mut new_wrapper = wrapper.clone();
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
         let inner_unsigned_hash =
             wrapper.clone().update_header(TxType::Raw).header_hash();
 
@@ -2314,17 +2309,16 @@ mod test_process_proposal {
                 amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair_2,
+            keypair_2.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         ))));
         new_wrapper.add_section(Section::Signature(Signature::new(
-            &new_wrapper.header_hash(),
+            new_wrapper.sechashes(),
             &keypair,
         )));
-        new_wrapper.encrypt(&Default::default());
 
         // Run validation
         let request = ProcessProposal {
@@ -2362,7 +2356,7 @@ mod test_process_proposal {
                 amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -2373,10 +2367,9 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
         let protocol_tx = EthereumTxData::EthEventsVext({
@@ -2425,7 +2418,7 @@ mod test_process_proposal {
                 amount: token::Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -2436,13 +2429,12 @@ mod test_process_proposal {
         wrapper
             .set_data(Data::new("new transaction data".as_bytes().to_owned()));
         let mut decrypted = wrapper.clone();
-        wrapper.encrypt(&Default::default());
 
         decrypted.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
             has_valid_pow: false,
         }));
         decrypted.add_section(Section::Signature(Signature::new(
-            &decrypted.header_hash(),
+            decrypted.sechashes(),
             &keypair,
         )));
         let wrapper_in_queue = TxInQueue {
@@ -2486,7 +2478,7 @@ mod test_process_proposal {
                 amount: token::Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -2497,10 +2489,9 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         // Run validation
         let request = ProcessProposal {
@@ -2529,7 +2520,7 @@ mod test_process_proposal {
                 amount: token::Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -2541,13 +2532,12 @@ mod test_process_proposal {
         wrapper
             .set_data(Data::new("new transaction data".as_bytes().to_owned()));
         let mut decrypted = wrapper.clone();
-        wrapper.encrypt(&Default::default());
 
         decrypted.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
             has_valid_pow: false,
         }));
         decrypted.add_section(Section::Signature(Signature::new(
-            &decrypted.header_hash(),
+            decrypted.sechashes(),
             &keypair,
         )));
         let wrapper_in_queue = TxInQueue {
