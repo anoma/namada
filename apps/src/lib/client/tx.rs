@@ -27,9 +27,7 @@ use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::storage::{Epoch, Key};
 use namada::types::token;
-use namada::types::transaction::governance::{
-    InitProposalData, ProposalType, VoteProposalData,
-};
+use namada::types::transaction::governance::{ProposalType, VoteProposalData};
 use namada::types::transaction::{InitValidator, TxType};
 use sha2::{Digest as Sha2Digest, Sha256};
 
@@ -566,13 +564,14 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
         Ok(())
     } else {
         let signer = ctx.get(&signer);
-        let tx_data: Result<InitProposalData, _> = proposal.clone().try_into();
-        let init_proposal_data = if let Ok(data) = tx_data {
-            data
-        } else {
-            eprintln!("Invalid data for init proposal transaction.");
-            safe_exit(1)
-        };
+        let tx_data = proposal.clone().try_into();
+        let (mut init_proposal_data, init_proposal_content, init_proposal_code) =
+            if let Ok(data) = tx_data {
+                data
+            } else {
+                eprintln!("Invalid data for init proposal transaction.");
+                safe_exit(1)
+            };
 
         let balance =
             rpc::get_token_balance(client, &ctx.native_token, &proposal.author)
@@ -592,7 +591,7 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
             safe_exit(1);
         }
 
-        if init_proposal_data.content.len()
+        if init_proposal_content.len()
             > governance_parameters.max_proposal_content_size as usize
         {
             eprintln!("Proposal content size too big.",);
@@ -600,14 +599,33 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
         }
 
         let mut tx = Tx::new(TxType::Raw);
-        let data = init_proposal_data
-            .try_to_vec()
-            .expect("Encoding proposal data shouldn't fail");
         let tx_code_hash = query_wasm_code_hash(client, args::TX_INIT_PROPOSAL)
             .await
             .unwrap();
         tx.header.chain_id = ctx.config.ledger.chain_id.clone();
         tx.header.expiration = args.tx.expiration;
+        // Put the content of this proposal into an extra section
+        {
+            let content_sec = tx.add_section(Section::ExtraData(Code::new(
+                init_proposal_content,
+            )));
+            let content_sec_hash = Hash(
+                content_sec.hash(&mut Sha256::new()).finalize_reset().into(),
+            );
+            init_proposal_data.content = content_sec_hash;
+        }
+        // Put any proposal code into an extra section
+        if let Some(init_proposal_code) = init_proposal_code {
+            let code_sec = tx
+                .add_section(Section::ExtraData(Code::new(init_proposal_code)));
+            let code_sec_hash =
+                Hash(code_sec.hash(&mut Sha256::new()).finalize_reset().into());
+            init_proposal_data.r#type =
+                ProposalType::Default(Some(code_sec_hash));
+        }
+        let data = init_proposal_data
+            .try_to_vec()
+            .expect("Encoding proposal data shouldn't fail");
         tx.set_data(Data::new(data));
         tx.set_code(Code::from_hash(tx_code_hash));
 
@@ -1036,7 +1054,7 @@ pub async fn submit_validator_commission_change<
 >(
     client: &C,
     mut ctx: Context,
-    mut args: args::TxCommissionRateChange,
+    mut args: args::CommissionRateChange,
 ) -> Result<(), tx::Error> {
     args.tx.chain_id = args
         .tx
