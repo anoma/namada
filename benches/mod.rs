@@ -122,6 +122,7 @@ pub const TX_REVEAL_PK_WASM: &str = "tx_reveal_pk.wasm";
 pub const TX_CHANGE_VALIDATOR_COMMISSION_WASM: &str =
     "tx_change_validator_commission.wasm";
 pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
+pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
 pub const VP_VALIDATOR_WASM: &str = "vp_validator.wasm";
 
 pub const ALBERT_PAYMENT_ADDRESS: &str = "albert_payment";

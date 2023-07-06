@@ -3,10 +3,15 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::types::key::{
     common, SecretKey as SecretKeyInterface, SigScheme,
 };
+use namada::core::types::storage::KeySeg;
 use namada::core::types::token::Amount;
+use namada::ledger::args::TxUnjailValidator;
 use namada::ledger::governance;
 use namada::ledger::storage_api::StorageRead;
-use namada::proof_of_stake;
+use namada::proof_of_stake::types::{Slash, SlashType, ValidatorStates};
+use namada::proof_of_stake::{
+    self, enqueued_slashes_handle, read_pos_params, ADDRESS,
+};
 use namada::proto::{Signature, Tx};
 use namada::types::chain::ChainId;
 use namada::types::governance::{ProposalVote, VoteType};
@@ -27,8 +32,8 @@ use namada_benches::{
     generate_ibc_transfer_tx, generate_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
     TX_BOND_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_INIT_PROPOSAL_WASM,
-    TX_REVEAL_PK_WASM, TX_UNBOND_WASM, TX_UPDATE_VP_WASM,
-    TX_VOTE_PROPOSAL_WASM, VP_VALIDATOR_WASM, WASM_DIR,
+    TX_REVEAL_PK_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
+    TX_UPDATE_VP_WASM, TX_VOTE_PROPOSAL_WASM, VP_VALIDATOR_WASM, WASM_DIR,
 };
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -614,6 +619,111 @@ fn ibc(c: &mut Criterion) {
     });
 }
 
+fn unjail_validator(c: &mut Criterion) {
+    let signed_tx = generate_tx(
+        TX_UNJAIL_VALIDATOR_WASM,
+        &defaults::validator_address(),
+        None, //FIXME: is this ever used?
+        &defaults::validator_keypair(),
+    );
+
+    c.bench_function("unjail_validator", |b| {
+        b.iter_batched_ref(
+            || {
+                let mut shell = BenchShell::default();
+
+                // Init new validator
+                let mut csprng = rand::rngs::OsRng {};
+                let consensus_key: common::PublicKey =
+                    secp256k1::SigScheme::generate(&mut csprng)
+                        .try_to_sk::<common::SecretKey>()
+                        .unwrap()
+                        .to_public();
+
+                let protocol_key: common::PublicKey =
+                    secp256k1::SigScheme::generate(&mut csprng)
+                        .try_to_sk::<common::SecretKey>()
+                        .unwrap()
+                        .to_public();
+
+                let dkg_key = ferveo_common::Keypair::<EllipticCurve>::new(
+                    &mut StdRng::from_entropy(),
+                )
+                .public()
+                .into();
+
+                let validator_vp_code_hash: Hash = shell
+                    .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
+                    .unwrap();
+                //FIXME: shared fucntion here?
+                let mut tx =
+                    Tx::new(namada::types::transaction::TxType::Decrypted(
+                        namada::types::transaction::DecryptedTx::Decrypted {
+                            #[cfg(not(feature = "mainnet"))]
+                            has_valid_pow: true,
+                        },
+                    ));
+                let extra = tx.add_section(namada::proto::Section::ExtraData(
+                    namada::proto::Code::from_hash(validator_vp_code_hash),
+                ));
+                let extra_hash = Hash(
+                    extra
+                        .hash(&mut sha2::Sha256::new())
+                        .finalize_reset()
+                        .into(),
+                );
+                let data = InitValidator {
+                    account_key: defaults::albert_keypair().to_public(),
+                    consensus_key,
+                    protocol_key,
+                    dkg_key,
+                    commission_rate: Decimal::default(),
+                    max_commission_rate_change: Decimal::default(),
+                    validator_vp_code_hash: extra_hash,
+                };
+
+                tx.set_data(namada::proto::Data::new(
+                    data.try_to_vec().unwrap(),
+                ));
+                tx.set_code(namada::proto::Code::new(
+                    wasm_loader::read_wasm_or_exit(
+                        WASM_DIR,
+                        TX_INIT_VALIDATOR_WASM,
+                    ),
+                ));
+
+                shell.execute_tx(&tx);
+
+                // Jail the validator
+                let pos_params = read_pos_params(&shell.wl_storage).unwrap();
+                let current_epoch = shell.wl_storage.storage.block.epoch;
+                let evidence_epoch = current_epoch.prev();
+                proof_of_stake::slash(
+                    &mut shell.wl_storage,
+                    &pos_params,
+                    current_epoch,
+                    evidence_epoch,
+                    0u64,
+                    SlashType::DuplicateVote,
+                    &defaults::validator_address(),
+                )
+                .unwrap();
+
+                shell.wl_storage.commit_tx();
+                shell.commit();
+                // Advance by slash epoch offset epochs
+                for _ in 0..=pos_params.slash_processing_epoch_offset() {
+                    shell.advance_epoch();
+                }
+
+                shell
+            },
+            |shell| shell.execute_tx(&signed_tx),
+            criterion::BatchSize::LargeInput,
+        )
+    });
+}
+
 criterion_group!(
     whitelisted_txs,
     transfer,
@@ -627,6 +737,7 @@ criterion_group!(
     vote_proposal,
     init_validator,
     change_validator_commission,
-    ibc
+    ibc,
+    unjail_validator
 );
 criterion_main!(whitelisted_txs);

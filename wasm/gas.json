@@ -8,6 +8,7 @@
     "tx_reveal_pk.wasm": 170,
     "tx_transfer.wasm": 110,
     "tx_unbond.wasm": 430,
+    "tx_unjail_validator.wasm": 340,
     "tx_update_vp.wasm": 140,
     "tx_vote_proposal.wasm": 120,
     "tx_withdraw.wasm": 260,
