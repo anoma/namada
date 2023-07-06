@@ -129,11 +129,7 @@ mod test_bridge_pool_vp {
         tx.set_data(Data::new(data));
         tx.set_code(Code::new(wasm_code));
         tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
-            keypair,
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
+            vec![*tx.data_sechash(), *tx.code_sechash()],
             keypair,
         )));
         tx

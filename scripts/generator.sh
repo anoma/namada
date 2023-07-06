@@ -12,26 +12,6 @@ NAMADA_DIR="$(pwd)"
 export NAMADA_LEDGER_LOG_PATH="$(pwd)/vectors.json"
 export NAMADA_TX_LOG_PATH="$(pwd)/debugs.txt"
 
-echo '{
-    "content": {
-        "title": "TheTitle",
-        "authors": "test@test.com",
-        "discussions-to": "www.github.com/anoma/aip/1",
-        "created": "2022-03-10T08:54:37Z",
-        "license": "MIT",
-        "abstract": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros. Nullam sed ex justo. Ut at placerat ipsum, sit amet rhoncus libero. Sed blandit non purus non suscipit. Phasellus sed quam nec augue bibendum bibendum ut vitae urna. Sed odio diam, ornare nec sapien eget, congue viverra enim.",
-        "motivation": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices.",
-        "details": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros.",
-        "requires": "2"
-    },
-    "author": "atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw",
-    "voting_start_epoch": 12,
-    "voting_end_epoch": 24,
-    "grace_epoch": 30,
-    "type": { "Default": "'"$NAMADA_DIR"'/wasm_for_tests/tx_no_op.wasm" }
-}
-' > valid_proposal.json
-
 if [ "$#" -ne 1 ]; then
     echo "Illegal number of parameters"
 elif [ "$1" = "server" ]; then
@@ -56,10 +36,239 @@ elif [ "$1" = "client" ]; then
     echo > $NAMADA_TX_LOG_PATH
 
     echo $'[' > $NAMADA_LEDGER_LOG_PATH
+
+    ALBERT_ADDRESS=$(cargo run --bin namadaw -- address find --alias albert | sed 's/^Found address Established: //')
+
+    echo '{
+     "author":"'$ALBERT_ADDRESS'",
+     "content":{
+        "abstract":"Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros. Nullam sed ex justo. Ut at placerat ipsum, sit amet rhoncus libero. Sed blandit non purus non suscipit. Phasellus sed quam nec augue bibendum bibendum ut vitae urna. Sed odio diam, ornare nec sapien eget, congue viverra enim.",
+        "authors":"test@test.com",
+        "created":"2022-03-10T08:54:37Z",
+        "details":"Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros.",
+        "discussions-to":"www.github.com/anoma/aip/1",
+        "license":"MIT",
+        "motivation":"Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices.",
+        "requires":"2",
+        "title":"TheTitle"
+    },
+    "grace_epoch":30,
+    "type":{
+        "Default":"'$NAMADA_DIR'/wasm_for_tests/tx_proposal_code.wasm"
+    },
+    "voting_end_epoch":24,
+    "voting_start_epoch":12
+}
+' > proposal_submission_valid_proposal.json
+
+    echo '{
+  "content": {
+    "abstract": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros. Nullam sed ex justo. Ut at placerat ipsum, sit amet rhoncus libero. Sed blandit non purus non suscipit. Phasellus sed quam nec augue bibendum bibendum ut vitae urna. Sed odio diam, ornare nec sapien eget, congue viverra enim.",
+    "authors": "test@test.com",
+    "created": "2022-03-10T08:54:37Z",
+    "details": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros.",
+    "discussions-to": "www.github.com/anoma/aip/1",
+    "license": "MIT",
+    "motivation": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices.",
+    "requires": "2",
+    "title": "TheTitle"
+  },
+  "author": "'$ALBERT_ADDRESS'",
+  "tally_epoch": 18,
+  "signature": {
+    "Ed25519": {
+      "R_bytes": [
+        113,
+        196,
+        231,
+        134,
+        101,
+        191,
+        75,
+        17,
+        245,
+        19,
+        50,
+        231,
+        183,
+        80,
+        162,
+        38,
+        108,
+        72,
+        72,
+        2,
+        116,
+        112,
+        121,
+        33,
+        197,
+        67,
+        64,
+        116,
+        21,
+        250,
+        196,
+        121
+      ],
+      "s_bytes": [
+        87,
+        163,
+        134,
+        87,
+        42,
+        156,
+        121,
+        211,
+        189,
+        19,
+        255,
+        5,
+        23,
+        178,
+        143,
+        39,
+        118,
+        249,
+        37,
+        53,
+        121,
+        136,
+        59,
+        103,
+        190,
+        91,
+        121,
+        95,
+        46,
+        54,
+        168,
+        9
+      ]
+    }
+  },
+  "address": "'$ALBERT_ADDRESS'"
+}
+' > proposal_offline_proposal
+
+    echo '{
+     "author":"'$ALBERT_ADDRESS'",
+     "content":{
+        "abstract":"Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros. Nullam sed ex justo. Ut at placerat ipsum, sit amet rhoncus libero. Sed blandit non purus non suscipit. Phasellus sed quam nec augue bibendum bibendum ut vitae urna. Sed odio diam, ornare nec sapien eget, congue viverra enim.",
+        "authors":"test@test.com",
+        "created":"2022-03-10T08:54:37Z",
+        "details":"Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros.",
+        "discussions-to":"www.github.com/anoma/aip/1",
+        "license":"MIT",
+        "motivation":"Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices.",
+        "requires":"2",
+        "title":"TheTitle"
+    },
+    "grace_epoch":18,
+    "type":{
+        "Default":null
+    },
+    "voting_end_epoch":9,
+    "voting_start_epoch":3
+}' > proposal_offline_valid_proposal.json
+
+    echo '{
+     "author":"'$ALBERT_ADDRESS'",
+     "content":{
+        "abstract":"Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros. Nullam sed ex justo. Ut at placerat ipsum, sit amet rhoncus libero. Sed blandit non purus non suscipit. Phasellus sed quam nec augue bibendum bibendum ut vitae urna. Sed odio diam, ornare nec sapien eget, congue viverra enim.",
+        "authors":"test@test.com",
+        "created":"2022-03-10T08:54:37Z",
+        "details":"Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros.",
+        "discussions-to":"www.github.com/anoma/aip/1",
+        "license":"MIT",
+        "motivation":"Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices.",
+        "requires":"2",
+        "title":"TheTitle"
+    },
+    "grace_epoch":30,
+    "type":"ETHBridge",
+    "voting_end_epoch":24,
+    "voting_start_epoch":12
+}' > eth_governance_proposal_valid_proposal.json
+
+    echo '{
+     "author":"'$ALBERT_ADDRESS'",
+     "content":{
+        "abstract":"Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros. Nullam sed ex justo. Ut at placerat ipsum, sit amet rhoncus libero. Sed blandit non purus non suscipit. Phasellus sed quam nec augue bibendum bibendum ut vitae urna. Sed odio diam, ornare nec sapien eget, congue viverra enim.",
+        "authors":"test@test.com",
+        "created":"2022-03-10T08:54:37Z",
+        "details":"Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros.",
+        "discussions-to":"www.github.com/anoma/aip/1",
+        "license":"MIT",
+        "motivation":"Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices.",
+        "requires":"2",
+        "title":"TheTitle"
+    },
+    "grace_epoch":30,
+    "type":"PGFCouncil",
+    "voting_end_epoch":24,
+    "voting_start_epoch":12
+}' > pgf_governance_proposal_valid_proposal.json
+
+    # proposal_submission
+    
+    cargo run --bin namadac --features std -- --mode full bond --validator validator-0 --source Bertha --amount 900 --gas-amount 0 --gas-limit 0 --gas-token NAM --node 127.0.0.1:27657
+
+    cargo run --bin namadac --features std -- --mode full change-commission-rate --validator Bertha --commission-rate 0.02 --gas-amount 0 --gas-limit 0 --gas-token NAM --force --node 127.0.0.1:27657
+
+    PROPOSAL_ID_0=$(cargo run --bin namadac --features std -- --mode full init-proposal --force --data-path proposal_submission_valid_proposal.json --node 127.0.0.1:27657 | grep -o -P '(?<=/proposal/).*(?=/author)')
+
+    cargo run --bin namadac --features std -- --base-dir $NAMADA_BASE_DIR/setup/validator-0/.namada --mode validator vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote yay --signer validator-0 --node 127.0.0.1:27657
+
+    cargo run --bin namadac --features std -- --mode full vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote nay --signer Bertha --node 127.0.0.1:27657
+
+    cargo run --bin namadac --features std -- --mode full vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote yay --signer Albert --node 127.0.0.1:27657
+
+    # proposal_offline
+
+    cargo run --bin namadac --features std -- --mode full bond --validator validator-0 --source Albert --amount 900 --gas-amount 0 --gas-limit 0 --gas-token NAM --node 127.0.0.1:27657
+
+    cargo run --bin namadac --features std -- --mode full change-commission-rate --validator Albert --commission-rate 0.05 --gas-amount 0 --gas-limit 0 --gas-token NAM --force --node 127.0.0.1:27657
+
+    cargo run --bin namadac --features std -- --mode full init-proposal --force --data-path proposal_offline_valid_proposal.json --offline --node 127.0.0.1:27657
+
+    cargo run --bin namadac --features std -- --mode full vote-proposal --data-path proposal_offline_proposal --vote yay --signer Albert --offline --node 127.0.0.1:27657
+
+    # eth_governance_proposal
+
+    cargo run --bin namadac --features std -- --mode full bond --validator validator-0 --source Bertha --amount 900 --gas-amount 0 --gas-limit 0 --gas-token NAM --ledger-address 127.0.0.1:27657
+
+    cargo run --bin namadac --features std -- --mode full change-commission-rate --validator Bertha --commission-rate 0.07 --gas-amount 0 --gas-limit 0 --gas-token NAM --force --node 127.0.0.1:27657
+
+    PROPOSAL_ID_0=$(cargo run --bin namadac --features std -- --mode full init-proposal --force --data-path eth_governance_proposal_valid_proposal.json --ledger-address 127.0.0.1:27657 | grep -o -P '(?<=/proposal/).*(?=/author)')
+
+    cargo run --bin namadac --features std -- --mode full vote-proposal --force --proposal-id 0 --vote yay --eth '011586062748ba53bc53155e817ec1ea708de75878dcb9a5713bf6986d87fe14e7 fd34672ab5' --signer Bertha --ledger-address 127.0.0.1:27657
+
+    cargo run --bin namadac --features std -- --base-dir $NAMADA_BASE_DIR/setup/validator-0/.namada --mode validator vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote yay --eth '011586062748ba53bc53155e817ec1ea708de75878dcb9a5713bf6986d87fe14e7 fd34672ab5' --signer validator-0 --ledger-address 127.0.0.1:27657
+
+    # pgf_governance_proposal
+
+    cargo run --bin namadac --features std -- --mode full bond --validator validator-0 --source Bertha --amount 900 --gas-amount 0 --gas-limit 0 --gas-token NAM --ledger-address 127.0.0.1:27657
+
+    cargo run --bin namadac --features std -- --mode full change-commission-rate --validator Bertha --commission-rate 0.09 --gas-amount 0 --gas-limit 0 --gas-token NAM --force --node 127.0.0.1:27657
+
+    PROPOSAL_ID_0=$(cargo run --bin namadac --features std -- --mode full init-proposal --force --data-path pgf_governance_proposal_valid_proposal.json --ledger-address 127.0.0.1:27657 | grep -o -P '(?<=/proposal/).*(?=/author)')
+
+    PROPOSAL_ID_1=$(cargo run --bin namadac --features std -- --mode full init-proposal --force --data-path pgf_governance_proposal_valid_proposal.json --ledger-address 127.0.0.1:27657 | grep -o -P '(?<=/proposal/).*(?=/author)')
+
+    cargo run --bin namadac --features std -- --base-dir $NAMADA_BASE_DIR/setup/validator-0/.namada --mode validator vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote yay --pgf "$ALBERT_ADDRESS 1000" --signer validator-0 --ledger-address 127.0.0.1:27657
+
+    cargo run --bin namadac --features std -- --mode full vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote yay --pgf "$ALBERT_ADDRESS 900" --signer Bertha --ledger-address 127.0.0.1:27657
+
+    cargo run --bin namadac --features std -- --mode full vote-proposal --force --proposal-id $PROPOSAL_ID_1 --vote yay --pgf "$ALBERT_ADDRESS 900" --signer Bertha --ledger-address 127.0.0.1:27657
+
+    # non-proposal tests
     
     cargo run --bin namadac --features std -- transfer --source bertha --target christel --token btc --amount 23 --force --signing-key bertha-key --ledger-address 127.0.0.1:27657
 
     cargo run --bin namadac --features std -- bond --validator bertha --amount 25 --signing-key bertha-key --force --ledger-address 127.0.0.1:27657
+
+    cargo run --bin namadac --features std -- --mode full change-commission-rate --validator Bertha --commission-rate 0.11 --gas-amount 0 --gas-limit 0 --gas-token NAM --force --node 127.0.0.1:27657
 
     cargo run --bin namadac --features std -- reveal-pk --public-key albert-key --force --ledger-address 127.0.0.1:27657
 
@@ -76,8 +285,6 @@ elif [ "$1" = "client" ]; then
     cargo run --bin namadac --features std -- tx --code-path $NAMADA_DIR/wasm_for_tests/tx_no_op.wasm --data-path README.md --signing-key albert-key --force --ledger-address 127.0.0.1:27657
 
     cargo run --bin namadac --features std -- ibc-transfer --source bertha --receiver christel  --token btc --amount 24 --channel-id channel-141 --signing-key bertha-key --force --ledger-address 127.0.0.1:27657
-
-    #cargo run --bin namadac -- init-proposal --data-path valid_proposal.json --epoch 2 --force --signing-key bertha-key --ledger-address 127.0.0.1:27657
 
     cargo run --bin namadaw -- masp add --alias a_spending_key --value xsktest1qqqqqqqqqqqqqq9v0sls5r5de7njx8ehu49pqgmqr9ygelg87l5x8y4s9r0pjlvu69au6gn3su5ewneas486hdccyayx32hxvt64p3d0hfuprpgcgv2q9gdx3jvxrn02f0nnp3jtdd6f5vwscfuyum083cvfv4jun75ak5sdgrm2pthzj3sflxc0jx0edrakx3vdcngrfjmru8ywkguru8mxss2uuqxdlglaz6undx5h8w7g70t2es850g48xzdkqay5qs0yw06rtxcvedhsv --unsafe-dont-encrypt
     
@@ -101,9 +308,17 @@ elif [ "$1" = "client" ]; then
     
     cargo run --bin namadac --features std -- --mode full transfer --source b_spending_key --target bb_payment_address --token btc --amount 6 --force --ledger-address 127.0.0.1:27657
 
+    rm proposal_submission_valid_proposal.json
+
+    rm proposal_offline_proposal
+
+    rm proposal_offline_valid_proposal.json
+
+    rm eth_governance_proposal_valid_proposal.json
+
+    rm pgf_governance_proposal_valid_proposal.json
+
     perl -0777 -i.original -pe 's/,\s*$//igs' $NAMADA_LEDGER_LOG_PATH
 
     echo $'\n]' >> $NAMADA_LEDGER_LOG_PATH
 fi
-
-rm valid_proposal.json

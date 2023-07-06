@@ -10,7 +10,7 @@ use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
 use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
-use namada_core::types::chain::ChainId;
+use namada_core::types::key::common;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 
@@ -21,7 +21,7 @@ use crate::ledger::args;
 use crate::ledger::queries::{Client, RPC};
 use crate::ledger::rpc::validate_amount;
 use crate::ledger::signing::TxSigningKey;
-use crate::ledger::tx::process_tx;
+use crate::ledger::tx::{prepare_tx, Error};
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::{Code, Data, Tx};
 use crate::types::address::Address;
@@ -39,16 +39,14 @@ use crate::types::transaction::TxType;
 use crate::types::voting_power::FractionalVotingPower;
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
-pub async fn add_to_eth_bridge_pool<C, U>(
+pub async fn build_bridge_pool_tx<
+    C: crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
-    chain_id: ChainId,
-    mut args: args::EthereumBridgePool,
-) where
-    C: Client + Sync,
-    U: WalletUtils,
-{
-    args.tx.chain_id = args.tx.chain_id.or_else(|| Some(chain_id.clone()));
+    args: args::EthereumBridgePool,
+) -> Result<(Tx, Option<Address>, common::PublicKey), Error> {
     let args::EthereumBridgePool {
         ref tx,
         asset,
@@ -59,6 +57,7 @@ pub async fn add_to_eth_bridge_pool<C, U>(
         gas_payer,
         code_path: wasm_code,
     } = args;
+
     let sub_prefix = Some(wrapped_erc20s::sub_prefix(&asset));
     let DenominatedAmount { amount, .. } =
         validate_amount(client, amount, &BRIDGE_ADDRESS, &sub_prefix, tx.force)
@@ -76,17 +75,19 @@ pub async fn add_to_eth_bridge_pool<C, U>(
             payer: gas_payer,
         },
     };
+
     let mut transfer_tx = Tx::new(TxType::Raw);
-    transfer_tx.header.chain_id = chain_id;
-    transfer_tx.header.expiration = args.tx.expiration;
+    transfer_tx.header.chain_id = tx.chain_id.clone().unwrap();
+    transfer_tx.header.expiration = tx.expiration;
     transfer_tx.set_data(Data::new(
         transfer
             .try_to_vec()
             .expect("Serializing tx should not fail"),
     ));
+    // TODO: change the wasm code to a hash
     transfer_tx.set_code(Code::new(wasm_code));
-    // this should not initialize any new addresses, so we ignore the result.
-    process_tx(
+
+    prepare_tx::<C, U>(
         client,
         wallet,
         tx,
@@ -96,7 +97,6 @@ pub async fn add_to_eth_bridge_pool<C, U>(
         false,
     )
     .await
-    .unwrap();
 }
 
 /// A json serializable representation of the Ethereum

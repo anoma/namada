@@ -31,7 +31,7 @@ keywords = ["blockchain", "privacy", "crypto", "protocol", "network"]
 license = "GPL-3.0"
 readme = "README.md"
 repository = "https://github.com/anoma/namada"
-version = "0.18.0"
+version = "0.18.1"
 
 [workspace.dependencies]
 ark-bls12-381 = {version = "0.3"}

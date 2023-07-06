@@ -120,6 +120,26 @@ pub trait StorageWrite {
 
     /// Delete a value at the given key from storage.
     fn delete(&mut self, key: &storage::Key) -> Result<()>;
+
+    /// Delete all key-vals with a matching prefix.
+    fn delete_prefix(&mut self, prefix: &storage::Key) -> Result<()>
+    where
+        Self: StorageRead + Sized,
+    {
+        let keys = iter_prefix_bytes(self, prefix)?
+            .map(|res| {
+                let (key, _val) = res?;
+                Ok(key)
+            })
+            .collect::<Result<Vec<storage::Key>>>();
+        for key in keys? {
+            // Skip validity predicates as they cannot be deleted
+            if key.is_validity_predicate().is_none() {
+                self.delete(&key)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Iterate items matching the given prefix, ordered by the storage keys.

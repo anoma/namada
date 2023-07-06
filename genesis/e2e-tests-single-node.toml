@@ -222,7 +222,7 @@ validator_stake_threshold = "1"
 # minimum amount of nam token to lock
 min_proposal_fund = 500
 # proposal code size in bytes
-max_proposal_code_size = 500000
+max_proposal_code_size = 1000000
 # min proposal period length in epochs
 min_proposal_period = 3
 # max proposal period length in epochs

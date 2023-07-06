@@ -96,7 +96,7 @@ where
 {
     let tx_code = tx
         .get_section(tx.code_sechash())
-        .and_then(Section::code_sec)
+        .and_then(|x| Section::code_sec(x.as_ref()))
         .ok_or(Error::MissingCode)?;
     let (module, store) = match tx_code.code {
         Commitment::Hash(code_hash) => {

@@ -219,6 +219,7 @@ pub mod cmds {
                 .subcommand(Bond::def().display_order(2))
                 .subcommand(Unbond::def().display_order(2))
                 .subcommand(Withdraw::def().display_order(2))
+                .subcommand(TxCommissionRateChange::def().display_order(2))
                 // Ethereum bridge
                 .subcommand(AddToEthBridgePool::def().display_order(3))
                 // Queries
@@ -255,6 +256,8 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, TxInitProposal);
             let tx_vote_proposal =
                 Self::parse_with_ctx(matches, TxVoteProposal);
+            let tx_commission_rate_change =
+                Self::parse_with_ctx(matches, TxCommissionRateChange);
             let bond = Self::parse_with_ctx(matches, Bond);
             let unbond = Self::parse_with_ctx(matches, Unbond);
             let withdraw = Self::parse_with_ctx(matches, Withdraw);
@@ -291,6 +294,7 @@ pub mod cmds {
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
                 .or(tx_init_validator)
+                .or(tx_commission_rate_change)
                 .or(bond)
                 .or(unbond)
                 .or(withdraw)
@@ -354,6 +358,7 @@ pub mod cmds {
         TxUpdateVp(TxUpdateVp),
         TxInitAccount(TxInitAccount),
         TxInitValidator(TxInitValidator),
+        TxCommissionRateChange(TxCommissionRateChange),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
         TxRevealPk(TxRevealPk),
@@ -1596,6 +1601,32 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct TxCommissionRateChange(
+        pub args::CommissionRateChange<args::CliTypes>,
+    );
+
+    impl SubCmd for TxCommissionRateChange {
+        const CMD: &'static str = "change-commission-rate";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxCommissionRateChange(args::CommissionRateChange::parse(
+                    matches,
+                ))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Change commission raate.")
+                .add_args::<args::CommissionRateChange<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct TxVoteProposal(pub args::VoteProposal<args::CliTypes>);
 
     impl SubCmd for TxVoteProposal {
@@ -2376,6 +2407,8 @@ pub mod args {
     pub const VALIDATOR_ETH_HOT_KEY: ArgOpt<WalletKeypair> =
         arg_opt("eth-hot-key");
     pub const VALUE: ArgOpt<String> = arg_opt("value");
+    pub const VERIFICATION_KEY: ArgOpt<WalletPublicKey> =
+        arg_opt("verification-key");
     pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
@@ -3989,11 +4022,11 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<TxCommissionRateChange<SdkTypes>>
-        for TxCommissionRateChange<CliTypes>
+    impl CliToSdk<CommissionRateChange<SdkTypes>>
+        for CommissionRateChange<CliTypes>
     {
-        fn to_sdk(self, ctx: &mut Context) -> TxCommissionRateChange<SdkTypes> {
-            TxCommissionRateChange::<SdkTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> CommissionRateChange<SdkTypes> {
+            CommissionRateChange::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
                 rate: self.rate,
@@ -4002,7 +4035,7 @@ pub mod args {
         }
     }
 
-    impl Args for TxCommissionRateChange<CliTypes> {
+    impl Args for CommissionRateChange<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let validator = VALIDATOR.parse(matches);
@@ -4229,11 +4262,16 @@ pub mod args {
                 fee_token: ctx.get(&self.fee_token),
                 gas_limit: self.gas_limit,
                 signing_key: self.signing_key.map(|x| ctx.get_cached(&x)),
+                verification_key: self
+                    .verification_key
+                    .map(|x| ctx.get_cached(&x)),
                 signer: self.signer.map(|x| ctx.get(&x)),
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
                 expiration: self.expiration,
-                chain_id: self.chain_id,
+                chain_id: self
+                    .chain_id
+                    .or_else(|| Some(ctx.config.ledger.chain_id.clone())),
             }
         }
     }
@@ -4292,7 +4330,8 @@ pub mod args {
                          public key, public key hash or alias from your \
                          wallet.",
                     )
-                    .conflicts_with(SIGNER.name),
+                    .conflicts_with(SIGNER.name)
+                    .conflicts_with(VERIFICATION_KEY.name),
             )
             .arg(
                 SIGNER
@@ -4301,6 +4340,18 @@ pub mod args {
                         "Sign the transaction with the keypair of the public \
                          key of the given address.",
                     )
+                    .conflicts_with(SIGNING_KEY_OPT.name)
+                    .conflicts_with(VERIFICATION_KEY.name),
+            )
+            .arg(
+                VERIFICATION_KEY
+                    .def()
+                    .help(
+                        "Sign the transaction with the key for the given \
+                         public key, public key hash or alias from your \
+                         wallet.",
+                    )
+                    .conflicts_with(SIGNER.name)
                     .conflicts_with(SIGNING_KEY_OPT.name),
             )
             .arg(CHAIN_ID_OPT.def().help("The chain ID."))
@@ -4320,6 +4371,7 @@ pub mod args {
             let gas_limit = GAS_LIMIT.parse(matches).amount.into();
             let expiration = EXPIRATION_OPT.parse(matches);
             let signing_key = SIGNING_KEY_OPT.parse(matches);
+            let verification_key = VERIFICATION_KEY.parse(matches);
             let signer = SIGNER.parse(matches);
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
@@ -4337,6 +4389,7 @@ pub mod args {
                 gas_limit,
                 expiration,
                 signing_key,
+                verification_key,
                 signer,
                 tx_reveal_code_path,
                 password,
