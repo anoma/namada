@@ -129,7 +129,7 @@ impl Hash {
         HASH_LENGTH
     }
 
-    /// Convert this [`Hash`] to a [`Vec`].
+    /// Convert this [`struct@Hash`] to a [`Vec`].
     pub fn to_vec(&self) -> Vec<u8> {
         self.0.to_vec()
     }
