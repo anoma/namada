@@ -555,7 +555,7 @@ async fn make_ledger_amount_asset<C: crate::ledger::queries::Client + Sync>(
     if let Some((token, _, _epoch)) = assets.get(token) {
         // If the AssetType can be decoded, then at least display Addressees
         let formatted_amt =
-            format_denominated_amount(client, &token, amount.into()).await;
+            format_denominated_amount(client, token, amount.into()).await;
         if let Some(token) = tokens.get(token) {
             output
                 .push(

@@ -192,7 +192,7 @@ pub async fn query_transfers<
         for (account, MaspChange { ref asset, change }) in tfer_delta {
             if account != masp() {
                 print!("  {}:", account);
-                let token_alias = lookup_alias(wallet, &asset);
+                let token_alias = lookup_alias(wallet, asset);
                 let sign = match change.cmp(&Change::zero()) {
                     Ordering::Greater => "+",
                     Ordering::Less => "-",
@@ -443,7 +443,7 @@ pub async fn query_pinned_balance<
                 } else {
                     let formatted = format_denominated_amount(
                         client,
-                        &token,
+                        token,
                         total_balance.into(),
                     )
                     .await;
@@ -476,7 +476,7 @@ pub async fn query_pinned_balance<
                     )
                     .await;
                     let token_alias = tokens
-                        .get(&token_addr)
+                        .get(token_addr)
                         .map(|a| a.to_string())
                         .unwrap_or_else(|| token_addr.to_string());
                     println!(" {}: {}", token_alias, formatted,);
@@ -920,7 +920,7 @@ pub async fn print_decoded_balance<
         {
             println!(
                 "{} : {}",
-                lookup_alias(wallet, &token_addr),
+                lookup_alias(wallet, token_addr),
                 format_denominated_amount(client, token_addr, (*amount).into())
                     .await,
             );
@@ -942,7 +942,7 @@ pub async fn print_decoded_balance_with_epoch<
     for ((epoch, token_addr), value) in decoded_balance.iter() {
         let asset_value = (*value).into();
         let alias = tokens
-            .get(&token_addr)
+            .get(token_addr)
             .map(|a| a.to_string())
             .unwrap_or_else(|| token_addr.to_string());
         println!(

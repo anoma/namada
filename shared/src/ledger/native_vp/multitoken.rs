@@ -83,17 +83,14 @@ where
                     Some(_) => {}
                     None => return Ok(false),
                 }
-            } else {
-                if key.segments.get(0)
-                    == Some(
-                        &Address::Internal(InternalAddress::Multitoken)
-                            .to_db_key(),
-                    )
-                {
-                    // Reject when trying to update an unexpected key under
-                    // `#Multitoken/...`
-                    return Ok(false);
-                }
+            } else if key.segments.get(0)
+                == Some(
+                    &Address::Internal(InternalAddress::Multitoken).to_db_key(),
+                )
+            {
+                // Reject when trying to update an unexpected key under
+                // `#Multitoken/...`
+                return Ok(false);
             }
         }
 

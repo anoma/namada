@@ -294,7 +294,6 @@ mod tests {
         storage_api::token::write_denom(
             &mut tx_env.wl_storage,
             &token,
-            None,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
         .unwrap();
@@ -450,7 +449,6 @@ mod tests {
         storage_api::token::write_denom(
             &mut tx_env.wl_storage,
             &token,
-            None,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
         .unwrap();
@@ -531,7 +529,6 @@ mod tests {
         storage_api::token::write_denom(
             &mut tx_env.wl_storage,
             &token,
-            None,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
         .unwrap();
