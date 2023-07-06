@@ -3,6 +3,7 @@
 use color_eyre::eyre::{eyre, Report, Result};
 use namada::ledger::eth_bridge::bridge_pool;
 use namada::ledger::rpc::wait_until_node_is_synched;
+use namada::ledger::{signing, tx};
 use namada::types::control_flow::ProceedOrElse;
 use namada_apps::cli;
 use namada_apps::cli::args::CliToSdk;
@@ -208,14 +209,27 @@ pub async fn main() -> Result<()> {
                         .await
                         .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
-                    let chain_id = ctx.config.ledger.chain_id.clone();
-                    bridge_pool::add_to_eth_bridge_pool(
+                    let tx_args = args.tx.clone();
+                    let (tx, addr, pk) = bridge_pool::build_bridge_pool_tx(
                         &client,
                         &mut ctx.wallet,
-                        chain_id,
                         args,
                     )
-                    .await;
+                    .await
+                    .unwrap();
+                    tx::submit_reveal_aux(
+                        &client,
+                        &mut ctx,
+                        &tx_args,
+                        addr,
+                        pk.clone(),
+                        &mut tx,
+                    )
+                    .await?;
+                    signing::sign_tx(&mut ctx.wallet, &mut tx, &tx_args, &pk)
+                        .await?;
+                    tx::process_tx(&client, &mut ctx.wallet, &tx_args, tx)
+                        .await?;
                 }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(mut args)) => {
