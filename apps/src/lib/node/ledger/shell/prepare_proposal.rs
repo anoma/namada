@@ -237,6 +237,9 @@ where
                 TxGasMeter::new(wrapper.gas_limit.clone().into());
             tx_gas_meter.add_tx_size_gas(tx_bytes).map_err(|_| ())?;
 
+            // Check replay protection
+            self.replay_protection_checks(&tx, tx_bytes, temp_wl_storage).map_err(|_| ())?;
+
             // Check fees
             let fee_unshield = wrapper.unshield_hash.map(|ref hash| tx.get_section(hash).map(|section| if let Section::MaspTx(transaction) = section {Some(transaction.to_owned())} else {None} ).flatten()).flatten();
             match self.wrapper_fee_check(
@@ -579,12 +582,12 @@ use data_encoding::HEXUPPER;
         let keypair = crate::wallet::defaults::daewon_keypair();
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount_per_gas_unit: 0.into(),
+                amount_per_gas_unit: 1.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None
@@ -675,12 +678,12 @@ use data_encoding::HEXUPPER;
         let keypair_2 = crate::wallet::defaults::daewon_keypair();
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount_per_gas_unit: 0.into(),
+                amount_per_gas_unit: 1.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None
@@ -690,32 +693,29 @@ use data_encoding::HEXUPPER;
         wrapper.set_code(tx_code.clone());
         let tx_data = Data::new("transaction data".as_bytes().to_owned());
         wrapper.set_data(tx_data.clone());
+        let mut new_wrapper = wrapper.clone();
         wrapper.add_section(Section::Signature(Signature::new(
             &wrapper.header_hash(),
             &keypair,
         )));
         wrapper.encrypt(&Default::default());
 
-        let mut new_wrapper =
-            Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        new_wrapper.update_header(
+            TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: 0.into(),
+                    amount_per_gas_unit: 1.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair_2,
                 Epoch(0),
-                0.into(),
+                GAS_LIMIT_MULTIPLIER.into(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
                 None
             ))));
-        new_wrapper.header.chain_id = shell.chain_id.clone();
-        new_wrapper.header.timestamp = wrapper.header.timestamp;
-        new_wrapper.set_code(tx_code);
-        new_wrapper.set_data(tx_data);
         new_wrapper.add_section(Section::Signature(Signature::new(
             &new_wrapper.header_hash(),
-            &keypair,
+            &keypair_2,
         )));
         new_wrapper.encrypt(&Default::default());
 
@@ -738,11 +738,10 @@ use data_encoding::HEXUPPER;
     fn test_expired_wrapper_tx() {
         let (shell, _) = test_utils::setup(1);
         let keypair = gen_keypair();
-        let tx_time = DateTimeUtc::now();
         let mut wrapper_tx =
             Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: 0.into(),
+                    amount_per_gas_unit: 1.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
@@ -753,7 +752,7 @@ use data_encoding::HEXUPPER;
                 None
             ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
-        wrapper_tx.header.expiration = Some(tx_time);
+        wrapper_tx.header.expiration = Some(DateTimeUtc::default());
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper_tx
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
