@@ -27,8 +27,8 @@ use namada_core::ledger::storage::{
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::{BlockHash, BlockHeight, Epoch, Header};
 use namada_core::types::time::DateTimeUtc;
+use num_traits::cast::FromPrimitive;
 use regex::Regex;
-use rust_decimal::prelude::FromPrimitive;
 use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::e2e::setup::TestDir;
@@ -170,7 +170,7 @@ impl MockNode {
             },
             byzantine_validators: vec![],
             txs: vec![ProcessedTx {
-                tx: tx_bytes.clone(),
+                tx: tx_bytes,
                 result: result.tx_results.remove(0),
             }],
             proposer_address: vec![],

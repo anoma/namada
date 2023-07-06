@@ -1,11 +1,15 @@
 use std::sync::Arc;
-use clap::App;
+
+use clap::Command as App;
 use eyre::Report;
+use namada::ledger::signing;
+use namada::ledger::tx::ProcessTxResponse;
 use namada_apps::cli;
 use namada_apps::cli::args::{CliToSdk, Global};
 use namada_apps::cli::cmds::{Namada, NamadaClient, NamadaClientWithContext};
 use namada_apps::cli::utils::Cmd;
 use namada_apps::cli::{args, cmds, Context};
+use namada_apps::client::tx::submit_reveal_aux;
 use namada_apps::client::{rpc, tx};
 use namada_apps::wallet::cli_utils::{
     address_add, address_key_add, address_key_find, address_list,
@@ -27,25 +31,31 @@ pub fn run(
             args.insert(0, "namadan");
             let app = App::new("test");
             let app = cmds::NamadaNode::add_sub(args::Global::def(app));
-            let app = cmds::NamadaNode::add_sub(app);
-            let matches = app.clone().get_matches_from(args.clone());
-            cmds::Namada::Node(cmds::NamadaNode::parse(&matches).expect("Could not parse node command"))
+            let matches = app.get_matches_from(args.clone());
+            cmds::Namada::Node(
+                cmds::NamadaNode::parse(&matches)
+                    .expect("Could not parse node command"),
+            )
         }
         Bin::Client => {
             args.insert(0, "client");
             let app = App::new("test");
             let app = cmds::NamadaClient::add_sub(args::Global::def(app));
-            let app = cmds::NamadaClient::add_sub(app);
-            let matches = app.clone().get_matches_from(args.clone());
-            cmds::Namada::Client(cmds::NamadaClient::parse(&matches).expect("Could not parse client command"))
+            let matches = app.get_matches_from(args.clone());
+            cmds::Namada::Client(
+                cmds::NamadaClient::parse(&matches)
+                    .expect("Could not parse client command"),
+            )
         }
         Bin::Wallet => {
             args.insert(0, "wallet");
             let app = App::new("test");
             let app = cmds::NamadaWallet::add_sub(args::Global::def(app));
-            let app = cmds::NamadaWallet::add_sub(app);
-            let matches = app.clone().get_matches_from(args.clone());
-            cmds::Namada::Wallet(cmds::NamadaWallet::parse(&matches).expect("Could not parse wallet command"))
+            let matches = app.get_matches_from(args.clone());
+            cmds::Namada::Wallet(
+                cmds::NamadaWallet::parse(&matches)
+                    .expect("Could not parse wallet command"),
+            )
         }
     };
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -98,13 +108,7 @@ impl MockNode {
                     }
                     NamadaClientWithContext::TxTransfer(args) => {
                         let args = args.0.to_sdk(&mut ctx);
-                        namada::ledger::tx::submit_transfer::<MockNode, _, _>(
-                            self,
-                            &mut ctx.wallet,
-                            &mut ctx.shielded,
-                            args,
-                        )
-                        .await?;
+                        submit_transfer(self, &mut ctx, args).await?;
                     }
                     NamadaClientWithContext::TxIbcTransfer(args) => {
                         let args = args.0.to_sdk(&mut ctx);
@@ -140,7 +144,7 @@ impl MockNode {
                     NamadaClientWithContext::TxInitValidator(args) => {
                         let args = args.0.to_sdk(&mut ctx);
                         tx::submit_init_validator::<MockNode>(self, ctx, args)
-                            .await;
+                            .await?;
                     }
                     NamadaClientWithContext::TxInitProposal(args) => {
                         let args = args.0.to_sdk(&mut ctx);
@@ -270,6 +274,13 @@ impl MockNode {
                         rpc::query_protocol_parameters::<MockNode>(self, args)
                             .await;
                     }
+                    NamadaClientWithContext::TxCommissionRateChange(args) => {
+                        let args = args.0.to_sdk(&mut ctx);
+                        tx::submit_validator_commission_change::<MockNode>(
+                            self, ctx, args,
+                        )
+                        .await?;
+                    }
                 },
                 NamadaClient::WithoutContext(cmd) => unreachable!(
                     "Command not supported by integration test: {:?}",
@@ -350,13 +361,7 @@ impl MockNode {
             }
             Namada::TxTransfer(args) => {
                 let args = args.0.to_sdk(&mut ctx);
-                namada::ledger::tx::submit_transfer::<MockNode, _, _>(
-                    self,
-                    &mut ctx.wallet,
-                    &mut ctx.shielded,
-                    args,
-                )
-                .await?;
+                submit_transfer(self, &mut ctx, args).await?;
             }
             Namada::TxIbcTransfer(args) => {
                 let args = args.0.to_sdk(&mut ctx);
@@ -387,7 +392,7 @@ impl MockNode {
 /// a process.
 pub struct CapturedOutput<T> {
     pub output: String,
-    pub result: T
+    pub result: T,
 }
 
 impl<T> CapturedOutput<T> {
@@ -395,7 +400,6 @@ impl<T> CapturedOutput<T> {
     where
         F: FnOnce() -> T,
     {
-
         std::io::set_output_capture(Some(Default::default()));
         let mut capture = Self {
             output: Default::default(),
@@ -419,5 +423,56 @@ impl<T> CapturedOutput<T> {
         let needle = regex::Regex::new(needle).unwrap();
         self.matches(needle)
     }
+}
 
+async fn submit_transfer(
+    client: &MockNode,
+    ctx: &mut Context,
+    args: args::TxTransfer,
+) -> Result<(), namada::ledger::tx::Error> {
+    for _ in 0..2 {
+        let arg = args.clone();
+        let (mut tx, addr, pk, tx_epoch, _isf) =
+            namada::ledger::tx::build_transfer(
+                client,
+                &mut ctx.wallet,
+                &mut ctx.shielded,
+                arg,
+            )
+            .await?;
+        submit_reveal_aux(client, ctx, &args.tx, addr, pk.clone(), &mut tx)
+            .await?;
+        signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
+        let result = namada::ledger::tx::process_tx(
+            client,
+            &mut ctx.wallet,
+            &args.tx,
+            tx,
+        )
+        .await?;
+        // Query the epoch in which the transaction was probably submitted
+        let submission_epoch = rpc::query_and_print_epoch(client).await;
+
+        match result {
+            ProcessTxResponse::Applied(resp) if
+            // If a transaction is shielded
+            tx_epoch.is_some() &&
+                // And it is rejected by a VP
+                resp.code == 1.to_string() &&
+                // And the its submission epoch doesn't match construction epoch
+                tx_epoch.unwrap() != submission_epoch =>
+                {
+                    // Then we probably straddled an epoch boundary. Let's retry...
+                    eprintln!(
+                        "MASP transaction rejected and this may be due to the \
+                     epoch changing. Attempting to resubmit transaction.",
+                    );
+                    continue;
+                },
+            // Otherwise either the transaction was successful or it will not
+            // benefit from resubmission
+            _ => break,
+        }
+    }
+    Ok(())
 }

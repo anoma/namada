@@ -40,6 +40,7 @@ derivative.workspace = true
 ibc-relayer-types.workspace = true
 ibc-relayer.workspace = true
 lazy_static = "1.4.0"
+num-traits.workspace = true
 prost.workspace = true
 regex.workspace = true
 serde_json.workspace = true

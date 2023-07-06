@@ -1221,7 +1221,7 @@ pub async fn build_ibc_transfer<
 /// Try to decode the given asset type and add its decoding to the supplied set.
 /// Returns true only if a new decoding has been added to the given set.
 async fn add_asset_type<
-    C: crate::ledger::queries::Client + Send + Sync,
+    C: crate::ledger::queries::Client + Sync,
     U: ShieldedUtils,
 >(
     asset_types: &mut HashSet<(Address, Option<Key>, MaspDenom, Epoch)>,
@@ -1242,7 +1242,7 @@ async fn add_asset_type<
 /// function provides the data necessary for offline wallets to present asset
 /// type information.
 async fn used_asset_types<
-    C: crate::ledger::queries::Client + Send + Sync,
+    C: crate::ledger::queries::Client + Sync,
     U: ShieldedUtils,
     P,
     R,

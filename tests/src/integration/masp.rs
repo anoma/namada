@@ -5,7 +5,9 @@ use namada_apps::client::tx::CLIShieldedUtils;
 
 use super::client::run;
 use super::setup;
-use crate::e2e::setup::constants::{AA_PAYMENT_ADDRESS, AA_VIEWING_KEY, ALBERT, BTC};
+use crate::e2e::setup::constants::{
+    AA_PAYMENT_ADDRESS, AA_VIEWING_KEY, ALBERT, BTC,
+};
 use crate::e2e::setup::Bin;
 use crate::integration::client::CapturedOutput;
 
@@ -19,7 +21,7 @@ fn masp_incentives() -> Result<()> {
     let mut node = setup::setup()?;
     // Wait till epoch boundary
     let _ep0 = node.next_epoch();
-    let _ = run(
+    run(
         &node,
         Bin::Client,
         vec![
@@ -38,20 +40,21 @@ fn masp_incentives() -> Result<()> {
     )?;
     assert!(node.success());
     node.next_epoch();
-    let captured = CapturedOutput::of(
-    || run(
-        &node,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AA_VIEWING_KEY,
-            "--token",
-            BTC,
-            "--node",
-            "127.0.0.1:26567",
-        ],
-    ));
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                BTC,
+                "--node",
+                "127.0.0.1:26567",
+            ],
+        )
+    });
     assert!(captured.result.is_ok());
     assert!(captured.contains("btc: 20"));
     Ok(())
