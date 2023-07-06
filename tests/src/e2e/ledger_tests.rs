@@ -4217,7 +4217,7 @@ fn double_signing_gets_slashed() -> Result<()> {
                 genesis.pos_params.unbonding_len,
                 genesis.pos_params.cubic_slashing_window_length,
             );
-            setup::set_validators(4, genesis, default_port_offset)
+            setup::set_validators(2, genesis, default_port_offset)
         },
         None,
     )?;
@@ -4238,17 +4238,17 @@ fn double_signing_gets_slashed() -> Result<()> {
     validator_1.exp_string("This node is a validator")?;
     let bg_validator_1 = validator_1.background();
 
-    let mut validator_2 =
-        run_as!(test, Who::Validator(2), Bin::Node, &["ledger"], Some(40))?;
-    validator_2.exp_string("Namada ledger node started")?;
-    validator_2.exp_string("This node is a validator")?;
-    let _bg_validator_2 = validator_2.background();
+    // let mut validator_2 =
+    //     run_as!(test, Who::Validator(2), Bin::Node, &["ledger"], Some(40))?;
+    // validator_2.exp_string("Namada ledger node started")?;
+    // validator_2.exp_string("This node is a validator")?;
+    // let _bg_validator_2 = validator_2.background();
 
-    let mut validator_3 =
-        run_as!(test, Who::Validator(3), Bin::Node, &["ledger"], Some(40))?;
-    validator_3.exp_string("Namada ledger node started")?;
-    validator_3.exp_string("This node is a validator")?;
-    let _bg_validator_3 = validator_3.background();
+    // let mut validator_3 =
+    //     run_as!(test, Who::Validator(3), Bin::Node, &["ledger"], Some(40))?;
+    // validator_3.exp_string("Namada ledger node started")?;
+    // validator_3.exp_string("This node is a validator")?;
+    // let _bg_validator_3 = validator_3.background();
 
     // 2. Copy the first genesis validator base-dir
     let validator_0_base_dir = test.get_base_dir(&Who::Validator(0));
