@@ -19,6 +19,8 @@ abciplus = [
 ]
 # testing helpers
 testing = ["proptest"]
+# Enable testing against PoS Quint model
+test_quint = []
 
 [dependencies]
 namada_core = {path = "../core", default-features = false}
@@ -35,6 +37,7 @@ tracing.workspace = true
 
 [dev-dependencies]
 namada_core = {path = "../core", features = ["testing"]}
+expectrl.workspace = true
 itertools.workspace = true
 proptest.workspace = true
 proptest-state-machine.workspace = true

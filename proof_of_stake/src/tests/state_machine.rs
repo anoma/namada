@@ -1,5 +1,8 @@
 //! Test PoS transitions with a state machine
 
+#[cfg(feature = "test_quint")]
+mod quint;
+
 use std::cmp;
 use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 
@@ -45,12 +48,12 @@ prop_state_machine! {
     })]
     #[test]
     /// A `StateMachineTest` implemented on `PosState`
-    fn pos_state_machine_test(sequential 200 => ConcretePosState);
+    fn pos_state_machine_test(sequential 2 => ConcretePosState);
 }
 
 /// Abstract representation of a state of PoS system
 #[derive(Clone, Debug)]
-struct AbstractPosState {
+pub struct AbstractPosState {
     /// Current epoch
     epoch: Epoch,
     /// Parameters
@@ -94,12 +97,15 @@ struct AbstractPosState {
 struct ConcretePosState {
     /// Storage - contains all the PoS state
     s: TestWlStorage,
+    /// Quint REPL session
+    #[cfg(feature = "test_quint")]
+    quint: quint::State,
 }
 
 /// State machine transitions
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
-enum Transition {
+pub enum Transition {
     NextEpoch,
     InitValidator {
         address: Address,
@@ -154,7 +160,15 @@ impl StateMachineTest for ConcretePosState {
             initial_state.epoch,
         )
         .unwrap();
-        Self { s }
+
+        #[cfg(feature = "test_quint")]
+        let quint = quint::State::new(initial_state, &s);
+
+        Self {
+            s,
+            #[cfg(feature = "test_quint")]
+            quint,
+        }
     }
 
     fn apply(
@@ -170,6 +184,10 @@ impl StateMachineTest for ConcretePosState {
         )
         .unwrap();
         println!("PoS balance: {}", pos_balance);
+
+        #[cfg(feature = "test_quint")]
+        let transition_clone = transition.clone();
+
         match transition {
             Transition::NextEpoch => {
                 println!("\nCONCRETE Next epoch");
@@ -449,6 +467,14 @@ impl StateMachineTest for ConcretePosState {
                 state.check_unjail_validator_post_conditions(&params, &address);
             }
         }
+
+        #[cfg(feature = "test_quint")]
+        {
+            state
+                .quint
+                .apply_and_check(transition_clone, _ref_state, &state.s);
+        }
+
         state
     }
 

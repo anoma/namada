@@ -3851,6 +3851,7 @@ dependencies = [
  "borsh",
  "data-encoding",
  "derivative",
+ "expectrl",
  "itertools",
  "namada_core",
  "once_cell",
