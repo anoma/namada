@@ -132,10 +132,10 @@ mod protocol_txs {
                 $( type $variant = $inner_ty; )*
             }
 
-            /// All the variants of [`EthereumTxData`], stored
-            /// in a module.
             #[allow(missing_docs)]
             pub mod ethereum_tx_data_variants {
+                //! All the variants of [`EthereumTxData`], stored
+                //! in a module.
                 use super::*;
 
                 $( pub type $variant = $inner_ty; )*
