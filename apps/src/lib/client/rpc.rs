@@ -1,7 +1,7 @@
 //! Client RPC queries
 
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, Write};
 use std::iter::Iterator;
@@ -1738,11 +1738,6 @@ pub async fn query_slashes<C: namada::ledger::queries::Client + Sync>(
     _wallet: &mut Wallet<CliWalletUtils>,
     args: args::QuerySlashes,
 ) {
-    let params_key = pos::params_key();
-    let params = query_storage_value::<C, PosParams>(client, &params_key)
-        .await
-        .expect("Parameter should be defined.");
-
     match args.validator {
         Some(validator) => {
             let validator = validator;
@@ -1751,18 +1746,54 @@ pub async fn query_slashes<C: namada::ledger::queries::Client + Sync>(
                 RPC.vp().pos().validator_slashes(client, &validator).await,
             );
             if !slashes.is_empty() {
+                println!("Processed slashes:");
                 let stdout = io::stdout();
                 let mut w = stdout.lock();
                 for slash in slashes {
                     writeln!(
                         w,
-                        "Slash epoch {}, type {}, rate {}",
-                        slash.epoch, slash.r#type, slash.rate
+                        "Infraction epoch {}, block height {}, type {}, rate \
+                         {}",
+                        slash.epoch,
+                        slash.block_height,
+                        slash.r#type,
+                        slash.rate
                     )
                     .unwrap();
                 }
             } else {
-                println!("No slashes found for {}", validator.encode())
+                println!(
+                    "No processed slashes found for {}",
+                    validator.encode()
+                )
+            }
+            // Find enqueued slashes to be processed in the future for the given
+            // validator
+            let enqueued_slashes: HashMap<
+                Address,
+                BTreeMap<Epoch, Vec<Slash>>,
+            > = unwrap_client_response::<
+                C,
+                HashMap<Address, BTreeMap<Epoch, Vec<Slash>>>,
+            >(RPC.vp().pos().enqueued_slashes(client).await);
+            let enqueued_slashes = enqueued_slashes.get(&validator).cloned();
+            if let Some(enqueued) = enqueued_slashes {
+                println!("\nEnqueued slashes for future processing");
+                for (epoch, slashes) in enqueued {
+                    println!("To be processed in epoch {}", epoch);
+                    for slash in slashes {
+                        let stdout = io::stdout();
+                        let mut w = stdout.lock();
+                        writeln!(
+                            w,
+                            "Infraction epoch {}, block height {}, type {}",
+                            slash.epoch, slash.block_height, slash.r#type,
+                        )
+                        .unwrap();
+                    }
+                }
+            } else {
+                println!("No enqueued slashes found for {}", validator.encode())
             }
         }
         None => {
@@ -1774,15 +1805,16 @@ pub async fn query_slashes<C: namada::ledger::queries::Client + Sync>(
             if !all_slashes.is_empty() {
                 let stdout = io::stdout();
                 let mut w = stdout.lock();
+                println!("Processed slashes:");
                 for (validator, slashes) in all_slashes.into_iter() {
                     for slash in slashes {
                         writeln!(
                             w,
-                            "Slash epoch {}, block height {}, rate {}, type \
-                             {}, validator {}",
+                            "Infraction epoch {}, block height {}, rate {}, \
+                             type {}, validator {}",
                             slash.epoch,
                             slash.block_height,
-                            slash.r#type.get_slash_rate(&params),
+                            slash.rate,
                             slash.r#type,
                             validator,
                         )
@@ -1790,7 +1822,41 @@ pub async fn query_slashes<C: namada::ledger::queries::Client + Sync>(
                     }
                 }
             } else {
-                println!("No slashes found")
+                println!("No processed slashes found")
+            }
+
+            // Find enqueued slashes to be processed in the future for the given
+            // validator
+            let enqueued_slashes: HashMap<
+                Address,
+                BTreeMap<Epoch, Vec<Slash>>,
+            > = unwrap_client_response::<
+                C,
+                HashMap<Address, BTreeMap<Epoch, Vec<Slash>>>,
+            >(RPC.vp().pos().enqueued_slashes(client).await);
+            if !enqueued_slashes.is_empty() {
+                println!("\nEnqueued slashes for future processing");
+                for (validator, slashes_by_epoch) in enqueued_slashes {
+                    for (epoch, slashes) in slashes_by_epoch {
+                        println!("\nTo be processed in epoch {}", epoch);
+                        for slash in slashes {
+                            let stdout = io::stdout();
+                            let mut w = stdout.lock();
+                            writeln!(
+                                w,
+                                "Infraction epoch {}, block height {}, type \
+                                 {}, validator {}",
+                                slash.epoch,
+                                slash.block_height,
+                                slash.r#type,
+                                validator
+                            )
+                            .unwrap();
+                        }
+                    }
+                }
+            } else {
+                println!("\nNo enqueued slashes found for future processing")
             }
         }
     }
