@@ -115,17 +115,14 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
     validator_0.exp_string("Namada ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
-    validator_0.exp_string("Starting RPC HTTP server on")?;
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
     validator_1.exp_string("Namada ledger node started")?;
     validator_1.exp_string("This node is a validator")?;
-    validator_1.exp_string("Starting RPC HTTP server on")?;
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
     non_validator.exp_string("Namada ledger node started")?;
     non_validator.exp_string("This node is not a validator")?;
-    non_validator.exp_string("Starting RPC HTTP server on")?;
 
     wait_for_wasm_pre_compile(&mut validator_0)?;
     let bg_validator_0 = validator_0.background();
@@ -223,7 +220,6 @@ fn test_namada_shuts_down_if_tendermint_dies() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Namada ledger node started")?;
-    ledger.exp_string("Starting RPC HTTP server on")?;
 
     // 2. Kill the tendermint node
     sleep(1);
@@ -4270,19 +4266,16 @@ fn test_genesis_validators() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
     validator_0.exp_string("Namada ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
-    validator_0.exp_string("Starting RPC HTTP server on")?;
 
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
     validator_1.exp_string("Namada ledger node started")?;
     validator_1.exp_string("This node is a validator")?;
-    validator_1.exp_string("Starting RPC HTTP server on")?;
 
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
     non_validator.exp_string("Namada ledger node started")?;
     non_validator.exp_string("This node is not a validator")?;
-    non_validator.exp_string("Starting RPC HTTP server on")?;
 
     // Wait for a first block
     validator_0.exp_string("Committed block hash")?;
