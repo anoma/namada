@@ -8,7 +8,8 @@ use namada::core::types::key::{
 };
 use namada::core::types::token::{Amount, Transfer};
 use namada::ledger::gas::VpGasMeter;
-use namada::proto::Tx;
+use namada::ledger::storage::Sha256Hasher;
+use namada::proto::{Code, Signature, Tx};
 use namada::types::chain::ChainId;
 use namada::types::governance::{ProposalVote, VoteType};
 use namada::types::hash::Hash;
@@ -29,6 +30,7 @@ use namada_benches::{
     VP_VALIDATOR_WASM, WASM_DIR,
 };
 use rust_decimal::Decimal;
+use sha2::Digest;
 
 const VP_USER_WASM: &str = "vp_user.wasm";
 const VP_TOKEN_WASM: &str = "vp_token.wasm";
@@ -75,15 +77,34 @@ fn vp_user(c: &mut Criterion) {
     let vp_validator_hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
         .unwrap();
-    let vp = generate_tx(
-        TX_UPDATE_VP_WASM,
-        UpdateVp {
-            addr: defaults::albert_address(),
-            vp_code_hash: vp_validator_hash,
+    //FIXME: shared function?
+    let mut vp = Tx::new(namada::types::transaction::TxType::Decrypted(
+        namada::types::transaction::DecryptedTx::Decrypted {
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: true,
         },
-        None,
+    ));
+    let extra_section = vp.add_section(namada::proto::Section::ExtraData(
+        Code::from_hash(vp_validator_hash),
+    ));
+    let data = UpdateVp {
+        addr: defaults::albert_address(),
+        vp_code_hash: Hash(
+            extra_section
+                .hash(&mut sha2::Sha256::new())
+                .finalize_reset()
+                .into(),
+        ),
+    };
+    vp.set_data(namada::proto::Data::new(data.try_to_vec().unwrap()));
+    vp.set_code(Code::new(wasm_loader::read_wasm_or_exit(
+        WASM_DIR,
+        TX_UPDATE_VP_WASM,
+    )));
+    vp.add_section(namada::proto::Section::Signature(Signature::new(
+        vp.data_sechash(),
         &defaults::albert_keypair(),
-    );
+    )));
 
     let vote = generate_tx(
         TX_VOTE_PROPOSAL_WASM,
@@ -149,6 +170,7 @@ fn vp_user(c: &mut Criterion) {
                     &keys_changed,
                     &verifiers,
                     shell.vp_wasm_cache.clone(),
+                    #[cfg(not(feature = "mainnet"))]
                     false,
                 )
                 .unwrap());
@@ -207,12 +229,11 @@ fn vp_implicit(c: &mut Criterion) {
             has_valid_pow: true,
         },
     ));
-    //FIXME: need to chance the chain_id to bench?
     reveal_pk.set_code(namada::proto::Code::new(
         wasm_loader::read_wasm_or_exit(WASM_DIR, TX_REVEAL_PK_WASM),
     ));
     reveal_pk.set_data(namada::proto::Data::new(
-        Some(implicit_account.to_public()).try_to_vec().unwrap(),
+        implicit_account.to_public().try_to_vec().unwrap(),
     ));
 
     let pos = generate_tx(
@@ -296,6 +317,7 @@ fn vp_implicit(c: &mut Criterion) {
                     &keys_changed,
                     &verifiers,
                     shell.vp_wasm_cache.clone(),
+                    #[cfg(not(feature = "mainnet"))]
                     false,
                 )
                 .unwrap())
@@ -346,15 +368,34 @@ fn vp_validator(c: &mut Criterion) {
         &defaults::bertha_keypair(),
     );
 
-    let vp = generate_tx(
-        TX_UPDATE_VP_WASM,
-        UpdateVp {
-            addr: defaults::validator_address(),
-            vp_code_hash: vp_code_hash.clone(),
+    //FIXME: shared function?
+    let mut vp = Tx::new(namada::types::transaction::TxType::Decrypted(
+        namada::types::transaction::DecryptedTx::Decrypted {
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: true,
         },
-        None,
+    ));
+    let extra_section = vp.add_section(namada::proto::Section::ExtraData(
+        Code::from_hash(vp_code_hash),
+    ));
+    let data = UpdateVp {
+        addr: defaults::validator_address(),
+        vp_code_hash: Hash(
+            extra_section
+                .hash(&mut sha2::Sha256::new())
+                .finalize_reset()
+                .into(),
+        ),
+    };
+    vp.set_data(namada::proto::Data::new(data.try_to_vec().unwrap()));
+    vp.set_code(Code::new(wasm_loader::read_wasm_or_exit(
+        WASM_DIR,
+        TX_UPDATE_VP_WASM,
+    )));
+    vp.add_section(namada::proto::Section::Signature(Signature::new(
+        vp.data_sechash(),
         &defaults::validator_keypair(),
-    );
+    )));
 
     let commission_rate = generate_tx(
         TX_CHANGE_VALIDATOR_COMMISSION_WASM,
@@ -430,6 +471,7 @@ fn vp_validator(c: &mut Criterion) {
                     &keys_changed,
                     &verifiers,
                     shell.vp_wasm_cache.clone(),
+                    #[cfg(not(feature = "mainnet"))]
                     false,
                 )
                 .unwrap());
@@ -489,6 +531,7 @@ fn vp_token(c: &mut Criterion) {
                     &keys_changed,
                     &verifiers,
                     shell.vp_wasm_cache.clone(),
+                    #[cfg(not(feature = "mainnet"))]
                     false,
                 )
                 .unwrap());
@@ -574,6 +617,7 @@ fn vp_masp(c: &mut Criterion) {
                     &keys_changed,
                     &verifiers,
                     shielded_ctx.shell.vp_wasm_cache.clone(),
+                    #[cfg(not(feature = "mainnet"))]
                     false,
                 )
                 .unwrap());

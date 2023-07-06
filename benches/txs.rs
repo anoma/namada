@@ -7,7 +7,7 @@ use namada::core::types::token::Amount;
 use namada::ledger::governance;
 use namada::ledger::storage_api::StorageRead;
 use namada::proof_of_stake;
-use namada::proto::Tx;
+use namada::proto::{Signature, Tx};
 use namada::types::chain::ChainId;
 use namada::types::governance::{ProposalVote, VoteType};
 use namada::types::hash::Hash;
@@ -33,6 +33,7 @@ use namada_benches::{
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use rust_decimal::Decimal;
+use sha2::Digest;
 
 const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
@@ -290,13 +291,12 @@ fn reveal_pk(c: &mut Criterion) {
             has_valid_pow: true,
         },
     ));
-    //FIXME: need to chance the chain_id to bench?
     tx.set_code(namada::proto::Code::new(wasm_loader::read_wasm_or_exit(
         WASM_DIR,
         TX_REVEAL_PK_WASM,
     )));
     tx.set_data(namada::proto::Data::new(
-        Some(new_implicit_account.to_public()).try_to_vec().unwrap(),
+        new_implicit_account.to_public().try_to_vec().unwrap(),
     ));
 
     c.bench_function("reveal_pk", |b| {
@@ -313,20 +313,39 @@ fn update_vp(c: &mut Criterion) {
     let vp_code_hash: Hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
         .unwrap();
-    let signed_tx = generate_tx(
-        TX_UPDATE_VP_WASM,
-        UpdateVp {
-            addr: defaults::albert_address(),
-            vp_code_hash,
+    //FIXME: shared function for this?
+    let mut vp = Tx::new(namada::types::transaction::TxType::Decrypted(
+        namada::types::transaction::DecryptedTx::Decrypted {
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: true,
         },
-        None,
+    ));
+    let extra_section = vp.add_section(namada::proto::Section::ExtraData(
+        namada::proto::Code::from_hash(vp_code_hash),
+    ));
+    let data = UpdateVp {
+        addr: defaults::albert_address(),
+        vp_code_hash: Hash(
+            extra_section
+                .hash(&mut sha2::Sha256::new())
+                .finalize_reset()
+                .into(),
+        ),
+    };
+    vp.set_data(namada::proto::Data::new(data.try_to_vec().unwrap()));
+    vp.set_code(namada::proto::Code::new(wasm_loader::read_wasm_or_exit(
+        WASM_DIR,
+        TX_UPDATE_VP_WASM,
+    )));
+    vp.add_section(namada::proto::Section::Signature(Signature::new(
+        vp.data_sechash(),
         &defaults::albert_keypair(),
-    );
+    )));
 
     c.bench_function("update_vp", |b| {
         b.iter_batched_ref(
             BenchShell::default,
-            |shell| shell.execute_tx(&signed_tx),
+            |shell| shell.execute_tx(&vp),
             criterion::BatchSize::LargeInput,
         )
     });
@@ -343,20 +362,36 @@ fn init_account(c: &mut Criterion) {
     let vp_code_hash: Hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
         .unwrap();
-    let signed_tx = generate_tx(
-        TX_INIT_ACCOUNT_WASM,
-        InitAccount {
-            public_key: new_account.to_public(),
-            vp_code_hash,
+    //FIXME: shared function for txs with extra data?
+    let mut tx = Tx::new(namada::types::transaction::TxType::Decrypted(
+        namada::types::transaction::DecryptedTx::Decrypted {
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: true,
         },
-        None,
+    ));
+    let extra = tx.add_section(namada::proto::Section::ExtraData(
+        namada::proto::Code::from_hash(vp_code_hash),
+    ));
+    let extra_hash =
+        Hash(extra.hash(&mut sha2::Sha256::new()).finalize_reset().into());
+    let data = InitAccount {
+        public_key: new_account.to_public(),
+        vp_code_hash: extra_hash,
+    };
+    tx.set_data(namada::proto::Data::new(data.try_to_vec().unwrap()));
+    tx.set_code(namada::proto::Code::new(wasm_loader::read_wasm_or_exit(
+        WASM_DIR,
+        TX_INIT_ACCOUNT_WASM,
+    )));
+    tx.add_section(namada::proto::Section::Signature(Signature::new(
+        tx.data_sechash(),
         &defaults::albert_keypair(),
-    );
+    )));
 
     c.bench_function("init_account", |b| {
         b.iter_batched_ref(
             BenchShell::default,
-            |shell| shell.execute_tx(&signed_tx),
+            |shell| shell.execute_tx(&tx),
             criterion::BatchSize::LargeInput,
         )
     });
@@ -505,25 +540,38 @@ fn init_validator(c: &mut Criterion) {
     let validator_vp_code_hash: Hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
         .unwrap();
-    let signed_tx = generate_tx(
-        TX_INIT_VALIDATOR_WASM,
-        InitValidator {
-            account_key: defaults::albert_keypair().to_public(),
-            consensus_key,
-            protocol_key,
-            dkg_key,
-            commission_rate: Decimal::default(),
-            max_commission_rate_change: Decimal::default(),
-            validator_vp_code_hash,
+    //FIXME: shared fucntion here?
+    let mut tx = Tx::new(namada::types::transaction::TxType::Decrypted(
+        namada::types::transaction::DecryptedTx::Decrypted {
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: true,
         },
-        None,
-        &defaults::albert_keypair(),
-    );
+    ));
+    let extra = tx.add_section(namada::proto::Section::ExtraData(
+        namada::proto::Code::from_hash(validator_vp_code_hash),
+    ));
+    let extra_hash =
+        Hash(extra.hash(&mut sha2::Sha256::new()).finalize_reset().into());
+    let data = InitValidator {
+        account_key: defaults::albert_keypair().to_public(),
+        consensus_key,
+        protocol_key,
+        dkg_key,
+        commission_rate: Decimal::default(),
+        max_commission_rate_change: Decimal::default(),
+        validator_vp_code_hash: extra_hash,
+    };
+
+    tx.set_data(namada::proto::Data::new(data.try_to_vec().unwrap()));
+    tx.set_code(namada::proto::Code::new(wasm_loader::read_wasm_or_exit(
+        WASM_DIR,
+        TX_INIT_VALIDATOR_WASM,
+    )));
 
     c.bench_function("init_validator", |b| {
         b.iter_batched_ref(
             BenchShell::default,
-            |shell| shell.execute_tx(&signed_tx),
+            |shell| shell.execute_tx(&tx),
             criterion::BatchSize::LargeInput,
         )
     });

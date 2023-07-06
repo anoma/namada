@@ -34,8 +34,9 @@ use namada::types::transaction::governance::{
 use namada_apps::wallet::defaults;
 use namada_apps::wasm_loader;
 use namada_benches::{
-    generate_foreign_key_tx, generate_ibc_transfer_tx, generate_tx, BenchShell,
-    TX_IBC_WASM, TX_INIT_PROPOSAL_WASM, TX_VOTE_PROPOSAL_WASM, WASM_DIR,
+    generate_foreign_key_tx, generate_ibc_transfer_tx, generate_ibc_tx,
+    generate_tx, BenchShell, TX_IBC_WASM, TX_INIT_PROPOSAL_WASM,
+    TX_VOTE_PROPOSAL_WASM, WASM_DIR,
 };
 
 fn replay_protection(c: &mut Criterion) {
@@ -293,14 +294,8 @@ fn ibc(c: &mut Criterion) {
         signer: Signer::from_str(&defaults::albert_address().to_string())
             .unwrap(),
     };
-    let any_msg = msg.to_any();
-    let mut data = vec![];
-    prost::Message::encode(&any_msg, &mut data)
-        .expect("Encoding tx data shouldn't fail");
-
-    // Avoid serializing the data again with borsh
     let open_connection =
-        generate_tx(TX_IBC_WASM, data, None, &defaults::albert_keypair());
+        generate_ibc_tx(TX_IBC_WASM, msg, &defaults::albert_keypair());
 
     // Channel handshake
     let msg = MsgChannelOpenInit {
@@ -313,14 +308,9 @@ fn ibc(c: &mut Criterion) {
         version_proposal: ChannelVersion::new("ics20-1".to_string()),
     };
 
-    let any_msg = msg.to_any();
-    let mut data = vec![];
-    prost::Message::encode(&any_msg, &mut data)
-        .expect("Encoding tx data shouldn't fail");
-
     // Avoid serializing the data again with borsh
     let open_channel =
-        generate_tx(TX_IBC_WASM, data, None, &defaults::albert_keypair());
+        generate_ibc_tx(TX_IBC_WASM, msg, &defaults::albert_keypair());
 
     // Ibc transfer
     let outgoing_transfer = generate_ibc_transfer_tx();

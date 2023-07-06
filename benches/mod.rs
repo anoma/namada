@@ -271,7 +271,7 @@ impl BenchShell {
     pub fn init_ibc_channel(&mut self) {
         // Set connection open
         let client_id =
-            ClientId::new(ClientType::new("tendermint-1".to_string()), 1)
+            ClientId::new(ClientType::new("01-tendermint".to_string()), 1)
                 .unwrap();
         let connection = ConnectionEnd::new(
             ConnectionState::Open,
@@ -337,7 +337,7 @@ impl BenchShell {
 
         // Set client state
         let client_id =
-            ClientId::new(ClientType::new("tendermint-1".to_string()), 1)
+            ClientId::new(ClientType::new("01-tendermint".to_string()), 1)
                 .unwrap();
         let client_state_key = addr_key.join(&Key::from(
             IbcPath::ClientState(
@@ -405,7 +405,7 @@ impl BenchShell {
 pub fn generate_tx(
     //FIXME: rename to generate_signed_tx
     wasm_code_path: &str,
-    data: impl BorshSerialize, //FIXME: shouldn't this be ProtoBuf?
+    data: impl BorshSerialize,
     shielded: Option<Transaction>,
     signer: &SecretKey,
 ) -> Tx {
@@ -415,8 +415,8 @@ pub fn generate_tx(
             has_valid_pow: true,
         },
     ));
-    //FIXME: need to chance the chain_id to bench?
     //FIXME: do I ever need to attach the fee unshielding transaction here?
+    //FIXME: should we use the hash?
     tx.set_code(Code::new(wasm_loader::read_wasm_or_exit(
         WASM_DIR,
         wasm_code_path,
@@ -425,6 +425,43 @@ pub fn generate_tx(
     if let Some(transaction) = shielded {
         tx.add_section(Section::MaspTx(transaction)); //FIXME: need to sign this section?
     }
+
+    // Add signatures
+    tx.add_section(Section::Signature(Signature::new(
+        //FIXME: need to sign the header for the decrypted? Maybe not. Can I use this transaction also for revela pk?
+        &tx.header_hash(),
+        signer,
+    )));
+    // Sign over the transacttion data
+    tx.add_section(Section::Signature(Signature::new(
+        tx.data_sechash(),
+        signer,
+    )));
+
+    tx
+}
+
+pub fn generate_ibc_tx(
+    wasm_code_path: &str,
+    msg: impl Msg,
+    signer: &SecretKey,
+) -> Tx {
+    // This function avoid serializaing the tx data with Borsh
+    let mut tx = Tx::new(namada::types::transaction::TxType::Decrypted(
+        namada::types::transaction::DecryptedTx::Decrypted {
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: true,
+        },
+    ));
+    tx.set_code(Code::new(wasm_loader::read_wasm_or_exit(
+        WASM_DIR,
+        wasm_code_path,
+    )));
+
+    let mut data = vec![];
+    prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+    tx.set_data(Data::new(data));
+
     tx.add_section(Section::Signature(Signature::new(
         //FIXME: need to sign the header for the decrypted? Of not I can use this function also for reveal_pk
         &tx.header_hash(),
@@ -451,7 +488,7 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
         }
         .try_to_vec()
         .unwrap(),
-    )); //FIXME: protobuf?
+    ));
     tx.add_section(Section::Signature(Signature::new(
         &tx.header_hash(),
         signer,
@@ -483,28 +520,8 @@ pub fn generate_ibc_transfer_tx() -> Tx {
         timeout_height_on_b: timeout_height,
         timeout_timestamp_on_b: timeout_timestamp,
     };
-    let any_msg = msg.to_any();
-    let mut data = vec![];
-    prost::Message::encode(&any_msg, &mut data).unwrap();
 
-    // Don't use execute_tx to avoid serializing the data again with borsh
-    let mut tx = Tx::new(namada::types::transaction::TxType::Decrypted(
-        namada::types::transaction::DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: true,
-        },
-    ));
-    tx.set_code(Code::new(wasm_loader::read_wasm_or_exit(
-        WASM_DIR,
-        TX_IBC_WASM,
-    )));
-    tx.set_data(Data::new(data));
-    tx.add_section(Section::Signature(Signature::new(
-        &tx.header_hash(),
-        &defaults::albert_keypair(),
-    )));
-
-    tx
+    generate_ibc_tx(TX_IBC_WASM, msg, &defaults::albert_keypair())
 }
 
 pub struct BenchShieldedCtx {
@@ -635,7 +652,7 @@ impl Default for BenchShieldedCtx {
             base_dir: shell.tempdir.as_ref().canonicalize().unwrap(),
             wasm_dir: None,
         })
-        .unwrap(); //FIXME: remove?
+        .unwrap();
 
         // Generate spending key for Albert and Bertha
         ctx.wallet.gen_spending_key(
@@ -648,7 +665,7 @@ impl Default for BenchShieldedCtx {
             None,
             true,
         );
-        namada_apps::wallet::save(&ctx.wallet).unwrap(); //FIXME: need this?
+        namada_apps::wallet::save(&ctx.wallet).unwrap();
 
         // Generate payment addresses for both Albert and Bertha
         for (alias, viewing_alias) in [
@@ -708,11 +725,6 @@ impl BenchShieldedCtx {
             force: false,
             broadcast_only: false,
             ledger_address: (),
-            // ledger_address: TendermintAddress::Tcp { //FIXME: remove?
-            //     peer_id: None,
-            //     host: "bench-host".to_string(),
-            //     port: 1,
-            // },
             initialized_account_alias: None,
             fee_amount: None,
             fee_token: address::nam(),

@@ -27,7 +27,7 @@ fn process_tx(c: &mut Criterion) {
             target: defaults::bertha_address(),
             token: address::nam(),
             sub_prefix: None,
-            amount: Amount::whole(1000),
+            amount: Amount::whole(1),
             key: None,
             shielded: None,
         },
@@ -39,11 +39,11 @@ fn process_tx(c: &mut Criterion) {
         WrapperTx::new(
             Fee {
                 token: address::nam(),
-                amount_per_gas_unit: Amount::whole(200),
+                amount_per_gas_unit: 1.into(),
             },
             &defaults::albert_keypair(),
             0.into(),
-            1000.into(),
+            5_000_000.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None,
