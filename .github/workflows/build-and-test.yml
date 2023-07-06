@@ -29,7 +29,8 @@ env:
 jobs:
   build-wasm:
     timeout-minutes: 30
-    runs-on: ${{ matrix.os }}
+    runs-on: 
+      group: gians-runners
     container: 
       image: ghcr.io/anoma/namada:wasm-main
     strategy:
@@ -70,7 +71,8 @@ jobs:
 
   test-wasm:
     timeout-minutes: 30
-    runs-on: ${{ matrix.os }}
+    runs-on: 
+      group: gians-runners
     needs: [build-wasm]
     container: 
       image: ghcr.io/anoma/namada:wasm-main
@@ -145,7 +147,8 @@ jobs:
           AWS_REGION: eu-west-1
 
   namada:
-    runs-on: ${{ matrix.os }}
+    runs-on: 
+      group: gians-runners
     timeout-minutes: 80
     needs: [build-wasm]
     strategy:
@@ -374,7 +377,8 @@ jobs:
 
 
   namada-e2e:
-    runs-on: ${{ matrix.os }}
+    runs-on: 
+      group: gians-runners
     # timeout-minutes: 80
     strategy:
       fail-fast: false
