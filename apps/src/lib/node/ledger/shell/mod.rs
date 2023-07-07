@@ -28,6 +28,7 @@ use namada::ledger::eth_bridge::{EthBridgeQueries, EthereumBridgeConfig};
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::BlockGasMeter;
+use namada::ledger::pos::into_tm_voting_power;
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
 };
@@ -1373,6 +1374,59 @@ where
             }
         }
         false
+    }
+
+    fn get_abci_validator_updates(
+        &self,
+        is_genesis: bool,
+    ) -> storage_api::Result<Vec<namada::tendermint_proto::abci::ValidatorUpdate>>
+    {
+        use namada::ledger::pos::namada_proof_of_stake;
+
+        use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
+
+        let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
+        let pos_params =
+            namada_proof_of_stake::read_pos_params(&self.wl_storage)
+                .expect("Could not find the PoS parameters");
+
+        let validator_set_update_fn = if is_genesis {
+            namada_proof_of_stake::genesis_validator_set_tendermint
+        } else {
+            namada_proof_of_stake::validator_set_update_tendermint
+        };
+
+        validator_set_update_fn(
+            &self.wl_storage,
+            &pos_params,
+            current_epoch,
+            |update| {
+                let (consensus_key, power) = match update {
+                    ValidatorSetUpdate::Consensus(ConsensusValidator {
+                        consensus_key,
+                        bonded_stake,
+                    }) => {
+                        let power: i64 = into_tm_voting_power(
+                            pos_params.tm_votes_per_token,
+                            bonded_stake,
+                        );
+                        (consensus_key, power)
+                    }
+                    ValidatorSetUpdate::Deactivated(consensus_key) => {
+                        // Any validators that have been dropped from the
+                        // consensus set must have voting power set to 0 to
+                        // remove them from the conensus set
+                        let power = 0_i64;
+                        (consensus_key, power)
+                    }
+                };
+                let pub_key = TendermintPublicKey {
+                    sum: Some(key_to_tendermint(&consensus_key).unwrap()),
+                };
+                let pub_key = Some(pub_key);
+                ValidatorUpdate { pub_key, power }
+            },
+        )
     }
 }
 
