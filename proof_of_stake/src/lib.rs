@@ -2455,6 +2455,41 @@ where
     Ok((total, total_active))
 }
 
+/// Get the genesis consensus validators stake and consensus key for Tendermint,
+/// converted from [`ValidatorSetUpdate`]s using the given function.
+pub fn genesis_validator_set_tendermint<S, T>(
+    storage: &S,
+    params: &PosParams,
+    current_epoch: Epoch,
+    mut f: impl FnMut(ValidatorSetUpdate) -> T,
+) -> storage_api::Result<Vec<T>>
+where
+    S: StorageRead,
+{
+    let consensus_validator_handle =
+        consensus_validator_set_handle().at(&current_epoch);
+    let iter = consensus_validator_handle.iter(storage)?;
+
+    iter.map(|validator| {
+        let (
+            NestedSubKey::Data {
+                key: new_stake,
+                nested_sub_key: _,
+            },
+            address,
+        ) = validator?;
+        let consensus_key = validator_consensus_key_handle(&address)
+            .get(storage, current_epoch, params)?
+            .unwrap();
+        let converted = f(ValidatorSetUpdate::Consensus(ConsensusValidator {
+            consensus_key,
+            bonded_stake: new_stake,
+        }));
+        Ok(converted)
+    })
+    .collect()
+}
+
 /// Communicate imminent validator set updates to Tendermint. This function is
 /// called two blocks before the start of a new epoch because Tendermint
 /// validator updates become active two blocks after the updates are submitted.
