@@ -4,7 +4,6 @@ use std::collections::HashMap;
 
 use data_encoding::HEXUPPER;
 use namada::ledger::parameters::storage as params_storage;
-use namada::ledger::pos::types::into_tm_voting_power;
 use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ledger::storage_api::token::credit_tokens;
@@ -32,7 +31,6 @@ use super::*;
 use crate::facade::tendermint_proto::abci::{
     Misbehavior as Evidence, VoteInfo,
 };
-use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 use crate::node::ledger::shell::stats::InternalStats;
 
 impl<D, H> Shell<D, H>
@@ -634,45 +632,9 @@ where
     /// changes to the validator sets and consensus parameters
     fn update_epoch(&mut self, response: &mut shim::response::FinalizeBlock) {
         // Apply validator set update
-        let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
-        let pos_params =
-            namada_proof_of_stake::read_pos_params(&self.wl_storage)
-                .expect("Could not find the PoS parameters");
-        // TODO ABCI validator updates on block H affects the validator set
-        // on block H+2, do we need to update a block earlier?
-        response.validator_updates =
-            namada_proof_of_stake::validator_set_update_tendermint(
-                &self.wl_storage,
-                &pos_params,
-                current_epoch,
-                |update| {
-                    let (consensus_key, power) = match update {
-                        ValidatorSetUpdate::Consensus(ConsensusValidator {
-                            consensus_key,
-                            bonded_stake,
-                        }) => {
-                            let power: i64 = into_tm_voting_power(
-                                pos_params.tm_votes_per_token,
-                                bonded_stake,
-                            );
-                            (consensus_key, power)
-                        }
-                        ValidatorSetUpdate::Deactivated(consensus_key) => {
-                            // Any validators that have been dropped from the
-                            // consensus set must have voting power set to 0 to
-                            // remove them from the conensus set
-                            let power = 0_i64;
-                            (consensus_key, power)
-                        }
-                    };
-                    let pub_key = TendermintPublicKey {
-                        sum: Some(key_to_tendermint(&consensus_key).unwrap()),
-                    };
-                    let pub_key = Some(pub_key);
-                    ValidatorUpdate { pub_key, power }
-                },
-            )
-            .expect("Must be able to update validator sets");
+        response.validator_updates = self
+            .get_abci_validator_updates(false)
+            .expect("Must be able to update validator set");
     }
 
     /// Calculate the new inflation rate, mint the new tokens to the PoS
