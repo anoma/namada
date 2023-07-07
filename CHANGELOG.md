@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v0.19.0
+
+Namada 0.19.0 is a minor releasing addressing the integration with the namada trustless ethereum bridge.
+
 ## v0.18.1
 
 Namada 0.18.1 is a patch release that addresses transaction format changes and minor ledger storage improvements.
@@ -157,6 +161,9 @@ wallet address derivation, transaction structure and the ledger stability.
 
 ### BUG FIXES
 
+- Fixed the PrefixIter order of iteration in the write-
+  log to always match the iteration order in the storage.
+  ([#1141](https://github.com/anoma/namada/pull/1141))
 - Persists a newly added storage field for epoch update blocks delay to be
   available after node restart when not `None` which may break consensus.
   ([\#1455](https://github.com/anoma/namada/pull/1455))
@@ -1092,6 +1099,20 @@ Anoma 0.6.0 is a scheduled minor release.
   file and it is missing ([#1044](https://github.com/anoma/anoma/pull/1044))
 - Wallet: various store and API changes and additions for genesis setup.
   ([#1063](https://github.com/anoma/anoma/pull/1063))
+- Ledger: Updated the version of Tendermint used for ABCI++ ([#1088](https://github.com/anoma/anoma/pull/1088))
+    - Add full support for ProcessProposal and FinalizeBlock
+    - Updated the shims
+    - Updated `tendermint-rs`, `ibc-rs`, and `tower-abci` deps
+    - Updated the proto definitions
+    - Added Tendermint's new method of a BFT timestamping
+    - Updated the format of Tendermint's new config
+    - Fixed booting up the tendermint node in the ledger with correct settings
+    - Refactored storage to account for the fact that tendermint no longer passes in block headers
+- Client: Configured Tendermints new event log and JSON RPC API for events querying ([#1088](https://github.com/anoma/anoma/pull/1088))
+    - Added necessary config parameters to our tendermint node's configuration
+    - Wrote a jsonrpc client for querying tendermint's event logs
+    - Refactored how txs are submitted in the client when the `ABCI-plus-plus` feature is
+      set to use jsonrpc calls instead of websockets.
 
 ### MISCELLANEOUS
 
