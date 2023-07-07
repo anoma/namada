@@ -41,6 +41,7 @@ pub mod genesis_config {
     use namada::types::{storage, token};
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
+    use namada::types::uint::Uint;
 
     use super::{
         EstablishedAccount, Genesis, ImplicitAccount, Parameters, TokenAccount,
@@ -200,7 +201,7 @@ pub mod genesis_config {
         // Filename of token account VP. (default: token VP)
         pub vp: Option<String>,
         // Initial balances held by accounts defined elsewhere.
-        pub balances: Option<HashMap<String, token::Amount>>,
+        pub balances: Option<HashMap<String, Uint>>,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]

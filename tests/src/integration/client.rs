@@ -59,6 +59,7 @@ pub fn run(
         }
     };
     let rt = tokio::runtime::Runtime::new().unwrap();
+
     rt.block_on(node.handle_command(cmd))
 }
 
