@@ -751,33 +751,41 @@ pub fn init_network(
             config.ledger.cometbft.p2p.addr_book_strict = !localhost;
             // Clear the net address from the config and use it to set ports
             let net_address = validator_config.net_address.take().unwrap();
-            let ip = SocketAddr::from_str(&net_address).unwrap().ip();
+            let _ip = SocketAddr::from_str(&net_address).unwrap().ip();
             let first_port = SocketAddr::from_str(&net_address).unwrap().port();
-            if !localhost {
+            if localhost {
+                config.ledger.cometbft.p2p.laddr = TendermintAddress::from_str(
+                    &format!("127.0.0.1:{}", first_port),
+                )
+                .unwrap();
+            } else {
                 config.ledger.cometbft.p2p.laddr = TendermintAddress::from_str(
                     &format!("0.0.0.0:{}", first_port),
                 )
                 .unwrap();
             }
-            config.ledger.cometbft.p2p.laddr =
-                TendermintAddress::from_str(&format!("{}:{}", ip, first_port))
-                    .unwrap();
-            if !localhost {
+            if localhost {
+                config.ledger.cometbft.rpc.laddr = TendermintAddress::from_str(
+                    &format!("127.0.0.1:{}", first_port + 1),
+                )
+                .unwrap();
+            } else {
                 config.ledger.cometbft.rpc.laddr = TendermintAddress::from_str(
                     &format!("0.0.0.0:{}", first_port + 1),
                 )
                 .unwrap();
             }
-            config.ledger.cometbft.rpc.laddr = TendermintAddress::from_str(
-                &format!("{}:{}", ip, first_port + 1),
-            )
-            .unwrap();
-
-            config.ledger.cometbft.proxy_app = TendermintAddress::from_str(
-                &format!("{}:{}", ip, first_port + 2),
-            )
-            .unwrap();
-
+            if localhost {
+                config.ledger.cometbft.proxy_app = TendermintAddress::from_str(
+                    &format!("127.0.0.1:{}", first_port + 2),
+                )
+                .unwrap();
+            } else {
+                config.ledger.cometbft.proxy_app = TendermintAddress::from_str(
+                    &format!("0.0.0.0:{}", first_port + 2),
+                )
+                .unwrap();
+            }
             config.write(&validator_dir, &chain_id, true).unwrap();
         },
     );
