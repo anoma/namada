@@ -702,6 +702,8 @@ fn masp_txs_and_queries() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
+    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+
     let txs_args = vec![
         // 2. Attempt to spend 10 BTC at SK(A) to PA(B)
         (
@@ -1113,7 +1115,7 @@ fn masp_incentives() -> Result<()> {
         |genesis| {
             let parameters = ParametersConfig {
                 epochs_per_year: epochs_per_year_from_min_duration(
-                    if is_debug_mode() { 240 } else { 60 },
+                    if is_debug_mode() { 340 } else { 85 },
                 ),
                 min_num_of_blocks: 1,
                 ..genesis.parameters
@@ -1144,7 +1146,7 @@ fn masp_incentives() -> Result<()> {
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     // Wait till epoch boundary
-    let ep0 = get_epoch(&test, &validator_one_rpc)?;
+    let ep0 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
     // Send 20 BTC from Albert to PA(A)
     let mut client = run!(
@@ -1524,7 +1526,7 @@ fn masp_incentives() -> Result<()> {
     client.exp_string("No shielded eth balance found")?;
     client.assert_success();
 
-    let mut ep = get_epoch(&test, &validator_one_rpc)?;
+    // let mut ep = get_epoch(&test, &validator_one_rpc)?;
 
     // Assert NAM balance at VK(B) is 10*ETH_reward*(ep-epoch_3)
     let mut client = run!(
@@ -1541,7 +1543,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
-    let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep.0 - ep3.0);
+    let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0);
     let denominated = DenominatedAmount {
         amount: amt,
         denom: NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -1549,7 +1551,7 @@ fn masp_incentives() -> Result<()> {
     client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
-    ep = get_epoch(&test, &validator_one_rpc)?;
+    // ep = get_epoch(&test, &validator_one_rpc)?;
     // Assert NAM balance at MASP pool is
     // 20*BTC_reward*(epoch_5-epoch_0)+10*ETH_reward*(epoch_5-epoch_3)
     let mut client = run!(
@@ -1566,8 +1568,8 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
-    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep.0 - ep0.0))
-        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep.0 - ep3.0));
+    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep5.0 - ep0.0))
+        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0));
     let denominated = DenominatedAmount {
         amount: amt,
         denom: NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -4275,6 +4277,11 @@ fn test_genesis_validators() -> Result<()> {
     wait_for_wasm_pre_compile(&mut validator_0)?;
     wait_for_wasm_pre_compile(&mut validator_1)?;
     wait_for_wasm_pre_compile(&mut non_validator)?;
+
+    // Wait for a first block
+    validator_0.exp_string("Committed block hash")?;
+    validator_1.exp_string("Committed block hash")?;
+    non_validator.exp_string("Committed block hash")?;
 
     let bg_validator_0 = validator_0.background();
     let bg_validator_1 = validator_1.background();
