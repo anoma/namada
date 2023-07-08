@@ -65,6 +65,11 @@ impl Drop for MockNode {
 }
 
 impl MockNode {
+
+    pub fn current_epoch(&self) -> Epoch {
+        self.shell.lock().unwrap().wl_storage.storage.last_epoch
+    }
+
     pub fn next_epoch(&mut self) -> Epoch {
         {
             let mut locked = self.shell.lock().unwrap();

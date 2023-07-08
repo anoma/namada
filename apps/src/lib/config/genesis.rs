@@ -16,6 +16,7 @@ use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
 use namada::types::token::Denomination;
 use namada::types::{storage, token};
+use namada::types::uint::Uint;
 
 /// Genesis configuration file format
 pub mod genesis_config {
@@ -992,9 +993,9 @@ pub fn genesis(num_validators: u64) -> Genesis {
             public_key: wallet::defaults::ester_keypair().ref_to(),
         },
     ];
-    let default_user_tokens = token::Amount::native_whole(1_000_000);
-    let default_key_tokens = token::Amount::native_whole(1_000);
-    let mut balances: HashMap<Address, token::Amount> = HashMap::from_iter([
+    let default_user_tokens = Uint::from(1_000_000);
+    let default_key_tokens =  Uint::from(1_000_000);
+    let mut balances: HashMap<Address, Uint> = HashMap::from_iter([
         // established accounts' balances
         (wallet::defaults::albert_address(), default_user_tokens),
         (wallet::defaults::bertha_address(), default_user_tokens),
@@ -1040,7 +1041,11 @@ pub fn genesis(num_validators: u64) -> Genesis {
             denom,
             vp_code_path: vp_token_path.into(),
             vp_sha256: Default::default(),
-            balances: balances.clone(),
+            balances: balances
+                .clone()
+                .into_iter()
+                .map(|(k, v)| (k, token::Amount::from_uint(v, denom).unwrap()))
+                .collect(),
         })
         .collect();
     Genesis {

@@ -58,6 +58,7 @@ abciplus = [
     "namada/tendermint-rpc",
 ]
 
+
 [dependencies]
 namada = {path = "../shared", features = ["ferveo-tpke", "masp-tx-gen", "multicore", "http-client"]}
 ark-serialize.workspace = true

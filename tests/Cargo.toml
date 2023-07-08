@@ -24,6 +24,7 @@ abciplus = [
   "namada_vp_prelude/abciplus",
   "namada_tx_prelude/abciplus",
 ]
+
 wasm-runtime = ["namada/wasm-runtime"]
 
 [dependencies]

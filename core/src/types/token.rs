@@ -165,7 +165,10 @@ impl Amount {
             .checked_pow(Uint::from(denom))
             .and_then(|scaling| scaling.checked_mul(uint.into()))
         {
-            Some(amount) => Ok(Self { raw: amount }),
+            Some(amount) => {
+                let raw = amount;
+                Ok(Self { raw})
+            },
             None => Err(AmountParseError::ConvertToDecimal),
         }
     }
