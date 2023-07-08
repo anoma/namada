@@ -1,3 +1,4 @@
+#![feature(internal_output_capture)]
 //! Namada integrations and WASM tests and testing helpers.
 
 #![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
@@ -11,6 +12,9 @@ mod vm_host_env;
 pub use vm_host_env::{ibc, tx, vp};
 #[cfg(test)]
 mod e2e;
+#[cfg(test)]
+#[allow(dead_code)]
+mod integration;
 pub mod native_vp;
 pub mod storage;
 #[cfg(test)]

@@ -381,8 +381,6 @@ impl Default for CLIShieldedUtils {
 
 #[async_trait(?Send)]
 impl masp::ShieldedUtils for CLIShieldedUtils {
-    type C = crate::facade::tendermint_rpc::HttpClient;
-
     fn local_tx_prover(&self) -> LocalTxProver {
         if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR) {
             let params_dir = PathBuf::from(params_dir);

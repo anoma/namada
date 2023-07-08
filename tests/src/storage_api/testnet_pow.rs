@@ -26,7 +26,7 @@ fn test_challenge_and_solution() -> storage_api::Result<()> {
         &mut tx_env.wl_storage,
         &faucet_address,
         difficulty,
-        withdrawal_limit,
+        withdrawal_limit.into(),
     )?;
     tx_env.commit_genesis();
 

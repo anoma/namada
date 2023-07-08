@@ -318,6 +318,7 @@ where
     })
 }
 
+#[cfg(not(test))]
 /// A helper to exit after flushing output, borrowed from `clap::util` module.
 pub fn safe_exit(code: i32) -> ! {
     use std::io::Write;
@@ -326,4 +327,15 @@ pub fn safe_exit(code: i32) -> ! {
     let _ = std::io::stderr().lock().flush();
 
     std::process::exit(code)
+}
+
+#[cfg(test)]
+/// A helper to exit after flushing output, borrowed from `clap::util` module.
+pub fn safe_exit(_: i32) -> ! {
+    use std::io::Write;
+
+    let _ = std::io::stdout().lock().flush();
+    let _ = std::io::stderr().lock().flush();
+
+    panic!("Test failed because the client exited unexpectedly.")
 }

@@ -9,6 +9,25 @@
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
 
+fn read_denom(
+    ctx: &Ctx,
+    token: &Address,
+    sub_prefix: Option<&storage::Key>,
+) -> EnvResult<token::Denomination> {
+    if let Some(sub_prefix) = sub_prefix {
+        if sub_prefix
+            .segments
+            .contains(&storage::DbKeySeg::StringSeg("ibc".to_string()))
+        {
+            return Ok(token::NATIVE_MAX_DECIMAL_PLACES.into());
+        }
+    }
+    let key = token::denom_key(token, sub_prefix);
+    ctx.read_pre(&key).map(|opt_denom| {
+        opt_denom.unwrap_or_else(|| token::NATIVE_MAX_DECIMAL_PLACES.into())
+    })
+}
+
 #[validity_predicate]
 fn validate_tx(
     ctx: &Ctx,
@@ -40,7 +59,7 @@ fn validate_tx(
     }
 
     for key in keys_changed.iter() {
-        let is_valid = if let Some([_, owner]) =
+        let is_valid = if let Some([token, owner]) =
             token::is_any_token_balance_key(key)
         {
             if owner == &addr {
@@ -48,7 +67,7 @@ fn validate_tx(
                 let post: token::Amount =
                     ctx.read_post(key)?.unwrap_or_default();
                 let change = post.change() - pre.change();
-
+                let denom = read_denom(ctx, token, None)?;
                 if !change.non_negative() {
                     // Allow to withdraw without a sig if there's a valid PoW
                     if ctx.has_valid_pow() {
@@ -57,7 +76,10 @@ fn validate_tx(
                                 &ctx.pre(),
                                 &addr,
                             )?;
-                        change >= -max_free_debit.change()
+
+                        token::Amount::from_uint(change.abs(), 0).unwrap()
+                            <= token::Amount::from_uint(max_free_debit, denom)
+                                .unwrap()
                     } else {
                         debug_log!("No PoW solution, a signature is required");
                         // Debit without a solution has to signed
@@ -300,7 +322,7 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();
         let withdrawal_limit = token::Amount::from_uint(MAX_FREE_DEBIT as u64, 0).unwrap();
-        testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
+        testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit.into()).unwrap();
 
         let target = address::testing::established_address_2();
         let token = address::nam();
@@ -345,7 +367,7 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();
         let withdrawal_limit = token::Amount::from_uint(MAX_FREE_DEBIT as u64, 0).unwrap();
-        testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
+        testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit.into()).unwrap();
 
         let target = address::testing::established_address_2();
         let target_key = key::testing::keypair_1();
@@ -409,7 +431,7 @@ mod tests {
             // Init the VP
             let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();
             let withdrawal_limit = token::Amount::from_uint(MAX_FREE_DEBIT as u64, 0).unwrap();
-            testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
+            testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit.into()).unwrap();
 
             let keypair = key::testing::keypair_1();
             let public_key = &keypair.ref_to();

@@ -17,7 +17,7 @@ use super::storage_api;
 use crate::types::storage::BlockHeight;
 
 #[macro_use]
-mod router;
+pub mod router;
 mod shell;
 mod types;
 pub mod vp;

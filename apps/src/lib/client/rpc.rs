@@ -110,7 +110,7 @@ pub async fn query_results<C: namada::ledger::queries::Client + Sync>(
 /// Query the specified accepted transfers from the ledger
 pub async fn query_transfers<
     C: namada::ledger::queries::Client + Sync,
-    U: ShieldedUtils<C = C>,
+    U: ShieldedUtils,
 >(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
@@ -262,7 +262,7 @@ pub async fn query_raw_bytes<C: namada::ledger::queries::Client + Sync>(
 /// Query token balance(s)
 pub async fn query_balance<
     C: namada::ledger::queries::Client + Sync,
-    U: ShieldedUtils<C = C>,
+    U: ShieldedUtils,
 >(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
@@ -396,7 +396,7 @@ pub async fn query_transparent_balance<
 /// Query the token pinned balance(s)
 pub async fn query_pinned_balance<
     C: namada::ledger::queries::Client + Sync,
-    U: ShieldedUtils<C = C>,
+    U: ShieldedUtils,
 >(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
@@ -760,7 +760,7 @@ pub async fn query_proposal<C: namada::ledger::queries::Client + Sync>(
 /// Query token shielded balance(s)
 pub async fn query_shielded_balance<
     C: namada::ledger::queries::Client + Sync,
-    U: ShieldedUtils<C = C>,
+    U: ShieldedUtils,
 >(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,

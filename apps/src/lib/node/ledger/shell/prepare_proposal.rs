@@ -91,7 +91,7 @@ where
     /// Otherwise, we return an allocator wrapped in an
     /// [`EncryptedTxBatchAllocator::WithEncryptedTxs`] value.
     #[inline]
-    fn get_encrypted_txs_allocator(&self) -> EncryptedTxBatchAllocator {
+    pub fn get_encrypted_txs_allocator(&self) -> EncryptedTxBatchAllocator {
         let pos_queries = self.wl_storage.pos_queries();
 
         let is_2nd_height_off = pos_queries.is_deciding_offset_within_epoch(1);

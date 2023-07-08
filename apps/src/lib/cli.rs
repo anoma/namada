@@ -7,7 +7,7 @@
 //! respectively.
 
 pub mod context;
-mod utils;
+pub mod utils;
 
 use clap::{AppSettings, ArgGroup, ArgMatches};
 use color_eyre::eyre::Result;
@@ -3336,7 +3336,9 @@ pub mod args {
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
                 expiration: self.expiration,
-                chain_id: self.chain_id,
+                chain_id: self
+                    .chain_id
+                    .or_else(|| Some(ctx.config.ledger.chain_id.clone())),
             }
         }
     }

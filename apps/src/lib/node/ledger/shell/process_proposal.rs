@@ -503,7 +503,7 @@ where
 
     /// Checks if it is not possible to include encrypted txs at the current
     /// block height.
-    fn encrypted_txs_not_allowed(&self) -> bool {
+    pub fn encrypted_txs_not_allowed(&self) -> bool {
         let pos_queries = self.wl_storage.pos_queries();
         let is_2nd_height_off = pos_queries.is_deciding_offset_within_epoch(1);
         let is_3rd_height_off = pos_queries.is_deciding_offset_within_epoch(2);
