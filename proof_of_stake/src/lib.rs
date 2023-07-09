@@ -3336,6 +3336,7 @@ where
         let infracting_stake = slashes.iter(storage)?.fold(
             Ok(Dec::zero()),
             |acc: storage_api::Result<Dec>, res| {
+                let acc = acc?;
                 let (
                     NestedSubKey::Data {
                         key: validator,
@@ -3349,11 +3350,7 @@ where
                         .unwrap_or_default();
                 // println!("Val {} stake: {}", &validator, validator_stake);
 
-                if let Ok(inner) = acc {
-                    Ok(inner + Dec::from(validator_stake))
-                } else {
-                    acc
-                }
+                Ok(acc + Dec::from(validator_stake))
                 // TODO: does something more complex need to be done
                 // here in the event some of these slashes correspond to
                 // the same validator?
