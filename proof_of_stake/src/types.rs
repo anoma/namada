@@ -29,6 +29,10 @@ use crate::parameters::PosParams;
 // core::types::token::NATIVE_MAX_DECIMAL_PLACES??
 const U64_MAX: u64 = u64::MAX;
 
+/// Number of epochs below the current epoch for which validator deltas and
+/// slashes are stored
+const VALIDATOR_DELTAS_SLASHES_LEN: u64 = 23;
+
 // TODO: add this to the spec
 /// Stored positions of validators in validator sets
 pub type ValidatorSetPositions = crate::epoched::NestedEpoched<
@@ -129,14 +133,14 @@ pub type TotalConsensusStakes =
 pub type ValidatorDeltas = crate::epoched::EpochedDelta<
     token::Change,
     crate::epoched::OffsetUnbondingLen,
-    23,
+    VALIDATOR_DELTAS_SLASHES_LEN,
 >;
 
 /// Epoched total deltas.
 pub type TotalDeltas = crate::epoched::EpochedDelta<
     token::Change,
     crate::epoched::OffsetUnbondingLen,
-    23,
+    VALIDATOR_DELTAS_SLASHES_LEN,
 >;
 
 /// Epoched validator commission rate
@@ -168,7 +172,7 @@ pub type ValidatorSlashes = NestedMap<Address, Slashes>;
 pub type EpochedSlashes = crate::epoched::NestedEpoched<
     ValidatorSlashes,
     crate::epoched::OffsetUnbondingLen,
-    23,
+    VALIDATOR_DELTAS_SLASHES_LEN,
 >;
 
 /// Epoched validator's unbonds
