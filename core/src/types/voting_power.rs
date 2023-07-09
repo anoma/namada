@@ -31,6 +31,12 @@ use crate::types::uint::Uint;
 )]
 pub struct EthBridgeVotingPower(u64);
 
+impl EthBridgeVotingPower {
+    /// Maximum value that can be represented for the voting power
+    /// stored in an Ethereum bridge smart contract.
+    pub const MAX: Self = Self(1 << 32);
+}
+
 impl From<u64> for EthBridgeVotingPower {
     fn from(val: u64) -> Self {
         Self(val)
