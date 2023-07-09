@@ -47,7 +47,8 @@ impl From<&FractionalVotingPower> for EthBridgeVotingPower {
     fn from(ratio: &FractionalVotingPower) -> Self {
         // normalize the voting power
         // https://github.com/anoma/ethereum-bridge/blob/fe93d2e95ddb193a759811a79c8464ad4d709c12/test/utils/utilities.js#L29
-        const NORMALIZED_VOTING_POWER: Uint = Uint::from_u64(1 << 32);
+        const NORMALIZED_VOTING_POWER: Uint =
+            Uint::from_u64(EthBridgeVotingPower::MAX.0);
 
         let voting_power = ratio.0 * NORMALIZED_VOTING_POWER;
         let voting_power = voting_power.round().to_integer().low_u64();
