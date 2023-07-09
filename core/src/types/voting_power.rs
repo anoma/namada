@@ -37,9 +37,16 @@ impl EthBridgeVotingPower {
     pub const MAX: Self = Self(1 << 32);
 }
 
-impl From<u64> for EthBridgeVotingPower {
-    fn from(val: u64) -> Self {
-        Self(val)
+impl TryFrom<u64> for EthBridgeVotingPower {
+    type Error = ();
+
+    #[inline]
+    fn try_from(val: u64) -> Result<Self, ()> {
+        if val <= Self::MAX.0 {
+            Ok(Self(val))
+        } else {
+            Err(())
+        }
     }
 }
 
