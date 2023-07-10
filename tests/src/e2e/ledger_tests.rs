@@ -1568,7 +1568,7 @@ fn masp_incentives() -> Result<()> {
         Some(60)
     )?;
     let amt = ((amt20 * masp_rewards[&btc()]).0 * (ep5.0 - ep0.0))
-        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0));
+        + ((amt10 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0));
     let denominated = DenominatedAmount {
         amount: amt,
         denom: NATIVE_MAX_DECIMAL_PLACES.into(),
