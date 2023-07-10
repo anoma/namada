@@ -203,8 +203,21 @@ pub type OutgoingRedelegations =
 /// A validator's total redelegated unbonded tokens
 /// TODO: understand better, better description
 pub type TotalRedelegatedUnbonded = NestedMap<
+    // unbond withdrawble epoch
     Epoch,
-    NestedMap<Epoch, NestedMap<Address, LazyMap<Epoch, token::Amount>>>,
+    NestedMap<
+        // redelegation start epoch
+        Epoch,
+        NestedMap<
+            // redelegation source validator
+            Address,
+            LazyMap<
+                // bond start epoch
+                Epoch,
+                token::Amount,
+            >,
+        >,
+    >,
 >;
 
 /// Map of redelegated bonds
@@ -213,7 +226,15 @@ pub type TotalRedelegatedUnbonded = NestedMap<
 pub type RedelegatedBonds = NestedMap<Address, LazyMap<Epoch, token::Change>>;
 
 /// In-memory map of redelegated bonds
-pub type RedelegatedBondsMap = HashMap<Address, HashMap<Epoch, token::Change>>;
+pub type RedelegatedBondsMap = HashMap<
+    // source validator
+    Address,
+    HashMap<
+        // bond start epoch
+        Epoch,
+        token::Change,
+    >,
+>;
 
 /// A delegator's redelegated bonded token amount
 /// TODO: better understanding and description

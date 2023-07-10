@@ -14,6 +14,6 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         &redelegation.owner,
         &redelegation.src_validator,
         &redelegation.dest_validator,
-        &redelegation.amount,
+        redelegation.amount,
     )
 }

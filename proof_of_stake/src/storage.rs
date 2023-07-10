@@ -45,6 +45,8 @@ const CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY: &str =
     "validator_rewards_accumulator";
 const VALIDATOR_INCOMING_REDELEGATIONS_KEY: &str = "incoming_redelegations";
 const VALIDATOR_OUTGOING_REDELEGATIONS_KEY: &str = "outgoing_redelegations";
+const VALIDATOR_TOTAL_REDELEGATED_UNBONDED_KEY: &str =
+    "total_redelegated_unbonded";
 const DELEGATOR_REDELEGATED_BONDS_KEY: &str = "delegator_redelegated_bonds";
 const DELEGATOR_REDELEGATED_UNBONDS_KEY: &str = "delegator_redelegated_unbonds";
 
@@ -277,6 +279,14 @@ pub fn validator_outgoing_redelegations_key(validator: &Address) -> Key {
         .expect("Cannot obtain a storage key")
 }
 
+/// Storage key for validator's total-redelegated-unbonded amount to track for
+/// slashing
+pub fn validator_total_redelegated_unbonded_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_TOTAL_REDELEGATED_UNBONDED_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
 /// Storage key prefix for all delegators' redelegated bonds.
 pub fn delegator_redelegated_bonds_prefix() -> Key {
     Key::from(ADDRESS.to_db_key())
@@ -300,7 +310,7 @@ pub fn delegator_redelegated_unbonds_prefix() -> Key {
 
 /// Storage key for a particular delegator's redelegated unbond information.
 pub fn delegator_redelegated_unbonds_key(delegator: &Address) -> Key {
-    delegator_redelegated_bonds_prefix()
+    delegator_redelegated_unbonds_prefix()
         .push(&delegator.to_db_key())
         .expect("Cannot obtain a storage key")
 }
