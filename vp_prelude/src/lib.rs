@@ -88,16 +88,14 @@ pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
         storage_api::account::threshold(&ctx.pre(), owner)?.unwrap_or(1);
 
     let tx_data_hash = tx.data_sechash();
-    let is_correctly_signed = tx
-        .verify_section_signatures(
-            tx_data_hash,
-            public_keys_index_map,
-            threshold,
-            max_signatures_per_transaction,
-        )
-        .is_ok();
-
-    Ok(is_correctly_signed)
+    tx.verify_section_signatures(
+        tx_data_hash,
+        public_keys_index_map,
+        threshold,
+        max_signatures_per_transaction,
+    )
+    .map_err(|_e| Error::SimpleMessage("Invalid signatures"))
+    .map(|_| true)
 }
 
 /// Checks whether a transaction is valid, which happens in two cases:

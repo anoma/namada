@@ -120,27 +120,6 @@ pub async fn submit_init_validator<
 
     let validator_key_alias = format!("{}-key", alias);
     let consensus_key_alias = format!("{}-consensus-key", alias);
-    let account_keys = if !account_keys.is_empty() {
-        account_keys
-    } else {
-        println!("Generating validator account key...");
-        let password =
-            read_and_confirm_encryption_password(unsafe_dont_encrypt);
-        let public_key = ctx
-            .wallet
-            .gen_key(
-                scheme,
-                Some(validator_key_alias.clone()),
-                tx_args.wallet_alias_force,
-                password,
-                None,
-            )
-            .expect("Key generation should not fail.")
-            .expect("No existing alias expected.")
-            .1
-            .ref_to();
-        vec![public_key]
-    };
 
     let threshold = match threshold {
         Some(threshold) => threshold,

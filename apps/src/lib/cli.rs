@@ -2175,6 +2175,10 @@ pub mod args {
                      will be passed to the transaction code when it's \
                      executed.",
                 ))
+                .arg(OWNER.def().about(
+                    "The address corresponding to the signatures or signing \
+                     keys.",
+                ))
         }
     }
 
@@ -2418,11 +2422,16 @@ pub mod args {
                     "The key scheme/type used for the validator keys. \
                      Currently supports ed25519 and secp256k1.",
                 ))
-                .arg(VALIDATOR_ACCOUNT_KEYS.def().about(
-                    "A list public keys to be associated with the new account \
-                     in hexadecimal encoding. A new one will be generated if \
-                     none given.",
-                ))
+                .arg(
+                    VALIDATOR_ACCOUNT_KEYS
+                        .def()
+                        .about(
+                            "A list public keys to be associated with the new \
+                             account in hexadecimal encoding. A new one will \
+                             be generated if none given.",
+                        )
+                        .min_values(1),
+                )
                 .arg(VALIDATOR_CONSENSUS_KEY.def().about(
                     "A consensus key for the validator account. A new one \
                      will be generated if none given.",
@@ -2777,6 +2786,7 @@ pub mod args {
                         )
                         .conflicts_with(PROPOSAL_ID.name),
                 )
+                .arg(ADDRESS.def().about("The address of the voter."))
         }
     }
 

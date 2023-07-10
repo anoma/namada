@@ -245,8 +245,9 @@ pub async fn sign_tx<
         &public_keys_index_map,
     );
 
-    if code_section_multisig.total_signatures() < threshold
-        || data_section_multisig.total_signatures() < threshold
+    if (code_section_multisig.total_signatures() < threshold
+        || data_section_multisig.total_signatures() < threshold)
+        && !args.force
     {
         return Err(Error::MissingSigningKeys(
             threshold,
