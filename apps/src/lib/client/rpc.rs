@@ -520,15 +520,20 @@ async fn print_balances<C: namada::ledger::queries::Client + Sync>(
             ),
             None => continue,
         };
-
         // Get the token and the balance
         let (t, s) = match (token, target) {
+            // the given token and the given target are the same as the
+            // retrieved ones
             (Some(token), Some(target)) if t == *token && o == *target => {
                 (t, s)
             }
+            // the given token is the same as the retrieved one
             (Some(token), None) if t == *token => (t, s),
+            // the given target is the same as the retrieved one
             (None, Some(target)) if o == *target => (t, s),
+            // no specified token or target
             (None, None) => (t, s),
+            // otherwise, this balance will not be printed
             _ => continue,
         };
         // Print the token if it isn't printed yet
