@@ -4387,7 +4387,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
             .map(|x| x.to_owned())
             .collect()
         }),
-        Submit proposal
+        // Submit proposal
         Box::new(|source| {
             // Gen data for proposal tx
             let source = find_address(&test, source).unwrap();
