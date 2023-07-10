@@ -4269,14 +4269,14 @@ fn test_genesis_validators() -> Result<()> {
     non_validator.exp_string("Namada ledger node started")?;
     non_validator.exp_string("This node is not a validator")?;
 
+    wait_for_wasm_pre_compile(&mut validator_0)?;
+    wait_for_wasm_pre_compile(&mut validator_1)?;
+    wait_for_wasm_pre_compile(&mut non_validator)?;
+
     // Wait for a first block
     validator_0.exp_string("Committed block hash")?;
     validator_1.exp_string("Committed block hash")?;
     non_validator.exp_string("Committed block hash")?;
-
-    wait_for_wasm_pre_compile(&mut validator_0)?;
-    wait_for_wasm_pre_compile(&mut validator_1)?;
-    wait_for_wasm_pre_compile(&mut non_validator)?;
 
     // Wait for a first block
     validator_0.exp_string("Committed block hash")?;
