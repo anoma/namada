@@ -124,7 +124,8 @@ pub mod genesis_config {
         /// Testnet faucet PoW difficulty - defaults to `0` when not set
         pub faucet_pow_difficulty: Option<testnet_pow::Difficulty>,
         #[cfg(not(feature = "mainnet"))]
-        /// Testnet faucet withdrawal limit - defaults to 1000 tokens when not set
+        /// Testnet faucet withdrawal limit - defaults to 1000 tokens when not
+        /// set
         pub faucet_withdrawal_limit: Option<Uint>,
         // Initial validator set
         pub validator: HashMap<String, ValidatorConfig>,

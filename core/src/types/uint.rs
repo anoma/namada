@@ -63,7 +63,7 @@ impl<'de> serde::Deserialize<'de> for Uint {
         let digits = amount_string
             .chars()
             .filter_map(|c| {
-                if c.is_digit(10) {
+                if c.is_ascii_digit() {
                     c.to_digit(10).map(Uint::from)
                 } else {
                     None
