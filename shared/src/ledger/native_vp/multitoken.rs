@@ -120,9 +120,8 @@ where
         };
         match token {
             Address::Internal(InternalAddress::Erc20(_)) => {
-                if minter == Address::Internal(InternalAddress::EthBridge) {
-                    return Ok(Some(minter));
-                }
+                // ERC20 token should not be minted by a wasm transaction
+                return Ok(None);
             }
             Address::Internal(InternalAddress::IbcToken(_)) => {
                 if minter == Address::Internal(InternalAddress::Ibc) {
@@ -155,6 +154,7 @@ mod tests {
     };
     use crate::eth_bridge::storage::wrapped_erc20s;
     use crate::ledger::gas::VpGasMeter;
+    use crate::ledger::ibc::storage::ibc_token;
     use crate::proto::{Code, Data, Section, Signature, Tx};
     use crate::types::address::{Address, InternalAddress};
     use crate::types::ethereum_events::testing::arbitrary_eth_address;
@@ -294,8 +294,8 @@ mod tests {
         let mut wl_storage = TestWlStorage::default();
         let mut keys_changed = BTreeSet::new();
 
-        // ERC20 token
-        let token = wrapped_erc20s::token(&arbitrary_eth_address());
+        // IBC token
+        let token = ibc_token("/port-42/channel-42/denom");
 
         // mint 100
         let target = established_address_1();
@@ -315,7 +315,7 @@ mod tests {
         keys_changed.insert(minted_key);
 
         // minter
-        let minter = Address::Internal(InternalAddress::EthBridge);
+        let minter = Address::Internal(InternalAddress::Ibc);
         let minter_key = minter_key(&token);
         wl_storage
             .write_log

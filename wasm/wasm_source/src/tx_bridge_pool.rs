@@ -46,13 +46,12 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
     } else {
         // Otherwise we escrow ERC20 tokens.
         let token = wrapped_erc20s::token(&asset);
-        let amount = amount.denominated(&eth_bridge::ADDRESS, ctx)?;
         token::transfer(
             ctx,
             sender,
             &bridge_pool::BRIDGE_POOL_ADDRESS,
             &token,
-            amount,
+            amount.native_denominated(),
             &None,
             &None,
             &None,

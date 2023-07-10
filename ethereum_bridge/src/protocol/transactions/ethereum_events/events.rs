@@ -3,7 +3,7 @@
 use std::collections::{BTreeSet, HashSet};
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
 use eyre::{Result, WrapErr};
 use namada_core::hints;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
@@ -26,7 +26,7 @@ use namada_core::types::ethereum_events::{
 };
 use namada_core::types::storage::{BlockHeight, Key, KeySeg};
 use namada_core::types::token;
-use namada_core::types::token::{balance_key, minted_balance_key, minter_key};
+use namada_core::types::token::{balance_key, minted_balance_key};
 
 use crate::parameters::read_native_erc20_address;
 use crate::protocol::transactions::update;
@@ -265,9 +265,8 @@ where
     })?;
     _ = changed_keys.insert(supply_key);
 
-    let minter_key = minter_key(&token);
-    wl_storage.write_bytes(&minter_key, BRIDGE_POOL_ADDRESS.try_to_vec()?)?;
-    _ = changed_keys.insert(minter_key);
+    // mint the token without a minter because a protocol tx doesn't need to
+    // trigger a VP
 
     Ok(changed_keys)
 }
@@ -757,7 +756,7 @@ mod tests {
 
         assert_eq!(
             stored_keys_count(&wl_storage),
-            initial_stored_keys_count + 3
+            initial_stored_keys_count + 2
         );
     }
 
@@ -789,7 +788,7 @@ mod tests {
 
         assert_eq!(
             stored_keys_count(&wl_storage),
-            initial_stored_keys_count + 3
+            initial_stored_keys_count + 2
         );
 
         let expected_amount = amount.try_to_vec().unwrap();

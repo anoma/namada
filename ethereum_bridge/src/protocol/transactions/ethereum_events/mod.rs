@@ -284,9 +284,7 @@ mod tests {
     use namada_core::types::ethereum_events::{
         EthereumEvent, TransferToNamada,
     };
-    use namada_core::types::token::{
-        balance_key, minted_balance_key, minter_key, Amount,
-    };
+    use namada_core::types::token::{balance_key, minted_balance_key, Amount};
 
     use super::*;
     use crate::protocol::transactions::utils::GetVoters;
@@ -347,7 +345,6 @@ mod tests {
                 eth_msg_keys.voting_started_epoch(),
                 balance_key(&wrapped_erc20_token, &receiver),
                 minted_balance_key(&wrapped_erc20_token),
-                minter_key(&wrapped_erc20_token),
             ]),
             changed_keys
         );
@@ -449,7 +446,6 @@ mod tests {
                 eth_msg_keys.voting_started_epoch(),
                 balance_key(&dai_token, &receiver),
                 minted_balance_key(&dai_token),
-                minter_key(&dai_token),
             ])
         );
         assert!(tx_result.vps_result.accepted_vps.is_empty());
