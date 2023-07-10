@@ -56,8 +56,9 @@ use storage::{
     validator_address_raw_hash_key, validator_last_slash_key,
     validator_max_commission_rate_change_key, BondDetails,
     BondsAndUnbondsDetail, BondsAndUnbondsDetails, EpochedSlashes,
-    ReverseOrdTokenAmount, RewardsAccumulator, SlashedAmount, TotalConsensusStakes, UnbondDetails,
-    ValidatorAddresses, ValidatorUnbondRecords,
+    ReverseOrdTokenAmount, RewardsAccumulator, SlashedAmount,
+    TotalConsensusStakes, UnbondDetails, ValidatorAddresses,
+    ValidatorUnbondRecords,
 };
 use thiserror::Error;
 use types::{
