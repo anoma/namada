@@ -443,7 +443,8 @@ pub fn epoch_sleep(
 /// Wait for txs and VPs WASM compilations to finish. This is useful to avoid a
 /// timeout when submitting a first tx.
 pub fn wait_for_wasm_pre_compile(ledger: &mut NamadaCmd) -> Result<()> {
-    ledger.exp_string("Finished compiling all")?;
-    ledger.exp_string("Finished compiling all")?;
+    // Assumes that VPs are always done compiling before txs
+    ledger.exp_string("Finished compiling all VP.")?;
+    ledger.exp_string("Finished compiling all Tx.")?;
     Ok(())
 }
