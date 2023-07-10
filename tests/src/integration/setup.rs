@@ -94,7 +94,7 @@ fn create_node(
     genesis: &GenesisConfig,
     keep_temp: bool,
 ) -> Result<MockNode> {
-    // look up the chain id from the genesis file.
+    // look up the chain id from the global file.
     let chain_id = if let toml::Value::String(chain_id) =
         toml::from_str::<Table>(
             &std::fs::read_to_string(

@@ -249,10 +249,9 @@ where
                 let difficulty =
                     genesis.faucet_pow_difficulty.unwrap_or_default();
                 // withdrawal limit defaults to 1000 NAM when not set
-                let withdrawal_limit =
-                    genesis.faucet_withdrawal_limit.unwrap_or_else(|| {
-                        token::Amount::native_whole(1_000).into()
-                    });
+                let withdrawal_limit = genesis
+                    .faucet_withdrawal_limit
+                    .unwrap_or_else(|| token::Amount::native_whole(1_000));
                 testnet_pow::init_faucet_storage(
                     &mut self.wl_storage,
                     &address,

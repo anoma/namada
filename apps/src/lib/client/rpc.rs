@@ -51,6 +51,7 @@ use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
 use namada::types::token::{Change, Denomination, MaspDenom, TokenAddress};
 use namada::types::{storage, token};
 
+use crate::cli::utils::prompt;
 use crate::cli::{self, args};
 use crate::facade::tendermint::merkle::proof::Proof;
 use crate::facade::tendermint_rpc::error::Error as TError;
@@ -438,10 +439,8 @@ pub async fn query_pinned_balance<
         }
         // If a suitable viewing key was not found, then demand it from the user
         if balance == pinned_error {
-            print!("Enter the viewing key for {}: ", owner);
-            io::stdout().flush().unwrap();
-            let mut vk_str = String::new();
-            io::stdin().read_line(&mut vk_str).unwrap();
+            let vk_str =
+                prompt(&format!("Enter the viewing key for {}: ", owner));
             let fvk = match ExtendedViewingKey::from_str(vk_str.trim()) {
                 Ok(fvk) => fvk,
                 _ => {

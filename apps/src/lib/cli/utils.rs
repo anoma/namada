@@ -1,5 +1,6 @@
 //! Command line interface utilities
 use std::fmt::Debug;
+use std::io::Write;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
@@ -322,25 +323,45 @@ where
     })
 }
 
-#[cfg(not(test))]
+#[cfg(not(feature = "testing"))]
 /// A helper to exit after flushing output, borrowed from `clap::util` module.
 pub fn safe_exit(code: i32) -> ! {
     use std::io::Write;
 
     let _ = std::io::stdout().lock().flush();
     let _ = std::io::stderr().lock().flush();
-
 
     std::process::exit(code)
 }
 
-#[cfg(test)]
+#[cfg(feature = "testing")]
 /// A helper to exit after flushing output, borrowed from `clap::util` module.
-pub fn safe_exit(code: i32) -> ! {
-    use std::io::Write;
-
+pub fn safe_exit(_: i32) -> ! {
     let _ = std::io::stdout().lock().flush();
     let _ = std::io::stderr().lock().flush();
 
     panic!("Test failed because the client exited unexpectedly.")
+}
+
+pub fn prompt_aux<R, W>(mut reader: R, mut writer: W, question: &str) -> String
+where
+    R: std::io::Read,
+    W: Write,
+{
+    write!(&mut writer, "{}", question).expect("Unable to write");
+    std::io::stdout().flush().unwrap();
+    let mut s = String::new();
+    reader.read_to_string(&mut s).expect("Unable to read");
+    s
+}
+
+#[cfg(feature = "dev")]
+pub fn prompt(question: &str) -> String {
+    let file = std::fs::File::open("stdin.mock").unwrap();
+    prompt_aux(file, std::io::stdout(), question)
+}
+
+#[cfg(not(feature = "dev"))]
+pub fn prompt(mut reader: R, question: &str) -> String {
+    prompt_aux(std::io::stdin().lock(), std::io::stdout(), question)
 }

@@ -1,4 +1,5 @@
 use std::mem::ManuallyDrop;
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
@@ -65,6 +66,26 @@ impl Drop for MockNode {
 }
 
 impl MockNode {
+    pub fn genesis_dir(&self) -> PathBuf {
+        self.test_dir
+            .as_ref()
+            .join(self.shell.lock().unwrap().chain_id.to_string())
+    }
+
+    pub fn genesis_path(&self) -> PathBuf {
+        self.test_dir.as_ref().join(format!(
+            "{}.toml",
+            self.shell.lock().unwrap().chain_id.to_string()
+        ))
+    }
+
+    pub fn wasm_dir(&self) -> PathBuf {
+        self.genesis_path().join("wasm")
+    }
+
+    pub fn wallet_path(&self) -> PathBuf {
+        self.genesis_dir().join("wallet.toml")
+    }
 
     pub fn current_epoch(&self) -> Epoch {
         self.shell.lock().unwrap().wl_storage.storage.last_epoch

@@ -167,8 +167,8 @@ impl Amount {
         {
             Some(amount) => {
                 let raw = amount;
-                Ok(Self { raw})
-            },
+                Ok(Self { raw })
+            }
             None => Err(AmountParseError::ConvertToDecimal),
         }
     }

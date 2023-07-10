@@ -8,7 +8,11 @@ use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 
 use super::client::run;
 use super::setup;
-use crate::e2e::setup::constants::{A_SPENDING_KEY, AA_PAYMENT_ADDRESS, AA_VIEWING_KEY, AB_PAYMENT_ADDRESS, AB_VIEWING_KEY, ALBERT, B_SPENDING_KEY, BERTHA, BTC, CHRISTEL, ETH, MASP, NAM};
+use crate::e2e::setup::constants::{
+    AA_PAYMENT_ADDRESS, AA_VIEWING_KEY, AB_PAYMENT_ADDRESS, AB_VIEWING_KEY,
+    AC_PAYMENT_ADDRESS, AC_VIEWING_KEY, ALBERT, A_SPENDING_KEY, BERTHA, BTC,
+    B_SPENDING_KEY, CHRISTEL, ETH, MASP, NAM,
+};
 use crate::e2e::setup::Bin;
 use crate::integration::client::CapturedOutput;
 
@@ -19,7 +23,7 @@ fn masp_incentives() -> Result<()> {
     // The number of decimal places used by ETH amounts.
     const ETH_DENOMINATION: u8 = 18;
     // This address doesn't matter for tests. But an argument is required.
-    let validator_one_rpc= "127.0.0.1:26567";
+    let validator_one_rpc = "127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = CLIShieldedUtils::new(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
@@ -69,8 +73,8 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.contains("btc: 20"));
 
     // Assert NAM balance at VK(A) is 0
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -81,8 +85,9 @@ fn masp_incentives() -> Result<()> {
                 NAM,
                 "--node",
                 validator_one_rpc,
-            ])
-    );
+            ],
+        )
+    });
     assert!(captured.result.is_ok());
     assert!(captured.contains("No shielded nam balance found"));
 
@@ -92,8 +97,8 @@ fn masp_incentives() -> Result<()> {
     let ep1 = node.next_epoch();
 
     // Assert BTC balance at VK(A) is 20
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -103,10 +108,10 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 BTC,
                 "--node",
-                validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     assert!(captured.result.is_ok());
     assert!(captured.contains("btc: 20"));
 
@@ -114,8 +119,8 @@ fn masp_incentives() -> Result<()> {
     let amt10 = token::Amount::from_uint(10, ETH_DENOMINATION).unwrap();
 
     // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_1-epoch_0)
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -125,9 +130,10 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 NAM,
                 "--node",
-                validator_one_rpc
+                validator_one_rpc,
             ],
-    ));
+        )
+    });
 
     let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep1.0 - ep0.0);
     let denominated = DenominatedAmount {
@@ -138,8 +144,8 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.contains(&format!("nam: {}", denominated)));
 
     // Assert NAM balance at MASP pool is 20*BTC_reward*(epoch_1-epoch_0)
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -149,10 +155,10 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 NAM,
                 "--node",
-                validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep1.0 - ep0.0);
     let denominated = DenominatedAmount {
         amount: amt,
@@ -165,8 +171,8 @@ fn masp_incentives() -> Result<()> {
     let ep2 = node.next_epoch();
 
     // Assert BTC balance at VK(A) is 20
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -176,16 +182,16 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 BTC,
                 "--node",
-                validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     assert!(captured.result.is_ok());
     assert!(captured.contains("btc: 20"));
 
     // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_2-epoch_0)
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -195,10 +201,10 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 NAM,
                 "--node",
-                validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep2.0 - ep0.0);
     let denominated = DenominatedAmount {
         amount: amt,
@@ -208,8 +214,8 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.contains(&format!("nam: {}", denominated)));
 
     // Assert NAM balance at MASP pool is 20*BTC_reward*(epoch_2-epoch_0)
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -219,10 +225,10 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 NAM,
                 "--node",
-                validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep2.0 - ep0.0);
     let denominated = DenominatedAmount {
         amount: amt,
@@ -236,7 +242,7 @@ fn masp_incentives() -> Result<()> {
 
     // Send 10 ETH from Albert to PA(B)
     run(
-      &node,
+        &node,
         Bin::Client,
         vec![
             "transfer",
@@ -249,15 +255,15 @@ fn masp_incentives() -> Result<()> {
             "--amount",
             "10",
             "--node",
-            validator_one_rpc
+            validator_one_rpc,
         ],
     )?;
     assert!(node.success());
     node.clear_results();
 
     // Assert ETH balance at VK(B) is 10
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -267,16 +273,16 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 ETH,
                 "--node",
-                validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     assert!(captured.result.is_ok());
     assert!(captured.contains("eth: 10"));
 
     // Assert NAM balance at VK(B) is 0
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -286,10 +292,10 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 NAM,
                 "--node",
-                &validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     assert!(captured.result.is_ok());
     assert!(captured.contains("No shielded nam balance found"));
 
@@ -297,8 +303,8 @@ fn masp_incentives() -> Result<()> {
     let ep4 = node.next_epoch();
 
     // Assert ETH balance at VK(B) is 10
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -308,16 +314,16 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 ETH,
                 "--node",
-                &validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     assert!(captured.result.is_ok());
     assert!(captured.contains("eth: 10"));
 
     // Assert NAM balance at VK(B) is 10*ETH_reward*(epoch_4-epoch_3)
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -327,9 +333,10 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 NAM,
                 "--node",
-                &validator_one_rpc
-            ],)
-    );
+                validator_one_rpc,
+            ],
+        )
+    });
     let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep4.0 - ep3.0);
     let denominated = DenominatedAmount {
         amount: amt,
@@ -340,8 +347,8 @@ fn masp_incentives() -> Result<()> {
 
     // Assert NAM balance at MASP pool is
     // 20*BTC_reward*(epoch_4-epoch_0)+10*ETH_reward*(epoch_4-epoch_3)
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -351,10 +358,10 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 NAM,
                 "--node",
-                &validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep4.0 - ep0.0))
         + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep4.0 - ep3.0));
     let denominated = DenominatedAmount {
@@ -384,15 +391,15 @@ fn masp_incentives() -> Result<()> {
             "--signer",
             BERTHA,
             "--node",
-            &validator_one_rpc
+            validator_one_rpc,
         ],
     )?;
     assert!(node.success());
     node.clear_results();
 
     // Assert ETH balance at VK(B) is 0
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -402,18 +409,18 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 ETH,
                 "--node",
-                &validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     assert!(captured.result.is_ok());
     assert!(captured.contains("No shielded eth balance found"));
 
     let mut ep = node.next_epoch();
 
     // Assert NAM balance at VK(B) is 10*ETH_reward*(ep-epoch_3)
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -423,10 +430,10 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 NAM,
                 "--node",
-                &validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep.0 - ep3.0);
     let denominated = DenominatedAmount {
         amount: amt,
@@ -438,8 +445,8 @@ fn masp_incentives() -> Result<()> {
     ep = node.next_epoch();
     // Assert NAM balance at MASP pool is
     // 20*BTC_reward*(epoch_5-epoch_0)+10*ETH_reward*(epoch_5-epoch_3)
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -449,10 +456,10 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 NAM,
                 "--node",
-                &validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep.0 - ep0.0))
         + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep.0 - ep3.0));
     let denominated = DenominatedAmount {
@@ -482,15 +489,15 @@ fn masp_incentives() -> Result<()> {
             "--signer",
             ALBERT,
             "--node",
-            &validator_one_rpc
+            validator_one_rpc,
         ],
     )?;
     assert!(node.success());
     node.clear_results();
 
     // Assert BTC balance at VK(A) is 0
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -500,16 +507,16 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 BTC,
                 "--node",
-                &validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     assert!(captured.result.is_ok());
     assert!(captured.contains("No shielded btc balance found"));
 
     // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_6-epoch_0)
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -519,10 +526,10 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 NAM,
                 "--node",
-                &validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0);
     let denominated = DenominatedAmount {
         amount: amt,
@@ -533,8 +540,8 @@ fn masp_incentives() -> Result<()> {
 
     // Assert NAM balance at MASP pool is
     // 20*BTC_reward*(epoch_6-epoch_0)+20*ETH_reward*(epoch_5-epoch_3)
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -544,10 +551,10 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 NAM,
                 "--node",
-                &validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
         + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0));
     let denominated = DenominatedAmount {
@@ -561,8 +568,8 @@ fn masp_incentives() -> Result<()> {
     let _ep7 = node.next_epoch();
 
     // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_6-epoch_0)
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -572,10 +579,10 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 NAM,
                 "--node",
-                &validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0);
     let denominated = DenominatedAmount {
         amount: amt,
@@ -585,8 +592,8 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.contains(&format!("nam: {}", denominated)));
 
     // Assert NAM balance at VK(B) is 10*ETH_reward*(epoch_5-epoch_3)
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -596,10 +603,10 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 NAM,
                 "--node",
-                &validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0);
     let denominated = DenominatedAmount {
         amount: amt,
@@ -610,8 +617,8 @@ fn masp_incentives() -> Result<()> {
 
     // Assert NAM balance at MASP pool is
     // 20*BTC_reward*(epoch_6-epoch_0)+10*ETH_reward*(epoch_5-epoch_3)
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -621,10 +628,10 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 NAM,
                 "--node",
-                &validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
         + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0));
     let denominated = DenominatedAmount {
@@ -656,7 +663,7 @@ fn masp_incentives() -> Result<()> {
             "--signer",
             BERTHA,
             "--node",
-            &validator_one_rpc
+            validator_one_rpc,
         ],
     )?;
     assert!(node.success());
@@ -667,7 +674,7 @@ fn masp_incentives() -> Result<()> {
 
     // Send 20*BTC_reward*(epoch_6-epoch_0) NAM from SK(A) to Bertha
     run(
-       &node,
+        &node,
         Bin::Client,
         vec![
             "transfer",
@@ -683,15 +690,15 @@ fn masp_incentives() -> Result<()> {
             "--signer",
             ALBERT,
             "--node",
-            &validator_one_rpc
+            validator_one_rpc,
         ],
     )?;
     assert!(node.success());
     node.clear_results();
 
     // Assert NAM balance at VK(A) is 0
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -701,16 +708,16 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 NAM,
                 "--node",
-                &validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     assert!(captured.result.is_ok());
     assert!(captured.contains("No shielded nam balance found"));
 
     // Assert NAM balance at VK(B) is 0
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -720,16 +727,16 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 NAM,
                 "--node",
-                &validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     assert!(captured.result.is_ok());
     assert!(captured.contains("No shielded nam balance found"));
 
     // Assert NAM balance at MASP pool is 0
-    let captured = CapturedOutput::of(
-        || run(
+    let captured = CapturedOutput::of(|| {
+        run(
             &node,
             Bin::Client,
             vec![
@@ -739,12 +746,160 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 NAM,
                 "--node",
-                &validator_one_rpc
+                validator_one_rpc,
             ],
         )
-    );
+    });
     assert!(captured.result.is_ok());
     assert!(captured.contains("nam: 0"));
 
+    Ok(())
+}
+
+#[test]
+fn masp_pinned_txs() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = CLIShieldedUtils::new(PathBuf::new());
+    // Lengthen epoch to ensure that a transaction can be constructed and
+    // submitted within the same block. Necessary to ensure that conversion is
+    // not invalidated.
+    let mut node = setup::setup()?;
+    // Wait till epoch boundary
+    let _ep0 = node.next_epoch();
+
+    // Assert PPA(C) cannot be recognized by incorrect viewing key
+    let captured =
+        CapturedOutput::with_input(AB_VIEWING_KEY.into()).run(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "balance",
+                    "--owner",
+                    AC_PAYMENT_ADDRESS,
+                    "--token",
+                    BTC,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )
+        });
+    assert!(captured.result.is_ok());
+    assert!(
+        captured.contains("Supplied viewing key cannot decode transactions to")
+    );
+
+    // Assert PPA(C) has no transaction pinned to it
+    let captured =
+        CapturedOutput::with_input(AC_VIEWING_KEY.into()).run(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "balance",
+                    "--owner",
+                    AC_PAYMENT_ADDRESS,
+                    "--token",
+                    BTC,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )
+        });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("has not yet been consumed"));
+
+    // Wait till epoch boundary
+    let _ep1 = node.next_epoch();
+
+    // Send 20 BTC from Albert to PPA(C)
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            ALBERT,
+            "--target",
+            AC_PAYMENT_ADDRESS,
+            "--token",
+            BTC,
+            "--amount",
+            "20",
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+    assert!(node.success());
+    node.clear_results();
+
+    // Wait till epoch boundary
+    // This makes it more consistent for some reason?
+    let _ep2 = node.next_epoch();
+
+    // Assert PPA(C) has the 20 BTC transaction pinned to it
+    let captured =
+        CapturedOutput::with_input(AC_VIEWING_KEY.into()).run(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "balance",
+                    "--owner",
+                    AC_PAYMENT_ADDRESS,
+                    "--token",
+                    BTC,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )
+        });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("Received 20 btc"));
+
+    // Assert PPA(C) has no NAM pinned to it
+    let captured =
+        CapturedOutput::with_input(AC_VIEWING_KEY.into()).run(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "balance",
+                    "--owner",
+                    AC_PAYMENT_ADDRESS,
+                    "--token",
+                    NAM,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )
+        });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("Received no shielded nam"));
+
+    // Wait till epoch boundary
+    let _ep1 = node.next_epoch();
+
+    // Assert PPA(C) does not NAM pinned to it on epoch boundary
+    let captured =
+        CapturedOutput::with_input(AC_VIEWING_KEY.into()).run(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "balance",
+                    "--owner",
+                    AC_PAYMENT_ADDRESS,
+                    "--token",
+                    NAM,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )
+        });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("Received no shielded nam"));
     Ok(())
 }

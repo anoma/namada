@@ -71,7 +71,7 @@ pub async fn submit_reveal_aux<C: namada::ledger::queries::Client + Sync>(
     Ok(())
 }
 
-pub async fn submit_custom<C: namada::ledger::queries::Client + Send + Sync>(
+pub async fn submit_custom<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     args: args::TxCustom,
@@ -84,9 +84,7 @@ pub async fn submit_custom<C: namada::ledger::queries::Client + Send + Sync>(
     Ok(())
 }
 
-pub async fn submit_update_vp<
-    C: namada::ledger::queries::Client + Send + Sync,
->(
+pub async fn submit_update_vp<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     args: args::TxUpdateVp,
@@ -99,9 +97,7 @@ pub async fn submit_update_vp<
     Ok(())
 }
 
-pub async fn submit_init_account<
-    C: namada::ledger::queries::Client + Send + Sync,
->(
+pub async fn submit_init_account<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     args: args::TxInitAccount,
@@ -115,7 +111,7 @@ pub async fn submit_init_account<
 }
 
 pub async fn submit_init_validator<
-    C: namada::ledger::queries::Client + Send + Sync,
+    C: namada::ledger::queries::Client + Sync,
 >(
     client: &C,
     mut ctx: Context,
@@ -490,9 +486,7 @@ pub async fn submit_transfer(
     Ok(())
 }
 
-pub async fn submit_ibc_transfer<
-    C: namada::ledger::queries::Client + Send + Sync,
->(
+pub async fn submit_ibc_transfer<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     args: args::TxIbcTransfer,
@@ -506,9 +500,7 @@ pub async fn submit_ibc_transfer<
     Ok(())
 }
 
-pub async fn submit_init_proposal<
-    C: namada::ledger::queries::Client + Send + Sync,
->(
+pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     args: args::InitProposal,
@@ -690,9 +682,7 @@ pub async fn submit_init_proposal<
     }
 }
 
-pub async fn submit_vote_proposal<
-    C: namada::ledger::queries::Client + Send + Sync,
->(
+pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     args: args::VoteProposal,
@@ -967,9 +957,7 @@ pub async fn submit_vote_proposal<
     }
 }
 
-pub async fn submit_reveal_pk<
-    C: namada::ledger::queries::Client + Send + Sync,
->(
+pub async fn submit_reveal_pk<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     args: args::RevealPk,
@@ -986,9 +974,7 @@ pub async fn submit_reveal_pk<
 /// Check if current epoch is in the last third of the voting period of the
 /// proposal. This ensures that it is safe to optimize the vote writing to
 /// storage.
-async fn is_safe_voting_window<
-    C: namada::ledger::queries::Client + Send + Sync,
->(
+async fn is_safe_voting_window<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     proposal_id: u64,
     proposal_start_epoch: Epoch,
@@ -998,9 +984,7 @@ async fn is_safe_voting_window<
 
 /// Removes validators whose vote corresponds to that of the delegator (needless
 /// vote)
-async fn filter_delegations<
-    C: namada::ledger::queries::Client + Send + Sync,
->(
+async fn filter_delegations<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     delegations: HashSet<Address>,
     proposal_id: u64,
@@ -1037,7 +1021,7 @@ async fn filter_delegations<
     delegations.into_iter().flatten().collect()
 }
 
-pub async fn submit_bond<C: namada::ledger::queries::Client + Send + Sync>(
+pub async fn submit_bond<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     args: args::Bond,
@@ -1050,7 +1034,7 @@ pub async fn submit_bond<C: namada::ledger::queries::Client + Send + Sync>(
     Ok(())
 }
 
-pub async fn submit_unbond<C: namada::ledger::queries::Client + Send + Sync>(
+pub async fn submit_unbond<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     args: args::Unbond,
@@ -1064,9 +1048,7 @@ pub async fn submit_unbond<C: namada::ledger::queries::Client + Send + Sync>(
     Ok(())
 }
 
-pub async fn submit_withdraw<
-    C: namada::ledger::queries::Client + Send + Sync,
->(
+pub async fn submit_withdraw<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     args: args::Withdraw,
@@ -1081,7 +1063,7 @@ pub async fn submit_withdraw<
 }
 
 pub async fn submit_validator_commission_change<
-    C: namada::ledger::queries::Client + Send + Sync,
+    C: namada::ledger::queries::Client + Sync,
 >(
     client: &C,
     mut ctx: Context,
@@ -1099,7 +1081,7 @@ pub async fn submit_validator_commission_change<
 }
 
 pub async fn submit_unjail_validator<
-    C: namada::ledger::queries::Client + Send + Sync,
+    C: namada::ledger::queries::Client + Sync,
 >(
     client: &C,
     mut ctx: Context,
@@ -1128,7 +1110,7 @@ pub async fn save_initialized_accounts<U: WalletUtils>(
 /// the tx has been successfully included into the mempool of a validator
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn broadcast_tx<C: namada::ledger::queries::Client + Send + Sync>(
+pub async fn broadcast_tx<C: namada::ledger::queries::Client + Sync>(
     rpc_cli: &C,
     to_broadcast: &TxBroadcastData,
 ) -> Result<Response, tx::Error> {
@@ -1143,7 +1125,7 @@ pub async fn broadcast_tx<C: namada::ledger::queries::Client + Send + Sync>(
 /// 3. The decrypted payload of the tx has been included on the blockchain.
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn submit_tx<C: namada::ledger::queries::Client + Send + Sync>(
+pub async fn submit_tx<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     to_broadcast: TxBroadcastData,
 ) -> Result<TxResponse, tx::Error> {

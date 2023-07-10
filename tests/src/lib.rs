@@ -13,6 +13,7 @@ pub use vm_host_env::{ibc, tx, vp};
 #[cfg(test)]
 mod e2e;
 #[cfg(test)]
+#[allow(dead_code)]
 mod integration;
 pub mod native_vp;
 pub mod storage;

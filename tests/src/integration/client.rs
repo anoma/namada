@@ -1,3 +1,5 @@
+use std::fs::File;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use clap::Command as App;
@@ -389,11 +391,36 @@ impl MockNode {
     }
 }
 
+struct TempFile(PathBuf);
+impl TempFile {
+    fn new(path: PathBuf) -> (Self, File) {
+        let f = File::create(&path).unwrap();
+        (Self(path), f)
+    }
+}
+
+impl Drop for TempFile {
+    fn drop(&mut self) {
+        _ = std::fs::remove_file(&self.0);
+    }
+}
+
 /// Test helper that captures stdout of
 /// a process.
-pub struct CapturedOutput<T> {
+pub struct CapturedOutput<T = ()> {
     pub output: String,
     pub result: T,
+    input: String,
+}
+
+impl CapturedOutput {
+    pub fn with_input(input: String) -> Self {
+        Self {
+            output: "".to_string(),
+            result: (),
+            input,
+        }
+    }
 }
 
 impl<T> CapturedOutput<T> {
@@ -405,6 +432,7 @@ impl<T> CapturedOutput<T> {
         let mut capture = Self {
             output: Default::default(),
             result: func(),
+            input: Default::default(),
         };
         let captured = std::io::set_output_capture(None);
         let captured = captured.unwrap();
@@ -412,6 +440,19 @@ impl<T> CapturedOutput<T> {
         let captured = captured.into_inner().unwrap();
         capture.output = String::from_utf8(captured).unwrap();
         capture
+    }
+
+    pub fn run<U, F>(&self, func: F) -> CapturedOutput<U>
+    where
+        F: FnOnce() -> U,
+    {
+        use std::io::Write;
+        let _temp = {
+            let (temp, mut f) = TempFile::new(PathBuf::from("stdin.mock"));
+            write!(&mut f, "{}", self.input).unwrap();
+            temp
+        };
+        CapturedOutput::of(func)
     }
 
     /// Check if the captured output contains the regex.

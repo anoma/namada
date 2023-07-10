@@ -15,8 +15,8 @@ use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
 use namada::types::token::Denomination;
-use namada::types::{storage, token};
 use namada::types::uint::Uint;
+use namada::types::{storage, token};
 
 /// Genesis configuration file format
 pub mod genesis_config {
@@ -39,10 +39,10 @@ pub mod genesis_config {
     use namada::types::key::*;
     use namada::types::time::Rfc3339String;
     use namada::types::token::Denomination;
+    use namada::types::uint::Uint;
     use namada::types::{storage, token};
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
-    use namada::types::uint::Uint;
 
     use super::{
         EstablishedAccount, Genesis, ImplicitAccount, Parameters, TokenAccount,
@@ -994,7 +994,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         },
     ];
     let default_user_tokens = Uint::from(1_000_000);
-    let default_key_tokens =  Uint::from(1_000_000);
+    let default_key_tokens = Uint::from(1_000_000);
     let mut balances: HashMap<Address, Uint> = HashMap::from_iter([
         // established accounts' balances
         (wallet::defaults::albert_address(), default_user_tokens),
