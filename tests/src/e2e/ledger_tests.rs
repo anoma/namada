@@ -693,7 +693,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 ETH,
                 "--amount",
                 "10",
-                "--signer",
+                "--signing-keys",
                 ALBERT,
                 "--node",
                 &validator_one_rpc,
@@ -712,7 +712,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "7",
-                "--signer",
+                "--signing-keys",
                 ALBERT,
                 "--node",
                 &validator_one_rpc,
@@ -731,7 +731,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "7",
-                "--signer",
+                "--signing-keys",
                 ALBERT,
                 "--node",
                 &validator_one_rpc,
@@ -750,7 +750,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "7",
-                "--signer",
+                "--signing-keys",
                 ALBERT,
                 "--node",
                 &validator_one_rpc,
@@ -769,7 +769,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "6",
-                "--signer",
+                "--signing-keys",
                 ALBERT,
                 "--node",
                 &validator_one_rpc,
@@ -825,7 +825,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "20",
-                "--signer",
+                "--signing-keys",
                 BERTHA,
                 "--node",
                 &validator_one_rpc,
@@ -1393,7 +1393,7 @@ fn masp_incentives() -> Result<()> {
             ETH,
             "--amount",
             "30",
-            "--signer",
+            "--signing-keys",
             BERTHA,
             "--node",
             &validator_one_rpc
@@ -1485,7 +1485,7 @@ fn masp_incentives() -> Result<()> {
             BTC,
             "--amount",
             "20",
-            "--signer",
+            "--signing-keys",
             ALBERT,
             "--node",
             &validator_one_rpc
@@ -1643,7 +1643,7 @@ fn masp_incentives() -> Result<()> {
             NAM,
             "--amount",
             &((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0)).to_string(),
-            "--signer",
+            "--signing-keys",
             BERTHA,
             "--node",
             &validator_one_rpc
@@ -1670,7 +1670,7 @@ fn masp_incentives() -> Result<()> {
             NAM,
             "--amount",
             &((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)).to_string(),
-            "--signer",
+            "--signing-keys",
             ALBERT,
             "--node",
             &validator_one_rpc
@@ -4369,44 +4369,44 @@ fn implicit_account_reveal_pk() -> Result<()> {
             .collect()
         }),
         // A bond
-        // Box::new(|source| {
-        //     vec![
-        //         "bond",
-        //         "--validator",
-        //         "validator-0",
-        //         "--source",
-        //         source,
-        //         "--amount",
-        //         "10.1",
-        //         "--signing-keys",
-        //         &format!("{}-key", source),
-        //         "--node",
-        //         &validator_one_rpc,
-        //     ]
-        //     .into_iter()
-        //     .map(|x| x.to_owned())
-        //     .collect()
-        // }),
-        // Submit proposal
-        // Box::new(|source| {
-        //     // Gen data for proposal tx
-        //     let source = find_address(&test, source).unwrap();
-        //     let valid_proposal_json_path = prepare_proposal_data(
-        //         &test,
-        //         source,
-        //         ProposalType::Default(None),
-        //     );
-        //     vec![
-        //         "init-proposal",
-        //         "--data-path",
-        //         valid_proposal_json_path.to_str().unwrap(),
-        //         "--node",
-        //         &validator_one_rpc,
-        //     ]
-        //     .into_iter()
-        //     .map(|x| x.to_owned())
-        //     .collect()
-        // }),
+        Box::new(|source| {
+            vec![
+                "bond",
+                "--validator",
+                "validator-0",
+                "--source",
+                source,
+                "--amount",
+                "10.1",
+                "--signing-keys",
+                &format!("{}-key", source),
+                "--node",
+                &validator_one_rpc,
+            ]
+            .into_iter()
+            .map(|x| x.to_owned())
+            .collect()
+        }),
+        Submit proposal
+        Box::new(|source| {
+            // Gen data for proposal tx
+            let source = find_address(&test, source).unwrap();
+            let valid_proposal_json_path = prepare_proposal_data(
+                &test,
+                source,
+                ProposalType::Default(None),
+            );
+            vec![
+                "init-proposal",
+                "--data-path",
+                valid_proposal_json_path.to_str().unwrap(),
+                "--node",
+                &validator_one_rpc,
+            ]
+            .into_iter()
+            .map(|x| x.to_owned())
+            .collect()
+        }),
     ];
 
     for (ix, tx_args) in txs_args.into_iter().enumerate() {

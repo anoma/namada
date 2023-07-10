@@ -9,6 +9,7 @@
     "e2e::ledger_tests::masp_pinned_txs": 75,
     "e2e::ledger_tests::masp_txs_and_queries": 282,
     "e2e::ledger_tests::pos_bonds": 77,
+    "e2e::ledger_tests::implicit_account_reveal_pk": 30,
     "e2e::ledger_tests::pos_init_validator": 40,
     "e2e::ledger_tests::proposal_offline": 21,
     "e2e::ledger_tests::pgf_governance_proposal": 100,
