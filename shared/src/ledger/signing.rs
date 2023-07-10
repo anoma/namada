@@ -18,7 +18,6 @@ use masp_primitives::transaction::components::sapling::fees::{
 use namada_core::types::address::{
     masp, masp_tx_key, Address, ImplicitAddress,
 };
-use namada_core::types::storage::Key;
 use namada_core::types::token::{self, Amount, DenominatedAmount, MaspDenom};
 use namada_core::types::transaction::{pos, MIN_FEE};
 use prost::Message;
@@ -647,7 +646,7 @@ pub async fn make_ledger_masp_endpoints<
     output: &mut Vec<String>,
     transfer: &Transfer,
     builder: Option<&MaspBuilder>,
-    assets: &HashMap<AssetType, (Address, Option<Key>, MaspDenom, Epoch)>,
+    assets: &HashMap<AssetType, (Address, MaspDenom, Epoch)>,
 ) {
     if transfer.source != masp() {
         output.push(format!("Sender : {}", transfer.source));
@@ -657,7 +656,6 @@ pub async fn make_ledger_masp_endpoints<
                 output,
                 transfer.amount,
                 &transfer.token,
-                &transfer.sub_prefix,
                 "Sending ",
             );
         }
@@ -685,7 +683,6 @@ pub async fn make_ledger_masp_endpoints<
                 output,
                 transfer.amount,
                 &transfer.token,
-                &transfer.sub_prefix,
                 "Receiving ",
             );
         }
@@ -711,7 +708,6 @@ pub async fn make_ledger_masp_endpoints<
             output,
             transfer.amount,
             &transfer.token,
-            &transfer.sub_prefix,
             "",
         );
     }

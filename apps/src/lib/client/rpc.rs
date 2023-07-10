@@ -506,6 +506,8 @@ async fn print_balances<C: namada::ledger::queries::Client + Sync>(
     let mut print_num = 0;
     let mut print_token = None;
     for (key, balance) in balances {
+        // Get the token, the owner, and the balance with the token and the
+        // owner
         let (t, o, s) = match token::is_any_token_balance_key(&key) {
             Some([tok, owner]) => (
                 tok.clone(),
@@ -519,6 +521,7 @@ async fn print_balances<C: namada::ledger::queries::Client + Sync>(
             None => continue,
         };
 
+        // Get the token and the balance
         let (t, s) = match (token, target) {
             (Some(token), Some(target)) if t == *token && o == *target => {
                 (t, s)
@@ -528,9 +531,10 @@ async fn print_balances<C: namada::ledger::queries::Client + Sync>(
             (None, None) => (t, s),
             _ => continue,
         };
+        // Print the token if it isn't printed yet
         match &print_token {
             Some(token) if *token == t => {
-                // the token was already printed
+                // the token has been already printed
             }
             _ => {
                 let token_alias = lookup_alias(wallet, &t);
@@ -538,6 +542,7 @@ async fn print_balances<C: namada::ledger::queries::Client + Sync>(
                 print_token = Some(t);
             }
         }
+        // Print the balance
         writeln!(w, "{}", s).unwrap();
         print_num += 1;
     }
