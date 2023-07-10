@@ -245,11 +245,11 @@ where
             &implicit_vp_code_path,
         );
         // set the initial validators set
-        Ok(self.set_initial_validators(
+        self.set_initial_validators(
             &staking_token,
             genesis.validators,
             &genesis.pos_params,
-        ))
+        )
     }
 
     /// Initialize genesis established accounts
@@ -460,7 +460,7 @@ where
         staking_token: &Address,
         validators: Vec<genesis::Validator>,
         pos_params: &PosParams,
-    ) -> response::InitChain {
+    ) -> Result<response::InitChain> {
         let mut response = response::InitChain::default();
         // PoS system depends on epoch being initialized. Write the total
         // genesis staking token balance to storage after
@@ -473,13 +473,11 @@ where
             current_epoch,
         );
 
-        let total_nam =
-            read_total_supply(&self.wl_storage, staking_token).unwrap();
+        let total_nam = read_total_supply(&self.wl_storage, staking_token)?;
         // At this stage in the chain genesis, the PoS address balance is the
         // same as the number of staked tokens
         let total_staked_nam =
-            read_balance(&self.wl_storage, staking_token, &address::POS)
-                .unwrap();
+            read_balance(&self.wl_storage, staking_token, &address::POS)?;
 
         tracing::info!(
             "Genesis total native tokens: {}.",
@@ -505,7 +503,7 @@ where
             .expect("Must be able to set genesis validator set");
         debug_assert!(!response.validators.is_empty());
 
-        response
+        Ok(response)
     }
 }
 
