@@ -122,8 +122,6 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
         NAM,
         "--amount",
         "10.1",
-        "--gas-limit",
-        "100",
         "--node",
         &validator_one_rpc,
     ];
@@ -392,8 +390,6 @@ fn ledger_txs_and_queries() -> Result<()> {
             NAM,
             "--amount",
             "10.1",
-            "--gas-limit",
-            "40",
             "--node",
             &validator_one_rpc,
         ],
@@ -408,8 +404,6 @@ fn ledger_txs_and_queries() -> Result<()> {
             NAM,
             "--amount",
             "10.1",
-            "--gas-limit",
-            "40",
             "--node",
             &validator_one_rpc,
         ],
@@ -417,12 +411,10 @@ fn ledger_txs_and_queries() -> Result<()> {
         // predicate
         vec![
             "update",
-             "--address",
-             BERTHA,
-             "--code-path",
-             VP_USER_WASM,
-             "--gas-limit",
-             "40",
+            "--address",
+            BERTHA,
+            "--code-path",
+            VP_USER_WASM,
             "--node",
             &validator_one_rpc,
         ],
@@ -435,10 +427,8 @@ fn ledger_txs_and_queries() -> Result<()> {
             TX_TRANSFER_WASM,
             "--data-path",
             &tx_data_path,
-            "--gas-limit",
-            "40",
             "--node",
-            &validator_one_rpc
+            &validator_one_rpc,
         ],
         // 5. Submit a tx to initialize a new account
         vec![
@@ -452,31 +442,27 @@ fn ledger_txs_and_queries() -> Result<()> {
             VP_USER_WASM,
             "--alias",
             "Test-Account",
-            "--gas-limit",
-            "40",
             "--node",
             &validator_one_rpc,
         ],
-    // 6. Submit a tx to withdraw from faucet account (requires PoW challenge
-    //    solution)
-        vec![
-            "transfer",
-            "--source",
-            "faucet",
-            "--target",
-            ALBERT,
-            "--token",
-            NAM,
-            "--amount",
-            "10.1",
-            // Faucet withdrawal requires an explicit signer
-            "--signer",
-            ALBERT,
-            "--gas-limit",
-            "40",
-            "--node",
-            &validator_one_rpc,
-        ],
+        // 6. Submit a tx to withdraw from faucet account (requires PoW challenge
+        //    solution)
+            vec![
+                "transfer",
+                "--source",
+                "faucet",
+                "--target",
+                ALBERT,
+                "--token",
+                NAM,
+                "--amount",
+                "10.1",
+                // Faucet withdrawal requires an explicit signer
+                "--signer",
+                ALBERT,
+                "--node",
+                &validator_one_rpc,
+            ],
     ];
 
     for tx_args in &txs_args {
@@ -600,8 +586,6 @@ fn wrapper_disposable_signer() -> Result<()> {
                 NAM,
                 "--amount",
                 "50",
-                "--gas-limit",
-                "40",
                 "--ledger-address",
                 &validator_one_rpc,
             ],
@@ -619,8 +603,6 @@ fn wrapper_disposable_signer() -> Result<()> {
                 NAM,
                 "--amount",
                 "1",
-                "--gas-limit",
-                "100",
                 "--disposable-signing-key",
                 "--ledger-address",
                 &validator_one_rpc,
@@ -639,8 +621,6 @@ fn wrapper_disposable_signer() -> Result<()> {
                 NAM,
                 "--amount",
                 "1",
-                "--gas-limit",
-                "100",
                 "--fee-spending-key",
                 A_SPENDING_KEY,
                 "--disposable-signing-key",
@@ -661,8 +641,6 @@ fn wrapper_disposable_signer() -> Result<()> {
                 NAM,
                 "--amount",
                 "1",
-                "--gas-limit",
-                "40",
                 "--fee-spending-key",
                 A_SPENDING_KEY,
                 "--disposable-signing-key",
@@ -743,8 +721,6 @@ fn wrapper_fee_unshielding() -> Result<()> {
                 NAM,
                 "--amount",
                 "50000",
-                "--gas-limit",
-                "40",
                 "--ledger-address",
                 &validator_one_rpc,
             ],
@@ -752,6 +728,7 @@ fn wrapper_fee_unshielding() -> Result<()> {
         ),
         // 2. Invalid unshielding
         (
+            //FIXME: should force this?
             vec![
                 "transfer",
                 "--source",
@@ -762,8 +739,6 @@ fn wrapper_fee_unshielding() -> Result<()> {
                 NAM,
                 "--amount",
                 "1",
-                "--gas-limit",
-                "100",
                 "--fee-spending-key",
                 B_SPENDING_KEY,
                 "--ledger-address",
@@ -773,6 +748,7 @@ fn wrapper_fee_unshielding() -> Result<()> {
         ),
         // 3. Valid unshielding
         (
+            //FIXME: it appears like it doesn't actually attach the unshielding operation
             vec![
                 "transfer",
                 "--source",
@@ -783,8 +759,6 @@ fn wrapper_fee_unshielding() -> Result<()> {
                 NAM,
                 "--amount",
                 "1",
-                "--gas-limit",
-                "40",
                 "--fee-spending-key",
                 A_SPENDING_KEY,
                 "--ledger-address",
@@ -872,8 +846,6 @@ fn masp_txs_and_queries() -> Result<()> {
                 NAM,
                 "--amount",
                 "100000",
-                "--gas-limit",
-                "20",
                 "--node",
                 &validator_one_rpc,
             ],
@@ -891,8 +863,6 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "10",
-                "--gas-limit",
-                "1",
                 "--node",
                 &validator_one_rpc,
             ],
@@ -910,8 +880,6 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "15",
-                "--gas-limit",
-                "1",
                 "--node",
                 &validator_one_rpc,
             ],
@@ -929,8 +897,6 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "20",
-                "--gas-limit",
-                "100",
                 "--node",
                 &validator_one_rpc,
             ],
@@ -950,8 +916,6 @@ fn masp_txs_and_queries() -> Result<()> {
                 "10",
                 "--signer",
                 ALBERT,
-                "--gas-limit",
-                "20",
                 "--node",
                 &validator_one_rpc,
             ],
@@ -971,8 +935,6 @@ fn masp_txs_and_queries() -> Result<()> {
                 "7",
                 "--signer",
                 ALBERT,
-                "--gas-limit",
-                "100",
                 "--node",
                 &validator_one_rpc,
             ],
@@ -992,8 +954,6 @@ fn masp_txs_and_queries() -> Result<()> {
                 "7",
                 "--signer",
                 ALBERT,
-                "--gas-limit",
-                "100",
                 "--node",
                 &validator_one_rpc,
             ],
@@ -1013,8 +973,6 @@ fn masp_txs_and_queries() -> Result<()> {
                 "7",
                 "--signer",
                 ALBERT,
-                "--gas-limit",
-                "30",
                 "--node",
                 &validator_one_rpc,
             ],
@@ -1034,8 +992,6 @@ fn masp_txs_and_queries() -> Result<()> {
                 "6",
                 "--signer",
                 ALBERT,
-                "--gas-limit",
-                "100",
                 "--node",
                 &validator_one_rpc,
             ],
@@ -1092,8 +1048,6 @@ fn masp_txs_and_queries() -> Result<()> {
                 "20",
                 "--signer",
                 BERTHA,
-                "--gas-limit",
-                "150",
                 "--node",
                 &validator_one_rpc,
             ],
@@ -1217,8 +1171,6 @@ fn masp_pinned_txs() -> Result<()> {
             BTC,
             "--amount",
             "20",
-            "--gas-limit",
-            "100",
             "--node",
             &validator_one_rpc
         ],
@@ -1344,8 +1296,6 @@ fn masp_incentives() -> Result<()> {
             BTC,
             "--amount",
             "20",
-            "--gas-limit",
-            "150",
             "--signer",
             ALBERT,
             "--node",
@@ -1540,8 +1490,6 @@ fn masp_incentives() -> Result<()> {
             ETH,
             "--amount",
             "30",
-            "--gas-limit",
-            "150",
             "--signer",
             ALBERT,
             "--node",
@@ -1672,8 +1620,6 @@ fn masp_incentives() -> Result<()> {
             "30",
             "--signer",
             BERTHA,
-            "--gas-limit",
-            "150",
             "--node",
             &validator_one_rpc
         ],
@@ -1766,8 +1712,6 @@ fn masp_incentives() -> Result<()> {
             "20",
             "--signer",
             ALBERT,
-            "--gas-limit",
-            "150",
             "--node",
             &validator_one_rpc
         ],
@@ -1926,8 +1870,6 @@ fn masp_incentives() -> Result<()> {
             &((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0)).to_string(),
             "--signer",
             BERTHA,
-            "--gas-limit",
-            "150",
             "--node",
             &validator_one_rpc
         ],
@@ -1955,8 +1897,6 @@ fn masp_incentives() -> Result<()> {
             &((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)).to_string(),
             "--signer",
             ALBERT,
-            "--gas-limit",
-            "150",
             "--node",
             &validator_one_rpc
         ],
@@ -2056,8 +1996,6 @@ fn invalid_transactions() -> Result<()> {
         NAM,
         "--amount",
         "1",
-        "--gas-limit",
-        "100",
         "--node",
         &validator_one_rpc,
     ];
@@ -2109,8 +2047,6 @@ fn invalid_transactions() -> Result<()> {
         BERTHA,
         "--amount",
         "1_000_000.1",
-        "--gas-limit",
-        "100",
         // Force to ignore client check that fails on the balance check of the
         // source address
         "--force",
@@ -2182,8 +2118,6 @@ fn pos_bonds() -> Result<()> {
         "validator-0",
         "--amount",
         "10000.0",
-        "--gas-limit",
-        "100",
         "--node",
         &validator_one_rpc,
     ];
@@ -2201,8 +2135,6 @@ fn pos_bonds() -> Result<()> {
         BERTHA,
         "--amount",
         "5000.0",
-        "--gas-limit",
-        "100",
         "--node",
         &validator_one_rpc,
     ];
@@ -2217,8 +2149,6 @@ fn pos_bonds() -> Result<()> {
         "validator-0",
         "--amount",
         "5100.0",
-        "--gas-limit",
-        "100",
         "--node",
         &validator_one_rpc,
     ];
@@ -2236,8 +2166,6 @@ fn pos_bonds() -> Result<()> {
         BERTHA,
         "--amount",
         "3200.",
-        "--gas-limit",
-        "100",
         "--node",
         &validator_one_rpc,
     ];
@@ -2276,8 +2204,6 @@ fn pos_bonds() -> Result<()> {
         "withdraw",
         "--validator",
         "validator-0",
-        "--gas-limit",
-        "100",
         "--node",
         &validator_one_rpc,
     ];
@@ -2293,8 +2219,6 @@ fn pos_bonds() -> Result<()> {
         "validator-0",
         "--source",
         BERTHA,
-        "--gas-limit",
-        "100",
         "--node",
         &validator_one_rpc,
     ];
@@ -2368,8 +2292,6 @@ fn pos_rewards() -> Result<()> {
         "10000.0",
         "--gas-amount",
         "0",
-        "--gas-limit",
-        "0",
         "--gas-token",
         NAM,
         "--ledger-address",
@@ -2403,8 +2325,6 @@ fn pos_rewards() -> Result<()> {
         "30000.0",
         "--gas-amount",
         "0",
-        "--gas-limit",
-        "0",
         "--gas-token",
         NAM,
         "--ledger-address",
@@ -2423,8 +2343,6 @@ fn pos_rewards() -> Result<()> {
         "--amount",
         "25000.0",
         "--gas-amount",
-        "0",
-        "--gas-limit",
         "0",
         "--gas-token",
         NAM,
@@ -2510,8 +2428,6 @@ fn test_bond_queries() -> Result<()> {
         validator_alias,
         "--amount",
         "100",
-        "--gas-limit",
-        "100",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -2529,8 +2445,6 @@ fn test_bond_queries() -> Result<()> {
         BERTHA,
         "--amount",
         "200",
-        "--gas-limit",
-        "100",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -2560,8 +2474,6 @@ fn test_bond_queries() -> Result<()> {
         BERTHA,
         "--amount",
         "300",
-        "--gas-limit",
-        "100",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -2578,8 +2490,6 @@ fn test_bond_queries() -> Result<()> {
         BERTHA,
         "--amount",
         "412",
-        "--gas-limit",
-        "100",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -2687,8 +2597,6 @@ fn pos_init_validator() -> Result<()> {
         "--source",
         BERTHA,
         "--unsafe-dont-encrypt",
-        "--gas-limit",
-        "100",
         "--commission-rate",
         "0.05",
         "--max-commission-rate-change",
@@ -2712,8 +2620,6 @@ fn pos_init_validator() -> Result<()> {
         NAM,
         "--amount",
         "10000.5",
-        "--gas-limit",
-        "100",
         "--node",
         &non_validator_rpc,
     ];
@@ -2731,8 +2637,6 @@ fn pos_init_validator() -> Result<()> {
         BERTHA,
         "--amount",
         delegation_str,
-        "--gas-limit",
-        "100",
         "--node",
         &non_validator_rpc,
     ];
@@ -2752,8 +2656,6 @@ fn pos_init_validator() -> Result<()> {
         NAM,
         "--amount",
         validator_stake_str,
-        "--gas-limit",
-        "100",
         "--node",
         &non_validator_rpc,
     ];
@@ -2768,8 +2670,6 @@ fn pos_init_validator() -> Result<()> {
         new_validator,
         "--amount",
         validator_stake_str,
-        "--gas-limit",
-        "100",
         "--node",
         &non_validator_rpc,
     ];
@@ -2854,18 +2754,8 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
 
     // A token transfer tx args
     let tx_args = Arc::new(vec![
-        "transfer",
-        "--source",
-        BERTHA,
-        "--target",
-        ALBERT,
-        "--token",
-        NAM,
-        "--amount",
-        "1.01",
-        "--gas-limit",
-        "100",
-        "--node",
+        "transfer", "--source", BERTHA, "--target", ALBERT, "--token", NAM,
+        "--amount", "1.01", "--node",
     ]);
 
     // 2. Spawn threads each submitting token transfer tx
@@ -2957,8 +2847,6 @@ fn proposal_submission() -> Result<()> {
         BERTHA,
         "--amount",
         "900",
-        "--gas-limit",
-        "100",
         "--node",
         &validator_one_rpc,
     ];
@@ -2984,8 +2872,6 @@ fn proposal_submission() -> Result<()> {
         "init-proposal",
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
-        "--gas-limit",
-        "100",
         "--node",
         &validator_one_rpc,
     ];
@@ -3087,8 +2973,6 @@ fn proposal_submission() -> Result<()> {
         "init-proposal",
         "--data-path",
         invalid_proposal_json_path.to_str().unwrap(),
-        "--gas-limit",
-        "100",
         "--node",
         &validator_one_rpc,
     ];
@@ -3143,8 +3027,6 @@ fn proposal_submission() -> Result<()> {
         "yay",
         "--signer",
         "validator-0",
-        "--gas-limit",
-        "100",
         "--node",
         &validator_one_rpc,
     ];
@@ -3167,8 +3049,6 @@ fn proposal_submission() -> Result<()> {
         "nay",
         "--signer",
         BERTHA,
-        "--gas-limit",
-        "100",
         "--node",
         &validator_one_rpc,
     ];
@@ -3187,8 +3067,6 @@ fn proposal_submission() -> Result<()> {
         "yay",
         "--signer",
         ALBERT,
-        "--gas-limit",
-        "100",
         "--node",
         &validator_one_rpc,
     ];
@@ -3317,8 +3195,6 @@ fn eth_governance_proposal() -> Result<()> {
         BERTHA,
         "--amount",
         "900",
-        "--gas-limit",
-        "100",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3336,8 +3212,6 @@ fn eth_governance_proposal() -> Result<()> {
         "init-proposal",
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
-        "--gas-limit",
-        "100",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3416,8 +3290,6 @@ fn eth_governance_proposal() -> Result<()> {
         &vote_arg,
         "--signer",
         BERTHA,
-        "--gas-limit",
-        "100",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3439,8 +3311,6 @@ fn eth_governance_proposal() -> Result<()> {
         &vote_arg,
         "--signer",
         "validator-0",
-        "--gas-limit",
-        "100",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3545,8 +3415,6 @@ fn pgf_governance_proposal() -> Result<()> {
         BERTHA,
         "--amount",
         "900",
-        "--gas-limit",
-        "40",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3564,8 +3432,6 @@ fn pgf_governance_proposal() -> Result<()> {
         "init-proposal",
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
-        "--gas-limit",
-        "40",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3582,8 +3448,6 @@ fn pgf_governance_proposal() -> Result<()> {
         "init-proposal",
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
-        "--gas-limit",
-        "40",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3666,8 +3530,6 @@ fn pgf_governance_proposal() -> Result<()> {
         &arg_vote,
         "--signer",
         "validator-0",
-        "--gas-limit",
-        "40",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3694,8 +3556,6 @@ fn pgf_governance_proposal() -> Result<()> {
         &different_vote,
         "--signer",
         BERTHA,
-        "--gas-limit",
-        "40",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3715,8 +3575,6 @@ fn pgf_governance_proposal() -> Result<()> {
         &different_vote,
         "--signer",
         BERTHA,
-        "--gas-limit",
-        "40",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -3826,8 +3684,6 @@ fn proposal_offline() -> Result<()> {
         ALBERT,
         "--amount",
         "900",
-        "--gas-limit",
-        "1",
         "--node",
         &validator_one_rpc,
     ];
@@ -3873,8 +3729,6 @@ fn proposal_offline() -> Result<()> {
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
         "--offline",
-        "--gas-limit",
-        "1",
         "--node",
         &validator_one_rpc,
     ];
@@ -3900,8 +3754,6 @@ fn proposal_offline() -> Result<()> {
         "yay",
         "--signer",
         ALBERT,
-        "--gas-limit",
-        "1",
         "--offline",
         "--node",
         &validator_one_rpc,
@@ -4299,8 +4151,9 @@ fn test_genesis_validators() -> Result<()> {
         NAM,
         "--amount",
         "10.1",
+        //NOTE: keep a fixed gas limit since it's important to assert the test
         "--gas-limit",
-        "100",
+        "100000000",
         "--node",
         &validator_one_rpc,
     ];
@@ -4347,7 +4200,7 @@ fn test_genesis_validators() -> Result<()> {
     for ledger_rpc in &[validator_0_rpc, validator_1_rpc, non_validator_rpc] {
         let mut client =
             run!(test, Bin::Client, query_balance_args(ledger_rpc), Some(40))?;
-        // The actual balance is also affected by the fees collected by the block proposer. Given the two validators, there's a 50% chance that the balance will also include the 100 NAMs coming from the transfer tx
+        // The actual balance is also affected by the fees collected by the block proposer. Given the two validators, there's a chance that the balance will also include the NAMs coming from the transfer tx
         client.exp_regex(r"nam: 1000000000[0-1]{1}10.1")?;
         client.assert_success();
     }
@@ -4492,8 +4345,6 @@ fn double_signing_gets_slashed() -> Result<()> {
         NAM,
         "--amount",
         "10.1",
-        "--gas-limit",
-        "100",
         "--node",
         &validator_one_rpc,
     ];

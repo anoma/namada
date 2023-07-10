@@ -30,7 +30,7 @@ address = "atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvf
 vp = "vp_token"
 [token.NAM.balances]
 Albert = 1000000
-"Albert.public_key" = 1000
+"Albert.public_key" = 4000
 Bertha = 1000000
 "Bertha.public_key" = 2000
 Christel = 1000000
@@ -38,7 +38,7 @@ Christel = 1000000
 Daewon = 1000000
 faucet = 9223372036
 "faucet.public_key" = 100
-"validator-0.public_key" = 100
+"validator-0.public_key" = 200
 
 [token.BTC]
 address = "atest1v4ehgw36xdzryve5gsc52veeg5cnsv2yx5eygvp38qcrvd29xy6rys6p8yc5xvp4xfpy2v694wgwcp"
@@ -156,6 +156,7 @@ max_expected_time_per_block = 30
 # Max payload size, in bytes, for a tx batch proposal.
 max_proposal_bytes = 22020096
 # Max amount of gas per block 
+# FIXME: adjust these two values everywhere, also in the repo where the genesis for testnets lives
 max_block_gas = 1000000000 
 # Fee unshielding gas limit
 fee_unshielding_gas_limit = 1000000
