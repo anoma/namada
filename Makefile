@@ -116,7 +116,7 @@ test-unit-coverage:
 	$(cargo) +$(nightly) llvm-cov --output-dir target \
 		--features namada/testing \
 		--html \
-		-- --skip e2e -Z unstable-options --report-time
+		-- --skip e2e --skip integration -Z unstable-options --report-time
 
 # NOTE: `TEST_FILTER` is prepended with `e2e::`. Since filters in `cargo test`
 # work with a substring search, TEST_FILTER only works if it contains a string
@@ -132,11 +132,18 @@ test-e2e:
 	--test-threads=1 \
 	-Z unstable-options --report-time
 
+test-integration:
+	RUST_BACKTRACE=$(RUST_BACKTRACE) \
+	$(cargo) +$(nightly) test integration::$(TEST_FILTER) \
+	-Z unstable-options \
+	-- \
+	-Z unstable-options --report-time
+
 test-unit:
 	$(cargo) +$(nightly) test \
 		$(TEST_FILTER) \
 		$(jobs) \
-		-- --skip e2e \
+		-- --skip e2e --skip integration \
 		-Z unstable-options --report-time
 
 test-unit-mainnet:
@@ -144,14 +151,14 @@ test-unit-mainnet:
 		--features "mainnet" \
 		$(TEST_FILTER) \
 		$(jobs) \
-		-- --skip e2e \
+		-- --skip e2e --skip integration \
 		-Z unstable-options --report-time
 
 test-unit-debug:
 	$(debug-cargo) +$(nightly) test \
 		$(jobs) \
 		$(TEST_FILTER) -- \
-		-- --skip e2e \
+		-- --skip e2e --skip integration \
 		--nocapture \
 		-Z unstable-options --report-time
 

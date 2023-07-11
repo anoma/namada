@@ -16,6 +16,8 @@ use crate::e2e::setup::constants::{
 use crate::e2e::setup::Bin;
 use crate::integration::client::CapturedOutput;
 
+/// In this test we verify that users of the MASP receive the correct rewards
+/// for leaving their assets in the pool for varying periods of time.
 #[test]
 fn masp_incentives() -> Result<()> {
     // The number of decimal places used by BTC amounts.
@@ -416,7 +418,7 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.result.is_ok());
     assert!(captured.contains("No shielded eth balance found"));
 
-    let mut ep = node.next_epoch();
+    let _ep = node.next_epoch();
 
     // Assert NAM balance at VK(B) is 10*ETH_reward*(ep-epoch_3)
     let captured = CapturedOutput::of(|| {
@@ -434,7 +436,7 @@ fn masp_incentives() -> Result<()> {
             ],
         )
     });
-    let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep.0 - ep3.0);
+    let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0);
     let denominated = DenominatedAmount {
         amount: amt,
         denom: NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -442,7 +444,7 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.result.is_ok());
     assert!(captured.contains(&format!("nam: {}", denominated)));
 
-    ep = node.next_epoch();
+    let ep = node.next_epoch();
     // Assert NAM balance at MASP pool is
     // 20*BTC_reward*(epoch_5-epoch_0)+10*ETH_reward*(epoch_5-epoch_3)
     let captured = CapturedOutput::of(|| {
@@ -461,7 +463,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep.0 - ep0.0))
-        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep.0 - ep3.0));
+        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0));
     let denominated = DenominatedAmount {
         amount: amt,
         denom: NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -756,6 +758,12 @@ fn masp_incentives() -> Result<()> {
     Ok(())
 }
 
+/// In this test we:
+/// 1. Run the ledger node
+/// 2. Assert PPA(C) cannot be recognized by incorrect viewing key
+/// 3. Assert PPA(C) has not transaction pinned to it
+/// 4. Send 20 BTC from Albert to PPA(C)
+/// 5. Assert PPA(C) has the 20 BTC transaction pinned to it
 #[test]
 fn masp_pinned_txs() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
@@ -902,6 +910,20 @@ fn masp_pinned_txs() -> Result<()> {
     Ok(())
 }
 
+/// In this test we:
+/// 1. Run the ledger node
+/// 2. Attempt to spend 10 BTC at SK(A) to PA(B)
+/// 3. Attempt to spend 15 BTC at SK(A) to Bertha
+/// 4. Send 20 BTC from Albert to PA(A)
+/// 5. Attempt to spend 10 ETH at SK(A) to PA(B)
+/// 6. Spend 7 BTC at SK(A) to PA(B)
+/// 7. Spend 7 BTC at SK(A) to PA(B)
+/// 8. Attempt to spend 7 BTC at SK(A) to PA(B)
+/// 9. Spend 6 BTC at SK(A) to PA(B)
+/// 10. Assert BTC balance at VK(A) is 0
+/// 11. Assert ETH balance at VK(A) is 0
+/// 12. Assert balance at VK(B) is 10 BTC
+/// 13. Send 10 BTC from SK(B) to Bertha
 #[test]
 fn masp_txs_and_queries() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
