@@ -181,9 +181,6 @@ pub mod cmds {
                 .subcommand(QueryProposal::def().display_order(3))
                 .subcommand(QueryProposalResult::def().display_order(3))
                 .subcommand(QueryProtocolParameters::def().display_order(3))
-                // wait until next epoch (can't be in utils, needs the ledger
-                // address)
-                .subcommand(EpochSleep::def().display_order(4))
                 // Utils
                 .subcommand(Utils::def().display_order(5))
         }
@@ -226,7 +223,6 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryProposalResult);
             let query_protocol_parameters =
                 Self::parse_with_ctx(matches, QueryProtocolParameters);
-            let epoch_sleep = Self::parse_with_ctx(matches, EpochSleep);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
@@ -255,7 +251,6 @@ pub mod cmds {
                 .or(query_proposal)
                 .or(query_proposal_result)
                 .or(query_protocol_parameters)
-                .or(epoch_sleep)
                 .or(utils)
         }
     }
@@ -320,7 +315,6 @@ pub mod cmds {
         QueryProposal(QueryProposal),
         QueryProposalResult(QueryProposalResult),
         QueryProtocolParameters(QueryProtocolParameters),
-        EpochSleep(EpochSleep),
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -1617,6 +1611,7 @@ pub mod cmds {
         InitGenesisValidator(InitGenesisValidator),
         PkToTmAddress(PkToTmAddress),
         DefaultBaseDir(DefaultBaseDir),
+        EpochSleep(EpochSleep),
     }
 
     impl SubCmd for Utils {
@@ -1635,12 +1630,14 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::PkToTmAddress);
                 let default_base_dir =
                     SubCmd::parse(matches).map(Self::DefaultBaseDir);
+                let epoch_sleep = SubCmd::parse(matches).map(Self::EpochSleep);
                 join_network
                     .or(fetch_wasms)
                     .or(init_network)
                     .or(init_genesis)
                     .or(pk_to_tm_address)
                     .or(default_base_dir)
+                    .or(epoch_sleep)
             })
         }
 
@@ -1653,6 +1650,7 @@ pub mod cmds {
                 .subcommand(InitGenesisValidator::def())
                 .subcommand(PkToTmAddress::def())
                 .subcommand(DefaultBaseDir::def())
+                .subcommand(EpochSleep::def())
                 .setting(AppSettings::SubcommandRequiredElseHelp)
         }
     }

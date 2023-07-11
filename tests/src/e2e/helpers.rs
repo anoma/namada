@@ -361,7 +361,7 @@ pub fn epoch_sleep(
     let mut find = run!(
         test,
         Bin::Client,
-        &["epoch-sleep", "--node", ledger_address],
+        &["utils", "epoch-sleep", "--node", ledger_address],
         Some(timeout_secs)
     )?;
     parse_reached_epoch(&mut find)
