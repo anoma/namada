@@ -886,7 +886,7 @@ fn transfer_timeout(
         &receiver,
         NAM,
         &Amount::whole(100000),
-        ALBERT,
+        ALBERT_KEY,
         port_channel_id_a,
         None,
         Some(Duration::new(5, 0)),

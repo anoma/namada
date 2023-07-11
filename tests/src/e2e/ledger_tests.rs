@@ -10,7 +10,6 @@
 //! `NAMADA_E2E_KEEP_TEMP=true`.
 #![allow(clippy::type_complexity)]
 
-use std::f32::consts::E;
 use std::path::PathBuf;
 use std::process::Command;
 use std::str::FromStr;
