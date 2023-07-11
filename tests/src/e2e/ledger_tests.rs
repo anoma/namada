@@ -2893,7 +2893,7 @@ fn proposal_submission() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     wait_for_wasm_pre_compile(&mut ledger)?;
-    let _bg_ledger = ledger.background();
+    let bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
@@ -2943,6 +2943,11 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
+
+    // Wait for the proposal to be committed
+    let mut ledger = bg_ledger.foreground();
+    ledger.exp_string("Committed block hash")?;
+    let _bg_ledger = ledger.background();
 
     // 3. Query the proposal
     let proposal_query_args = vec![
