@@ -1394,7 +1394,7 @@ pub async fn submit_transfer<
         tx.set_code(Code::from_hash(tx_code_hash));
 
         #[cfg(not(feature = "mainnet"))]
-        let owner = if is_source_faucet {
+        let owner = if is_source_faucet || source == masp_addr {
             None
         } else {
             let transfer_source = &args.source;
