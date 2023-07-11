@@ -748,7 +748,7 @@ where
 pub fn read_consensus_validator_set_addresses_with_stake<S>(
     storage: &S,
     epoch: namada_core::types::storage::Epoch,
-) -> storage_api::Result<HashSet<WeightedValidator>>
+) -> storage_api::Result<BTreeSet<WeightedValidator>>
 where
     S: StorageRead,
 {
@@ -792,7 +792,7 @@ where
 pub fn read_below_capacity_validator_set_addresses_with_stake<S>(
     storage: &S,
     epoch: namada_core::types::storage::Epoch,
-) -> storage_api::Result<HashSet<WeightedValidator>>
+) -> storage_api::Result<BTreeSet<WeightedValidator>>
 where
     S: StorageRead,
 {

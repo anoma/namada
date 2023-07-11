@@ -1,6 +1,6 @@
 //! Queries router and handlers for PoS validity predicate
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::ledger::storage_api::collections::lazy_map;
@@ -10,13 +10,14 @@ use namada_proof_of_stake::types::{
     Slash, ValidatorState, WeightedValidator,
 };
 use namada_proof_of_stake::{
-    self, below_capacity_validator_set_handle, bond_amount, bond_handle,
-    consensus_validator_set_handle, find_all_enqueued_slashes,
+    self, bond_amount, bond_handle, find_all_enqueued_slashes,
     find_all_slashes, find_delegation_validators, find_delegations,
-    read_all_validator_addresses, read_pos_params, read_total_stake,
-    read_validator_max_commission_rate_change, read_validator_stake,
-    unbond_handle, validator_commission_rate_handle, validator_slashes_handle,
-    validator_state_handle,
+    read_all_validator_addresses,
+    read_below_capacity_validator_set_addresses_with_stake,
+    read_consensus_validator_set_addresses_with_stake, read_pos_params,
+    read_total_stake, read_validator_max_commission_rate_change,
+    read_validator_stake, unbond_handle, validator_commission_rate_handle,
+    validator_slashes_handle, validator_state_handle,
 };
 
 use crate::ledger::queries::types::RequestCtx;
@@ -51,10 +52,10 @@ router! {POS,
 
     ( "validator_set" ) = {
         ( "consensus" / [epoch: opt Epoch] )
-            -> HashSet<WeightedValidator> = consensus_validator_set,
+            -> BTreeSet<WeightedValidator> = consensus_validator_set,
 
         ( "below_capacity" / [epoch: opt Epoch] )
-            -> HashSet<WeightedValidator> = below_capacity_validator_set,
+            -> BTreeSet<WeightedValidator> = below_capacity_validator_set,
 
         // TODO: add "below_threshold"
     },
@@ -253,64 +254,29 @@ where
 fn consensus_validator_set<D, H>(
     ctx: RequestCtx<'_, D, H>,
     epoch: Option<Epoch>,
-) -> storage_api::Result<HashSet<WeightedValidator>>
+) -> storage_api::Result<BTreeSet<WeightedValidator>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
-    consensus_validator_set_handle()
-        .at(&epoch)
-        .iter(ctx.wl_storage)?
-        .map(|next_result| {
-            next_result.map(
-                |(
-                    lazy_map::NestedSubKey::Data {
-                        key: bonded_stake,
-                        nested_sub_key: _position,
-                    },
-                    address,
-                )| {
-                    WeightedValidator {
-                        bonded_stake,
-                        address,
-                    }
-                },
-            )
-        })
-        .collect()
+    read_consensus_validator_set_addresses_with_stake(ctx.wl_storage, epoch)
 }
 
 /// Get all the validator in the below-capacity set with their bonded stake.
 fn below_capacity_validator_set<D, H>(
     ctx: RequestCtx<'_, D, H>,
     epoch: Option<Epoch>,
-) -> storage_api::Result<HashSet<WeightedValidator>>
+) -> storage_api::Result<BTreeSet<WeightedValidator>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
-    below_capacity_validator_set_handle()
-        .at(&epoch)
-        .iter(ctx.wl_storage)?
-        .map(|next_result| {
-            next_result.map(
-                |(
-                    lazy_map::NestedSubKey::Data {
-                        key: bonded_stake,
-                        nested_sub_key: _position,
-                    },
-                    address,
-                )| {
-                    WeightedValidator {
-                        bonded_stake: bonded_stake.into(),
-                        address,
-                    }
-                },
-            )
-        })
-        .collect()
+    read_below_capacity_validator_set_addresses_with_stake(
+        ctx.wl_storage,
+        epoch,
+    )
 }
 
 /// Get the total stake in PoS system at the given epoch or current when `None`.
