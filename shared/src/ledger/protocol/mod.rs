@@ -314,13 +314,25 @@ where
             &wrapper.fee.token,
             &wrapper.fee_payer(),
         ).map_err(|e| Error::FeeError(e.to_string()))?;
+                //FIXME: should return an error if empty unshield or try to withdraw fees from transparent balance as stated after?
+            let unshield_amount = wrapper
+                .get_tx_fee().map_err(|e| Error::FeeUnshieldingError(e))?
+                .checked_sub(transparent_balance)
+                .and_then(|v| if v.is_zero() { None } else { Some(v) })
+                .ok_or_else(|| {
+                    Error::FeeUnshieldingError(crate::types::transaction::WrapperTxErr::InvalidUnshield(
+                        "The transparent balance of the fee payer is enough \
+                         to pay fees, no need for unshielding"
+                            .to_string(),
+                    ))
+                })?;
 
         // If it fails, do not return early
         // from this function but try to take the funds from the unshielded
         // balance
             //FIXME: this logic is actually only needed in case of ABCI?
         match wrapper.generate_fee_unshielding(
-            transparent_balance,
+            unshield_amount,
             get_transfer_hash_from_storage(wl_storage),
                 transaction
         ) {
@@ -367,7 +379,8 @@ where
         None => tracing::error!("Missing expected fee unshielding tx") 
     }}
 
-    // Charge or check fees
+
+           // Charge or check fees
     match block_proposer {
         Some(proposer) => transfer_fee(wl_storage, proposer, #[cfg(not(feature = "mainnet"))]has_valid_pow, &wrapper)?,
         None => check_fees(wl_storage, #[cfg(not(feature = "mainnet"))]has_valid_pow, &wrapper)?
