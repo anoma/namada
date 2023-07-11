@@ -115,3 +115,50 @@ pub fn is_cap_or_whitelisted_key(key: &storage::Key) -> bool {
         _ => false,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
+
+    /// Test that storage key serialization yields the expected value.
+    #[test]
+    fn test_keys_whitelisted_to_string() {
+        let key: storage::Key = Key {
+            asset: DAI_ERC20_ETH_ADDRESS,
+            suffix: KeyType::Whitelisted,
+        }
+        .into();
+        let expected = "#atest1v9hx7w36g42ysgzzwf5kgem9ypqkgerjv4ehxgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq8f99ew/whitelist/0x6b175474e89094c44da98b954eedeac495271d0f/whitelisted";
+        assert_eq!(expected, key.to_string());
+    }
+
+    /// Test that checking if a key is of type "cap" or "whitelisted" works.
+    #[test]
+    fn test_cap_or_whitelisted_key() {
+        let whitelisted_key: storage::Key = Key {
+            asset: DAI_ERC20_ETH_ADDRESS,
+            suffix: KeyType::Whitelisted,
+        }
+        .into();
+        assert!(is_cap_or_whitelisted_key(&whitelisted_key));
+
+        let cap_key: storage::Key = Key {
+            asset: DAI_ERC20_ETH_ADDRESS,
+            suffix: KeyType::Cap,
+        }
+        .into();
+        assert!(is_cap_or_whitelisted_key(&cap_key));
+
+        let unexpected_key = {
+            let mut k: storage::Key = Key {
+                asset: DAI_ERC20_ETH_ADDRESS,
+                suffix: KeyType::Cap,
+            }
+            .into();
+            k.segments[3] = DbKeySeg::StringSeg("abc".to_owned());
+            k
+        };
+        assert!(!is_cap_or_whitelisted_key(&unexpected_key));
+    }
+}
