@@ -10,6 +10,7 @@
 //! `NAMADA_E2E_KEEP_TEMP=true`.
 #![allow(clippy::type_complexity)]
 
+use std::f32::consts::E;
 use std::path::PathBuf;
 use std::process::Command;
 use std::str::FromStr;
@@ -1814,9 +1815,7 @@ fn invalid_transactions() -> Result<()> {
     let _bg_ledger = ledger.background();
 
     // we need to wait for the rpc endpoint to start
-    if is_debug_mode() {
-        sleep(3);
-    }
+    sleep(10);
 
     // 5. Submit an invalid transactions (invalid token address)
     let daewon_lower = DAEWON.to_lowercase();
