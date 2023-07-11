@@ -907,6 +907,7 @@ impl Tx {
     /// Verify that the section with the given hash has been signed by the given
     /// public key
     pub fn verify_signature(
+        //FIXME: need a host env function for gas metering!
         &self,
         pk: &common::PublicKey,
         hash: &crate::types::hash::Hash,
@@ -969,12 +970,36 @@ impl Tx {
     /// signatures over it
     #[cfg(feature = "ferveo-tpke")]
     pub fn encrypt(&mut self, pubkey: &EncryptionKey) {
+        use crate::types::hash::Hash;
+
         let header_hash = self.header_hash();
         let mut plaintexts = vec![];
         // Iterate backwrds to sidestep the effects of deletion on indexing
         for i in (0..self.sections.len()).rev() {
             match &self.sections[i] {
                 Section::Signature(sig) if sig.target == header_hash => {}
+                Section::MaspTx(_unshield) => {
+                    // Do NOT encrypt the fee unshielding transaction
+                    //FIXME: manage unwraps
+                    //FIXME: improve
+                    //FIXME: if I need to sign the unshield (probably not) I should also skip the encyption on its signature
+                    if let Some(unshield_section_hash) =
+                        self.header().wrapper().unwrap().unshield_hash
+                    {
+                        if unshield_section_hash
+                            == Hash(
+                                self.sections[i]
+                                    .hash(&mut Sha256::new())
+                                    .finalize_reset()
+                                    .into(),
+                            )
+                        {
+                            continue;
+                        }
+                    }
+
+                    plaintexts.push(self.sections.remove(i))
+                }
                 // Add eligible section to the list of sections to encrypt
                 _ => plaintexts.push(self.sections.remove(i)),
             }
