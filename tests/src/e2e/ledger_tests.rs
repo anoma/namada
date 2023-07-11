@@ -4695,7 +4695,7 @@ fn test_epoch_sleep() -> Result<()> {
     let start_epoch = get_epoch(&test, &validator_one_rpc).unwrap();
 
     // 3. Use epoch-sleep to sleep for an epoch
-    let args = ["epoch-sleep", "--node", &validator_one_rpc];
+    let args = ["utils", "epoch-sleep", "--node", &validator_one_rpc];
     let mut client = run!(test, Bin::Client, &args, None)?;
     let reached_epoch = parse_reached_epoch(&mut client)?;
     client.assert_success();

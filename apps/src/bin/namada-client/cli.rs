@@ -433,17 +433,6 @@ pub async fn main() -> Result<()> {
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_protocol_parameters(&client, args).await;
                 }
-                Sub::EpochSleep(EpochSleep(mut args)) => {
-                    let client = HttpClient::new(utils::take_config_address(
-                        &mut args.ledger_address,
-                    ))
-                    .unwrap();
-                    wait_until_node_is_synched(&client).await;
-                    let client =
-                        HttpClient::new(args.ledger_address.clone()).unwrap();
-                    let args = args.to_sdk(&mut ctx);
-                    rpc::epoch_sleep(&client, args).await;
-                }
             }
         }
         cli::NamadaClient::WithoutContext(cmd, global_args) => match cmd {
@@ -465,6 +454,18 @@ pub async fn main() -> Result<()> {
             }
             Utils::DefaultBaseDir(DefaultBaseDir(args)) => {
                 utils::default_base_dir(global_args, args)
+            }
+            Utils::EpochSleep(EpochSleep(mut args)) => {
+                let mut ctx = cli::Context::new(global_args)?;
+                let ledger_address = args.ledger_address.clone();
+                let client = HttpClient::new(utils::take_config_address(
+                    &mut args.ledger_address,
+                ))
+                .unwrap();
+                wait_until_node_is_synched(&client).await;
+                let client = HttpClient::new(ledger_address).unwrap();
+                let args = args.to_sdk(&mut ctx);
+                rpc::epoch_sleep(&client, args).await;
             }
         },
     }
