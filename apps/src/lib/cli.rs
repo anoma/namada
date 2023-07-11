@@ -1701,6 +1701,28 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct EpochSleep(pub args::Query<args::CliTypes>);
+
+    impl SubCmd for EpochSleep {
+        const CMD: &'static str = "epoch-sleep";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::Query::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Query for the current epoch, then sleep until the next \
+                     epoch.",
+                )
+                .add_args::<args::Query<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub enum Utils {
         JoinNetwork(JoinNetwork),
         FetchWasms(FetchWasms),
@@ -1708,6 +1730,7 @@ pub mod cmds {
         InitGenesisValidator(InitGenesisValidator),
         PkToTmAddress(PkToTmAddress),
         DefaultBaseDir(DefaultBaseDir),
+        EpochSleep(EpochSleep),
     }
 
     impl SubCmd for Utils {
@@ -1726,12 +1749,14 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::PkToTmAddress);
                 let default_base_dir =
                     SubCmd::parse(matches).map(Self::DefaultBaseDir);
+                let epoch_sleep = SubCmd::parse(matches).map(Self::EpochSleep);
                 join_network
                     .or(fetch_wasms)
                     .or(init_network)
                     .or(init_genesis)
                     .or(pk_to_tm_address)
                     .or(default_base_dir)
+                    .or(epoch_sleep)
             })
         }
 
@@ -1744,6 +1769,7 @@ pub mod cmds {
                 .subcommand(InitGenesisValidator::def())
                 .subcommand(PkToTmAddress::def())
                 .subcommand(DefaultBaseDir::def())
+                .subcommand(EpochSleep::def())
                 .subcommand_required(true)
                 .arg_required_else_help(true)
         }

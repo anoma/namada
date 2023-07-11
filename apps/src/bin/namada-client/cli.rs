@@ -471,6 +471,15 @@ pub async fn main() -> Result<()> {
             Utils::DefaultBaseDir(DefaultBaseDir(args)) => {
                 utils::default_base_dir(global_args, args)
             }
+            Utils::EpochSleep(EpochSleep(args)) => {
+                let mut ctx = cli::Context::new(global_args)
+                    .expect("expected to construct a context");
+                let ledger_address = args.ledger_address.clone();
+                wait_until_node_is_synched(&ledger_address).await;
+                let client = HttpClient::new(ledger_address).unwrap();
+                let args = args.to_sdk(&mut ctx);
+                rpc::epoch_sleep(&client, args).await;
+            }
         },
     }
     Ok(())
