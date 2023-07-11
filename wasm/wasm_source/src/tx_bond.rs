@@ -15,7 +15,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    use std::collections::BTreeSet;
 
     use namada::ledger::pos::{GenesisValidator, PosParams, PosVP};
     use namada::proof_of_stake::{
@@ -132,7 +132,7 @@ mod tests {
         // Read some data before the tx is executed
         let mut epoched_total_stake_pre: Vec<token::Amount> = Vec::new();
         let mut epoched_validator_stake_pre: Vec<token::Amount> = Vec::new();
-        let mut epoched_validator_set_pre: Vec<HashSet<WeightedValidator>> =
+        let mut epoched_validator_set_pre: Vec<BTreeSet<WeightedValidator>> =
             Vec::new();
 
         for epoch in 0..=pos_params.unbonding_len {
@@ -163,7 +163,7 @@ mod tests {
         // Read the data after the tx is executed.
         let mut epoched_total_stake_post: Vec<token::Amount> = Vec::new();
         let mut epoched_validator_stake_post: Vec<token::Amount> = Vec::new();
-        let mut epoched_validator_set_post: Vec<HashSet<WeightedValidator>> =
+        let mut epoched_validator_set_post: Vec<BTreeSet<WeightedValidator>> =
             Vec::new();
 
         println!("\nFILLING POST STATE\n");
