@@ -1,9 +1,9 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::hints;
-use namada_core::ledger::eth_bridge::storage::active_key;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
     get_nonce_key, get_signed_root_key,
 };
+use namada_core::ledger::eth_bridge::storage::{active_key, whitelist};
 use namada_core::ledger::storage;
 use namada_core::ledger::storage::{StoreType, WlStorage};
 use namada_core::ledger::storage_api::StorageRead;
@@ -391,6 +391,55 @@ where
             },
             voting_powers_map,
         )
+    }
+
+    /// Check if the token at the given [`EthAddress`] is whitelisted.
+    pub fn is_token_whitelisted(self, &token: &EthAddress) -> bool {
+        let key = whitelist::Key {
+            asset: token,
+            suffix: whitelist::KeyType::Whitelisted,
+        }
+        .into();
+
+        self.wl_storage
+            .read(&key)
+            .expect("Reading from storage should not fail")
+            .unwrap_or(false)
+    }
+
+    /// Fetch the token cap of the asset associated with the given
+    /// [`EthAddress`].
+    ///
+    /// If the asset has never been whitelisted, return [`None`].
+    pub fn get_token_cap(self, &token: &EthAddress) -> Option<token::Amount> {
+        let key = whitelist::Key {
+            asset: token,
+            suffix: whitelist::KeyType::Cap,
+        }
+        .into();
+
+        self.wl_storage
+            .read(&key)
+            .expect("Reading from storage should not fail")
+    }
+
+    /// Fetch the token supply of the asset associated with the given
+    /// [`EthAddress`].
+    ///
+    /// If the asset has never been minted, return [`None`].
+    pub fn get_token_supply(
+        self,
+        &token: &EthAddress,
+    ) -> Option<token::Amount> {
+        let key = whitelist::Key {
+            asset: token,
+            suffix: whitelist::KeyType::WrappedSupply,
+        }
+        .into();
+
+        self.wl_storage
+            .read(&key)
+            .expect("Reading from storage should not fail")
     }
 }
 
