@@ -696,10 +696,11 @@ fn transfer_token(
     let receiver = find_address(test_b, BERTHA)?;
     let height = transfer(
         test_a,
-        ALBERT_KEY,
+        ALBERT,
         &receiver,
         NAM,
         &Amount::whole(100000),
+        ALBERT_KEY,
         port_channel_id_a,
         None,
         None,
@@ -821,10 +822,11 @@ fn transfer_back(
     // Send a token from Chain B
     let height = transfer(
         test_b,
-        BERTHA_KEY,
+        BERTHA,
         &receiver,
         NAM,
         &Amount::whole(50000),
+        BERTHA_KEY,
         port_channel_id_b,
         Some(sub_prefix),
         None,
@@ -880,10 +882,11 @@ fn transfer_timeout(
     // Send a token from Chain A
     let height = transfer(
         test_a,
-        ALBERT_KEY,
+        ALBERT,
         &receiver,
         NAM,
         &Amount::whole(100000),
+        ALBERT,
         port_channel_id_a,
         None,
         Some(Duration::new(5, 0)),
@@ -1021,6 +1024,7 @@ fn transfer(
     receiver: &Address,
     token: impl AsRef<str>,
     amount: &Amount,
+    signer: impl AsRef<str>,
     port_channel_id: &PortChannelId,
     sub_prefix: Option<String>,
     timeout_sec: Option<Duration>,
@@ -1038,7 +1042,7 @@ fn transfer(
         "--receiver",
         &receiver,
         "--signing-keys",
-        sender.as_ref(),
+        signer.as_ref(),
         "--token",
         token.as_ref(),
         "--amount",
