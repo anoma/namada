@@ -659,6 +659,29 @@ where
     }
 }
 
+/// Zero offset
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
+pub struct OffsetZero;
+impl EpochOffset for OffsetZero {
+    fn value(_paras: &PosParams) -> u64 {
+        0
+    }
+
+    fn dyn_offset() -> DynEpochOffset {
+        DynEpochOffset::Zero
+    }
+}
+
 /// Offset at pipeline length.
 #[derive(
     Debug,
@@ -731,6 +754,8 @@ impl EpochOffset for OffsetPipelinePlusUnbondingLen {
 /// Offset length dynamic choice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DynEpochOffset {
+    /// Zero offset
+    Zero,
     /// Offset at pipeline length - 1
     PipelineLenMinusOne,
     /// Offset at pipeline length.
