@@ -4413,8 +4413,13 @@ fn double_signing_gets_slashed() -> Result<()> {
 
     // 2. Copy the first genesis validator base-dir
     let validator_0_base_dir = test.get_base_dir(&Who::Validator(0));
-    let validator_0_base_dir_copy =
-        test.test_dir.path().join("validator-0-copy");
+    let validator_0_base_dir_copy = test
+        .test_dir
+        .path()
+        .join(test.net.chain_id.as_str())
+        .join(client::utils::NET_ACCOUNTS_DIR)
+        .join("validator-0-copy")
+        .join(namada_apps::config::DEFAULT_BASE_DIR);
     fs_extra::dir::copy(
         validator_0_base_dir,
         &validator_0_base_dir_copy,
