@@ -1,7 +1,7 @@
 //! Client RPC queries
 
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, Write};
 use std::iter::Iterator;
@@ -10,7 +10,7 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
-use itertools::{Either, Itertools};
+use itertools::Either;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::{Node, ViewingKey};
@@ -1567,31 +1567,26 @@ pub async fn query_bonded_stake<C: namada::ledger::queries::Client + Sync>(
         }
         None => {
             let consensus =
-                unwrap_client_response::<C, HashSet<WeightedValidator>>(
+                unwrap_client_response::<C, BTreeSet<WeightedValidator>>(
                     RPC.vp()
                         .pos()
                         .consensus_validator_set(client, &Some(epoch))
                         .await,
                 );
             let below_capacity =
-                unwrap_client_response::<C, HashSet<WeightedValidator>>(
+                unwrap_client_response::<C, BTreeSet<WeightedValidator>>(
                     RPC.vp()
                         .pos()
                         .below_capacity_validator_set(client, &Some(epoch))
                         .await,
                 );
 
-            let sorted_consensus = consensus.into_iter().sorted_by_key(|v| {
-                -(i128::try_from(v.bonded_stake.change()))
-                    .expect("Failed to sort consensus validators")
-            });
-
             // Iterate all validators
             let stdout = io::stdout();
             let mut w = stdout.lock();
 
             writeln!(w, "Consensus validators:").unwrap();
-            for val in sorted_consensus {
+            for val in consensus.into_iter().rev() {
                 writeln!(
                     w,
                     "  {}: {}",
@@ -1601,13 +1596,8 @@ pub async fn query_bonded_stake<C: namada::ledger::queries::Client + Sync>(
                 .unwrap();
             }
             if !below_capacity.is_empty() {
-                let sorted_below_capacity =
-                    below_capacity.into_iter().sorted_by_key(|v| {
-                        -(i128::try_from(v.bonded_stake.change()))
-                            .expect("Failed to sort consensus validators")
-                    });
                 writeln!(w, "Below capacity validators:").unwrap();
-                for val in sorted_below_capacity {
+                for val in below_capacity.into_iter().rev() {
                     writeln!(
                         w,
                         "  {}: {}",
