@@ -475,8 +475,8 @@ pub async fn main() -> Result<()> {
                 let mut ctx = cli::Context::new(global_args)
                     .expect("expected to construct a context");
                 let ledger_address = args.ledger_address.clone();
-                wait_until_node_is_synched(&ledger_address).await;
                 let client = HttpClient::new(ledger_address).unwrap();
+                wait_until_node_is_synched(&client).await;
                 let args = args.to_sdk(&mut ctx);
                 rpc::epoch_sleep(&client, args).await;
             }

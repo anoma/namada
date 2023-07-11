@@ -2156,7 +2156,7 @@ pub async fn epoch_sleep<C: namada::ledger::queries::Client + Sync>(
 ) {
     let start_epoch = query_and_print_epoch(client).await;
     loop {
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(core::time::Duration::from_secs(1)).await;
         let current_epoch = query_epoch(client).await;
         if current_epoch > start_epoch {
             println!("Reached epoch {}", current_epoch);
