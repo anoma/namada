@@ -1406,7 +1406,11 @@ pub async fn submit_transfer<
         #[cfg(feature = "mainnet")]
         let transfer_address = transfer_source.effective_address();
         #[cfg(feature = "mainnet")]
-        let owner = Some(transfer_address);
+        let owner = if source == masp_addr {
+            Some(transfer_address)
+        } else {
+            None
+        };
 
         // Dry-run/broadcast/submit the transaction
         let result = process_tx::<C, V>(

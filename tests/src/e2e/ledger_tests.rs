@@ -606,7 +606,7 @@ fn masp_txs_and_queries() -> Result<()> {
         |genesis| {
             let parameters = ParametersConfig {
                 epochs_per_year: epochs_per_year_from_min_duration(
-                    if is_debug_mode() { 3600 } else { 360 },
+                    if is_debug_mode() { 1440 } else { 360 },
                 ),
                 min_num_of_blocks: 1,
                 ..genesis.parameters
