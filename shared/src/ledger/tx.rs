@@ -1407,9 +1407,9 @@ pub async fn submit_transfer<
         let transfer_address = transfer_source.effective_address();
         #[cfg(feature = "mainnet")]
         let owner = if source == masp_addr {
-            Some(transfer_address)
-        } else {
             None
+        } else {
+            Some(transfer_address)
         };
 
         // Dry-run/broadcast/submit the transaction
