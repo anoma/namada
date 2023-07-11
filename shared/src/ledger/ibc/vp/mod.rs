@@ -1047,7 +1047,7 @@ mod tests {
         // client connection list
         let client_conn_key = client_connections_key(&msg.client_id_on_a);
         let conn_list = conn_id.to_string();
-        let bytes = conn_list.as_bytes().to_vec();
+        let bytes = conn_list.try_to_vec().expect("encoding failed");
         wl_storage
             .write_log
             .write(&client_conn_key, bytes)
@@ -1154,7 +1154,7 @@ mod tests {
         // client connection list
         let client_conn_key = client_connections_key(&msg.client_id_on_a);
         let conn_list = conn_id.to_string();
-        let bytes = conn_list.as_bytes().to_vec();
+        let bytes = conn_list.try_to_vec().expect("encoding failed");
         wl_storage
             .write_log
             .write(&client_conn_key, bytes)
@@ -1270,7 +1270,7 @@ mod tests {
         // client connection list
         let client_conn_key = client_connections_key(&msg.client_id_on_b);
         let conn_list = conn_id.to_string();
-        let bytes = conn_list.as_bytes().to_vec();
+        let bytes = conn_list.try_to_vec().expect("encoding failed");
         wl_storage
             .write_log
             .write(&client_conn_key, bytes)
