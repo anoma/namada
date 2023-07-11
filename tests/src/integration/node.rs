@@ -282,8 +282,7 @@ impl Client for MockNode {
             tx_wasm_cache: borrowed.tx_wasm_cache.read_only(),
             storage_read_past_height_limit: None,
         };
-        let response = rpc.handle(ctx, &request).unwrap();
-        Ok(response)
+        rpc.handle(ctx, &request).map_err(Report::new)
     }
 
     async fn perform<R>(
