@@ -11,6 +11,7 @@ use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter};
 use crate::ledger::governance::GovernanceVp;
 use crate::ledger::ibc::vp::Ibc;
 use crate::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
+use crate::ledger::native_vp::ethereum_bridge::nut::NonUsableTokens;
 use crate::ledger::native_vp::ethereum_bridge::vp::EthBridge;
 use crate::ledger::native_vp::multitoken::MultitokenVp;
 use crate::ledger::native_vp::parameters::{self, ParametersVp};
@@ -72,6 +73,8 @@ pub enum Error {
     ReplayProtectionNativeVpError(
         crate::ledger::native_vp::replay_protection::Error,
     ),
+    #[error("Non usable tokens native VP error: {0}")]
+    NutNativeVpError(native_vp::ethereum_bridge::nut::Error),
     #[error("Access to an internal address {0} is forbidden")]
     AccessForbidden(InternalAddress),
 }
@@ -585,9 +588,17 @@ where
                             gas_meter = pgf_vp.ctx.gas_meter.into_inner();
                             result
                         }
+                        InternalAddress::Nut(_) => {
+                            let non_usable_tokens = NonUsableTokens { ctx };
+                            let result = non_usable_tokens
+                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .map_err(Error::NutNativeVpError);
+                            gas_meter =
+                                non_usable_tokens.ctx.gas_meter.into_inner();
+                            result
+                        }
                         InternalAddress::IbcToken(_)
-                        | InternalAddress::Erc20(_)
-                        | InternalAddress::Nut(_) => {
+                        | InternalAddress::Erc20(_) => {
                             // The address should be a part of a multitoken key
                             gas_meter = ctx.gas_meter.into_inner();
                             Ok(verifiers.contains(&Address::Internal(
