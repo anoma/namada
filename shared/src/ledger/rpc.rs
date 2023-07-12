@@ -15,7 +15,10 @@ use namada_core::types::storage::Key;
 use namada_core::types::token::{
     Amount, DenominatedAmount, Denomination, MaspDenom, TokenAddress,
 };
-use namada_proof_of_stake::types::{BondsAndUnbondsDetails, CommissionPair};
+use namada_proof_of_stake::parameters::PosParams;
+use namada_proof_of_stake::types::{
+    BondsAndUnbondsDetails, CommissionPair, ValidatorState,
+};
 use serde::Serialize;
 
 use crate::ledger::args::InputAmount;
@@ -696,6 +699,13 @@ pub async fn get_proposal_votes<C: crate::ledger::queries::Client + Sync>(
     }
 }
 
+/// Get the PoS parameters
+pub async fn get_pos_params<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+) -> PosParams {
+    unwrap_client_response::<C, _>(RPC.vp().pos().pos_params(client).await)
+}
+
 /// Get all validators in the given epoch
 pub async fn get_all_validators<C: crate::ledger::queries::Client + Sync>(
     client: &C,
@@ -734,6 +744,20 @@ pub async fn get_validator_stake<C: crate::ledger::queries::Client + Sync>(
             .await,
     )
     .unwrap_or_default()
+}
+
+/// Query and return a validator's state
+pub async fn get_validator_state<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    validator: &Address,
+    epoch: Option<Epoch>,
+) -> Option<ValidatorState> {
+    unwrap_client_response::<C, Option<ValidatorState>>(
+        RPC.vp()
+            .pos()
+            .validator_state(client, validator, &epoch)
+            .await,
+    )
 }
 
 /// Get the delegator's delegation
