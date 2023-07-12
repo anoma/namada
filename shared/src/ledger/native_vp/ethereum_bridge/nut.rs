@@ -116,4 +116,124 @@ where
     }
 }
 
-// TODO: add tests
+#[cfg(test)]
+mod test_nuts {
+    use std::env::temp_dir;
+
+    use assert_matches::assert_matches;
+    use borsh::BorshSerialize;
+    use namada_core::ledger::storage::testing::TestWlStorage;
+    use namada_core::ledger::storage_api::StorageWrite;
+    use namada_core::types::address::testing::arb_non_internal_address;
+    use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
+    use namada_core::types::storage::TxIndex;
+    use namada_core::types::token::balance_key;
+    use namada_core::types::transaction::TxType;
+    use namada_ethereum_bridge::storage::wrapped_erc20s;
+    use proptest::prelude::*;
+
+    use super::*;
+    use crate::ledger::gas::VpGasMeter;
+    use crate::vm::wasm::VpCache;
+    use crate::vm::WasmCacheRwAccess;
+
+    /// Run a VP check on a NUT transfer between the two provided addresses.
+    fn check_nut_transfer(src: Address, dst: Address) -> Option<bool> {
+        let nut = wrapped_erc20s::nut(&DAI_ERC20_ETH_ADDRESS);
+        let src_balance_key = balance_key(&nut, &src);
+        let dst_balance_key = balance_key(&nut, &dst);
+
+        let wl_storage = {
+            let mut wl = TestWlStorage::default();
+
+            // write initial balances
+            wl.write(&src_balance_key, Amount::from(200_u64))
+                .expect("Test failed");
+            wl.write(&dst_balance_key, Amount::from(100_u64))
+                .expect("Test failed");
+            wl.commit_block().expect("Test failed");
+
+            // write the updated balances
+            wl.write_log
+                .write(
+                    &src_balance_key,
+                    Amount::from(100_u64).try_to_vec().expect("Test failed"),
+                )
+                .expect("Test failed");
+            wl.write_log
+                .write(
+                    &dst_balance_key,
+                    Amount::from(200_u64).try_to_vec().expect("Test failed"),
+                )
+                .expect("Test failed");
+
+            wl
+        };
+
+        let keys_changed = {
+            let mut keys = BTreeSet::new();
+            keys.insert(src_balance_key);
+            keys.insert(dst_balance_key);
+            keys
+        };
+        let verifiers = {
+            let mut v = BTreeSet::new();
+            v.insert(Address::Internal(InternalAddress::Multitoken));
+            v
+        };
+
+        let tx = Tx::from_type(TxType::Raw);
+        let ctx = Ctx::<_, _, WasmCacheRwAccess>::new(
+            &Address::Internal(InternalAddress::Nut(DAI_ERC20_ETH_ADDRESS)),
+            &wl_storage.storage,
+            &wl_storage.write_log,
+            &tx,
+            &TxIndex(0),
+            VpGasMeter::new(0u64),
+            &keys_changed,
+            &verifiers,
+            VpCache::new(temp_dir(), 100usize),
+        );
+        let vp = NonUsableTokens { ctx };
+
+        // print debug info in case we run into failures
+        for key in &keys_changed {
+            let pre: Amount = vp
+                .ctx
+                .read_pre(key)
+                .expect("Test failed")
+                .unwrap_or_default();
+            let post: Amount = vp
+                .ctx
+                .read_post(key)
+                .expect("Test failed")
+                .unwrap_or_default();
+            println!("{key}: PRE={pre:?} POST={post:?}");
+        }
+
+        vp.validate_tx(&tx, &keys_changed, &verifiers).ok()
+    }
+
+    proptest! {
+        /// Test that transferring NUTs between two arbitrary addresses
+        /// will always fail.
+        #[test]
+        fn test_nut_transfer_rejected(
+            (src, dst) in (arb_non_internal_address(), arb_non_internal_address())
+        ) {
+            let status = check_nut_transfer(src, dst);
+            assert_matches!(status, Some(false));
+        }
+
+        /// Test that transferring NUTs from an arbitrary address to the
+        /// Bridge pool address passes.
+        #[test]
+        fn test_nut_transfer_passes(src in arb_non_internal_address()) {
+            let status = check_nut_transfer(
+                src,
+                Address::Internal(InternalAddress::EthBridgePool),
+            );
+            assert_matches!(status, Some(true));
+        }
+    }
+}
