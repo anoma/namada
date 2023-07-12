@@ -39,6 +39,7 @@ pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     args::EthereumBridgePool {
         tx: tx_args,
+        nut,
         asset,
         recipient,
         sender,
@@ -60,9 +61,11 @@ pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
             recipient,
             sender: sender.clone(),
             amount,
-            // TODO: dispatch on the transfer kind, based
-            // on CLI arguments
-            kind: TransferToEthereumKind::Erc20,
+            kind: if nut {
+                TransferToEthereumKind::Nut
+            } else {
+                TransferToEthereumKind::Erc20
+            },
         },
         gas_fee: GasFee {
             amount: fee_amount,

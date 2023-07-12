@@ -2513,6 +2513,7 @@ pub mod args {
     pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     pub const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
+    pub const NUT: ArgFlag = flag("nut");
     pub const OUT_FILE_PATH_OPT: ArgOpt<PathBuf> = arg_opt("out-file-path");
     pub const OUTPUT_FOLDER_PATH: ArgOpt<PathBuf> =
         arg_opt("output-folder-path");
@@ -2787,6 +2788,7 @@ pub mod args {
     impl CliToSdk<EthereumBridgePool<SdkTypes>> for EthereumBridgePool<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> EthereumBridgePool<SdkTypes> {
             EthereumBridgePool::<SdkTypes> {
+                nut: self.nut,
                 tx: self.tx.to_sdk(ctx),
                 asset: self.asset,
                 recipient: self.recipient,
@@ -2809,6 +2811,7 @@ pub mod args {
             let fee_amount = FEE_AMOUNT.parse(matches).amount;
             let fee_payer = FEE_PAYER.parse(matches);
             let code_path = PathBuf::from(TX_BRIDGE_POOL_WASM);
+            let nut = NUT.parse(matches);
             Self {
                 tx,
                 asset,
@@ -2818,6 +2821,7 @@ pub mod args {
                 fee_amount,
                 fee_payer,
                 code_path,
+                nut,
             }
         }
 
@@ -2852,6 +2856,10 @@ pub mod args {
                         "The Namada address of the account paying the fee.",
                     ),
                 )
+                .arg(NUT.def().help(
+                    "Add Non Usable Tokens (NUTs) to the Bridge pool. These \
+                     are usually obtained from invalid transfers to Namada.",
+                ))
         }
     }
 
