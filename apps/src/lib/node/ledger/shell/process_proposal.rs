@@ -246,7 +246,7 @@ where
             Ok(tx) => tx,
             Err(tx_result) => return tx_result,
         };
-
+        tracing::info!("+++++ process_single_tx() TX DATA +++++ : {:?}", tx);
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 

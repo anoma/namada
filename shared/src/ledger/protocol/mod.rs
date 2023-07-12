@@ -94,6 +94,7 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
+    tracing::info!("+++++ apply_tx() TX DATA +++++ : {:?}", tx);
     // Base gas cost for applying the tx
     block_gas_meter
         .add_base_transaction_fee(tx_length)
