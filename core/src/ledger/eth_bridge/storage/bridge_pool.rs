@@ -415,7 +415,9 @@ mod test_bridge_pool_tree {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::types::eth_bridge_pool::{GasFee, TransferToEthereum};
+    use crate::types::eth_bridge_pool::{
+        GasFee, TransferToEthereum, TransferToEthereumKind,
+    };
     use crate::types::ethereum_events::EthAddress;
 
     /// An established user address for testing & development
@@ -432,6 +434,7 @@ mod test_bridge_pool_tree {
         assert_eq!(tree.root().0, [0; 32]);
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([1; 20]),
                 sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
@@ -458,6 +461,7 @@ mod test_bridge_pool_tree {
         for i in 0..2 {
             let transfer = PendingTransfer {
                 transfer: TransferToEthereum {
+                    kind: TransferToEthereumKind::Erc20,
                     asset: EthAddress([i; 20]),
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
@@ -485,6 +489,7 @@ mod test_bridge_pool_tree {
         for i in 0..3 {
             let transfer = PendingTransfer {
                 transfer: TransferToEthereum {
+                    kind: TransferToEthereumKind::Erc20,
                     asset: EthAddress([i; 20]),
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
@@ -522,6 +527,7 @@ mod test_bridge_pool_tree {
 
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([1; 20]),
                 sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
@@ -549,6 +555,7 @@ mod test_bridge_pool_tree {
         for i in 0..3 {
             let transfer = PendingTransfer {
                 transfer: TransferToEthereum {
+                    kind: TransferToEthereumKind::Erc20,
                     asset: EthAddress([i; 20]),
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
@@ -579,6 +586,7 @@ mod test_bridge_pool_tree {
     fn test_parse_key() {
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([1; 20]),
                 sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
@@ -602,6 +610,7 @@ mod test_bridge_pool_tree {
     fn test_key_multiple_segments() {
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([1; 20]),
                 sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
@@ -637,6 +646,7 @@ mod test_bridge_pool_tree {
         let mut tree = BridgePoolTree::default();
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([1; 20]),
                 sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
@@ -655,6 +665,7 @@ mod test_bridge_pool_tree {
         );
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([1; 20]),
                 sender: bertha_address(),
                 recipient: EthAddress([0; 20]),
@@ -686,6 +697,7 @@ mod test_bridge_pool_tree {
     fn test_single_leaf() {
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([0; 20]),
                 sender: bertha_address(),
                 recipient: EthAddress([0; 20]),
@@ -714,6 +726,7 @@ mod test_bridge_pool_tree {
         for i in 0..2 {
             let transfer = PendingTransfer {
                 transfer: TransferToEthereum {
+                    kind: TransferToEthereumKind::Erc20,
                     asset: EthAddress([i; 20]),
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
@@ -743,6 +756,7 @@ mod test_bridge_pool_tree {
         for i in 0..3 {
             let transfer = PendingTransfer {
                 transfer: TransferToEthereum {
+                    kind: TransferToEthereumKind::Erc20,
                     asset: EthAddress([i; 20]),
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
@@ -772,6 +786,7 @@ mod test_bridge_pool_tree {
         for i in 0..3 {
             let transfer = PendingTransfer {
                 transfer: TransferToEthereum {
+                    kind: TransferToEthereumKind::Erc20,
                     asset: EthAddress([i; 20]),
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
@@ -799,6 +814,7 @@ mod test_bridge_pool_tree {
         for i in 0..2 {
             let transfer = PendingTransfer {
                 transfer: TransferToEthereum {
+                    kind: TransferToEthereumKind::Erc20,
                     asset: EthAddress([i; 20]),
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
@@ -826,6 +842,7 @@ mod test_bridge_pool_tree {
         for i in 0..3 {
             let transfer = PendingTransfer {
                 transfer: TransferToEthereum {
+                    kind: TransferToEthereumKind::Erc20,
                     asset: EthAddress([i; 20]),
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
@@ -853,6 +870,7 @@ mod test_bridge_pool_tree {
         for i in 0..5 {
             let transfer = PendingTransfer {
                 transfer: TransferToEthereum {
+                    kind: TransferToEthereumKind::Erc20,
                     asset: EthAddress([i; 20]),
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
@@ -884,6 +902,7 @@ mod test_bridge_pool_tree {
                         .into_iter()
                         .map(|addr| PendingTransfer {
                             transfer: TransferToEthereum {
+                                kind: TransferToEthereumKind::Erc20,
                                 asset: EthAddress(addr),
                                 sender: bertha_address(),
                                 recipient: EthAddress(addr),

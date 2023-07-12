@@ -30,7 +30,7 @@ use crate::types::control_flow::{
 };
 use crate::types::eth_abi::Encode;
 use crate::types::eth_bridge_pool::{
-    GasFee, PendingTransfer, TransferToEthereum,
+    GasFee, PendingTransfer, TransferToEthereum, TransferToEthereumKind,
 };
 use crate::types::keccak::KeccakHash;
 use crate::types::token::{Amount, DenominatedAmount};
@@ -66,6 +66,9 @@ pub async fn build_bridge_pool_tx<
             recipient,
             sender,
             amount,
+            // TODO: dispatch on the transfer kind, based
+            // on CLI arguments
+            kind: TransferToEthereumKind::Erc20,
         },
         gas_fee: GasFee {
             amount: gas_amount,
@@ -680,6 +683,7 @@ mod recommendations {
         pub fn transfer(gas_amount: u64) -> PendingTransfer {
             PendingTransfer {
                 transfer: TransferToEthereum {
+                    kind: TransferToEthereumKind::Erc20,
                     asset: EthAddress([1; 20]),
                     recipient: EthAddress([2; 20]),
                     sender: bertha_address(),

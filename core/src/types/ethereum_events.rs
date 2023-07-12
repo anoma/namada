@@ -376,6 +376,60 @@ pub struct TransferToNamada {
     pub receiver: Address,
 }
 
+/// Transfer to Ethereum kinds.
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Serialize,
+    Deserialize,
+)]
+#[repr(u8)]
+pub enum TransferToEthereumKind {
+    /// Transfer ERC20 assets from Namada to Ethereum.
+    ///
+    /// These transfers burn wrapped ERC20 assets in Namada, once
+    /// they have been confirmed.
+    Erc20 = Self::KIND_ERC20,
+    /// Refund non-usable tokens.
+    ///
+    /// These Bridge pool transfers should be crafted for assets
+    /// that have been transferred to Namada, that had either not
+    /// been whitelisted or whose token caps had been exceeded in
+    /// Namada at the time of the transfer.
+    Nut = Self::KIND_NUT,
+}
+
+// XXX: keep these values in sync with the smart contracts
+impl TransferToEthereumKind {
+    const KIND_ERC20: u8 = 0;
+    const KIND_NUT: u8 = 1;
+}
+
+impl TryFrom<u8> for TransferToEthereumKind {
+    type Error = eyre::Error;
+
+    fn try_from(kind: u8) -> Result<Self, Self::Error> {
+        match kind {
+            Self::KIND_ERC20 => Ok(Self::Erc20),
+            Self::KIND_NUT => Ok(Self::Nut),
+            _ => Err(eyre!(
+                "Only valid kinds are {} (ERC20) and {} (NUT)",
+                Self::KIND_ERC20,
+                Self::KIND_NUT
+            )),
+        }
+    }
+}
+
 /// An event transferring some kind of value from Namada to Ethereum
 #[derive(
     Clone,
@@ -392,6 +446,8 @@ pub struct TransferToNamada {
     Deserialize,
 )]
 pub struct TransferToEthereum {
+    /// The kind of transfer to Ethereum.
+    pub kind: TransferToEthereumKind,
     /// Quantity of wrapped Asset in the transfer
     pub amount: Amount,
     /// Address of the smart contract issuing the token

@@ -596,6 +596,7 @@ mod tests {
                     sender: sender.clone(),
                     recipient: EthAddress([i as u8 + 1; 20]),
                     amount: Amount::from(10),
+                    kind: eth_bridge_pool::TransferToEthereumKind::Erc20,
                 },
                 gas_fee: GasFee {
                     amount: Amount::from(1),
@@ -822,6 +823,7 @@ mod tests {
         let mut transfers = vec![];
         for transfer in pending_transfers {
             let transfer_to_eth = TransferToEthereum {
+                kind: transfer.transfer.kind,
                 amount: transfer.transfer.amount,
                 asset: transfer.transfer.asset,
                 receiver: transfer.transfer.recipient,
@@ -912,6 +914,7 @@ mod tests {
                 sender: address::testing::established_address_1(),
                 recipient: EthAddress([5; 20]),
                 amount: Amount::from(10),
+                kind: eth_bridge_pool::TransferToEthereumKind::Erc20,
             },
             gas_fee: GasFee {
                 amount: Amount::from(1),
@@ -1077,6 +1080,7 @@ mod tests {
             .into_iter()
             .map(|transfer| {
                 let transfer_to_eth = TransferToEthereum {
+                    kind: transfer.transfer.kind,
                     amount: transfer.transfer.amount,
                     asset: transfer.transfer.asset,
                     receiver: transfer.transfer.recipient,

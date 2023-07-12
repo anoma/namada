@@ -12,7 +12,7 @@ mod test_bridge_pool_vp {
     use namada::types::address::{nam, wnam};
     use namada::types::chain::ChainId;
     use namada::types::eth_bridge_pool::{
-        GasFee, PendingTransfer, TransferToEthereum,
+        GasFee, PendingTransfer, TransferToEthereum, TransferToEthereumKind,
     };
     use namada::types::ethereum_events::EthAddress;
     use namada::types::key::{common, ed25519, SecretKey};
@@ -123,6 +123,7 @@ mod test_bridge_pool_vp {
     fn validate_erc20_tx() {
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: ASSET,
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
@@ -140,6 +141,7 @@ mod test_bridge_pool_vp {
     fn validate_mint_wnam_tx() {
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: wnam(),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
@@ -157,6 +159,7 @@ mod test_bridge_pool_vp {
     fn validate_mint_wnam_different_sender_tx() {
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: wnam(),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
