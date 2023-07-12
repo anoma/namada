@@ -797,6 +797,16 @@ mod tests {
     fn test_act_on_transfers_to_namada_mints_wdai() {
         let mut wl_storage = TestWlStorage::default();
         test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
+        test_utils::whitelist_tokens(
+            &mut wl_storage,
+            [(
+                DAI_ERC20_ETH_ADDRESS,
+                test_utils::WhitelistMeta {
+                    cap: Amount::max(),
+                    denom: 18,
+                },
+            )],
+        );
         let initial_stored_keys_count = stored_keys_count(&wl_storage);
 
         let amount = Amount::from(100);
