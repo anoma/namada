@@ -173,6 +173,30 @@ impl PosParams {
         let end = infraction_epoch + self.cubic_slashing_window_length;
         (start, end)
     }
+
+    /// Get the redelegation end epoch from the start epoch
+    pub fn redelegation_end_epoch_from_start(&self, end: Epoch) -> Epoch {
+        end + self.pipeline_len
+    }
+
+    /// Get the redelegation start epoch from the end epoch
+    pub fn redelegation_start_epoch_from_end(&self, end: Epoch) -> Epoch {
+        end - self.pipeline_len
+    }
+
+    /// Determine if the infraction is in the slashing window for given
+    /// redelegation
+    pub fn in_redelegation_slashing_window(
+        &self,
+        infraction_epoch: Epoch,
+        redel_start: Epoch,
+        redel_end: Epoch,
+    ) -> bool {
+        // TODO: check bounds on this!
+        redel_start - self.unbonding_len - self.cubic_slashing_window_length
+            <= infraction_epoch
+            && infraction_epoch < redel_end
+    }
 }
 
 #[cfg(test)]

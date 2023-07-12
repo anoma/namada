@@ -45,6 +45,7 @@ const CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY: &str =
     "validator_rewards_accumulator";
 const VALIDATOR_INCOMING_REDELEGATIONS_KEY: &str = "incoming_redelegations";
 const VALIDATOR_OUTGOING_REDELEGATIONS_KEY: &str = "outgoing_redelegations";
+const VALIDATOR_TOTAL_REDELEGATED_BONDED_KEY: &str = "total_redelegated_bonded";
 const VALIDATOR_TOTAL_REDELEGATED_UNBONDED_KEY: &str =
     "total_redelegated_unbonded";
 const DELEGATOR_REDELEGATED_BONDS_KEY: &str = "delegator_redelegated_bonds";
@@ -276,6 +277,14 @@ pub fn validator_incoming_redelegations_key(validator: &Address) -> Key {
 pub fn validator_outgoing_redelegations_key(validator: &Address) -> Key {
     validator_prefix(validator)
         .push(&VALIDATOR_OUTGOING_REDELEGATIONS_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for validator's total-redelegated-bonded amount to track for
+/// slashing
+pub fn validator_total_redelegated_bonded_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_TOTAL_REDELEGATED_BONDED_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 

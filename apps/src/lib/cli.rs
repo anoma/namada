@@ -3602,6 +3602,14 @@ pub mod args {
             let dest_validator = DESTINATION_VALIDATOR.parse(matches);
             let owner = OWNER.parse(matches);
             let amount = AMOUNT.parse(matches);
+            let amount = amount
+                .canonical()
+                .increase_precision(NATIVE_MAX_DECIMAL_PLACES.into())
+                .unwrap_or_else(|e| {
+                    println!("Could not parse bond amount: {:?}", e);
+                    safe_exit(1);
+                })
+                .amount;
             let tx_code_path = PathBuf::from(TX_UNBOND_WASM);
             Self {
                 tx,
@@ -3616,18 +3624,18 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
                 .arg(
-                    SOURCE_VALIDATOR.def().about(
-                        "Source validator address for the redelegation.",
-                    ),
+                    SOURCE_VALIDATOR
+                        .def()
+                        .help("Source validator address for the redelegation."),
                 )
-                .arg(DESTINATION_VALIDATOR.def().about(
+                .arg(DESTINATION_VALIDATOR.def().help(
                     "Destination validator address for the redelegation.",
                 ))
-                .arg(OWNER.def().about(
+                .arg(OWNER.def().help(
                     "Delegator (owner) address of the bonds that are being \
                      redelegated.",
                 ))
-                .arg(AMOUNT.def().about("Amount of tokens to redelegate."))
+                .arg(AMOUNT.def().help("Amount of tokens to redelegate."))
         }
     }
 

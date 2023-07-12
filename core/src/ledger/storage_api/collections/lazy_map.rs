@@ -1,6 +1,6 @@
 //! Lazy map.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::marker::PhantomData;
@@ -100,6 +100,107 @@ pub enum ValidationError {
     #[error("Invalid nested storage key {0}")]
     InvalidNestedSubKey(storage::Key),
 }
+
+// pub trait EagerMapFromIter<K: Eq + Hash + Ord, V> {
+//     fn from_iter<I>(iter: I) -> Self
+//     where
+//         I: IntoIterator<Item = (K, V)>;
+// }
+
+// impl<K: Eq + Hash + Ord, V> EagerMapFromIter<K, V> for HashMap<K, V> {
+//     fn from_iter<I>(iter: I) -> Self
+//     where
+//         I: IntoIterator<Item = (K, V)>,
+//     {
+//         iter.into_iter().collect()
+//     }
+// }
+
+// impl<K: Eq + Hash + Ord, V> EagerMapFromIter<K, V> for BTreeMap<K, V> {
+//     fn from_iter<I>(iter: I) -> Self
+//     where
+//         K: Eq + Hash + Ord,
+//         I: IntoIterator<Item = (K, V)>,
+//     {
+//         iter.into_iter().collect()
+//     }
+// }
+
+/// Trait used to facilitate collection of lazy maps into eager maps
+pub trait Collectable {
+    /// The type of the value of the lazy map
+    type Collected;
+
+    /// Collect the lazy map into an eager map
+    fn collect_map<S: StorageRead>(
+        &self,
+        storage: &S,
+    ) -> storage_api::Result<Self::Collected>;
+}
+
+impl<K, V> Collectable for LazyMap<K, V, super::Nested>
+where
+    K: Hash + Eq + Clone + Debug + storage::KeySeg + Ord,
+    V: Collectable + LazyCollection + Debug,
+{
+    type Collected = BTreeMap<K, V::Collected>;
+
+    fn collect_map<S>(
+        &self,
+        storage: &S,
+    ) -> storage_api::Result<Self::Collected>
+    where
+        S: StorageRead,
+    {
+        let mut map = BTreeMap::<K, V::Collected>::new();
+        for res in self.iter(storage)? {
+            let (
+                NestedSubKey::Data {
+                    key,
+                    nested_sub_key: _,
+                },
+                _,
+            ) = res?;
+            let next_layer = self.at(&key).collect_map(storage)?;
+            map.insert(key, next_layer);
+        }
+        Ok(map)
+    }
+}
+
+impl<K, V> Collectable for LazyMap<K, V, super::Simple>
+where
+    K: Hash + Eq + Clone + Debug + storage::KeySeg + Ord,
+    V: BorshSerialize + BorshDeserialize + Clone + Debug + 'static,
+{
+    type Collected = BTreeMap<K, V>;
+
+    fn collect_map<S>(
+        &self,
+        storage: &S,
+    ) -> storage_api::Result<Self::Collected>
+    where
+        S: StorageRead,
+    {
+        let mut map = BTreeMap::<K, V>::new();
+        for res in self.iter(storage)? {
+            let (key, value) = res?;
+            map.insert(key, value);
+        }
+        Ok(map)
+    }
+}
+
+// impl<V: BorshSerialize + BorshDeserialize + Clone> Collectable for V {
+//     type Collected = Self;
+
+//     fn collect_map<S>(
+//         &self,
+//         _storage: &S,
+//     ) -> storage_api::Result<Self::Collected> {
+//         Ok(self.clone())
+//     }
+// }
 
 /// [`LazyMap`] validation result
 pub type ValidationResult<T> = std::result::Result<T, ValidationError>;
@@ -359,14 +460,6 @@ impl<K, V, SON> LazyMap<K, V, SON>
 where
     K: storage::KeySeg,
 {
-    /// Returns whether the set contains a value.
-    pub fn contains<S>(&self, storage: &S, key: &K) -> Result<bool>
-    where
-        S: StorageRead,
-    {
-        storage.has_key(&self.get_data_key(key))
-    }
-
     /// Get the prefix of set's elements storage
     fn get_data_prefix(&self) -> storage::Key {
         self.key.push(&DATA_SUBKEY.to_owned()).unwrap()
@@ -390,6 +483,16 @@ where
     /// nested collection may be manipulated through its methods.
     pub fn at(&self, key: &K) -> V {
         V::open(self.get_data_key(key))
+    }
+
+    /// Returns whether the nested map contains a certain key with data inside.
+    pub fn contains<S>(&self, storage: &S, key: &K) -> Result<bool>
+    where
+        S: StorageRead,
+    {
+        let prefix = self.get_data_key(key);
+        let mut iter = storage_api::iter_prefix_bytes(storage, &prefix)?;
+        Ok(iter.next().is_some())
     }
 
     /// Remove all map entries at a given key prefix
@@ -505,6 +608,14 @@ where
         Self::read_key_val(storage, &data_key)
     }
 
+    /// Returns whether the map contains a key with a value.
+    pub fn contains<S>(&self, storage: &S, key: &K) -> Result<bool>
+    where
+        S: StorageRead,
+    {
+        storage.has_key(&self.get_data_key(key))
+    }
+
     /// Returns whether the map contains no elements.
     pub fn is_empty<S>(&self, storage: &S) -> Result<bool>
     where
@@ -552,6 +663,19 @@ where
             Ok((key, val))
         }))
     }
+
+    // /// Collect the lazy map into an eager map
+    // pub fn collect<M, S>(&self, storage: &S) -> Result<M>
+    // where
+    //     S: StorageRead,
+    //     M: EagerMapFromIter<K, V>,
+    //     K: Eq + Hash + Ord,
+    // {
+    //     let it = self
+    //         .iter(storage)?
+    //         .map(|res| res.expect("Failed to unwrap a lazy map element"));
+    //     Ok(M::from_iter(it))
+    // }
 
     /// Reads a value from storage
     fn read_key_val<S>(
@@ -618,6 +742,14 @@ mod test {
         assert!(lazy_map.get(&storage, &0)?.is_none());
         assert_eq!(lazy_map.get(&storage, &key)?.unwrap(), val);
         assert_eq!(lazy_map.get(&storage, &key2)?.unwrap(), val2);
+
+        let eager_map: BTreeMap<_, _> = lazy_map.collect_map(&storage)?;
+        assert_eq!(
+            eager_map,
+            vec![(123, "Test".to_string()), (456, "Test2".to_string())]
+                .into_iter()
+                .collect::<BTreeMap<_, _>>()
+        );
 
         // Remove the values and check the map contents
         let removed = lazy_map.remove(&mut storage, &key)?.unwrap();
@@ -780,6 +912,7 @@ mod test {
             nested_map.at(&0).get(&storage, &"string2".to_string())?,
             None
         );
+        assert!(nested_map.contains(&storage, &0)?);
 
         // Insert more values
         nested_map
@@ -788,6 +921,9 @@ mod test {
         nested_map
             .at(&0)
             .insert(&mut storage, "string2".to_string(), 300)?;
+
+        assert!(nested_map.contains(&storage, &0)?);
+        assert!(nested_map.contains(&storage, &1)?);
 
         let mut it = nested_map.iter(&storage)?;
         let (
@@ -852,6 +988,8 @@ mod test {
         assert_eq!(nested_map.at(&0).len(&storage)?, 0_u64);
         assert_eq!(nested_map.at(&1).len(&storage)?, 1_u64);
         assert_eq!(nested_map.iter(&storage)?.count(), 1);
+        assert!(!nested_map.contains(&storage, &0)?);
+        assert!(nested_map.contains(&storage, &1)?);
 
         // Start removing elements
         let rem = nested_map
@@ -898,5 +1036,57 @@ mod test {
         nested_map.remove_all(&mut storage, &1).unwrap();
         assert!(!nested_map.contains(&storage, &1).unwrap());
         assert!(nested_map.is_empty(&storage).unwrap());
+    }
+
+    #[test]
+    fn test_lazy_map_collection() {
+        let mut storage = TestWlStorage::default();
+        let key_s = storage::Key::parse("testing_simple").unwrap();
+        let key_n = storage::Key::parse("testing_nested").unwrap();
+
+        let simple = LazyMap::<String, u32>::open(key_s);
+        simple
+            .insert(&mut storage, "bartle".to_string(), 5)
+            .unwrap();
+        simple.insert(&mut storage, "doo".to_string(), 4).unwrap();
+
+        let nested_map = NestedMap::<u32, LazyMap<String, u32>>::open(key_n);
+        nested_map
+            .at(&0)
+            .insert(&mut storage, "dingus".to_string(), 5)
+            .unwrap();
+        nested_map
+            .at(&0)
+            .insert(&mut storage, "zingus".to_string(), 3)
+            .unwrap();
+        nested_map
+            .at(&1)
+            .insert(&mut storage, "dingus".to_string(), 4)
+            .unwrap();
+
+        let exp_simple =
+            vec![("bartle".to_string(), 5), ("doo".to_string(), 4)]
+                .into_iter()
+                .collect::<BTreeMap<_, _>>();
+        let mut exp_nested: BTreeMap<u32, BTreeMap<String, u32>> =
+            BTreeMap::new();
+        exp_nested
+            .entry(0)
+            .or_default()
+            .insert("dingus".to_string(), 5);
+        exp_nested
+            .entry(0)
+            .or_default()
+            .insert("zingus".to_string(), 3);
+        exp_nested
+            .entry(1)
+            .or_default()
+            .insert("dingus".to_string(), 4);
+
+        let simple_eager = simple.collect_map(&storage).unwrap();
+        let nested_eager = nested_map.collect_map(&storage).unwrap();
+
+        assert_eq!(exp_simple, simple_eager);
+        assert_eq!(exp_nested, nested_eager);
     }
 }

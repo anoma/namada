@@ -1183,6 +1183,24 @@ where
     Ok(())
 }
 
+pub async fn submit_redelegation<C>(
+    client: &C,
+    mut ctx: Context,
+    args: args::Redelegate,
+) -> Result<(), tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
+    let (mut tx, addr, pk) =
+        tx::build_redelegation(client, &mut ctx.wallet, args.clone()).await?;
+    submit_reveal_aux(client, &mut ctx, &args.tx, addr, pk.clone(), &mut tx)
+        .await?;
+    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
+    Ok(())
+}
+
 pub async fn submit_validator_commission_change<C>(
     client: &C,
     mut ctx: Context,
@@ -1222,18 +1240,6 @@ where
     signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
     tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     Ok(())
-}
-
-pub async fn submit_redelegation<C: namada::ledger::queries::Client + Sync>(
-    client: &C,
-    mut ctx: Context,
-    mut args: args::Redelegate,
-) -> Result<(), tx::Error> {
-    args.tx.chain_id = args
-        .tx
-        .chain_id
-        .or_else(|| Some(ctx.config.ledger.chain_id.clone()));
-    tx::submit_redelegation::<C, _>(client, &mut ctx.wallet, args).await
 }
 
 /// Save accounts initialized from a tx into the wallet, if any.

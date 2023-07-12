@@ -855,15 +855,15 @@ pub async fn submit_unjail_validator<
     Ok(())
 }
 
-/// Submit transaction to redelegate bonded tokens from one validator to another
-pub async fn submit_redelegation<
+/// Redelegate tokens from one validator to another
+pub async fn build_redelegation<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Redelegate,
-) -> Result<(), Error> {
+) -> Result<(Tx, Option<Address>, common::PublicKey), Error> {
     let epoch = rpc::query_epoch(client).await;
 
     let src_validator = known_validator_or_err(
@@ -881,7 +881,7 @@ pub async fn submit_redelegation<
     .await?;
 
     let owner = args.owner.clone();
-    let redel_amount = args.amount.clone();
+    let redel_amount = args.amount;
 
     let bond_amount =
         rpc::query_bond(client, &owner, &src_validator, None).await;
@@ -896,8 +896,10 @@ pub async fn submit_redelegation<
         }
     } else {
         println!(
-            "{bond_amount} NAM tokens available for redelegation. Submitting \
-             redelegation transaction for {redel_amount} tokens..."
+            "{} NAM tokens available for redelegation. Submitting \
+             redelegation transaction for {} tokens...",
+            bond_amount.to_string_native(),
+            redel_amount.to_string_native()
         );
     }
 
@@ -921,7 +923,7 @@ pub async fn submit_redelegation<
     tx.set_code(Code::from_hash(tx_code_hash));
 
     let default_signer = args.owner;
-    process_tx::<C, U>(
+    prepare_tx::<C, U>(
         client,
         wallet,
         &args.tx,
@@ -930,9 +932,7 @@ pub async fn submit_redelegation<
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-    .await?;
-
-    Ok(())
+    .await
 }
 
 /// Submit transaction to withdraw an unbond

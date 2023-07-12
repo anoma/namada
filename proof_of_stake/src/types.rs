@@ -3,7 +3,7 @@
 mod rev_order;
 
 use core::fmt::Debug;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::hash::Hash;
@@ -200,6 +200,9 @@ pub type IncomingRedelegations = LazyMap<Address, Epoch>;
 pub type OutgoingRedelegations =
     NestedMap<Address, NestedMap<Epoch, LazyMap<Epoch, token::Amount>>>;
 
+/// A validator's total redelegated bonded tokens
+pub type TotalRedelegatedBonded = NestedMap<Epoch, RedelegatedBonds>;
+
 /// A validator's total redelegated unbonded tokens
 /// TODO: understand better, better description
 pub type TotalRedelegatedUnbonded = NestedMap<
@@ -214,7 +217,7 @@ pub type TotalRedelegatedUnbonded = NestedMap<
             LazyMap<
                 // bond start epoch
                 Epoch,
-                token::Amount,
+                token::Change,
             >,
         >,
     >,
@@ -226,25 +229,27 @@ pub type TotalRedelegatedUnbonded = NestedMap<
 pub type RedelegatedBonds = NestedMap<Address, LazyMap<Epoch, token::Change>>;
 
 /// In-memory map of redelegated bonds
-pub type RedelegatedBondsMap = HashMap<
+pub type EagerRedelegatedBondsMap = BTreeMap<
     // source validator
     Address,
-    HashMap<
+    BTreeMap<
         // bond start epoch
         Epoch,
         token::Change,
     >,
 >;
 
+/// The redelegated bonds, keyed by the epoch of TODO (which one?)
+pub type RedelegatedBonded = NestedMap<Epoch, RedelegatedBonds>;
+
 /// A delegator's redelegated bonded token amount
 /// TODO: better understanding and description
-pub type DelegatorRedelegatedBonded =
-    NestedMap<Address, NestedMap<Epoch, RedelegatedBonds>>;
+pub type DelegatorRedelegatedBonded = NestedMap<Address, RedelegatedBonded>;
 
 /// A delegator's redelegated unbonded token amount
 /// TODO: better understanding and description
 pub type DelegatorRedelegatedUnbonded =
-    NestedMap<Address, NestedMap<Epoch, NestedMap<Epoch, RedelegatedBonds>>>;
+    NestedMap<Address, NestedMap<Epoch, RedelegatedBonded>>;
 
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, Eq, Hash, PartialEq,
@@ -273,6 +278,18 @@ pub type RewardsProducts = LazyMap<Epoch, Dec>;
 /// rewards owed over the course of an epoch)
 pub type RewardsAccumulator = LazyMap<Address, Dec>;
 
+/// Eager data for a generic redelegation
+pub struct Redelegation {
+    /// Start epoch of the redelegation
+    /// TODO: better description
+    pub redel_bond_start: Epoch,
+    /// Source validator
+    pub src_validator: Address,
+    /// Start epoch of the redelgated bond
+    pub bond_start: Epoch,
+    /// Redelegation amount
+    pub amount: token::Change,
+}
 // --------------------------------------------------------------------------------------------
 
 /// A genesis validator definition.
