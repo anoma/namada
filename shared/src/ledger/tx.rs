@@ -1022,12 +1022,11 @@ pub async fn submit_bond<
             .await?;
 
     // Check that the source address exists on chain
-    let source = args.source.clone();
     let source = match args.source.clone() {
         Some(source) => source_exists_or_err(source, args.tx.force, client)
             .await
             .map(Some),
-        None => Ok(source),
+        None => Ok(args.source.clone()),
     }?;
     // Check bond's source (source for delegation or validator for self-bonds)
     // balance
@@ -1035,15 +1034,24 @@ pub async fn submit_bond<
     let balance_key = token::balance_key(&args.native_token, bond_source);
 
     // TODO Should we state the same error message for the native token?
-    let updated_balance = check_balance_too_low_err(
-        &args.native_token,
-        bond_source,
-        args.amount,
-        balance_key,
-        args.tx.force,
-        client,
-    )
-    .await?;
+    let updated_balance = {
+        let new_balance = check_balance_too_low_err(
+            &args.native_token,
+            bond_source,
+            args.amount,
+            balance_key,
+            args.tx.force,
+            client,
+        )
+        .await?;
+
+        if let Address::Established(_) = bond_source {
+            // Fees will be paid by the underlying implicit account
+            None
+        } else {
+            Some(new_balance)
+        }
+    };
 
     let tx_code_hash =
         query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
@@ -1071,7 +1079,7 @@ pub async fn submit_bond<
         &args.tx,
         tx,
         TxSigningKey::WalletAddress(default_signer),
-        Some(updated_balance),
+        updated_balance,
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -1141,15 +1149,24 @@ pub async fn submit_ibc_transfer<
         None => (None, token::balance_key(&token, &source)),
     };
 
-    let updated_balance = check_balance_too_low_err(
-        &token,
-        &source,
-        args.amount,
-        balance_key,
-        args.tx.force,
-        client,
-    )
-    .await?;
+    let updated_balance = {
+        let new_balance = check_balance_too_low_err(
+            &token,
+            &source,
+            args.amount,
+            balance_key,
+            args.tx.force,
+            client,
+        )
+        .await?;
+
+        if let Address::Established(_) = source {
+            // Fees will be paid by the underlying implicit account
+            None
+        } else {
+            Some(new_balance)
+        }
+    };
 
     let tx_code_hash =
         query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
@@ -1213,7 +1230,7 @@ pub async fn submit_ibc_transfer<
         &args.tx,
         tx,
         TxSigningKey::WalletAddress(args.source),
-        Some(updated_balance),
+        updated_balance,
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -1327,15 +1344,24 @@ pub async fn submit_transfer<
         }
         None => (None, token::balance_key(&token, &source)),
     };
-    let updated_balance = check_balance_too_low_err::<C>(
-        &token,
-        &source,
-        args.amount,
-        balance_key,
-        args.tx.force,
-        client,
-    )
-    .await?;
+    let updated_balance = {
+        let new_balance = check_balance_too_low_err::<C>(
+            &token,
+            &source,
+            args.amount,
+            balance_key,
+            args.tx.force,
+            client,
+        )
+        .await?;
+
+        if let Address::Established(_) = source {
+            // Fees will be paid by the underlying implicit account
+            None
+        } else {
+            Some(new_balance)
+        }
+    };
 
     let masp_addr = masp();
     // For MASP sources, use a special sentinel key recognized by VPs as default
@@ -1458,7 +1484,7 @@ pub async fn submit_transfer<
             &args.tx,
             tx,
             default_signer.clone(),
-            Some(updated_balance),
+            updated_balance,
             #[cfg(not(feature = "mainnet"))]
             is_source_faucet,
         )
@@ -1810,8 +1836,8 @@ async fn target_exists_or_err<C: crate::ledger::queries::Client + Sync>(
     .await
 }
 
-/// checks the balance at the given address is enough to transfer the
-/// given amount, along with the balance even existing. force
+/// Checks the balance at the given address is enough to transfer the
+/// given amount, along with the balance even existing. Force
 /// overrides this. Returns the updated balance for fee check
 async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
     token: &Address,
