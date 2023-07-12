@@ -682,7 +682,7 @@ fn wrapper_fee_unshielding() -> Result<()> {
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.
     let test = setup::network(
-        |genesis| {
+        |mut genesis| {
             let parameters = ParametersConfig {
                 epochs_per_year: epochs_per_year_from_min_duration(
                     if is_debug_mode() { 3600 } else { 360 },
@@ -690,6 +690,18 @@ fn wrapper_fee_unshielding() -> Result<()> {
                 min_num_of_blocks: 1,
                 ..genesis.parameters
             };
+            // Reduce balance of fee payer
+            let balance = genesis
+                .token
+                .get_mut("NAM")
+                .unwrap()
+                .balances
+                .as_mut()
+                .unwrap()
+                .get_mut("Albert.public_key")
+                .unwrap();
+            *balance = 200;
+
             GenesisConfig {
                 parameters,
                 ..genesis
@@ -728,7 +740,6 @@ fn wrapper_fee_unshielding() -> Result<()> {
         ),
         // 2. Invalid unshielding
         (
-            //FIXME: should force this?
             vec![
                 "transfer",
                 "--source",
@@ -744,11 +755,11 @@ fn wrapper_fee_unshielding() -> Result<()> {
                 "--ledger-address",
                 &validator_one_rpc,
             ],
-            "Insufficient transparent balance",
+            // Test the client response
+            "The transaction requires the completion of a PoW challenge.",
         ),
         // 3. Valid unshielding
         (
-            //FIXME: it appears like it doesn't actually attach the unshielding operation
             vec![
                 "transfer",
                 "--source",
