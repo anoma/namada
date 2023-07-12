@@ -278,32 +278,33 @@ pub async fn sign_wrapper<
         updated_balance = Some(Amount::default());
     }
 
-    let fee_amount = match args.fee_amount {
-        Some(amount) => amount, //FIXME: validate that this matches the minimum required?
+    // Validate fee amount and token
+    let gas_cost_key = parameter_storage::get_gas_cost_key();
+    let minimum_fee = match rpc::query_storage_value::<
+        C,
+        BTreeMap<Address, Amount>,
+    >(client, &gas_cost_key)
+    .await
+    .map(|map| map.get(&args.fee_token).map(ToOwned::to_owned))
+    .flatten()
+    {
+        Some(amount) => amount,
         None => {
-            let gas_cost_key = parameter_storage::get_gas_cost_key();
-            match rpc::query_storage_value::<C, BTreeMap<Address, Amount>>(
-                client,
-                &gas_cost_key,
-            )
-            .await
-            .map(|map| map.get(&args.fee_token).map(ToOwned::to_owned))
-            .flatten()
-            {
-                Some(amount) => amount,
-                None => {
-                    if !args.force {
-                        panic!(
-                            "Could not retrieve the gas cost for token {}",
-                            args.fee_token
-                        );
-                    } else {
-                        token::Amount::default()
-                    }
-                }
+            if !args.force {
+                panic!(
+                    "Could not retrieve the gas cost for token {}",
+                    args.fee_token
+                );
+            } else {
+                token::Amount::default()
             }
         }
     };
+    let fee_amount = match args.fee_amount {
+        Some(amount) if amount >= minimum_fee => amount,
+        _ => minimum_fee,
+    };
+
     let source = Address::from(&keypair.ref_to());
     let mut updated_balance = match updated_balance {
         Some(balance) => balance,
@@ -491,12 +492,13 @@ pub async fn sign_wrapper<
 
     tx.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
         Fee {
-            amount_per_gas_unit: fee_amount, //FIXME: validate this
-            token: args.fee_token.clone(),   //FIXME: validate this
+            amount_per_gas_unit: fee_amount,
+            token: args.fee_token.clone(),
         },
         keypair.as_ref(),
         epoch,
-        args.gas_limit.clone(), //FIXME: can validate this?
+        //TODO: partially validate the gas limit in client
+        args.gas_limit.clone(),
         #[cfg(not(feature = "mainnet"))]
         pow_solution,
         unshield_section_hash,
