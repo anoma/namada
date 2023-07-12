@@ -325,6 +325,22 @@ pub async fn main() -> Result<()> {
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_bonded_stake(&client, args).await;
                 }
+                Sub::QueryValidatorState(QueryValidatorState(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_and_print_validator_state(
+                        &client,
+                        &mut ctx.wallet,
+                        args,
+                    )
+                    .await;
+                }
                 Sub::QueryCommissionRate(QueryCommissionRate(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
                         &mut args.query.ledger_address,
