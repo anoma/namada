@@ -1039,7 +1039,7 @@ mod test_finalize_block {
     use namada::proto::{Code, Data, Section, Signature};
     use namada::types::dec::POS_DECIMAL_PRECISION;
     use namada::types::ethereum_events::{
-        EthAddress, TransferToEthereum, Uint as ethUint,
+        EthAddress, TransferToEthereum, TransferToEthereumKind, Uint as ethUint,
     };
     use namada::types::hash::Hash;
     use namada::types::keccak::KeccakHash;
@@ -1697,6 +1697,7 @@ mod test_finalize_block {
             let transfer = {
                 use namada::core::types::eth_bridge_pool::PendingTransfer;
                 let transfer = TransferToEthereum {
+                    kind: TransferToEthereumKind::Erc20,
                     amount: 10u64.into(),
                     asset,
                     receiver,

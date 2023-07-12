@@ -15,7 +15,7 @@ pub mod eth_events {
     use namada::types::address::Address;
     use namada::types::ethereum_events::{
         EthAddress, EthereumEvent, TokenWhitelist, TransferToEthereum,
-        TransferToNamada, Uint,
+        TransferToEthereumKind, TransferToNamada, Uint,
     };
     use namada::types::keccak::KeccakHash;
     use namada::types::token::Amount;
@@ -180,6 +180,7 @@ pub mod eth_events {
 
     /// Trait to add parsing methods to foreign types.
     trait Parse: Sized {
+        parse_method! { parse_eth_transfer_kind -> TransferToEthereumKind }
         parse_method! { parse_eth_address -> EthAddress }
         parse_method! { parse_address -> Address }
         parse_method! { parse_amount -> Amount }
@@ -196,6 +197,13 @@ pub mod eth_events {
         parse_method! { parse_transfer_to_namada -> TransferToNamada }
         parse_method! { parse_transfer_to_eth_array -> Vec<TransferToEthereum> }
         parse_method! { parse_transfer_to_eth -> TransferToEthereum }
+    }
+
+    impl Parse for u8 {
+        fn parse_eth_transfer_kind(self) -> Result<TransferToEthereumKind> {
+            self.try_into()
+                .map_err(|err| Error::Decode(format!("{:?}", err)))
+        }
     }
 
     impl Parse for ethabi::Address {
@@ -296,6 +304,7 @@ pub mod eth_events {
 
     impl Parse for ethereum_structs::Erc20Transfer {
         fn parse_transfer_to_eth(self) -> Result<TransferToEthereum> {
+            let kind = self.kind.parse_eth_transfer_kind()?;
             let asset = self.from.parse_eth_address()?;
             let receiver = self.to.parse_eth_address()?;
             let sender = self.sender.parse_address()?;
@@ -303,6 +312,7 @@ pub mod eth_events {
             let gas_payer = self.fee_from.parse_address()?;
             let gas_amount = self.fee.parse_amount()?;
             Ok(TransferToEthereum {
+                kind,
                 asset,
                 amount,
                 sender,
@@ -524,6 +534,7 @@ pub mod eth_events {
             let eth_transfers = TransferToErcFilter {
                 transfers: vec![
                     ethereum_structs::Erc20Transfer {
+                        kind: TransferToEthereumKind::Erc20 as u8,
                         from: H160([1; 20]),
                         to: H160([2; 20]),
                         sender: address.clone(),

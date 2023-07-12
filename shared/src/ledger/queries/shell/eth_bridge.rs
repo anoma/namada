@@ -588,7 +588,7 @@ mod test_ethbridge_router {
     use crate::ledger::queries::RPC;
     use crate::types::eth_abi::Encode;
     use crate::types::eth_bridge_pool::{
-        GasFee, PendingTransfer, TransferToEthereum,
+        GasFee, PendingTransfer, TransferToEthereum, TransferToEthereumKind,
     };
     use crate::types::ethereum_events::EthAddress;
 
@@ -788,6 +788,7 @@ mod test_ethbridge_router {
 
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
@@ -829,6 +830,7 @@ mod test_ethbridge_router {
         let mut client = TestClient::new(RPC);
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
@@ -889,6 +891,7 @@ mod test_ethbridge_router {
         let mut client = TestClient::new(RPC);
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
@@ -998,6 +1001,7 @@ mod test_ethbridge_router {
         let mut client = TestClient::new(RPC);
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
@@ -1088,6 +1092,7 @@ mod test_ethbridge_router {
         let mut client = TestClient::new(RPC);
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
@@ -1159,6 +1164,7 @@ mod test_ethbridge_router {
         let mut client = TestClient::new(RPC);
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
@@ -1183,6 +1189,7 @@ mod test_ethbridge_router {
 
         let event_transfer =
             namada_core::types::ethereum_events::TransferToEthereum {
+                kind: transfer.transfer.kind,
                 asset: transfer.transfer.asset,
                 receiver: transfer.transfer.recipient,
                 amount: transfer.transfer.amount,
@@ -1269,6 +1276,7 @@ mod test_ethbridge_router {
         test_utils::init_default_storage(&mut client.wl_storage);
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
