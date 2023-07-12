@@ -622,6 +622,11 @@ pub struct RecommendBatch<C: NamadaTypes = SdkTypes> {
 /// A transfer to be added to the Ethereum bridge pool.
 #[derive(Clone, Debug)]
 pub struct EthereumBridgePool<C: NamadaTypes = SdkTypes> {
+    /// Whether the transfer is for a NUT.
+    ///
+    /// By default, we add wrapped ERC20s onto the
+    /// Bridge pool.
+    pub nut: bool,
     /// The args for building a tx to the bridge pool
     pub tx: Tx<C>,
     /// The type of token

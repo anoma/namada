@@ -47,6 +47,7 @@ pub async fn build_bridge_pool_tx<
     args: args::EthereumBridgePool,
 ) -> Result<(Tx, Option<Address>, common::PublicKey), Error> {
     let args::EthereumBridgePool {
+        nut,
         ref tx,
         asset,
         recipient,
@@ -66,9 +67,11 @@ pub async fn build_bridge_pool_tx<
             recipient,
             sender,
             amount,
-            // TODO: dispatch on the transfer kind, based
-            // on CLI arguments
-            kind: TransferToEthereumKind::Erc20,
+            kind: if nut {
+                TransferToEthereumKind::Nut
+            } else {
+                TransferToEthereumKind::Erc20
+            },
         },
         gas_fee: GasFee {
             amount: gas_amount,
