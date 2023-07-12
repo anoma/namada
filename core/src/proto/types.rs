@@ -978,13 +978,13 @@ impl Tx {
         for i in (0..self.sections.len()).rev() {
             match &self.sections[i] {
                 Section::Signature(sig) if sig.target == header_hash => {}
-                Section::MaspTx(_unshield) => {
+                Section::MaspTx(_) => {
                     // Do NOT encrypt the fee unshielding transaction
-                    //FIXME: manage unwraps
-                    //FIXME: improve
-                    //FIXME: if I need to sign the unshield (probably not) I should also skip the encyption on its signature
-                    if let Some(unshield_section_hash) =
-                        self.header().wrapper().unwrap().unshield_section_hash
+                    if let Some(unshield_section_hash) = self
+                        .header()
+                        .wrapper()
+                        .expect("Tried to encrypt a non-wrapper tx")
+                        .unshield_section_hash
                     {
                         if unshield_section_hash
                             == Hash(
