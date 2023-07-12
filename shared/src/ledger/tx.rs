@@ -92,9 +92,9 @@ pub enum Error {
          instead: {0:?}"
     )]
     ExpectDryRun(Tx),
-    /// Expect a wrapped encrypted running transaction
+    /// Expect a live running transaction
     #[error("Cannot broadcast a dry-run transaction")]
-    ExpectWrappedRun(Tx), //FIXME: rename to Live
+    ExpectLiveRun(Tx),
     /// Error during broadcasting a transaction
     #[error("Encountered error while broadcasting transaction: {0}")]
     TxBroadcast(RpcError),
@@ -497,7 +497,7 @@ pub async fn broadcast_tx<C: crate::ledger::queries::Client + Sync>(
             wrapper_hash,
             decrypted_hash,
         } => Ok((tx, wrapper_hash, decrypted_hash)),
-        TxBroadcastData::DryRun(tx) => Err(Error::ExpectWrappedRun(tx.clone())),
+        TxBroadcastData::DryRun(tx) => Err(Error::ExpectLiveRun(tx.clone())),
     }?;
 
     tracing::debug!(
@@ -545,7 +545,7 @@ pub async fn submit_tx<C: crate::ledger::queries::Client + Sync>(
             wrapper_hash,
             decrypted_hash,
         } => Ok((tx, wrapper_hash, decrypted_hash)),
-        TxBroadcastData::DryRun(tx) => Err(Error::ExpectWrappedRun(tx.clone())),
+        TxBroadcastData::DryRun(tx) => Err(Error::ExpectLiveRun(tx.clone())),
     }?;
 
     // Broadcast the supplied transaction
