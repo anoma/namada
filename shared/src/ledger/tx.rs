@@ -1140,7 +1140,7 @@ pub async fn build_ibc_transfer<
             .await?;
     // We cannot check the receiver
 
-    let token = token_exists_or_err(args.token, args.tx.force, client).await?;
+    let token = args.token;
 
     // Check source balance
     let balance_key = token::balance_key(&token, &source);
@@ -1317,8 +1317,6 @@ pub async fn build_transfer<
     source_exists_or_err(source.clone(), args.tx.force, client).await?;
     // Check that the target address exists on chain
     target_exists_or_err(target.clone(), args.tx.force, client).await?;
-    // Check that the token address exists on chain
-    token_exists_or_err(token.clone(), args.tx.force, client).await?;
     // Check source balance
     let balance_key = token::balance_key(&token, &source);
 
@@ -1702,26 +1700,6 @@ where
     } else {
         Ok(addr)
     }
-}
-
-/// Returns the given token if the given address exists on chain
-/// otherwise returns an error, force forces the address through even
-/// if it isn't on chain
-pub async fn token_exists_or_err<C: crate::ledger::queries::Client + Sync>(
-    token: Address,
-    force: bool,
-    client: &C,
-) -> Result<Address, Error> {
-    let message =
-        format!("The token address {} doesn't exist on chain.", token);
-    address_exists_or_err(
-        token,
-        force,
-        client,
-        message,
-        Error::TokenDoesNotExist,
-    )
-    .await
 }
 
 /// Returns the given source address if the given address exists on chain

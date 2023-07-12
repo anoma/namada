@@ -392,27 +392,13 @@ pub mod genesis_config {
 
     fn load_token(
         config: &TokenAccountConfig,
-        wasm: &HashMap<String, WasmConfig>,
         validators: &HashMap<String, Validator>,
         established_accounts: &HashMap<String, EstablishedAccount>,
         implicit_accounts: &HashMap<String, ImplicitAccount>,
     ) -> TokenAccount {
-        let token_vp_name = config.vp.as_ref().unwrap();
-        let token_vp_config = wasm.get(token_vp_name).unwrap();
-
         TokenAccount {
             address: Address::decode(config.address.as_ref().unwrap()).unwrap(),
             denom: config.denom,
-            vp_code_path: token_vp_config.filename.to_owned(),
-            vp_sha256: token_vp_config
-                .sha256
-                .clone()
-                .unwrap_or_else(|| {
-                    eprintln!("Unknown token VP WASM sha256");
-                    cli::safe_exit(1);
-                })
-                .to_sha256_bytes()
-                .unwrap(),
             balances: config
                 .balances
                 .as_ref()
@@ -579,7 +565,6 @@ pub mod genesis_config {
             .map(|(_name, cfg)| {
                 load_token(
                     cfg,
-                    &wasm,
                     &validators,
                     &established_accounts,
                     &implicit_accounts,
@@ -814,10 +799,6 @@ pub struct TokenAccount {
     pub address: Address,
     /// The number of decimal places amounts of this token has
     pub denom: Denomination,
-    /// Validity predicate code WASM
-    pub vp_code_path: String,
-    /// Expected SHA-256 hash of the validity predicate wasm
-    pub vp_sha256: [u8; 32],
     /// Accounts' balances of this token
     #[derivative(PartialOrd = "ignore", Ord = "ignore")]
     pub balances: HashMap<Address, token::Amount>,
@@ -903,7 +884,6 @@ pub fn genesis(num_validators: u64) -> Genesis {
     use crate::wallet;
 
     let vp_implicit_path = "vp_implicit.wasm";
-    let vp_token_path = "vp_token.wasm";
     let vp_user_path = "vp_user.wasm";
 
     // NOTE When the validator's key changes, tendermint must be reset with
@@ -1081,8 +1061,6 @@ pub fn genesis(num_validators: u64) -> Genesis {
         .map(|(address, (_, denom))| TokenAccount {
             address,
             denom,
-            vp_code_path: vp_token_path.into(),
-            vp_sha256: Default::default(),
             balances: balances.clone(),
         })
         .collect();

@@ -236,10 +236,7 @@ where
         self.initialize_implicit_accounts(genesis.implicit_accounts);
 
         // Initialize genesis token accounts
-        self.initialize_token_accounts(
-            genesis.token_accounts,
-            &implicit_vp_code_path,
-        );
+        self.initialize_token_accounts(genesis.token_accounts);
 
         // Initialize genesis validator accounts
         let staking_token = staking_token_address(&self.wl_storage);
@@ -342,45 +339,16 @@ where
     fn initialize_token_accounts(
         &mut self,
         accounts: Vec<genesis::TokenAccount>,
-        implicit_vp_code_path: &str,
     ) {
         // Initialize genesis token accounts
         for genesis::TokenAccount {
             address,
             denom,
-            vp_code_path,
-            vp_sha256,
             balances,
         } in accounts
         {
             // associate a token with its denomination.
             write_denom(&mut self.wl_storage, &address, denom).unwrap();
-            let vp_code_hash =
-                read_wasm_hash(&self.wl_storage, vp_code_path.clone())
-                    .unwrap()
-                    .ok_or(Error::LoadingWasm(format!(
-                        "Unknown vp code path: {}",
-                        implicit_vp_code_path
-                    )))
-                    .expect("Reading wasms should succeed");
-
-            // In dev, we don't check the hash
-            #[cfg(feature = "dev")]
-            let _ = vp_sha256;
-            #[cfg(not(feature = "dev"))]
-            {
-                assert_eq!(
-                    vp_code_hash.0.as_slice(),
-                    &vp_sha256,
-                    "Invalid token account's VP sha256 hash for {}",
-                    vp_code_path
-                );
-            }
-
-            self.wl_storage
-                .write_bytes(&Key::validity_predicate(&address), vp_code_hash)
-                .unwrap();
-
             for (owner, amount) in balances {
                 credit_tokens(&mut self.wl_storage, &address, &owner, amount)
                     .unwrap();

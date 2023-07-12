@@ -93,7 +93,7 @@ use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_test_utils::TestWasms;
 use namada_tx_prelude::BorshSerialize;
 
-use crate::tx::{self, *};
+use crate::tx::*;
 
 const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
 
@@ -235,10 +235,10 @@ pub fn init_storage() -> (Address, Address) {
     });
 
     // initialize a token
-    let token = tx::ctx().init_account(code_hash).unwrap();
+    let token = tx_host_env::ctx().init_account(code_hash).unwrap();
 
     // initialize an account
-    let account = tx::ctx().init_account(code_hash).unwrap();
+    let account = tx_host_env::ctx().init_account(code_hash).unwrap();
     let key = token::balance_key(&token, &account);
     let init_bal = Amount::native_whole(100);
     let bytes = init_bal.try_to_vec().expect("encoding failed");
@@ -263,6 +263,22 @@ pub fn init_storage() -> (Address, Address) {
     let bytes = namada::ledger::storage::types::encode(&time);
     tx_host_env::with(|env| {
         env.wl_storage.storage.write(&key, &bytes).unwrap();
+    });
+
+    // commit the initialized token and account
+    tx_host_env::with(|env| {
+        env.wl_storage.commit_tx();
+        env.wl_storage.commit_block().unwrap();
+
+        // block header to check timeout timestamp
+        env.wl_storage
+            .storage
+            .set_header(tm_dummy_header())
+            .unwrap();
+        env.wl_storage
+            .storage
+            .begin_block(BlockHash::default(), BlockHeight(2))
+            .unwrap();
     });
 
     (token, account)
