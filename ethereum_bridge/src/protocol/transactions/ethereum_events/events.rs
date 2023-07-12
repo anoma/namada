@@ -510,7 +510,7 @@ where
         );
         (escrow_balance_key, sender_balance_key)
     } else {
-        let token = wrapped_erc20s::token(&transfer.transfer.asset);
+        let token = transfer.token_address();
         let escrow_balance_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
         let sender_balance_key = balance_key(&token, &transfer.transfer.sender);
         (escrow_balance_key, sender_balance_key)
@@ -548,7 +548,7 @@ where
         return Ok(changed_keys);
     }
 
-    let token = wrapped_erc20s::token(&transfer.transfer.asset);
+    let token = transfer.token_address();
 
     let escrow_balance_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
     update::amount(wl_storage, &escrow_balance_key, |balance| {
@@ -690,7 +690,7 @@ mod tests {
                     )
                     .expect("Test failed");
             } else {
-                let token = wrapped_erc20s::token(&transfer.transfer.asset);
+                let token = transfer.token_address();
                 let sender_key = balance_key(&token, &transfer.transfer.sender);
                 let sender_balance = Amount::from(0);
                 wl_storage
@@ -1029,7 +1029,7 @@ mod tests {
                         .expect("Test failed");
                 assert_eq!(escrow_balance, Amount::from(0));
             } else {
-                let token = wrapped_erc20s::token(&transfer.transfer.asset);
+                let token = transfer.token_address();
                 let sender_key = balance_key(&token, &transfer.transfer.sender);
                 let value =
                     wl_storage.read_bytes(&sender_key).expect("Test failed");
