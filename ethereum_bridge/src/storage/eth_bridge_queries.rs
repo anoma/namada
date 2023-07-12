@@ -441,6 +441,63 @@ where
             .read(&key)
             .expect("Reading from storage should not fail")
     }
+
+    /// Return the number of ERC20 and NUT assets to be minted,
+    /// after receiving a "transfer to Namada" Ethereum event.
+    ///
+    /// NUTs are minted when:
+    ///
+    /// 1. `token` is not whitelisted.
+    /// 2. `token` has exceeded the configured token caps,
+    ///    after minting `amount_to_mint`.
+    pub fn get_eth_assets_to_mint(
+        self,
+        token: &EthAddress,
+        amount_to_mint: token::Amount,
+    ) -> EthAssetMint {
+        if !self.is_token_whitelisted(token) {
+            return EthAssetMint {
+                nut_amount: amount_to_mint,
+                erc20_amount: token::Amount::zero(),
+            };
+        }
+
+        let supply = self.get_token_supply(token).unwrap_or_default();
+        let cap = self.get_token_cap(token).unwrap_or_default();
+
+        if hints::unlikely(cap < supply) {
+            panic!(
+                "Namada's state is faulty! The Ethereum ERC20 asset {token} \
+                 has a higher minted supply than the configured token cap: \
+                 cap:{cap:?} < supply:{supply:?}"
+            );
+        }
+
+        if amount_to_mint + supply > cap {
+            let erc20_amount = cap - supply;
+            let nut_amount = amount_to_mint - erc20_amount;
+
+            return EthAssetMint {
+                nut_amount,
+                erc20_amount,
+            };
+        }
+
+        EthAssetMint {
+            erc20_amount: amount_to_mint,
+            nut_amount: token::Amount::zero(),
+        }
+    }
+}
+
+/// Number of tokens to mint after receiving a "transfer
+/// to Namada" Ethereum event.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct EthAssetMint {
+    /// Amount of NUTs to mint.
+    pub nut_amount: token::Amount,
+    /// Amount of wrapped ERC20s to mint.
+    pub erc20_amount: token::Amount,
 }
 
 /// A handle to the Ethereum addresses of the set of consensus
