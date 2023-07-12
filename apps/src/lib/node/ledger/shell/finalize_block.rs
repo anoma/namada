@@ -166,9 +166,7 @@ where
                 continue;
             }
 
-            let tx = if let Ok(()) = tx.validate_header() {
-                tx
-            } else {
+            if tx.validate_header().is_err() {
                 tracing::error!(
                     "Internal logic error: FinalizeBlock received tx that \
                      could not be deserialized to a valid TxType"
@@ -210,34 +208,50 @@ where
                 }
 
                 #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
-                if let TxType::Wrapper(wrapper) = &tx_header {
+                if let TxType::Wrapper(wrapper) = &tx_header.tx_type {
                     // Charge fee if wrapper transaction went out of gas or failed because of fees
                     let error_code =
                         ErrorCodes::from_u32(processed_tx.result.code).unwrap();
                     if (error_code == ErrorCodes::TxGasLimit)
                         | (error_code == ErrorCodes::FeeError)
                     {
+                        let masp_transaction = wrapper
+                            .unshield_section_hash
+                            .map(|ref hash| {
+                                tx.get_section(hash)
+                                    .map(|section| {
+                                        if let Section::MaspTx(transaction) =
+                                            section
+                                        {
+                                            Some(transaction.to_owned())
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .flatten()
+                            })
+                            .flatten();
                         #[cfg(not(feature = "mainnet"))]
                         let has_valid_pow =
                             self.invalidate_pow_solution_if_valid(wrapper);
                         if let Err(msg) = protocol::charge_fee(
                             wrapper,
+                            masp_transaction,
+                            &processed_tx.tx,
                             &gas_table,
                             #[cfg(not(feature = "mainnet"))]
                             has_valid_pow,
-                            Some(native_block_proposer_address),
-                            &mut self.wl_storage.write_log,
-                            &self.wl_storage.storage,
+                            Some(&native_block_proposer_address),
+                            &mut self.wl_storage,
                             &mut BTreeSet::default(),
                             &mut self.vp_wasm_cache,
                             &mut self.tx_wasm_cache,
                         ) {
                             tracing::error!(
                                 "Rejected wrapper tx {} could not pay fee: {}",
-                                Hash(
-                                    Tx::try_from(processed_tx.tx.as_ref())
+                                Hash::sha256(
+                                    tx::try_from(processed_tx.as_ref())
                                         .unwrap()
-                                        .unsigned_hash()
                                 ),
                                 msg
                             )
