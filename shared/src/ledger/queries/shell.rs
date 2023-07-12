@@ -66,6 +66,9 @@ router! {SHELL,
     // Query account subspace
     ( "account" / [owner: Address] ) -> Option<Account> = account,
 
+    // Query public key revealad
+    ( "revealed" / [owner: Address] ) -> bool = revealed,
+
     // IBC UpdateClient event
     ( "ibc_client_update" / [client_id: ClientId] / [consensus_height: BlockHeight] ) -> Option<Event> = ibc_client_update,
 
@@ -443,6 +446,20 @@ where
     } else {
         Ok(None)
     }
+}
+
+fn revealed<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    owner: Address,
+) -> storage_api::Result<bool>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let public_keys =
+        storage_api::account::public_keys(ctx.wl_storage, &owner)?;
+
+    Ok(!public_keys.is_empty())
 }
 
 #[cfg(test)]

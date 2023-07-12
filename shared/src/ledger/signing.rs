@@ -151,7 +151,17 @@ pub async fn tx_signer<
     // Now actually fetch the signing key and apply it
     for key in signing_keys {
         match key {
-            TxSigningKey::WalletKeypair(key) => secret_keys.push(key),
+            TxSigningKey::WalletKeypair(key) => {
+                let public_key = &key.ref_to();
+                let address: Address = public_key.into();
+                if matches!(address, Address::Implicit(_)) {
+                    super::tx::reveal_pk_if_needed::<C, U>(
+                        client, wallet, public_key, args,
+                    )
+                    .await?;
+                }
+                secret_keys.push(key)
+            }
             TxSigningKey::WalletAddress(address) => {
                 let signing_key = find_keypair::<C, U>(
                     client,

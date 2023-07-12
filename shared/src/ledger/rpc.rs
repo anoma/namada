@@ -754,6 +754,16 @@ pub async fn get_account_info<C: crate::ledger::queries::Client + Sync>(
     )
 }
 
+/// Query if the public_key is revealed
+pub async fn is_public_key_revealed<
+    C: crate::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    owner: &Address,
+) -> bool {
+    unwrap_client_response::<C, bool>(RPC.shell().revealed(client, owner).await)
+}
+
 /// Query an account substorage at a specific index
 pub async fn get_public_key_at<C: crate::ledger::queries::Client + Sync>(
     client: &C,

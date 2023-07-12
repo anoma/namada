@@ -235,7 +235,7 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(addr.clone(), tx_env, |_address| {
             // Apply reveal_pk in a transaction
-            tx_host_env::key::reveal_pk(&mut tx::ctx(), &public_key).unwrap();
+            tx_host_env::key::reveal_pk(tx::ctx(), &public_key).unwrap();
         });
 
         let vp_env = vp_host_env::take();
@@ -699,10 +699,10 @@ mod tests {
     /// or deletes to  the account is rejected.
         #[test]
         fn test_unsigned_arb_storage_write_rejected(
-            (_sk, vp_owner, storage_key) in
-    arb_account_storage_subspace_key(),         // Generate bytes to
-    // write. If `None`, delete from the key instead         storage_value
-    in any::<Option<Vec<u8>>>(),     ) {
+            (_sk, vp_owner, storage_key) in arb_account_storage_subspace_key(),
+            // Generate bytes to write. If `None`, delete from the key instead
+            storage_value in any::<Option<Vec<u8>>>(),
+        ) {
             // Initialize a tx environment
             let mut tx_env = TestTxEnv::default();
 
@@ -728,19 +728,14 @@ mod tests {
                 vp_env.all_touched_storage_keys();
             let verifiers: BTreeSet<Address> = BTreeSet::default();
             vp_host_env::set(vp_env);
-            assert!(!validate_tx(&CTX, tx_data, vp_owner, keys_changed,
-    verifiers).unwrap());     }
-    }
+            assert!(!validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers).unwrap());
+        }
 
-    proptest! {
-        /// Test that a signed tx that performs arbitrary storage writes or
-        /// deletes to the account is accepted.
-        #[test]
-        fn test_signed_arb_storage_write(
-            (secret_key, vp_owner, storage_key) in
-    arb_account_storage_subspace_key(),         // Generate bytes to
-    // write. If `None`, delete from the key instead         storage_value
-    in any::<Option<Vec<u8>>>(),     ) {
+    fn test_signed_arb_storage_write(
+        (secret_key, vp_owner, storage_key) in arb_account_storage_subspace_key(),
+        // Generate bytes to write. If `None`, delete from the key instead
+        storage_value in any::<Option<Vec<u8>>>(),
+    ) {
             // Initialize a tx environment
             let mut tx_env = TestTxEnv::default();
 
@@ -750,9 +745,7 @@ mod tests {
             tx_env.spawn_accounts(storage_key_addresses);
 
             let public_key = secret_key.ref_to();
-            let _ =
-    storage_api::account::set_public_key_at(tx_host_env::ctx(), &vp_owner,
-    &public_key, 0);
+            let _ = storage_api::account::set_public_key_at(tx_host_env::ctx(), &vp_owner, &public_key, 0);
 
             // Initialize VP environment from a transaction
             vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
@@ -766,15 +759,15 @@ mod tests {
 
             let mut vp_env = vp_host_env::take();
             let mut tx = vp_env.tx.clone();
-            tx.add_section(Section::Signature(Signature::new(tx.
-    data_sechash(), &secret_key)));         let signed_tx = tx.clone();
+            tx.add_section(Section::Signature(Signature::new(tx. data_sechash(), &secret_key)));
+            let signed_tx = tx.clone();
             vp_env.tx = signed_tx.clone();
             let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
             let verifiers: BTreeSet<Address> = BTreeSet::default();
             vp_host_env::set(vp_env);
-            assert!(validate_tx(&CTX, signed_tx, vp_owner, keys_changed,
-    verifiers).unwrap());     }
+            assert!(validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers).unwrap());
+        }
     }
 
     /// Test that a validity predicate update without a valid signature is

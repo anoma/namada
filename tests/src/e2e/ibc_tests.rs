@@ -846,7 +846,7 @@ fn transfer_back(
     // Update the client state of Chain B on Chain A
     update_client_with_height(test_b, test_a, client_id_a, height_b)?;
     // Receive the token on Chain A
-    let height = submit_ibc_tx(test_a, msg,ALBERT, ALBERT_KEY)?;
+    let height = submit_ibc_tx(test_a, msg, ALBERT, ALBERT_KEY)?;
     let (acknowledgement, packet) = match get_event(test_a, height)? {
         Some(IbcEvent::WriteAcknowledgement(event)) => {
             (event.ack, event.packet)

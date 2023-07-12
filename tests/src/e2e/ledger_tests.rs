@@ -4377,7 +4377,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 "--amount",
                 "10.1",
                 "--signing-keys",
-                &format!("{}-key", source),
+                source,
                 "--node",
                 &validator_one_rpc,
             ]
@@ -4388,16 +4388,18 @@ fn implicit_account_reveal_pk() -> Result<()> {
         // Submit proposal
         Box::new(|source| {
             // Gen data for proposal tx
-            let source = find_address(&test, source).unwrap();
+            let author = find_address(&test, source).unwrap();
             let valid_proposal_json_path = prepare_proposal_data(
                 &test,
-                source,
+                author,
                 ProposalType::Default(None),
             );
             vec![
                 "init-proposal",
                 "--data-path",
                 valid_proposal_json_path.to_str().unwrap(),
+                "--signing-keys",
+                source,
                 "--node",
                 &validator_one_rpc,
             ]
