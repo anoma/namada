@@ -87,7 +87,7 @@ pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
     let threshold =
         storage_api::account::threshold(&ctx.pre(), owner)?.unwrap_or(1);
 
-    let tx_data_hash = tx.data_sechash();
+    let tx_data_hash: &Hash = tx.data_sechash();
     tx.verify_section_signatures(
         tx_data_hash,
         public_keys_index_map,

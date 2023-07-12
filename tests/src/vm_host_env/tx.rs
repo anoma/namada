@@ -18,7 +18,8 @@ use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::run::Error;
 use namada::vm::wasm::{self, TxCache, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
-use namada_tx_prelude::{BorshSerialize, Ctx};
+use namada_tx_prelude::{storage_api, BorshSerialize, Ctx};
+use namada_vp_prelude::key::common;
 use tempfile::TempDir;
 
 use crate::vp::TestVpEnv;
@@ -159,6 +160,21 @@ impl TestTxEnv {
                 .write(&key, vp_code)
                 .expect("Unable to write VP");
         }
+    }
+
+    pub fn init_account_storage(
+        &mut self,
+        owner: &Address,
+        public_keys: Vec<common::PublicKey>,
+        threshold: u8,
+    ) {
+        storage_api::account::init_account_storage(
+            &mut self.wl_storage,
+            owner,
+            &public_keys,
+            threshold,
+        )
+        .expect("Unable to write Account substorage.");
     }
 
     /// Set public key for the address.
