@@ -30,7 +30,7 @@ use namada_core::types::token::{balance_key, minted_balance_key};
 
 use crate::parameters::read_native_erc20_address;
 use crate::protocol::transactions::update;
-use crate::storage::eth_bridge_queries::EthBridgeQueries;
+use crate::storage::eth_bridge_queries::{EthAssetMint, EthBridgeQueries};
 
 /// Updates storage based on the given confirmed `event`. For example, for a
 /// confirmed [`EthereumEvent::TransfersToNamada`], mint the corresponding
@@ -140,15 +140,25 @@ where
             receiver,
         } = transfer;
         let mut changed = if asset != &wrapped_native_erc20 {
-            let changed =
-                mint_wrapped_erc20s(wl_storage, asset, receiver, amount)?;
+            let (asset_count, changed) =
+                mint_eth_assets(wl_storage, asset, receiver, amount)?;
             // TODO: query denomination of the whitelisted token from storage,
             // and print this amount with the proper formatting; for now, use
             // NAM's formatting
-            tracing::info!(
-                "Minted wrapped ERC20s - (receiver - {receiver}, amount - {})",
-                amount.to_string_native(),
-            );
+            if !asset_count.erc20_amount.is_zero() {
+                tracing::info!(
+                    "Minted wrapped ERC20s - (asset - {asset}, receiver - \
+                     {receiver}, amount - {})",
+                    asset_count.erc20_amount.to_string_native(),
+                );
+            }
+            if !asset_count.nut_amount.is_zero() {
+                tracing::info!(
+                    "Minted NUTs - (asset - {asset}, receiver - {receiver}, \
+                     amount - {})",
+                    asset_count.nut_amount.to_string_native(),
+                );
+            }
             changed
         } else {
             redeem_native_token(wl_storage, receiver, amount)?
@@ -220,55 +230,76 @@ where
     ]))
 }
 
+/// Helper function to mint assets originating from Ethereum
+/// on Namada.
+///
 /// Mints `amount` of a wrapped ERC20 `asset` for `receiver`.
-fn mint_wrapped_erc20s<D, H>(
+/// If the given asset is not whitelisted or has exceeded the
+/// token caps, mint NUTs, too.
+fn mint_eth_assets<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     asset: &EthAddress,
     receiver: &Address,
-    amount: &token::Amount,
-) -> Result<BTreeSet<Key>>
+    &amount: &token::Amount,
+) -> Result<(EthAssetMint, BTreeSet<Key>)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     let mut changed_keys = BTreeSet::default();
-    let token = wrapped_erc20s::token(asset);
-    let balance_key = balance_key(&token, receiver);
-    update::amount(wl_storage, &balance_key, |balance| {
-        tracing::debug!(
-            %balance_key,
-            ?balance,
-            "Existing value found",
-        );
-        balance.receive(amount);
-        tracing::debug!(
-            %balance_key,
-            ?balance,
-            "New value calculated",
-        );
-    })?;
-    _ = changed_keys.insert(balance_key);
 
-    let supply_key = minted_balance_key(&token);
-    update::amount(wl_storage, &supply_key, |supply| {
-        tracing::debug!(
-            %supply_key,
-            ?supply,
-            "Existing value found",
-        );
-        supply.receive(amount);
-        tracing::debug!(
-            %supply_key,
-            ?supply,
-            "New value calculated",
-        );
-    })?;
-    _ = changed_keys.insert(supply_key);
+    let asset_count = wl_storage
+        .ethbridge_queries()
+        .get_eth_assets_to_mint(asset, amount);
 
-    // mint the token without a minter because a protocol tx doesn't need to
-    // trigger a VP
+    let assets_to_mint = [
+        // check if we should mint nuts
+        (!asset_count.nut_amount.is_zero())
+            .then(|| (wrapped_erc20s::nut(asset), asset_count.nut_amount)),
+        // check if we should mint erc20s
+        (!asset_count.erc20_amount.is_zero())
+            .then(|| (wrapped_erc20s::token(asset), asset_count.erc20_amount)),
+    ]
+    .into_iter()
+    // remove assets that do not need to be
+    // minted from the iterator
+    .flatten();
 
-    Ok(changed_keys)
+    for (token, ref amount) in assets_to_mint {
+        let balance_key = balance_key(&token, receiver);
+        update::amount(wl_storage, &balance_key, |balance| {
+            tracing::debug!(
+                %balance_key,
+                ?balance,
+                "Existing value found",
+            );
+            balance.receive(amount);
+            tracing::debug!(
+                %balance_key,
+                ?balance,
+                "New value calculated",
+            );
+        })?;
+        _ = changed_keys.insert(balance_key);
+
+        let supply_key = minted_balance_key(&token);
+        update::amount(wl_storage, &supply_key, |supply| {
+            tracing::debug!(
+                %supply_key,
+                ?supply,
+                "Existing value found",
+            );
+            supply.receive(amount);
+            tracing::debug!(
+                %supply_key,
+                ?supply,
+                "New value calculated",
+            );
+        })?;
+        _ = changed_keys.insert(supply_key);
+    }
+
+    Ok((asset_count, changed_keys))
 }
 
 fn act_on_transfers_to_eth<D, H>(
