@@ -293,9 +293,7 @@ where
     CA: 'static + WasmCacheAccess + Sync,
 {
     // Unshield funds if requested
-    if wrapper.unshield_section_hash.is_some() {
-        match masp_transaction {
-            Some(transaction ) => {
+            if let Some(transaction ) = masp_transaction {
         // The unshielding tx does not charge gas, instantiate a
         // custom gas meter for this step
         let mut gas_meter =
@@ -375,9 +373,9 @@ where
             }
             Err(e) => tracing::error!("{}", e), 
         }
-    },
-        None => tracing::error!("Missing expected fee unshielding tx") 
-    }}
+    } else {
+        tracing::error!("Missing expected fee unshielding tx") 
+    }
 
 
            // Charge or check fees

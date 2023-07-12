@@ -749,6 +749,7 @@ where
         let tx_chain_id = tx.header.chain_id.clone();
         let tx_expiration = tx.header.expiration;
 
+        // Tx chain id
         if tx_chain_id != self.chain_id {
             response.code = ErrorCodes::InvalidChainId.into();
             response.log = format!(
@@ -1136,15 +1137,8 @@ where
         )
         .expect("Token balance read in the protocol must not fail");
 
-        if wrapper.unshield_section_hash.is_some() {
-            //FIXME: isn't enough to pass the Transaction? If we already heck the validity of the Hash then I can only check if the argument is Some or None. Same in finalize block
-            let transaction =
-                masp_transaction
-                    .ok_or(Error::TxApply(protocol::Error::FeeUnshieldingError(
-                    namada::types::transaction::WrapperTxErr::InvalidUnshield(
-                        "Missing expected fee unshielding tx".to_string(),
-                    ),
-                )))?;
+        if let Some(transaction) = masp_transaction {
+            // Validation of the commitment to this section is done when checking the aggregated signature of the wrapper, no need for further validation
 
             // Validate data and generate unshielding tx
             let transfer_code_hash =
