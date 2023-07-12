@@ -6,9 +6,7 @@ use std::hash::Hash;
 use namada::core::ledger::testnet_pow;
 use namada::ledger::eth_bridge::EthBridgeStatus;
 use namada::ledger::parameters::{self, Parameters};
-use namada::ledger::pos::{
-    into_tm_voting_power, staking_token_address, PosParams,
-};
+use namada::ledger::pos::{staking_token_address, PosParams};
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::ledger::storage_api::token::{
@@ -23,8 +21,6 @@ use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::token;
 
 use super::*;
-use crate::facade::tendermint_proto::abci;
-use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 use crate::facade::tendermint_proto::google::protobuf;
 use crate::facade::tower_abci::{request, response};
 use crate::wasm_loader;
@@ -249,11 +245,11 @@ where
             &implicit_vp_code_path,
         );
         // set the initial validators set
-        Ok(self.set_initial_validators(
+        self.set_initial_validators(
             &staking_token,
             genesis.validators,
             &genesis.pos_params,
-        ))
+        )
     }
 
     /// Initialize genesis established accounts
@@ -467,7 +463,7 @@ where
         staking_token: &Address,
         validators: Vec<genesis::Validator>,
         pos_params: &PosParams,
-    ) -> response::InitChain {
+    ) -> Result<response::InitChain> {
         let mut response = response::InitChain::default();
         // PoS system depends on epoch being initialized. Write the total
         // genesis staking token balance to storage after
@@ -476,20 +472,15 @@ where
         pos::init_genesis_storage(
             &mut self.wl_storage,
             pos_params,
-            validators
-                .clone()
-                .into_iter()
-                .map(|validator| validator.pos_data),
+            validators.into_iter().map(|validator| validator.pos_data),
             current_epoch,
         );
 
-        let total_nam =
-            read_total_supply(&self.wl_storage, staking_token).unwrap();
+        let total_nam = read_total_supply(&self.wl_storage, staking_token)?;
         // At this stage in the chain genesis, the PoS address balance is the
         // same as the number of staked tokens
         let total_staked_nam =
-            read_balance(&self.wl_storage, staking_token, &address::POS)
-                .unwrap();
+            read_balance(&self.wl_storage, staking_token, &address::POS)?;
 
         tracing::info!(
             "Genesis total native tokens: {}.",
@@ -510,21 +501,12 @@ where
         ibc::init_genesis_storage(&mut self.wl_storage);
 
         // Set the initial validator set
-        for validator in validators {
-            let mut abci_validator = abci::ValidatorUpdate::default();
-            let consensus_key: common::PublicKey =
-                validator.pos_data.consensus_key.clone();
-            let pub_key = TendermintPublicKey {
-                sum: Some(key_to_tendermint(&consensus_key).unwrap()),
-            };
-            abci_validator.pub_key = Some(pub_key);
-            abci_validator.power = into_tm_voting_power(
-                pos_params.tm_votes_per_token,
-                validator.pos_data.tokens,
-            );
-            response.validators.push(abci_validator);
-        }
-        response
+        response.validators = self
+            .get_abci_validator_updates(true)
+            .expect("Must be able to set genesis validator set");
+        debug_assert!(!response.validators.is_empty());
+
+        Ok(response)
     }
 }
 
