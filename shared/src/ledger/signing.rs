@@ -324,7 +324,7 @@ pub async fn sign_wrapper<
     let (unshield, unshielding_epoch) = match total_fee
         .checked_sub(updated_balance)
     {
-        Some(diff) => {
+        Some(diff) if !diff.is_zero() => {
             if let Some(spending_key) = args.fee_unshield.clone() {
                 // Unshield funds for fee payment
                 let tx_args = args::Tx {
@@ -441,7 +441,7 @@ pub async fn sign_wrapper<
             } else {
                 eprintln!(
                     "The wrapper transaction source doesn't have enough \
-                     balance to pay fee. Fee: {fee_amount}, balance: \
+                     balance to pay fee. Fee: {total_fee}, balance: \
                      {updated_balance}."
                 );
                 if !args.force && cfg!(feature = "mainnet") {
@@ -451,7 +451,7 @@ pub async fn sign_wrapper<
                 (None, None)
             }
         }
-        None => (None, None),
+        _ => (None, None),
     };
 
     #[cfg(not(feature = "mainnet"))]
@@ -491,12 +491,12 @@ pub async fn sign_wrapper<
 
     tx.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
         Fee {
-            amount_per_gas_unit: fee_amount,
-            token: args.fee_token.clone(),
+            amount_per_gas_unit: fee_amount, //FIXME: validate this
+            token: args.fee_token.clone(),   //FIXME: validate this
         },
         keypair.as_ref(),
         epoch,
-        args.gas_limit.clone(),
+        args.gas_limit.clone(), //FIXME: can validate this?
         #[cfg(not(feature = "mainnet"))]
         pow_solution,
         unshield_section_hash,
