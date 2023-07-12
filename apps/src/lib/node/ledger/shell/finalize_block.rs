@@ -201,7 +201,6 @@ where
                     let tx_hash_key =
                         replay_protection::get_tx_hash_key(&tx_hash);
                     self.wl_storage
-                        .storage
                         .delete(&tx_hash_key)
                         .expect("Error while deleting tx hash from storage");
                 }
@@ -221,16 +220,14 @@ where
                             processed_tx.header_hash().0,
                         ));
                     self.wl_storage
-                        .storage
-                        .write(&wrapper_tx_hash_key, vec![])
+                        .write_bytes(&wrapper_tx_hash_key, vec![])
                         .expect("Error while writing tx hash to storage");
 
                     let inner_tx_hash_key = replay_protection::get_tx_hash_key(
                         &tx.clone().update_header(TxType::Raw).header_hash(),
                     );
                     self.wl_storage
-                        .storage
-                        .write(&inner_tx_hash_key, vec![])
+                        .write_bytes(&inner_tx_hash_key, vec![])
                         .expect("Error while writing tx hash to storage");
 
                     #[cfg(not(feature = "mainnet"))]
@@ -256,11 +253,7 @@ where
                     match balance.checked_sub(wrapper_fees) {
                         Some(amount) => {
                             self.wl_storage
-                                .storage
-                                .write(
-                                    &balance_key,
-                                    amount.try_to_vec().unwrap(),
-                                )
+                                .write(&balance_key, amount)
                                 .unwrap();
                         }
                         None => {
@@ -271,12 +264,9 @@ where
                             if reject {
                                 // Burn remaining funds
                                 self.wl_storage
-                                    .storage
                                     .write(
                                         &balance_key,
-                                        Amount::native_whole(0)
-                                            .try_to_vec()
-                                            .unwrap(),
+                                        Amount::native_whole(0),
                                     )
                                     .unwrap();
                                 tx_event["info"] =
@@ -481,6 +471,7 @@ where
                     );
                     stats.increment_errored_txs();
 
+                    self.wl_storage.drop_tx();
                     // If transaction type is Decrypted and failed because of
                     // out of gas, remove its hash from storage to allow
                     // rewrapping it
@@ -491,15 +482,16 @@ where
                             let tx_hash_key =
                                 replay_protection::get_tx_hash_key(&hash);
                             self.wl_storage
-                                .storage
                                 .delete(&tx_hash_key)
                                 .expect(
                                     "Error while deleting tx hash key from storage",
                                 );
+                            // Apply only to remove its hash,
+                            // since all other changes have already been dropped
+                            self.wl_storage.commit_tx();
                         }
                     }
 
-                    self.wl_storage.drop_tx();
                     tx_event["gas_used"] = self
                         .gas_meter
                         .get_current_transaction_gas()
@@ -1834,7 +1826,14 @@ mod test_finalize_block {
                 votes: votes.clone(),
                 ..Default::default()
             };
+            // merkle tree root before finalize_block
+            let root_pre = shell.shell.wl_storage.storage.block.tree.root();
+
             let _events = shell.finalize_block(req).unwrap();
+
+            // the merkle tree root should not change after finalize_block
+            let root_post = shell.shell.wl_storage.storage.block.tree.root();
+            assert_eq!(root_pre.0, root_post.0);
             let new_state = store_block_state(&shell);
             // The new state must be unchanged
             itertools::assert_equal(
@@ -2226,6 +2225,8 @@ mod test_finalize_block {
             },
         };
         shell.enqueue_tx(wrapper_tx);
+        // merkle tree root before finalize_block
+        let root_pre = shell.shell.wl_storage.storage.block.tree.root();
 
         let _event = &shell
             .finalize_block(FinalizeBlock {
@@ -2233,6 +2234,10 @@ mod test_finalize_block {
                 ..Default::default()
             })
             .expect("Test failed")[0];
+
+        // the merkle tree root should not change after finalize_block
+        let root_post = shell.shell.wl_storage.storage.block.tree.root();
+        assert_eq!(root_pre.0, root_post.0);
 
         // FIXME: uncomment when proper gas metering is in place
         // // Check inner tx hash has been removed from storage
