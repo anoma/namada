@@ -756,7 +756,7 @@ where
 pub fn read_consensus_validator_set_addresses_with_stake<S>(
     storage: &S,
     epoch: namada_core::types::storage::Epoch,
-) -> storage_api::Result<BTreeSet<WeightedValidator>>
+) -> storage_api::Result<HashSet<WeightedValidator>>
 where
     S: StorageRead,
 {
@@ -800,7 +800,7 @@ where
 pub fn read_below_capacity_validator_set_addresses_with_stake<S>(
     storage: &S,
     epoch: namada_core::types::storage::Epoch,
-) -> storage_api::Result<BTreeSet<WeightedValidator>>
+) -> storage_api::Result<HashSet<WeightedValidator>>
 where
     S: StorageRead,
 {
@@ -2825,42 +2825,6 @@ where
             get_multiple_bonds_and_unbonds(storage, &params, source, validator)
         }
     }
-}
-
-/// Collect the details of all of the enqueued slashes to be processed in future
-/// epochs into a nested map
-pub fn find_all_enqueued_slashes<S>(
-    storage: &S,
-    epoch: Epoch,
-) -> storage_api::Result<HashMap<Address, BTreeMap<Epoch, Vec<Slash>>>>
-where
-    S: StorageRead,
-{
-    let mut enqueued = HashMap::<Address, BTreeMap<Epoch, Vec<Slash>>>::new();
-    for res in enqueued_slashes_handle().get_data_handler().iter(storage)? {
-        let (
-            NestedSubKey::Data {
-                key: processing_epoch,
-                nested_sub_key:
-                    NestedSubKey::Data {
-                        key: address,
-                        nested_sub_key: _,
-                    },
-            },
-            slash,
-        ) = res?;
-        if processing_epoch <= epoch {
-            continue;
-        }
-
-        let slashes = enqueued
-            .entry(address)
-            .or_default()
-            .entry(processing_epoch)
-            .or_default();
-        slashes.push(slash);
-    }
-    Ok(enqueued)
 }
 
 /// Find all slashes and the associated validators in the PoS system
