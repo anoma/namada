@@ -158,7 +158,7 @@ where
             let mut changed_keys = BTreeSet::default();
             // FIXME: this is only needed for ABCI?
             // Propagate invalid masp transactions to try withdraw fees from transparent balance
-            let masp_transaction = wrapper.unshield_hash.map(|ref hash| tx.get_section(hash).map(|section| if let Section::MaspTx(transaction) = section { Some(transaction.to_owned()) } else { None }).flatten()).flatten();
+            let masp_transaction = wrapper.unshield_section_hash.map(|ref hash| tx.get_section(hash).map(|section| if let Section::MaspTx(transaction) = section { Some(transaction.to_owned()) } else { None }).flatten()).flatten();
 
             apply_wrapper_tx(
                 write_log,
@@ -293,7 +293,7 @@ where
     CA: 'static + WasmCacheAccess + Sync,
 {
     // Unshield funds if requested
-    if wrapper.unshield_hash.is_some() {
+    if wrapper.unshield_section_hash.is_some() {
         match masp_transaction {
             Some(transaction ) => {
         // The unshielding tx does not charge gas, instantiate a

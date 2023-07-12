@@ -241,7 +241,7 @@ where
             self.replay_protection_checks(&tx, tx_bytes, temp_wl_storage).map_err(|_| ())?;
 
             // Check fees
-            let fee_unshield = wrapper.unshield_hash.map(|ref hash| tx.get_section(hash).map(|section| if let Section::MaspTx(transaction) = section {Some(transaction.to_owned())} else {None} ).flatten()).flatten();
+            let fee_unshield = wrapper.unshield_section_hash.map(|ref hash| tx.get_section(hash).map(|section| if let Section::MaspTx(transaction) = section {Some(transaction.to_owned())} else {None} ).flatten()).flatten();
             match self.wrapper_fee_check(
                 &wrapper,
                 fee_unshield,

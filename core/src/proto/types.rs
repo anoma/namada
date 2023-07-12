@@ -984,7 +984,7 @@ impl Tx {
                     //FIXME: improve
                     //FIXME: if I need to sign the unshield (probably not) I should also skip the encyption on its signature
                     if let Some(unshield_section_hash) =
-                        self.header().wrapper().unwrap().unshield_hash
+                        self.header().wrapper().unwrap().unshield_section_hash
                     {
                         if unshield_section_hash
                             == Hash(

@@ -851,7 +851,7 @@ where
             }
 
             let fee_unshield = wrapper
-                .unshield_hash
+                .unshield_section_hash
                 .map(|ref hash| tx.get_section(hash))
                 .flatten()
                 .map(|section| {
@@ -1136,7 +1136,7 @@ where
         )
         .expect("Token balance read in the protocol must not fail");
 
-        if wrapper.unshield_hash.is_some() {
+        if wrapper.unshield_section_hash.is_some() {
             //FIXME: isn't enough to pass the Transaction? If we already heck the validity of the Hash then I can only check if the argument is Some or None. Same in finalize block
             let transaction =
                 masp_transaction

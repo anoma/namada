@@ -583,7 +583,7 @@ where
                     let mut clone_wl_storage =
                         TempWlStorage::new(&self.wl_storage.storage);
                     let fee_unshield = wrapper
-                        .unshield_hash
+                        .unshield_section_hash
                         .map(|ref hash| {
                             tx.get_section(hash)
                                 .map(|section| {
@@ -1068,7 +1068,7 @@ mod test_process_proposal {
             gas_limit: GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
             pow_solution: None,
-            unshield_hash: None,
+            unshield_section_hash: None,
         };
 
         let tx = Tx::new(TxType::Wrapper(Box::new(wrapper)));

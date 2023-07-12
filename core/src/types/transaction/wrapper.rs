@@ -177,7 +177,7 @@ pub mod wrapper_tx {
         /// Max amount of gas that can be used when executing the inner tx
         pub gas_limit: GasLimit,
         /// The hash of the optional, unencrypted, unshielding transaction for fee payment
-        pub unshield_hash: Option<Hash>, //FIXME: rename to unshield_section_hash
+        pub unshield_section_hash: Option<Hash>,
         #[cfg(not(feature = "mainnet"))]
         /// A PoW solution can be used to allow zero-fee testnet transactions
         pub pow_solution: Option<crate::ledger::testnet_pow::Solution>,
@@ -204,7 +204,7 @@ pub mod wrapper_tx {
                 pk: keypair.ref_to(),
                 epoch,
                 gas_limit,
-                unshield_hash,
+                unshield_section_hash: unshield_hash,
                 #[cfg(not(feature = "mainnet"))]
                 pow_solution,
             }
