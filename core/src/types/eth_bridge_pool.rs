@@ -5,6 +5,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::token::Token;
 use serde::{Deserialize, Serialize};
 
+use crate::ledger::eth_bridge::storage::wrapped_erc20s;
 use crate::types::address::Address;
 use crate::types::eth_abi::Encode;
 pub use crate::types::ethereum_events::TransferToEthereumKind;
@@ -68,6 +69,21 @@ pub struct PendingTransfer {
     /// The amount of gas fees (in NAM)
     /// paid by the user sending this transfer
     pub gas_fee: GasFee,
+}
+
+impl PendingTransfer {
+    /// Get a token [`Address`] from this [`PendingTransfer`].
+    #[inline]
+    pub fn token_address(&self) -> Address {
+        match &self.transfer.kind {
+            TransferToEthereumKind::Erc20 => {
+                wrapped_erc20s::token(&self.transfer.asset)
+            }
+            TransferToEthereumKind::Nut => {
+                wrapped_erc20s::nut(&self.transfer.asset)
+            }
+        }
+    }
 }
 
 impl From<PendingTransfer> for ethbridge_structs::Erc20Transfer {
