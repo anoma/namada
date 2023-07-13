@@ -134,6 +134,7 @@ fn create_node(
             wasm_dir,
             sender,
             None,
+            None,
             50 * 1024 * 1024, // 50 kiB
             50 * 1024 * 1024, // 50 kiB
             Address::from_str("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),

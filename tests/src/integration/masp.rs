@@ -53,8 +53,7 @@ fn masp_incentives() -> Result<()> {
             validator_one_rpc,
         ],
     )?;
-    assert!(node.success());
-    node.clear_results();
+    node.assert_success();
 
     // Assert BTC balance at VK(A) is 20
     let captured = CapturedOutput::of(|| {
@@ -261,8 +260,7 @@ fn masp_incentives() -> Result<()> {
             validator_one_rpc,
         ],
     )?;
-    assert!(node.success());
-    node.clear_results();
+    node.assert_success();
 
     // Assert ETH balance at VK(B) is 10
     let captured = CapturedOutput::of(|| {
@@ -397,8 +395,7 @@ fn masp_incentives() -> Result<()> {
             validator_one_rpc,
         ],
     )?;
-    assert!(node.success());
-    node.clear_results();
+    node.assert_success();
 
     // Assert ETH balance at VK(B) is 0
     let captured = CapturedOutput::of(|| {
@@ -495,8 +492,7 @@ fn masp_incentives() -> Result<()> {
             validator_one_rpc,
         ],
     )?;
-    assert!(node.success());
-    node.clear_results();
+    node.assert_success();
 
     // Assert BTC balance at VK(A) is 0
     let captured = CapturedOutput::of(|| {
@@ -669,8 +665,7 @@ fn masp_incentives() -> Result<()> {
             validator_one_rpc,
         ],
     )?;
-    assert!(node.success());
-    node.clear_results();
+    node.assert_success();
 
     // Wait till epoch boundary
     let _ep9 = node.next_epoch();
@@ -696,8 +691,7 @@ fn masp_incentives() -> Result<()> {
             validator_one_rpc,
         ],
     )?;
-    assert!(node.success());
-    node.clear_results();
+    node.assert_success();
 
     // Assert NAM balance at VK(A) is 0
     let captured = CapturedOutput::of(|| {
@@ -839,8 +833,7 @@ fn masp_pinned_txs() -> Result<()> {
             validator_one_rpc,
         ],
     )?;
-    assert!(node.success());
-    node.clear_results();
+    node.assert_success();
 
     // Wait till epoch boundary
     // This makes it more consistent for some reason?

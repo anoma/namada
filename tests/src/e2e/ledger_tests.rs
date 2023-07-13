@@ -24,7 +24,6 @@ use namada::types::governance::ProposalType;
 use namada::types::storage::Epoch;
 use namada::types::token;
 use namada_apps::config::ethereum_bridge;
-
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
@@ -644,7 +643,6 @@ fn ledger_txs_and_queries() -> Result<()> {
 
     Ok(())
 }
-
 
 /// In this test we:
 /// 1. Run the ledger node

@@ -3,12 +3,17 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use clap::Command as App;
-use eyre::Report;
+use eyre::{eyre, Report};
+use namada::eth_bridge::ethers::providers::{Http, Provider};
+use namada::ledger::eth_bridge::{bridge_pool, validator_set};
 use namada::ledger::signing;
 use namada::ledger::tx::ProcessTxResponse;
+use namada::types::control_flow::ProceedOrElse;
 use namada_apps::cli;
-use namada_apps::cli::args::{CliToSdk, Global};
-use namada_apps::cli::cmds::{Namada, NamadaClient, NamadaClientWithContext};
+use namada_apps::cli::args::{CliToSdk, CliToSdkCtxless, Global};
+use namada_apps::cli::cmds::{
+    Namada, NamadaClient, NamadaClientWithContext, NamadaRelayer,
+};
 use namada_apps::cli::utils::Cmd;
 use namada_apps::cli::{args, cmds, Context};
 use namada_apps::client::tx::submit_reveal_aux;
@@ -56,6 +61,16 @@ pub fn run(
             let matches = app.get_matches_from(args.clone());
             cmds::Namada::Wallet(
                 cmds::NamadaWallet::parse(&matches)
+                    .expect("Could not parse wallet command"),
+            )
+        }
+        Bin::Relayer => {
+            args.insert(0, "relayer");
+            let app = App::new("test");
+            let app = cmds::NamadaRelayer::add_sub(args::Global::def(app));
+            let matches = app.get_matches_from(args.clone());
+            cmds::Namada::Relayer(
+                cmds::NamadaRelayer::parse(&matches)
                     .expect("Could not parse wallet command"),
             )
         }
@@ -284,6 +299,42 @@ impl MockNode {
                         )
                         .await?;
                     }
+                    NamadaClientWithContext::AddToEthBridgePool(args) => {
+                        let args = args.0;
+                        let args = args.to_sdk(&mut ctx);
+                        let tx_args = args.tx.clone();
+                        let (mut tx, addr, pk) =
+                            bridge_pool::build_bridge_pool_tx(
+                                self,
+                                &mut ctx.wallet,
+                                args,
+                            )
+                            .await
+                            .unwrap();
+                        tx::submit_reveal_aux(
+                            self,
+                            &mut ctx,
+                            &tx_args,
+                            addr,
+                            pk.clone(),
+                            &mut tx,
+                        )
+                        .await?;
+                        signing::sign_tx(
+                            &mut ctx.wallet,
+                            &mut tx,
+                            &tx_args,
+                            &pk,
+                        )
+                        .await?;
+                        namada::ledger::tx::process_tx(
+                            self,
+                            &mut ctx.wallet,
+                            &tx_args,
+                            tx,
+                        )
+                        .await?;
+                    }
                 },
                 NamadaClient::WithoutContext(cmd) => unreachable!(
                     "Command not supported by integration test: {:?}",
@@ -386,6 +437,108 @@ impl MockNode {
                 let args = args.0.to_sdk(&mut ctx);
                 tx::submit_reveal_pk::<MockNode>(self, &mut ctx, args).await?;
             }
+            Namada::EthBridgePool(sub) => match sub {
+                cmds::EthBridgePool::RecommendBatch(args) => {
+                    let args = args.to_sdk_ctxless();
+                    bridge_pool::recommend_batch(self, args)
+                        .await
+                        .proceed_or_else(|| eyre!("Fatal error"))?;
+                }
+                cmds::EthBridgePool::ConstructProof(args) => {
+                    let args = args.to_sdk_ctxless();
+                    bridge_pool::construct_proof(self, args)
+                        .await
+                        .proceed_or_else(|| eyre!("Fatal error"))?;
+                }
+                cmds::EthBridgePool::RelayProof(args) => {
+                    let eth_client = Arc::new(
+                        Provider::<Http>::try_from(&args.eth_rpc_endpoint)
+                            .unwrap(),
+                    );
+                    let args = args.to_sdk_ctxless();
+                    bridge_pool::relay_bridge_pool_proof(
+                        eth_client, self, args,
+                    )
+                    .await
+                    .proceed_or_else(|| eyre!("Fatal error"))?;
+                }
+                cmds::EthBridgePool::QueryPool(_) => {
+                    bridge_pool::query_bridge_pool(self).await;
+                }
+                cmds::EthBridgePool::QuerySigned(_) => {
+                    bridge_pool::query_signed_bridge_pool(self)
+                        .await
+                        .proceed_or_else(|| eyre!("Fatal error"))?;
+                }
+                cmds::EthBridgePool::QueryRelays(_) => {
+                    bridge_pool::query_relay_progress(self).await;
+                }
+            },
+            Namada::Relayer(sub) => match sub {
+                NamadaRelayer::EthBridgePool(sub) => match sub {
+                    cmds::EthBridgePool::RecommendBatch(args) => {
+                        let args = args.to_sdk_ctxless();
+                        bridge_pool::recommend_batch(self, args)
+                            .await
+                            .proceed_or_else(|| eyre!("Fatal error"))?;
+                    }
+                    cmds::EthBridgePool::ConstructProof(args) => {
+                        let args = args.to_sdk_ctxless();
+                        bridge_pool::construct_proof(self, args)
+                            .await
+                            .proceed_or_else(|| eyre!("Fatal error"))?;
+                    }
+                    cmds::EthBridgePool::RelayProof(args) => {
+                        let eth_client = Arc::new(
+                            Provider::<Http>::try_from(&args.eth_rpc_endpoint)
+                                .unwrap(),
+                        );
+                        let args = args.to_sdk_ctxless();
+                        bridge_pool::relay_bridge_pool_proof(
+                            eth_client, self, args,
+                        )
+                        .await
+                        .proceed_or_else(|| eyre!("Fatal error"))?;
+                    }
+                    cmds::EthBridgePool::QueryPool(_) => {
+                        bridge_pool::query_bridge_pool(self).await;
+                    }
+                    cmds::EthBridgePool::QuerySigned(_) => {
+                        bridge_pool::query_signed_bridge_pool(self)
+                            .await
+                            .proceed_or_else(|| eyre!("Fatal error"))?;
+                    }
+                    cmds::EthBridgePool::QueryRelays(_) => {
+                        bridge_pool::query_relay_progress(self).await;
+                    }
+                },
+                NamadaRelayer::ValidatorSet(sub) => match sub {
+                    cmds::ValidatorSet::ConsensusValidatorSet(args) => {
+                        let args = args.to_sdk_ctxless();
+                        validator_set::query_validator_set_args(self, args)
+                            .await;
+                    }
+                    cmds::ValidatorSet::ValidatorSetProof(args) => {
+                        let args = args.to_sdk_ctxless();
+                        validator_set::query_validator_set_update_proof(
+                            self, args,
+                        )
+                        .await;
+                    }
+                    cmds::ValidatorSet::ValidatorSetUpdateRelay(args) => {
+                        let eth_client = Arc::new(
+                            Provider::<Http>::try_from(&args.eth_rpc_endpoint)
+                                .unwrap(),
+                        );
+                        let args = args.to_sdk_ctxless();
+                        validator_set::relay_validator_set_update(
+                            eth_client, self, args,
+                        )
+                        .await
+                        .proceed_or_else(|| eyre!("Fatal error"))?;
+                    }
+                },
+            },
         }
         Ok(())
     }
