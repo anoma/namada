@@ -233,7 +233,7 @@ pub mod wrapper_tx {
             descriptions_limit: u64,
             unshield: Transaction,
         ) -> Result<Tx, WrapperTxErr> {
-            // Check that the unshield operation is actually needed. Note that unshielding 0 tokens is considered an error
+            // Check that the unshield operation is actually needed
             let amount = self
                 .get_tx_fee()?
                 .checked_sub(transparent_balance)

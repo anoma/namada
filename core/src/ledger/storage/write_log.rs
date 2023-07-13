@@ -90,16 +90,6 @@ impl Iterator for PrefixIter {
     }
 }
 
-impl WriteLog {
-    /// Merges the write log of the current tx with the one coming from the
-    /// other instance. This is useful when two or more distincts write logs are
-    /// required to correctly validate a transaction. This function consumes the
-    /// passed in parameter to prevent further use of it.
-    pub fn merge_tx_write_log(&mut self, other: WriteLog) {
-        self.tx_write_log.extend(other.tx_write_log.into_iter())
-    }
-}
-
 impl Default for WriteLog {
     fn default() -> Self {
         Self {
@@ -422,6 +412,23 @@ impl WriteLog {
     pub fn drop_tx(&mut self) {
         self.tx_write_log.clear();
     }
+
+    /// Extract the current tx write log and reset it. Can be used when in need of a clean tx write log but still need the block log.
+    pub fn take_tx_log(
+        &mut self,
+    ) -> HashMap<storage::Key, StorageModification> {
+        std::mem::take(&mut self.tx_write_log)
+    }
+
+    /// Extend the tx write log with another one which is consumed in the process
+    pub fn merge_tx_log(
+        &mut self,
+        other: HashMap<storage::Key, StorageModification>,
+    ) {
+        self.tx_write_log.extend(other)
+    }
+
+    //FIXME: should create a pre_commit function for fee validation? I need an extra field on the struct though. Then I can remove the ptrevious two functions
 
     /// Commit the current block's write log to the storage. Starts a new block
     /// write log.

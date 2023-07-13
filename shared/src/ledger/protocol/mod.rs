@@ -10,7 +10,7 @@ use namada_core::ledger::storage::TempWlStorage;
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::hash::Hash;
 use namada_core::types::transaction::WrapperTx;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator, Empty};
 use thiserror::Error;
 
 use crate::ledger::eth_bridge::vp::EthBridge;
@@ -156,8 +156,6 @@ where
         }
         TxType::Wrapper(ref wrapper) => {
             let mut changed_keys = BTreeSet::default();
-            // FIXME: this is only needed for ABCI?
-            // Propagate invalid masp transactions to try withdraw fees from transparent balance
             let masp_transaction = wrapper.unshield_section_hash.map(|ref hash| tx.get_section(hash).map(|section| if let Section::MaspTx(transaction) = section { Some(transaction.to_owned()) } else { None }).flatten()).flatten();
 
             apply_wrapper_tx(
@@ -246,7 +244,6 @@ where
     write_log.commit_tx();
 
     // Charge fee before performing any fallible operations
-    let mut temp_wl_storage = TempWlStorage::new(storage);
     charge_fee(
         wrapper,
         masp_transaction,
@@ -255,14 +252,12 @@ where
         #[cfg(not(feature = "mainnet"))]
         has_valid_pow,
         block_proposer,
-        &mut temp_wl_storage,
+        write_log,
+        storage,
         changed_keys,
         vp_wasm_cache,
         tx_wasm_cache,
     )?;
-
-    // Extract the updated write log
-    *write_log = temp_wl_storage.write_log;
 
     // Account for gas
     gas_meter.add_tx_size_gas(tx_bytes)?;
@@ -282,7 +277,9 @@ pub fn charge_fee<D, H, CA>(
     gas_table: &BTreeMap<String, u64>,
     #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     block_proposer: Option<&Address>,
-    wl_storage: &mut TempWlStorage<D, H>,
+
+    write_log: &mut WriteLog,
+    storage: &Storage<D, H>,
     changed_keys: &mut BTreeSet<storage::Key>,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
@@ -292,8 +289,12 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
+    // Reconstruct a WlStorage with the current WriteLog to account for prior modifications
+    let mut wl_storage = TempWlStorage::new(storage);
+    wl_storage.write_log = write_log.clone();  //FIXME: can avoid this clone? Only if I pass WlStorage to apply_tx instead of the write log and storage split. 
+    
     // Unshield funds if requested
-            if let Some(transaction ) = masp_transaction {
+        let unexpected_unshielding_tx =    if let Some(transaction ) = masp_transaction {
         // The unshielding tx does not charge gas, instantiate a
         // custom gas meter for this step
         let mut gas_meter =
@@ -308,34 +309,27 @@ where
             );
 
         let transparent_balance = storage_api::token::read_balance(
-            wl_storage,
+            &wl_storage,
             &wrapper.fee.token,
             &wrapper.fee_payer(),
         ).map_err(|e| Error::FeeError(e.to_string()))?;
-                //FIXME: should return an error if empty unshield or try to withdraw fees from transparent balance as stated after?
             let unshield_amount = wrapper
                 .get_tx_fee().map_err(|e| Error::FeeUnshieldingError(e))?
                 .checked_sub(transparent_balance)
-                .and_then(|v| if v.is_zero() { None } else { Some(v) })
-                .ok_or_else(|| {
-                    Error::FeeUnshieldingError(crate::types::transaction::WrapperTxErr::InvalidUnshield(
-                        "The transparent balance of the fee payer is enough \
-                         to pay fees, no need for unshielding"
-                            .to_string(),
-                    ))
-                })?;
+                .and_then(|v| if v.is_zero() { None } else { Some(v) });
 
         // If it fails, do not return early
         // from this function but try to take the funds from the unshielded
         // balance
-            //FIXME: this logic is actually only needed in case of ABCI?
+        if let Some(unshield_amount) = unshield_amount {
         match wrapper.generate_fee_unshielding(
             unshield_amount,
-            get_transfer_hash_from_storage(wl_storage),
+            get_transfer_hash_from_storage(&wl_storage),
                 transaction
         ) {
             Ok(fee_unshielding_tx) => {
-                // NOTE: A clean write log must be provided to this call for a correct vp validation
+                    let previous_tx_log = wl_storage.write_log.take_tx_log();
+                // NOTE: A clean tx write log must be provided to this call for a correct vp validation. Block write log, instead, should contain any prior changes (if any)
                 match apply_tx(
                         fee_unshielding_tx,
                     tx_bytes,
@@ -351,8 +345,10 @@ where
                     
                 ) {
                     Ok(result) => {
-                        // NOTE: do not commit the result of the unshielding until fees are paid otherwise this could be exploited to get free unshieldings
-                        if !result.is_accepted() {
+                            if result.is_accepted() {
+                                // Rejoin tx write logs but do not commit the result of the unshielding until fees are paid otherwise this could be exploited to get free unshieldings
+                                wl_storage.write_log.merge_tx_log(previous_tx_log);
+                            } else {
                             wl_storage.write_log.drop_tx();
                             tracing::error!(
                                 "The unshielding tx is invalid, some VPs \
@@ -373,34 +369,48 @@ where
             }
             Err(e) => tracing::error!("{}", e), 
         }
-    } else {
-        tracing::error!("Missing expected fee unshielding tx") 
-    }
+        
+        }
 
+        false
+    } else {
+        true
+    };
 
            // Charge or check fees
     match block_proposer {
-        Some(proposer) => transfer_fee(wl_storage, proposer, #[cfg(not(feature = "mainnet"))]has_valid_pow, &wrapper)?,
-        None => check_fees(wl_storage, #[cfg(not(feature = "mainnet"))]has_valid_pow, &wrapper)?
+        Some(proposer) => transfer_fee(&mut wl_storage, proposer, #[cfg(not(feature = "mainnet"))]has_valid_pow, &wrapper)?,
+        None => check_fees(&wl_storage, #[cfg(not(feature = "mainnet"))]has_valid_pow, &wrapper)?
         }
 
     changed_keys.append(&mut wl_storage.write_log.get_keys());
 
-    Ok(())
+    // Commit tx write log even in case of subsequent errors
+    wl_storage.write_log.commit_tx();
+    *write_log = wl_storage.write_log;
+
+    if unexpected_unshielding_tx{
+        Err(Error::FeeUnshieldingError(namada_core::types::transaction::WrapperTxErr::InvalidUnshield("Found unnecessary unshielding tx attached".to_string())))
+    } else {
+        Ok(())
+    }
+
+
 }
 
-/// Perform the actual transfer of fess from the fee payer to the block proposer
-pub fn transfer_fee<S>(
-    wl_storage: &mut S,
+/// Perform the actual transfer of fess from the fee payer to the block proposer.
+pub fn transfer_fee<D, H>( 
+    temp_wl_storage: &mut TempWlStorage<D, H>,
     block_proposer: &Address, 
     #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     wrapper: &WrapperTx,
 ) -> Result<()> 
 where
-    S: StorageRead + StorageWrite,
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
 {
     let balance = storage_api::token::read_balance(
-        wl_storage,
+        temp_wl_storage,
         &wrapper.fee.token,
         &wrapper.fee_payer(),
     )
@@ -410,7 +420,7 @@ where
         Ok(fees) => {
             if balance.checked_sub(fees).is_some() {
         storage_api::token::transfer(
-            wl_storage,
+            temp_wl_storage,
             &wrapper.fee.token,
             &wrapper.fee_payer(),
             block_proposer,
@@ -428,7 +438,7 @@ where
                     {
                         // Move all the available funds in the transparent balance of the fee payer
         storage_api::token::transfer(
-            wl_storage,
+            temp_wl_storage,
             &wrapper.fee.token,
             &wrapper.fee_payer(),
             block_proposer,
@@ -453,7 +463,7 @@ where
             {
                 // Move all the available funds in the transparent balance of the fee payer
         storage_api::token::transfer(
-            wl_storage,
+            temp_wl_storage,
             &wrapper.fee.token,
             &wrapper.fee_payer(),
             block_proposer,
@@ -469,21 +479,22 @@ where
                 #[cfg(any(feature = "abciplus", feature = "abcipp"))]
             return Err(Error::FeeError(e.to_string()));
         }
-    }
+}
 }
 
 /// Check if the fee payer has enough transparent balance to pay fees
-pub fn check_fees<S>(
-    wl_storage: &mut S,
+pub fn check_fees<D, H>( 
+    temp_wl_storage: &TempWlStorage<D, H>,
     #[cfg(not(feature = "mainnet"))] has_valid_pow: bool, 
     wrapper: &WrapperTx,
 ) -> Result<()> 
 where
-    S: StorageRead + StorageWrite,
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
 {
     
     let balance = storage_api::token::read_balance(
-        wl_storage,
+        temp_wl_storage,
         &wrapper.fee.token,
         &wrapper.fee_payer(),
     )

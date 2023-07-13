@@ -242,7 +242,8 @@ where
                             #[cfg(not(feature = "mainnet"))]
                             has_valid_pow,
                             Some(&native_block_proposer_address),
-                            &mut self.wl_storage,
+                            &mut self.wl_storage.write_log,
+                            &self.wl_storage.storage,
                             &mut BTreeSet::default(),
                             &mut self.vp_wasm_cache,
                             &mut self.tx_wasm_cache,

@@ -573,15 +573,6 @@ where
                     }
 
                     // Check that the fee payer has sufficient balance.
-                    // The temporary write log is populated by now. We need a
-                    // new, empty one, to simulate the unshielding tx (to
-                    // prevent the already written keys from being
-                    // passed/triggering VPs) but we cannot commit the tx write
-                    // log yet cause the unshielding could be invalid. As a
-                    // workaround, we create a new write log and merge it with
-                    // the previous one in case of success
-                    let mut clone_wl_storage =
-                        TempWlStorage::new(&self.wl_storage.storage);
                     let fee_unshield = wrapper
                         .unshield_section_hash
                         .map(|ref hash| {
@@ -602,23 +593,18 @@ where
                     match self.wrapper_fee_check(
                         &wrapper,
                         fee_unshield,
-                        &mut clone_wl_storage,
+                        temp_wl_storage,
                         Some(Cow::Borrowed(gas_table)),
                         vp_wasm_cache,
                         tx_wasm_cache,
                         Some(block_proposer),
                     ) {
-                        Ok(()) => {
-                            temp_wl_storage
-                                .write_log
-                                .merge_tx_write_log(clone_wl_storage.write_log);
-                            TxResult {
-                                code: ErrorCodes::Ok.into(),
-                                info: "Process proposal accepted this \
+                        Ok(()) => TxResult {
+                            code: ErrorCodes::Ok.into(),
+                            info: "Process proposal accepted this \
                                        transaction"
-                                    .into(),
-                            }
-                        }
+                                .into(),
+                        },
                         Err(e) => TxResult {
                             code: ErrorCodes::FeeError.into(),
                             info: e.to_string(),
