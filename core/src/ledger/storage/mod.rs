@@ -261,7 +261,7 @@ pub trait DB: std::fmt::Debug {
     /// Write block's metadata. Merkle tree sub-stores are committed only when
     /// `is_full_commit` is `true` (typically on a beginning of a new epoch).
     fn write_block(
-        &mut self,
+        &self,
         state: BlockStateWrite,
         batch: &mut Self::WriteBatch,
         is_full_commit: bool,

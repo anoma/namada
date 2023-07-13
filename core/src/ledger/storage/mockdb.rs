@@ -212,7 +212,7 @@ impl DB for MockDB {
     }
 
     fn write_block(
-        &mut self,
+        &self,
         state: BlockStateWrite,
         _batch: &mut Self::WriteBatch,
         _is_full_commit: bool,
