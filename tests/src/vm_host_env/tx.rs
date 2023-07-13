@@ -229,18 +229,6 @@ impl TestTxEnv {
             .unwrap();
     }
 
-    /// Set public key for the address.
-    pub fn write_public_key(
-        &mut self,
-        address: &Address,
-        public_key: &key::common::PublicKey,
-        index: u8,
-    ) {
-        key::pks_handle(address)
-            .insert(&mut self.wl_storage, index, public_key.clone())
-            .unwrap();
-    }
-
     /// Apply the tx changes to the write log.
     pub fn execute_tx(&mut self) -> Result<(), Error> {
         wasm::run::tx(

@@ -12,10 +12,10 @@
     "tx_update_account.wasm": "tx_update_account.b67d3bfd43f2f0fc6cc8e32368f7f44ee42ef582f306abe805bb89d26da8d0aa.wasm",
     "tx_vote_proposal.wasm": "tx_vote_proposal.483989ea22c82c5051bb450accebf65244a05a7b0062b17d69f8b8766eb014d7.wasm",
     "tx_withdraw.wasm": "tx_withdraw.74816e3789f6c0187f3858c295624f663d0d5f2b3bbc56ef3cb0ac3fa8286bed.wasm",
-    "vp_implicit.wasm": "vp_implicit.17e0f34ced76bb1b2fd679be224d0b84003429f237918dae752aea5e257d3d30.wasm",
+    "vp_implicit.wasm": "vp_implicit.f97a7884329fb82b11f5a387fa76fad82b9563bdf5b3c6376c3d79f5a9092762.wasm",
     "vp_masp.wasm": "vp_masp.c436834d42070382c6ffeccef64d5909af3de51957e75e0f4077744b3a29c4a1.wasm",
-    "vp_testnet_faucet.wasm": "vp_testnet_faucet.ac16ba8200fc58ad95a861b9a674f5a1dc46614419cc5d69c8f9f1279d867f31.wasm",
+    "vp_testnet_faucet.wasm": "vp_testnet_faucet.b9ec8e7a73af5f694863ff299e1bd53d40357e916b03d942498dfc8bc39dcbc5.wasm",
     "vp_token.wasm": "vp_token.5009c76f1682e355a79af28af2416366f78f6967f48617c2fc6fdf393652e0d3.wasm",
-    "vp_user.wasm": "vp_user.9f2ff291026bb6d78d47b7ce22f85dcdee115b91507c21ad1892bfa3d0825b8e.wasm",
-    "vp_validator.wasm": "vp_validator.e00d30e7e42627330a81d2ba7056e7bdc32fdb3e4433b3e6a1943f6c2fa6d800.wasm"
+    "vp_user.wasm": "vp_user.14780afa21432dcff4b13fa74e30cd7576e5783caa413ac6929ae3a6109b5f25.wasm",
+    "vp_validator.wasm": "vp_validator.1faec2f880eaedf111e430a717ce4a28f968e2f1e28a17542673aa437c9cd148.wasm"
 }

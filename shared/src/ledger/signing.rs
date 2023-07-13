@@ -160,7 +160,7 @@ pub async fn tx_signer<
                     )
                     .await?;
                 }
-                secret_keys.push(key)
+                secret_keys.push(key);
             }
             TxSigningKey::WalletAddress(address) => {
                 let signing_key = find_keypair::<C, U>(

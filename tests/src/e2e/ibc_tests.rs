@@ -87,6 +87,7 @@ use namada_apps::facade::tendermint_rpc::{Client, HttpClient, Url};
 use prost::Message;
 use setup::constants::*;
 
+use super::helpers::wait_for_wasm_pre_compile;
 use crate::e2e::helpers::{find_address, get_actor_rpc, get_validator_pk};
 use crate::e2e::setup::{self, sleep, Bin, NamadaCmd, Test, Who};
 use crate::{run, run_as};
@@ -115,6 +116,9 @@ fn run_ledger_ibc() -> Result<()> {
     ledger_b.exp_string("Namada ledger node started")?;
     ledger_a.exp_string("This node is a validator")?;
     ledger_b.exp_string("This node is a validator")?;
+
+    wait_for_wasm_pre_compile(&mut ledger_a)?;
+    wait_for_wasm_pre_compile(&mut ledger_b)?;
 
     // Wait for a first block
     ledger_a.exp_string("Committed block hash")?;

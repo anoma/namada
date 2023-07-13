@@ -629,6 +629,8 @@ fn masp_txs_and_queries() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
+    // the extra argument in the tuple is for flagging extra checks below
+
     let txs_args = vec![
         // 2. Attempt to spend 10 BTC at SK(A) to PA(B)
         (
@@ -642,10 +644,12 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "10",
+                "--signing-keys",
+                ALBERT_KEY,
                 "--node",
                 &validator_one_rpc,
             ],
-            "No balance found",
+            ("No balance found", None),
         ),
         // 3. Attempt to spend 15 BTC at SK(A) to Bertha
         (
@@ -659,10 +663,12 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "15",
+                "--signing-keys",
+                ALBERT_KEY,
                 "--node",
                 &validator_one_rpc,
             ],
-            "No balance found",
+            ("No balance found", None),
         ),
         // 4. Send 20 BTC from Albert to PA(A)
         (
@@ -676,10 +682,12 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "20",
+                "--signing-keys",
+                ALBERT_KEY,
                 "--node",
                 &validator_one_rpc,
             ],
-            "Transaction is valid",
+            ("Transaction is valid", Some(true)),
         ),
         // 5. Attempt to spend 10 ETH at SK(A) to PA(B)
         (
@@ -698,7 +706,20 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            "No balance found",
+            ("No balance found", None),
+        ),
+        // 10. Assert BTC balance at VK(A) is 0
+        (
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                BTC,
+                "--node",
+                &validator_one_rpc,
+            ],
+            ("btc: 20", None),
         ),
         // 6. Spend 7 BTC at SK(A) to PA(B)
         (
@@ -717,7 +738,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            "Transaction is valid",
+            ("Transaction is valid", None),
         ),
         // 7. Spend 7 BTC at SK(A) to PA(B)
         (
@@ -731,12 +752,10 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "7",
-                "--signing-keys",
-                ALBERT_KEY,
                 "--node",
                 &validator_one_rpc,
             ],
-            "Transaction is valid",
+            ("Transaction is valid", None),
         ),
         // 8. Attempt to spend 7 BTC at SK(A) to PA(B)
         (
@@ -750,12 +769,10 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "7",
-                "--signing-keys",
-                ALBERT_KEY,
                 "--node",
                 &validator_one_rpc,
             ],
-            "is lower than the amount to be transferred and fees",
+            ("is lower than the amount to be transferred and fees", None),
         ),
         // 9. Spend 6 BTC at SK(A) to PA(B)
         (
@@ -769,12 +786,10 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "6",
-                "--signing-keys",
-                ALBERT_KEY,
                 "--node",
                 &validator_one_rpc,
             ],
-            "Transaction is valid",
+            ("Transaction is valid", None),
         ),
         // 10. Assert BTC balance at VK(A) is 0
         (
@@ -787,7 +802,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            "No shielded btc balance found",
+            ("No shielded btc balance found", None),
         ),
         // 11. Assert ETH balance at VK(A) is 0
         (
@@ -800,7 +815,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            "No shielded eth balance found",
+            ("No shielded eth balance found", None),
         ),
         // 12. Assert balance at VK(B) is 10 BTC
         (
@@ -811,7 +826,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            "btc : 20",
+            ("btc : 20", None),
         ),
         // 13. Send 10 BTC from SK(B) to Bertha
         (
@@ -825,19 +840,17 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "20",
-                "--signing-keys",
-                BERTHA_KEY,
                 "--node",
                 &validator_one_rpc,
             ],
-            "Transaction is valid",
+            ("Transaction is valid", None),
         ),
     ];
 
     // Wait till epoch boundary
     let _ep0 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    for (tx_args, tx_result) in &txs_args {
+    for (tx_args, (tx_result, extra)) in &txs_args {
         for &dry_run in &[true, false] {
             let tx_args = if dry_run && tx_args[0] == "transfer" {
                 vec![tx_args.clone(), vec!["--dry-run"]].concat()
@@ -849,6 +862,9 @@ fn masp_txs_and_queries() -> Result<()> {
             if *tx_result == "Transaction is valid" && !dry_run {
                 client.exp_string("Transaction accepted")?;
                 client.exp_string("Transaction applied")?;
+                if extra.is_some() {
+                    client.exp_string("Transaction applied")?;
+                }
             }
             client.exp_string(tx_result)?;
         }

@@ -64,18 +64,12 @@ fn validate_tx(
         verifiers
     );
 
-    log_string("test1");
-
     let valid_sig =
         Lazy::new(|| verify_signatures(ctx, &tx_data, &addr).is_ok());
-
-    log_string("test2");
 
     if !is_valid_tx(ctx, &tx_data)? {
         return reject();
     }
-
-    log_string("test3");
 
     for key in keys_changed.iter() {
         let key_type: KeyType = key.into();
