@@ -174,8 +174,7 @@ impl Amount {
             .and_then(|scaling| scaling.checked_mul(uint.into()))
         {
             Some(amount) => {
-                let raw = amount;
-                Ok(Self { raw })
+                Ok(Self { raw: amount })
             }
             None => Err(AmountParseError::ConvertToDecimal),
         }

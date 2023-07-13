@@ -9,25 +9,6 @@
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
 
-fn read_denom(
-    ctx: &Ctx,
-    token: &Address,
-    sub_prefix: Option<&storage::Key>,
-) -> EnvResult<token::Denomination> {
-    if let Some(sub_prefix) = sub_prefix {
-        if sub_prefix
-            .segments
-            .contains(&storage::DbKeySeg::StringSeg("ibc".to_string()))
-        {
-            return Ok(token::NATIVE_MAX_DECIMAL_PLACES.into());
-        }
-    }
-    let key = token::denom_key(token, sub_prefix);
-    ctx.read_pre(&key).map(|opt_denom| {
-        opt_denom.unwrap_or_else(|| token::NATIVE_MAX_DECIMAL_PLACES.into())
-    })
-}
-
 #[validity_predicate]
 fn validate_tx(
     ctx: &Ctx,
@@ -70,7 +51,17 @@ fn validate_tx(
                 let post: token::Amount =
                     ctx.read_post(key)?.unwrap_or_default();
                 let change = post.change() - pre.change();
-                let denom = read_denom(ctx, token, None)?;
+                let maybe_denom =
+                    storage_api::token::read_denom(&ctx.pre(), token, None)?;
+                if maybe_denom.is_none() {
+                    debug_log!(
+                        "A denomination for token address {} does not exist \
+                         in storage",
+                        token,
+                    );
+                    return reject();
+                }
+                let denom = maybe_denom.unwrap();
                 if !change.non_negative() {
                     // Allow to withdraw without a sig if there's a valid PoW
                     if ctx.has_valid_pow() {

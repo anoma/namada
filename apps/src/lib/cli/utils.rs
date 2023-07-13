@@ -362,6 +362,6 @@ pub fn prompt(question: &str) -> String {
 }
 
 #[cfg(not(feature = "dev"))]
-pub fn prompt(mut reader: R, question: &str) -> String {
+pub fn prompt(question: &str) -> String {
     prompt_aux(std::io::stdin().lock(), std::io::stdout(), question)
 }
