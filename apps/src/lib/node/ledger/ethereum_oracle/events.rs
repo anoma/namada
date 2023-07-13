@@ -7,15 +7,15 @@ pub mod eth_events {
     };
     use ethbridge_events::{DynEventCodec, Events as RawEvents};
     use ethbridge_governance_events::{
-        GovernanceEvents, NewContractFilter, UpdateBridgeWhitelistFilter,
-        UpgradedContractFilter, ValidatorSetUpdateFilter,
+        GovernanceEvents, NewContractFilter, UpgradedContractFilter,
+        ValidatorSetUpdateFilter,
     };
     use namada::core::types::ethereum_structs;
     use namada::eth_bridge::ethers::contract::EthEvent;
     use namada::types::address::Address;
     use namada::types::ethereum_events::{
-        EthAddress, EthereumEvent, TokenWhitelist, TransferToEthereum,
-        TransferToEthereumKind, TransferToNamada, Uint,
+        EthAddress, EthereumEvent, TransferToEthereum, TransferToEthereumKind,
+        TransferToNamada, Uint,
     };
     use namada::types::keccak::KeccakHash;
     use namada::types::token::Amount;
@@ -105,31 +105,6 @@ pub mod eth_events {
                     return Err(Error::NotInUse(
                         NewContractFilter::name().into(),
                     ));
-                }
-                RawEvents::Governance(
-                    GovernanceEvents::UpdateBridgeWhitelistFilter(
-                        UpdateBridgeWhitelistFilter {
-                            nonce,
-                            tokens,
-                            token_cap,
-                        },
-                    ),
-                ) => {
-                    let mut whitelist = vec![];
-
-                    for (token, cap) in
-                        tokens.into_iter().zip(token_cap.into_iter())
-                    {
-                        whitelist.push(TokenWhitelist {
-                            token: token.parse_eth_address()?,
-                            cap: cap.parse_amount()?,
-                        });
-                    }
-
-                    EthereumEvent::UpdateBridgeWhitelist {
-                        nonce: nonce.parse_uint256()?,
-                        whitelist,
-                    }
                 }
                 RawEvents::Governance(
                     GovernanceEvents::UpgradedContractFilter(
@@ -342,7 +317,7 @@ pub mod eth_events {
         use ethabi::ethereum_types::{H160, U256};
         use ethbridge_events::{
             TRANSFER_TO_ERC_CODEC, TRANSFER_TO_NAMADA_CODEC,
-            UPDATE_BRIDGE_WHITELIST_CODEC, VALIDATOR_SET_UPDATE_CODEC,
+            VALIDATOR_SET_UPDATE_CODEC,
         };
         use namada::eth_bridge::ethers::abi::AbiEncode;
 
@@ -553,11 +528,6 @@ pub mod eth_events {
                 bridge_validator_set_hash: [1; 32],
                 governance_validator_set_hash: [2; 32],
             };
-            let whitelist = UpdateBridgeWhitelistFilter {
-                nonce: 0u64.into(),
-                tokens: vec![H160([0; 20]); 2],
-                token_cap: vec![0u64.into(); 2],
-            };
             assert_eq!(
                 {
                     let decoded: TransferToNamadaFilter =
@@ -592,18 +562,6 @@ pub mod eth_events {
                     decoded
                 },
                 update
-            );
-            assert_eq!(
-                {
-                    let decoded: UpdateBridgeWhitelistFilter =
-                        UPDATE_BRIDGE_WHITELIST_CODEC
-                            .decode(&get_log(whitelist.clone().encode()))
-                            .expect("Test failed")
-                            .try_into()
-                            .expect("Test failed");
-                    decoded
-                },
-                whitelist
             );
         }
 

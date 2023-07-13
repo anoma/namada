@@ -276,11 +276,6 @@ where
                     return Err(VoteExtensionError::InvalidNamNonce);
                 }
             }
-            EthereumEvent::UpdateBridgeWhitelist { .. } => {
-                // TODO: check nonce of whitelist update;
-                // for this, we need to store the nonce of
-                // whitelist updates somewhere
-            }
             // consider other ethereum event kinds valid
             _ => {}
         }

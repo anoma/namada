@@ -334,16 +334,6 @@ pub enum EthereumEvent {
         #[allow(dead_code)]
         address: EthAddress,
     },
-    /// Event indication a new Ethereum based token has been whitelisted for
-    /// transfer across the bridge
-    UpdateBridgeWhitelist {
-        /// Monotonically increasing nonce
-        #[allow(dead_code)]
-        nonce: Uint,
-        /// Tokens to be allowed to be transferred across the bridge
-        #[allow(dead_code)]
-        whitelist: Vec<TokenWhitelist>,
-    },
 }
 
 impl EthereumEvent {
@@ -460,30 +450,6 @@ pub struct TransferToEthereum {
     pub sender: Address,
     /// The account of fee payer.
     pub gas_payer: Address,
-}
-
-/// struct for whitelisting a token from Ethereum.
-/// Includes the address of issuing contract and
-/// a cap on the max amount of this token allowed to be
-/// held by the bridge.
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-)]
-#[allow(dead_code)]
-pub struct TokenWhitelist {
-    /// Address of Ethereum smart contract issuing token
-    pub token: EthAddress,
-    /// Maximum amount of token allowed on the bridge
-    pub cap: Amount,
 }
 
 #[cfg(test)]
