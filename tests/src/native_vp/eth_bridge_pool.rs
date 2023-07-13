@@ -64,6 +64,7 @@ mod test_bridge_pool_vp {
             ..Default::default()
         };
         let config = EthereumBridgeConfig {
+            erc20_whitelist: vec![],
             eth_start_height: Default::default(),
             min_confirmations: Default::default(),
             contracts: Contracts {

@@ -27,7 +27,7 @@ use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada::core::ledger::eth_bridge;
-use namada::ledger::eth_bridge::{EthBridgeQueries, EthereumBridgeConfig};
+use namada::ledger::eth_bridge::{EthBridgeQueries, EthereumOracleConfig};
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::BlockGasMeter;
@@ -967,27 +967,16 @@ where
                 );
                 return;
             }
-            let Some(config) = EthereumBridgeConfig::read(&self.wl_storage) else {
-                tracing::info!(
-                    "Not starting oracle as the Ethereum bridge config couldn't be found in storage"
-                );
-                return;
-            };
+            let config = EthereumOracleConfig::read(&self.wl_storage).expect(
+                "The oracle config must be present in storage, since the \
+                 bridge is enabled",
+            );
             let start_block = self
                 .wl_storage
                 .storage
                 .ethereum_height
                 .clone()
-                .unwrap_or_else(|| {
-                    self.wl_storage
-                        .read(&eth_bridge::storage::eth_start_height_key())
-                        .expect(
-                            "Failed to read Ethereum start height from storage",
-                        )
-                        .expect(
-                            "The Ethereum start height should be in storage",
-                        )
-                });
+                .unwrap_or(config.eth_start_height);
             tracing::info!(
                 ?start_block,
                 "Found Ethereum height from which the Ethereum oracle should \
