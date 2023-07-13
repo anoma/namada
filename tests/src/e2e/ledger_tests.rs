@@ -2678,7 +2678,7 @@ fn pos_init_validator() -> Result<()> {
     let validator_1_base_dir = test.get_base_dir(&Who::NonValidator);
     let mut validator_1 = setup::run_cmd(
         Bin::Node,
-        &["ledger"],
+        ["ledger"],
         Some(60),
         &test.working_dir,
         validator_1_base_dir,
@@ -4428,7 +4428,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     // `validator_0` and `validator_0_copy` should start double signing
     let mut validator_0_copy = setup::run_cmd(
         Bin::Node,
-        &["ledger"],
+        ["ledger"],
         Some(40),
         &test.working_dir,
         validator_0_base_dir_copy,
