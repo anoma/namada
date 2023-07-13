@@ -4409,11 +4409,13 @@ fn double_signing_gets_slashed() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
     validator_0.exp_string("Namada ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
+    wait_for_wasm_pre_compile(&mut validator_0)?;
     let _bg_validator_0 = validator_0.background();
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
     validator_1.exp_string("Namada ledger node started")?;
     validator_1.exp_string("This node is a validator")?;
+    wait_for_wasm_pre_compile(&mut validator_1)?;
     let bg_validator_1 = validator_1.background();
 
     // 2. Copy the first genesis validator base-dir
@@ -4506,7 +4508,6 @@ fn double_signing_gets_slashed() -> Result<()> {
     )?;
     validator_0_copy.exp_string("Namada ledger node started")?;
     validator_0_copy.exp_string("This node is a validator")?;
-    wait_for_wasm_pre_compile(&mut validator_0_copy)?;
     let _bg_validator_0_copy = validator_0_copy.background();
 
     // 5. Submit a valid token transfer tx to validator 0
