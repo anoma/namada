@@ -395,7 +395,7 @@ where
     /// Proposal execution tracking
     pub proposal_data: HashSet<u64>,
     /// Log of events emitted by `FinalizeBlock` ABCI calls.
-    pub event_log: EventLog,
+    event_log: EventLog,
 }
 
 /// Channels for communicating with an Ethereum oracle.
