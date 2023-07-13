@@ -2893,7 +2893,7 @@ fn proposal_submission() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     wait_for_wasm_pre_compile(&mut ledger)?;
-    let _bg_ledger = ledger.background();
+    let bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
@@ -2943,6 +2943,11 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
+
+    // Wait for the proposal to be committed
+    let mut ledger = bg_ledger.foreground();
+    ledger.exp_string("Committed block hash")?;
+    let _bg_ledger = ledger.background();
 
     // 3. Query the proposal
     let proposal_query_args = vec![
@@ -4413,8 +4418,13 @@ fn double_signing_gets_slashed() -> Result<()> {
 
     // 2. Copy the first genesis validator base-dir
     let validator_0_base_dir = test.get_base_dir(&Who::Validator(0));
-    let validator_0_base_dir_copy =
-        test.test_dir.path().join("validator-0-copy");
+    let validator_0_base_dir_copy = test
+        .test_dir
+        .path()
+        .join(test.net.chain_id.as_str())
+        .join(client::utils::NET_ACCOUNTS_DIR)
+        .join("validator-0-copy")
+        .join(namada_apps::config::DEFAULT_BASE_DIR);
     fs_extra::dir::copy(
         validator_0_base_dir,
         &validator_0_base_dir_copy,
