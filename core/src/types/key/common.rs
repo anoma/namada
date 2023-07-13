@@ -1,5 +1,6 @@
 //! Cryptographic keys
 
+use std::convert::TryFrom;
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -8,12 +9,15 @@ use data_encoding::HEXLOWER;
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use super::{
     ed25519, secp256k1, ParsePublicKeyError, ParseSecretKeyError,
     ParseSignatureError, RefTo, SchemeType, SigScheme as SigSchemeTrait,
     VerifySigError,
 };
+use crate::types::ethereum_events::EthAddress;
+use crate::types::key::{SignableBytes, StorageHasher};
 
 /// Public key
 #[derive(
@@ -81,6 +85,24 @@ impl FromStr for PublicKey {
             .map_err(ParsePublicKeyError::InvalidHex)?;
         Self::try_from_slice(vec.as_slice())
             .map_err(ParsePublicKeyError::InvalidEncoding)
+    }
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum EthAddressConvError {
+    #[error("Eth key cannot be ed25519, only secp256k1")]
+    CannotBeEd25519,
+}
+
+impl TryFrom<&PublicKey> for EthAddress {
+    type Error = EthAddressConvError;
+
+    fn try_from(value: &PublicKey) -> Result<Self, Self::Error> {
+        match value {
+            PublicKey::Ed25519(_) => Err(EthAddressConvError::CannotBeEd25519),
+            PublicKey::Secp256k1(pk) => Ok(EthAddress::from(pk)),
+        }
     }
 }
 
@@ -222,6 +244,18 @@ pub enum Signature {
     Secp256k1(secp256k1::Signature),
 }
 
+impl From<ed25519::Signature> for Signature {
+    fn from(sig: ed25519::Signature) -> Self {
+        Signature::Ed25519(sig)
+    }
+}
+
+impl From<secp256k1::Signature> for Signature {
+    fn from(sig: secp256k1::Signature) -> Self {
+        Signature::Secp256k1(sig)
+    }
+}
+
 impl super::Signature for Signature {
     const TYPE: SchemeType = SigScheme::TYPE;
 
@@ -294,44 +328,41 @@ impl super::SigScheme for SigScheme {
         );
     }
 
-    fn sign(keypair: &SecretKey, data: impl AsRef<[u8]>) -> Self::Signature {
+    fn sign_with_hasher<H>(
+        keypair: &SecretKey,
+        data: impl super::SignableBytes,
+    ) -> Self::Signature
+    where
+        H: 'static + StorageHasher,
+    {
         match keypair {
-            SecretKey::Ed25519(kp) => {
-                Signature::Ed25519(ed25519::SigScheme::sign(kp, data))
-            }
-            SecretKey::Secp256k1(kp) => {
-                Signature::Secp256k1(secp256k1::SigScheme::sign(kp, data))
-            }
+            SecretKey::Ed25519(kp) => Signature::Ed25519(
+                ed25519::SigScheme::sign_with_hasher::<H>(kp, data),
+            ),
+            SecretKey::Secp256k1(kp) => Signature::Secp256k1(
+                secp256k1::SigScheme::sign_with_hasher::<H>(kp, data),
+            ),
         }
     }
 
-    fn verify_signature<T: BorshSerialize + BorshDeserialize>(
+    fn verify_signature_with_hasher<H>(
         pk: &Self::PublicKey,
-        data: &T,
+        data: &impl SignableBytes,
         sig: &Self::Signature,
-    ) -> Result<(), VerifySigError> {
+    ) -> Result<(), VerifySigError>
+    where
+        H: 'static + StorageHasher,
+    {
         match (pk, sig) {
             (PublicKey::Ed25519(pk), Signature::Ed25519(sig)) => {
-                ed25519::SigScheme::verify_signature(pk, data, sig)
+                ed25519::SigScheme::verify_signature_with_hasher::<H>(
+                    pk, data, sig,
+                )
             }
             (PublicKey::Secp256k1(pk), Signature::Secp256k1(sig)) => {
-                secp256k1::SigScheme::verify_signature(pk, data, sig)
-            }
-            _ => Err(VerifySigError::MismatchedScheme),
-        }
-    }
-
-    fn verify_signature_raw(
-        pk: &Self::PublicKey,
-        data: &[u8],
-        sig: &Self::Signature,
-    ) -> Result<(), VerifySigError> {
-        match (pk, sig) {
-            (PublicKey::Ed25519(pk), Signature::Ed25519(sig)) => {
-                ed25519::SigScheme::verify_signature_raw(pk, data, sig)
-            }
-            (PublicKey::Secp256k1(pk), Signature::Secp256k1(sig)) => {
-                secp256k1::SigScheme::verify_signature_raw(pk, data, sig)
+                secp256k1::SigScheme::verify_signature_with_hasher::<H>(
+                    pk, data, sig,
+                )
             }
             _ => Err(VerifySigError::MismatchedScheme),
         }

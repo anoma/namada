@@ -6,11 +6,18 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
+use namada::ledger::eth_bridge::EthereumBridgeConfig;
+#[cfg(feature = "dev")]
+use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
+#[cfg(feature = "dev")]
+use namada::types::address::wnam;
 use namada::types::address::Address;
 use namada::types::chain::ProposalBytes;
+#[cfg(feature = "dev")]
+use namada::types::ethereum_events::EthAddress;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
@@ -45,8 +52,8 @@ pub mod genesis_config {
     use thiserror::Error;
 
     use super::{
-        EstablishedAccount, Genesis, ImplicitAccount, Parameters, TokenAccount,
-        Validator,
+        EstablishedAccount, EthereumBridgeConfig, Genesis, ImplicitAccount,
+        Parameters, TokenAccount, Validator,
     };
     use crate::cli;
 
@@ -133,6 +140,8 @@ pub mod genesis_config {
         pub pos_params: PosParamsConfig,
         // Governance parameters
         pub gov_params: GovernanceParamsConfig,
+        // Ethereum bridge config
+        pub ethereum_bridge_params: Option<EthereumBridgeConfig>,
         // Wasm definitions
         pub wasm: HashMap<String, WasmConfig>,
     }
@@ -166,6 +175,10 @@ pub mod genesis_config {
     pub struct ValidatorConfig {
         // Public key for consensus. (default: generate)
         pub consensus_public_key: Option<HexString>,
+        // Public key (cold) for eth governance. (default: generate)
+        pub eth_cold_key: Option<HexString>,
+        // Public key (hot) for eth bridge. (default: generate)
+        pub eth_hot_key: Option<HexString>,
         // Public key for validator account. (default: generate)
         pub account_public_key: Option<HexString>,
         // Public protocol signing key for validator account. (default:
@@ -316,6 +329,18 @@ pub mod genesis_config {
                 ),
                 consensus_key: config
                     .consensus_public_key
+                    .as_ref()
+                    .unwrap()
+                    .to_public_key()
+                    .unwrap(),
+                eth_cold_key: config
+                    .eth_cold_key
+                    .as_ref()
+                    .unwrap()
+                    .to_public_key()
+                    .unwrap(),
+                eth_hot_key: config
+                    .eth_hot_key
                     .as_ref()
                     .unwrap()
                     .to_public_key()
@@ -519,6 +544,7 @@ pub mod genesis_config {
             pos_params,
             gov_params,
             wasm,
+            ethereum_bridge_params,
         } = config;
 
         let native_token = Address::decode(
@@ -663,6 +689,7 @@ pub mod genesis_config {
             parameters,
             pos_params,
             gov_params,
+            ethereum_bridge_params,
         };
         genesis.init();
         genesis
@@ -715,6 +742,8 @@ pub struct Genesis {
     pub parameters: Parameters,
     pub pos_params: PosParams,
     pub gov_params: GovParams,
+    // Ethereum bridge config
+    pub ethereum_bridge_params: Option<EthereumBridgeConfig>,
 }
 
 impl Genesis {
@@ -887,8 +916,17 @@ pub fn genesis(num_validators: u64) -> Genesis {
     // Use hard-coded keys for the first validator to avoid breaking other code
     let consensus_keypair = wallet::defaults::validator_keypair();
     let account_keypair = wallet::defaults::validator_keypair();
+    let secp_eth_cold_keypair = secp256k1::SecretKey::try_from_slice(&[
+        90, 83, 107, 155, 193, 251, 120, 27, 76, 1, 188, 8, 116, 121, 90, 99,
+        65, 17, 187, 6, 238, 141, 63, 188, 76, 38, 102, 7, 47, 185, 28, 52,
+    ])
+    .unwrap();
+
+    let eth_cold_keypair =
+        common::SecretKey::try_from_sk(&secp_eth_cold_keypair).unwrap();
     let address = wallet::defaults::validator_address();
-    let (protocol_keypair, dkg_keypair) = wallet::defaults::validator_keys();
+    let (protocol_keypair, eth_bridge_keypair, dkg_keypair) =
+        wallet::defaults::validator_keys();
     let validator = Validator {
         pos_data: GenesisValidator {
             address,
@@ -897,6 +935,8 @@ pub fn genesis(num_validators: u64) -> Genesis {
             commission_rate: Dec::new(5, 2).expect("This can't fail"),
             max_commission_rate_change: Dec::new(1, 2)
                 .expect("This can't fail"),
+            eth_cold_key: eth_cold_keypair.ref_to(),
+            eth_hot_key: eth_bridge_keypair.ref_to(),
         },
         account_key: account_keypair.ref_to(),
         protocol_key: protocol_keypair.ref_to(),
@@ -916,7 +956,9 @@ pub fn genesis(num_validators: u64) -> Genesis {
                 .unwrap();
         let account_keypair = consensus_keypair.clone();
         let address = address::gen_established_address("validator account");
-        let (protocol_keypair, dkg_keypair) =
+        let eth_cold_keypair =
+            common::SecretKey::try_from_sk(&secp_eth_cold_keypair).unwrap();
+        let (protocol_keypair, eth_bridge_keypair, dkg_keypair) =
             wallet::defaults::validator_keys();
         let validator = Validator {
             pos_data: GenesisValidator {
@@ -926,6 +968,8 @@ pub fn genesis(num_validators: u64) -> Genesis {
                 commission_rate: Dec::new(5, 2).expect("This can't fail"),
                 max_commission_rate_change: Dec::new(1, 2)
                     .expect("This can't fail"),
+                eth_cold_key: eth_cold_keypair.ref_to(),
+                eth_hot_key: eth_bridge_keypair.ref_to(),
             },
             account_key: account_keypair.ref_to(),
             protocol_key: protocol_keypair.ref_to(),
@@ -1057,6 +1101,21 @@ pub fn genesis(num_validators: u64) -> Genesis {
         parameters,
         pos_params: PosParams::default(),
         gov_params: GovParams::default(),
+        ethereum_bridge_params: Some(EthereumBridgeConfig {
+            eth_start_height: Default::default(),
+            min_confirmations: Default::default(),
+            contracts: Contracts {
+                native_erc20: wnam(),
+                bridge: UpgradeableContract {
+                    address: EthAddress([0; 20]),
+                    version: Default::default(),
+                },
+                governance: UpgradeableContract {
+                    address: EthAddress([1; 20]),
+                    version: Default::default(),
+                },
+            },
+        }),
         native_token: address::nam(),
         #[cfg(not(feature = "mainnet"))]
         faucet_pow_difficulty: None,
@@ -1084,11 +1143,30 @@ pub mod tests {
         let keypair: common::SecretKey =
             ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap();
         let kp_arr = keypair.try_to_vec().unwrap();
-        let (protocol_keypair, dkg_keypair) =
+        let (protocol_keypair, _eth_hot_bridge_keypair, dkg_keypair) =
             wallet::defaults::validator_keys();
+
+        // TODO: derive validator eth address from an eth keypair
+        let eth_cold_gov_keypair: common::SecretKey =
+            secp256k1::SigScheme::generate(&mut rng)
+                .try_to_sk()
+                .unwrap();
+        let eth_hot_bridge_keypair: common::SecretKey =
+            secp256k1::SigScheme::generate(&mut rng)
+                .try_to_sk()
+                .unwrap();
+
         println!("address: {}", address);
         println!("keypair: {:?}", kp_arr);
         println!("protocol_keypair: {:?}", protocol_keypair);
         println!("dkg_keypair: {:?}", dkg_keypair.try_to_vec().unwrap());
+        println!(
+            "eth_cold_gov_keypair: {:?}",
+            eth_cold_gov_keypair.try_to_vec().unwrap()
+        );
+        println!(
+            "eth_hot_bridge_keypair: {:?}",
+            eth_hot_bridge_keypair.try_to_vec().unwrap()
+        );
     }
 }

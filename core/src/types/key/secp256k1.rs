@@ -1,5 +1,6 @@
 //! secp256k1 keys and related functionality
 
+use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
@@ -8,6 +9,8 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXLOWER;
+use ethabi::ethereum_types::U256;
+use ethabi::Token;
 use libsecp256k1::RecoveryId;
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
@@ -17,8 +20,17 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
-    SchemeType, SigScheme as SigSchemeTrait, VerifySigError,
+    SchemeType, SigScheme as SigSchemeTrait, SignableBytes, VerifySigError,
 };
+use crate::hints;
+use crate::types::eth_abi::Encode;
+use crate::types::ethereum_events::EthAddress;
+use crate::types::key::StorageHasher;
+
+/// The provided constant is for a traditional
+/// signature on this curve. For Ethereum, an extra byte is included
+/// that prevents malleability attacks.
+pub const SIGNATURE_LENGTH: usize = libsecp256k1::util::SIGNATURE_SIZE + 1;
 
 /// secp256k1 public key
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -134,6 +146,23 @@ impl FromStr for PublicKey {
 impl From<libsecp256k1::PublicKey> for PublicKey {
     fn from(pk: libsecp256k1::PublicKey) -> Self {
         Self(pk)
+    }
+}
+
+impl From<&PublicKey> for EthAddress {
+    fn from(pk: &PublicKey) -> Self {
+        use tiny_keccak::Hasher;
+
+        let mut hasher = tiny_keccak::Keccak::v256();
+        // We're removing the first byte with
+        // `libsecp256k1::util::TAG_PUBKEY_FULL`
+        let pk_bytes = &pk.0.serialize()[1..];
+        hasher.update(pk_bytes);
+        let mut output = [0_u8; 32];
+        hasher.finalize(&mut output);
+        let mut addr = [0; 20];
+        addr.copy_from_slice(&output[12..]);
+        EthAddress(addr)
     }
 }
 
@@ -288,7 +317,7 @@ impl Serialize for Signature {
         // TODO: implement the line below, currently cannot support [u8; 64]
         // serde::Serialize::serialize(&arr, serializer)
 
-        let mut seq = serializer.serialize_tuple(arr.len())?;
+        let mut seq = serializer.serialize_tuple(arr.len() + 1)?;
         for elem in &arr[..] {
             seq.serialize_element(elem)?;
         }
@@ -305,12 +334,12 @@ impl<'de> Deserialize<'de> for Signature {
         struct ByteArrayVisitor;
 
         impl<'de> Visitor<'de> for ByteArrayVisitor {
-            type Value = [u8; libsecp256k1::util::SIGNATURE_SIZE + 1];
+            type Value = [u8; SIGNATURE_LENGTH];
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str(&format!(
                     "an array of length {}",
-                    libsecp256k1::util::SIGNATURE_SIZE
+                    SIGNATURE_LENGTH,
                 ))
             }
 
@@ -318,9 +347,9 @@ impl<'de> Deserialize<'de> for Signature {
             where
                 A: SeqAccess<'de>,
             {
-                let mut arr = [0u8; libsecp256k1::util::SIGNATURE_SIZE + 1];
+                let mut arr = [0u8; SIGNATURE_LENGTH];
                 #[allow(clippy::needless_range_loop)]
-                for i in 0..libsecp256k1::util::SIGNATURE_SIZE + 1 {
+                for i in 0..SIGNATURE_LENGTH {
                     arr[i] = seq
                         .next_element()?
                         .ok_or_else(|| Error::invalid_length(i, &self))?;
@@ -329,10 +358,8 @@ impl<'de> Deserialize<'de> for Signature {
             }
         }
 
-        let arr_res = deserializer.deserialize_tuple(
-            libsecp256k1::util::SIGNATURE_SIZE + 1,
-            ByteArrayVisitor,
-        )?;
+        let arr_res = deserializer
+            .deserialize_tuple(SIGNATURE_LENGTH, ByteArrayVisitor)?;
         let sig_array: [u8; 64] = arr_res[..64].try_into().unwrap();
         let sig = libsecp256k1::Signature::parse_standard(&sig_array)
             .map_err(D::Error::custom);
@@ -401,6 +428,66 @@ impl BorshSchema for Signature {
     }
 }
 
+impl Signature {
+    const S_MALLEABILITY_FIX: U256 = U256([
+        13822214165235122497,
+        13451932020343611451,
+        18446744073709551614,
+        18446744073709551615,
+    ]);
+    // these constants are pulled from OpenZeppelin's ECDSA code
+    const S_MALLEABILITY_THRESHOLD: U256 = U256([
+        16134479119472337056,
+        6725966010171805725,
+        18446744073709551615,
+        9223372036854775807,
+    ]);
+    const V_FIX: u8 = 27;
+
+    /// Returns the `r`, `s` and `v` parameters of this [`Signature`],
+    /// destroying the original value in the process.
+    ///
+    /// The returned signature is unique (i.e. non-malleable). This
+    /// ensures OpenZeppelin considers the signature valid.
+    pub fn into_eth_rsv(self) -> ([u8; 32], [u8; 32], u8) {
+        // assuming the value of v is either 0 or 1,
+        // the output is essentially the negated input
+        #[inline(always)]
+        fn flip_v(v: u8) -> u8 {
+            v ^ 1
+        }
+
+        let (v, s) = {
+            let s1: U256 = self.0.s.b32().into();
+            let v = self.1.serialize();
+            let (v, non_malleable_s) =
+                if hints::unlikely(s1 > Self::S_MALLEABILITY_THRESHOLD) {
+                    // this code path seems quite rare. we often
+                    // get non-malleable signatures, which is good
+                    (flip_v(v) + Self::V_FIX, Self::S_MALLEABILITY_FIX - s1)
+                } else {
+                    (v + Self::V_FIX, s1)
+                };
+            let mut non_malleable_s: [u8; 32] = non_malleable_s.into();
+            self.0.s.fill_b32(&mut non_malleable_s);
+            (v, self.0.s.b32())
+        };
+        let r = self.0.r.b32();
+
+        (r, s, v)
+    }
+}
+
+impl Encode<1> for Signature {
+    fn tokenize(&self) -> [Token; 1] {
+        let (r, s, v) = self.clone().into_eth_rsv();
+        let r = Token::FixedBytes(r.to_vec());
+        let s = Token::FixedBytes(s.to_vec());
+        let v = Token::Uint(v.into());
+        [Token::Tuple(vec![r, s, v])]
+    }
+}
+
 #[allow(clippy::derived_hash_with_manual_eq)]
 impl Hash for Signature {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -410,7 +497,18 @@ impl Hash for Signature {
 
 impl PartialOrd for Signature {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.serialize().partial_cmp(&other.0.serialize())
+        match self.0.serialize().partial_cmp(&other.0.serialize()) {
+            Some(Ordering::Equal) => {
+                self.1.serialize().partial_cmp(&other.1.serialize())
+            }
+            res => res,
+        }
+    }
+}
+
+impl Ord for Signature {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
     }
 }
 
@@ -475,8 +573,13 @@ impl super::SigScheme for SigScheme {
         ))
     }
 
-    /// Sign the data with a key
-    fn sign(keypair: &SecretKey, data: impl AsRef<[u8]>) -> Self::Signature {
+    fn sign_with_hasher<H>(
+        keypair: &SecretKey,
+        data: impl SignableBytes,
+    ) -> Self::Signature
+    where
+        H: 'static + StorageHasher,
+    {
         #[cfg(not(any(test, feature = "secp256k1-sign")))]
         {
             // to avoid `unused-variables` warn
@@ -486,28 +589,26 @@ impl super::SigScheme for SigScheme {
 
         #[cfg(any(test, feature = "secp256k1-sign"))]
         {
-            use sha2::{Digest, Sha256};
-            let hash = Sha256::digest(data.as_ref());
-            let message = libsecp256k1::Message::parse_slice(hash.as_ref())
-                .expect("Message encoding should not fail");
+            let message =
+                libsecp256k1::Message::parse_slice(&data.signable_hash::<H>())
+                    .expect("Message encoding should not fail");
             let (sig, recovery_id) = libsecp256k1::sign(&message, &keypair.0);
             Signature(sig, recovery_id)
         }
     }
 
-    fn verify_signature<T: BorshSerialize>(
+    fn verify_signature_with_hasher<H>(
         pk: &Self::PublicKey,
-        data: &T,
+        data: &impl SignableBytes,
         sig: &Self::Signature,
-    ) -> Result<(), VerifySigError> {
-        use sha2::{Digest, Sha256};
-        let bytes = &data
-            .try_to_vec()
-            .map_err(VerifySigError::DataEncodingError)?[..];
-        let hash = Sha256::digest(bytes);
-        let message = &libsecp256k1::Message::parse_slice(hash.as_ref())
-            .expect("Error parsing given data");
-        let is_valid = libsecp256k1::verify(message, &sig.0, &pk.0);
+    ) -> Result<(), VerifySigError>
+    where
+        H: 'static + StorageHasher,
+    {
+        let message =
+            libsecp256k1::Message::parse_slice(&data.signable_hash::<H>())
+                .expect("Message encoding should not fail");
+        let is_valid = libsecp256k1::verify(&message, &sig.0, &pk.0);
         if is_valid {
             Ok(())
         } else {
@@ -517,24 +618,81 @@ impl super::SigScheme for SigScheme {
             )))
         }
     }
+}
 
-    fn verify_signature_raw(
-        pk: &Self::PublicKey,
-        data: &[u8],
-        sig: &Self::Signature,
-    ) -> Result<(), VerifySigError> {
-        use sha2::{Digest, Sha256};
-        let hash = Sha256::digest(data);
-        let message = &libsecp256k1::Message::parse_slice(hash.as_ref())
-            .expect("Error parsing raw data");
-        let is_valid = libsecp256k1::verify(message, &sig.0, &pk.0);
-        if is_valid {
-            Ok(())
-        } else {
-            Err(VerifySigError::SigVerifyError(format!(
-                "Error verifying secp256k1 signature: {}",
-                libsecp256k1::Error::InvalidSignature
-            )))
-        }
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    /// test vector from https://bitcoin.stackexchange.com/a/89848
+    const SECRET_KEY_HEX: &str =
+        "c2c72dfbff11dfb4e9d5b0a20c620c58b15bb7552753601f043db91331b0db15";
+
+    /// Test that we can recover an Ethereum address from
+    /// a public secp key.
+    #[test]
+    fn test_eth_address_from_secp() {
+        let expected_pk_hex = "a225bf565ff4ea039bccba3e26456e910cd74e4616d67ee0a166e26da6e5e55a08d0fa1659b4b547ba7139ca531f62907b9c2e72b80712f1c81ece43c33f4b8b";
+        let expected_eth_addr_hex = "6ea27154616a29708dce7650b475dd6b82eba6a3";
+
+        let sk_bytes = HEXLOWER.decode(SECRET_KEY_HEX.as_bytes()).unwrap();
+        let sk = SecretKey::try_from_slice(&sk_bytes[..]).unwrap();
+        let pk: PublicKey = sk.ref_to();
+        // We're removing the first byte with
+        // `libsecp256k1::util::TAG_PUBKEY_FULL`
+        let pk_hex = HEXLOWER.encode(&pk.0.serialize()[1..]);
+        assert_eq!(expected_pk_hex, pk_hex);
+
+        let eth_addr: EthAddress = (&pk).into();
+        let eth_addr_hex = HEXLOWER.encode(&eth_addr.0[..]);
+        assert_eq!(expected_eth_addr_hex, eth_addr_hex);
+    }
+
+    /// Test serializing and then de-serializing a signature
+    /// with Serde is idempotent.
+    #[test]
+    fn test_roundtrip_serde() {
+        let sk_bytes = HEXLOWER.decode(SECRET_KEY_HEX.as_bytes()).unwrap();
+        let sk = SecretKey::try_from_slice(&sk_bytes[..]).unwrap();
+        let to_sign = "test".as_bytes();
+        let mut signature = SigScheme::sign(&sk, to_sign);
+        signature.1 = RecoveryId::parse(3).expect("Test failed");
+        let sig_json = serde_json::to_string(&signature).expect("Test failed");
+        let sig: Signature =
+            serde_json::from_str(&sig_json).expect("Test failed");
+        assert_eq!(sig, signature)
+    }
+
+    /// Test serializing and then de-serializing a signature
+    /// with Borsh is idempotent.
+    #[test]
+    fn test_roundtrip_borsh() {
+        let sk_bytes = HEXLOWER.decode(SECRET_KEY_HEX.as_bytes()).unwrap();
+        let sk = SecretKey::try_from_slice(&sk_bytes[..]).unwrap();
+        let to_sign = "test".as_bytes();
+        let mut signature = SigScheme::sign(&sk, to_sign);
+        signature.1 = RecoveryId::parse(3).expect("Test failed");
+        let sig_bytes = signature.try_to_vec().expect("Test failed");
+        let sig = Signature::try_from_slice(sig_bytes.as_slice())
+            .expect("Test failed");
+        assert_eq!(sig, signature);
+    }
+
+    /// Ensures we are using the right malleability consts.
+    #[test]
+    fn test_signature_malleability_consts() {
+        let s_threshold = U256::from_str_radix(
+            "7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0",
+            16,
+        )
+        .unwrap();
+        assert_eq!(Signature::S_MALLEABILITY_THRESHOLD, s_threshold);
+
+        let malleable_const = U256::from_str_radix(
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141",
+            16,
+        )
+        .unwrap();
+        assert_eq!(Signature::S_MALLEABILITY_FIX, malleable_const);
     }
 }

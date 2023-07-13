@@ -4,7 +4,7 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada_wasm"
 resolver = "2"
-version = "0.18.1"
+version = "0.19.0"
 
 [lib]
 crate-type = ["cdylib"]
@@ -13,7 +13,9 @@ crate-type = ["cdylib"]
 # Newly added wasms should also be added into the Makefile `$(wasms)` list.
 [features]
 tx_bond = ["namada_tx_prelude"]
+tx_bridge_pool = ["namada_tx_prelude"]
 tx_change_validator_commission = ["namada_tx_prelude"]
+tx_from_intent = ["namada_tx_prelude"]
 tx_ibc = ["namada_tx_prelude"]
 tx_init_account = ["namada_tx_prelude"]
 tx_init_proposal = ["namada_tx_prelude"]
@@ -39,8 +41,8 @@ borsh = "0.9.0"
 once_cell = {version = "1.8.0", optional = true}
 wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
-#masp_proofs = { git = "https://github.com/anoma/masp", rev = "64caae74dc71dd20e6e7fbf3d87770bffe5c4789", optional = true }
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "9320c6b69b5d2e97134866871e960f0a31703813", optional = true }
+# branch = "murisi/namada-integration"
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "252a6059565b125c1444e9e7d0b7c8da0fba8f8f", optional = true }
 ripemd = "0.1"
 
 [dev-dependencies]

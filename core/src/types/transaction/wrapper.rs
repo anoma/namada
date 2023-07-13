@@ -19,9 +19,15 @@ pub mod wrapper_tx {
     use crate::types::token::Amount;
     use crate::types::uint::Uint;
 
-    /// Minimum fee amount in micro NAMs
+    /// Minimum fee amount in micro NAMs, repesented
+    /// with a [`u64`] type.
     pub const MIN_FEE: u64 = 100;
-    /// TODO: Determine a sane number for this
+
+    /// Minimum fee amount in micro NAMs, repesented
+    /// with an [`Amount`] type.
+    pub const MIN_FEE_AMOUNT: Amount = Amount::from_u64(MIN_FEE);
+
+    // TODO: Determine a sane number for this
     const GAS_LIMIT_RESOLUTION: u64 = 1_000_000;
 
     /// Errors relating to decrypting a wrapper tx and its
@@ -366,7 +372,7 @@ pub mod wrapper_tx {
             let mut wrapper =
                 Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
                     Fee {
-                        amount: 10.into(),
+                        amount: Amount::from_uint(10, 0).expect("Test failed"),
                         token: nam(),
                     },
                     keypair.ref_to(),
@@ -399,7 +405,7 @@ pub mod wrapper_tx {
             let mut wrapper =
                 Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
                     Fee {
-                        amount: 10.into(),
+                        amount: Amount::from_uint(10, 0).expect("Test failed"),
                         token: nam(),
                     },
                     keypair.ref_to(),

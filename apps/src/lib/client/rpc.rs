@@ -5,12 +5,9 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, Write};
 use std::iter::Iterator;
+use std::path::PathBuf;
 use std::str::FromStr;
-use std::time::Duration;
 
-use async_std::fs;
-use async_std::path::PathBuf;
-use async_std::prelude::*;
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
 use itertools::Either;
@@ -41,6 +38,7 @@ use namada::ledger::storage::ConversionState;
 use namada::ledger::wallet::{AddressVpType, Wallet};
 use namada::proof_of_stake::types::WeightedValidator;
 use namada::types::address::{masp, Address};
+use namada::types::control_flow::ProceedOrElse;
 use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalVote, VotePower, VoteType,
 };
@@ -50,6 +48,7 @@ use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
 use namada::types::token::{Change, Denomination, MaspDenom, TokenAddress};
 use namada::types::{storage, token};
+use tokio::time::Instant;
 
 use crate::cli::utils::prompt;
 use crate::cli::{self, args};
@@ -64,9 +63,11 @@ use crate::wallet::CliWalletUtils;
 pub async fn query_tx_status<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     status: namada::ledger::rpc::TxEventQuery<'_>,
-    deadline: Duration,
+    deadline: Instant,
 ) -> Event {
-    namada::ledger::rpc::query_tx_status(client, status, deadline).await
+    namada::ledger::rpc::query_tx_status(client, status, deadline)
+        .await
+        .proceed()
 }
 
 /// Query and print the epoch of the last committed block
@@ -1162,13 +1163,15 @@ pub async fn query_proposal_result<
             if args.offline {
                 match args.proposal_folder {
                     Some(path) => {
-                        let mut dir = fs::read_dir(&path)
+                        let mut dir = tokio::fs::read_dir(&path)
                             .await
                             .expect("Should be able to read the directory.");
                         let mut files = HashSet::new();
                         let mut is_proposal_present = false;
 
-                        while let Some(entry) = dir.next().await {
+                        while let Some(entry) =
+                            dir.next_entry().await.transpose()
+                        {
                             match entry {
                                 Ok(entry) => match entry.file_type().await {
                                     Ok(entry_stat) => {
@@ -1772,10 +1775,11 @@ pub async fn query_find_validator<C: namada::ledger::queries::Client + Sync>(
 }
 
 /// Dry run a transaction
-pub async fn dry_run_tx<C: namada::ledger::queries::Client + Sync>(
-    client: &C,
-    tx_bytes: Vec<u8>,
-) {
+pub async fn dry_run_tx<C>(client: &C, tx_bytes: Vec<u8>)
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
     println!(
         "Dry-run result: {}",
         namada::ledger::rpc::dry_run_tx(client, tx_bytes).await

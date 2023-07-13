@@ -1,6 +1,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
+use namada::types::control_flow::{install_shutdown_signal, ShutdownSignal};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 
@@ -11,6 +12,7 @@ pub type AbortingTask = &'static str;
 /// An [`AbortableSpawner`] will spawn abortable tasks into the asynchronous
 /// runtime.
 pub struct AbortableSpawner {
+    shutdown_recv: ShutdownSignal,
     abort_send: UnboundedSender<AbortingTask>,
     abort_recv: UnboundedReceiver<AbortingTask>,
     cleanup_jobs: Vec<Pin<Box<dyn Future<Output = ()>>>>,
@@ -23,13 +25,22 @@ pub struct WithCleanup<'a, A> {
     spawner: &'a mut AbortableSpawner,
 }
 
+impl Default for AbortableSpawner {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AbortableSpawner {
     /// Creates a new [`AbortableSpawner`].
     pub fn new() -> Self {
+        let shutdown_recv = install_shutdown_signal();
         let (abort_send, abort_recv) = mpsc::unbounded_channel();
         Self {
             abort_send,
             abort_recv,
+            shutdown_recv,
             cleanup_jobs: Vec::new(),
         }
     }
@@ -70,8 +81,18 @@ impl AbortableSpawner {
     ///      which generates a notification upon dropping an [`Aborter`].
     ///
     /// These two scenarios are represented by the [`AborterStatus`] enum.
-    pub async fn wait_for_abort(self) -> AborterStatus {
-        let status = wait_for_abort(self.abort_recv).await;
+    pub async fn wait_for_abort(mut self) -> AborterStatus {
+        let status = tokio::select! {
+            _ = self.shutdown_recv => AborterStatus::UserShutdownLedger,
+            msg = self.abort_recv.recv() => {
+                // When the msg is `None`, there are no more abort senders, so both
+                // Tendermint and the shell must have already exited
+                if let Some(who) = msg {
+                     tracing::info!("{who} has exited, shutting down...");
+                }
+                AborterStatus::ChildProcessTerminated
+            }
+        };
 
         for job in self.cleanup_jobs {
             job.await;
@@ -138,104 +159,6 @@ impl Drop for Aborter {
         // Send abort message, ignore result
         let _ = self.sender.send(self.who);
     }
-}
-
-#[cfg(unix)]
-async fn wait_for_abort(
-    mut abort_recv: UnboundedReceiver<AbortingTask>,
-) -> AborterStatus {
-    use tokio::signal::unix::{signal, SignalKind};
-    let mut sigterm = signal(SignalKind::terminate()).unwrap();
-    let mut sighup = signal(SignalKind::hangup()).unwrap();
-    let mut sigpipe = signal(SignalKind::pipe()).unwrap();
-    tokio::select! {
-        signal = tokio::signal::ctrl_c() => {
-            match signal {
-                Ok(()) => tracing::info!("Received interrupt signal, exiting..."),
-                Err(err) => tracing::error!("Failed to listen for CTRL+C signal: {}", err),
-            }
-        },
-        signal = sigterm.recv() => {
-            match signal {
-                Some(()) => tracing::info!("Received termination signal, exiting..."),
-                None => tracing::error!("Termination signal cannot be caught anymore, exiting..."),
-            }
-        },
-        signal = sighup.recv() => {
-            match signal {
-                Some(()) => tracing::info!("Received hangup signal, exiting..."),
-                None => tracing::error!("Hangup signal cannot be caught anymore, exiting..."),
-            }
-        },
-        signal = sigpipe.recv() => {
-            match signal {
-                Some(()) => tracing::info!("Received pipe signal, exiting..."),
-                None => tracing::error!("Pipe signal cannot be caught anymore, exiting..."),
-            }
-        },
-        msg = abort_recv.recv() => {
-            // When the msg is `None`, there are no more abort senders, so both
-            // Tendermint and the shell must have already exited
-            if let Some(who) = msg {
-                 tracing::info!("{} has exited, shutting down...", who);
-            }
-            return AborterStatus::ChildProcessTerminated;
-        }
-    };
-    AborterStatus::UserShutdownLedger
-}
-
-#[cfg(windows)]
-async fn wait_for_abort(
-    mut abort_recv: UnboundedReceiver<AbortingTask>,
-) -> AborterStatus {
-    let mut sigbreak = tokio::signal::windows::ctrl_break().unwrap();
-    let _ = tokio::select! {
-        signal = tokio::signal::ctrl_c() => {
-            match signal {
-                Ok(()) => tracing::info!("Received interrupt signal, exiting..."),
-                Err(err) => tracing::error!("Failed to listen for CTRL+C signal: {}", err),
-            }
-        },
-        signal = sigbreak.recv() => {
-            match signal {
-                Some(()) => tracing::info!("Received break signal, exiting..."),
-                None => tracing::error!("Break signal cannot be caught anymore, exiting..."),
-            }
-        },
-        msg = abort_recv.recv() => {
-            // When the msg is `None`, there are no more abort senders, so both
-            // Tendermint and the shell must have already exited
-            if let Some(who) = msg {
-                 tracing::info!("{} has exited, shutting down...", who);
-            }
-            return AborterStatus::ChildProcessTerminated;
-        }
-    };
-    AborterStatus::UserShutdownLedger
-}
-
-#[cfg(not(any(unix, windows)))]
-async fn wait_for_abort(
-    mut abort_recv: UnboundedReceiver<AbortingTask>,
-) -> AborterStatus {
-    let _ = tokio::select! {
-        signal = tokio::signal::ctrl_c() => {
-            match signal {
-                Ok(()) => tracing::info!("Received interrupt signal, exiting..."),
-                Err(err) => tracing::error!("Failed to listen for CTRL+C signal: {}", err),
-            }
-        },
-        msg = abort_recv.recv() => {
-            // When the msg is `None`, there are no more abort senders, so both
-            // Tendermint and the shell must have already exited
-            if let Some(who) = msg {
-                 tracing::info!("{} has exited, shutting down...", who);
-            }
-            return AborterStatus::ChildProcessTerminated;
-        }
-    };
-    AborterStatus::UserShutdownLedger
 }
 
 /// An [`AborterStatus`] represents one of two possible causes that resulted

@@ -1,3 +1,5 @@
+mod eth_bridge;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
@@ -5,9 +7,10 @@ use masp_primitives::sapling::Node;
 use namada_core::ledger::storage::LastBlock;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
-use namada_core::types::storage::{BlockResults, Key, KeySeg};
+use namada_core::types::storage::{BlockHeight, BlockResults, Key, KeySeg};
 use namada_core::types::token::MaspDenom;
 
+use self::eth_bridge::{EthBridge, ETH_BRIDGE};
 use crate::ibc::core::ics04_channel::packet::Sequence;
 use crate::ibc::core::ics24_host::identifier::{ChannelId, ClientId, PortId};
 use crate::ledger::events::log::dumb_queries;
@@ -18,7 +21,7 @@ use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
 use crate::tendermint::merkle::proof::Proof;
-use crate::types::storage::{self, BlockHeight, Epoch, PrefixValue};
+use crate::types::storage::{self, Epoch, PrefixValue};
 #[cfg(any(test, feature = "async-client"))]
 use crate::types::transaction::TxResult;
 
@@ -32,8 +35,16 @@ type Conversion = (
 );
 
 router! {SHELL,
+    // Shell provides storage read access, block metadata and can dry-run a tx
+
+    // Ethereum bridge specific queries
+    ( "eth_bridge" ) = (sub ETH_BRIDGE),
+
     // Epoch of the last committed block
     ( "epoch" ) -> Epoch = epoch,
+
+    // Epoch of the input block height
+    ( "epoch_at_height" / [height: BlockHeight]) -> Option<Epoch> = epoch_at_height,
 
     // Query the last committed block
     ( "last_block" ) -> Option<LastBlock> = last_block,
@@ -53,11 +64,11 @@ router! {SHELL,
     ( "has_key" / [storage_key: storage::Key] )
         -> bool = storage_has_key,
 
-    // Block results access - read bit-vec
-    ( "results" ) -> Vec<BlockResults> = read_results,
-
     // Conversion state access - read conversion
     ( "conv" / [asset_type: AssetType] ) -> Conversion = read_conversion,
+
+    // Block results access - read bit-vec
+    ( "results" ) -> Vec<BlockResults> = read_results,
 
     // was the transaction accepted?
     ( "accepted" / [tx_hash: Hash] ) -> Option<Event> = accepted,
@@ -83,16 +94,12 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    use crate::ledger::gas::BlockGasMeter;
-    use crate::ledger::protocol;
-    use crate::ledger::storage::write_log::WriteLog;
+    use crate::ledger::protocol::{self, ShellParams};
     use crate::proto::Tx;
     use crate::types::storage::TxIndex;
     use crate::types::transaction::decrypted::DecryptedTx;
     use crate::types::transaction::TxType;
 
-    let mut gas_meter = BlockGasMeter::default();
-    let mut write_log = WriteLog::default();
     let mut tx = Tx::try_from(&request.data[..]).into_storage_result()?;
     tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
         #[cfg(not(feature = "mainnet"))]
@@ -100,15 +107,17 @@ where
         // that we got a valid PoW
         has_valid_pow: true,
     }));
-    let data = protocol::apply_tx(
+    let data = protocol::apply_wasm_tx(
         tx,
         request.data.len(),
-        TxIndex(0),
-        &mut gas_meter,
-        &mut write_log,
-        &ctx.wl_storage.storage,
-        &mut ctx.vp_wasm_cache,
-        &mut ctx.tx_wasm_cache,
+        &TxIndex(0),
+        ShellParams::DryRun {
+            storage: &ctx.wl_storage.storage,
+            vp_wasm_cache: &mut ctx.vp_wasm_cache,
+            tx_wasm_cache: &mut ctx.tx_wasm_cache,
+        },
+        #[cfg(not(feature = "mainnet"))]
+        true,
     )
     .into_storage_result()?;
     let data = data.try_to_vec().into_storage_result()?;
@@ -198,6 +207,17 @@ where
 {
     let data = ctx.wl_storage.storage.last_epoch;
     Ok(data)
+}
+
+fn epoch_at_height<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    height: BlockHeight,
+) -> storage_api::Result<Option<Epoch>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    Ok(ctx.wl_storage.storage.block.pred_epochs.get_epoch(height))
 }
 
 fn last_block<D, H>(
@@ -422,6 +442,7 @@ where
 
 #[cfg(test)]
 mod test {
+
     use borsh::BorshDeserialize;
     use namada_test_utils::TestWasms;
 

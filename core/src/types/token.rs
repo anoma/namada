@@ -7,13 +7,14 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
+use ethabi::ethereum_types::U256;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::dec::POS_DECIMAL_PRECISION;
 use crate::ibc::applications::transfer::Amount as IbcAmount;
 use crate::ledger::storage_api::token::read_denom;
-use crate::ledger::storage_api::StorageRead;
+use crate::ledger::storage_api::{self, StorageRead};
 use crate::types::address::{masp, Address, DecodeError as AddressError};
 use crate::types::dec::Dec;
 use crate::types::hash::Hash;
@@ -55,6 +56,13 @@ pub const NATIVE_SCALE: u64 = 1_000_000;
 pub type Change = I256;
 
 impl Amount {
+    /// Convert a [`u64`] to an [`Amount`].
+    pub const fn from_u64(x: u64) -> Self {
+        Self {
+            raw: Uint::from_u64(x),
+        }
+    }
+
     /// Get the amount as a [`Change`]
     pub fn change(&self) -> Change {
         self.raw.try_into().unwrap()
@@ -132,7 +140,7 @@ impl Amount {
         })
     }
 
-    /// Checked subtraction. Returns `None` on underflow
+    /// Checked subtraction. Returns `None` on underflow.
     pub fn checked_sub(&self, amount: Amount) -> Option<Self> {
         self.raw
             .checked_sub(amount.raw)
@@ -196,13 +204,23 @@ impl Amount {
         token: &Address,
         sub_prefix: Option<&Key>,
         storage: &impl StorageRead,
-    ) -> Option<DenominatedAmount> {
-        let denom = read_denom(storage, token, sub_prefix)
-            .expect("Should be able to read storage");
-        denom.map(|denom| DenominatedAmount {
+    ) -> storage_api::Result<DenominatedAmount> {
+        let denom =
+            read_denom(storage, token, sub_prefix)?.ok_or_else(|| {
+                storage_api::Error::SimpleMessage(
+                    "No denomination found in storage for the given token",
+                )
+            })?;
+        Ok(DenominatedAmount {
             amount: *self,
             denom,
         })
+    }
+
+    /// Return a denominated native token amount.
+    #[inline]
+    pub const fn native_denominated(self) -> DenominatedAmount {
+        DenominatedAmount::native(self)
     }
 
     /// Convert to an [`Amount`] under the assumption that the input
@@ -267,6 +285,14 @@ pub struct DenominatedAmount {
 }
 
 impl DenominatedAmount {
+    /// Return a denominated native token amount.
+    pub const fn native(amount: Amount) -> Self {
+        Self {
+            amount,
+            denom: Denomination(NATIVE_MAX_DECIMAL_PLACES),
+        }
+    }
+
     /// A precise string representation. The number of
     /// decimal places in this string gives the denomination.
     /// This not true of the string produced by the `Display`
@@ -447,6 +473,12 @@ impl From<u64> for Amount {
         Amount {
             raw: Uint::from(val),
         }
+    }
+}
+
+impl From<Amount> for U256 {
+    fn from(amt: Amount) -> Self {
+        Self(amt.raw.0)
     }
 }
 

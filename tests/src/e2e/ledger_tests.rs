@@ -23,6 +23,8 @@ use namada::types::address::Address;
 use namada::types::governance::ProposalType;
 use namada::types::storage::Epoch;
 use namada::types::token;
+use namada_apps::config::ethereum_bridge;
+
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
@@ -35,7 +37,7 @@ use setup::constants::*;
 use super::helpers::{
     get_height, wait_for_block_height, wait_for_wasm_pre_compile,
 };
-use super::setup::get_all_wasms_hashes;
+use super::setup::{get_all_wasms_hashes, set_ethereum_bridge_mode};
 use crate::e2e::helpers::{
     epoch_sleep, find_address, find_bonded_stake, get_actor_rpc, get_epoch,
 };
@@ -48,6 +50,15 @@ use crate::{run, run_as};
 #[test]
 fn run_ledger() -> Result<()> {
     let test = setup::single_node_net()?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
     let cmd_combinations = vec![vec!["ledger"], vec!["ledger", "run"]];
 
     // Start the ledger as a validator
@@ -81,6 +92,21 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
         |genesis| setup::set_validators(2, genesis, default_port_offset),
         None,
     )?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(1),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // 1. Run 2 genesis validator ledger nodes and 1 non-validator node
     let args = ["ledger"];
@@ -131,6 +157,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -179,6 +206,14 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
 fn test_namada_shuts_down_if_tendermint_dies() -> Result<()> {
     let test = setup::single_node_net()?;
 
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
     // 1. Run the ledger node
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
@@ -214,6 +249,14 @@ fn test_namada_shuts_down_if_tendermint_dies() -> Result<()> {
 #[test]
 fn run_ledger_load_state_and_reset() -> Result<()> {
     let test = setup::single_node_net()?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -357,6 +400,14 @@ fn stop_ledger_at_height() -> Result<()> {
 #[test]
 fn ledger_txs_and_queries() -> Result<()> {
     let test = setup::network(|genesis| genesis, None)?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -594,6 +645,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     Ok(())
 }
 
+
 /// In this test we:
 /// 1. Run the ledger node
 /// 2. Submit an invalid transaction (disallowed by state machine)
@@ -603,6 +655,14 @@ fn ledger_txs_and_queries() -> Result<()> {
 #[test]
 fn invalid_transactions() -> Result<()> {
     let test = setup::single_node_net()?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -746,6 +806,14 @@ fn pos_bonds() -> Result<()> {
         None,
     )?;
 
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
     // 1. Run the ledger node
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
@@ -773,6 +841,7 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -795,6 +864,7 @@ fn pos_bonds() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -884,6 +954,7 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -904,6 +975,7 @@ fn pos_bonds() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
     Ok(())
@@ -915,7 +987,7 @@ fn pos_rewards() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_num_of_blocks: 3,
+                min_num_of_blocks: 4,
                 epochs_per_year: 31_536_000,
                 max_expected_time_per_block: 1,
                 ..genesis.parameters
@@ -934,6 +1006,16 @@ fn pos_rewards() -> Result<()> {
         },
         None,
     )?;
+
+    for i in 0..3 {
+        set_ethereum_bridge_mode(
+            &test,
+            &test.net.chain_id,
+            &Who::Validator(i),
+            ethereum_bridge::ledger::Mode::Off,
+            None,
+        );
+    }
 
     // 1. Run 3 genesis validator ledger nodes
     let mut validator_0 =
@@ -982,6 +1064,7 @@ fn pos_rewards() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -1017,6 +1100,7 @@ fn pos_rewards() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(1), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -1127,6 +1211,7 @@ fn test_bond_queries() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -1162,6 +1247,7 @@ fn test_bond_queries() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -1184,6 +1270,7 @@ fn test_bond_queries() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     let (_, res) = client
         .exp_regex(r"withdrawable starting from epoch [0-9]+")
@@ -1463,6 +1550,14 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         Some("10s"),
     )?);
 
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
     // 1. Run the ledger node
     let mut ledger =
         run_as!(*test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
@@ -1580,7 +1675,7 @@ fn proposal_submission() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     wait_for_wasm_pre_compile(&mut ledger)?;
-    let _bg_ledger = ledger.background();
+    let bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
@@ -1630,6 +1725,11 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
+
+    // Wait for the proposal to be committed
+    let mut ledger = bg_ledger.foreground();
+    ledger.exp_string("Committed block hash")?;
+    let _bg_ledger = ledger.background();
 
     // 3. Query the proposal
     let proposal_query_args = vec![
@@ -2135,7 +2235,7 @@ fn pgf_governance_proposal() -> Result<()> {
             let parameters = ParametersConfig {
                 epochs_per_year: epochs_per_year_from_min_duration(1),
                 max_proposal_bytes: Default::default(),
-                min_num_of_blocks: 1,
+                min_num_of_blocks: 4,
                 max_expected_time_per_block: 1,
                 ..genesis.parameters
             };
@@ -2147,6 +2247,14 @@ fn pgf_governance_proposal() -> Result<()> {
         },
         None,
     )?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     let namadac_help = vec!["--help"];
 
@@ -2182,7 +2290,8 @@ fn pgf_governance_proposal() -> Result<()> {
         "--ledger-address",
         &validator_one_rpc,
     ];
-    client = run!(test, Bin::Client, tx_args, Some(40))?;
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -2199,7 +2308,8 @@ fn pgf_governance_proposal() -> Result<()> {
         "--ledger-address",
         &validator_one_rpc,
     ];
-    client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
+    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -2305,6 +2415,7 @@ fn pgf_governance_proposal() -> Result<()> {
         submit_proposal_vote,
         Some(15)
     )?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -2324,7 +2435,9 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    client = run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
+    let mut client =
+        run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -2343,7 +2456,11 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    client = run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
+    // this is valid because the client filter ALBERT delegation and there are
+    // none
+    let mut client =
+        run!(test, Bin::Client, submit_proposal_vote_delagator, Some(15))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -2428,7 +2545,42 @@ fn pgf_governance_proposal() -> Result<()> {
 /// 4. Tally offline
 #[test]
 fn proposal_offline() -> Result<()> {
-    let test = setup::network(|genesis| genesis, None)?;
+    let working_dir = setup::working_dir();
+    let test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                epochs_per_year: epochs_per_year_from_min_duration(1),
+                max_proposal_bytes: Default::default(),
+                min_num_of_blocks: 4,
+                max_expected_time_per_block: 1,
+                vp_whitelist: Some(get_all_wasms_hashes(
+                    &working_dir,
+                    Some("vp_"),
+                )),
+                // Enable tx whitelist to test the execution of a
+                // non-whitelisted tx by governance
+                tx_whitelist: Some(get_all_wasms_hashes(
+                    &working_dir,
+                    Some("tx_"),
+                )),
+                ..genesis.parameters
+            };
+
+            GenesisConfig {
+                parameters,
+                ..genesis
+            }
+        },
+        None,
+    )?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -2458,6 +2610,7 @@ fn proposal_offline() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -2830,6 +2983,8 @@ fn test_genesis_validators() -> Result<()> {
 
     // We have to update the ports in the configs again, because the ones from
     // `join-network` use the defaults
+    //
+    // TODO: use `update_actor_config` from `setup`, instead
     let update_config = |ix: u8, mut config: Config| {
         let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
         let p2p_addr =
@@ -2905,6 +3060,16 @@ fn test_genesis_validators() -> Result<()> {
     wait_for_wasm_pre_compile(&mut validator_1)?;
     wait_for_wasm_pre_compile(&mut non_validator)?;
 
+    // Wait for a first block
+    validator_0.exp_string("Committed block hash")?;
+    validator_1.exp_string("Committed block hash")?;
+    non_validator.exp_string("Committed block hash")?;
+
+    // Wait for a first block
+    validator_0.exp_string("Committed block hash")?;
+    validator_1.exp_string("Committed block hash")?;
+    non_validator.exp_string("Committed block hash")?;
+
     let bg_validator_0 = validator_0.background();
     let bg_validator_1 = validator_1.background();
     let _bg_non_validator = non_validator.background();
@@ -2932,6 +3097,7 @@ fn test_genesis_validators() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -3004,6 +3170,21 @@ fn double_signing_gets_slashed() -> Result<()> {
         None,
     )?;
 
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(1),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
     // 1. Run 2 genesis validator ledger nodes
     let args = ["ledger"];
     let mut validator_0 =
@@ -3019,8 +3200,13 @@ fn double_signing_gets_slashed() -> Result<()> {
 
     // 2. Copy the first genesis validator base-dir
     let validator_0_base_dir = test.get_base_dir(&Who::Validator(0));
-    let validator_0_base_dir_copy =
-        test.test_dir.path().join("validator-0-copy");
+    let validator_0_base_dir_copy = test
+        .test_dir
+        .path()
+        .join(test.net.chain_id.as_str())
+        .join(client::utils::NET_ACCOUNTS_DIR)
+        .join("validator-0-copy")
+        .join(namada_apps::config::DEFAULT_BASE_DIR);
     fs_extra::dir::copy(
         validator_0_base_dir,
         &validator_0_base_dir_copy,

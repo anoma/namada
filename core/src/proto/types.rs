@@ -1,11 +1,14 @@
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
+use std::hash::{Hash, Hasher};
+use std::marker::PhantomData;
 
 #[cfg(feature = "ferveo-tpke")]
 use ark_ec::AffineCurve;
 #[cfg(feature = "ferveo-tpke")]
 use ark_ec::PairingEngine;
+use borsh::schema::{Declaration, Definition};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use masp_primitives::transaction::builder::Builder;
 use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
@@ -18,11 +21,13 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use super::generated::types;
+use crate::ledger::storage::{KeccakHasher, Sha256Hasher, StorageHasher};
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint_proto::abci::ResponseDeliverTx;
 use crate::types::address::Address;
 use crate::types::chain::ChainId;
-use crate::types::key::*;
+use crate::types::keccak::{keccak_hash, KeccakHash};
+use crate::types::key::{self, *};
 use crate::types::storage::{Epoch, Key};
 use crate::types::time::DateTimeUtc;
 use crate::types::token::MaspDenom;
@@ -55,6 +60,168 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// This can be used to sign an arbitrary tx. The signature is produced and
+/// verified on the tx data concatenated with the tx code, however the tx code
+/// itself is not part of this structure.
+///
+/// Because the signature is not checked by the ledger, we don't inline it into
+/// the `Tx` type directly. Instead, the signature is attached to the `tx.data`,
+/// which can then be checked by a validity predicate wasm.
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+pub struct SignedTxData {
+    /// The original tx data bytes, if any
+    pub data: Option<Vec<u8>>,
+    /// The signature is produced on the tx data concatenated with the tx code
+    /// and the timestamp.
+    pub sig: common::Signature,
+}
+
+/// A serialization method to provide to [`Signed`], such
+/// that we may sign serialized data.
+///
+/// This is a higher level version of [`key::SignableBytes`].
+pub trait Signable<T> {
+    /// A byte vector containing the serialized data.
+    type Output: key::SignableBytes;
+
+    /// The hashing algorithm to use to sign serialized
+    /// data with.
+    type Hasher: 'static + StorageHasher;
+
+    /// Encodes `data` as a byte vector, with some arbitrary serialization
+    /// method.
+    ///
+    /// The returned output *must* be deterministic based on
+    /// `data`, so that two callers signing the same `data` will be
+    /// signing the same `Self::Output`.
+    fn as_signable(data: &T) -> Self::Output;
+}
+
+/// Tag type that indicates we should use [`BorshSerialize`]
+/// to sign data in a [`Signed`] wrapper.
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub struct SerializeWithBorsh;
+
+/// Tag type that indicates we should use ABI serialization
+/// to sign data in a [`Signed`] wrapper.
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub struct SignableEthMessage;
+
+impl<T: BorshSerialize> Signable<T> for SerializeWithBorsh {
+    type Hasher = Sha256Hasher;
+    type Output = Vec<u8>;
+
+    fn as_signable(data: &T) -> Vec<u8> {
+        data.try_to_vec()
+            .expect("Encoding data for signing shouldn't fail")
+    }
+}
+
+impl Signable<KeccakHash> for SignableEthMessage {
+    type Hasher = KeccakHasher;
+    type Output = KeccakHash;
+
+    fn as_signable(hash: &KeccakHash) -> KeccakHash {
+        keccak_hash({
+            let mut eth_message = Vec::from("\x19Ethereum Signed Message:\n32");
+            eth_message.extend_from_slice(hash.as_ref());
+            eth_message
+        })
+    }
+}
+
+/// A generic signed data wrapper for serialize-able types.
+///
+/// The default serialization method is [`BorshSerialize`].
+#[derive(
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+)]
+pub struct Signed<T, S = SerializeWithBorsh> {
+    /// Arbitrary data to be signed
+    pub data: T,
+    /// The signature of the data
+    pub sig: common::Signature,
+    /// The method to serialize the data with,
+    /// before it being signed
+    _serialization: PhantomData<S>,
+}
+
+impl<S, T: Eq> Eq for Signed<T, S> {}
+
+impl<S, T: PartialEq> PartialEq for Signed<T, S> {
+    fn eq(&self, other: &Self) -> bool {
+        self.data == other.data && self.sig == other.sig
+    }
+}
+
+impl<S, T: Hash> Hash for Signed<T, S> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.data.hash(state);
+        self.sig.hash(state);
+    }
+}
+
+impl<S, T: PartialOrd> PartialOrd for Signed<T, S> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.data.partial_cmp(&other.data)
+    }
+}
+
+impl<S, T: BorshSchema> BorshSchema for Signed<T, S> {
+    fn add_definitions_recursively(
+        definitions: &mut HashMap<Declaration, Definition>,
+    ) {
+        let fields = borsh::schema::Fields::NamedFields(borsh::maybestd::vec![
+            ("data".to_string(), T::declaration()),
+            ("sig".to_string(), <common::Signature>::declaration())
+        ]);
+        let definition = borsh::schema::Definition::Struct { fields };
+        Self::add_definition(Self::declaration(), definition, definitions);
+        T::add_definitions_recursively(definitions);
+        <common::Signature>::add_definitions_recursively(definitions);
+    }
+
+    fn declaration() -> borsh::schema::Declaration {
+        format!("Signed<{}>", T::declaration())
+    }
+}
+
+impl<T, S> Signed<T, S> {
+    /// Initialize a new [`Signed`] instance from an existing signature.
+    #[inline]
+    pub fn new_from(data: T, sig: common::Signature) -> Self {
+        Self {
+            data,
+            sig,
+            _serialization: PhantomData,
+        }
+    }
+}
+
+impl<T, S: Signable<T>> Signed<T, S> {
+    /// Initialize a new [`Signed`] instance.
+    pub fn new(keypair: &common::SecretKey, data: T) -> Self {
+        let to_sign = S::as_signable(&data);
+        let sig =
+            common::SigScheme::sign_with_hasher::<S::Hasher>(keypair, to_sign);
+        Self::new_from(data, sig)
+    }
+
+    /// Verify that the data has been signed by the secret key
+    /// counterpart of the given public key.
+    pub fn verify(
+        &self,
+        pk: &common::PublicKey,
+    ) -> std::result::Result<(), VerifySigError> {
+        let signed_bytes = S::as_signable(&self.data);
+        common::SigScheme::verify_signature_with_hasher::<S::Hasher>(
+            pk,
+            &signed_bytes,
+            &self.sig,
+        )
+    }
+}
 
 /// A section representing transaction data
 #[derive(
@@ -250,14 +417,13 @@ impl Signature {
     pub fn verify_signature(&self) -> std::result::Result<(), VerifySigError> {
         let signature =
             self.signature.as_ref().ok_or(VerifySigError::MissingData)?;
-        common::SigScheme::verify_signature_raw(
+        common::SigScheme::verify_signature(
             &self.pub_key,
             &Self {
                 signature: None,
                 ..self.clone()
             }
-            .get_hash()
-            .0,
+            .get_hash(),
             signature,
         )
     }

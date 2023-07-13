@@ -1,0 +1,51 @@
+[package]
+name = "namada_ethereum_bridge"
+description = "The Namada Ethereum bridge library crate"
+resolver = "2"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[features]
+default = ["abciplus"]
+
+abciplus = [
+    "tendermint",
+    "tendermint-rpc",
+    "tendermint-proto",
+    "namada_core/abciplus",
+    "namada_core/tendermint",
+    "namada_proof_of_stake/abciplus",
+]
+
+testing = [
+    "namada_core/testing",
+]
+
+[dependencies]
+namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign", "ferveo-tpke", "ethers-derive"]}
+namada_macros = {path = "../macros"}
+namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
+borsh.workspace = true
+ethers.workspace = true
+eyre.workspace = true
+itertools.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rand.workspace = true
+tendermint = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7", optional = true}
+tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7", default-features = false, features = ["trait-client"], optional = true}
+tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7", optional = true}
+tracing = "0.1.30"
+
+[dev-dependencies]
+assert_matches.workspace = true
+data-encoding.workspace = true
+ethabi.workspace = true
+toml.workspace = true

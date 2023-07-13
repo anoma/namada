@@ -74,7 +74,7 @@ use namada::ledger::parameters::storage::{
 };
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::storage::mockdb::MockDB;
-use namada::ledger::storage::Sha256Hasher;
+use namada::ledger::storage::traits::Sha256Hasher;
 use namada::ledger::tx_env::TxEnv;
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::parameters::PosParams;

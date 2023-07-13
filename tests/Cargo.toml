@@ -23,6 +23,7 @@ abciplus = [
   "namada_apps/abciplus",
   "namada_vp_prelude/abciplus",
   "namada_tx_prelude/abciplus",
+  "namada_apps/abciplus"
 ]
 
 wasm-runtime = ["namada/wasm-runtime"]
@@ -38,6 +39,7 @@ chrono.workspace = true
 clap.workspace = true
 concat-idents.workspace = true
 derivative.workspace = true
+hyper = {version = "0.14.20", features = ["full"]}
 ibc-relayer-types.workspace = true
 ibc-relayer.workspace = true
 lazy_static = "1.4.0"

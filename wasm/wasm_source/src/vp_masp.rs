@@ -168,21 +168,13 @@ fn validate_tx(
                 shielded_tx.transparent_bundle().ok_or_err_msg(
                     "Expected transparent outputs in unshielding transaction",
                 )?;
-            if transp_bundle.vout.len() != 1 {
-                debug_log!(
-                    "Transparent output to a transaction from the masp must \
-                     be 1 but is {}",
-                    transp_bundle.vin.len()
-                );
 
-                return reject();
-            }
             let out_length = transp_bundle.vout.len();
             if !(1..=4).contains(&out_length) {
                 debug_log!(
                     "Transparent output to a transaction to the masp must be \
                      beteween 1 and 4 but is {}",
-                    transp_bundle.vin.len()
+                    transp_bundle.vout.len()
                 );
 
                 return reject();
@@ -237,7 +229,7 @@ fn validate_tx(
                     .try_to_vec()
                     .expect("target address encoding");
 
-                let hash = Ripemd160::digest(sha256(&target_enc).as_slice());
+                let hash = Ripemd160::digest(sha256(&target_enc).0.as_slice());
 
                 if <[u8; 20]>::from(hash) != out.address.0 {
                     debug_log!(
@@ -264,7 +256,7 @@ fn validate_tx(
                     debug_log!(
                         "Transparent output to a transaction from the masp \
                          must be 0 but is {}",
-                        transp_bundle.vin.len()
+                        transp_bundle.vout.len()
                     );
                     return reject();
                 }

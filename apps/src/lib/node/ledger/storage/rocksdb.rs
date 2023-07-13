@@ -2,6 +2,10 @@
 //!
 //! The current storage tree is:
 //! - `state`: the latest ledger state
+//!   - `ethereum_height`: the height of the last eth block processed by the
+//!     oracle
+//!   - `eth_events_queue`: a queue of confirmed ethereum events to be processed
+//!     in order
 //!   - `height`: the last committed block height
 //!   - `tx_queue`: txs to be decrypted in the next block
 //!   - `next_epoch_min_start_height`: minimum block height from which the next
@@ -9,6 +13,7 @@
 //!   - `next_epoch_min_start_time`: minimum block time from which the next
 //!     epoch can start
 //!   - `pred`: predecessor values of the top-level keys of the same name
+//!     - `tx_queue`
 //!     - `next_epoch_min_start_height`
 //!     - `next_epoch_min_start_time`
 //! - `subspace`: accounts sub-spaces
@@ -35,6 +40,7 @@ use std::sync::Mutex;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
+use namada::core::types::ethereum_structs;
 use namada::ledger::storage::types::PrefixIterator;
 use namada::ledger::storage::{
     types, BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error,
@@ -42,8 +48,8 @@ use namada::ledger::storage::{
 };
 use namada::types::internal::TxQueue;
 use namada::types::storage::{
-    BlockHeight, BlockResults, Epoch, Epochs, Header, Key, KeySeg,
-    KEY_SEGMENT_SEPARATOR,
+    BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue, Header, Key,
+    KeySeg, KEY_SEGMENT_SEPARATOR,
 };
 use namada::types::time::DateTimeUtc;
 use rayon::prelude::*;
@@ -586,7 +592,33 @@ impl DB for RocksDB {
             }
         };
 
-        // Load block data at the height
+        let ethereum_height: Option<ethereum_structs::BlockHeight> = match self
+            .0
+            .get_cf(state_cf, "ethereum_height")
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            None => {
+                tracing::error!("Couldn't load ethereum height from the DB");
+                return Ok(None);
+            }
+        };
+
+        let eth_events_queue: EthEventsQueue = match self
+            .0
+            .get_cf(state_cf, "eth_events_queue")
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            None => {
+                tracing::error!(
+                    "Couldn't load the eth events queue from the DB"
+                );
+                return Ok(None);
+            }
+        };
+
+        // Load data at the height
         let prefix = format!("{}/", height.raw());
         let mut read_opts = ReadOptions::default();
         read_opts.set_total_order_seek(false);
@@ -688,6 +720,8 @@ impl DB for RocksDB {
                 update_epoch_blocks_delay,
                 address_gen,
                 tx_queue,
+                ethereum_height,
+                eth_events_queue,
             })),
             _ => Err(Error::Temporary {
                 error: "Essential data couldn't be read from the DB"
@@ -716,6 +750,8 @@ impl DB for RocksDB {
             address_gen,
             results,
             tx_queue,
+            ethereum_height,
+            eth_events_queue,
         }: BlockStateWrite = state;
 
         // Epoch start height and time
@@ -785,6 +821,16 @@ impl DB for RocksDB {
         batch
             .0
             .put_cf(state_cf, "tx_queue", types::encode(&tx_queue));
+        batch.0.put_cf(
+            state_cf,
+            "ethereum_height",
+            types::encode(&ethereum_height),
+        );
+        batch.0.put_cf(
+            state_cf,
+            "eth_events_queue",
+            types::encode(&eth_events_queue),
+        );
 
         let block_cf = self.get_column_family(BLOCK_CF)?;
         let prefix_key = Key::from(height.to_db_key());
@@ -1749,6 +1795,7 @@ mod test {
         let address_gen = EstablishedAddressGen::new("whatever");
         let tx_queue = TxQueue::default();
         let results = BlockResults::default();
+        let eth_events_queue = EthEventsQueue::default();
         let block = BlockStateWrite {
             merkle_tree_stores,
             header: None,
@@ -1763,6 +1810,8 @@ mod test {
             update_epoch_blocks_delay,
             address_gen: &address_gen,
             tx_queue: &tx_queue,
+            ethereum_height: None,
+            eth_events_queue: &eth_events_queue,
         };
 
         db.write_block(block, batch, true)
