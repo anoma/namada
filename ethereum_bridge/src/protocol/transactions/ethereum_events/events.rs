@@ -792,52 +792,114 @@ mod tests {
         );
     }
 
-    #[test]
-    /// Test acting on a single transfer and minting the first ever wDAI
-    fn test_act_on_transfers_to_namada_mints_wdai() {
-        let mut wl_storage = TestWlStorage::default();
-        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
-        test_utils::whitelist_tokens(
-            &mut wl_storage,
-            [(
-                DAI_ERC20_ETH_ADDRESS,
-                test_utils::WhitelistMeta {
-                    cap: Amount::max(),
-                    denom: 18,
-                },
-            )],
-        );
-        let initial_stored_keys_count = stored_keys_count(&wl_storage);
+    /// Parameters to test minting DAI in Namada.
+    struct TestMintDai {
+        /// The token cap of DAI.
+        ///
+        /// If the token is not whitelisted, this value
+        /// is not set.
+        dai_token_cap: Option<token::Amount>,
+        /// The transferred amount of DAI.
+        transferred_amount: token::Amount,
+    }
 
-        let amount = Amount::from(100);
-        let receiver = address::testing::established_address_1();
-        let transfers = vec![TransferToNamada {
-            amount,
-            asset: DAI_ERC20_ETH_ADDRESS,
-            receiver: receiver.clone(),
-        }];
+    impl TestMintDai {
+        /// Execute a test with the given parameters.
+        fn run_test(self) {
+            let dai_token_cap = self.dai_token_cap.unwrap_or_default();
 
-        update_transfers_to_namada_state(
-            &mut wl_storage,
-            &mut BTreeSet::new(),
-            &transfers,
-        )
-        .unwrap();
+            let (erc20_amount, nut_amount) =
+                if dai_token_cap > self.transferred_amount {
+                    (self.transferred_amount, token::Amount::zero())
+                } else {
+                    (dai_token_cap, self.transferred_amount - dai_token_cap)
+                };
+            assert_eq!(self.transferred_amount, nut_amount + erc20_amount);
 
-        let wdai = wrapped_erc20s::token(&DAI_ERC20_ETH_ADDRESS);
-        let receiver_balance_key = balance_key(&wdai, &receiver);
-        let wdai_supply_key = minted_balance_key(&wdai);
+            let mut wl_storage = TestWlStorage::default();
+            test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
+            if !dai_token_cap.is_zero() {
+                test_utils::whitelist_tokens(
+                    &mut wl_storage,
+                    [(
+                        DAI_ERC20_ETH_ADDRESS,
+                        test_utils::WhitelistMeta {
+                            cap: dai_token_cap,
+                            denom: 18,
+                        },
+                    )],
+                );
+            }
 
-        assert_eq!(
-            stored_keys_count(&wl_storage),
-            initial_stored_keys_count + 2
-        );
+            let receiver = address::testing::established_address_1();
+            let transfers = vec![TransferToNamada {
+                amount: self.transferred_amount,
+                asset: DAI_ERC20_ETH_ADDRESS,
+                receiver: receiver.clone(),
+            }];
 
-        let expected_amount = amount.try_to_vec().unwrap();
-        for key in vec![receiver_balance_key, wdai_supply_key] {
-            let value = wl_storage.read_bytes(&key).unwrap();
-            assert_matches!(value, Some(bytes) if bytes == expected_amount);
+            update_transfers_to_namada_state(
+                &mut wl_storage,
+                &mut BTreeSet::new(),
+                &transfers,
+            )
+            .unwrap();
+
+            for is_nut in [false, true] {
+                let wdai = if is_nut {
+                    wrapped_erc20s::nut(&DAI_ERC20_ETH_ADDRESS)
+                } else {
+                    wrapped_erc20s::token(&DAI_ERC20_ETH_ADDRESS)
+                };
+                let expected_amount =
+                    if is_nut { nut_amount } else { erc20_amount };
+
+                let receiver_balance_key = balance_key(&wdai, &receiver);
+                let wdai_supply_key = minted_balance_key(&wdai);
+
+                for key in vec![receiver_balance_key, wdai_supply_key] {
+                    let value: Option<token::Amount> =
+                        wl_storage.read(&key).unwrap();
+                    if expected_amount.is_zero() {
+                        assert_matches!(value, None);
+                    } else {
+                        assert_matches!(value, Some(amount) if amount == expected_amount);
+                    }
+                }
+            }
         }
+    }
+
+    /// Test that if DAI is never whitelisted, we only mint NUTs.
+    #[test]
+    fn test_minting_dai_when_not_whitelisted() {
+        TestMintDai {
+            dai_token_cap: None,
+            transferred_amount: Amount::from(100),
+        }
+        .run_test();
+    }
+
+    /// Test that overrunning the token caps results in minting DAI NUTs,
+    /// along with wDAI.
+    #[test]
+    fn test_minting_dai_on_cap_overrun() {
+        TestMintDai {
+            dai_token_cap: Some(Amount::from(80)),
+            transferred_amount: Amount::from(100),
+        }
+        .run_test();
+    }
+
+    /// Test acting on a single "transfer to Namada" Ethereum event
+    /// and minting the first ever wDAI.
+    #[test]
+    fn test_minting_dai_wrapped() {
+        TestMintDai {
+            dai_token_cap: Some(Amount::max()),
+            transferred_amount: Amount::from(100),
+        }
+        .run_test();
     }
 
     #[test]
