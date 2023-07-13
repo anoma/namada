@@ -649,7 +649,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            ("No balance found", None),
+            ("No balance found", false),
         ),
         // 3. Attempt to spend 15 BTC at SK(A) to Bertha
         (
@@ -668,7 +668,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            ("No balance found", None),
+            ("No balance found", false),
         ),
         // 4. Send 20 BTC from Albert to PA(A)
         (
@@ -687,7 +687,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            ("Transaction is valid", Some(true)),
+            ("Transaction is valid", true),
         ),
         // 5. Attempt to spend 10 ETH at SK(A) to PA(B)
         (
@@ -706,7 +706,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            ("No balance found", None),
+            ("No balance found", false),
         ),
         // 10. Assert BTC balance at VK(A) is 0
         (
@@ -719,7 +719,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            ("btc: 20", None),
+            ("btc: 20", false),
         ),
         // 6. Spend 7 BTC at SK(A) to PA(B)
         (
@@ -738,7 +738,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            ("Transaction is valid", None),
+            ("Transaction is valid", false),
         ),
         // 7. Spend 7 BTC at SK(A) to PA(B)
         (
@@ -755,7 +755,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            ("Transaction is valid", None),
+            ("Transaction is valid", false),
         ),
         // 8. Attempt to spend 7 BTC at SK(A) to PA(B)
         (
@@ -772,7 +772,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            ("is lower than the amount to be transferred and fees", None),
+            ("is lower than the amount to be transferred and fees", false),
         ),
         // 9. Spend 6 BTC at SK(A) to PA(B)
         (
@@ -789,7 +789,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            ("Transaction is valid", None),
+            ("Transaction is valid", false),
         ),
         // 10. Assert BTC balance at VK(A) is 0
         (
@@ -802,7 +802,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            ("No shielded btc balance found", None),
+            ("No shielded btc balance found", false),
         ),
         // 11. Assert ETH balance at VK(A) is 0
         (
@@ -815,7 +815,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            ("No shielded eth balance found", None),
+            ("No shielded eth balance found", false),
         ),
         // 12. Assert balance at VK(B) is 10 BTC
         (
@@ -826,7 +826,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            ("btc : 20", None),
+            ("btc : 20", false),
         ),
         // 13. Send 10 BTC from SK(B) to Bertha
         (
@@ -843,14 +843,14 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            ("Transaction is valid", None),
+            ("Transaction is valid", false),
         ),
     ];
 
     // Wait till epoch boundary
     let _ep0 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    for (tx_args, (tx_result, extra)) in &txs_args {
+    for (tx_args, (tx_result, wait_reveal_pk)) in &txs_args {
         for &dry_run in &[true, false] {
             let tx_args = if dry_run && tx_args[0] == "transfer" {
                 vec![tx_args.clone(), vec!["--dry-run"]].concat()
@@ -862,7 +862,7 @@ fn masp_txs_and_queries() -> Result<()> {
             if *tx_result == "Transaction is valid" && !dry_run {
                 client.exp_string("Transaction accepted")?;
                 client.exp_string("Transaction applied")?;
-                if extra.is_some() {
+                if *wait_reveal_pk {
                     client.exp_string("Transaction applied")?;
                 }
             }

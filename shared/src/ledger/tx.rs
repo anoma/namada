@@ -1642,6 +1642,7 @@ pub async fn submit_custom<
     let mut tx = Tx::new(TxType::Raw);
     tx.header.chain_id = args.tx.chain_id.clone().unwrap();
     tx.header.expiration = args.tx.expiration;
+
     args.data_path.map(|data| tx.set_data(Data::new(data)));
     tx.set_code(Code::new(args.code_path));
 
