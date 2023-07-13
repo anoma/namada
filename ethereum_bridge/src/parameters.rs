@@ -3,6 +3,7 @@ use std::num::NonZeroU64;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::{eyre, Result};
+use namada_core::ledger::eth_bridge::storage::whitelist;
 use namada_core::ledger::storage;
 use namada_core::ledger::storage::types::encode;
 use namada_core::ledger::storage::WlStorage;
@@ -10,10 +11,32 @@ use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::ethereum_structs;
 use namada_core::types::storage::Key;
+use namada_core::types::token::DenominatedAmount;
 use serde::{Deserialize, Serialize};
 
-use crate::storage::eth_bridge_queries::{EthBridgeEnabled, EthBridgeStatus};
+use crate::storage::eth_bridge_queries::{
+    EthBridgeEnabled, EthBridgeQueries, EthBridgeStatus,
+};
 use crate::{bridge_pool_vp, storage as bridge_storage, vp};
+
+/// An ERC20 token whitelist entry.
+#[derive(
+    Clone,
+    Copy,
+    Eq,
+    PartialEq,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshSerialize,
+    BorshDeserialize,
+)]
+pub struct Erc20WhitelistEntry {
+    /// The address of the whitelisted ERC20 token.
+    pub token_address: EthAddress,
+    /// The token cap of the whitelisted ERC20 token.
+    pub token_cap: DenominatedAmount,
+}
 
 /// Represents a configuration value for the minimum number of
 /// confirmations an Ethereum event must reach before it can be acted on.
@@ -135,6 +158,8 @@ pub struct EthereumBridgeConfig {
     /// Minimum number of confirmations needed to trust an Ethereum branch.
     /// This must be at least one.
     pub min_confirmations: MinimumConfirmations,
+    /// List of ERC20 token types whitelisted at genesis time.
+    pub erc20_whitelist: Vec<Erc20WhitelistEntry>,
     /// The addresses of the Ethereum contracts that need to be directly known
     /// by validators.
     pub contracts: Contracts,
@@ -151,6 +176,7 @@ impl EthereumBridgeConfig {
         H: 'static + storage::traits::StorageHasher,
     {
         let Self {
+            erc20_whitelist,
             eth_start_height,
             min_confirmations,
             contracts:
@@ -187,13 +213,71 @@ impl EthereumBridgeConfig {
         wl_storage
             .write_bytes(&eth_start_height_key, encode(eth_start_height))
             .unwrap();
+        for Erc20WhitelistEntry {
+            token_address: addr,
+            token_cap: DenominatedAmount { amount: cap, denom },
+        } in erc20_whitelist
+        {
+            let key = whitelist::Key {
+                asset: *addr,
+                suffix: whitelist::KeyType::Whitelisted,
+            }
+            .into();
+            wl_storage.write_bytes(&key, encode(&true)).unwrap();
+
+            let key = whitelist::Key {
+                asset: *addr,
+                suffix: whitelist::KeyType::Cap,
+            }
+            .into();
+            wl_storage.write_bytes(&key, encode(cap)).unwrap();
+
+            let key = whitelist::Key {
+                asset: *addr,
+                suffix: whitelist::KeyType::Denomination,
+            }
+            .into();
+            wl_storage.write_bytes(&key, encode(denom)).unwrap();
+        }
         // Initialize the storage for the Ethereum Bridge VP.
         vp::init_storage(wl_storage);
         // Initialize the storage for the Bridge Pool VP.
         bridge_pool_vp::init_storage(wl_storage);
     }
+}
 
-    /// Reads the latest [`EthereumBridgeConfig`] from storage. If it is not
+/// Subset of [`EthereumBridgeConfig`], containing only Ethereum
+/// oracle specific parameters.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EthereumOracleConfig {
+    /// Initial Ethereum block height when events will first be extracted from.
+    pub eth_start_height: ethereum_structs::BlockHeight,
+    /// Minimum number of confirmations needed to trust an Ethereum branch.
+    /// This must be at least one.
+    pub min_confirmations: MinimumConfirmations,
+    /// The addresses of the Ethereum contracts that need to be directly known
+    /// by validators.
+    pub contracts: Contracts,
+}
+
+impl From<EthereumBridgeConfig> for EthereumOracleConfig {
+    fn from(config: EthereumBridgeConfig) -> Self {
+        let EthereumBridgeConfig {
+            eth_start_height,
+            min_confirmations,
+            contracts,
+            ..
+        } = config;
+        Self {
+            eth_start_height,
+            min_confirmations,
+            contracts,
+        }
+    }
+}
+
+impl EthereumOracleConfig {
+    /// Reads the latest [`EthereumOracleConfig`] from storage. If it is not
     /// present, `None` will be returned - this could be the case if the bridge
     /// has not been bootstrapped yet. Panics if the storage appears to be
     /// corrupt.
@@ -202,25 +286,27 @@ impl EthereumBridgeConfig {
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
         H: 'static + storage::traits::StorageHasher,
     {
+        // TODO(namada#1720): remove present key check; `is_bridge_active`
+        // should not panic, when the active status key has not been
+        // written to; simply return bridge disabled instead
+        let has_active_key =
+            wl_storage.has_key(&bridge_storage::active_key()).unwrap();
+
+        if !has_active_key || !wl_storage.ethbridge_queries().is_bridge_active()
+        {
+            return None;
+        }
+
         let min_confirmations_key = bridge_storage::min_confirmations_key();
         let native_erc20_key = bridge_storage::native_erc20_key();
         let bridge_contract_key = bridge_storage::bridge_contract_key();
         let governance_contract_key = bridge_storage::governance_contract_key();
         let eth_start_height_key = bridge_storage::eth_start_height_key();
 
-        let Some(min_confirmations) = StorageRead::read::<MinimumConfirmations>(
-            wl_storage,
-            &min_confirmations_key,
-        )
-        .unwrap_or_else(|err| {
-            panic!("Could not read {min_confirmations_key}: {err:?}")
-        }) else {
-            // The bridge has not been configured yet
-            return None;
-        };
-
         // These reads must succeed otherwise the storage is corrupt or a
         // read failed
+        let min_confirmations =
+            must_read_key(wl_storage, &min_confirmations_key);
         let native_erc20 = must_read_key(wl_storage, &native_erc20_key);
         let bridge_contract = must_read_key(wl_storage, &bridge_contract_key);
         let governance_contract =
@@ -299,6 +385,7 @@ mod tests {
     #[test]
     fn test_round_trip_toml_serde() -> Result<()> {
         let config = EthereumBridgeConfig {
+            erc20_whitelist: vec![],
             eth_start_height: Default::default(),
             min_confirmations: MinimumConfirmations::default(),
             contracts: Contracts {
@@ -324,6 +411,7 @@ mod tests {
     fn test_ethereum_bridge_config_read_write_storage() {
         let mut wl_storage = TestWlStorage::default();
         let config = EthereumBridgeConfig {
+            erc20_whitelist: vec![],
             eth_start_height: Default::default(),
             min_confirmations: MinimumConfirmations::default(),
             contracts: Contracts {
@@ -340,7 +428,8 @@ mod tests {
         };
         config.init_storage(&mut wl_storage);
 
-        let read = EthereumBridgeConfig::read(&wl_storage).unwrap();
+        let read = EthereumOracleConfig::read(&wl_storage).unwrap();
+        let config = EthereumOracleConfig::from(config);
 
         assert_eq!(config, read);
     }
@@ -348,7 +437,7 @@ mod tests {
     #[test]
     fn test_ethereum_bridge_config_uninitialized() {
         let wl_storage = TestWlStorage::default();
-        let read = EthereumBridgeConfig::read(&wl_storage);
+        let read = EthereumOracleConfig::read(&wl_storage);
 
         assert!(read.is_none());
     }
@@ -358,6 +447,7 @@ mod tests {
     fn test_ethereum_bridge_config_storage_corrupt() {
         let mut wl_storage = TestWlStorage::default();
         let config = EthereumBridgeConfig {
+            erc20_whitelist: vec![],
             eth_start_height: Default::default(),
             min_confirmations: MinimumConfirmations::default(),
             contracts: Contracts {
@@ -379,7 +469,7 @@ mod tests {
             .unwrap();
 
         // This should panic because the min_confirmations value is not valid
-        EthereumBridgeConfig::read(&wl_storage);
+        EthereumOracleConfig::read(&wl_storage);
     }
 
     #[test]
@@ -388,16 +478,21 @@ mod tests {
     )]
     fn test_ethereum_bridge_config_storage_partially_configured() {
         let mut wl_storage = TestWlStorage::default();
-        // Write a valid min_confirmations value
-        let min_confirmations_key = bridge_storage::min_confirmations_key();
         wl_storage
             .write_bytes(
-                &min_confirmations_key,
+                &bridge_storage::active_key(),
+                encode(&EthBridgeStatus::Enabled(EthBridgeEnabled::AtGenesis)),
+            )
+            .unwrap();
+        // Write a valid min_confirmations value
+        wl_storage
+            .write_bytes(
+                &bridge_storage::min_confirmations_key(),
                 MinimumConfirmations::default().try_to_vec().unwrap(),
             )
             .unwrap();
 
         // This should panic as the other config values are not written
-        EthereumBridgeConfig::read(&wl_storage);
+        EthereumOracleConfig::read(&wl_storage);
     }
 }
