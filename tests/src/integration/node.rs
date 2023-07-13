@@ -239,6 +239,18 @@ impl MockNode {
     pub fn clear_results(&self) {
         self.results.lock().unwrap().clear();
     }
+
+    pub fn assert_success(&self) {
+        if !self.success() {
+            panic!(
+                "Assert failed: The node did not execute \
+                 successfully:\nErrors:\n    {:?}",
+                self.results.lock().unwrap()
+            );
+        } else {
+            self.clear_results();
+        }
+    }
 }
 
 #[async_trait::async_trait(?Send)]
@@ -328,7 +340,7 @@ impl Client for MockNode {
         tx: namada::tendermint::abci::Transaction,
     ) -> Result<tendermint_rpc::endpoint::broadcast::tx_sync::Response, RpcError>
     {
-        let mut resp = tendermint_rpc::endpoint::broadcast::tx_sync::Response {
+        let resp = tendermint_rpc::endpoint::broadcast::tx_sync::Response {
             code: Default::default(),
             data: Default::default(),
             log: Default::default(),
@@ -337,7 +349,6 @@ impl Client for MockNode {
         let tx_bytes: Vec<u8> = tx.into();
         self.submit_tx(tx_bytes);
         if !self.success() {
-            resp.code = tendermint::abci::Code::Err(1);
             return Ok(resp);
         } else {
             self.clear_results();
@@ -347,9 +358,6 @@ impl Client for MockNode {
             locked.prepare_proposal(Default::default()).txs.remove(0)
         };
         self.submit_tx(tx_bytes);
-        if !self.success() {
-            resp.code = tendermint::abci::Code::Err(1);
-        }
         Ok(resp)
     }
 

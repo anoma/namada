@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use color_eyre::eyre::Result;
+use color_eyre::owo_colors::OwoColorize;
 use namada_apps::client::tx::CLIShieldedUtils;
 use namada_core::types::address::{btc, eth, masp_rewards};
 use namada_core::types::token;
@@ -926,7 +927,10 @@ fn masp_pinned_txs() -> Result<()> {
 /// 13. Send 10 BTC from SK(B) to Bertha
 #[test]
 fn masp_txs_and_queries() -> Result<()> {
-    // This address doesn't matter for tests. But an argument is required.
+    // Uncomment for better debugging
+    // let _log_guard =
+    // namada_apps::logging::init_from_env_or(tracing::level_filters::LevelFilter::INFO)?
+    // ; This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = CLIShieldedUtils::new(PathBuf::new());
@@ -939,7 +943,7 @@ fn masp_txs_and_queries() -> Result<()> {
     let mut node = setup::setup()?;
     _ = node.next_epoch();
     let txs_args = vec![
-        // 2. Attempt to spend 10 BTC at SK(A) to PA(B)
+        // 0. Attempt to spend 10 BTC at SK(A) to PA(B)
         (
             vec![
                 "transfer",
@@ -956,7 +960,7 @@ fn masp_txs_and_queries() -> Result<()> {
             ],
             Response::Err(""),
         ),
-        // 3. Attempt to spend 15 BTC at SK(A) to Bertha
+        // 1. Attempt to spend 15 BTC at SK(A) to Bertha
         (
             vec![
                 "transfer",
@@ -973,7 +977,7 @@ fn masp_txs_and_queries() -> Result<()> {
             ],
             Response::Err(""),
         ),
-        // 4. Send 20 BTC from Albert to PA(A)
+        // 2. Send 20 BTC from Albert to PA(A)
         (
             vec![
                 "transfer",
@@ -990,7 +994,7 @@ fn masp_txs_and_queries() -> Result<()> {
             ],
             Response::Ok("Transaction is valid"),
         ),
-        // 5. Attempt to spend 10 ETH at SK(A) to PA(B)
+        // 3. Attempt to spend 10 ETH at SK(A) to PA(B)
         (
             vec![
                 "transfer",
@@ -1007,7 +1011,7 @@ fn masp_txs_and_queries() -> Result<()> {
             ],
             Response::Err(""),
         ),
-        // 6. Spend 7 BTC at SK(A) to PA(B)
+        // 4. Spend 7 BTC at SK(A) to PA(B)
         (
             vec![
                 "transfer",
@@ -1024,7 +1028,7 @@ fn masp_txs_and_queries() -> Result<()> {
             ],
             Response::Ok("Transaction is valid"),
         ),
-        // 7. Spend 7 BTC at SK(A) to PA(B)
+        // 5. Spend 7 BTC at SK(A) to PA(B)
         (
             vec![
                 "transfer",
@@ -1041,7 +1045,7 @@ fn masp_txs_and_queries() -> Result<()> {
             ],
             Response::Ok("Transaction is valid"),
         ),
-        // 8. Attempt to spend 7 BTC at SK(A) to PA(B)
+        // 6. Attempt to spend 7 BTC at SK(A) to PA(B)
         (
             vec![
                 "transfer",
@@ -1058,7 +1062,7 @@ fn masp_txs_and_queries() -> Result<()> {
             ],
             Response::Err(""),
         ),
-        // 9. Spend 6 BTC at SK(A) to PA(B)
+        // 7. Spend 6 BTC at SK(A) to PA(B)
         (
             vec![
                 "transfer",
@@ -1075,7 +1079,7 @@ fn masp_txs_and_queries() -> Result<()> {
             ],
             Response::Ok("Transaction is valid"),
         ),
-        // 10. Assert BTC balance at VK(A) is 0
+        // 8. Assert BTC balance at VK(A) is 0
         (
             vec![
                 "balance",
@@ -1088,7 +1092,7 @@ fn masp_txs_and_queries() -> Result<()> {
             ],
             Response::Ok("No shielded btc balance found"),
         ),
-        // 11. Assert ETH balance at VK(A) is 0
+        // 9. Assert ETH balance at VK(A) is 0
         (
             vec![
                 "balance",
@@ -1101,7 +1105,7 @@ fn masp_txs_and_queries() -> Result<()> {
             ],
             Response::Ok("No shielded eth balance found"),
         ),
-        // 12. Assert balance at VK(B) is 10 BTC
+        // 10. Assert balance at VK(B) is 20 BTC
         (
             vec![
                 "balance",
@@ -1112,7 +1116,7 @@ fn masp_txs_and_queries() -> Result<()> {
             ],
             Response::Ok("btc : 20"),
         ),
-        // 13. Send 10 BTC from SK(B) to Bertha
+        // 11. Send 20 BTC from SK(B) to Bertha
         (
             vec![
                 "transfer",
@@ -1132,25 +1136,34 @@ fn masp_txs_and_queries() -> Result<()> {
     ];
 
     for (tx_args, tx_result) in &txs_args {
+        // We ensure transfers don't cross epoch boundaries.
+        if tx_args[0] == "transfer" {
+            node.next_epoch();
+        }
         for &dry_run in &[true, false] {
             let tx_args = if dry_run && tx_args[0] == "transfer" {
                 vec![tx_args.clone(), vec!["--dry-run"]].concat()
             } else {
                 tx_args.clone()
             };
+            println!(
+                "{}: {:?}\n\n",
+                "Running".green().underline(),
+                tx_args.join(" ").yellow().underline()
+            );
             let captured =
                 CapturedOutput::of(|| run(&node, Bin::Client, tx_args.clone()));
             match tx_result {
                 Response::Ok("Transaction is valid") => {
                     assert!(
                         captured.result.is_ok(),
-                        "{:?} failed with result {:?}",
+                        "{:?} failed with result {:?}.\n Unread output: {}",
                         tx_args,
-                        captured.result
+                        captured.result,
+                        captured.output,
                     );
                     if !dry_run {
-                        assert!(node.success());
-                        node.clear_results();
+                        node.assert_success();
                     } else {
                         assert!(
                             captured.contains("Transaction is valid"),
@@ -1164,9 +1177,10 @@ fn masp_txs_and_queries() -> Result<()> {
                 Response::Ok(out) => {
                     assert!(
                         captured.result.is_ok(),
-                        "{:?} failed with result {:?}",
+                        "{:?} failed with result {:?}.\n Unread output: {}",
                         tx_args,
-                        captured.result
+                        captured.result,
+                        captured.output,
                     );
                     assert!(
                         captured.contains(out),

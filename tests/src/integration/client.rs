@@ -472,49 +472,40 @@ async fn submit_transfer(
     ctx: &mut Context,
     args: args::TxTransfer,
 ) -> Result<(), namada::ledger::tx::Error> {
-    for _ in 0..2 {
-        let arg = args.clone();
-        let (mut tx, addr, pk, tx_epoch, _isf) =
-            namada::ledger::tx::build_transfer(
-                client,
-                &mut ctx.wallet,
-                &mut ctx.shielded,
-                arg,
-            )
-            .await?;
-        submit_reveal_aux(client, ctx, &args.tx, addr, pk.clone(), &mut tx)
-            .await?;
-        signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-        let result = namada::ledger::tx::process_tx(
+    let arg = args.clone();
+    let (mut tx, addr, pk, tx_epoch, _isf) =
+        namada::ledger::tx::build_transfer(
             client,
             &mut ctx.wallet,
-            &args.tx,
-            tx,
+            &mut ctx.shielded,
+            arg,
         )
         .await?;
-        // Query the epoch in which the transaction was probably submitted
-        let submission_epoch = rpc::query_and_print_epoch(client).await;
+    submit_reveal_aux(client, ctx, &args.tx, addr, pk.clone(), &mut tx).await?;
+    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    let result =
+        namada::ledger::tx::process_tx(client, &mut ctx.wallet, &args.tx, tx)
+            .await?;
+    // Query the epoch in which the transaction was probably submitted
+    let submission_epoch = rpc::query_and_print_epoch(client).await;
 
-        match result {
-            ProcessTxResponse::Applied(resp) if
-            // If a transaction is shielded
-            tx_epoch.is_some() &&
-                // And it is rejected by a VP
-                resp.code == 1.to_string() &&
-                // And the its submission epoch doesn't match construction epoch
-                tx_epoch.unwrap() != submission_epoch =>
-                {
-                    // Then we probably straddled an epoch boundary. Let's retry...
-                    eprintln!(
-                        "MASP transaction rejected and this may be due to the \
-                     epoch changing. Attempting to resubmit transaction.",
-                    );
-                    continue;
-                },
-            // Otherwise either the transaction was successful or it will not
-            // benefit from resubmission
-            _ => break,
+    match result {
+        ProcessTxResponse::Applied(resp) if
+        // If a transaction is shielded
+        tx_epoch.is_some() &&
+            // And it is rejected by a VP
+            resp.code == 1.to_string() &&
+            // And the its submission epoch doesn't match construction epoch
+            tx_epoch.unwrap() != submission_epoch =>
+        {
+            // Then we probably straddled an epoch boundary
+            println!(
+                "MASP transaction rejected and this may be due to the \
+                epoch changing. Attempting to resubmit transaction.",
+            );
+
         }
+        _ => {}
     }
     Ok(())
 }

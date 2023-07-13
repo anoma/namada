@@ -19,23 +19,21 @@ use std::time::{Duration, Instant};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
-use namada::types::address::{btc, eth, masp_rewards, Address};
+use namada::types::address::Address;
 use namada::types::governance::ProposalType;
 use namada::types::storage::Epoch;
 use namada::types::token;
-use namada_apps::client::tx::CLIShieldedUtils;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
-use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use namada_test_utils::TestWasms;
 use serde_json::json;
 use setup::constants::*;
 
 use super::helpers::{
-    get_height, is_debug_mode, wait_for_block_height, wait_for_wasm_pre_compile,
+    get_height, wait_for_block_height, wait_for_wasm_pre_compile,
 };
 use super::setup::get_all_wasms_hashes;
 use crate::e2e::helpers::{
