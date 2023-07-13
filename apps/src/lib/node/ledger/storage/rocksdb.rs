@@ -176,14 +176,6 @@ impl RocksDB {
             .ok_or(Error::DBError("No {cf_name} column family".to_string()))
     }
 
-    fn flush(&self, wait: bool) -> Result<()> {
-        let mut flush_opts = FlushOptions::default();
-        flush_opts.set_wait(wait);
-        self.0
-            .flush_opt(&flush_opts)
-            .map_err(|e| Error::DBError(e.into_string()))
-    }
-
     /// Persist the diff of an account subspace key-val under the height where
     /// it was changed.
     fn write_subspace_diff(
