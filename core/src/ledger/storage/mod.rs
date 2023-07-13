@@ -256,7 +256,7 @@ pub trait DB: std::fmt::Debug {
     fn flush(&self, wait: bool) -> Result<()>;
 
     /// Read the last committed block's metadata
-    fn read_last_block(&mut self) -> Result<Option<BlockStateRead>>;
+    fn read_last_block(&self) -> Result<Option<BlockStateRead>>;
 
     /// Write block's metadata. Merkle tree sub-stores are committed only when
     /// `is_full_commit` is `true` (typically on a beginning of a new epoch).

@@ -53,7 +53,7 @@ impl DB for MockDB {
         Ok(())
     }
 
-    fn read_last_block(&mut self) -> Result<Option<BlockStateRead>> {
+    fn read_last_block(&self) -> Result<Option<BlockStateRead>> {
         // Block height
         let height: BlockHeight = match self.0.borrow().get("height") {
             Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,

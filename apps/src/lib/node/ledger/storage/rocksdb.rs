@@ -504,7 +504,7 @@ impl DB for RocksDB {
             .map_err(|e| Error::DBError(e.into_string()))
     }
 
-    fn read_last_block(&mut self) -> Result<Option<BlockStateRead>> {
+    fn read_last_block(&self) -> Result<Option<BlockStateRead>> {
         // Block height
         let state_cf = self.get_column_family(STATE_CF)?;
         let height: BlockHeight = match self
