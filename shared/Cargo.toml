@@ -100,8 +100,8 @@ clru.workspace = true
 data-encoding.workspace = true
 derivation-path.workspace = true
 derivative.workspace = true
-ethbridge-bridge-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.19.0"}
-ethbridge-governance-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.19.0"}
+ethbridge-bridge-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.20.0"}
+ethbridge-governance-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.20.0"}
 ethers.workspace = true
 eyre.workspace = true
 futures.workspace = true

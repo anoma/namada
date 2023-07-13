@@ -87,9 +87,9 @@ derivative.workspace = true
 directories.workspace = true
 ed25519-consensus.workspace = true
 ethabi.workspace = true
-ethbridge-bridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.19.0"}
-ethbridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.19.0"}
-ethbridge-governance-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.19.0"}
+ethbridge-bridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.20.0"}
+ethbridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.20.0"}
+ethbridge-governance-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.20.0"}
 eyre.workspace = true
 fd-lock.workspace = true
 ferveo-common.workspace = true
