@@ -1254,7 +1254,6 @@ pub struct PrefixValue {
 pub struct EthEventsQueue {
     /// Queue of transfer to Namada events.
     pub transfers_to_namada: InnerEthEventsQueue<TransfersToNamada>,
-    // TODO: add queue of update whitelist events
 }
 
 /// A queue of confirmed Ethereum events of type `E`.

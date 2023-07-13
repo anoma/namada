@@ -752,10 +752,6 @@ mod tests {
                 name: "bridge".to_string(),
                 address: arbitrary_eth_address(),
             },
-            EthereumEvent::UpdateBridgeWhitelist {
-                nonce: arbitrary_nonce(),
-                whitelist: vec![],
-            },
             EthereumEvent::UpgradedContract {
                 name: "bridge".to_string(),
                 address: arbitrary_eth_address(),
