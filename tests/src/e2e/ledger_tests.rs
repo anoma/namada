@@ -2672,9 +2672,7 @@ fn pos_init_validator() -> Result<()> {
     // Stop the non-validator node and run it as the new validator
     let mut non_validator = bg_non_validator.foreground();
     non_validator.interrupt()?;
-
-    // it takes a bit before the node is shutdown. We dont want flasky test.
-    sleep(6);
+    non_validator.exp_eof()?;
 
     let loc = format!("{}:{}", std::file!(), std::line!());
     let validator_1_base_dir = test.get_base_dir(&Who::NonValidator);
