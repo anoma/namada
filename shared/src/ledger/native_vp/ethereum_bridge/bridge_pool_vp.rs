@@ -19,7 +19,6 @@ use namada_core::ledger::eth_bridge::storage::bridge_pool::{
 };
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_ethereum_bridge::parameters::read_native_erc20_address;
-use namada_ethereum_bridge::storage::wrapped_erc20s;
 
 use crate::ledger::native_vp::ethereum_bridge::vp::check_balance_changes;
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
@@ -92,7 +91,7 @@ where
         transfer: &PendingTransfer,
     ) -> Result<bool, Error> {
         // check that the assets to be transferred were escrowed
-        let token = wrapped_erc20s::token(&transfer.transfer.asset);
+        let token = transfer.token_address();
         let owner_key = balance_key(&token, &transfer.transfer.sender);
         let escrow_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
         if keys_changed.contains(&owner_key)
@@ -347,6 +346,7 @@ mod test_bridge_pool_vp {
     use namada_ethereum_bridge::parameters::{
         Contracts, EthereumBridgeConfig, UpgradeableContract,
     };
+    use namada_ethereum_bridge::storage::wrapped_erc20s;
 
     use super::*;
     use crate::ledger::gas::VpGasMeter;
