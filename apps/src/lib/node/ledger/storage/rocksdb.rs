@@ -722,7 +722,7 @@ impl DB for RocksDB {
         }
     }
 
-    fn write_block(
+    fn add_block_to_batch(
         &self,
         state: BlockStateWrite,
         batch: &mut Self::WriteBatch,
@@ -1806,6 +1806,6 @@ mod test {
             eth_events_queue: &eth_events_queue,
         };
 
-        db.write_block(block, batch, true)
+        db.add_block_to_batch(block, batch, true)
     }
 }

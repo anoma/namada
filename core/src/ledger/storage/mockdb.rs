@@ -211,7 +211,7 @@ impl DB for MockDB {
         }
     }
 
-    fn write_block(
+    fn add_block_to_batch(
         &self,
         state: BlockStateWrite,
         _batch: &mut Self::WriteBatch,
