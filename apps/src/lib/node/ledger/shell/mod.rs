@@ -691,9 +691,10 @@ where
             )));
         }
 
-        // Write inner hash to WAL
+        // Write inner hash to tx WAL
         temp_wl_storage
-            .write(&inner_hash_key, ())
+            .write_log
+            .write(&inner_hash_key, vec![])
             .expect("Couldn't write inner transaction hash to write log");
 
         let tx =
@@ -711,9 +712,10 @@ where
             )));
         }
 
-        // Write wrapper hash to WAL
+        // Write wrapper hash to tx WAL
         temp_wl_storage
-            .write(&wrapper_hash_key, ())
+            .write_log
+            .write(&wrapper_hash_key, vec![])
             .expect("Couldn't write wrapper tx hash to write log");
 
         Ok(())

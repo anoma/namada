@@ -202,7 +202,6 @@ where
                     let tx_hash_key =
                         replay_protection::get_tx_hash_key(&tx_hash);
                     self.wl_storage
-                        .storage
                         .delete(&tx_hash_key)
                         .expect("Error while deleting tx hash from storage");
                 }
@@ -248,6 +247,7 @@ where
                             &mut self.vp_wasm_cache,
                             &mut self.tx_wasm_cache,
                         ) {
+                            self.wl_storage.write_log.drop_tx();
                             tracing::error!(
                                 "Rejected wrapper tx {} could not pay fee: {}",
                                 Hash::sha256(
@@ -459,10 +459,8 @@ where
                         {
                             let tx_hash_key =
                                 replay_protection::get_tx_hash_key(&hash);
-                            self.wl_storage
-                                .storage
-                                .delete(&tx_hash_key)
-                                .expect(
+                            //FIXME: do I have a unit test for this? No, add it
+                            self.wl_storage.delete(&tx_hash_key).expect(
                                 "Error while deleting tx hash key from storage",
                             );
                         }

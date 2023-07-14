@@ -2,6 +2,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::panic;
 
+use borsh::BorshSerialize;
 use masp_primitives::transaction::Transaction;
 use namada_core::ledger::gas::TxGasMeter;
 use namada_core::types::storage::Key;
@@ -9,6 +10,7 @@ use namada_core::proto::Section;
 use namada_core::ledger::storage::TempWlStorage;
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::hash::Hash;
+use namada_core::types::token::Amount;
 use namada_core::types::transaction::WrapperTx;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator, Empty};
 use thiserror::Error;
@@ -155,13 +157,11 @@ where
             })
         }
         TxType::Wrapper(ref wrapper) => {
-            let mut changed_keys = BTreeSet::default();
             let masp_transaction = wrapper.unshield_section_hash.map(|ref hash| tx.get_section(hash).map(|section| if let Section::MaspTx(transaction) = section { Some(transaction.to_owned()) } else { None }).flatten()).flatten();
 
-            apply_wrapper_tx(
+            let changed_keys = apply_wrapper_tx(
                 write_log,
                 storage,
-                &mut changed_keys,
                 wrapper,
                 masp_transaction,
                 tx_bytes,
@@ -207,7 +207,6 @@ where S: StorageRead{
 fn apply_wrapper_tx<D, H, CA>(
     write_log: &mut WriteLog,
     storage: &Storage<D, H>,
-    changed_keys: &mut BTreeSet<storage::Key>,
     wrapper: &WrapperTx,
     masp_transaction: Option<Transaction>,
     tx_bytes: &[u8],
@@ -217,31 +216,21 @@ fn apply_wrapper_tx<D, H, CA>(
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
     #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
-) -> Result<()>
+) -> Result<BTreeSet<Key>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    // Writes both txs hash to block write log (changes must be persisted even in case of failure)
+    let mut changed_keys = BTreeSet::default();
     let tx: Tx = tx_bytes.try_into().unwrap();
-    let wrapper_tx_hash_key =
-        replay_protection::get_tx_hash_key(&hash::Hash(tx.header_hash().0));
 
-    write_log
-        .write(&wrapper_tx_hash_key, vec![])
-        .expect("Error while writing tx hash to storage");
-
-    let inner_tx_hash_key =
-        replay_protection::get_tx_hash_key(&tx.clone().update_header(TxType::Raw).header_hash());
-
-    write_log
-        .write(&inner_tx_hash_key, vec![])
-        .expect("Error while writing tx hash to storage");
-
-    // Persist hashes to storage even in case of failure
-    changed_keys.append(&mut write_log.get_keys());
-    write_log.commit_tx();
+    for hash in [&hash::Hash(tx.header_hash().0), &tx.clone().update_header(TxType::Raw).header_hash()] {
+        let key = replay_protection::get_tx_hash_key(hash);
+    // Writes both txs hash to block write log (changes must be persisted even in case of failure)
+        write_log.protocol_write(&key, vec![]).expect("Error while writing tx hash to storage");
+        changed_keys.insert(key);
+    }
 
     // Charge fee before performing any fallible operations
     charge_fee(
@@ -254,7 +243,7 @@ where
         block_proposer,
         write_log,
         storage,
-        changed_keys,
+        &mut changed_keys, //FIXME: need to pass this here?
         vp_wasm_cache,
         tx_wasm_cache,
     )?;
@@ -262,7 +251,7 @@ where
     // Account for gas
     gas_meter.add_tx_size_gas(tx_bytes)?;
 
-    Ok(())
+    Ok(changed_keys)
 }
 
 /// Charge fee for the provided wrapper transaction. In ABCI returns an error if the balance of the block proposer overflows. In ABCI plus returns error if:
@@ -290,8 +279,8 @@ where
     CA: 'static + WasmCacheAccess + Sync,
 {
     // Reconstruct a WlStorage with the current WriteLog to account for prior modifications
-    let mut wl_storage = TempWlStorage::new(storage);
-    wl_storage.write_log = write_log.clone();  //FIXME: can avoid this clone? Only if I pass WlStorage to apply_tx instead of the write log and storage split. 
+    let mut temp_wl_storage = TempWlStorage::new(storage);
+    temp_wl_storage.write_log = write_log.clone();  //FIXME: can avoid this clone? Only if I pass WlStorage to apply_tx instead of the write log and storage split. But if I do that I might screw upa ll of the calls to write! Actually not, I'm already taking care of them here, I would just need to double check the calls in apply_tx
     
     // Unshield funds if requested
         let unexpected_unshielding_tx =    if let Some(transaction ) = masp_transaction {
@@ -299,7 +288,7 @@ where
         // custom gas meter for this step
         let mut gas_meter =
             TxGasMeter::new(
-                wl_storage 
+                temp_wl_storage 
                     .read(
                         &namada_core::ledger::parameters::storage::get_fee_unshielding_gas_limit_key(
                         ),
@@ -309,7 +298,7 @@ where
             );
 
         let transparent_balance = storage_api::token::read_balance(
-            &wl_storage,
+            &temp_wl_storage,
             &wrapper.fee.token,
             &wrapper.fee_payer(),
         ).map_err(|e| Error::FeeError(e.to_string()))?;
@@ -324,11 +313,11 @@ where
         if let Some(unshield_amount) = unshield_amount {
         match wrapper.generate_fee_unshielding(
             unshield_amount,
-            get_transfer_hash_from_storage(&wl_storage),
+            get_transfer_hash_from_storage(&temp_wl_storage),
                 transaction
         ) {
             Ok(fee_unshielding_tx) => {
-                    let previous_tx_log = wl_storage.write_log.take_tx_log();
+                    let previous_tx_log = temp_wl_storage.write_log.take_tx_log();
                 // NOTE: A clean tx write log must be provided to this call for a correct vp validation. Block write log, instead, should contain any prior changes (if any)
                 match apply_tx(
                         fee_unshielding_tx,
@@ -336,8 +325,8 @@ where
                     TxIndex::default(),
                     &mut gas_meter,
                     gas_table,
-                    &mut wl_storage.write_log,
-                    &wl_storage.storage,
+                    &mut temp_wl_storage.write_log,
+                    &temp_wl_storage.storage,
                     vp_wasm_cache,
                     tx_wasm_cache,
                     None,
@@ -346,10 +335,10 @@ where
                 ) {
                     Ok(result) => {
                             if result.is_accepted() {
-                                // Rejoin tx write logs but do not commit the result of the unshielding until fees are paid otherwise this could be exploited to get free unshieldings
-                                wl_storage.write_log.merge_tx_log(previous_tx_log);
+                                // NOTE: Rejoin tx write logs but do not commit the result of the unshielding until fees are paid otherwise this could be exploited to get free unshieldings
+                                temp_wl_storage.write_log.merge_tx_log(previous_tx_log);
                             } else {
-                            wl_storage.write_log.drop_tx();
+                            temp_wl_storage.write_log.drop_tx();
                             tracing::error!(
                                 "The unshielding tx is invalid, some VPs \
                                      rejected it: {:#?}",
@@ -358,7 +347,7 @@ where
                         }
                     }
                     Err(e) => {
-                        wl_storage.write_log.drop_tx();
+                        temp_wl_storage.write_log.drop_tx();
                         tracing::error!(
                             "The unshielding tx is invalid, wasm run \
                                  failed: {}",
@@ -369,25 +358,26 @@ where
             }
             Err(e) => tracing::error!("{}", e), 
         }
-        
-        }
+            false
+        } else {
 
-        false
+        true}
     } else {
-        true
+        false
     };
 
            // Charge or check fees
     match block_proposer {
-        Some(proposer) => transfer_fee(&mut wl_storage, proposer, #[cfg(not(feature = "mainnet"))]has_valid_pow, &wrapper)?,
-        None => check_fees(&wl_storage, #[cfg(not(feature = "mainnet"))]has_valid_pow, &wrapper)?
+        Some(proposer) => transfer_fee(&mut temp_wl_storage, proposer, #[cfg(not(feature = "mainnet"))]has_valid_pow, &wrapper)?,
+        None => check_fees(&temp_wl_storage, #[cfg(not(feature = "mainnet"))]has_valid_pow, &wrapper)?
         }
 
-    changed_keys.append(&mut wl_storage.write_log.get_keys());
+    changed_keys.append(&mut temp_wl_storage.write_log.get_keys()); //FIXME: need this here? Ideally I could add the changed keys in the caller before returning from apply_tx. But since I commit the write log from time to time I cannot
 
     // Commit tx write log even in case of subsequent errors
-    wl_storage.write_log.commit_tx();
-    *write_log = wl_storage.write_log;
+    //FIXME: still need this?
+    temp_wl_storage.write_log.commit_tx();
+    *write_log = temp_wl_storage.write_log;
 
     if unexpected_unshielding_tx{
         Err(Error::FeeUnshieldingError(namada_core::types::transaction::WrapperTxErr::InvalidUnshield("Found unnecessary unshielding tx attached".to_string())))
@@ -419,7 +409,7 @@ where
     match wrapper.get_tx_fee() {
         Ok(fees) => {
             if balance.checked_sub(fees).is_some() {
-        storage_api::token::transfer(
+        token_transfer(
             temp_wl_storage,
             &wrapper.fee.token,
             &wrapper.fee_payer(),
@@ -437,7 +427,7 @@ where
                 #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
                     {
                         // Move all the available funds in the transparent balance of the fee payer
-        storage_api::token::transfer(
+        token_transfer(
             temp_wl_storage,
             &wrapper.fee.token,
             &wrapper.fee_payer(),
@@ -462,7 +452,7 @@ where
                 #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
             {
                 // Move all the available funds in the transparent balance of the fee payer
-        storage_api::token::transfer(
+token_transfer(
             temp_wl_storage,
             &wrapper.fee.token,
             &wrapper.fee_payer(),
@@ -480,6 +470,50 @@ where
             return Err(Error::FeeError(e.to_string()));
         }
 }
+}
+
+/// Transfer `token` from `src` to `dest`. Returns an `Err` if `src` has
+/// insufficient balance or if the transfer the `dest` would overflow (This can
+/// only happen if the total supply does't fit in `token::Amount`). Contrary to `storage_api::token::transfer` this function updates the tx write log and not the block write log.
+fn token_transfer<D, H>(
+    temp_wl_storage: &mut TempWlStorage<D, H>,
+    token: &Address,
+    src: &Address,
+    dest: &Address,
+    amount: Amount
+    
+) -> Result<()> 
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    {
+    
+    if amount.is_zero() {
+        return Ok(());
+    }
+    let src_key = namada_core::types::token::balance_key(token, src);
+    let src_balance = namada_core::ledger::storage_api::token::read_balance(temp_wl_storage, token, src).expect("Token balance read in protocol must not fail");
+    match src_balance.checked_sub(amount) {
+        Some(new_src_balance) => {
+            let dest_key = namada_core::types::token::balance_key(token, dest);
+            let dest_balance = namada_core::ledger::storage_api::token::read_balance(temp_wl_storage, token, dest).expect("Token balance read in protocol must not fail");
+            match dest_balance.checked_add(amount) {
+                Some(new_dest_balance) => {
+                    temp_wl_storage.write_log.write(&src_key, new_src_balance.try_to_vec().unwrap()).map_err(|e| Error::FeeError(e.to_string()))?;
+                    match temp_wl_storage.write_log.write(&dest_key, new_dest_balance.try_to_vec().unwrap()) {
+                        Ok(_) => Ok(()),
+                        Err(e) => Err(Error::FeeError(e.to_string()))
+                    }
+                }
+                None => Err(Error::FeeError(
+                    "The transfer would overflow destination balance".to_string(),
+                )),
+            }
+        }
+        None => {
+            Err(Error::FeeError("Insufficient source balance".to_string()))
+        }
+    }
 }
 
 /// Check if the fee payer has enough transparent balance to pay fees
