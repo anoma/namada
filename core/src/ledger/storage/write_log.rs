@@ -70,6 +70,8 @@ pub struct WriteLog {
     block_write_log: HashMap<storage::Key, StorageModification>,
     /// The storage modifications for the current transaction
     tx_write_log: HashMap<storage::Key, StorageModification>,
+    /// A precommit bucket for the `tx_write_log`. This is useful for validation when a clean `tx_write_log` is needed without committing any modification already in there. These modifications can be temporarely stored here and then discarded or committed to the `block_write_log`, together with th content of `tx_write_log`. No direct key write/update/delete should ever happen on this field, this log should only be populated through a dump of the `tx_write_log` and should be cleaned either when committing or dumping the `tx_write_log`
+    tx_precommit_write_log: HashMap<storage::Key, StorageModification>,
     /// The IBC events for the current transaction
     ibc_events: BTreeSet<IbcEvent>,
 }
@@ -96,6 +98,7 @@ impl Default for WriteLog {
             address_gen: None,
             block_write_log: HashMap::with_capacity(100_000),
             tx_write_log: HashMap::with_capacity(100),
+            tx_precommit_write_log: HashMap::with_capacity(100),
             ibc_events: BTreeSet::new(),
         }
     }
@@ -109,10 +112,17 @@ impl WriteLog {
         key: &storage::Key,
     ) -> (Option<&StorageModification>, u64) {
         // try to read from tx write log first
-        match self.tx_write_log.get(key).or_else(|| {
-            // if not found, then try to read from block write log
-            self.block_write_log.get(key)
-        }) {
+        match self
+            .tx_write_log
+            .get(key)
+            .or_else(|| {
+                // If not found, then try to read from tx precommit write log
+                self.tx_precommit_write_log.get(key)
+            })
+            .or_else(|| {
+                // if not found, then try to read from block write log
+                self.block_write_log.get(key)
+            }) {
             Some(v) => {
                 let gas = match v {
                     StorageModification::Write { ref value } => {
@@ -342,9 +352,19 @@ impl WriteLog {
 
     /// Get the storage keys changed and accounts keys initialized in the
     /// current transaction. The account keys point to the validity predicates
-    /// of the newly created accounts.
+    /// of the newly created accounts. The keys in the precommit are not included in the result of this function.
     pub fn get_keys(&self) -> BTreeSet<storage::Key> {
         self.tx_write_log.keys().cloned().collect()
+    }
+
+    /// Get the storage keys changed and accounts keys initialized in the current transaction and precommit. The account keys point to the validity predicates
+    /// of the newly created accounts.
+    pub fn get_keys_with_precommit(&self) -> BTreeSet<storage::Key> {
+        self.tx_precommit_write_log
+            .keys()
+            .chain(self.tx_write_log.keys())
+            .cloned()
+            .collect()
     }
 
     /// Get the storage keys changed in the current transaction (left) and
@@ -392,43 +412,42 @@ impl WriteLog {
         &self.ibc_events
     }
 
-    /// Commit the current transaction's write log to the block when it's
-    /// accepted by all the triggered validity predicates. Starts a new
-    /// transaction write log.
-    pub fn commit_tx(&mut self) {
-        self.tx_write_log.retain(|_, v| {
-            !matches!(v, StorageModification::Temp { value: _ })
-        });
-        let tx_write_log = std::mem::replace(
+    /// Add the entire content of the tx write log to the precommit one. The tx log gets reset in the process.
+    pub fn precommit_tx(&mut self) {
+        let tx_log = std::mem::replace(
             &mut self.tx_write_log,
             HashMap::with_capacity(100),
         );
-        self.block_write_log.extend(tx_write_log);
+
+        self.tx_precommit_write_log.extend(tx_log)
+    }
+
+    /// Commit the current transaction's write log and precommit log to the block when it's
+    /// accepted by all the triggered validity predicates. Starts a new
+    /// transaction write log.
+    pub fn commit_tx(&mut self) {
+        // First precommit everything
+        self.precommit_tx();
+
+        // Then commit to block
+        self.tx_precommit_write_log.retain(|_, v| {
+            !matches!(v, StorageModification::Temp { value: _ })
+        });
+        let tx_precommit_write_log = std::mem::replace(
+            &mut self.tx_precommit_write_log,
+            HashMap::with_capacity(100),
+        );
+
+        self.block_write_log.extend(tx_precommit_write_log);
         self.take_ibc_events();
     }
 
-    /// Drop the current transaction's write log when it's declined by any of
+    /// Drop the current transaction's write log and precommit when it's declined by any of
     /// the triggered validity predicates. Starts a new transaction write log.
     pub fn drop_tx(&mut self) {
+        self.tx_precommit_write_log.clear();
         self.tx_write_log.clear();
     }
-
-    /// Extract the current tx write log and reset it. Can be used when in need of a clean tx write log but still need the block log.
-    pub fn take_tx_log(
-        &mut self,
-    ) -> HashMap<storage::Key, StorageModification> {
-        std::mem::take(&mut self.tx_write_log)
-    }
-
-    /// Extend the tx write log with another one which is consumed in the process
-    pub fn merge_tx_log(
-        &mut self,
-        other: HashMap<storage::Key, StorageModification>,
-    ) {
-        self.tx_write_log.extend(other)
-    }
-
-    //FIXME: should create a pre_commit function for fee validation? I need an extra field on the struct though. Then I can remove the ptrevious two functions
 
     /// Commit the current block's write log to the storage. Starts a new block
     /// write log.

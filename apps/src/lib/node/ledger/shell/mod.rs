@@ -1176,10 +1176,8 @@ where
             // This is to simulate the unshielding tx (to
             // prevent the already written keys from being
             // passed/triggering VPs) but we cannot commit the tx write
-            // log yet cause the tx could still be invalid. As a
-            // workaround, we dump the tx write log and merge it with
-            // the previous one in case of success
-            let previous_tx_log = temp_wl_storage.write_log.take_tx_log();
+            // log yet cause the tx could still be invalid.
+            temp_wl_storage.write_log.precommit_tx();
 
             match apply_tx(
                 unshield,
@@ -1196,10 +1194,7 @@ where
                 false,
             ) {
                 Ok(result) => {
-                    if result.is_accepted() {
-                        // Rejoin tx write logs
-                        temp_wl_storage.write_log.merge_tx_log(previous_tx_log);
-                    } else {
+                    if !result.is_accepted() {
                         return Err(Error::TxApply(
                             protocol::Error::FeeUnshieldingError(namada::types::transaction::WrapperTxErr::InvalidUnshield(format!(
                             "Some VPs rejected fee unshielding: {:#?}",

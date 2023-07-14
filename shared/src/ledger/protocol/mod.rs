@@ -228,12 +228,13 @@ where
     for hash in [&hash::Hash(tx.header_hash().0), &tx.clone().update_header(TxType::Raw).header_hash()] {
         let key = replay_protection::get_tx_hash_key(hash);
     // Writes both txs hash to block write log (changes must be persisted even in case of failure)
+        //FIXME: need a unit test to check this
         write_log.protocol_write(&key, vec![]).expect("Error while writing tx hash to storage");
         changed_keys.insert(key);
     }
 
     // Charge fee before performing any fallible operations
-    charge_fee(
+    changed_keys.extend(charge_fee(
         wrapper,
         masp_transaction,
         tx_bytes,
@@ -243,10 +244,9 @@ where
         block_proposer,
         write_log,
         storage,
-        &mut changed_keys, //FIXME: need to pass this here?
         vp_wasm_cache,
         tx_wasm_cache,
-    )?;
+    )?);
 
     // Account for gas
     gas_meter.add_tx_size_gas(tx_bytes)?;
@@ -259,6 +259,8 @@ where
 /// - Fee amount overflows
 /// - Not enough funds are available to pay the entire amount of the fee
 /// - The accumulated fee amount to be credited to the block proposer overflows
+///
+/// Returns the set of changed keys.
 pub fn charge_fee<D, H, CA>(
     wrapper: &WrapperTx,
     masp_transaction: Option<Transaction>,
@@ -269,10 +271,9 @@ pub fn charge_fee<D, H, CA>(
 
     write_log: &mut WriteLog,
     storage: &Storage<D, H>,
-    changed_keys: &mut BTreeSet<storage::Key>,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
-) -> Result<()>
+) -> Result<BTreeSet<Key>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -317,8 +318,8 @@ where
                 transaction
         ) {
             Ok(fee_unshielding_tx) => {
-                    let previous_tx_log = temp_wl_storage.write_log.take_tx_log();
                 // NOTE: A clean tx write log must be provided to this call for a correct vp validation. Block write log, instead, should contain any prior changes (if any)
+                    temp_wl_storage.write_log.precommit_tx();
                 match apply_tx(
                         fee_unshielding_tx,
                     tx_bytes,
@@ -334,10 +335,8 @@ where
                     
                 ) {
                     Ok(result) => {
-                            if result.is_accepted() {
-                                // NOTE: Rejoin tx write logs but do not commit the result of the unshielding until fees are paid otherwise this could be exploited to get free unshieldings
-                                temp_wl_storage.write_log.merge_tx_log(previous_tx_log);
-                            } else {
+                            //NOTE: do not commit yet cause this could be exploited to get free unshieldings
+                            if !result.is_accepted() {
                             temp_wl_storage.write_log.drop_tx();
                             tracing::error!(
                                 "The unshielding tx is invalid, some VPs \
@@ -372,17 +371,16 @@ where
         None => check_fees(&temp_wl_storage, #[cfg(not(feature = "mainnet"))]has_valid_pow, &wrapper)?
         }
 
-    changed_keys.append(&mut temp_wl_storage.write_log.get_keys()); //FIXME: need this here? Ideally I could add the changed keys in the caller before returning from apply_tx. But since I commit the write log from time to time I cannot
+    let changed_keys = temp_wl_storage.write_log.get_keys_with_precommit();
 
     // Commit tx write log even in case of subsequent errors
-    //FIXME: still need this?
     temp_wl_storage.write_log.commit_tx();
     *write_log = temp_wl_storage.write_log;
 
     if unexpected_unshielding_tx{
         Err(Error::FeeUnshieldingError(namada_core::types::transaction::WrapperTxErr::InvalidUnshield("Found unnecessary unshielding tx attached".to_string())))
     } else {
-        Ok(())
+        Ok(changed_keys)
     }
 
 
