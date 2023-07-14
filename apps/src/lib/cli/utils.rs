@@ -343,7 +343,7 @@ pub fn safe_exit(_: i32) -> ! {
     panic!("Test failed because the client exited unexpectedly.")
 }
 
-pub fn prompt_aux<R, W>(mut reader: R, mut writer: W, question: &str) -> String
+fn prompt_aux<R, W>(mut reader: R, mut writer: W, question: &str) -> String
 where
     R: std::io::Read,
     W: Write,
