@@ -4549,7 +4549,8 @@ fn double_signing_gets_slashed() -> Result<()> {
 
     let mut validator_1 = bg_validator_1.foreground();
     // The validator crashes with `InsufficientVotes`
-    validator_1.exp_string("InsufficientVotes")?;
+    let x = validator_1.exp_string("InsufficientVotes");
+    assert!(x.is_err());
 
     Ok(())
 }
