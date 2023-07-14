@@ -214,7 +214,7 @@ fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
         consensus_state: make_consensus_state(test_a, height)?.into(),
         signer: Signer::from_str("test_b").expect("invalid signer"),
     };
-    let height_b = submit_ibc_tx(test_b, message, ALBERT, ALBERT_KEY, false)?;
+    let height_b = submit_ibc_tx(test_b, message, ALBERT, ALBERT_KEY, true)?;
 
     // convert the client IDs from `ibc_relayer_type` to `ibc`
     let client_id_a = match get_event(test_a, height_a)? {
@@ -708,6 +708,7 @@ fn transfer_token(
         port_channel_id_a,
         None,
         None,
+        false,
     )?;
     let packet = match get_event(test_a, height)? {
         Some(IbcEvent::SendPacket(event)) => event.packet,
@@ -834,6 +835,7 @@ fn transfer_back(
         port_channel_id_b,
         Some(sub_prefix),
         None,
+        true,
     )?;
     let packet = match get_event(test_b, height)? {
         Some(IbcEvent::SendPacket(event)) => event.packet,
@@ -894,6 +896,7 @@ fn transfer_timeout(
         port_channel_id_a,
         None,
         Some(Duration::new(5, 0)),
+        false,
     )?;
     let packet = match get_event(test_a, height)? {
         Some(IbcEvent::SendPacket(event)) => event.packet,
@@ -986,7 +989,7 @@ fn submit_ibc_tx(
     message: impl Msg + std::fmt::Debug,
     owner: &str,
     signer: &str,
-    wait_reveal_pk: bool
+    wait_reveal_pk: bool,
 ) -> Result<u32> {
     let data_path = test.test_dir.path().join("tx.data");
     let data = make_ibc_data(message);
@@ -1036,6 +1039,7 @@ fn transfer(
     port_channel_id: &PortChannelId,
     sub_prefix: Option<String>,
     timeout_sec: Option<Duration>,
+    wait_reveal_pk: bool,
 ) -> Result<u32> {
     let rpc = get_actor_rpc(test, &Who::Validator(0));
 
@@ -1075,6 +1079,9 @@ fn transfer(
 
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction applied")?;
+    if wait_reveal_pk {
+        client.exp_string("Transaction applied")?;
+    }
     check_tx_height(test, &mut client)
 }
 
