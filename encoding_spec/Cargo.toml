@@ -22,5 +22,5 @@ abciplus = [
 namada = {path = "../shared"}
 borsh.workspace = true
 itertools.workspace = true
-lazy_static = "1.4.0"
+lazy_static.workspace = true
 madato = "0.5.3"
