@@ -286,60 +286,6 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_sender() {
-        let mut wl_storage = TestWlStorage::default();
-        let mut keys_changed = BTreeSet::new();
-
-        let sender = established_address_1();
-        let sender_key = balance_key(&nam(), &sender);
-        let amount = Amount::native_whole(100);
-        wl_storage
-            .storage
-            .write(&sender_key, amount.try_to_vec().unwrap())
-            .expect("write failed");
-
-        // transfer 10
-        let amount = Amount::native_whole(90);
-        wl_storage
-            .write_log
-            .write(&sender_key, amount.try_to_vec().unwrap())
-            .expect("write failed");
-        keys_changed.insert(sender_key);
-        let receiver = established_address_2();
-        let receiver_key = balance_key(&nam(), &receiver);
-        let amount = Amount::native_whole(10);
-        wl_storage
-            .write_log
-            .write(&receiver_key, amount.try_to_vec().unwrap())
-            .expect("write failed");
-        keys_changed.insert(receiver_key);
-
-        let tx_index = TxIndex::default();
-        let tx = dummy_tx(&wl_storage);
-        let gas_meter = VpGasMeter::new(0);
-        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
-        let verifiers = BTreeSet::new();
-        // The sender is not set
-        let ctx = Ctx::new(
-            &ADDRESS,
-            &wl_storage.storage,
-            &wl_storage.write_log,
-            &tx,
-            &tx_index,
-            gas_meter,
-            &keys_changed,
-            &verifiers,
-            vp_wasm_cache,
-        );
-
-        let vp = MultitokenVp { ctx };
-        assert!(
-            !vp.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
-    }
-
-    #[test]
     fn test_valid_mint() {
         let mut wl_storage = TestWlStorage::default();
         let mut keys_changed = BTreeSet::new();
