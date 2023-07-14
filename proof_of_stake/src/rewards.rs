@@ -16,11 +16,12 @@ pub enum RewardsError {
     /// number of votes is less than the threshold of 2/3
     #[error(
         "Insufficient votes. Got {signing_stake}, needed {votes_needed} (at \
-         least 2/3 of the total bonded stake)."
+         least 2/3 of the total bonded stake {total_stake})."
     )]
     InsufficientVotes {
         votes_needed: Uint,
         signing_stake: Uint,
+        total_stake: Uint,
     },
     /// rewards coefficients are not set
     #[error("Rewards coefficients are not properly set.")]
@@ -65,10 +66,17 @@ impl PosRewardsCalculator {
             total_stake,
         } = *self;
 
+        tracing::info!(
+            "XXX votes needed: {:?}, signing stake: {:?}, total stake: {:?}",
+            Uint::from(votes_needed),
+            Uint::from(signing_stake),
+            Uint::from(total_stake),
+        );
         if signing_stake < votes_needed {
             return Err(RewardsError::InsufficientVotes {
                 votes_needed: votes_needed.into(),
                 signing_stake: signing_stake.into(),
+                total_stake: total_stake.into(),
             });
         }
 
