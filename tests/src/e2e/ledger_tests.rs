@@ -756,7 +756,7 @@ fn wrapper_fee_unshielding() -> Result<()> {
                 &validator_one_rpc,
             ],
             // Test the client response
-            "The transaction requires the completion of a PoW challenge.",
+            "Insufficient transparent balance to pay fees",
         ),
         // 3. Valid unshielding
         (
