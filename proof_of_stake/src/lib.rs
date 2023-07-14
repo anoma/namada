@@ -3137,6 +3137,9 @@ where
         let state = validator_state_handle(&validator_address)
             .get(storage, epoch, &params)?;
         if state != Some(ValidatorState::Consensus) {
+            tracing::info!(
+                "SKIP {validator_address}, state {state:?} in epoch {epoch}"
+            );
             continue;
         }
 
