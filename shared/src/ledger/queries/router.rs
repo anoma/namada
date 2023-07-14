@@ -832,6 +832,7 @@ macro_rules! router {
 /// ```shell
 /// cargo expand ledger::queries::router::test_rpc_handlers --features "ferveo-tpke, ibc-mocks, testing, wasm-runtime, tendermint-rpc" --tests --lib
 /// ```
+#[cfg(test)]
 mod test_rpc_handlers {
     use borsh::BorshSerialize;
 
@@ -960,7 +961,8 @@ mod test_rpc_handlers {
 /// ```shell
 /// cargo expand ledger::queries::router::test_rpc --features "ferveo-tpke, ibc-mocks, testing, wasm-runtime, tendermint-rpc" --tests --lib
 /// ```
-pub mod test_rpc {
+#[cfg(test)]
+mod test_rpc {
     use super::test_rpc_handlers::*;
     use crate::types::storage::Epoch;
     use crate::types::token;
