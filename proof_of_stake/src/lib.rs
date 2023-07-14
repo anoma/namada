@@ -3124,11 +3124,12 @@ where
     // these signers
     let mut signer_set: HashSet<Address> = HashSet::new();
     let mut total_signing_stake = token::Amount::default();
-    for VoteInfo {
-        validator_address,
-        validator_vp,
-    } in votes
-    {
+    for vote in votes {
+        dbg!(&vote);
+        let VoteInfo {
+            validator_address,
+            validator_vp,
+        } = vote;
         if validator_vp == 0 {
             continue;
         }
