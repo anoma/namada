@@ -6,6 +6,7 @@ use namada_apps::client::tx::CLIShieldedUtils;
 use namada_core::types::address::{btc, eth, masp_rewards};
 use namada_core::types::token;
 use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
+use test_log::test;
 
 use super::client::run;
 use super::setup;
