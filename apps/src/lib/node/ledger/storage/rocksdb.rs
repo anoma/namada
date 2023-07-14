@@ -1535,7 +1535,7 @@ mod test {
         )
         .unwrap();
 
-        write_block(&db, &mut batch, BlockHeight::default()).unwrap();
+        add_block_to_batch(&db, &mut batch, BlockHeight::default()).unwrap();
         db.exec_batch(batch.0).unwrap();
 
         let _state = db
@@ -1726,7 +1726,7 @@ mod test {
         )
         .unwrap();
 
-        write_block(&db, &mut batch, height_0).unwrap();
+        add_block_to_batch(&db, &mut batch, height_0).unwrap();
         db.exec_batch(batch.0).unwrap();
 
         // Write second block
@@ -1746,7 +1746,7 @@ mod test {
         db.batch_delete_subspace_val(&mut batch, height_1, &delete_key)
             .unwrap();
 
-        write_block(&db, &mut batch, height_1).unwrap();
+        add_block_to_batch(&db, &mut batch, height_1).unwrap();
         db.exec_batch(batch.0).unwrap();
 
         // Check that the values are as expected from second block
@@ -1770,7 +1770,7 @@ mod test {
     }
 
     /// A test helper to write a block
-    fn write_block(
+    fn add_block_to_batch(
         db: &RocksDB,
         batch: &mut RocksDBWriteBatch,
         height: BlockHeight,
