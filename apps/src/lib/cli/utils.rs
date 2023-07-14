@@ -355,13 +355,13 @@ where
     s
 }
 
-#[cfg(feature = "dev")]
+#[cfg(feature = "testing")]
 pub fn prompt(question: &str) -> String {
     let file = std::fs::File::open("stdin.mock").unwrap();
     prompt_aux(file, std::io::stdout(), question)
 }
 
-#[cfg(not(feature = "dev"))]
+#[cfg(not(feature = "testing"))]
 pub fn prompt(question: &str) -> String {
     prompt_aux(std::io::stdin().lock(), std::io::stdout(), question)
 }
