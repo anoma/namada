@@ -53,7 +53,7 @@ impl DB for MockDB {
         Ok(())
     }
 
-    fn read_last_block(&mut self) -> Result<Option<BlockStateRead>> {
+    fn read_last_block(&self) -> Result<Option<BlockStateRead>> {
         // Block height
         let height: BlockHeight = match self.0.borrow().get("height") {
             Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
@@ -211,8 +211,8 @@ impl DB for MockDB {
         }
     }
 
-    fn write_block(
-        &mut self,
+    fn add_block_to_batch(
+        &self,
         state: BlockStateWrite,
         _batch: &mut Self::WriteBatch,
         _is_full_commit: bool,

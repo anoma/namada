@@ -176,14 +176,6 @@ impl RocksDB {
             .ok_or(Error::DBError("No {cf_name} column family".to_string()))
     }
 
-    fn flush(&self, wait: bool) -> Result<()> {
-        let mut flush_opts = FlushOptions::default();
-        flush_opts.set_wait(wait);
-        self.0
-            .flush_opt(&flush_opts)
-            .map_err(|e| Error::DBError(e.into_string()))
-    }
-
     /// Persist the diff of an account subspace key-val under the height where
     /// it was changed.
     fn write_subspace_diff(
@@ -512,7 +504,7 @@ impl DB for RocksDB {
             .map_err(|e| Error::DBError(e.into_string()))
     }
 
-    fn read_last_block(&mut self) -> Result<Option<BlockStateRead>> {
+    fn read_last_block(&self) -> Result<Option<BlockStateRead>> {
         // Block height
         let state_cf = self.get_column_family(STATE_CF)?;
         let height: BlockHeight = match self
@@ -730,8 +722,8 @@ impl DB for RocksDB {
         }
     }
 
-    fn write_block(
-        &mut self,
+    fn add_block_to_batch(
+        &self,
         state: BlockStateWrite,
         batch: &mut Self::WriteBatch,
         is_full_commit: bool,
@@ -1543,7 +1535,7 @@ mod test {
         )
         .unwrap();
 
-        write_block(&mut db, &mut batch, BlockHeight::default()).unwrap();
+        add_block_to_batch(&db, &mut batch, BlockHeight::default()).unwrap();
         db.exec_batch(batch.0).unwrap();
 
         let _state = db
@@ -1734,7 +1726,7 @@ mod test {
         )
         .unwrap();
 
-        write_block(&mut db, &mut batch, height_0).unwrap();
+        add_block_to_batch(&db, &mut batch, height_0).unwrap();
         db.exec_batch(batch.0).unwrap();
 
         // Write second block
@@ -1754,7 +1746,7 @@ mod test {
         db.batch_delete_subspace_val(&mut batch, height_1, &delete_key)
             .unwrap();
 
-        write_block(&mut db, &mut batch, height_1).unwrap();
+        add_block_to_batch(&db, &mut batch, height_1).unwrap();
         db.exec_batch(batch.0).unwrap();
 
         // Check that the values are as expected from second block
@@ -1778,8 +1770,8 @@ mod test {
     }
 
     /// A test helper to write a block
-    fn write_block(
-        db: &mut RocksDB,
+    fn add_block_to_batch(
+        db: &RocksDB,
         batch: &mut RocksDBWriteBatch,
         height: BlockHeight,
     ) -> Result<()> {
@@ -1814,6 +1806,6 @@ mod test {
             eth_events_queue: &eth_events_queue,
         };
 
-        db.write_block(block, batch, true)
+        db.add_block_to_batch(block, batch, true)
     }
 }

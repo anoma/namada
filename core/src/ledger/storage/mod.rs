@@ -256,12 +256,12 @@ pub trait DB: std::fmt::Debug {
     fn flush(&self, wait: bool) -> Result<()>;
 
     /// Read the last committed block's metadata
-    fn read_last_block(&mut self) -> Result<Option<BlockStateRead>>;
+    fn read_last_block(&self) -> Result<Option<BlockStateRead>>;
 
     /// Write block's metadata. Merkle tree sub-stores are committed only when
     /// `is_full_commit` is `true` (typically on a beginning of a new epoch).
-    fn write_block(
-        &mut self,
+    fn add_block_to_batch(
+        &self,
         state: BlockStateWrite,
         batch: &mut Self::WriteBatch,
         is_full_commit: bool,
@@ -532,7 +532,8 @@ where
             ethereum_height: self.ethereum_height.as_ref(),
             eth_events_queue: &self.eth_events_queue,
         };
-        self.db.write_block(state, &mut batch, is_full_commit)?;
+        self.db
+            .add_block_to_batch(state, &mut batch, is_full_commit)?;
         let header = self
             .header
             .take()
