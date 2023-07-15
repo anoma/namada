@@ -223,16 +223,14 @@ where
     CA: 'static + WasmCacheAccess + Sync,
 {
     let mut changed_keys = BTreeSet::default();
-    let tx: Tx = tx_bytes.try_into().unwrap();
+    let mut tx: Tx = tx_bytes.try_into().unwrap();
 
-    for hash in [&hash::Hash(tx.header_hash().0), &tx.clone().update_header(TxType::Raw).header_hash()] {
-        let key = replay_protection::get_tx_hash_key(hash);
-    // Writes both txs hash to block write log (changes must be persisted even in case of failure)
-        //FIXME: need a unit test to check this
-        write_log.protocol_write(&key, vec![]).expect("Error while writing tx hash to storage");
-        changed_keys.insert(key);
-    }
-
+    // Writes wrapper tx hash to block write log (changes must be persisted even in case of failure)
+    let wrapper_hash_key = 
+replay_protection::get_tx_hash_key(&hash::Hash(tx.header_hash().0));
+        write_log.protocol_write(&wrapper_hash_key, vec![]).expect("Error while writing tx hash to storage");
+        changed_keys.insert(wrapper_hash_key);
+     
     // Charge fee before performing any fallible operations
     changed_keys.extend(charge_fee(
         wrapper,
@@ -251,6 +249,13 @@ where
     // Account for gas
     gas_meter.add_tx_size_gas(tx_bytes)?;
 
+
+    // If wrapper was succesful, write inner tx hash to storage
+    let inner_hash_key= 
+replay_protection::get_tx_hash_key(&hash::Hash(tx.update_header(TxType::Raw).header_hash().0));
+        write_log.protocol_write(&inner_hash_key, vec![]).expect("Error while writing tx hash to storage");
+        changed_keys.insert(inner_hash_key); 
+    
     Ok(changed_keys)
 }
 

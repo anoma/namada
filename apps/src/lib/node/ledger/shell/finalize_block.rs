@@ -459,7 +459,6 @@ where
                         {
                             let tx_hash_key =
                                 replay_protection::get_tx_hash_key(&hash);
-                            //FIXME: do I have a unit test for this? No, add it
                             self.wl_storage.delete(&tx_hash_key).expect(
                                 "Error while deleting tx hash key from storage",
                             );
@@ -1764,7 +1763,7 @@ mod test_finalize_block {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None,
@@ -1813,6 +1812,71 @@ mod test_finalize_block {
         let code = event.attributes.get("code").expect("Testfailed").as_str();
         assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
 
+        assert!(!shell
+            .wl_storage
+            .has_key(&inner_hash_key)
+            .expect("Test failed"))
+    }
+
+    #[test]
+    /// Test that the hash of the wrapper transaction is committed to storage even if the wrapper tx fails on fee payment. The inner transaction hash must instead be removed
+    fn test_commits_hash_if_wrapper_failure() {
+        let (mut shell, _) = setup(1);
+        let keypair = gen_keypair();
+
+        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        ))));
+        wrapper.header.chain_id = shell.chain_id.clone();
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_data(Data::new(
+            "Encrypted transaction data".as_bytes().to_owned(),
+        ));
+        wrapper.add_section(Section::Signature(Signature::new(
+            &wrapper.header_hash(),
+            &keypair,
+        )));
+        wrapper.encrypt(&Default::default());
+
+        let wrapper_hash_key =
+            replay_protection::get_tx_hash_key(&wrapper.header_hash());
+        let inner_hash_key = replay_protection::get_tx_hash_key(
+            &wrapper.clone().update_header(TxType::Raw).header_hash(),
+        );
+
+        let processed_tx = ProcessedTx {
+            tx: wrapper.to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        };
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed")[0];
+
+        // Check wrapper hash has been committed to storage even if it failed. Check that, instead, the inner hash has been removed
+        assert_eq!(event.event_type.to_string(), String::from("accepted"));
+        let code = event.attributes.get("code").expect("Testfailed").as_str();
+        assert_eq!(code, String::from(ErrorCodes::InvalidTx).as_str());
+
+        assert!(shell
+            .wl_storage
+            .has_key(&wrapper_hash_key)
+            .expect("Test failed"));
         assert!(!shell
             .wl_storage
             .has_key(&inner_hash_key)
