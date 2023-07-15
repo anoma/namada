@@ -16,7 +16,7 @@ use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::storage_api::StorageRead;
 use crate::ledger::{native_vp, pos};
 use crate::proto::Tx;
-use crate::types::address::{Address, InternalAddress};
+use crate::types::address::Address;
 use crate::types::storage::{Epoch, Key};
 use crate::types::token;
 use crate::vm::WasmCacheAccess;
@@ -49,8 +49,6 @@ where
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
-
-    const ADDR: InternalAddress = InternalAddress::Governance;
 
     fn validate_tx(
         &self,

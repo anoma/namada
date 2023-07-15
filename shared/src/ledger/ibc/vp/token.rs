@@ -80,8 +80,6 @@ where
 {
     type Error = Error;
 
-    const ADDR: InternalAddress = InternalAddress::IbcBurn;
-
     fn validate_tx(
         &self,
         tx_data: &Tx,
