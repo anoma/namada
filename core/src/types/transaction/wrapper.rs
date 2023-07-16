@@ -169,7 +169,7 @@ pub mod wrapper_tx {
     pub struct WrapperTx {
         /// The fee to be payed for including the tx
         pub fee: Fee,
-        /// Used to determine an implicit account of the fee payer
+        /// Used for signature verification and to determine an implicit account of the fee payer
         pub pk: common::PublicKey,
         /// The epoch in which the tx is to be submitted. This determines
         /// which decryption key will be used
