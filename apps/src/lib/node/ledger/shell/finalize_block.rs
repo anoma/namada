@@ -1819,7 +1819,7 @@ mod test_finalize_block {
     }
 
     #[test]
-    /// Test that the hash of the wrapper transaction is committed to storage even if the wrapper tx fails on fee payment. The inner transaction hash must instead be removed
+    /// Test that the hash of the wrapper transaction is committed to storage even if the wrapper tx fails. The inner transaction hash must instead be removed
     fn test_commits_hash_if_wrapper_failure() {
         let (mut shell, _) = setup(1);
         let keypair = gen_keypair();
@@ -1881,6 +1881,67 @@ mod test_finalize_block {
             .wl_storage
             .has_key(&inner_hash_key)
             .expect("Test failed"))
+    }
+
+    // Test that if the fee payer doesn't have enough funds for fee payment the ledger drains their balance. Note that because of the checks in process proposal this scenario should never happen
+    #[test]
+    fn test_fee_payment_if_insufficient_balance() {
+        let (mut shell, _) = setup(1);
+        let keypair = gen_keypair();
+
+        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 100.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            GAS_LIMIT_MULTIPLIER.into(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        ))));
+        wrapper.header.chain_id = shell.chain_id.clone();
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_data(Data::new(
+            "Encrypted transaction data".as_bytes().to_owned(),
+        ));
+        wrapper.add_section(Section::Signature(Signature::new(
+            &wrapper.header_hash(),
+            &keypair,
+        )));
+        wrapper.encrypt(&Default::default());
+
+        let processed_tx = ProcessedTx {
+            tx: wrapper.to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        };
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed")[0];
+
+        // Check balance of fee payer is 0
+        assert_eq!(event.event_type.to_string(), String::from("accepted"));
+        let code = event.attributes.get("code").expect("Testfailed").as_str();
+        assert_eq!(code, String::from(ErrorCodes::InvalidTx).as_str());
+        let balance_key = namada::core::types::token::balance_key(
+            &shell.wl_storage.storage.native_token,
+            &Address::from(&keypair.to_public().into()),
+        );
+        let balance: Amount = shell
+            .wl_storage
+            .read(&balance_key)
+            .unwrap()
+            .unwrap_or_default();
+
+        assert_eq!(balance, 0.into())
     }
 
     // Test that the fees collected from a block are withdrew from the wrapper signer and credited to the block proposer
