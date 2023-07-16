@@ -38,6 +38,7 @@ use crate::ledger::tx::{
     TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UPDATE_VP_WASM,
     TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
 };
+use crate::ledger::wallet::alias::Alias;
 pub use crate::ledger::wallet::store::AddressVpType;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::ledger::{args, rpc};
@@ -258,7 +259,7 @@ pub async fn sign_wrapper<
     V: ShieldedUtils<C = C>,
 >(
     client: &C,
-    #[allow(unused_variables)] wallet: &mut Wallet<U>,
+    wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
     args: &args::Tx,
     epoch: Epoch,
@@ -268,13 +269,25 @@ pub async fn sign_wrapper<
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (TxBroadcastData, Option<Epoch>) {
     if args.disposable_signing_key {
+        // Create the alias
+        let alias_prefix = "disposable_";
+        let mut ctr = 1;
+        let mut alias = format!("{alias_prefix}_{ctr}");
+
+        while wallet.store().contains_alias(&Alias::from(&alias)) {
+            ctr += 1;
+            alias = format!("{alias_prefix}_{ctr}");
+        }
         // Generate a disposable keypair to sign the wrapper if requested
-        let mut csprng = rand::rngs::OsRng {};
-        keypair = Cow::Owned(
-            ed25519::SigScheme::generate(&mut csprng)
-                .try_to_sk()
-                .unwrap(),
-        );
+        // NOTE: this key must be stored in the wallet in case there was the need to resubmit the transaction
+        // TODO: once the wrapper transaction has been accepted this key can be deleted from wallet
+        let (alias, disposable_keypair) = wallet
+            .gen_key(SchemeType::Ed25519, Some(alias), false, None, None)
+            .expect("Failed to initialize disposable keypair")
+            .expect("Missing alias and secret key");
+
+        tracing::info!("Created disposable keypair with alias {alias}");
+        keypair = Cow::Owned(disposable_keypair);
         updated_balance = Some(Amount::default());
     }
 
