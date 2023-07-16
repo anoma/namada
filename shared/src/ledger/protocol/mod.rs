@@ -204,6 +204,8 @@ where S: StorageRead{
 ///  - replay protection
 ///  - fee payment
 ///  - gas accounting
+///
+/// Returns the set of changed storage keys.
 fn apply_wrapper_tx<D, H, CA>(
     write_log: &mut WriteLog,
     storage: &Storage<D, H>,
@@ -232,7 +234,7 @@ replay_protection::get_tx_hash_key(&hash::Hash(tx.header_hash().0));
         changed_keys.insert(wrapper_hash_key);
      
     // Charge fee before performing any fallible operations
-    changed_keys.extend(charge_fee(
+    charge_fee(
         wrapper,
         masp_transaction,
         tx_bytes,
@@ -240,11 +242,12 @@ replay_protection::get_tx_hash_key(&hash::Hash(tx.header_hash().0));
         #[cfg(not(feature = "mainnet"))]
         has_valid_pow,
         block_proposer,
+        &mut changed_keys,
         write_log,
         storage,
         vp_wasm_cache,
         tx_wasm_cache,
-    )?);
+    )?;
 
     // Account for gas
     gas_meter.add_tx_size_gas(tx_bytes)?;
@@ -264,8 +267,6 @@ replay_protection::get_tx_hash_key(&hash::Hash(tx.update_header(TxType::Raw).hea
 /// - Fee amount overflows
 /// - Not enough funds are available to pay the entire amount of the fee
 /// - The accumulated fee amount to be credited to the block proposer overflows
-///
-/// Returns the set of changed keys.
 pub fn charge_fee<D, H, CA>(
     wrapper: &WrapperTx,
     masp_transaction: Option<Transaction>,
@@ -273,12 +274,12 @@ pub fn charge_fee<D, H, CA>(
     gas_table: &BTreeMap<String, u64>,
     #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     block_proposer: Option<&Address>,
-
+    changed_keys: &mut BTreeSet<Key>,
     write_log: &mut WriteLog,
     storage: &Storage<D, H>,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
-) -> Result<BTreeSet<Key>>
+) -> Result<()>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -376,7 +377,7 @@ where
         None => check_fees(&temp_wl_storage, #[cfg(not(feature = "mainnet"))]has_valid_pow, &wrapper)?
         }
 
-    let changed_keys = temp_wl_storage.write_log.get_keys_with_precommit();
+    changed_keys.extend(temp_wl_storage.write_log.get_keys_with_precommit());
 
     // Commit tx write log even in case of subsequent errors
     temp_wl_storage.write_log.commit_tx();
@@ -385,7 +386,7 @@ where
     if unexpected_unshielding_tx{
         Err(Error::FeeUnshieldingError(namada_core::types::transaction::WrapperTxErr::InvalidUnshield("Found unnecessary unshielding tx attached".to_string())))
     } else {
-        Ok(changed_keys)
+        Ok(())
     }
 
 
@@ -484,20 +485,19 @@ fn token_transfer<D, H>(
     src: &Address,
     dest: &Address,
     amount: Amount
-    
 ) -> Result<()> 
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     {
     
-    if amount.is_zero() {
-        return Ok(());
-    }
     let src_key = namada_core::types::token::balance_key(token, src);
     let src_balance = namada_core::ledger::storage_api::token::read_balance(temp_wl_storage, token, src).expect("Token balance read in protocol must not fail");
     match src_balance.checked_sub(amount) {
         Some(new_src_balance) => {
+            if src == dest {
+                return Ok(());
+            }
             let dest_key = namada_core::types::token::balance_key(token, dest);
             let dest_balance = namada_core::ledger::storage_api::token::read_balance(temp_wl_storage, token, dest).expect("Token balance read in protocol must not fail");
             match dest_balance.checked_add(amount) {
@@ -506,8 +506,7 @@ where
                     match temp_wl_storage.write_log.write(&dest_key, new_dest_balance.try_to_vec().unwrap()) {
                         Ok(_) => Ok(()),
                         Err(e) => Err(Error::FeeError(e.to_string()))
-                    }
-                }
+                    }}
                 None => Err(Error::FeeError(
                     "The transfer would overflow destination balance".to_string(),
                 )),
