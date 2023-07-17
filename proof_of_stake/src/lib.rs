@@ -96,6 +96,8 @@ pub enum GenesisError {
 pub enum InflationError {
     #[error("Error in calculating rewards: {0}")]
     Rewards(rewards::RewardsError),
+    #[error("Expected validator {0} to be in consensus set but got: {1:?}")]
+    ExpectedValidatorInConsensus(Address, Option<ValidatorState>),
 }
 
 #[allow(missing_docs)]
@@ -3136,7 +3138,11 @@ where
         let state = validator_state_handle(&validator_address)
             .get(storage, epoch, &params)?;
         if state != Some(ValidatorState::Consensus) {
-            continue;
+            return Err(InflationError::ExpectedValidatorInConsensus(
+                validator_address,
+                state,
+            ))
+            .into_storage_result();
         }
 
         let stake_from_deltas =
