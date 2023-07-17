@@ -4308,6 +4308,7 @@ fn test_genesis_validators() -> Result<()> {
 /// 4. Run it to get it to double vote and sign blocks
 /// 5. Submit a valid token transfer tx to validator 0
 /// 6. Wait for double signing evidence
+/// 7. Make sure the the first validator can proceed to the next epoch
 #[test]
 fn double_signing_gets_slashed() -> Result<()> {
     use std::net::SocketAddr;
@@ -4319,7 +4320,13 @@ fn double_signing_gets_slashed() -> Result<()> {
 
     // Setup 2 genesis validator nodes
     let test = setup::network(
-        |genesis| setup::set_validators(2, genesis, default_port_offset),
+        |genesis| {
+            let mut genesis =
+                setup::set_validators(2, genesis, default_port_offset);
+            // Make faster epochs to be more likely to discover boundary issues
+            genesis.parameters.min_num_of_blocks = 2;
+            genesis
+        },
         None,
     )?;
 
@@ -4468,6 +4475,18 @@ fn double_signing_gets_slashed() -> Result<()> {
     let mut validator_1 = bg_validator_1.foreground();
     validator_1.exp_string("Processing evidence")?;
     validator_1.exp_string("Slashing")?;
+    let bg_validator_1 = validator_1.background();
+
+    // 7. Make sure the the first validator can proceed to the next epoch
+    epoch_sleep(&test, &validator_one_rpc, 120)?;
+
+    // Make sure there are no errors
+    let mut validator_1 = bg_validator_1.foreground();
+    validator_1.interrupt()?;
+    // Wait for the node to stop running to finish writing the state and tx
+    // queue
+    validator_1.exp_string("Namada ledger node has shut down.")?;
+    validator_1.assert_success();
 
     Ok(())
 }
