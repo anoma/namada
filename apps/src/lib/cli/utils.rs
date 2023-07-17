@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use clap::{ArgAction, ArgMatches};
 use color_eyre::eyre::Result;
+use lazy_static::lazy_static;
 
 use super::args;
 use super::context::{Context, FromContext};
@@ -364,4 +365,36 @@ pub fn prompt(question: &str) -> String {
 #[cfg(not(feature = "testing"))]
 pub fn prompt(question: &str) -> String {
     prompt_aux(std::io::stdin().lock(), std::io::stdout(), question)
+}
+
+//#[cfg(feature = "testing")]
+lazy_static! {
+    pub static ref DISPLAY: std::sync::Arc<std::sync::Mutex<Vec<u8>>> = std::sync::Arc::new(std::sync::Mutex::new(vec![]));
+}
+
+#[cfg(feature = "testing")]
+fn display_aux(output: &str) {
+    let mut buf = DISPLAY.lock().unwrap();
+    _ = buf.write(output.as_bytes());
+}
+
+#[cfg(not(feature = "testing"))]
+fn display_aux(output: &str) {
+    if cfg!(feature = "testing") {
+
+    }
+    print!("{}", output);
+}
+
+macro_rules! display {
+    () => {
+        display_aux("\n");
+    };
+    ($arg:tt, $($arg:tt)*) => {
+        let out = format!("TYPE: {}, MSG: {}", )
+        display_aux(out)
+    }
+    ($($arg:tt)*) => {{
+        display_aux("{}\n", format_args!($($arg)*));
+    }};
 }

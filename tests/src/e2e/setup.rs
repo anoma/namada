@@ -42,7 +42,7 @@ pub const APPS_PACKAGE: &str = "namada_apps";
 pub const ENV_VAR_DEBUG: &str = "NAMADA_E2E_DEBUG";
 
 /// Env. var for keeping temporary files created by the E2E tests
-pub const ENV_VAR_KEEP_TEMP: &str = "NAMADA_E2E_KEEP_TEMP";
+const ENV_VAR_KEEP_TEMP: &str = "NAMADA_E2E_KEEP_TEMP";
 
 /// Env. var for temporary path
 const ENV_VAR_TEMP_PATH: &str = "NAMADA_E2E_TEMP_PATH";
@@ -316,19 +316,6 @@ impl TestDir {
     /// Get the [`Path`] to the test directory.
     pub fn path(&self) -> &Path {
         self.as_ref()
-    }
-
-    /// Manually remove the test directory from the
-    /// file system.
-    pub fn clean_up(self) {
-        if let Either::Right(path) = self.0 {
-            if let Err(e) = std::fs::remove_dir_all(&path) {
-                println!(
-                    "Failed to clean up test dir at {}: {e:?}",
-                    path.to_string_lossy()
-                );
-            }
-        }
     }
 }
 

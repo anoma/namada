@@ -12,6 +12,7 @@ use namada_apps::config::TendermintMode;
 use namada_apps::facade::tendermint::Timeout;
 use namada_apps::facade::tendermint_proto::google::protobuf::Timestamp;
 use namada_apps::node::ledger::shell::Shell;
+use namada_apps::node::ledger::shell::testing::node::MockNode;
 use namada_core::types::address::Address;
 use namada_core::types::chain::{ChainId, ChainIdPrefix};
 use toml::value::Table;

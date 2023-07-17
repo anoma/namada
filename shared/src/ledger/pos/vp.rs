@@ -58,7 +58,7 @@ where
 }
 
 // TODO this is temporarily to run PoS native VP in a new thread to avoid
-// crashing the ledger (in apps/src/lib/node/ledger/protocol/mod.rs). The
+// crashing the ledger (in apps/src/lib/node/ledger/protocol/testing). The
 // RefCells contained within PosVP are not thread-safe, but each thread has its
 // own instances.
 impl<DB, H, CA> UnwindSafe for PosVP<'_, DB, H, CA>
@@ -70,7 +70,7 @@ where
 }
 
 // TODO this is temporarily to run PoS native VP in a new thread to avoid
-// crashing the ledger (in apps/src/lib/node/ledger/protocol/mod.rs). The
+// crashing the ledger (in apps/src/lib/node/ledger/protocol/testing). The
 // RefCells contained within PosVP are not thread-safe, but each thread has its
 // own instances.
 impl<DB, H, CA> RefUnwindSafe for PosVP<'_, DB, H, CA>

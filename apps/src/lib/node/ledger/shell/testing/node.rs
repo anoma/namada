@@ -11,28 +11,28 @@ use namada::ledger::queries::{
 };
 use namada::tendermint_rpc::endpoint::abci_info;
 use namada::tendermint_rpc::SimpleRequest;
-use namada_apps::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
-use namada_apps::facade::tendermint_proto::abci::RequestProcessProposal;
-use namada_apps::facade::tendermint_rpc::endpoint::abci_info::AbciInfo;
-use namada_apps::facade::tendermint_rpc::error::Error as RpcError;
-use namada_apps::facade::{tendermint, tendermint_rpc};
-use namada_apps::node::ledger::shell::{ErrorCodes, Shell};
-use namada_apps::node::ledger::shims::abcipp_shim_types::shim::request::{
-    FinalizeBlock, ProcessedTx,
-};
-use namada_apps::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
-use namada_apps::node::ledger::storage;
-use namada_core::ledger::storage::{
+use namada::ledger::storage::{
     LastBlock, Sha256Hasher, EPOCH_SWITCH_BLOCKS_DELAY,
 };
-use namada_core::types::hash::Hash;
-use namada_core::types::storage::{BlockHash, BlockHeight, Epoch, Header};
-use namada_core::types::time::DateTimeUtc;
+use namada::types::hash::Hash;
+use namada::types::storage::{BlockHash, BlockHeight, Epoch, Header};
+use namada::types::time::DateTimeUtc;
 use num_traits::cast::FromPrimitive;
 use regex::Regex;
 use tokio::sync::mpsc::UnboundedReceiver;
 
-use crate::e2e::setup::TestDir;
+use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
+use crate::facade::tendermint_proto::abci::RequestProcessProposal;
+use crate::facade::tendermint_rpc::endpoint::abci_info::AbciInfo;
+use crate::facade::tendermint_rpc::error::Error as RpcError;
+use crate::facade::{tendermint, tendermint_rpc};
+use crate::node::ledger::shell::{ErrorCodes, Shell};
+use crate::node::ledger::shell::testing::utils::TestDir;
+use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
+    FinalizeBlock, ProcessedTx,
+};
+use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
+use crate::node::ledger::storage;
 
 /// Status of tx
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,6 +59,7 @@ impl Drop for MockNode {
             if !self.keep_temp {
                 ManuallyDrop::take(&mut self.test_dir).clean_up()
             } else {
+                println!("Keeping tempfile at {}", self.test_dir.path().to_string_lossy());
                 ManuallyDrop::drop(&mut self.test_dir)
             }
         }
@@ -68,12 +69,12 @@ impl Drop for MockNode {
 impl MockNode {
     pub fn genesis_dir(&self) -> PathBuf {
         self.test_dir
-            .as_ref()
+            .path()
             .join(self.shell.lock().unwrap().chain_id.to_string())
     }
 
     pub fn genesis_path(&self) -> PathBuf {
-        self.test_dir.as_ref().join(format!(
+        self.test_dir.path().join(format!(
             "{}.toml",
             self.shell.lock().unwrap().chain_id.to_string()
         ))

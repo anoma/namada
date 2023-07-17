@@ -4330,6 +4330,7 @@ dependencies = [
  "futures",
  "git2",
  "itertools",
+ "lazy_static",
  "libc",
  "libloading",
  "masp_primitives",
